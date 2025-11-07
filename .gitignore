@@ -1,0 +1,35 @@
+# Fichiers à ne pas commiter dans GitHub
+
+# Fichiers de configuration locaux
+.env
+*.env.local
+
+# Fichiers de documentation temporaires
+*.md
+!scripts/README.md
+
+# Scripts d'aide (pas besoin dans le repo)
+setup-github-repo.sh
+upload-to-github.js
+*.sh
+
+# Fichiers HTML de test
+*.html
+!README.html
+
+# Fichiers JavaScript de test/développement
+*_TEST*.js
+*_DEBUG*.js
+TEST_*.js
+FONCTION_TEST*.js
+
+# Anciens scripts (gardés localement)
+scripts/upload/
+scripts/relance/
+
+# Fichiers système
+.DS_Store
+*.swp
+*.swo
+*~
+
