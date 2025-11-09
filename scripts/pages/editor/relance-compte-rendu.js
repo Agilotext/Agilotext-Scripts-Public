@@ -284,33 +284,12 @@
     
     const canRegen = canRegenerate(jobId, edition);
     
-    // Utilisateur Free : Afficher message premium avec intégration AgiloGate
+    // Utilisateur Free : Garder le bouton visible mais avec apparence désactivée
+    // Le message premium est caché, le bouton affichera directement la pop-up au clic
     if (canRegen.reason === 'free') {
-      const premiumMsg = document.createElement('div');
-      premiumMsg.className = 'regeneration-premium-message';
-      premiumMsg.innerHTML = `
-        <span style="font-size: 16px;">🔒</span>
-        <div>
-          <strong>Fonctionnalité Premium</strong>
-          <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-            Disponible pour les plans Pro et Business
-          </div>
-        </div>
-      `;
-      btn.parentElement.appendChild(premiumMsg);
-      btn.style.display = 'none'; // Cacher le bouton
-      
-      // Ajouter un bouton "Passer en Pro" qui utilise AgiloGate
-      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
-        const upgradeBtn = document.createElement('button');
-        upgradeBtn.className = 'button bleu';
-        upgradeBtn.style.cssText = 'margin-top: 8px; width: 100%;';
-        upgradeBtn.textContent = 'Passer en Pro';
-        upgradeBtn.setAttribute('data-plan-min', 'pro');
-        upgradeBtn.setAttribute('data-upgrade-reason', 'Régénération de compte-rendu');
-        premiumMsg.appendChild(upgradeBtn);
-      }
-      
+      // Ne pas créer le message premium (on le cache)
+      // Le bouton reste visible et cliquable
+      btn.style.display = 'flex';
       return;
     }
     
@@ -378,14 +357,16 @@
     
     const canRegen = canRegenerate(jobId, edition);
     
-    // Pour Free : désactiver complètement et ajouter badge AgiloGate
+    // Pour Free : garder le bouton cliquable mais avec apparence désactivée + badge AgiloGate
     if (canRegen.reason === 'free') {
-      btn.disabled = true;
-      btn.setAttribute('aria-disabled', 'true');
+      // Ne PAS désactiver le bouton (disabled = false) pour qu'il reste cliquable
+      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
       btn.setAttribute('data-plan-min', 'pro');
       btn.setAttribute('data-upgrade-reason', 'Régénération de compte-rendu');
+      // Apparence désactivée visuellement mais reste cliquable
       btn.style.opacity = '0.5';
-      btn.style.cursor = 'not-allowed';
+      btn.style.cursor = 'pointer'; // Pointer au lieu de not-allowed
       
       // S'assurer que AgiloGate décore ce bouton (badge Pro)
       if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
