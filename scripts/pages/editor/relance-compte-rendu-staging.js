@@ -671,10 +671,14 @@
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
       // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
-      if (checkSummaryErrorInDOM()) {
+      console.log('[AGILO:RELANCE] Appel checkSummaryErrorInDOM()...');
+      const hasErrorInDOM = checkSummaryErrorInDOM();
+      console.log('[AGILO:RELANCE] Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+      if (hasErrorInDOM) {
         console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
         return false;
       }
+      console.log('[AGILO:RELANCE] Pas de message d\'erreur dans le DOM - Vérification API...');
       
       // Ajouter cache-busting pour éviter le cache navigateur
       const cacheBuster = Date.now();
@@ -710,22 +714,36 @@
         ];
         
         const isError = errorPatterns.some(pattern => pattern.test(text));
-        const isValidContent = !isError && text.length > 100 && !text.trim().startsWith('<');
+        
+        // ⚠️ IMPORTANT : Vérifier aussi si c'est une structure HTML d'alerte
+        const isAlertHTML = /ag-alert/i.test(text) && (
+          /pas encore disponible/i.test(text) || 
+          /fichier manquant/i.test(text) || 
+          /non publié/i.test(text)
+        );
+        
+        const isValidContent = !isError && !isAlertHTML && text.length > 100 && 
+                               !text.trim().startsWith('<div class="ag-alert') &&
+                               !text.includes('ag-alert ag-alert--warn');
         
         // Log détaillé pour debug
         console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
           length: text.length,
           isError,
+          isAlertHTML,
           isValidContent,
-          preview: text.substring(0, 150).replace(/\s+/g, ' ')
+          preview: text.substring(0, 200).replace(/\s+/g, ' '),
+          containsAlert: /ag-alert/i.test(text),
+          containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text)
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide');
+          console.log('[AGILO:RELANCE] ERREUR - Compte-rendu inexistant ou invalide (contenu:', 
+            isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
           return false;
         }
         
-        console.log('[AGILO:RELANCE] ✅ Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] OK - Compte-rendu valide détecté');
         return true;
       }
       
