@@ -925,10 +925,24 @@
   // ⚠️ VÉRIFICATION IMMÉDIATE SYNCHRONE (avant même l'init async)
   function immediateCheck(){
     const btn = $('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
+    if (!btn) {
+      log('immediateCheck: Bouton non trouvé');
+      return;
+    }
+    
+    // Récupérer editorRoot à chaque fois (au cas où il n'était pas là au début)
+    const root = byId('editorRoot');
+    
+    log('immediateCheck: Début', {
+      btnExists: !!btn,
+      rootExists: !!root,
+      summaryEmpty: root?.dataset.summaryEmpty,
+      btnVisible: window.getComputedStyle(btn).display !== 'none',
+      hasForceHide: btn.classList.contains('agilo-force-hide')
+    });
     
     // Vérifier summaryEmpty immédiatement
-    if (editorRoot?.dataset.summaryEmpty === '1') {
+    if (root?.dataset.summaryEmpty === '1') {
       log('⚠️ VÉRIFICATION IMMÉDIATE: summaryEmpty=1 détecté - Cache bouton');
       hideButton(btn, 'immediate-check-summary-empty');
       return;
@@ -938,13 +952,36 @@
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
     if (summaryEl) {
       const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
+      const html = (summaryEl.innerHTML || '').toLowerCase();
       const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-      if (text.includes(exactMsg) || text.includes('pas encore disponible') || text.includes('fichier manquant')) {
-        log('⚠️ VÉRIFICATION IMMÉDIATE: Message d\'erreur détecté - Cache bouton');
-        hideButton(btn, 'immediate-check-error-message');
+      
+      // Vérifier le message exact (plus fiable)
+      if (text.includes(exactMsg) || html.includes(exactMsg)) {
+        log('⚠️ VÉRIFICATION IMMÉDIATE: Message exact détecté - Cache bouton');
+        hideButton(btn, 'immediate-check-exact-message');
         return;
       }
+      
+      // Vérifier les patterns
+      if (text.includes('pas encore disponible') || text.includes('fichier manquant') || text.includes('non publié')) {
+        log('⚠️ VÉRIFICATION IMMÉDIATE: Pattern erreur détecté - Cache bouton');
+        hideButton(btn, 'immediate-check-error-pattern');
+        return;
+      }
+      
+      // Vérifier aussi dans les alertes
+      const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title');
+      for (const alert of alerts) {
+        const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
+        if (alertText.includes(exactMsg) || alertText.includes('pas encore disponible') || alertText.includes('fichier manquant')) {
+          log('⚠️ VÉRIFICATION IMMÉDIATE: Message erreur dans alerte - Cache bouton');
+          hideButton(btn, 'immediate-check-alert-message');
+          return;
+        }
+      }
     }
+    
+    log('immediateCheck: Aucune condition de masquage détectée');
   }
 
   async function init(){
@@ -1071,22 +1108,34 @@
   }
 
   // ⚠️ VÉRIFICATION IMMÉDIATE même si le DOM n'est pas prêt
+  // Appel immédiat
+  immediateCheck();
+  
   if (document.readyState !== 'loading') {
-    immediateCheck();
+    // DOM déjà prêt, vérifier plusieurs fois
+    setTimeout(() => immediateCheck(), 100);
+    setTimeout(() => immediateCheck(), 500);
     init();
   } else {
     // Vérification immédiate dès que possible
     document.addEventListener('DOMContentLoaded', () => {
       immediateCheck();
+      setTimeout(() => immediateCheck(), 100);
+      setTimeout(() => immediateCheck(), 500);
       init();
     }, { once:true });
     
-    // Vérification aussi après un court délai (au cas où le DOM est déjà là)
+    // Vérifications multiples (au cas où le DOM est déjà là)
+    setTimeout(() => immediateCheck(), 100);
+    setTimeout(() => immediateCheck(), 300);
+    setTimeout(() => immediateCheck(), 500);
+    setTimeout(() => immediateCheck(), 1000);
     setTimeout(() => {
       if (!window.__agiloEditorRelanceInit) {
         immediateCheck();
+        init();
       }
-    }, 100);
+    }, 2000);
   }
   
   // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné)
@@ -1094,25 +1143,40 @@
     const btn = $('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
-    // Si le bouton est visible mais qu'il ne devrait pas l'être
-    if (!btn.classList.contains('agilo-force-hide') && window.getComputedStyle(btn).display !== 'none') {
-      // Vérifier summaryEmpty
-      if (editorRoot?.dataset.summaryEmpty === '1') {
-        log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton');
-        hideButton(btn, 'periodic-check-summary-empty');
+    // Récupérer editorRoot à chaque fois
+    const root = byId('editorRoot');
+    const isVisible = window.getComputedStyle(btn).display !== 'none' && 
+                      window.getComputedStyle(btn).visibility !== 'hidden' &&
+                      !btn.classList.contains('agilo-force-hide');
+    
+    if (!isVisible) return; // Déjà caché, pas besoin de vérifier
+    
+    // Vérifier summaryEmpty
+    if (root?.dataset.summaryEmpty === '1') {
+      log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton', {
+        summaryEmpty: root.dataset.summaryEmpty,
+        btnVisible: true,
+        hasForceHide: btn.classList.contains('agilo-force-hide')
+      });
+      hideButton(btn, 'periodic-check-summary-empty');
+      return;
+    }
+    
+    // Vérifier le message d'erreur
+    const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
+    if (summaryEl) {
+      const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
+      const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
+      if (text.includes(exactMsg) || text.includes('pas encore disponible') || text.includes('fichier manquant')) {
+        log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur - Cache bouton', {
+          textPreview: text.substring(0, 100),
+          btnVisible: true,
+          hasForceHide: btn.classList.contains('agilo-force-hide')
+        });
+        hideButton(btn, 'periodic-check-error-message');
         return;
       }
-      
-      // Vérifier le message d'erreur
-      const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-      if (summaryEl) {
-        const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-        if (text.includes('pas encore disponible') || text.includes('fichier manquant')) {
-          log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur - Cache bouton');
-          hideButton(btn, 'periodic-check-error-message');
-        }
-      }
     }
-  }, 1000); // Vérifie toutes les secondes
+  }, 500); // Vérifie toutes les 500ms (plus agressif)
 })();
 
