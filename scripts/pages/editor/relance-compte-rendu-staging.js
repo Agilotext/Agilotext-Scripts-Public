@@ -599,7 +599,10 @@
    */
   function checkSummaryErrorInDOM() {
     // ⚠️ IMPORTANT : Chercher d'abord les alertes spécifiques (plus fiable)
+    // Même si elles sont cachées (hidden), on peut les lire
     const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title, [class*="alert"]');
+    console.log('[AGILO:RELANCE] 🔍 Recherche alertes dans le DOM:', alertElements.length, 'éléments trouvés');
+    
     for (const alert of alertElements) {
       const text = alert.textContent || alert.innerText || '';
       const html = alert.innerHTML || '';
@@ -620,15 +623,23 @@
       
       if (hasError) {
         console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans une alerte:', text.substring(0, 150));
+        console.log('[AGILO:RELANCE] 📍 Élément:', alert.className, alert.id);
         return true;
       }
     }
     
-    // Chercher l'éditeur de compte-rendu (même s'il est caché)
-    const summaryEditor = document.querySelector('#summaryEditor, [id*="summaryEditor"], [id*="summary"]');
+    // Chercher l'éditeur de compte-rendu (même s'il est caché avec hidden)
+    const summaryEditor = document.querySelector('#summaryEditor');
     if (summaryEditor) {
       const text = summaryEditor.textContent || summaryEditor.innerText || '';
       const html = summaryEditor.innerHTML || '';
+      
+      console.log('[AGILO:RELANCE] 🔍 Contenu summaryEditor:', {
+        textLength: text.length,
+        htmlLength: html.length,
+        preview: text.substring(0, 200),
+        isHidden: summaryEditor.hasAttribute('hidden') || summaryEditor.closest('[hidden]')
+      });
       
       // Vérifier les messages d'erreur possibles
       const errorMessages = [
@@ -648,13 +659,22 @@
         console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans summaryEditor:', text.substring(0, 150));
         return true;
       }
+    } else {
+      console.log('[AGILO:RELANCE] ⚠️ summaryEditor non trouvé');
     }
     
-    // Si l'éditeur n'existe pas, chercher dans tous les panneaux
-    const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
+    // Si l'éditeur n'existe pas, chercher dans tous les panneaux (même cachés)
+    const summaryPane = document.querySelector('#pane-summary');
     if (summaryPane) {
       const text = summaryPane.textContent || summaryPane.innerText || '';
       const html = summaryPane.innerHTML || '';
+      
+      console.log('[AGILO:RELANCE] 🔍 Contenu pane-summary:', {
+        textLength: text.length,
+        htmlLength: html.length,
+        preview: text.substring(0, 200),
+        isHidden: summaryPane.hasAttribute('hidden')
+      });
       
       // Vérifier les messages d'erreur possibles
       const errorMessages = [
@@ -674,6 +694,8 @@
         console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 150));
         return true;
       }
+    } else {
+      console.log('[AGILO:RELANCE] ⚠️ pane-summary non trouvé');
     }
     
     console.log('[AGILO:RELANCE] ❌ Aucun message d\'erreur détecté dans le DOM');
@@ -683,12 +705,10 @@
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
       // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
-      console.log('[AGILO:RELANCE] 🔍 Étape 1: Vérification DOM...');
       if (checkSummaryErrorInDOM()) {
-        console.log('[AGILO:RELANCE] ❌ Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
         return false;
       }
-      console.log('[AGILO:RELANCE] ✅ Pas de message d\'erreur dans le DOM - Vérification API...');
       
       // Ajouter cache-busting pour éviter le cache navigateur
       const cacheBuster = Date.now();
@@ -704,7 +724,7 @@
         }
       });
       
-      console.log('[AGILO:RELANCE] 🔍 Étape 2: Réponse API:', {
+      console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
         status: response.status,
         ok: response.ok
       });
@@ -720,28 +740,42 @@
           /fichier manquant/i,
           /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,
           /n'est pas encore disponible/i,
-          /résumé en préparation/i,
-          /ag-alert/i  // Si c'est une alerte HTML, c'est une erreur
+          /résumé en préparation/i
         ];
         
         const isError = errorPatterns.some(pattern => pattern.test(text));
-        // Vérifier aussi si c'est une structure HTML d'alerte
-        const isAlertHTML = text.includes('ag-alert') || text.includes('ag-alert__title');
-        const isValidContent = !isError && !isAlertHTML && text.length > 100 && !text.trim().startsWith('<div class="ag-alert');
+        
+        // ⚠️ IMPORTANT : Vérifier aussi si c'est une structure HTML d'alerte
+        // Le message d'erreur peut être dans une div avec classe ag-alert
+        const isAlertHTML = /ag-alert/i.test(text) && (
+          /pas encore disponible/i.test(text) || 
+          /fichier manquant/i.test(text) || 
+          /non publié/i.test(text)
+        );
+        
+        // Un compte-rendu valide doit :
+        // 1. Ne pas contenir de message d'erreur
+        // 2. Ne pas être une alerte HTML
+        // 3. Avoir une longueur suffisante (> 100 caractères)
+        // 4. Ne pas commencer par une div d'alerte
+        const isValidContent = !isError && !isAlertHTML && text.length > 100 && 
+                               !text.trim().startsWith('<div class="ag-alert') &&
+                               !text.includes('ag-alert ag-alert--warn');
         
         // Log détaillé pour debug
-        console.log('[AGILO:RELANCE] 🔍 Étape 3: Analyse contenu compte-rendu:', {
+        console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
           length: text.length,
           isError,
           isAlertHTML,
           isValidContent,
           preview: text.substring(0, 200).replace(/\s+/g, ' '),
-          containsAlert: text.includes('ag-alert'),
-          containsErrorMsg: text.includes('pas encore disponible') || text.includes('fichier manquant')
+          containsAlert: /ag-alert/i.test(text),
+          containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text)
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide (contenu:', isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
+          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide (contenu:', 
+            isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
           return false;
         }
         
@@ -749,10 +783,9 @@
         return true;
       }
       
-      console.log('[AGILO:RELANCE] ❌ Réponse API non-OK:', response.status);
       return false;
     } catch (error) {
-      console.error('[AGILO:RELANCE] ❌ Erreur vérification existence:', error);
+      console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
       return false;
     }
   }
@@ -1657,7 +1690,7 @@
       });
     });
     
-    const tabObserver = new MutationObserver(function(mutations) {
+    const observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(mutation) {
         if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
           updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
@@ -1666,7 +1699,7 @@
     });
     
     tabs.forEach(tab => {
-      tabObserver.observe(tab, { attributes: true });
+      observer.observe(tab, { attributes: true });
     });
     
     // Initialiser les compteurs et limites
@@ -1681,13 +1714,8 @@
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
           
-          // ⚠️ IMPORTANT : Attendre un peu que le DOM soit complètement chargé
-          // Le message d'erreur peut être ajouté après le chargement initial
-          setTimeout(async () => {
-            // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
-            console.log('[AGILO:RELANCE] 🔄 Appel updateButtonVisibility()...');
-            await updateButtonVisibility();
-          }, 1000);
+          // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
+          await updateButtonVisibility();
           
           // Logs pour debug Pro/Business
           const canRegen = canRegenerate(jobId, edition);
@@ -1707,31 +1735,6 @@
     
     // Attendre un peu que les credentials soient disponibles
     setTimeout(initLimits, 500);
-    
-    // ⚠️ IMPORTANT : Observer les changements dans le DOM pour détecter quand le message d'erreur apparaît
-    const errorObserver = new MutationObserver(() => {
-      // Si le message d'erreur apparaît, cacher le bouton immédiatement
-      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-      if (btn && btn.style.display !== 'none') {
-        if (checkSummaryErrorInDOM()) {
-          console.log('[AGILO:RELANCE] 🚨 Message d\'erreur détecté par MutationObserver - Cachage immédiat du bouton');
-          btn.style.display = 'none';
-          const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-          if (counter) counter.style.display = 'none';
-        }
-      }
-    });
-    
-    // Observer les changements dans le panneau Compte-rendu
-    const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
-    if (summaryPane) {
-      errorObserver.observe(summaryPane, {
-        childList: true,
-        subtree: true,
-        characterData: true
-      });
-      console.log('[AGILO:RELANCE] ✅ MutationObserver activé sur panneau Compte-rendu');
-    }
     
     // Réinitialiser les compteurs quand on change de transcript
     // Utiliser MutationObserver au lieu de setInterval pour meilleure performance
