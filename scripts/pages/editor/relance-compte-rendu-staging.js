@@ -1453,14 +1453,41 @@
       // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
       // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
       // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
-      // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
-      if (!checkSummaryErrorInDOM()) {
-        btn.style.display = 'flex';
-        if (counter) counter.style.display = '';
-      } else {
+      if (checkSummaryErrorInDOM()) {
+        // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
         console.log('[AGILO:RELANCE] Sur onglet Transcription mais message d\'erreur détecté - Bouton caché');
         btn.style.display = 'none';
         if (counter) counter.style.display = 'none';
+      } else {
+        // Vérifier aussi via l'API pour être sûr
+        try {
+          const creds = await ensureCreds();
+          const { jobId, edition } = creds;
+          if (jobId && edition) {
+            const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
+            if (!summaryExists) {
+              console.log('[AGILO:RELANCE] Sur onglet Transcription mais compte-rendu inexistant - Bouton caché');
+              btn.style.display = 'none';
+              if (counter) counter.style.display = 'none';
+            } else {
+              btn.style.display = 'flex';
+              if (counter) counter.style.display = '';
+            }
+          } else {
+            btn.style.display = 'none';
+            if (counter) counter.style.display = 'none';
+          }
+        } catch (e) {
+          console.error('[AGILO:RELANCE] Erreur vérification compte-rendu sur onglet Transcription:', e);
+          // En cas d'erreur, vérifier quand même le DOM
+          if (checkSummaryErrorInDOM()) {
+            btn.style.display = 'none';
+            if (counter) counter.style.display = 'none';
+          } else {
+            btn.style.display = 'none';
+            if (counter) counter.style.display = 'none';
+          }
+        }
       }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
