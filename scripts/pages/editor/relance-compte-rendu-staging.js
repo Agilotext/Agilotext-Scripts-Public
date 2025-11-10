@@ -545,6 +545,31 @@
   
   function showButton(btn){
     if (!btn) return;
+    
+    // ⚠️ SÉCURITÉ : Ne PAS réafficher si le message d'erreur est présent
+    const root = byId('editorRoot');
+    if (root?.dataset.summaryEmpty === '1') {
+      log('showButton: summaryEmpty=1 détecté - NE PAS réafficher');
+      return; // Ne pas réafficher si summaryEmpty=1
+    }
+    
+    // Vérifier aussi le message d'erreur dans le DOM
+    if (hasErrorMessageInDOM()) {
+      log('showButton: Message d\'erreur détecté - NE PAS réafficher');
+      return; // Ne pas réafficher si message d'erreur présent
+    }
+    
+    // Vérifier l'état d'erreur stocké
+    const jobId = pickJobId();
+    if (jobId) {
+      const errorState = readSummaryErrorState(jobId);
+      if (errorState?.hasError) {
+        log('showButton: État erreur stocké - NE PAS réafficher');
+        return; // Ne pas réafficher si erreur stockée
+      }
+    }
+    
+    // ✅ Si on arrive ici, on peut réafficher
     btn.removeAttribute('hidden');
     btn.removeAttribute('aria-hidden');
     btn.style.removeProperty('display');
@@ -563,6 +588,8 @@
     $$('*', btn).forEach(child => {
       child.style.removeProperty('display');
     });
+    
+    log('showButton: Bouton réaffiché (aucune erreur détectée)');
   }
   
   function updateRegenerationCounter(jobId, edition){
@@ -662,34 +689,64 @@
       return;
     }
 
-    // ⚠️ IMPORTANT : Vérifier d'abord si le message d'erreur est dans le DOM
-    if (hasErrorMessageInDOM()) {
-      log('Message d\'erreur détecté dans le DOM - Bouton caché');
-      hideButton(btn, 'error-message-in-dom');
-      // Message pédagogique
+    // ⚠️ PRIORITÉ ABSOLUE 1 : Vérifier summaryEmpty du script principal
+    const root = byId('editorRoot');
+    if (root?.dataset.summaryEmpty === '1') {
+      log('⚠️ PRIORITÉ ABSOLUE: summaryEmpty=1 - Cache bouton immédiatement');
+      hideButton(btn, 'summary-empty-absolute');
       if (!$('.regeneration-no-summary-message', btn.parentElement)) {
         const msg = document.createElement('div');
         msg.className = 'regeneration-no-summary-message';
         msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
         btn.parentElement.appendChild(msg);
       }
-      return;
+      return; // ⚠️ ARRÊT IMMÉDIAT - Ne pas continuer
     }
 
-    // garde "jamais demandé"
+    // ⚠️ PRIORITÉ ABSOLUE 2 : Vérifier le message d'erreur dans le DOM (plusieurs fois pour être sûr)
+    const hasError = hasErrorMessageInDOM();
+    if (hasError) {
+      log('⚠️ PRIORITÉ ABSOLUE: Message d\'erreur détecté dans le DOM - Cache bouton immédiatement');
+      hideButton(btn, 'error-message-in-dom-absolute');
+      if (!$('.regeneration-no-summary-message', btn.parentElement)) {
+        const msg = document.createElement('div');
+        msg.className = 'regeneration-no-summary-message';
+        msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
+        btn.parentElement.appendChild(msg);
+      }
+      return; // ⚠️ ARRÊT IMMÉDIAT - Ne pas continuer
+    }
+
+    // ⚠️ PRIORITÉ 3 : Vérifier l'état d'erreur stocké (au cas où le DOM n'est pas encore mis à jour)
+    const errorState = readSummaryErrorState(jobId);
+    if (errorState?.hasError) {
+      log('⚠️ PRIORITÉ 3: État d\'erreur stocké détecté - Cache bouton', errorState.errorCode);
+      hideButton(btn, 'error-state-stored');
+      if (!$('.regeneration-no-summary-message', btn.parentElement)) {
+        const msg = document.createElement('div');
+        msg.className = 'regeneration-no-summary-message';
+        msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
+        btn.parentElement.appendChild(msg);
+      }
+      return; // ⚠️ ARRÊT - Ne pas continuer
+    }
+
+    // ⚠️ PRIORITÉ 4 : Vérifier via API si le compte-rendu a été demandé
     const requested = await wasSummaryEverRequested(jobId, auth);
     if (!requested){
-      hideButton(btn, 'never-requested');
+      log('⚠️ PRIORITÉ 4: Summary jamais demandé (API) - Cache bouton');
+      hideButton(btn, 'never-requested-api');
       if (!$('.regeneration-no-summary-message', btn.parentElement)) {
         const msg = document.createElement('div');
         msg.className = 'regeneration-no-summary-message';
         msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
         btn.parentElement.appendChild(msg);
       }
-      return;
+      return; // ⚠️ ARRÊT - Ne pas continuer
     }
 
-    // si demandé → bouton visible, mais limites applicables
+    // ✅ Si on arrive ici, le compte-rendu existe vraiment → bouton visible
+    log('✅ Compte-rendu existe - Affiche bouton');
     showButton(btn);
     updateRegenerationCounter(jobId, auth.edition);
     // updateButtonState est maintenant async, on doit attendre
@@ -1209,45 +1266,69 @@
     }, 2000);
   }
   
-  // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné)
+  // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné) - PLUS AGRESSIVE
   setInterval(() => {
     const btn = $('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
     // Récupérer editorRoot à chaque fois
     const root = byId('editorRoot');
-    const isVisible = window.getComputedStyle(btn).display !== 'none' && 
-                      window.getComputedStyle(btn).visibility !== 'hidden' &&
-                      !btn.classList.contains('agilo-force-hide');
+    const styles = window.getComputedStyle(btn);
+    const isVisible = styles.display !== 'none' && 
+                      styles.visibility !== 'hidden' &&
+                      !btn.classList.contains('agilo-force-hide') &&
+                      styles.opacity !== '0';
     
-    if (!isVisible) return; // Déjà caché, pas besoin de vérifier
-    
-    // Vérifier summaryEmpty
-    if (root?.dataset.summaryEmpty === '1') {
-      log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton', {
-        summaryEmpty: root.dataset.summaryEmpty,
-        btnVisible: true,
-        hasForceHide: btn.classList.contains('agilo-force-hide')
-      });
-      hideButton(btn, 'periodic-check-summary-empty');
-      return;
-    }
-    
-    // Vérifier le message d'erreur
-    const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-    if (summaryEl) {
-      const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-      const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-      if (text.includes(exactMsg) || text.includes('pas encore disponible') || text.includes('fichier manquant')) {
-        log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur - Cache bouton', {
-          textPreview: text.substring(0, 100),
+    // ⚠️ Si le bouton est visible, on vérifie TOUJOURS s'il devrait être caché
+    if (isVisible) {
+      // PRIORITÉ 1 : summaryEmpty
+      if (root?.dataset.summaryEmpty === '1') {
+        log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton FORCÉ', {
+          summaryEmpty: root.dataset.summaryEmpty,
           btnVisible: true,
-          hasForceHide: btn.classList.contains('agilo-force-hide')
+          display: styles.display,
+          visibility: styles.visibility,
+          opacity: styles.opacity
         });
-        hideButton(btn, 'periodic-check-error-message');
+        hideButton(btn, 'periodic-check-summary-empty');
         return;
       }
+      
+      // PRIORITÉ 2 : Message d'erreur dans le DOM
+      const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
+      if (summaryEl) {
+        const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
+        const html = (summaryEl.innerHTML || '').toLowerCase();
+        const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
+        
+        if (text.includes(exactMsg) || html.includes(exactMsg) || 
+            text.includes('pas encore disponible') || text.includes('fichier manquant')) {
+          log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur détecté - Cache bouton FORCÉ', {
+            textPreview: text.substring(0, 100),
+            btnVisible: true,
+            display: styles.display,
+            visibility: styles.visibility,
+            opacity: styles.opacity
+          });
+          hideButton(btn, 'periodic-check-error-message');
+          return;
+        }
+      }
+      
+      // PRIORITÉ 3 : État d'erreur stocké
+      const jobId = pickJobId();
+      if (jobId) {
+        const errorState = readSummaryErrorState(jobId);
+        if (errorState?.hasError) {
+          log('⚠️ VÉRIFICATION PÉRIODIQUE: État erreur stocké - Cache bouton FORCÉ', {
+            errorCode: errorState.errorCode,
+            btnVisible: true
+          });
+          hideButton(btn, 'periodic-check-error-state');
+          return;
+        }
+      }
     }
-  }, 500); // Vérifie toutes les 500ms (plus agressif)
+  }, 300); // Checks every 300ms (plus fréquent)
 })();
 
