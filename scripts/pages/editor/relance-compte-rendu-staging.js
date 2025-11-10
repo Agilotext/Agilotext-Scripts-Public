@@ -593,9 +593,42 @@
   /**
    * Vérifier si le message d'erreur est affiché dans le DOM
    */
+  /**
+   * Vérifier si le message d'erreur est affiché dans le DOM
+   * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
+   */
   function checkSummaryErrorInDOM() {
-    const summaryEditor = document.querySelector('#summaryEditor, [id*="summary"], [class*="summary"]');
-    if (!summaryEditor) return false;
+    // Chercher l'éditeur de compte-rendu (même s'il est caché)
+    const summaryEditor = document.querySelector('#summaryEditor, [id*="summaryEditor"], [id*="summary"]');
+    if (!summaryEditor) {
+      // Si l'éditeur n'existe pas, chercher dans tous les panneaux
+      const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
+      if (summaryPane) {
+        const text = summaryPane.textContent || summaryPane.innerText || '';
+        const html = summaryPane.innerHTML || '';
+        
+        // Vérifier les messages d'erreur possibles
+        const errorMessages = [
+          'pas encore disponible',
+          'fichier manquant',
+          'non publié',
+          'n\'est pas encore disponible',
+          'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+        ];
+        
+        const hasError = errorMessages.some(msg => 
+          text.toLowerCase().includes(msg.toLowerCase()) || 
+          html.toLowerCase().includes(msg.toLowerCase())
+        );
+        
+        if (hasError) {
+          console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 100));
+        }
+        
+        return hasError;
+      }
+      return false;
+    }
     
     const text = summaryEditor.textContent || summaryEditor.innerText || '';
     const html = summaryEditor.innerHTML || '';
@@ -1389,6 +1422,15 @@
       }
     }
     
+    // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
+    // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
+    if (checkSummaryErrorInDOM()) {
+      console.log('[AGILO:RELANCE] Message d\'erreur détecté - Bouton caché (vérification finale)');
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
+      return;
+    }
+    
     // Gérer la visibilité selon l'onglet et l'état du transcript
     if (isSummaryTab) {
       // Visible sur l'onglet Compte-rendu (le compte-rendu existe, vérifié ci-dessus)
@@ -1404,8 +1446,17 @@
       }
     } else if (isTranscriptTab && transcriptModified) {
       // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
+      // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
+      // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
+      // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
+      if (!checkSummaryErrorInDOM()) {
+        btn.style.display = 'flex';
+        if (counter) counter.style.display = '';
+      } else {
+        console.log('[AGILO:RELANCE] Sur onglet Transcription mais message d\'erreur détecté - Bouton caché');
+        btn.style.display = 'none';
+        if (counter) counter.style.display = 'none';
+      }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
       btn.style.display = 'none';
