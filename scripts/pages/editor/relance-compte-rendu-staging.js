@@ -1395,11 +1395,15 @@
     
     // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur dans le DOM - Bouton caché');
+    console.log('[AGILO:RELANCE] 🔍 Vérification DOM pour message d\'erreur...');
+    const hasErrorInDOM = checkSummaryErrorInDOM();
+    if (hasErrorInDOM) {
+      console.log('[AGILO:RELANCE] ❌ Message d\'erreur dans le DOM - Bouton CACHÉ');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
+    } else {
+      console.log('[AGILO:RELANCE] ✅ Aucun message d\'erreur dans le DOM - Vérification API...');
     }
     
     // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
@@ -1450,11 +1454,15 @@
     
     // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
     // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur détecté - Bouton caché (vérification finale)');
+    console.log('[AGILO:RELANCE] 🔍 Vérification finale DOM avant affichage bouton...');
+    const hasErrorFinal = checkSummaryErrorInDOM();
+    if (hasErrorFinal) {
+      console.log('[AGILO:RELANCE] ❌ Message d\'erreur détecté - Bouton CACHÉ (vérification finale)');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
+    } else {
+      console.log('[AGILO:RELANCE] ✅ Pas de message d\'erreur - Bouton peut être affiché');
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
