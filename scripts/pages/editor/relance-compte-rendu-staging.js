@@ -1657,7 +1657,7 @@
       });
     });
     
-    const observer = new MutationObserver(function(mutations) {
+    const tabObserver = new MutationObserver(function(mutations) {
       mutations.forEach(function(mutation) {
         if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
           updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
@@ -1666,7 +1666,7 @@
     });
     
     tabs.forEach(tab => {
-      observer.observe(tab, { attributes: true });
+      tabObserver.observe(tab, { attributes: true });
     });
     
     // Initialiser les compteurs et limites
@@ -1709,7 +1709,7 @@
     setTimeout(initLimits, 500);
     
     // ⚠️ IMPORTANT : Observer les changements dans le DOM pour détecter quand le message d'erreur apparaît
-    const observer = new MutationObserver(() => {
+    const errorObserver = new MutationObserver(() => {
       // Si le message d'erreur apparaît, cacher le bouton immédiatement
       const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
       if (btn && btn.style.display !== 'none') {
@@ -1725,7 +1725,7 @@
     // Observer les changements dans le panneau Compte-rendu
     const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
     if (summaryPane) {
-      observer.observe(summaryPane, {
+      errorObserver.observe(summaryPane, {
         childList: true,
         subtree: true,
         characterData: true
