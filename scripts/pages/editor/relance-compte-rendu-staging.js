@@ -1546,71 +1546,147 @@
                 console.error('[AGILO:RELANCE] Il se peut que le compte-rendu n\'ait pas été régénéré ou que le cache serveur retourne l\'ancien.');
                 console.error('[AGILO:RELANCE] Hash ancien:', oldContentHash.substring(0, 100) + '...');
                 console.error('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 100) + '...');
+              } else {
+                // ⚠️ CRITIQUE : Afficher directement le nouveau compte-rendu dans l'éditeur
+                console.log('[AGILO:RELANCE] ========================================');
+                console.log('[AGILO:RELANCE] 📝 Affichage direct du NOUVEAU compte-rendu dans l\'éditeur...');
+                console.log('[AGILO:RELANCE] ========================================');
+                
+                try {
+                  // Fonction pour nettoyer le HTML (similaire au script principal)
+                  function sanitizeHtml(html) {
+                    const div = document.createElement('div');
+                    div.innerHTML = html || '';
+                    div.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+                    div.querySelectorAll('*').forEach(n => {
+                      [...n.attributes].forEach(a => {
+                        const name = a.name.toLowerCase();
+                        const val = String(a.value || '');
+                        if (name.startsWith('on') || /^javascript:/i.test(val)) n.removeAttribute(a.name);
+                      });
+                    });
+                    return div.innerHTML;
+                  }
+                  
+                  // Nettoyer le HTML
+                  const cleanedHtml = sanitizeHtml(newSummaryText);
+                  
+                  // Trouver l'éditeur de compte-rendu
+                  const summaryEditor = document.querySelector('#summaryEditor');
+                  const summaryPane = document.querySelector('#pane-summary');
+                  
+                  if (summaryEditor) {
+                    // Afficher le nouveau compte-rendu
+                    summaryEditor.innerHTML = cleanedHtml;
+                    console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #summaryEditor');
+                  } else if (summaryPane) {
+                    // Si pas d'éditeur, chercher dans le pane
+                    const editorInPane = summaryPane.querySelector('#summaryEditor, [id*="summary"]');
+                    if (editorInPane) {
+                      editorInPane.innerHTML = cleanedHtml;
+                      console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #pane-summary > #summaryEditor');
+                    } else {
+                      // Créer un conteneur si nécessaire
+                      summaryPane.innerHTML = cleanedHtml;
+                      console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #pane-summary');
+                    }
+                  } else {
+                    console.warn('[AGILO:RELANCE] ⚠️ Éditeur de compte-rendu non trouvé, rechargement nécessaire');
+                    // Fallback : recharger la page
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('tab', 'summary');
+                    url.searchParams.set('_regen', Date.now());
+                    window.location.replace(url.toString());
+                    return;
+                  }
+                  
+                  // Basculer vers l'onglet "Compte rendu" si nécessaire
+                  const summaryTab = document.querySelector('[data-tab="summary"], [aria-controls="pane-summary"], #tab-summary');
+                  if (summaryTab && summaryTab.getAttribute('aria-selected') !== 'true') {
+                    summaryTab.click();
+                    console.log('[AGILO:RELANCE] ✅ Onglet "Compte rendu" activé');
+                  }
+                  
+                  // Mettre à jour les liens de téléchargement
+                  console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
+                  try {
+                    const creds = await ensureCreds();
+                    // Appeler la fonction updateDownloadLinks du script principal si elle existe
+                    if (typeof window.updateDownloadLinks === 'function') {
+                      window.updateDownloadLinks(jobId, {
+                        username: creds.email,
+                        token: creds.token,
+                        edition: creds.edition
+                      }, { summaryEmpty: false });
+                      console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
+                    } else {
+                      console.warn('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée');
+                    }
+                  } catch (e) {
+                    console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
+                  }
+                  
+                  // Mettre à jour le dataset pour indiquer que le compte-rendu n'est plus vide
+                  const editorRoot = document.getElementById('editorRoot');
+                  if (editorRoot) {
+                    editorRoot.dataset.summaryEmpty = '0';
+                    console.log('[AGILO:RELANCE] ✅ Dataset summaryEmpty mis à jour');
+                  }
+                  
+                  // Émettre un événement pour notifier le script principal
+                  window.dispatchEvent(new CustomEvent('agilo:summary-updated', {
+                    detail: { jobId, hash: newHash }
+                  }));
+                  
+                  console.log('[AGILO:RELANCE] ========================================');
+                  console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu affiché avec succès !');
+                  console.log('[AGILO:RELANCE] Le compte-rendu est maintenant visible dans l\'éditeur');
+                  console.log('[AGILO:RELANCE] ========================================');
+                  
+                  // Afficher un message de succès
+                  if (typeof window.toast === 'function') {
+                    window.toast('✅ Compte-rendu régénéré avec succès !');
+                  }
+                  
+                } catch (e) {
+                  console.error('[AGILO:RELANCE] ❌ Erreur affichage nouveau compte-rendu:', e);
+                  // En cas d'erreur, recharger la page
+                  const url = new URL(window.location.href);
+                  url.searchParams.set('tab', 'summary');
+                  url.searchParams.set('_regen', Date.now());
+                  window.location.replace(url.toString());
+                  return;
+                }
               }
             } else {
               console.warn('[AGILO:RELANCE] ⚠️ Impossible de récupérer un nouveau compte-rendu différent après', maxAttempts, 'tentatives');
               console.warn('[AGILO:RELANCE] Le rechargement de la page devrait afficher le nouveau compte-rendu quand il sera disponible');
+              
+              // Recharger la page si on n'a pas pu récupérer le nouveau compte-rendu
+              const url = new URL(window.location.href);
+              url.searchParams.set('tab', 'summary');
+              url.searchParams.set('_regen', Date.now());
+              window.location.replace(url.toString());
             }
           } catch (e) {
             console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', e);
-          }
-          
-          // ⚠️ IMPORTANT : Mettre à jour les liens de téléchargement AVANT de recharger
-          // Les liens de téléchargement (PDF, DOC, etc.) pointent vers receiveSummary
-          // Ils doivent être mis à jour pour pointer vers le NOUVEAU compte-rendu
-          console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
-          try {
-            // Appeler la fonction updateDownloadLinks du script principal si elle existe
-            if (typeof window.updateDownloadLinks === 'function') {
-              const creds = await ensureCreds();
-              window.updateDownloadLinks(jobId, {
-                username: creds.email,
-                token: creds.token,
-                edition: creds.edition
-              }, { summaryEmpty: false });
-              console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
-            } else {
-              // Fallback : forcer le rechargement pour que le script principal mette à jour les liens
-              console.log('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée, rechargement nécessaire');
-            }
-          } catch (e) {
-            console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
+            // En cas d'erreur, recharger la page
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'summary');
+            url.searchParams.set('_regen', Date.now());
+            window.location.replace(url.toString());
           }
         } else {
           console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas encore prêt après toutes les tentatives');
           console.log('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu n\'est peut-être pas encore disponible');
-          console.log('[AGILO:RELANCE] ⚠️ Les liens de téléchargement peuvent pointer vers l\'ancien compte-rendu');
-          console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
+          console.log('[AGILO:RELANCE] Rechargement - le compte-rendu apparaîtra quand il sera prêt');
+          
+          // Recharger la page
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'summary');
+          url.searchParams.set('_regen', Date.now());
+          window.location.replace(url.toString());
         }
-        
-        // Recharger la page avec cache-busting MULTIPLE pour forcer le chargement du nouveau compte-rendu
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
-        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : Attendez que le compte-rendu soit complètement chargé avant de télécharger');
-        console.log('[AGILO:RELANCE] Le téléchargement PDF/DOC utilisera receiveSummary qui doit retourner le NOUVEAU compte-rendu');
-        console.log('[AGILO:RELANCE] Hash du nouveau compte-rendu:', waitResult.contentHash?.substring(0, 50) + '...');
-        console.log('[AGILO:RELANCE] ========================================');
-        
-        // ⚠️ CRITIQUE : Utiliser plusieurs paramètres de cache-busting pour forcer le serveur
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', 'summary');
-        url.searchParams.set('_regen', Date.now()); // Cache-busting principal
-        url.searchParams.set('_t', Date.now() + 1); // Cache-busting supplémentaire
-        url.searchParams.set('_v', waitResult.contentHash?.substring(0, 20) || Date.now()); // Version basée sur le hash
-        
-        // ⚠️ IMPORTANT : Nettoyer le cache du navigateur pour cette page
-        // Utiliser location.replace avec un timestamp unique
-        const finalUrl = url.toString() + '&_nocache=' + Date.now();
-        
-        // Forcer le rechargement sans cache
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.getRegistrations().then(registrations => {
-            registrations.forEach(registration => registration.unregister());
-          });
-        }
-        
-        // Utiliser location.replace pour éviter le cache navigateur
-        window.location.replace(finalUrl);
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
