@@ -890,23 +890,36 @@
         });
         
         // ⚠️ CRITIQUE : Vérifier aussi si le texte contient UNIQUEMENT le message d'erreur
-        // Parfois l'API retourne 200 OK mais avec seulement le message d'erreur
+        // L'API peut retourner 200 OK avec du HTML contenant uniquement le message d'erreur
         const textLower = text.toLowerCase();
-        const isOnlyError = (
-          textLower.includes('pas encore disponible') &&
-          (textLower.includes('fichier manquant') || textLower.includes('non publié')) &&
-          text.length < 500 // Si c'est court, c'est probablement juste le message d'erreur
-        );
+        const hasErrorPhrase = textLower.includes('pas encore disponible') || 
+                              textLower.includes('fichier manquant') || 
+                              textLower.includes('non publié');
+        const hasErrorCode = /error_summary_transcript_file_not_exists/i.test(text);
         
-        if (!isValidContent || isOnlyError) {
-          const reason = isOnlyError ? 'uniquement message erreur' :
+        // Si le texte est court ET contient le message d'erreur, c'est une erreur
+        const isOnlyError = hasErrorPhrase && text.length < 500;
+        
+        // Si le texte contient le code d'erreur, c'est une erreur (même si long)
+        const containsErrorCode = hasErrorCode;
+        
+        if (!isValidContent || isOnlyError || containsErrorCode) {
+          const reason = containsErrorCode ? 'code erreur ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' :
+                       (isOnlyError ? 'uniquement message erreur' :
                        (isError ? 'message erreur' : 
                        (isAlertHTML ? 'alerte HTML' : 
                        (startsWithAlert ? 'commence par alerte' :
-                       (isMostlyAlert ? 'principalement alerte' : 'trop court/invalide'))));
+                       (isMostlyAlert ? 'principalement alerte' : 'trop court/invalide')))));
           console.log('[AGILO:RELANCE] ❌ ERREUR - Compte-rendu inexistant ou invalide (contenu:', reason, ')');
           console.log('[AGILO:RELANCE] Aperçu complet du contenu (500 premiers chars):', text.substring(0, 500));
           console.log('[AGILO:RELANCE] Longueur totale:', text.length);
+          console.log('[AGILO:RELANCE] Détails:', {
+            hasErrorPhrase,
+            hasErrorCode,
+            isOnlyError,
+            containsErrorCode,
+            isValidContent
+          });
           console.log('[AGILO:RELANCE] ========================================');
           return false;
         }
