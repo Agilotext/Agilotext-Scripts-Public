@@ -2228,6 +2228,22 @@
     const style = document.createElement('style');
     style.id = 'relance-summary-styles';
     style.textContent = `
+      /* ⚠️ CRITIQUE : Forcer le cache du bouton si erreur détectée */
+      [data-action="relancer-compte-rendu"].agilo-force-hide,
+      [data-action="relancer-compte-rendu"].agilo-force-hide * {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        left: -9999px !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
       /* Conteneur de chargement - utilise vos variables CSS */
       .summary-loading-indicator {
         display: flex;
