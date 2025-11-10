@@ -2295,18 +2295,39 @@
           console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
 
           // ⚠️ CRITIQUE : Vérifier d'abord le DOM AVANT updateButtonVisibility
+          console.log('[AGILO:RELANCE] Vérification DOM avant initialisation...');
           const hasErrorDOM = checkSummaryErrorInDOM();
+          console.log('[AGILO:RELANCE] Résultat vérification DOM:', hasErrorDOM);
           if (hasErrorDOM) {
             console.log('[AGILO:RELANCE] ⚠️ Erreur détectée dans DOM - Cache bouton immédiatement');
             const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
             if (btn) {
+              console.log('[AGILO:RELANCE] Bouton trouvé, cache avec !important');
               btn.style.setProperty('display', 'none', 'important');
               btn.style.setProperty('visibility', 'hidden', 'important');
+              btn.style.setProperty('opacity', '0', 'important');
+              btn.style.setProperty('position', 'absolute', 'important');
+              btn.style.setProperty('left', '-9999px', 'important');
+              btn.style.setProperty('width', '0', 'important');
+              btn.style.setProperty('height', '0', 'important');
               btn.classList.add('agilo-force-hide');
               const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
               if (counter) counter.style.setProperty('display', 'none', 'important');
+              
+              // Vérifier que ça a fonctionné
+              setTimeout(() => {
+                const computed = window.getComputedStyle(btn);
+                console.log('[AGILO:RELANCE] Vérification après cache - Display:', computed.display, 'Visible:', btn.offsetParent !== null);
+                if (computed.display !== 'none') {
+                  console.warn('[AGILO:RELANCE] ⚠️ Le bouton est toujours visible malgré display:none !important');
+                }
+              }, 100);
+            } else {
+              console.warn('[AGILO:RELANCE] ⚠️ Bouton non trouvé lors de la vérification DOM');
             }
             return; // Ne pas continuer si erreur dans DOM
+          } else {
+            console.log('[AGILO:RELANCE] Pas d\'erreur dans DOM, continue initialisation...');
           }
 
           // ⚠️ CRITIQUE : Appeler updateButtonVisibility() EN PREMIER pour vérifier si le compte-rendu existe
@@ -2713,17 +2734,24 @@
   }
   
   // ⚠️ CRITIQUE : Exposer les fonctions globalement pour le diagnostic et le debug
-  window.relancerCompteRendu = relancerCompteRendu;
-  window.openSummaryTab = openSummaryTab;
-  window.checkSummaryErrorInDOM = checkSummaryErrorInDOM;
-  window.updateButtonVisibility = updateButtonVisibility;
-  window.checkSummaryExists = checkSummaryExists;
-  window.getContentHash = getContentHash;
-  
-  console.log('[AGILO:RELANCE] ✅ Fonctions exposées globalement:', {
-    checkSummaryErrorInDOM: typeof checkSummaryErrorInDOM === 'function',
-    updateButtonVisibility: typeof updateButtonVisibility === 'function',
-    checkSummaryExists: typeof checkSummaryExists === 'function'
-  });
+  // FAIRE CELA AVANT la fermeture de l'IIFE pour être sûr qu'elles sont disponibles
+  try {
+    window.relancerCompteRendu = relancerCompteRendu;
+    window.openSummaryTab = openSummaryTab;
+    window.checkSummaryErrorInDOM = checkSummaryErrorInDOM;
+    window.updateButtonVisibility = updateButtonVisibility;
+    window.checkSummaryExists = checkSummaryExists;
+    window.getContentHash = getContentHash;
+    
+    console.log('[AGILO:RELANCE] ✅ Fonctions exposées globalement:', {
+      checkSummaryErrorInDOM: typeof window.checkSummaryErrorInDOM === 'function',
+      updateButtonVisibility: typeof window.updateButtonVisibility === 'function',
+      checkSummaryExists: typeof window.checkSummaryExists === 'function',
+      relancerCompteRendu: typeof window.relancerCompteRendu === 'function',
+      openSummaryTab: typeof window.openSummaryTab === 'function'
+    });
+  } catch (e) {
+    console.error('[AGILO:RELANCE] ❌ Erreur lors de l\'exposition des fonctions:', e);
+  }
 })();
 
