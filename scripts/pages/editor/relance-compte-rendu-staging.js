@@ -1843,9 +1843,36 @@
     // ⚠️ CRITIQUE : Vérifier IMMÉDIATEMENT dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
     // Cette vérification doit être faite AVANT TOUT, même avant de vérifier l'onglet actif
+    // ⚠️ DOUBLE VÉRIFICATION pour être sûr
     console.log('[AGILO:RELANCE] updateButtonVisibility - Appel checkSummaryErrorInDOM()...');
-    const hasErrorInDOM = checkSummaryErrorInDOM();
-    console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+    let hasErrorInDOM = false;
+    try {
+      hasErrorInDOM = checkSummaryErrorInDOM();
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+      
+      // ⚠️ DOUBLE VÉRIFICATION : Vérifier aussi directement dans les conteneurs
+      if (!hasErrorInDOM) {
+        const summaryPane = document.querySelector('#pane-summary');
+        const summaryEditor = document.querySelector('#summaryEditor');
+        if (summaryPane || summaryEditor) {
+          const paneText = summaryPane ? (summaryPane.textContent || '').toLowerCase() : '';
+          const editorText = summaryEditor ? (summaryEditor.textContent || '').toLowerCase() : '';
+          const combinedText = paneText + ' ' + editorText;
+          if (combinedText.includes('pas encore disponible') || 
+              combinedText.includes('fichier manquant') || 
+              combinedText.includes('non publié') ||
+              combinedText.includes('error_summary_transcript_file_not_exists')) {
+            console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur trouvé dans conteneurs directement');
+            hasErrorInDOM = true;
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[AGILO:RELANCE] updateButtonVisibility - Erreur checkSummaryErrorInDOM:', e);
+      // En cas d'erreur, considérer qu'il y a une erreur par sécurité
+      hasErrorInDOM = true;
+    }
+    
     if (hasErrorInDOM) {
       console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE (tous onglets)');
       // ⚠️ CRITIQUE : Forcer le cache avec plusieurs méthodes pour être sûr
