@@ -2305,14 +2305,22 @@
         const creds = await ensureCreds();
         const { edition, jobId } = creds;
         if (jobId && edition) {
+          console.log('[AGILO:RELANCE] ========================================');
           console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
-          
+          console.log('[AGILO:RELANCE] ========================================');
+
           // ⚠️ CRITIQUE : Vérifier d'abord le DOM AVANT updateButtonVisibility
-          console.log('[AGILO:RELANCE] Vérification DOM avant initialisation...');
-          const hasErrorDOM = checkSummaryErrorInDOM();
-          console.log('[AGILO:RELANCE] Résultat vérification DOM:', hasErrorDOM);
+          console.log('[AGILO:RELANCE] ÉTAPE 1: Vérification DOM avant initialisation...');
+          let hasErrorDOM = false;
+          try {
+            hasErrorDOM = checkSummaryErrorInDOM();
+            console.log('[AGILO:RELANCE] Résultat vérification DOM:', hasErrorDOM);
+          } catch (e) {
+            console.error('[AGILO:RELANCE] Erreur lors de checkSummaryErrorInDOM:', e);
+          }
+          
           if (hasErrorDOM) {
-            console.log('[AGILO:RELANCE] ⚠️ Erreur détectée dans DOM - Cache bouton immédiatement');
+            console.log('[AGILO:RELANCE] ⚠️ ERREUR DÉTECTÉE dans DOM - Cache bouton immédiatement');
             const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
             if (btn) {
               console.log('[AGILO:RELANCE] Bouton trouvé, cache avec !important');
@@ -2323,6 +2331,7 @@
               btn.style.setProperty('left', '-9999px', 'important');
               btn.style.setProperty('width', '0', 'important');
               btn.style.setProperty('height', '0', 'important');
+              btn.style.setProperty('pointer-events', 'none', 'important');
               btn.classList.add('agilo-force-hide');
               const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
               if (counter) counter.style.setProperty('display', 'none', 'important');
@@ -2330,14 +2339,22 @@
               // Vérifier que ça a fonctionné
               setTimeout(() => {
                 const computed = window.getComputedStyle(btn);
-                console.log('[AGILO:RELANCE] Vérification après cache - Display:', computed.display, 'Visible:', btn.offsetParent !== null);
-                if (computed.display !== 'none') {
-                  console.warn('[AGILO:RELANCE] ⚠️ Le bouton est toujours visible malgré display:none !important');
+                const isVisible = btn.offsetParent !== null;
+                console.log('[AGILO:RELANCE] Vérification après cache - Display:', computed.display, 'Visible:', isVisible);
+                if (computed.display !== 'none' || isVisible) {
+                  console.warn('[AGILO:RELANCE] ⚠️ PROBLÈME: Le bouton est toujours visible malgré display:none !important');
+                  console.warn('[AGILO:RELANCE] Tentative méthode alternative...');
+                  // Méthode alternative encore plus agressive
+                  btn.style.cssText = 'display: none !important; visibility: hidden !important; opacity: 0 !important; position: absolute !important; left: -9999px !important; width: 0 !important; height: 0 !important; pointer-events: none !important;';
+                  btn.remove();
+                } else {
+                  console.log('[AGILO:RELANCE] ✅ Bouton bien caché');
                 }
               }, 100);
             } else {
               console.warn('[AGILO:RELANCE] ⚠️ Bouton non trouvé lors de la vérification DOM');
             }
+            console.log('[AGILO:RELANCE] ========================================');
             return; // Ne pas continuer si erreur dans DOM
           } else {
             console.log('[AGILO:RELANCE] Pas d\'erreur dans DOM, continue initialisation...');
@@ -2345,6 +2362,7 @@
 
           // ⚠️ CRITIQUE : Appeler updateButtonVisibility() EN PREMIER pour vérifier si le compte-rendu existe
           // Si le compte-rendu n'existe pas, le bouton sera caché et on n'a pas besoin de mettre à jour les compteurs
+          console.log('[AGILO:RELANCE] ÉTAPE 2: Appel updateButtonVisibility()...');
           await updateButtonVisibility();
           
           // Seulement si le bouton est visible, mettre à jour les compteurs et l'état
