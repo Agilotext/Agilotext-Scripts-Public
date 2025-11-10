@@ -1379,46 +1379,103 @@
           console.log('[AGILO:RELANCE] Hash nouveau:', waitResult.contentHash?.substring(0, 30) + '...');
           console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 30) + '...' || 'aucun');
           
-          // ⚠️ IMPORTANT : Récupérer le NOUVEAU compte-rendu avec cache-busting pour vérifier qu'il est bien différent
+          // ⚠️ CRITIQUE : Récupérer le NOUVEAU compte-rendu avec cache-busting MULTIPLE pour forcer le serveur
+          // Faire plusieurs tentatives avec différents cache-busters pour être sûr d'avoir le nouveau
           try {
-            const cacheBuster = Date.now();
-            const newSummaryUrl = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
-            
+            console.log('[AGILO:RELANCE] ========================================');
             console.log('[AGILO:RELANCE] Récupération explicite du NOUVEAU compte-rendu...');
-            const newSummaryResponse = await fetch(newSummaryUrl, {
-              method: 'GET',
-              cache: 'no-store',
-              headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-              }
-            });
+            console.log('[AGILO:RELANCE] Hash attendu (nouveau):', waitResult.contentHash?.substring(0, 50) + '...');
+            console.log('[AGILO:RELANCE] Hash ancien (à éviter):', oldContentHash?.substring(0, 50) + '...' || 'aucun');
+            console.log('[AGILO:RELANCE] ========================================');
             
-            if (newSummaryResponse.ok) {
-              const newSummaryText = await newSummaryResponse.text();
-              const newHash = getContentHash(newSummaryText);
+            // Faire 3 tentatives avec cache-busting différent pour être sûr
+            let newSummaryText = null;
+            let newHash = null;
+            let attempts = 0;
+            const maxAttempts = 3;
+            
+            while (attempts < maxAttempts && (!newHash || (oldContentHash && newHash === oldContentHash))) {
+              attempts++;
+              const cacheBuster = Date.now() + attempts; // Cache-buster unique à chaque tentative
+              const newSummaryUrl = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}&_attempt=${attempts}`;
               
-              console.log('[AGILO:RELANCE] Nouveau compte-rendu récupéré:', {
-                length: newSummaryText.length,
-                hash: newHash.substring(0, 50) + '...',
-                isDifferent: oldContentHash ? (newHash !== oldContentHash) : true,
-                preview: newSummaryText.substring(0, 200).replace(/\s+/g, ' ')
+              console.log(`[AGILO:RELANCE] Tentative ${attempts}/${maxAttempts} de récupération...`);
+              
+              const newSummaryResponse = await fetch(newSummaryUrl, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: {
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache',
+                  'Expires': '0',
+                  'X-Requested-With': 'XMLHttpRequest' // Pour éviter certains caches
+                }
               });
               
-              // Vérifier que c'est bien différent de l'ancien
-              if (oldContentHash && newHash === oldContentHash) {
-                console.warn('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu a le même hash que l\'ancien !');
-                console.warn('[AGILO:RELANCE] Hash ancien:', oldContentHash.substring(0, 50) + '...');
-                console.warn('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 50) + '...');
-                console.warn('[AGILO:RELANCE] Il se peut que le compte-rendu n\'ait pas été régénéré ou que le contenu soit identique.');
+              if (newSummaryResponse.ok) {
+                const text = await newSummaryResponse.text();
+                const hash = getContentHash(text);
+                
+                console.log(`[AGILO:RELANCE] Tentative ${attempts} - Hash récupéré:`, hash.substring(0, 50) + '...');
+                
+                // Vérifier que ce n'est pas un message d'erreur
+                const isError = text.includes('pas encore disponible') || 
+                               text.includes('non publié') || 
+                               text.includes('fichier manquant');
+                
+                if (!isError && text.length > 100) {
+                  // Si on a un hash attendu, vérifier qu'il correspond
+                  if (waitResult.contentHash && hash === waitResult.contentHash) {
+                    console.log(`[AGILO:RELANCE] ✅ Hash correspond au hash attendu (tentative ${attempts})`);
+                    newSummaryText = text;
+                    newHash = hash;
+                    break;
+                  }
+                  
+                  // Si pas de hash attendu mais que c'est différent de l'ancien, c'est bon
+                  if (!oldContentHash || hash !== oldContentHash) {
+                    console.log(`[AGILO:RELANCE] ✅ Hash différent de l'ancien (tentative ${attempts})`);
+                    newSummaryText = text;
+                    newHash = hash;
+                    break;
+                  }
+                  
+                  // Si hash identique à l'ancien, attendre un peu et réessayer
+                  if (oldContentHash && hash === oldContentHash) {
+                    console.warn(`[AGILO:RELANCE] ⚠️ Hash identique à l'ancien (tentative ${attempts}) - Attente avant nouvelle tentative...`);
+                    if (attempts < maxAttempts) {
+                      await new Promise(r => setTimeout(r, 1000)); // Attendre 1 seconde
+                      continue;
+                    }
+                  }
+                } else {
+                  console.warn(`[AGILO:RELANCE] ⚠️ Réponse contient une erreur (tentative ${attempts})`);
+                }
               } else {
-                console.log('[AGILO:RELANCE] ✅ Le nouveau compte-rendu est différent de l\'ancien (hash différent)');
-                console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 50) + '...' || 'aucun');
-                console.log('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 50) + '...');
+                console.warn(`[AGILO:RELANCE] ⚠️ Erreur HTTP ${newSummaryResponse.status} (tentative ${attempts})`);
+              }
+            }
+            
+            if (newSummaryText && newHash) {
+              console.log('[AGILO:RELANCE] ========================================');
+              console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu récupéré avec succès !');
+              console.log('[AGILO:RELANCE] Longueur:', newSummaryText.length);
+              console.log('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 50) + '...');
+              console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 50) + '...' || 'aucun');
+              console.log('[AGILO:RELANCE] Est différent:', oldContentHash ? (newHash !== oldContentHash) : true);
+              console.log('[AGILO:RELANCE] Aperçu (200 premiers chars):', newSummaryText.substring(0, 200).replace(/\s+/g, ' '));
+              console.log('[AGILO:RELANCE] ========================================');
+              
+              // Vérifier une dernière fois que c'est bien différent
+              if (oldContentHash && newHash === oldContentHash) {
+                console.error('[AGILO:RELANCE] ❌ ERREUR : Le compte-rendu récupéré a le même hash que l\'ancien !');
+                console.error('[AGILO:RELANCE] Il se peut que le compte-rendu n\'ait pas été régénéré ou que le cache serveur retourne l\'ancien.');
+                console.error('[AGILO:RELANCE] Hash ancien:', oldContentHash.substring(0, 100) + '...');
+                console.error('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 100) + '...');
               }
             } else {
-              console.warn('[AGILO:RELANCE] ⚠️ Impossible de récupérer le nouveau compte-rendu:', newSummaryResponse.status);
+              console.warn('[AGILO:RELANCE] ⚠️ Impossible de récupérer un nouveau compte-rendu différent après', maxAttempts, 'tentatives');
+              console.warn('[AGILO:RELANCE] Le rechargement de la page devrait afficher le nouveau compte-rendu quand il sera disponible');
             }
           } catch (e) {
             console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', e);
@@ -1452,17 +1509,34 @@
           console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
         }
         
-        // Recharger la page avec cache-busting pour forcer le chargement du nouveau compte-rendu
+        // Recharger la page avec cache-busting MULTIPLE pour forcer le chargement du nouveau compte-rendu
         console.log('[AGILO:RELANCE] ========================================');
         console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
         console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : Attendez que le compte-rendu soit complètement chargé avant de télécharger');
         console.log('[AGILO:RELANCE] Le téléchargement PDF/DOC utilisera receiveSummary qui doit retourner le NOUVEAU compte-rendu');
+        console.log('[AGILO:RELANCE] Hash du nouveau compte-rendu:', waitResult.contentHash?.substring(0, 50) + '...');
         console.log('[AGILO:RELANCE] ========================================');
+        
+        // ⚠️ CRITIQUE : Utiliser plusieurs paramètres de cache-busting pour forcer le serveur
         const url = new URL(window.location.href);
         url.searchParams.set('tab', 'summary');
-        url.searchParams.set('_regen', Date.now()); // Cache-busting pour forcer le rechargement
+        url.searchParams.set('_regen', Date.now()); // Cache-busting principal
+        url.searchParams.set('_t', Date.now() + 1); // Cache-busting supplémentaire
+        url.searchParams.set('_v', waitResult.contentHash?.substring(0, 20) || Date.now()); // Version basée sur le hash
+        
+        // ⚠️ IMPORTANT : Nettoyer le cache du navigateur pour cette page
+        // Utiliser location.replace avec un timestamp unique
+        const finalUrl = url.toString() + '&_nocache=' + Date.now();
+        
+        // Forcer le rechargement sans cache
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            registrations.forEach(registration => registration.unregister());
+          });
+        }
+        
         // Utiliser location.replace pour éviter le cache navigateur
-        window.location.replace(url.toString());
+        window.location.replace(finalUrl);
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
@@ -1773,8 +1847,8 @@
             }
             // Seulement maintenant, si TOUTES les vérifications passent, on peut afficher
             console.log('[AGILO:RELANCE] updateButtonVisibility - TOUTES vérifications OK - Affichage bouton sur onglet Transcription');
-            btn.style.display = 'flex';
-            if (counter) counter.style.display = '';
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
           }
         } else {
           console.log('[AGILO:RELANCE] updateButtonVisibility - Credentials manquants - Bouton CACHE');
@@ -2117,8 +2191,8 @@
                 }
                 
                 // Mettre à jour les compteurs et l'état
-                updateRegenerationCounter(creds.jobId, creds.edition);
-                updateButtonState(creds.jobId, creds.edition);
+              updateRegenerationCounter(creds.jobId, creds.edition);
+              updateButtonState(creds.jobId, creds.edition);
               } else {
                 // Si pas de compte-rendu, ne pas afficher le bouton
                 console.log('[AGILO:RELANCE] Après sauvegarde - Aucun compte-rendu existant - Bouton CACHE');
@@ -2206,8 +2280,8 @@
           // Seulement si le bouton est visible, mettre à jour les compteurs et l'état
           const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
           if (btn && btn.style.display !== 'none') {
-            updateRegenerationCounter(jobId, edition);
-            updateButtonState(jobId, edition);
+          updateRegenerationCounter(jobId, edition);
+          updateButtonState(jobId, edition);
           }
           
           // Logs pour debug Pro/Business
