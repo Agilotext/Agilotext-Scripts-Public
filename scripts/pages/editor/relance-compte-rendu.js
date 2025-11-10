@@ -1445,8 +1445,15 @@
       // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
       // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
       // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
+      // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
+      if (!checkSummaryErrorInDOM()) {
+        btn.style.display = 'flex';
+        if (counter) counter.style.display = '';
+      } else {
+        console.log('[AGILO:RELANCE] Sur onglet Transcription mais message d\'erreur détecté - Bouton caché');
+        btn.style.display = 'none';
+        if (counter) counter.style.display = 'none';
+      }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
       btn.style.display = 'none';
