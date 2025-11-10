@@ -31,21 +31,69 @@
     log('Bouton caché', reason);
   }
   
+  function showButton(btn, reason='') {
+    if (!btn) return;
+    log('showButton', reason);
+    
+    // Réafficher le bouton
+    btn.style.removeProperty('display');
+    btn.style.removeProperty('visibility');
+    btn.style.removeProperty('opacity');
+    btn.style.removeProperty('position');
+    btn.style.removeProperty('left');
+    btn.style.removeProperty('width');
+    btn.style.removeProperty('height');
+    btn.style.removeProperty('overflow');
+    btn.style.removeProperty('margin');
+    btn.style.removeProperty('padding');
+    btn.classList.remove('agilo-force-hide');
+    btn.removeAttribute('hidden');
+    btn.removeAttribute('aria-hidden');
+    btn.disabled = false;
+    
+    // Réafficher les enfants
+    $$('*', btn).forEach(child => {
+      child.style.removeProperty('display');
+    });
+    
+    log('Bouton réaffiché', reason);
+  }
+  
   function hasErrorMessage() {
     const root = byId('editorRoot');
+    
+    // PRIORITÉ 1 : summaryEmpty=1
     if (root?.dataset.summaryEmpty === '1') {
       return true;
     }
     
+    // PRIORITÉ 2 : Message d'erreur dans le DOM
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
     if (!summaryEl) return false;
     
-    const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-    const html = (summaryEl.innerHTML || '').toLowerCase();
+    const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
+    const html = (summaryEl.innerHTML || '').trim();
+    
+    // Si le contenu est vide ou très court, ce n'est pas un compte-rendu valide
+    if (text.length < 50) {
+      return false; // Pas assez d'info pour décider
+    }
+    
+    const lowerText = text.toLowerCase();
+    const lowerHtml = html.toLowerCase();
     const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
     
-    return text.includes(exactMsg) || html.includes(exactMsg) || 
-           text.includes('pas encore disponible') || text.includes('fichier manquant');
+    // Vérifier le message exact
+    if (lowerText.includes(exactMsg) || lowerHtml.includes(exactMsg)) {
+      return true;
+    }
+    
+    // Vérifier les patterns d'erreur (seulement si le contenu est court, sinon c'est peut-être un vrai compte-rendu)
+    if (text.length < 200 && (lowerText.includes('pas encore disponible') || lowerText.includes('fichier manquant'))) {
+      return true;
+    }
+    
+    return false;
   }
   
   function checkAndHide() {
@@ -63,15 +111,25 @@
     const btn = allButtons[0];
     if (!btn) return;
     
+    const hasError = hasErrorMessage();
     const styles = window.getComputedStyle(btn);
-    const isVisible = styles.display !== 'none' && 
-                      styles.visibility !== 'hidden' &&
-                      !btn.classList.contains('agilo-force-hide') &&
-                      styles.opacity !== '0';
+    const isHidden = btn.classList.contains('agilo-force-hide') || 
+                     styles.display === 'none' || 
+                     styles.visibility === 'hidden' ||
+                     styles.opacity === '0';
     
-    if (isVisible && hasErrorMessage()) {
-      log('⚠️ Message d\'erreur détecté - Cache bouton FORCÉ');
-      hideButton(btn, 'fallback-check');
+    if (hasError) {
+      // Si erreur détectée et bouton visible → cacher
+      if (!isHidden) {
+        log('⚠️ Message d\'erreur détecté - Cache bouton FORCÉ');
+        hideButton(btn, 'fallback-check-error');
+      }
+    } else {
+      // Si pas d'erreur et bouton caché par le fallback → réafficher
+      if (isHidden && btn.classList.contains('agilo-force-hide')) {
+        log('✅ Pas d\'erreur détectée - Réaffiche bouton');
+        showButton(btn, 'fallback-check-ok');
+      }
     }
   }
   
