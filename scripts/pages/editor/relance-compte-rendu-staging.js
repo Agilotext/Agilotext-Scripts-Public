@@ -762,15 +762,27 @@
   
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
-      // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
-      console.log('[AGILO:RELANCE] Appel checkSummaryErrorInDOM()...');
-      const hasErrorInDOM = checkSummaryErrorInDOM();
-      console.log('[AGILO:RELANCE] Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+      console.log('[AGILO:RELANCE] ========================================');
+      console.log('[AGILO:RELANCE] checkSummaryExists - DEBUT');
+      console.log('[AGILO:RELANCE] ========================================');
+      
+      // ⚠️ CRITIQUE : Vérifier d'abord dans le DOM si le message d'erreur est affiché
+      // C'est plus rapide et plus fiable que l'API
+      console.log('[AGILO:RELANCE] ÉTAPE 1: Appel checkSummaryErrorInDOM()...');
+      let hasErrorInDOM = false;
+      try {
+        hasErrorInDOM = checkSummaryErrorInDOM();
+        console.log('[AGILO:RELANCE] Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+      } catch (e) {
+        console.error('[AGILO:RELANCE] Erreur dans checkSummaryErrorInDOM:', e);
+      }
+      
       if (hasErrorInDOM) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
+        console.log('[AGILO:RELANCE] ❌ Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
+        console.log('[AGILO:RELANCE] ========================================');
         return false;
       }
-      console.log('[AGILO:RELANCE] Pas de message d\'erreur dans le DOM - Vérification API...');
+      console.log('[AGILO:RELANCE] ÉTAPE 2: Pas de message d\'erreur dans le DOM - Vérification API...');
       
       // Ajouter cache-busting pour éviter le cache navigateur
       const cacheBuster = Date.now();
@@ -873,21 +885,34 @@
           containsAlert: /ag-alert/i.test(text),
           containsErrorCode: /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(text),
           containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text),
-          firstChars: text.substring(0, 100)
+          firstChars: text.substring(0, 100),
+          lastChars: text.substring(Math.max(0, text.length - 100))
         });
         
-        if (!isValidContent) {
-          const reason = isError ? 'message erreur' : 
+        // ⚠️ CRITIQUE : Vérifier aussi si le texte contient UNIQUEMENT le message d'erreur
+        // Parfois l'API retourne 200 OK mais avec seulement le message d'erreur
+        const textLower = text.toLowerCase();
+        const isOnlyError = (
+          textLower.includes('pas encore disponible') &&
+          (textLower.includes('fichier manquant') || textLower.includes('non publié')) &&
+          text.length < 500 // Si c'est court, c'est probablement juste le message d'erreur
+        );
+        
+        if (!isValidContent || isOnlyError) {
+          const reason = isOnlyError ? 'uniquement message erreur' :
+                       (isError ? 'message erreur' : 
                        (isAlertHTML ? 'alerte HTML' : 
                        (startsWithAlert ? 'commence par alerte' :
-                       (isMostlyAlert ? 'principalement alerte' : 'trop court/invalide')));
+                       (isMostlyAlert ? 'principalement alerte' : 'trop court/invalide'))));
           console.log('[AGILO:RELANCE] ❌ ERREUR - Compte-rendu inexistant ou invalide (contenu:', reason, ')');
-          console.log('[AGILO:RELANCE] Aperçu du contenu:', text.substring(0, 500));
+          console.log('[AGILO:RELANCE] Aperçu complet du contenu (500 premiers chars):', text.substring(0, 500));
+          console.log('[AGILO:RELANCE] Longueur totale:', text.length);
           console.log('[AGILO:RELANCE] ========================================');
           return false;
         }
         
         console.log('[AGILO:RELANCE] ✅ OK - Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] Longueur:', text.length, 'caractères');
         console.log('[AGILO:RELANCE] ========================================');
         return true;
       }
