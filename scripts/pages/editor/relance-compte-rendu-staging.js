@@ -241,29 +241,45 @@
     }
     
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-    if (!summaryEl) return false;
+    if (!summaryEl) {
+      log('summaryEl non trouvé');
+      return false;
+    }
     
     const text = summaryEl.textContent || summaryEl.innerText || '';
     const html = summaryEl.innerHTML || '';
+    
+    log('Vérification message erreur:', {
+      textLength: text.length,
+      htmlLength: html.length,
+      hasAgAlert: html.includes('ag-alert'),
+      summaryEmpty: editorRoot?.dataset.summaryEmpty
+    });
     
     // Vérifier les patterns d'erreur dans le texte
     const hasError = ERROR_PATTERNS.some(pattern => {
       const lowerText = text.toLowerCase();
       const lowerHtml = html.toLowerCase();
-      return lowerText.includes(pattern.toLowerCase()) || lowerHtml.includes(pattern.toLowerCase());
+      const found = lowerText.includes(pattern.toLowerCase()) || lowerHtml.includes(pattern.toLowerCase());
+      if (found) {
+        log('Pattern trouvé:', pattern);
+      }
+      return found;
     });
     
     if (hasError) {
-      log('Message d\'erreur détecté dans le DOM:', text.substring(0, 100));
+      log('✅ Message d\'erreur détecté dans le DOM:', text.substring(0, 100));
       return true;
     }
     
     // Vérifier aussi les classes d'alerte (ag-alert du script principal)
     const alerts = $$('.ag-alert, .ag-alert--warn, .ag-alert__title', summaryEl);
+    log('Alertes trouvées:', alerts.length);
     for (const alert of alerts) {
       const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
+      log('Texte alerte:', alertText.substring(0, 100));
       if (ERROR_PATTERNS.some(p => alertText.includes(p.toLowerCase()))) {
-        log('Message d\'erreur détecté dans une alerte:', alertText.substring(0, 100));
+        log('✅ Message d\'erreur détecté dans une alerte:', alertText.substring(0, 100));
         return true;
       }
     }
@@ -271,10 +287,11 @@
     // Vérifier si le contenu est vide ou juste un message d'erreur
     const cleanText = text.replace(/\s+/g, ' ').trim();
     if (cleanText.length < 50 && ERROR_PATTERNS.some(p => cleanText.toLowerCase().includes(p.toLowerCase()))) {
-      log('Message d\'erreur détecté (texte court):', cleanText);
+      log('✅ Message d\'erreur détecté (texte court):', cleanText);
       return true;
     }
     
+    log('❌ Aucun message d\'erreur détecté');
     return false;
   }
 
@@ -348,14 +365,33 @@
   function hideButton(btn, reason=''){
     if (!btn) return;
     if (DEBUG) log('hideButton', reason);
-    btn.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:absolute!important;left:-9999px!important;width:0!important;height:0!important';
+    
+    // ⚠️ FORCER le masquage avec plusieurs méthodes
+    btn.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:absolute!important;left:-9999px!important;width:0!important;height:0!important;overflow:hidden!important;margin:0!important;padding:0!important;';
     btn.classList.add('agilo-force-hide');
+    btn.setAttribute('hidden', '');
+    btn.setAttribute('aria-hidden', 'true');
+    btn.disabled = true;
+    
+    // Cacher aussi tous les enfants
+    $$('*', btn).forEach(child => {
+      child.style.setProperty('display', 'none', 'important');
+    });
+    
+    // Cacher le compteur et messages
     const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
-    if (counter) counter.style.setProperty('display','none','important');
+    if (counter) {
+      counter.style.setProperty('display','none','important');
+      counter.style.setProperty('visibility','hidden','important');
+    }
+    
+    log('Bouton caché avec toutes les méthodes', reason);
   }
   
   function showButton(btn){
     if (!btn) return;
+    btn.removeAttribute('hidden');
+    btn.removeAttribute('aria-hidden');
     btn.style.removeProperty('display');
     btn.style.removeProperty('visibility');
     btn.style.removeProperty('opacity');
@@ -363,7 +399,15 @@
     btn.style.removeProperty('left');
     btn.style.removeProperty('width');
     btn.style.removeProperty('height');
+    btn.style.removeProperty('overflow');
+    btn.style.removeProperty('margin');
+    btn.style.removeProperty('padding');
     btn.classList.remove('agilo-force-hide');
+    
+    // Réafficher les enfants
+    $$('*', btn).forEach(child => {
+      child.style.removeProperty('display');
+    });
   }
   
   function updateRegenerationCounter(jobId, edition){
@@ -630,7 +674,9 @@
     s.id = 'agilo-relance-styles';
     s.textContent = `
       [data-action="relancer-compte-rendu"].agilo-force-hide,
-      [data-action="relancer-compte-rendu"].agilo-force-hide * {
+      [data-action="relancer-compte-rendu"].agilo-force-hide *,
+      [data-action="relancer-compte-rendu"][hidden],
+      [data-action="relancer-compte-rendu"][aria-hidden="true"] {
         display:none!important; visibility:hidden!important; opacity:0!important; pointer-events:none!important; position:absolute!important; left:-9999px!important; width:0!important; height:0!important; overflow:hidden!important; margin:0!important; padding:0!important;
       }
       .regeneration-counter{display:flex;align-items:center;justify-content:center;gap:4px;font-size:12px;font-weight:500;color:var(--agilo-dim,#525252);margin-top:6px;padding:4px 8px;border-radius:4px;background:var(--agilo-surface-2,#f8f9fa);}
@@ -675,13 +721,23 @@
   // Observer les changements du summaryEditor pour détecter les messages d'erreur
   function setupSummaryObserver(){
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-    if (!summaryEl) return;
+    if (!summaryEl) {
+      log('summaryEl non trouvé pour observer');
+      // Réessayer après un délai
+      setTimeout(() => setupSummaryObserver(), 1000);
+      return;
+    }
+    
+    log('Observer configuré pour summaryEl');
     
     const observer = new MutationObserver(() => {
       // Délai pour laisser le DOM se stabiliser
       setTimeout(() => {
-        updateButtonVisibility().catch(() => {});
-      }, 300);
+        log('Mutation détectée dans summaryEl - Mise à jour visibilité');
+        updateButtonVisibility().catch((e) => {
+          log('Erreur updateButtonVisibility:', e);
+        });
+      }, 100);
     });
     
     observer.observe(summaryEl, {
@@ -692,16 +748,26 @@
     
     // Observer aussi les changements du dataset summaryEmpty sur editorRoot
     if (editorRoot) {
-      const rootObserver = new MutationObserver(() => {
-        setTimeout(() => {
-          updateButtonVisibility().catch(() => {});
-        }, 300);
+      log('Observer configuré pour editorRoot dataset');
+      const rootObserver = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'data-summary-empty') {
+            log('data-summary-empty changé:', editorRoot.dataset.summaryEmpty);
+            setTimeout(() => {
+              updateButtonVisibility().catch((e) => {
+                log('Erreur updateButtonVisibility:', e);
+              });
+            }, 100);
+          }
+        });
       });
       
       rootObserver.observe(editorRoot, {
         attributes: true,
         attributeFilter: ['data-summary-empty']
       });
+    } else {
+      log('editorRoot non trouvé');
     }
   }
 
@@ -729,8 +795,20 @@
     setupSummaryObserver();
     setupSaveObserver();
 
-    // MAJ bouton à l'ouverture
-          await updateButtonVisibility();
+    // MAJ bouton à l'ouverture (plusieurs fois pour être sûr)
+    await updateButtonVisibility();
+    setTimeout(() => updateButtonVisibility().catch(() => {}), 500);
+    setTimeout(() => updateButtonVisibility().catch(() => {}), 1500);
+    setTimeout(() => updateButtonVisibility().catch(() => {}), 3000);
+    
+    // Vérifier périodiquement (au cas où un autre script réaffiche le bouton)
+    setInterval(() => {
+      const btn = $('[data-action="relancer-compte-rendu"]');
+      if (btn && hasErrorMessageInDOM() && !btn.classList.contains('agilo-force-hide')) {
+        log('⚠️ Bouton réaffiché alors que message erreur présent - Re-cache');
+        hideButton(btn, 'periodic-check');
+      }
+    }, 2000);
           
     // réagit aux changements (jobId, token, onglets)
     window.addEventListener('agilo:load', async (e)=>{
