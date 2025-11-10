@@ -2119,10 +2119,23 @@
   function init() {
     // Vérifier si déjà initialisé (éviter les doublons)
     if (window.__agiloRelanceInitialized) {
-      console.log('Script de relance déjà initialisé, skip');
+      console.log('[AGILO:RELANCE] Script de relance déjà initialisé, skip');
       return;
     }
     window.__agiloRelanceInitialized = true;
+    
+    // ⚠️ CRITIQUE : Exposer les fonctions IMMÉDIATEMENT au début de l'initialisation
+    try {
+      window.checkSummaryErrorInDOM = checkSummaryErrorInDOM;
+      window.updateButtonVisibility = updateButtonVisibility;
+      window.checkSummaryExists = checkSummaryExists;
+      window.relancerCompteRendu = relancerCompteRendu;
+      window.openSummaryTab = openSummaryTab;
+      window.getContentHash = getContentHash;
+      console.log('[AGILO:RELANCE] ✅ Fonctions exposées globalement (dans init)');
+    } catch (e) {
+      console.error('[AGILO:RELANCE] ❌ Erreur exposition fonctions dans init:', e);
+    }
     
     // ⚠️ CRITIQUE : Cacher le bouton IMMÉDIATEMENT si erreur détectée (AVANT tout)
     const immediateCheck = () => {
@@ -2293,7 +2306,7 @@
         const { edition, jobId } = creds;
         if (jobId && edition) {
           console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
-
+          
           // ⚠️ CRITIQUE : Vérifier d'abord le DOM AVANT updateButtonVisibility
           console.log('[AGILO:RELANCE] Vérification DOM avant initialisation...');
           const hasErrorDOM = checkSummaryErrorInDOM();
@@ -2736,8 +2749,8 @@
   // ⚠️ CRITIQUE : Exposer les fonctions globalement pour le diagnostic et le debug
   // FAIRE CELA AVANT la fermeture de l'IIFE pour être sûr qu'elles sont disponibles
   try {
-    window.relancerCompteRendu = relancerCompteRendu;
-    window.openSummaryTab = openSummaryTab;
+  window.relancerCompteRendu = relancerCompteRendu;
+  window.openSummaryTab = openSummaryTab;
     window.checkSummaryErrorInDOM = checkSummaryErrorInDOM;
     window.updateButtonVisibility = updateButtonVisibility;
     window.checkSummaryExists = checkSummaryExists;
