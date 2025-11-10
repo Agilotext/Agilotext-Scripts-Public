@@ -601,7 +601,7 @@
     // ⚠️ IMPORTANT : Chercher d'abord les alertes spécifiques (plus fiable)
     // Même si elles sont cachées (hidden), on peut les lire
     const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title, [class*="alert"]');
-    console.log('[AGILO:RELANCE] 🔍 Recherche alertes dans le DOM:', alertElements.length, 'éléments trouvés');
+    console.log('[AGILO:RELANCE] Recherche alertes dans le DOM:', alertElements.length, 'éléments trouvés');
     
     for (const alert of alertElements) {
       const text = alert.textContent || alert.innerText || '';
@@ -622,8 +622,8 @@
       );
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans une alerte:', text.substring(0, 150));
-        console.log('[AGILO:RELANCE] 📍 Élément:', alert.className, alert.id);
+        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans une alerte:', text.substring(0, 150));
+        console.log('[AGILO:RELANCE] Element trouve:', alert.className, alert.id);
         return true;
       }
     }
@@ -634,7 +634,7 @@
       const text = summaryEditor.textContent || summaryEditor.innerText || '';
       const html = summaryEditor.innerHTML || '';
       
-      console.log('[AGILO:RELANCE] 🔍 Contenu summaryEditor:', {
+      console.log('[AGILO:RELANCE] Contenu summaryEditor:', {
         textLength: text.length,
         htmlLength: html.length,
         preview: text.substring(0, 200),
@@ -656,11 +656,11 @@
       );
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans summaryEditor:', text.substring(0, 150));
+        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans summaryEditor:', text.substring(0, 150));
         return true;
       }
     } else {
-      console.log('[AGILO:RELANCE] ⚠️ summaryEditor non trouvé');
+      console.log('[AGILO:RELANCE] WARN - summaryEditor non trouvé');
     }
     
     // Si l'éditeur n'existe pas, chercher dans tous les panneaux (même cachés)
@@ -669,7 +669,7 @@
       const text = summaryPane.textContent || summaryPane.innerText || '';
       const html = summaryPane.innerHTML || '';
       
-      console.log('[AGILO:RELANCE] 🔍 Contenu pane-summary:', {
+      console.log('[AGILO:RELANCE] Contenu pane-summary:', {
         textLength: text.length,
         htmlLength: html.length,
         preview: text.substring(0, 200),
@@ -691,14 +691,14 @@
       );
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] ✅ Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 150));
+        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 150));
         return true;
       }
     } else {
-      console.log('[AGILO:RELANCE] ⚠️ pane-summary non trouvé');
+      console.log('[AGILO:RELANCE] WARN - pane-summary non trouvé');
     }
     
-    console.log('[AGILO:RELANCE] ❌ Aucun message d\'erreur détecté dans le DOM');
+    console.log('[AGILO:RELANCE] Aucun message d\'erreur détecté dans le DOM');
     return false;
   }
   
@@ -774,12 +774,12 @@
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide (contenu:', 
+          console.log('[AGILO:RELANCE] ERREUR - Compte-rendu inexistant ou invalide (contenu:', 
             isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
           return false;
         }
         
-        console.log('[AGILO:RELANCE] ✅ Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] OK - Compte-rendu valide détecté');
         return true;
       }
       
@@ -1437,15 +1437,15 @@
     
     // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
-    console.log('[AGILO:RELANCE] 🔍 Vérification DOM pour message d\'erreur...');
+    console.log('[AGILO:RELANCE] Vérification DOM pour message d\'erreur...');
     const hasErrorInDOM = checkSummaryErrorInDOM();
     if (hasErrorInDOM) {
-      console.log('[AGILO:RELANCE] ❌ Message d\'erreur dans le DOM - Bouton CACHÉ');
+      console.log('[AGILO:RELANCE] ERREUR - Message d\'erreur dans le DOM - Bouton CACHE');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
     } else {
-      console.log('[AGILO:RELANCE] ✅ Aucun message d\'erreur dans le DOM - Vérification API...');
+      console.log('[AGILO:RELANCE] OK - Aucun message d\'erreur dans le DOM - Vérification API...');
     }
     
     // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
@@ -1496,15 +1496,15 @@
     
     // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
     // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
-    console.log('[AGILO:RELANCE] 🔍 Vérification finale DOM avant affichage bouton...');
+    console.log('[AGILO:RELANCE] Vérification finale DOM avant affichage bouton...');
     const hasErrorFinal = checkSummaryErrorInDOM();
     if (hasErrorFinal) {
-      console.log('[AGILO:RELANCE] ❌ Message d\'erreur détecté - Bouton CACHÉ (vérification finale)');
+      console.log('[AGILO:RELANCE] ERREUR - Message d\'erreur détecté - Bouton CACHE (vérification finale)');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
     } else {
-      console.log('[AGILO:RELANCE] ✅ Pas de message d\'erreur - Bouton peut être affiché');
+      console.log('[AGILO:RELANCE] OK - Pas de message d\'erreur - Bouton peut être affiché');
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
