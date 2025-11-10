@@ -595,7 +595,9 @@
    * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
    */
   function checkSummaryErrorInDOM() {
+    console.log('[AGILO:RELANCE] ========================================');
     console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - DEBUT');
+    console.log('[AGILO:RELANCE] ========================================');
     
     // ⚠️ IMPORTANT : Chercher dans TOUS les éléments, même ceux qui sont cachés (hidden)
     // querySelectorAll trouve les éléments même s'ils sont dans un parent caché
@@ -604,21 +606,46 @@
     const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title');
     console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - Alertes trouvées:', alertElements.length);
     
-    for (const alert of alertElements) {
+    for (let i = 0; i < alertElements.length; i++) {
+      const alert = alertElements[i];
       const text = alert.textContent || alert.innerText || '';
-      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - Alerte texte:', text.substring(0, 150));
+      const html = alert.innerHTML || '';
+      console.log(`[AGILO:RELANCE] checkSummaryErrorInDOM - Alerte #${i}:`, {
+        text: text.substring(0, 200),
+        html: html.substring(0, 200),
+        className: alert.className,
+        id: alert.id
+      });
       
+      // ⚠️ CRITIQUE : Vérifier les messages d'erreur avec plusieurs variantes
       const errorMessages = [
         'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible'
+        'n\'est pas encore disponible',
+        'n\'est pas encore disponible',  // Avec apostrophe typographique
+        'nest pas encore disponible',   // Sans apostrophe
+        'compte-rendu n\'est pas encore disponible',
+        'compte rendu n\'est pas encore disponible'
       ];
       
-      const hasError = errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()));
+      const hasError = errorMessages.some(msg => {
+        const lowerText = text.toLowerCase();
+        const lowerHtml = html.toLowerCase();
+        const lowerMsg = msg.toLowerCase();
+        const found = lowerText.includes(lowerMsg) || lowerHtml.includes(lowerMsg);
+        if (found) {
+          console.log(`[AGILO:RELANCE] checkSummaryErrorInDOM - MESSAGE D'ERREUR TROUVE: "${msg}"`);
+        }
+        return found;
+      });
+      
       if (hasError) {
-        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans alerte:', text.substring(0, 100));
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans alerte');
+        console.log('[AGILO:RELANCE] Texte complet:', text);
+        console.log('[AGILO:RELANCE] ========================================');
         return true;
       }
     }
@@ -630,24 +657,42 @@
     if (summaryPane) {
       const text = summaryPane.textContent || summaryPane.innerText || '';
       const html = summaryPane.innerHTML || '';
-      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary texte longueur:', text.length);
-      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary texte preview:', text.substring(0, 200));
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary:', {
+        textLength: text.length,
+        htmlLength: html.length,
+        textPreview: text.substring(0, 300),
+        htmlPreview: html.substring(0, 300),
+        hasHidden: summaryPane.hasAttribute('hidden'),
+        className: summaryPane.className
+      });
       
       const errorMessages = [
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible'
+        'n\'est pas encore disponible',
+        'n\'est pas encore disponible',
+        'nest pas encore disponible',
+        'compte-rendu n\'est pas encore disponible',
+        'compte rendu n\'est pas encore disponible'
       ];
       
-      const hasError = errorMessages.some(msg => 
-        text.toLowerCase().includes(msg.toLowerCase()) || 
-        html.toLowerCase().includes(msg.toLowerCase())
-      );
+      const hasError = errorMessages.some(msg => {
+        const lowerText = text.toLowerCase();
+        const lowerHtml = html.toLowerCase();
+        const lowerMsg = msg.toLowerCase();
+        const found = lowerText.includes(lowerMsg) || lowerHtml.includes(lowerMsg);
+        if (found) {
+          console.log(`[AGILO:RELANCE] checkSummaryErrorInDOM - MESSAGE D'ERREUR TROUVE dans pane-summary: "${msg}"`);
+        }
+        return found;
+      });
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans pane-summary:', text.substring(0, 100));
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans pane-summary');
+        console.log('[AGILO:RELANCE] ========================================');
         return true;
       }
     }
@@ -659,29 +704,48 @@
     if (summaryEditor) {
       const text = summaryEditor.textContent || summaryEditor.innerText || '';
       const html = summaryEditor.innerHTML || '';
-      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor texte longueur:', text.length);
-      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor texte preview:', text.substring(0, 200));
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor:', {
+        textLength: text.length,
+        htmlLength: html.length,
+        textPreview: text.substring(0, 300),
+        htmlPreview: html.substring(0, 300),
+        className: summaryEditor.className
+      });
       
       const errorMessages = [
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible'
+        'n\'est pas encore disponible',
+        'n\'est pas encore disponible',
+        'nest pas encore disponible',
+        'compte-rendu n\'est pas encore disponible',
+        'compte rendu n\'est pas encore disponible'
       ];
       
-      const hasError = errorMessages.some(msg => 
-        text.toLowerCase().includes(msg.toLowerCase()) || 
-        html.toLowerCase().includes(msg.toLowerCase())
-      );
+      const hasError = errorMessages.some(msg => {
+        const lowerText = text.toLowerCase();
+        const lowerHtml = html.toLowerCase();
+        const lowerMsg = msg.toLowerCase();
+        const found = lowerText.includes(lowerMsg) || lowerHtml.includes(lowerMsg);
+        if (found) {
+          console.log(`[AGILO:RELANCE] checkSummaryErrorInDOM - MESSAGE D'ERREUR TROUVE dans summaryEditor: "${msg}"`);
+        }
+        return found;
+      });
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans summaryEditor:', text.substring(0, 100));
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans summaryEditor');
+        console.log('[AGILO:RELANCE] ========================================');
         return true;
       }
     }
     
+    console.log('[AGILO:RELANCE] ========================================');
     console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - FIN - Aucune erreur détectée');
+    console.log('[AGILO:RELANCE] ========================================');
     return false;
   }
   
