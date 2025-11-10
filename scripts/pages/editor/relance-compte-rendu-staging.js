@@ -1379,6 +1379,51 @@
           console.log('[AGILO:RELANCE] Hash nouveau:', waitResult.contentHash?.substring(0, 30) + '...');
           console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 30) + '...' || 'aucun');
           
+          // ⚠️ IMPORTANT : Récupérer le NOUVEAU compte-rendu avec cache-busting pour vérifier qu'il est bien différent
+          try {
+            const cacheBuster = Date.now();
+            const newSummaryUrl = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
+            
+            console.log('[AGILO:RELANCE] Récupération explicite du NOUVEAU compte-rendu...');
+            const newSummaryResponse = await fetch(newSummaryUrl, {
+              method: 'GET',
+              cache: 'no-store',
+              headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+              }
+            });
+            
+            if (newSummaryResponse.ok) {
+              const newSummaryText = await newSummaryResponse.text();
+              const newHash = getContentHash(newSummaryText);
+              
+              console.log('[AGILO:RELANCE] Nouveau compte-rendu récupéré:', {
+                length: newSummaryText.length,
+                hash: newHash.substring(0, 50) + '...',
+                isDifferent: oldContentHash ? (newHash !== oldContentHash) : true,
+                preview: newSummaryText.substring(0, 200).replace(/\s+/g, ' ')
+              });
+              
+              // Vérifier que c'est bien différent de l'ancien
+              if (oldContentHash && newHash === oldContentHash) {
+                console.warn('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu a le même hash que l\'ancien !');
+                console.warn('[AGILO:RELANCE] Hash ancien:', oldContentHash.substring(0, 50) + '...');
+                console.warn('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 50) + '...');
+                console.warn('[AGILO:RELANCE] Il se peut que le compte-rendu n\'ait pas été régénéré ou que le contenu soit identique.');
+              } else {
+                console.log('[AGILO:RELANCE] ✅ Le nouveau compte-rendu est différent de l\'ancien (hash différent)');
+                console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 50) + '...' || 'aucun');
+                console.log('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 50) + '...');
+              }
+            } else {
+              console.warn('[AGILO:RELANCE] ⚠️ Impossible de récupérer le nouveau compte-rendu:', newSummaryResponse.status);
+            }
+          } catch (e) {
+            console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', e);
+          }
+          
           // ⚠️ IMPORTANT : Mettre à jour les liens de téléchargement AVANT de recharger
           // Les liens de téléchargement (PDF, DOC, etc.) pointent vers receiveSummary
           // Ils doivent être mis à jour pour pointer vers le NOUVEAU compte-rendu
@@ -2269,7 +2314,10 @@
   
   // ⚠️ CRITIQUE : Ajouter les styles CSS IMMÉDIATEMENT (avant même l'initialisation)
   // Pour que la règle CSS soit disponible dès le chargement
-  if (!document.querySelector('#relance-summary-styles')) {
+  // Cette partie doit être EXÉCUTÉE EN PREMIER, avant toute autre logique
+  (function injectStylesImmediately() {
+    if (document.querySelector('#relance-summary-styles')) return;
+    
     const style = document.createElement('style');
     style.id = 'relance-summary-styles';
     style.textContent = `
@@ -2290,18 +2338,25 @@
       }
       
       /* ⚠️ CRITIQUE : Règle CSS supplémentaire pour forcer le cache si erreur dans le DOM */
-      body:has(#pane-summary:has(.ag-alert--warn)),
-      body:has(#summaryEditor:has(.ag-alert--warn)) {
-        [data-action="relancer-compte-rendu"] {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-          position: absolute !important;
-          left: -9999px !important;
-          width: 0 !important;
-          height: 0 !important;
-        }
+      /* Utilisation de :has() si supporté, sinon fallback sur sélecteur direct */
+      body:has(#pane-summary .ag-alert--warn) [data-action="relancer-compte-rendu"],
+      body:has(#summaryEditor .ag-alert--warn) [data-action="relancer-compte-rendu"],
+      #pane-summary:has(.ag-alert--warn) ~ * [data-action="relancer-compte-rendu"],
+      #summaryEditor:has(.ag-alert--warn) ~ * [data-action="relancer-compte-rendu"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        left: -9999px !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      
+      /* Fallback pour navigateurs qui ne supportent pas :has() */
+      .ag-alert--warn:has-text("pas encore disponible") ~ [data-action="relancer-compte-rendu"],
+      .ag-alert__title:has-text("pas encore disponible") ~ [data-action="relancer-compte-rendu"] {
+        display: none !important;
       }
       
       /* Conteneur de chargement - utilise vos variables CSS */
