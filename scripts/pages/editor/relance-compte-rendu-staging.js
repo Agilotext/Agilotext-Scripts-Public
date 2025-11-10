@@ -824,7 +824,7 @@
       
       if (response.ok) {
         
-        // ⚠️ IMPORTANT : Vérifier plus strictement que ce n'est pas un message d'erreur
+        // ⚠️ CRITIQUE : Vérifier plus strictement que ce n'est pas un message d'erreur
         // L'API peut retourner 200 OK avec un message d'erreur dans le HTML
         const errorPatterns = [
           /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,  // Code d'erreur exact de l'API
@@ -832,12 +832,15 @@
           /non publié/i,
           /fichier manquant/i,
           /n'est pas encore disponible/i,
-          /résumé en préparation/i
+          /nest pas encore disponible/i,  // Sans apostrophe
+          /résumé en préparation/i,
+          /compte-rendu n'est pas encore disponible/i,
+          /compte rendu n'est pas encore disponible/i
         ];
         
         const isError = errorPatterns.some(pattern => pattern.test(text));
         
-        // ⚠️ IMPORTANT : Vérifier aussi si c'est une structure HTML d'alerte
+        // ⚠️ CRITIQUE : Vérifier aussi si c'est une structure HTML d'alerte
         const isAlertHTML = /ag-alert/i.test(text) && (
           /pas encore disponible/i.test(text) || 
           /fichier manquant/i.test(text) || 
@@ -845,8 +848,16 @@
           /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(text)
         );
         
-        const isValidContent = !isError && !isAlertHTML && text.length > 100 && 
+        // ⚠️ CRITIQUE : Vérifier si le texte commence par une alerte (même avec des espaces)
+        const startsWithAlert = /^\s*<div[^>]*class\s*=\s*["']ag-alert/i.test(text.trim());
+        
+        // ⚠️ CRITIQUE : Vérifier si le texte contient principalement une alerte (plus de 50% du contenu)
+        const alertMatch = text.match(/<div[^>]*class\s*=\s*["']ag-alert[^>]*>[\s\S]*?<\/div>/i);
+        const isMostlyAlert = alertMatch && (alertMatch[0].length > text.length * 0.5);
+        
+        const isValidContent = !isError && !isAlertHTML && !startsWithAlert && !isMostlyAlert && text.length > 100 && 
                                !text.trim().startsWith('<div class="ag-alert') &&
+                               !text.trim().startsWith('<div class=\'ag-alert') &&
                                !text.includes('ag-alert ag-alert--warn') &&
                                !text.includes('ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
         
@@ -855,20 +866,29 @@
           length: text.length,
           isError,
           isAlertHTML,
+          startsWithAlert,
+          isMostlyAlert,
           isValidContent,
-          preview: text.substring(0, 200).replace(/\s+/g, ' '),
+          preview: text.substring(0, 300).replace(/\s+/g, ' '),
           containsAlert: /ag-alert/i.test(text),
           containsErrorCode: /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(text),
-          containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text)
+          containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text),
+          firstChars: text.substring(0, 100)
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ERREUR - Compte-rendu inexistant ou invalide (contenu:', 
-            isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
+          const reason = isError ? 'message erreur' : 
+                       (isAlertHTML ? 'alerte HTML' : 
+                       (startsWithAlert ? 'commence par alerte' :
+                       (isMostlyAlert ? 'principalement alerte' : 'trop court/invalide')));
+          console.log('[AGILO:RELANCE] ❌ ERREUR - Compte-rendu inexistant ou invalide (contenu:', reason, ')');
+          console.log('[AGILO:RELANCE] Aperçu du contenu:', text.substring(0, 500));
+          console.log('[AGILO:RELANCE] ========================================');
           return false;
         }
         
-        console.log('[AGILO:RELANCE] OK - Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] ✅ OK - Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] ========================================');
         return true;
       }
       
