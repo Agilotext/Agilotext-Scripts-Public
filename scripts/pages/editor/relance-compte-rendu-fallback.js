@@ -5,7 +5,9 @@
 (function() {
   'use strict';
   
-  const log = (...a) => console.log('[AGILO:FALLBACK]', ...a);
+  // Réduire les logs en production (seulement les warnings/erreurs)
+  const DEBUG = false; // Mettre à true pour debug
+  const log = (...a) => { if (DEBUG) console.log('[AGILO:FALLBACK]', ...a); };
   const warn = (...a) => console.warn('[AGILO:FALLBACK]', ...a);
   
   const byId = (id) => document.getElementById(id);
@@ -96,13 +98,31 @@
     return false;
   }
   
+  function hideCounter(btn) {
+    if (!btn) return;
+    const counters = $$('.regeneration-counter, #regeneration-info', btn.parentElement || document);
+    counters.forEach(c => {
+      c.style.display = 'none';
+      c.style.visibility = 'hidden';
+    });
+  }
+  
+  function showCounter(btn) {
+    if (!btn) return;
+    const counters = $$('.regeneration-counter, #regeneration-info', btn.parentElement || document);
+    counters.forEach(c => {
+      c.style.removeProperty('display');
+      c.style.removeProperty('visibility');
+    });
+  }
+  
   function checkAndHide() {
     const allButtons = $$('[data-action="relancer-compte-rendu"]');
     if (allButtons.length === 0) return;
     
     // Supprimer les doublons
     if (allButtons.length > 1) {
-      warn(`⚠️ ${allButtons.length} boutons détectés ! Suppression des doublons...`);
+      if (DEBUG) warn(`⚠️ ${allButtons.length} boutons détectés ! Suppression des doublons...`);
       for (let i = 1; i < allButtons.length; i++) {
         allButtons[i].remove();
       }
@@ -121,35 +141,50 @@
     if (hasError) {
       // Si erreur détectée et bouton visible → cacher
       if (!isHidden) {
-        log('⚠️ Message d\'erreur détecté - Cache bouton FORCÉ');
+        if (DEBUG) log('⚠️ Message d\'erreur détecté - Cache bouton FORCÉ');
         hideButton(btn, 'fallback-check-error');
       }
+      // Cacher aussi le compteur
+      hideCounter(btn);
     } else {
       // Si pas d'erreur et bouton caché par le fallback → réafficher
       if (isHidden && btn.classList.contains('agilo-force-hide')) {
-        log('✅ Pas d\'erreur détectée - Réaffiche bouton');
+        if (DEBUG) log('✅ Pas d\'erreur détectée - Réaffiche bouton');
         showButton(btn, 'fallback-check-ok');
       }
+      // Réafficher le compteur
+      showCounter(btn);
     }
   }
   
   // Vérification immédiate
   checkAndHide();
   
-  // Vérifications multiples
+  // Vérifications multiples (réduites pour moins de lag)
   setTimeout(checkAndHide, 100);
-  setTimeout(checkAndHide, 300);
   setTimeout(checkAndHide, 500);
-  setTimeout(checkAndHide, 1000);
   
-  // Vérification périodique (toutes les 200ms)
-  setInterval(checkAndHide, 200);
+  // Vérification périodique (réduite à 500ms au lieu de 200ms pour moins de lag)
+  setInterval(checkAndHide, 500);
   
-  // Écouter les changements du DOM
+  // ⚠️ IMPORTANT : Écouter les changements de job (agilo:load)
+  window.addEventListener('agilo:load', (e) => {
+    if (DEBUG) log('agilo:load détecté - Vérification...');
+    // Attendre un peu que le DOM se mette à jour
+    setTimeout(checkAndHide, 100);
+    setTimeout(checkAndHide, 500);
+    setTimeout(checkAndHide, 1000);
+  });
+  
+  // Écouter les changements du DOM (optimisé)
   if (typeof MutationObserver !== 'undefined') {
-    const observer = new MutationObserver(() => {
-      checkAndHide();
-    });
+    let timeoutId = null;
+    const debouncedCheck = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(checkAndHide, 100); // Debounce pour moins de lag
+    };
+    
+    const observer = new MutationObserver(debouncedCheck);
     
     const root = byId('editorRoot');
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
@@ -157,7 +192,7 @@
     if (root) {
       observer.observe(root, {
         attributes: true,
-        attributeFilter: ['data-summary-empty']
+        attributeFilter: ['data-summary-empty', 'data-job-id']
       });
     }
     
@@ -170,6 +205,6 @@
     }
   }
   
-  log('✅ Script fallback initialisé');
+  if (DEBUG) log('✅ Script fallback initialisé');
 })();
 
