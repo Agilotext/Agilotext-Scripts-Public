@@ -1509,16 +1509,43 @@
     
     // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
     // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur détecté - Bouton caché (vérification finale)');
+    console.log('[AGILO:RELANCE] updateButtonVisibility - Vérification finale DOM...');
+    const hasErrorFinal = checkSummaryErrorInDOM();
+    console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat vérification finale:', hasErrorFinal);
+    if (hasErrorFinal) {
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur détecté - Bouton CACHE (vérification finale)');
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
+      return;
+    }
+    
+    // ⚠️ CRITIQUE : Ne JAMAIS afficher le bouton si le compte-rendu n'existe pas
+    // Vérifier une dernière fois via l'API avant d'afficher
+    try {
+      const credsFinal = await ensureCreds();
+      const { jobId: jobIdFinal, edition: editionFinal } = credsFinal;
+      if (jobIdFinal && editionFinal) {
+        const summaryExistsFinal = await checkSummaryExists(jobIdFinal, credsFinal.email, credsFinal.token, editionFinal);
+        if (!summaryExistsFinal) {
+          console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu inexistant (vérification finale API) - Bouton CACHE');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return;
+        }
+      }
+    } catch (e) {
+      console.error('[AGILO:RELANCE] updateButtonVisibility - Erreur vérification finale:', e);
+      // En cas d'erreur, cacher le bouton par sécurité
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
+    // ⚠️ À ce stade, on est sûr que le compte-rendu existe
     if (isSummaryTab) {
       // Visible sur l'onglet Compte-rendu (le compte-rendu existe, vérifié ci-dessus)
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Affichage bouton sur onglet Compte-rendu');
       btn.style.display = 'flex';
       if (counter) counter.style.display = '';
       // Désactiver le bouton si transcript non sauvegardé
@@ -1533,41 +1560,43 @@
       // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
       // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
       // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
-      if (checkSummaryErrorInDOM()) {
-        // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
-        console.log('[AGILO:RELANCE] Sur onglet Transcription mais message d\'erreur détecté - Bouton caché');
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Onglet Transcription, transcript modifié');
+      
+      // Vérifier d'abord le DOM
+      const hasErrorDOM = checkSummaryErrorInDOM();
+      if (hasErrorDOM) {
+        console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans DOM sur onglet Transcription - Bouton CACHE');
         btn.style.display = 'none';
         if (counter) counter.style.display = 'none';
-      } else {
-        // Vérifier aussi via l'API pour être sûr
-        try {
-          const creds = await ensureCreds();
-          const { jobId, edition } = creds;
-          if (jobId && edition) {
-            const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
-            if (!summaryExists) {
-              console.log('[AGILO:RELANCE] Sur onglet Transcription mais compte-rendu inexistant - Bouton caché');
-              btn.style.display = 'none';
-              if (counter) counter.style.display = 'none';
-            } else {
-              btn.style.display = 'flex';
-              if (counter) counter.style.display = '';
-            }
+        return;
+      }
+      
+      // Vérifier aussi via l'API pour être sûr
+      try {
+        const creds = await ensureCreds();
+        const { jobId, edition } = creds;
+        if (jobId && edition) {
+          const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
+          if (!summaryExists) {
+            console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu inexistant sur onglet Transcription - Bouton CACHE');
+            btn.style.display = 'none';
+            if (counter) counter.style.display = 'none';
+            return;
           } else {
-            btn.style.display = 'none';
-            if (counter) counter.style.display = 'none';
+            console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu existe - Affichage bouton sur onglet Transcription');
+            btn.style.display = 'flex';
+            if (counter) counter.style.display = '';
           }
-        } catch (e) {
-          console.error('[AGILO:RELANCE] Erreur vérification compte-rendu sur onglet Transcription:', e);
-          // En cas d'erreur, vérifier quand même le DOM
-          if (checkSummaryErrorInDOM()) {
-            btn.style.display = 'none';
-            if (counter) counter.style.display = 'none';
-          } else {
-            btn.style.display = 'none';
-            if (counter) counter.style.display = 'none';
-          }
+        } else {
+          console.log('[AGILO:RELANCE] updateButtonVisibility - Credentials manquants - Bouton CACHE');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
         }
+      } catch (e) {
+        console.error('[AGILO:RELANCE] updateButtonVisibility - Erreur vérification sur onglet Transcription:', e);
+        // En cas d'erreur, cacher le bouton par sécurité
+        btn.style.display = 'none';
+        if (counter) counter.style.display = 'none';
       }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
