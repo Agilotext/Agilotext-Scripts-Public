@@ -949,12 +949,70 @@
       }
     }, 2000);
           
-    // réagit aux changements (jobId, token, onglets)
+    // ⚠️ IMPORTANT : Écouter agilo:beforeload pour cacher immédiatement le bouton (état de transition)
+    window.addEventListener('agilo:beforeload', (e)=>{
+      const raw = e?.detail?.jobId ?? e?.detail ?? '';
+      const id = String(raw||'').trim();
+      if (!id) return;
+      
+      log('agilo:beforeload détecté - Cache bouton en transition pour jobId:', id);
+      
+      // ⚠️ Nettoyer l'état d'erreur de l'ancien jobId (si différent)
+      const oldJobId = pickJobId();
+      if (oldJobId && oldJobId !== id) {
+        log('Nettoyage état erreur ancien jobId:', oldJobId);
+        saveSummaryErrorState(oldJobId, false);
+      }
+      
+      const btn = $('[data-action="relancer-compte-rendu"]');
+      if (btn) {
+        // Cacher temporairement pendant le chargement
+        btn.style.opacity = '0.5';
+        btn.style.pointerEvents = 'none';
+        btn.setAttribute('data-loading', 'true');
+      }
+    });
+    
+    // ⚠️ IMPORTANT : Écouter agilo:load avec vérifications progressives (le script principal met du temps à charger)
     window.addEventListener('agilo:load', async (e)=>{
       const raw = e?.detail?.jobId ?? e?.detail ?? '';
       const id = String(raw||'').trim();
       if (!id) return;
+      
+      log('agilo:load détecté - Vérifications progressives de la visibilité');
+      
+      // Retirer l'état de chargement
+      const btn = $('[data-action="relancer-compte-rendu"]');
+      if (btn) {
+        btn.removeAttribute('data-loading');
+        btn.style.removeProperty('opacity');
+        btn.style.removeProperty('pointer-events');
+      }
+      
+      // ⚠️ Vérifications progressives : le script principal met 1-3 secondes à charger le summary
+      // Vérification immédiate (au cas où le DOM est déjà prêt)
       await updateButtonVisibility();
+      
+      // Vérifications avec délais progressifs pour laisser le temps au script principal
+      setTimeout(() => {
+        log('Vérification 1 (500ms après agilo:load)');
+        updateButtonVisibility().catch(() => {});
+      }, 500);
+      
+      setTimeout(() => {
+        log('Vérification 2 (1500ms après agilo:load)');
+        updateButtonVisibility().catch(() => {});
+      }, 1500);
+      
+      setTimeout(() => {
+        log('Vérification 3 (3000ms après agilo:load)');
+        updateButtonVisibility().catch(() => {});
+      }, 3000);
+      
+      setTimeout(() => {
+        log('Vérification 4 (5000ms après agilo:load)');
+        updateButtonVisibility().catch(() => {});
+      }, 5000);
     });
     
     window.addEventListener('agilo:token', async ()=>{
