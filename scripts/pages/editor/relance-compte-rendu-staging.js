@@ -590,8 +590,45 @@
   /**
    * Vérifier si un compte-rendu existe déjà pour ce jobId
    */
+  /**
+   * Vérifier si le message d'erreur est affiché dans le DOM
+   */
+  function checkSummaryErrorInDOM() {
+    const summaryEditor = document.querySelector('#summaryEditor, [id*="summary"], [class*="summary"]');
+    if (!summaryEditor) return false;
+    
+    const text = summaryEditor.textContent || summaryEditor.innerText || '';
+    const html = summaryEditor.innerHTML || '';
+    
+    // Vérifier les messages d'erreur possibles
+    const errorMessages = [
+      'pas encore disponible',
+      'fichier manquant',
+      'non publié',
+      'n\'est pas encore disponible',
+      'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+    ];
+    
+    const hasError = errorMessages.some(msg => 
+      text.toLowerCase().includes(msg.toLowerCase()) || 
+      html.toLowerCase().includes(msg.toLowerCase())
+    );
+    
+    if (hasError) {
+      console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM:', text.substring(0, 100));
+    }
+    
+    return hasError;
+  }
+  
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
+      // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
+      if (checkSummaryErrorInDOM()) {
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
+        return false;
+      }
+      
       // Ajouter cache-busting pour éviter le cache navigateur
       const cacheBuster = Date.now();
       const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
@@ -613,12 +650,36 @@
       
       if (response.ok) {
         const text = await response.text();
-        // Vérifier que ce n'est pas un message d'erreur
-        const isError = text.includes('pas encore disponible') || 
-                       text.includes('non publié') || 
-                       text.includes('fichier manquant');
         
-        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
+        // ⚠️ IMPORTANT : Vérifier plus strictement que ce n'est pas un message d'erreur
+        // L'API peut retourner 200 OK avec un message d'erreur dans le HTML
+        const errorPatterns = [
+          /pas encore disponible/i,
+          /non publié/i,
+          /fichier manquant/i,
+          /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,
+          /n'est pas encore disponible/i,
+          /résumé en préparation/i
+        ];
+        
+        const isError = errorPatterns.some(pattern => pattern.test(text));
+        const isValidContent = !isError && text.length > 100 && !text.trim().startsWith('<');
+        
+        // Log détaillé pour debug
+        console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
+          length: text.length,
+          isError,
+          isValidContent,
+          preview: text.substring(0, 150).replace(/\s+/g, ' ')
+        });
+        
+        if (!isValidContent) {
+          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide');
+          return false;
+        }
+        
+        console.log('[AGILO:RELANCE] ✅ Compte-rendu valide détecté');
+        return true;
       }
       
       return false;
@@ -1245,6 +1306,15 @@
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
     const noSummaryMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
     
+    // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
+    // C'est plus rapide et plus fiable que l'API
+    if (checkSummaryErrorInDOM()) {
+      console.log('[AGILO:RELANCE] Message d\'erreur dans le DOM - Bouton caché');
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
+      return;
+    }
+    
     // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
     try {
       const creds = await ensureCreds();
@@ -1255,7 +1325,7 @@
         
         // Si le compte-rendu n'existe pas, CACHER le bouton complètement
         if (!summaryExists) {
-          console.log('[AGILO:RELANCE] Compte-rendu inexistant - Bouton caché');
+          console.log('[AGILO:RELANCE] Compte-rendu inexistant (API) - Bouton caché');
           btn.style.display = 'none';
           if (counter) counter.style.display = 'none';
           // Afficher le message informatif si on est sur l'onglet Compte-rendu
@@ -1283,7 +1353,12 @@
       }
     } catch (e) {
       console.error('[AGILO:RELANCE] Erreur vérification existence compte-rendu:', e);
-      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
+      // En cas d'erreur, vérifier quand même le DOM
+      if (checkSummaryErrorInDOM()) {
+        btn.style.display = 'none';
+        if (counter) counter.style.display = 'none';
+        return;
+      }
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
