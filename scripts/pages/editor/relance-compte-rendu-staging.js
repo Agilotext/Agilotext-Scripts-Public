@@ -595,7 +595,10 @@
    * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
    */
   function checkSummaryErrorInDOM() {
-    // Chercher d'abord les alertes (plus fiable)
+    // ⚠️ IMPORTANT : Chercher dans TOUS les éléments, même ceux qui sont cachés (hidden)
+    // querySelectorAll trouve les éléments même s'ils sont dans un parent caché
+    
+    // 1. Chercher d'abord les alertes (plus fiable) - même si cachées
     const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title');
     for (const alert of alertElements) {
       const text = alert.textContent || alert.innerText || '';
@@ -607,56 +610,62 @@
         'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
       ];
       if (errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()))) {
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans alerte:', text.substring(0, 100));
         return true;
       }
     }
     
-    // Chercher l'éditeur de compte-rendu (même s'il est caché)
-    const summaryEditor = document.querySelector('#summaryEditor, [id*="summaryEditor"], [id*="summary"]');
-    if (!summaryEditor) {
-      // Si l'éditeur n'existe pas, chercher dans tous les panneaux
-      const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
-      if (summaryPane) {
-        const text = summaryPane.textContent || summaryPane.innerText || '';
-        const html = summaryPane.innerHTML || '';
-        
-        // Vérifier les messages d'erreur possibles
-        const errorMessages = [
-          'pas encore disponible',
-          'fichier manquant',
-          'non publié',
-          'n\'est pas encore disponible',
-          'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-        ];
-        
-        const hasError = errorMessages.some(msg => 
-          text.toLowerCase().includes(msg.toLowerCase()) || 
-          html.toLowerCase().includes(msg.toLowerCase())
-        );
-        
-        return hasError;
+    // 2. Chercher dans #pane-summary (même s'il est caché avec hidden)
+    const summaryPane = document.querySelector('#pane-summary');
+    if (summaryPane) {
+      const text = summaryPane.textContent || summaryPane.innerText || '';
+      const html = summaryPane.innerHTML || '';
+      
+      const errorMessages = [
+        'pas encore disponible',
+        'fichier manquant',
+        'non publié',
+        'n\'est pas encore disponible',
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+      ];
+      
+      const hasError = errorMessages.some(msg => 
+        text.toLowerCase().includes(msg.toLowerCase()) || 
+        html.toLowerCase().includes(msg.toLowerCase())
+      );
+      
+      if (hasError) {
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans pane-summary:', text.substring(0, 100));
+        return true;
       }
-      return false;
     }
     
-    const text = summaryEditor.textContent || summaryEditor.innerText || '';
-    const html = summaryEditor.innerHTML || '';
+    // 3. Chercher dans #summaryEditor (même s'il est caché)
+    const summaryEditor = document.querySelector('#summaryEditor');
+    if (summaryEditor) {
+      const text = summaryEditor.textContent || summaryEditor.innerText || '';
+      const html = summaryEditor.innerHTML || '';
+      
+      const errorMessages = [
+        'pas encore disponible',
+        'fichier manquant',
+        'non publié',
+        'n\'est pas encore disponible',
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+      ];
+      
+      const hasError = errorMessages.some(msg => 
+        text.toLowerCase().includes(msg.toLowerCase()) || 
+        html.toLowerCase().includes(msg.toLowerCase())
+      );
+      
+      if (hasError) {
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans summaryEditor:', text.substring(0, 100));
+        return true;
+      }
+    }
     
-    // Vérifier les messages d'erreur possibles
-    const errorMessages = [
-      'pas encore disponible',
-      'fichier manquant',
-      'non publié',
-      'n\'est pas encore disponible',
-      'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-    ];
-    
-    const hasError = errorMessages.some(msg => 
-      text.toLowerCase().includes(msg.toLowerCase()) || 
-      html.toLowerCase().includes(msg.toLowerCase())
-    );
-    
-    return hasError;
+    return false;
   }
   
   async function checkSummaryExists(jobId, email, token, edition) {
