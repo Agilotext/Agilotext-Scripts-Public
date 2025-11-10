@@ -609,11 +609,11 @@
       console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - Alerte texte:', text.substring(0, 150));
       
       const errorMessages = [
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible',
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+        'n\'est pas encore disponible'
       ];
       
       const hasError = errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()));
@@ -634,11 +634,11 @@
       console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary texte preview:', text.substring(0, 200));
       
       const errorMessages = [
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible',
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+        'n\'est pas encore disponible'
       ];
       
       const hasError = errorMessages.some(msg => 
@@ -663,11 +663,11 @@
       console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor texte preview:', text.substring(0, 200));
       
       const errorMessages = [
+        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS',  // Code d'erreur exact de l'API (priorité)
         'pas encore disponible',
         'fichier manquant',
         'non publié',
-        'n\'est pas encore disponible',
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+        'n\'est pas encore disponible'
       ];
       
       const hasError = errorMessages.some(msg => 
@@ -713,8 +713,23 @@
       
       console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
         status: response.status,
-        ok: response.ok
+        ok: response.ok,
+        contentType: response.headers.get('content-type')
       });
+      
+      // Vérifier d'abord si c'est du JSON avec un code d'erreur
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const json = await response.json();
+        console.log('[AGILO:RELANCE] Réponse JSON:', json);
+        
+        // ⚠️ IMPORTANT : Si l'API retourne ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS, le compte-rendu n'existe pas
+        if (json.errorMessage === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' || 
+            json.status === 'KO' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(json.errorMessage || '')) {
+          console.log('[AGILO:RELANCE] ERREUR - Code d\'erreur API détecté: ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+          return false;
+        }
+      }
       
       if (response.ok) {
         const text = await response.text();
@@ -722,10 +737,10 @@
         // ⚠️ IMPORTANT : Vérifier plus strictement que ce n'est pas un message d'erreur
         // L'API peut retourner 200 OK avec un message d'erreur dans le HTML
         const errorPatterns = [
+          /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,  // Code d'erreur exact de l'API
           /pas encore disponible/i,
           /non publié/i,
           /fichier manquant/i,
-          /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,
           /n'est pas encore disponible/i,
           /résumé en préparation/i
         ];
@@ -736,12 +751,14 @@
         const isAlertHTML = /ag-alert/i.test(text) && (
           /pas encore disponible/i.test(text) || 
           /fichier manquant/i.test(text) || 
-          /non publié/i.test(text)
+          /non publié/i.test(text) ||
+          /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(text)
         );
         
         const isValidContent = !isError && !isAlertHTML && text.length > 100 && 
                                !text.trim().startsWith('<div class="ag-alert') &&
-                               !text.includes('ag-alert ag-alert--warn');
+                               !text.includes('ag-alert ag-alert--warn') &&
+                               !text.includes('ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
         
         // Log détaillé pour debug
         console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
@@ -751,6 +768,7 @@
           isValidContent,
           preview: text.substring(0, 200).replace(/\s+/g, ' '),
           containsAlert: /ag-alert/i.test(text),
+          containsErrorCode: /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(text),
           containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text)
         });
         
