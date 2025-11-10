@@ -271,6 +271,20 @@
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
+    // ⚠️ CRITIQUE : Ne JAMAIS afficher le bouton si le compte-rendu n'existe pas
+    // Vérifier d'abord dans le DOM si le message d'erreur est affiché
+    const hasErrorInDOM = checkSummaryErrorInDOM();
+    if (hasErrorInDOM) {
+      console.log('[AGILO:RELANCE] updateRegenerationCounter - Message d\'erreur dans DOM - Bouton CACHE');
+      btn.style.display = 'none';
+      // Supprimer aussi le compteur s'il existe
+      const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
+      if (oldCounter) oldCounter.remove();
+      const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+      if (oldMessage) oldMessage.remove();
+      return;
+    }
+    
     // Supprimer l'ancien compteur s'il existe
     const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
     if (oldCounter) {
@@ -284,17 +298,14 @@
     
     const canRegen = canRegenerate(jobId, edition);
     
-    // Utilisateur Free : Garder le bouton visible mais avec apparence désactivée
-    // Le message premium est caché, le bouton affichera directement la pop-up au clic
+    // ⚠️ IMPORTANT : Ne pas afficher le bouton ici, laisser updateButtonVisibility() le faire
+    // On ne fait que créer le compteur, pas afficher le bouton
+    
+    // Utilisateur Free : Ne pas créer le message premium (on le cache)
+    // Le bouton sera géré par updateButtonVisibility()
     if (canRegen.reason === 'free') {
-      // Ne pas créer le message premium (on le cache)
-      // Le bouton reste visible et cliquable
-      btn.style.display = 'flex';
       return;
     }
-    
-    // Afficher le bouton pour Pro/Business
-    btn.style.display = 'flex';
     
       // Limite atteinte : Afficher message avec option d'upgrade si Pro
       if (canRegen.reason === 'limit') {
@@ -1863,12 +1874,16 @@
         if (jobId && edition) {
           console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
           
-          // Mettre à jour les compteurs et l'état du bouton
-          updateRegenerationCounter(jobId, edition);
-          updateButtonState(jobId, edition);
-          
-          // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
+          // ⚠️ CRITIQUE : Appeler updateButtonVisibility() EN PREMIER pour vérifier si le compte-rendu existe
+          // Si le compte-rendu n'existe pas, le bouton sera caché et on n'a pas besoin de mettre à jour les compteurs
           await updateButtonVisibility();
+          
+          // Seulement si le bouton est visible, mettre à jour les compteurs et l'état
+          const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+          if (btn && btn.style.display !== 'none') {
+            updateRegenerationCounter(jobId, edition);
+            updateButtonState(jobId, edition);
+          }
           
           // Logs pour debug Pro/Business
           const canRegen = canRegenerate(jobId, edition);
