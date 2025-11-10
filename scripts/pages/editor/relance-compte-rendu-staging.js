@@ -10,7 +10,7 @@
 
 (function () {
   'use strict';
-
+  
   /************* Réglages *************/
   const DEBUG = true; // Activé pour staging
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -234,6 +234,12 @@
 
   /************* Détection du message d'erreur dans le DOM *************/
   function hasErrorMessageInDOM(){
+    // ⚠️ IMPORTANT : Vérifier d'abord le dataset du script principal
+    if (editorRoot?.dataset.summaryEmpty === '1') {
+      log('summaryEmpty=1 détecté (script principal)');
+      return true;
+    }
+    
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
     if (!summaryEl) return false;
     
@@ -252,14 +258,21 @@
       return true;
     }
     
-    // Vérifier aussi les classes d'alerte
-    const alerts = $$('.ag-alert, .ag-alert--warn, [class*="alert"]', summaryEl);
+    // Vérifier aussi les classes d'alerte (ag-alert du script principal)
+    const alerts = $$('.ag-alert, .ag-alert--warn, .ag-alert__title', summaryEl);
     for (const alert of alerts) {
-      const alertText = (alert.textContent || '').toLowerCase();
+      const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
       if (ERROR_PATTERNS.some(p => alertText.includes(p.toLowerCase()))) {
         log('Message d\'erreur détecté dans une alerte:', alertText.substring(0, 100));
         return true;
       }
+    }
+    
+    // Vérifier si le contenu est vide ou juste un message d'erreur
+    const cleanText = text.replace(/\s+/g, ' ').trim();
+    if (cleanText.length < 50 && ERROR_PATTERNS.some(p => cleanText.toLowerCase().includes(p.toLowerCase()))) {
+      log('Message d\'erreur détecté (texte court):', cleanText);
+      return true;
     }
     
     return false;
@@ -377,10 +390,22 @@
   function updateButtonState(jobId, edition){
     const btn = $('[data-action="relancer-compte-rendu"]'); 
     if (!btn) return;
+    
+    // ⚠️ IMPORTANT : Vérifier d'abord si le message d'erreur est présent
+    if (hasErrorMessageInDOM()) {
+      log('Message d\'erreur détecté - Bouton désactivé');
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+      btn.title = 'Aucun compte-rendu disponible pour régénérer';
+      return;
+    }
+    
     const gate = canRegenerate(jobId, edition);
     if (gate.reason === 'free'){
-      btn.disabled = false;
+      btn.disabled = false; // Cliquable pour afficher la pop-up AgiloGate
       btn.style.opacity = '0.6';
+      btn.style.cursor = 'pointer';
       btn.setAttribute('data-plan-min','pro');
       btn.setAttribute('data-upgrade-reason','Régénération de compte-rendu');
       if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
@@ -393,11 +418,14 @@
       btn.style.opacity = '0.5';
       btn.style.cursor  = 'not-allowed';
     } else {
+      // ⚠️ IMPORTANT : S'assurer que le bouton est cliquable quand le compte-rendu est prêt
       btn.disabled = false;
       btn.style.opacity = '1';
-      btn.style.cursor  = 'pointer';
+      btn.style.cursor = 'pointer';
       btn.removeAttribute('data-plan-min');
       btn.removeAttribute('data-upgrade-reason');
+      btn.removeAttribute('title');
+      log('Bouton activé et cliquable');
     }
   }
 
@@ -470,7 +498,7 @@
               });
               saveSummaryHash(jobId, newHash);
               return { ok:true, html, hash:newHash };
-            } else {
+      } else {
               log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
             }
           }
@@ -495,7 +523,7 @@
       alert('❌ Informations incomplètes.');
       return;
     }
-
+    
     // limites
     const gate = canRegenerate(jobId, auth.edition);
     if (!gate.allowed){
@@ -504,20 +532,20 @@
           window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
         } else {
           alert('🔒 Fonctionnalité Premium — disponible en Pro/Business.');
-        }
-      } else {
+          }
+        } else {
         alert(`⚠️ Limite atteinte\n\n${gate.count}/${gate.limit} régénérations utilisées.`);
       }
       return;
     }
-
+    
     // garde "jamais demandé"
     const requested = await wasSummaryEverRequested(jobId, auth);
     if (!requested){
       alert('⚠️ Aucun compte-rendu initial demandé pour cet audio.');
-      return;
-    }
-
+        return;
+      }
+      
     const ok = confirm(`Remplacer le compte-rendu actuel ?\n\n${gate.remaining}/${gate.limit} régénération${gate.remaining>1?'s':''} restante${gate.remaining>1?'s':''}.`);
     if (!ok) return;
 
@@ -557,9 +585,9 @@
       
       if (!redo.ok || !(j.status==='OK' || j.ok === true)) {
         alert('❌ Erreur lors de la régénération.\n\n' + (j.message || j.error || j.errorMessage || 'Erreur inconnue'));
-        return;
-      }
-
+          return;
+        }
+        
       log('✅ API redoSummary OK - Incrémentation compteur');
       incrementRegenerationCount(jobId, auth.edition);
       updateRegenerationCounter(jobId, auth.edition);
@@ -575,7 +603,7 @@
           hash: result.hash?.substring(0, 30) + '...',
           htmlLength: result.html?.length
         });
-      } else {
+    } else {
         warn('⚠️ Compte-rendu pas prêt après toutes les tentatives');
       }
 
@@ -616,10 +644,31 @@
   function bindRelanceClick(){
     document.addEventListener('click', (e)=>{
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn && !btn.disabled && !btn.classList.contains('agilo-force-hide')) {
-        e.preventDefault(); e.stopPropagation();
-        relancerCompteRendu();
+    if (!btn) return;
+    
+      // Vérifier que le bouton n'est pas caché
+      if (btn.classList.contains('agilo-force-hide')) {
+        log('Bouton caché - Clic ignoré');
+        return;
       }
+      
+      // Vérifier que le bouton n'est pas désactivé
+      if (btn.disabled) {
+        log('Bouton désactivé - Clic ignoré');
+        return;
+      }
+      
+      // Vérifier une dernière fois si le message d'erreur est présent
+      if (hasErrorMessageInDOM()) {
+        log('Message d\'erreur détecté au clic - Action annulée');
+        toast('Aucun compte-rendu disponible pour régénérer');
+      return;
+    }
+    
+        e.preventDefault();
+        e.stopPropagation();
+      log('Clic sur bouton régénérer - Lancement...');
+        relancerCompteRendu();
     }, { passive:false });
   }
 
@@ -640,6 +689,20 @@
       subtree: true,
       characterData: true
     });
+    
+    // Observer aussi les changements du dataset summaryEmpty sur editorRoot
+    if (editorRoot) {
+      const rootObserver = new MutationObserver(() => {
+        setTimeout(() => {
+          updateButtonVisibility().catch(() => {});
+        }, 300);
+      });
+      
+      rootObserver.observe(editorRoot, {
+        attributes: true,
+        attributeFilter: ['data-summary-empty']
+      });
+    }
   }
 
   // Observer la sauvegarde du transcript
@@ -667,8 +730,8 @@
     setupSaveObserver();
 
     // MAJ bouton à l'ouverture
-    await updateButtonVisibility();
-
+          await updateButtonVisibility();
+          
     // réagit aux changements (jobId, token, onglets)
     window.addEventListener('agilo:load', async (e)=>{
       const raw = e?.detail?.jobId ?? e?.detail ?? '';
@@ -690,7 +753,7 @@
         }, 200);
       });
     });
-
+    
     // Si l'URL forçait l'onglet summary, on nettoie le param
     const url = new URL(location.href);
     if (url.searchParams.get('tab') === 'summary'){
