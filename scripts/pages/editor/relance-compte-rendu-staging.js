@@ -407,8 +407,26 @@
   /************* Jobs info & statut *************/
   async function getTranscriptStatus(jobId, auth, signal){
     const r = await apiGetWithRetry('status', jobId, {...auth}, 0, signal);
-    if (!r.ok) return null;
-    try { return (JSON.parse(r.payload)||{}).transcriptStatus || null; } catch { return null; }
+    if (!r.ok) {
+      // Si l'API retourne une erreur avec ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS
+      if (r.json && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(r.json.errorMessage || '')) {
+        log('⚠️ ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS détecté dans getTranscriptStatus');
+        saveSummaryErrorState(jobId, true, 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+        return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+      }
+      return null;
+    }
+    try {
+      const data = JSON.parse(r.payload) || {};
+      const status = data.transcriptStatus || null;
+      // Vérifier aussi dans javaException
+      if (data.javaException && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.javaException)) {
+        log('⚠️ ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS détecté dans javaException');
+        saveSummaryErrorState(jobId, true, 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+        return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+      }
+      return status;
+    } catch { return null; }
   }
   
   async function getJobsInfo(jobId, auth, signal){
@@ -418,10 +436,38 @@
   }
   
   async function wasSummaryEverRequested(jobId, auth, signal){
-    const info = await getJobsInfo(jobId, auth, signal);
-    if (info && typeof info.doSummary !== 'undefined') return !!info.doSummary;
+    // Vérifier d'abord via getTranscriptStatus (plus fiable)
     const st = await getTranscriptStatus(jobId, auth, signal);
-    return st === 'READY_SUMMARY_READY' || st === 'READY_SUMMARY_PENDING' || st === 'READY_SUMMARY_ON_ERROR';
+    if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+      log('❌ Summary jamais demandé (ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS)');
+      return false;
+    }
+    if (st === 'READY_SUMMARY_READY' || st === 'READY_SUMMARY_PENDING' || st === 'READY_SUMMARY_ON_ERROR') {
+      log('✅ Summary demandé (statut:', st, ')');
+      return true;
+    }
+    
+    // Fallback sur getJobsInfo
+    const info = await getJobsInfo(jobId, auth, signal);
+    if (info && typeof info.doSummary !== 'undefined') {
+      log('✅ Summary demandé (doSummary:', info.doSummary, ')');
+      return !!info.doSummary;
+    }
+    
+    // Si on n'a pas de statut clair, on considère que c'est demandé si on a un summary dans le DOM
+    const summaryEl = byId('summaryEditor') || $('[data-editor="summary"]');
+    if (summaryEl) {
+      const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
+      // Si le contenu n'est pas un message d'erreur, on considère qu'un summary existe
+      const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
+      if (text && !text.includes(exactMsg) && text.length > 50) {
+        log('✅ Summary détecté dans le DOM (contenu présent)');
+        return true;
+      }
+    }
+    
+    log('❌ Summary jamais demandé (aucune preuve)');
+    return false;
   }
 
   /************* Bouton Régénérer — limites *************/
@@ -540,18 +586,40 @@
     btn.parentElement.appendChild(c);
   }
   
-  function updateButtonState(jobId, edition){
+  async function updateButtonState(jobId, edition){
     const btn = $('[data-action="relancer-compte-rendu"]'); 
     if (!btn) return;
     
-    // ⚠️ IMPORTANT : Vérifier d'abord si le message d'erreur est présent
-    if (hasErrorMessageInDOM()) {
-      log('Message d\'erreur détecté - Bouton désactivé');
+    // ⚠️ IMPORTANT : Vérifier d'abord si un summary existe vraiment (via API)
+    // Ne pas se fier uniquement au DOM qui peut être en transition
+    const auth = await ensureAuth();
+    const requested = await wasSummaryEverRequested(jobId, auth);
+    
+    if (!requested) {
+      log('Summary jamais demandé - Bouton désactivé');
       btn.disabled = true;
       btn.style.opacity = '0.5';
       btn.style.cursor = 'not-allowed';
       btn.title = 'Aucun compte-rendu disponible pour régénérer';
       return;
+    }
+    
+    // Si un summary existe, vérifier aussi le DOM pour les cas de transition
+    // Mais ne pas bloquer si le summary existe vraiment
+    const hasErrorInDOM = hasErrorMessageInDOM();
+    if (hasErrorInDOM) {
+      // Double vérification : si le statut API dit qu'un summary existe, on fait confiance à l'API
+      const st = await getTranscriptStatus(jobId, auth);
+      if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        log('Message d\'erreur confirmé par API - Bouton désactivé');
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'Aucun compte-rendu disponible pour régénérer';
+        return;
+      }
+      // Si l'API dit qu'un summary existe, on ignore le message DOM (probablement une transition)
+      log('Message d\'erreur dans DOM mais summary existe selon API - Bouton activé');
     }
     
     const gate = canRegenerate(jobId, edition);
@@ -578,7 +646,7 @@
       btn.removeAttribute('data-plan-min');
       btn.removeAttribute('data-upgrade-reason');
       btn.removeAttribute('title');
-      log('Bouton activé et cliquable');
+      log('✅ Bouton activé et cliquable (summary existe)');
     }
   }
 
@@ -624,7 +692,10 @@
     // si demandé → bouton visible, mais limites applicables
     showButton(btn);
     updateRegenerationCounter(jobId, auth.edition);
-    updateButtonState(jobId, auth.edition);
+    // updateButtonState est maintenant async, on doit attendre
+    updateButtonState(jobId, auth.edition).catch(e => {
+      warn('Erreur updateButtonState:', e);
+    });
   }
 
   /************* Poll du résumé jusqu'à READY + hash différent *************/
