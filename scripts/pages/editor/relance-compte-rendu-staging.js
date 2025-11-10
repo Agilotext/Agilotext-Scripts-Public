@@ -1531,8 +1531,27 @@
     console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
     if (hasErrorInDOM) {
       console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE (tous onglets)');
+      // ⚠️ CRITIQUE : Forcer le cache avec plusieurs méthodes pour être sûr
       btn.style.setProperty('display', 'none', 'important');
+      btn.style.setProperty('visibility', 'hidden', 'important');
+      btn.style.setProperty('opacity', '0', 'important');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+      btn.classList.add('agilo-force-hide');
       if (counter) counter.style.setProperty('display', 'none', 'important');
+      
+      // Vérifier que ça a fonctionné
+      setTimeout(() => {
+        const computedDisplay = window.getComputedStyle(btn).display;
+        if (computedDisplay !== 'none') {
+          console.warn('[AGILO:RELANCE] updateButtonVisibility - Le bouton est toujours visible, méthode alternative');
+          btn.style.setProperty('position', 'absolute', 'important');
+          btn.style.setProperty('left', '-9999px', 'important');
+          btn.style.setProperty('width', '0', 'important');
+          btn.style.setProperty('height', '0', 'important');
+          btn.style.setProperty('overflow', 'hidden', 'important');
+        }
+      }, 50);
+      
       // ⚠️ IMPORTANT : Ne PAS continuer, même si on est sur l'onglet Transcription
       return;
     }
@@ -1768,25 +1787,43 @@
   function setupErrorWatcher() {
     // Vérifier immédiatement
     const checkAndHide = () => {
-      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-      if (!btn) return;
+      const allButtons = document.querySelectorAll('[data-action="relancer-compte-rendu"]');
+      if (allButtons.length === 0) return;
       
       const hasError = checkSummaryErrorInDOM();
       if (hasError) {
-        console.log('[AGILO:RELANCE] ErrorWatcher - Message d\'erreur détecté, cache le bouton');
-        btn.style.setProperty('display', 'none', 'important');
-        const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-        if (counter) {
-          counter.style.setProperty('display', 'none', 'important');
-        }
+        console.log('[AGILO:RELANCE] ErrorWatcher - Message d\'erreur détecté, cache TOUS les boutons');
+        allButtons.forEach((btn) => {
+          // ⚠️ CRITIQUE : Forcer le cache avec !important et vérifier que ça prend
+          btn.style.setProperty('display', 'none', 'important');
+          
+          // ⚠️ IMPORTANT : Vérifier que le style a bien été appliqué
+          const computedDisplay = window.getComputedStyle(btn).display;
+          if (computedDisplay !== 'none') {
+            console.warn('[AGILO:RELANCE] ErrorWatcher - Le bouton est toujours visible malgré display:none !important');
+            // Essayer une autre méthode : ajouter une classe CSS
+            btn.classList.add('agilo-force-hide');
+            // Ou utiliser visibility
+            btn.style.setProperty('visibility', 'hidden', 'important');
+            btn.style.setProperty('opacity', '0', 'important');
+            btn.style.setProperty('pointer-events', 'none', 'important');
+            btn.style.setProperty('position', 'absolute', 'important');
+            btn.style.setProperty('left', '-9999px', 'important');
+          }
+          
+          const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+          if (counter) {
+            counter.style.setProperty('display', 'none', 'important');
+          }
+        });
       }
     };
     
     // Vérifier immédiatement
     checkAndHide();
     
-    // Vérifier périodiquement (toutes les 500ms)
-    const intervalId = setInterval(checkAndHide, 500);
+    // Vérifier périodiquement (toutes les 300ms pour être plus réactif)
+    const intervalId = setInterval(checkAndHide, 300);
     
     // Observer les changements dans le DOM
     const observer = new MutationObserver((mutations) => {
@@ -1859,16 +1896,66 @@
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['style', 'class', 'aria-selected', 'hidden']
+    });
+    
+    // ⚠️ CRITIQUE : Observer aussi les changements de STYLE sur les boutons eux-mêmes
+    // Si un autre script force display:flex !important, on doit le contrer
+    const buttonObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          const btn = mutation.target;
+          if (btn && btn.getAttribute('data-action') === 'relancer-compte-rendu') {
+            const hasError = checkSummaryErrorInDOM();
+            if (hasError) {
+              const currentDisplay = window.getComputedStyle(btn).display;
+              if (currentDisplay !== 'none') {
+                console.log('[AGILO:RELANCE] ErrorWatcher - Style changé sur bouton, force cache');
+                btn.style.setProperty('display', 'none', 'important');
+                btn.style.setProperty('visibility', 'hidden', 'important');
+                btn.style.setProperty('opacity', '0', 'important');
+                btn.style.setProperty('pointer-events', 'none', 'important');
+              }
+            }
+          }
+        }
+      });
+    });
+    
+    // Observer tous les boutons existants et futurs
+    const observeButtons = () => {
+      const allButtons = document.querySelectorAll('[data-action="relancer-compte-rendu"]');
+      allButtons.forEach((btn) => {
+        buttonObserver.observe(btn, {
+          attributes: true,
+          attributeFilter: ['style', 'class']
+        });
+      });
+    };
+    
+    // Observer immédiatement
+    observeButtons();
+    
+    // Observer aussi les nouveaux boutons ajoutés
+    const buttonContainerObserver = new MutationObserver(() => {
+      observeButtons();
+    });
+    buttonContainerObserver.observe(document.body, {
+      childList: true,
+      subtree: true
     });
     
     // Nettoyer au démontage
     window.addEventListener('beforeunload', () => {
       clearInterval(intervalId);
       observer.disconnect();
+      buttonObserver.disconnect();
+      buttonContainerObserver.disconnect();
     });
     
-    console.log('[AGILO:RELANCE] ErrorWatcher initialisé - Surveillance active du DOM');
+    console.log('[AGILO:RELANCE] ErrorWatcher initialisé - Surveillance active du DOM et des styles');
   }
   
   /**
