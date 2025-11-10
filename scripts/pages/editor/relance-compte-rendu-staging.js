@@ -1146,6 +1146,7 @@
       } catch (error) {
         console.error(`[AGILO:RELANCE] Erreur vérification (tentative ${attempt}/${maxAttempts}):`, error);
         if (attempt < maxAttempts) {
+          const delay = baseDelay * Math.pow(1.3, attempt - 1);
           await new Promise(r => setTimeout(r, delay));
         }
       }
