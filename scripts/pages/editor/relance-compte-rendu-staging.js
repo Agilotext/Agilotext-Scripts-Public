@@ -1681,8 +1681,13 @@
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
           
-          // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
-          await updateButtonVisibility();
+          // ⚠️ IMPORTANT : Attendre un peu que le DOM soit complètement chargé
+          // Le message d'erreur peut être ajouté après le chargement initial
+          setTimeout(async () => {
+            // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
+            console.log('[AGILO:RELANCE] 🔄 Appel updateButtonVisibility()...');
+            await updateButtonVisibility();
+          }, 1000);
           
           // Logs pour debug Pro/Business
           const canRegen = canRegenerate(jobId, edition);
@@ -1702,6 +1707,31 @@
     
     // Attendre un peu que les credentials soient disponibles
     setTimeout(initLimits, 500);
+    
+    // ⚠️ IMPORTANT : Observer les changements dans le DOM pour détecter quand le message d'erreur apparaît
+    const observer = new MutationObserver(() => {
+      // Si le message d'erreur apparaît, cacher le bouton immédiatement
+      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+      if (btn && btn.style.display !== 'none') {
+        if (checkSummaryErrorInDOM()) {
+          console.log('[AGILO:RELANCE] 🚨 Message d\'erreur détecté par MutationObserver - Cachage immédiat du bouton');
+          btn.style.display = 'none';
+          const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+          if (counter) counter.style.display = 'none';
+        }
+      }
+    });
+    
+    // Observer les changements dans le panneau Compte-rendu
+    const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
+    if (summaryPane) {
+      observer.observe(summaryPane, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+      console.log('[AGILO:RELANCE] ✅ MutationObserver activé sur panneau Compte-rendu');
+    }
     
     // Réinitialiser les compteurs quand on change de transcript
     // Utiliser MutationObserver au lieu de setInterval pour meilleure performance
