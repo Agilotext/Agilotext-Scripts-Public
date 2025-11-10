@@ -789,7 +789,8 @@
       console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
         status: response.status,
         ok: response.ok,
-        contentType: response.headers.get('content-type')
+        contentType: response.headers.get('content-type'),
+        url: url
       });
       
       // Vérifier d'abord si c'est du JSON avec un code d'erreur
@@ -2272,7 +2273,22 @@
         const { edition, jobId } = creds;
         if (jobId && edition) {
           console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
-          
+
+          // ⚠️ CRITIQUE : Vérifier d'abord le DOM AVANT updateButtonVisibility
+          const hasErrorDOM = checkSummaryErrorInDOM();
+          if (hasErrorDOM) {
+            console.log('[AGILO:RELANCE] ⚠️ Erreur détectée dans DOM - Cache bouton immédiatement');
+            const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+            if (btn) {
+              btn.style.setProperty('display', 'none', 'important');
+              btn.style.setProperty('visibility', 'hidden', 'important');
+              btn.classList.add('agilo-force-hide');
+              const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+              if (counter) counter.style.setProperty('display', 'none', 'important');
+            }
+            return; // Ne pas continuer si erreur dans DOM
+          }
+
           // ⚠️ CRITIQUE : Appeler updateButtonVisibility() EN PREMIER pour vérifier si le compte-rendu existe
           // Si le compte-rendu n'existe pas, le bouton sera caché et on n'a pas besoin de mettre à jour les compteurs
           await updateButtonVisibility();
