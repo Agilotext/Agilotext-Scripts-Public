@@ -970,25 +970,49 @@
     return `${text.length}_${start}_${middle}_${end}`;
   }
   
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000, oldContentHash = null) {
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 50, baseDelay = 2000, oldContentHash = null) {
     const waitStartTime = Date.now();
     console.log('[AGILO:RELANCE] ========================================');
     console.log('[AGILO:RELANCE] ⏳ Début vérification disponibilité NOUVEAU compte-rendu', {
       jobId,
       maxAttempts,
-      delay: delay + 'ms',
-      tempsMaxAttendu: Math.round((maxAttempts * delay) / 1000) + ' secondes',
-      oldContentHash: oldContentHash || 'aucun (première génération)'
+      baseDelay: baseDelay + 'ms',
+      tempsMaxAttendu: Math.round((maxAttempts * baseDelay) / 1000) + ' secondes',
+      oldContentHash: oldContentHash ? oldContentHash.substring(0, 30) + '...' : 'aucun (première génération)'
     });
+    console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : On attend que le statut soit READY_SUMMARY_READY');
     console.log('[AGILO:RELANCE] ========================================');
     
     // ⚠️ IMPORTANT : Attendre un délai initial car l'API redoSummary retourne OK rapidement
     // mais la génération réelle prend du temps (30-60 secondes généralement)
-    console.log('[AGILO:RELANCE] ⏳ Attente initiale de 5 secondes (génération en cours...)');
-    await new Promise(r => setTimeout(r, 5000));
+    console.log('[AGILO:RELANCE] ⏳ Attente initiale de 3 secondes (génération en cours...)');
+    await new Promise(r => setTimeout(r, 3000));
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        // ⚠️ CRITIQUE : Utiliser le même système que pollSummaryUntilReady du script principal
+        // Vérifier d'abord le statut via getTranscriptStatus pour savoir si c'est READY_SUMMARY_READY
+        const statusUrl = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+        const statusResponse = await fetch(statusUrl, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        let transcriptStatus = null;
+        if (statusResponse.ok) {
+          try {
+            const statusData = await statusResponse.json();
+            transcriptStatus = statusData.transcriptStatus;
+            console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Statut transcript:`, transcriptStatus);
+          } catch (e) {
+            console.warn('[AGILO:RELANCE] Erreur parsing statut:', e);
+          }
+        }
+        
         // ⚠️ IMPORTANT : Ajouter un paramètre cache-busting pour éviter le cache navigateur
         const cacheBuster = Date.now();
         const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
@@ -1008,16 +1032,49 @@
         const elapsedTime = Math.round((Date.now() - waitStartTime) / 1000);
         console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} (${elapsedTime}s écoulées) - Status: ${response.status} (${checkTime}ms)`);
         
-        // Si 200 OK, le compte-rendu est prêt
+        // ⚠️ CRITIQUE : Vérifier si c'est du JSON avec un code d'erreur (comme dans apiGetWithRetry)
+        const contentType = response.headers.get('content-type') || '';
+        let text = '';
+        let isJsonError = false;
+        
+        if (contentType.includes('application/json')) {
+          try {
+            const json = await response.json();
+            const errorCode = String(json.errorMessage || json.status || '').toUpperCase();
+            console.log('[AGILO:RELANCE] Réponse JSON:', { status: json.status, errorMessage: errorCode });
+            
+            // Vérifier les codes d'erreur qui indiquent que le compte-rendu est en préparation
+            if (/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(errorCode)) {
+              console.log(`[AGILO:RELANCE] ⏳ Compte-rendu en préparation (${errorCode}), on continue à attendre...`);
+              // Continuer la boucle pour réessayer
+              const delay = baseDelay * Math.pow(1.3, attempt - 1); // Délai exponentiel comme pollSummaryUntilReady
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            } else if (json.status === 'KO' || json.errorMessage) {
+              // Vraie erreur, arrêter
+              console.error('[AGILO:RELANCE] ❌ Erreur API:', errorCode);
+              return { ready: false, error: errorCode, contentHash: null };
+            }
+            text = JSON.stringify(json);
+          } catch (e) {
+            console.error('[AGILO:RELANCE] Erreur parsing JSON:', e);
+            return { ready: false, error: 'PARSE_ERROR', contentHash: null };
+          }
+        } else {
+          text = await response.text();
+        }
+        
+        // Si 200 OK, vérifier que le compte-rendu est valide
         if (response.ok) {
-          const text = await response.text();
           // Vérifier que ce n'est pas un message d'erreur
           const isError = text.includes('pas encore disponible') || 
                          text.includes('non publié') || 
-                         text.includes('fichier manquant');
+                         text.includes('fichier manquant') ||
+                         text.includes('ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') ||
+                         /ag-alert.*pas encore disponible/i.test(text);
           
           if (!isError && text.length > 100) {
-            // ⚠️ IMPORTANT : Vérifier que c'est bien un NOUVEAU compte-rendu (différent de l'ancien)
+            // ⚠️ CRITIQUE : Vérifier que c'est bien un NOUVEAU compte-rendu (différent de l'ancien)
             const newContentHash = getContentHash(text);
             
             if (oldContentHash && newContentHash === oldContentHash) {
@@ -1546,150 +1603,71 @@
                 console.error('[AGILO:RELANCE] Il se peut que le compte-rendu n\'ait pas été régénéré ou que le cache serveur retourne l\'ancien.');
                 console.error('[AGILO:RELANCE] Hash ancien:', oldContentHash.substring(0, 100) + '...');
                 console.error('[AGILO:RELANCE] Hash nouveau:', newHash.substring(0, 100) + '...');
-              } else {
-                // ⚠️ CRITIQUE : Afficher directement le nouveau compte-rendu dans l'éditeur
-                console.log('[AGILO:RELANCE] ========================================');
-                console.log('[AGILO:RELANCE] 📝 Affichage direct du NOUVEAU compte-rendu dans l\'éditeur...');
-                console.log('[AGILO:RELANCE] ========================================');
-                
-                try {
-                  // Fonction pour nettoyer le HTML (similaire au script principal)
-                  function sanitizeHtml(html) {
-                    const div = document.createElement('div');
-                    div.innerHTML = html || '';
-                    div.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-                    div.querySelectorAll('*').forEach(n => {
-                      [...n.attributes].forEach(a => {
-                        const name = a.name.toLowerCase();
-                        const val = String(a.value || '');
-                        if (name.startsWith('on') || /^javascript:/i.test(val)) n.removeAttribute(a.name);
-                      });
-                    });
-                    return div.innerHTML;
-                  }
-                  
-                  // Nettoyer le HTML
-                  const cleanedHtml = sanitizeHtml(newSummaryText);
-                  
-                  // Trouver l'éditeur de compte-rendu
-                  const summaryEditor = document.querySelector('#summaryEditor');
-                  const summaryPane = document.querySelector('#pane-summary');
-                  
-                  if (summaryEditor) {
-                    // Afficher le nouveau compte-rendu
-                    summaryEditor.innerHTML = cleanedHtml;
-                    console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #summaryEditor');
-                  } else if (summaryPane) {
-                    // Si pas d'éditeur, chercher dans le pane
-                    const editorInPane = summaryPane.querySelector('#summaryEditor, [id*="summary"]');
-                    if (editorInPane) {
-                      editorInPane.innerHTML = cleanedHtml;
-                      console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #pane-summary > #summaryEditor');
-                    } else {
-                      // Créer un conteneur si nécessaire
-                      summaryPane.innerHTML = cleanedHtml;
-                      console.log('[AGILO:RELANCE] ✅ Compte-rendu affiché dans #pane-summary');
-                    }
-                  } else {
-                    console.warn('[AGILO:RELANCE] ⚠️ Éditeur de compte-rendu non trouvé, rechargement nécessaire');
-                    // Fallback : recharger la page
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', 'summary');
-                    url.searchParams.set('_regen', Date.now());
-                    window.location.replace(url.toString());
-                    return;
-                  }
-                  
-                  // Basculer vers l'onglet "Compte rendu" si nécessaire
-                  const summaryTab = document.querySelector('[data-tab="summary"], [aria-controls="pane-summary"], #tab-summary');
-                  if (summaryTab && summaryTab.getAttribute('aria-selected') !== 'true') {
-                    summaryTab.click();
-                    console.log('[AGILO:RELANCE] ✅ Onglet "Compte rendu" activé');
-                  }
-                  
-                  // Mettre à jour les liens de téléchargement
-                  console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
-                  try {
-                    const creds = await ensureCreds();
-                    // Appeler la fonction updateDownloadLinks du script principal si elle existe
-                    if (typeof window.updateDownloadLinks === 'function') {
-                      window.updateDownloadLinks(jobId, {
-                        username: creds.email,
-                        token: creds.token,
-                        edition: creds.edition
-                      }, { summaryEmpty: false });
-                      console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
-                    } else {
-                      console.warn('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée');
-                    }
-                  } catch (e) {
-                    console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
-                  }
-                  
-                  // Mettre à jour le dataset pour indiquer que le compte-rendu n'est plus vide
-                  const editorRoot = document.getElementById('editorRoot');
-                  if (editorRoot) {
-                    editorRoot.dataset.summaryEmpty = '0';
-                    console.log('[AGILO:RELANCE] ✅ Dataset summaryEmpty mis à jour');
-                  }
-                  
-                  // Émettre un événement pour notifier le script principal
-                  window.dispatchEvent(new CustomEvent('agilo:summary-updated', {
-                    detail: { jobId, hash: newHash }
-                  }));
-                  
-                  console.log('[AGILO:RELANCE] ========================================');
-                  console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu affiché avec succès !');
-                  console.log('[AGILO:RELANCE] Le compte-rendu est maintenant visible dans l\'éditeur');
-                  console.log('[AGILO:RELANCE] ========================================');
-                  
-                  // Afficher un message de succès
-                  if (typeof window.toast === 'function') {
-                    window.toast('✅ Compte-rendu régénéré avec succès !');
-                  }
-                  
-                  // ⚠️ IMPORTANT : Réactiver les boutons après l'affichage
-                  setGeneratingState(false);
-                  
-                } catch (e) {
-                  console.error('[AGILO:RELANCE] ❌ Erreur affichage nouveau compte-rendu:', e);
-                  // En cas d'erreur, recharger la page
-                  const url = new URL(window.location.href);
-                  url.searchParams.set('tab', 'summary');
-                  url.searchParams.set('_regen', Date.now());
-                  window.location.replace(url.toString());
-                  return;
-                }
               }
             } else {
               console.warn('[AGILO:RELANCE] ⚠️ Impossible de récupérer un nouveau compte-rendu différent après', maxAttempts, 'tentatives');
               console.warn('[AGILO:RELANCE] Le rechargement de la page devrait afficher le nouveau compte-rendu quand il sera disponible');
-              
-              // Recharger la page si on n'a pas pu récupérer le nouveau compte-rendu
-              const url = new URL(window.location.href);
-              url.searchParams.set('tab', 'summary');
-              url.searchParams.set('_regen', Date.now());
-              window.location.replace(url.toString());
             }
           } catch (e) {
             console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', e);
-            // En cas d'erreur, recharger la page
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', 'summary');
-            url.searchParams.set('_regen', Date.now());
-            window.location.replace(url.toString());
+          }
+          
+          // ⚠️ IMPORTANT : Mettre à jour les liens de téléchargement AVANT de recharger
+          // Les liens de téléchargement (PDF, DOC, etc.) pointent vers receiveSummary
+          // Ils doivent être mis à jour pour pointer vers le NOUVEAU compte-rendu
+          console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
+          try {
+            // Appeler la fonction updateDownloadLinks du script principal si elle existe
+            if (typeof window.updateDownloadLinks === 'function') {
+              const creds = await ensureCreds();
+              window.updateDownloadLinks(jobId, {
+                username: creds.email,
+                token: creds.token,
+                edition: creds.edition
+              }, { summaryEmpty: false });
+              console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
+            } else {
+              // Fallback : forcer le rechargement pour que le script principal mette à jour les liens
+              console.log('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée, rechargement nécessaire');
+            }
+          } catch (e) {
+            console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
           }
         } else {
           console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas encore prêt après toutes les tentatives');
           console.log('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu n\'est peut-être pas encore disponible');
-          console.log('[AGILO:RELANCE] Rechargement - le compte-rendu apparaîtra quand il sera prêt');
-          
-          // Recharger la page
-          const url = new URL(window.location.href);
-          url.searchParams.set('tab', 'summary');
-          url.searchParams.set('_regen', Date.now());
-          window.location.replace(url.toString());
+          console.log('[AGILO:RELANCE] ⚠️ Les liens de téléchargement peuvent pointer vers l\'ancien compte-rendu');
+          console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
         }
+        
+        // Recharger la page avec cache-busting MULTIPLE pour forcer le chargement du nouveau compte-rendu
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : Attendez que le compte-rendu soit complètement chargé avant de télécharger');
+        console.log('[AGILO:RELANCE] Le téléchargement PDF/DOC utilisera receiveSummary qui doit retourner le NOUVEAU compte-rendu');
+        console.log('[AGILO:RELANCE] Hash du nouveau compte-rendu:', waitResult.contentHash?.substring(0, 50) + '...');
+        console.log('[AGILO:RELANCE] ========================================');
+        
+        // ⚠️ CRITIQUE : Utiliser plusieurs paramètres de cache-busting pour forcer le serveur
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'summary');
+        url.searchParams.set('_regen', Date.now()); // Cache-busting principal
+        url.searchParams.set('_t', Date.now() + 1); // Cache-busting supplémentaire
+        url.searchParams.set('_v', waitResult.contentHash?.substring(0, 20) || Date.now()); // Version basée sur le hash
+        
+        // ⚠️ IMPORTANT : Nettoyer le cache du navigateur pour cette page
+        // Utiliser location.replace avec un timestamp unique
+        const finalUrl = url.toString() + '&_nocache=' + Date.now();
+        
+        // Forcer le rechargement sans cache
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            registrations.forEach(registration => registration.unregister());
+          });
+        }
+        
+        // Utiliser location.replace pour éviter le cache navigateur
+        window.location.replace(finalUrl);
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
