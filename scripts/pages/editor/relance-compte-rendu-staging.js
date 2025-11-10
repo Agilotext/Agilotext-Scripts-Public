@@ -1090,38 +1090,57 @@
                 console.warn('[AGILO:RELANCE] Il se peut que la régénération n\'ait pas fonctionné ou que le contenu soit vraiment identique');
               }
               
+              // Attendre avec délai exponentiel
+              const delay = baseDelay * Math.pow(1.3, attempt - 1);
               if (attempt < maxAttempts) {
-                console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
+                console.log(`[AGILO:RELANCE] ⏳ Attente ${Math.round(delay)}ms avant prochaine vérification...`);
                 await new Promise(r => setTimeout(r, delay));
               }
               continue;
             }
             
-            // C'est un nouveau compte-rendu (hash différent ou pas d'ancien hash)
+            // ⚠️ CRITIQUE : Vérifier aussi le statut transcript pour être sûr
+            if (transcriptStatus && transcriptStatus !== 'READY_SUMMARY_READY') {
+              console.log(`[AGILO:RELANCE] ⏳ Statut transcript: ${transcriptStatus} (attendu: READY_SUMMARY_READY), on continue...`);
+              const delay = baseDelay * Math.pow(1.3, attempt - 1);
+              await new Promise(r => setTimeout(r, delay));
+              continue;
+            }
+            
+            // ✅ NOUVEAU compte-rendu détecté ET statut READY !
             const totalTime = Math.round((Date.now() - waitStartTime) / 1000);
             console.log('[AGILO:RELANCE] ========================================');
-            console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible !', {
+            console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible ET statut READY_SUMMARY_READY !', {
               attempt,
               contentLength: text.length,
               tempsTotal: totalTime + ' secondes',
               newHash: newContentHash.substring(0, 30) + '...',
-              isNew: oldContentHash ? (newContentHash !== oldContentHash) : true
+              isNew: oldContentHash ? (newContentHash !== oldContentHash) : true,
+              transcriptStatus: transcriptStatus || 'non vérifié'
             });
             console.log('[AGILO:RELANCE] ========================================');
-            return { ready: true, contentHash: newContentHash };
+            return { ready: true, contentHash: newContentHash, text: text, transcriptStatus: transcriptStatus };
           } else {
             console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts}) - Message: ${text.substring(0, 50)}...`);
+            // Vérifier si c'est un statut "en préparation"
+            if (transcriptStatus && /READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(transcriptStatus)) {
+              console.log(`[AGILO:RELANCE] ⏳ Statut: ${transcriptStatus} - Compte-rendu en préparation, on continue...`);
+            }
           }
         } else if (response.status === 404 || response.status === 204) {
           // 404 ou 204 = pas encore disponible
           console.log(`[AGILO:RELANCE] Compte-rendu pas encore disponible (${response.status}) - tentative ${attempt}/${maxAttempts}`);
+          if (transcriptStatus) {
+            console.log(`[AGILO:RELANCE] Statut transcript: ${transcriptStatus}`);
+          }
         } else {
           console.warn(`[AGILO:RELANCE] Erreur HTTP ${response.status} - tentative ${attempt}/${maxAttempts}`);
         }
         
-        // Attendre avant la prochaine tentative (sauf dernière)
+        // Attendre avant la prochaine tentative avec délai exponentiel (comme pollSummaryUntilReady)
         if (attempt < maxAttempts) {
-          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
+          const delay = baseDelay * Math.pow(1.3, attempt - 1);
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${Math.round(delay)}ms avant prochaine vérification...`);
           await new Promise(r => setTimeout(r, delay));
         }
       } catch (error) {
