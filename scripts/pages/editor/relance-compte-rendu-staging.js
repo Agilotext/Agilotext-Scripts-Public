@@ -1523,16 +1523,26 @@
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
     const noSummaryMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
     
-    // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
+    // ⚠️ CRITIQUE : Vérifier IMMÉDIATEMENT dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
+    // Cette vérification doit être faite AVANT TOUT, même avant de vérifier l'onglet actif
     console.log('[AGILO:RELANCE] updateButtonVisibility - Appel checkSummaryErrorInDOM()...');
     const hasErrorInDOM = checkSummaryErrorInDOM();
     console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
     if (hasErrorInDOM) {
-      console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE');
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE (tous onglets)');
       btn.style.setProperty('display', 'none', 'important');
       if (counter) counter.style.setProperty('display', 'none', 'important');
+      // ⚠️ IMPORTANT : Ne PAS continuer, même si on est sur l'onglet Transcription
       return;
+    }
+    
+    // ⚠️ CRITIQUE : Sur l'onglet Transcription, cacher le bouton PAR DÉFAUT
+    // On ne l'affichera que si on est SÛR que le compte-rendu existe
+    if (isTranscriptTab) {
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Onglet Transcription détecté - Cache par défaut');
+      btn.style.setProperty('display', 'none', 'important');
+      if (counter) counter.style.setProperty('display', 'none', 'important');
     }
     console.log('[AGILO:RELANCE] updateButtonVisibility - Pas de message d\'erreur dans le DOM - Vérification API...');
     
@@ -1632,12 +1642,11 @@
         btn.title = 'Sauvegardez d\'abord le transcript pour régénérer le compte-rendu';
       }
     } else if (isTranscriptTab && transcriptModified) {
-      // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
-      // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
-      // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
-      console.log('[AGILO:RELANCE] updateButtonVisibility - Onglet Transcription, transcript modifié');
+      // ⚠️ CRITIQUE : Sur l'onglet Transcription, on cache le bouton PAR DÉFAUT
+      // On ne l'affiche QUE si on est ABSOLUMENT SÛR que le compte-rendu existe
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Onglet Transcription, transcript modifié - Vérification stricte');
       
-      // Vérifier d'abord le DOM
+      // Vérifier d'abord le DOM (déjà fait au début, mais on re-vérifie pour être sûr)
       const hasErrorDOM = checkSummaryErrorInDOM();
       if (hasErrorDOM) {
         console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans DOM sur onglet Transcription - Bouton CACHE');
@@ -1658,7 +1667,7 @@
             if (counter) counter.style.setProperty('display', 'none', 'important');
             return;
           } else {
-            // ⚠️ Vérifier encore une fois le DOM avant d'afficher
+            // ⚠️ Vérifier ENCORE une fois le DOM avant d'afficher (triple vérification)
             const hasErrorBeforeShow = checkSummaryErrorInDOM();
             if (hasErrorBeforeShow) {
               console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur détecté AVANT affichage - Bouton CACHE');
@@ -1666,7 +1675,25 @@
               if (counter) counter.style.setProperty('display', 'none', 'important');
               return;
             }
-            console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu existe - Affichage bouton sur onglet Transcription');
+            // ⚠️ Dernière vérification : s'assurer que le message d'erreur n'est pas dans le DOM
+            // Même si l'API dit OK, si le DOM montre une erreur, on cache
+            const summaryPane = document.querySelector('#pane-summary');
+            const summaryEditor = document.querySelector('#summaryEditor');
+            if (summaryPane || summaryEditor) {
+              const paneText = summaryPane ? (summaryPane.textContent || '').toLowerCase() : '';
+              const editorText = summaryEditor ? (summaryEditor.textContent || '').toLowerCase() : '';
+              const combinedText = paneText + ' ' + editorText;
+              if (combinedText.includes('pas encore disponible') || 
+                  combinedText.includes('fichier manquant') || 
+                  combinedText.includes('non publié')) {
+                console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur détecté dans conteneurs - Bouton CACHE');
+                btn.style.setProperty('display', 'none', 'important');
+                if (counter) counter.style.setProperty('display', 'none', 'important');
+                return;
+              }
+            }
+            // Seulement maintenant, si TOUTES les vérifications passent, on peut afficher
+            console.log('[AGILO:RELANCE] updateButtonVisibility - TOUTES vérifications OK - Affichage bouton sur onglet Transcription');
             btn.style.display = 'flex';
             if (counter) counter.style.display = '';
           }
@@ -1683,6 +1710,7 @@
       }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Autre onglet ou transcript non modifié - Bouton CACHE');
       btn.style.setProperty('display', 'none', 'important');
       if (counter) counter.style.setProperty('display', 'none', 'important');
     }
@@ -1781,6 +1809,11 @@
                   node.querySelector?.('#pane-summary, #summaryEditor')) {
                 shouldCheck = true;
               }
+              // ⚠️ IMPORTANT : Vérifier aussi si c'est un onglet qui change
+              if (node.getAttribute?.('role') === 'tab' || 
+                  node.querySelector?.('[role="tab"]')) {
+                shouldCheck = true;
+              }
             }
           });
         }
@@ -1792,15 +1825,33 @@
             target.classList?.contains('ag-alert') ||
             target.classList?.contains('ag-alert__title') ||
             target.id === 'pane-summary' ||
-            target.id === 'summaryEditor'
+            target.id === 'summaryEditor' ||
+            target.getAttribute?.('role') === 'tab'
           )) {
             shouldCheck = true;
           }
+        }
+        
+        // ⚠️ IMPORTANT : Vérifier aussi les changements d'attributs (aria-selected pour les onglets)
+        if (mutation.type === 'attributes' && 
+            (mutation.attributeName === 'aria-selected' || mutation.attributeName === 'hidden')) {
+          shouldCheck = true;
         }
       });
       
       if (shouldCheck) {
         checkAndHide();
+        // ⚠️ IMPORTANT : Re-vérifier aussi la visibilité du bouton après changement d'onglet
+        setTimeout(() => {
+          const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+          if (activeTab) {
+            const isTranscriptTab = activeTab.id === 'tab-transcript';
+            if (isTranscriptTab) {
+              // Sur l'onglet Transcription, forcer la vérification
+              updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+            }
+          }
+        }, 100);
       }
     });
     
