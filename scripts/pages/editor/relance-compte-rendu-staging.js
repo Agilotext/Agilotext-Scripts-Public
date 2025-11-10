@@ -1689,7 +1689,25 @@
           try {
             const creds = await ensureCreds();
             if (creds.jobId && creds.edition) {
-              // Vérifier d'abord si le compte-rendu existe
+              console.log('[AGILO:RELANCE] Après sauvegarde - Vérification existence compte-rendu...');
+              
+              // ⚠️ CRITIQUE : Vérifier d'abord le DOM (plus rapide)
+              const hasErrorInDOM = checkSummaryErrorInDOM();
+              if (hasErrorInDOM) {
+                console.log('[AGILO:RELANCE] Après sauvegarde - Message d\'erreur dans DOM - Bouton CACHE');
+                const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+                if (btn) {
+                  btn.style.display = 'none';
+                  const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+                  if (counter) counter.style.display = 'none';
+                }
+                if (typeof window.toast === 'function') {
+                  window.toast('✅ Transcript sauvegardé');
+                }
+                return;
+              }
+              
+              // Vérifier ensuite via l'API
               const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
               
               if (summaryExists) {
@@ -1703,7 +1721,13 @@
                 updateButtonState(creds.jobId, creds.edition);
               } else {
                 // Si pas de compte-rendu, ne pas afficher le bouton
-                console.log('[AGILO:RELANCE] Transcript sauvegardé mais aucun compte-rendu existant - Bouton caché');
+                console.log('[AGILO:RELANCE] Après sauvegarde - Aucun compte-rendu existant - Bouton CACHE');
+                const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+                if (btn) {
+                  btn.style.display = 'none';
+                  const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+                  if (counter) counter.style.display = 'none';
+                }
                 if (typeof window.toast === 'function') {
                   window.toast('✅ Transcript sauvegardé');
                 }
