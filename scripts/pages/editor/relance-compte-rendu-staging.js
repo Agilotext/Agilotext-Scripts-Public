@@ -1593,8 +1593,8 @@
                   } else {
                     console.warn('[AGILO:RELANCE] ⚠️ Éditeur de compte-rendu non trouvé, rechargement nécessaire');
                     // Fallback : recharger la page
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('tab', 'summary');
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'summary');
                     url.searchParams.set('_regen', Date.now());
                     window.location.replace(url.toString());
                     return;
@@ -1647,6 +1647,9 @@
                   if (typeof window.toast === 'function') {
                     window.toast('✅ Compte-rendu régénéré avec succès !');
                   }
+                  
+                  // ⚠️ IMPORTANT : Réactiver les boutons après l'affichage
+                  setGeneratingState(false);
                   
                 } catch (e) {
                   console.error('[AGILO:RELANCE] ❌ Erreur affichage nouveau compte-rendu:', e);
