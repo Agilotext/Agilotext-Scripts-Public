@@ -182,14 +182,39 @@
       if ((r.status===401 || r.status===403) && retryCount < 3) {
         // Refresh token logic would go here if needed
       }
-      return { ok:false, code:'HTTP_ERROR', httpStatus:r.status, json:parseMaybeJson(raw, r.headers.get('content-type')||''), raw, headers:r.headers };
+      const json = parseMaybeJson(raw, r.headers.get('content-type')||'');
+      const errorCode = json?.errorMessage || 'HTTP_ERROR';
+      
+      // ⚠️ IMPORTANT : Détecter ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS
+      if (kind === 'summary' && (r.status === 404 || r.status === 204 || /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(errorCode))) {
+        log('⚠️ Erreur API détectée (summary non disponible):', errorCode);
+        saveSummaryErrorState(jobId, true, errorCode);
+      }
+      
+      return { ok:false, code:'HTTP_ERROR', httpStatus:r.status, json, raw, headers:r.headers };
     }
     const ct = r.headers.get('content-type') || '';
     const json = parseMaybeJson(raw, ct);
     if (json && (json.status==='KO' || json.errorMessage)){
       const code = String(json.errorMessage || json.status || 'ON_ERROR');
+      
+      // ⚠️ IMPORTANT : Détecter ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS dans la réponse JSON
+      if (kind === 'summary' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(code)) {
+        log('⚠️ Erreur API détectée (ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS):', code);
+        saveSummaryErrorState(jobId, true, code);
+      } else if (kind === 'summary' && r.ok) {
+        // Si on reçoit un summary valide, on nettoie l'état d'erreur
+        saveSummaryErrorState(jobId, false);
+      }
+      
       return { ok:false, code, json, raw, headers:r.headers };
     }
+    
+    // Si on reçoit un summary valide, on nettoie l'état d'erreur
+    if (kind === 'summary' && r.ok) {
+      saveSummaryErrorState(jobId, false);
+    }
+    
     return { ok:true, payload: raw, contentType: ct, headers: r.headers };
   }
 
@@ -219,8 +244,13 @@
     'n\'est pas encore disponible',
     'nest pas encore disponible',
     'compte-rendu n\'est pas encore disponible',
-    'compte rendu n\'est pas encore disponible'
+    'compte rendu n\'est pas encore disponible',
+    'le compte-rendu n\'est pas encore disponible',
+    'le compte rendu n\'est pas encore disponible'
   ];
+  
+  // Message exact du script principal
+  const EXACT_ERROR_MESSAGE = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
   
   function looksLikeNotReady(text){
     const lower = String(text||'').toLowerCase();
@@ -232,18 +262,63 @@
     return s.length === 0;
   }
 
+  /************* Stockage de l'état d'erreur API *************/
+  function saveSummaryErrorState(jobId, hasError, errorCode = ''){
+    try {
+      const key = `agilo:summary-error:${jobId}`;
+      if (hasError) {
+        localStorage.setItem(key, JSON.stringify({ 
+          hasError: true, 
+          errorCode, 
+          timestamp: Date.now() 
+        }));
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch {}
+  }
+  
+  function readSummaryErrorState(jobId){
+    try {
+      const key = `agilo:summary-error:${jobId}`;
+      const data = localStorage.getItem(key);
+      if (!data) return null;
+      const parsed = JSON.parse(data);
+      // Vérifier que l'état n'est pas trop vieux (max 5 minutes)
+      if (Date.now() - parsed.timestamp > 5 * 60 * 1000) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return parsed;
+    } catch { return null; }
+  }
+
   /************* Détection du message d'erreur dans le DOM *************/
   function hasErrorMessageInDOM(){
     // ⚠️ IMPORTANT : Vérifier d'abord le dataset du script principal
     if (editorRoot?.dataset.summaryEmpty === '1') {
       log('summaryEmpty=1 détecté (script principal)');
+      // Stocker l'état d'erreur pour référence future
+      const jobId = pickJobId();
+      if (jobId) saveSummaryErrorState(jobId, true, 'summaryEmpty=1');
       return true;
+    }
+    
+    // ⚠️ Vérifier aussi l'état d'erreur stocké (au cas où le DOM n'est pas encore mis à jour)
+    const jobId = pickJobId();
+    if (jobId) {
+      const errorState = readSummaryErrorState(jobId);
+      if (errorState?.hasError) {
+        log('État d\'erreur API détecté (stocké):', errorState.errorCode);
+        return true;
+      }
     }
     
     const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
     if (!summaryEl) {
       log('summaryEl non trouvé');
-      return false;
+      // Si summaryEl n'existe pas, on vérifie quand même summaryEmpty au cas où
+      return editorRoot?.dataset.summaryEmpty === '1';
     }
     
     const text = summaryEl.textContent || summaryEl.innerText || '';
@@ -253,14 +328,23 @@
       textLength: text.length,
       htmlLength: html.length,
       hasAgAlert: html.includes('ag-alert'),
-      summaryEmpty: editorRoot?.dataset.summaryEmpty
+      summaryEmpty: editorRoot?.dataset.summaryEmpty,
+      textPreview: text.substring(0, 150)
     });
+    
+    // ⚠️ Vérifier d'abord le message exact (plus rapide et fiable)
+    const lowerText = text.toLowerCase();
+    const lowerHtml = html.toLowerCase();
+    const exactLower = EXACT_ERROR_MESSAGE.toLowerCase();
+    if (lowerText.includes(exactLower) || lowerHtml.includes(exactLower)) {
+      log('✅ Message exact détecté:', EXACT_ERROR_MESSAGE);
+      return true;
+    }
     
     // Vérifier les patterns d'erreur dans le texte
     const hasError = ERROR_PATTERNS.some(pattern => {
-      const lowerText = text.toLowerCase();
-      const lowerHtml = html.toLowerCase();
-      const found = lowerText.includes(pattern.toLowerCase()) || lowerHtml.includes(pattern.toLowerCase());
+      const patternLower = pattern.toLowerCase();
+      const found = lowerText.includes(patternLower) || lowerHtml.includes(patternLower);
       if (found) {
         log('Pattern trouvé:', pattern);
       }
@@ -269,24 +353,49 @@
     
     if (hasError) {
       log('✅ Message d\'erreur détecté dans le DOM:', text.substring(0, 100));
+      // Stocker l'état d'erreur pour référence future
+      const currentJobId = pickJobId();
+      if (currentJobId) saveSummaryErrorState(currentJobId, true, 'dom-message-detected');
       return true;
     }
     
-    // Vérifier aussi les classes d'alerte (ag-alert du script principal)
+    // ⚠️ Vérifier aussi les classes d'alerte (ag-alert du script principal) - PRIORITAIRE
     const alerts = $$('.ag-alert, .ag-alert--warn, .ag-alert__title', summaryEl);
     log('Alertes trouvées:', alerts.length);
     for (const alert of alerts) {
       const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
-      log('Texte alerte:', alertText.substring(0, 100));
+      log('Texte alerte:', alertText.substring(0, 150));
+      
+      // Vérifier le message exact d'abord
+      if (alertText.includes(exactLower)) {
+        log('✅ Message exact détecté dans alerte:', EXACT_ERROR_MESSAGE);
+        const currentJobId = pickJobId();
+        if (currentJobId) saveSummaryErrorState(currentJobId, true, 'exact-message-in-alert');
+        return true;
+      }
+      
+      // Puis les patterns
       if (ERROR_PATTERNS.some(p => alertText.includes(p.toLowerCase()))) {
         log('✅ Message d\'erreur détecté dans une alerte:', alertText.substring(0, 100));
+        const currentJobId = pickJobId();
+        if (currentJobId) saveSummaryErrorState(currentJobId, true, 'pattern-in-alert');
+        return true;
+      }
+    }
+    
+    // Vérifier aussi dans tout le document (au cas où l'alerte serait ailleurs)
+    const allAlerts = $$('.ag-alert, .ag-alert--warn');
+    for (const alert of allAlerts) {
+      const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
+      if (alertText.includes(exactLower) || ERROR_PATTERNS.some(p => alertText.includes(p.toLowerCase()))) {
+        log('✅ Message d\'erreur détecté dans alerte globale:', alertText.substring(0, 100));
         return true;
       }
     }
     
     // Vérifier si le contenu est vide ou juste un message d'erreur
     const cleanText = text.replace(/\s+/g, ' ').trim();
-    if (cleanText.length < 50 && ERROR_PATTERNS.some(p => cleanText.toLowerCase().includes(p.toLowerCase()))) {
+    if (cleanText.length < 100 && (cleanText.toLowerCase().includes(exactLower) || ERROR_PATTERNS.some(p => cleanText.toLowerCase().includes(p.toLowerCase())))) {
       log('✅ Message d\'erreur détecté (texte court):', cleanText);
       return true;
     }
@@ -542,7 +651,7 @@
               });
               saveSummaryHash(jobId, newHash);
               return { ok:true, html, hash:newHash };
-      } else {
+    } else {
               log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
             }
           }
@@ -711,10 +820,10 @@
       return;
     }
     
-        e.preventDefault();
+          e.preventDefault();
         e.stopPropagation();
       log('Clic sur bouton régénérer - Lancement...');
-        relancerCompteRendu();
+          relancerCompteRendu();
     }, { passive:false });
   }
 
@@ -730,20 +839,35 @@
     
     log('Observer configuré pour summaryEl');
     
-    const observer = new MutationObserver(() => {
-      // Délai pour laisser le DOM se stabiliser
-      setTimeout(() => {
+    let debounceTimer = null;
+    const debouncedUpdate = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
         log('Mutation détectée dans summaryEl - Mise à jour visibilité');
         updateButtonVisibility().catch((e) => {
           log('Erreur updateButtonVisibility:', e);
         });
-      }, 100);
+      }, 50); // Délai réduit pour réaction plus rapide
+    };
+    
+    const observer = new MutationObserver((mutations) => {
+      // Vérifier immédiatement si un message d'erreur apparaît
+      const hasError = hasErrorMessageInDOM();
+      if (hasError) {
+        log('⚠️ Message d\'erreur détecté immédiatement - Cache bouton');
+        const btn = $('[data-action="relancer-compte-rendu"]');
+        if (btn && !btn.classList.contains('agilo-force-hide')) {
+          hideButton(btn, 'immediate-error-detection');
+        }
+      }
+      debouncedUpdate();
     });
     
     observer.observe(summaryEl, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: false // On observe déjà editorRoot pour les attributs
     });
     
     // Observer aussi les changements du dataset summaryEmpty sur editorRoot
@@ -752,12 +876,23 @@
       const rootObserver = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
           if (mutation.type === 'attributes' && mutation.attributeName === 'data-summary-empty') {
-            log('data-summary-empty changé:', editorRoot.dataset.summaryEmpty);
+            const newValue = editorRoot.dataset.summaryEmpty;
+            log('data-summary-empty changé:', newValue);
+            
+            // Réaction immédiate si summaryEmpty devient '1'
+            if (newValue === '1') {
+              const btn = $('[data-action="relancer-compte-rendu"]');
+              if (btn && !btn.classList.contains('agilo-force-hide')) {
+                log('⚠️ summaryEmpty=1 détecté - Cache bouton immédiatement');
+                hideButton(btn, 'summary-empty-changed');
+              }
+            }
+            
             setTimeout(() => {
               updateButtonVisibility().catch((e) => {
                 log('Erreur updateButtonVisibility:', e);
               });
-            }, 100);
+            }, 50);
           }
         });
       });
@@ -768,6 +903,10 @@
       });
     } else {
       log('editorRoot non trouvé');
+      // Réessayer après un délai
+      setTimeout(() => {
+        if (byId('editorRoot')) setupSummaryObserver();
+      }, 1000);
     }
   }
 
@@ -796,7 +935,7 @@
     setupSaveObserver();
 
     // MAJ bouton à l'ouverture (plusieurs fois pour être sûr)
-    await updateButtonVisibility();
+          await updateButtonVisibility();
     setTimeout(() => updateButtonVisibility().catch(() => {}), 500);
     setTimeout(() => updateButtonVisibility().catch(() => {}), 1500);
     setTimeout(() => updateButtonVisibility().catch(() => {}), 3000);
