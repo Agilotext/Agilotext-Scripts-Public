@@ -885,10 +885,15 @@
    * Récupérer le hash du contenu du compte-rendu (pour détecter les changements)
    */
   function getContentHash(text) {
-    // Hash simple basé sur la longueur et les premiers caractères
-    // Plus robuste qu'un hash complet mais suffisant pour détecter les changements
+    // Hash amélioré basé sur la longueur, les premiers caractères ET un extrait du milieu
+    // Plus robuste pour détecter les changements même si le début est similaire
     if (!text || text.length < 100) return '';
-    return text.length + '_' + text.substring(0, 200).replace(/\s/g, '').substring(0, 50);
+    
+    const start = text.substring(0, 200).replace(/\s/g, '').substring(0, 50);
+    const middle = text.length > 500 ? text.substring(Math.floor(text.length / 2), Math.floor(text.length / 2) + 200).replace(/\s/g, '').substring(0, 50) : '';
+    const end = text.length > 300 ? text.substring(text.length - 200).replace(/\s/g, '').substring(0, 50) : '';
+    
+    return `${text.length}_${start}_${middle}_${end}`;
   }
   
   async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000, oldContentHash = null) {
@@ -943,7 +948,17 @@
             
             if (oldContentHash && newContentHash === oldContentHash) {
               // Le contenu est identique à l'ancien, ce n'est pas encore le nouveau
-              console.log(`[AGILO:RELANCE] ⚠️ Compte-rendu identique à l'ancien (hash: ${newContentHash.substring(0, 20)}...) - Attente du nouveau...`);
+              console.log(`[AGILO:RELANCE] ⚠️ Compte-rendu identique à l'ancien (hash: ${newContentHash.substring(0, 30)}...) - Attente du nouveau...`);
+              console.log(`[AGILO:RELANCE] Hash ancien: ${oldContentHash.substring(0, 30)}...`);
+              console.log(`[AGILO:RELANCE] Hash nouveau: ${newContentHash.substring(0, 30)}...`);
+              
+              // ⚠️ IMPORTANT : Si après plusieurs tentatives le hash est toujours identique,
+              // il se peut que le compte-rendu n'ait pas été régénéré
+              if (attempt >= 10) {
+                console.warn('[AGILO:RELANCE] ⚠️ ATTENTION : Après 10 tentatives, le compte-rendu a toujours le même hash que l\'ancien');
+                console.warn('[AGILO:RELANCE] Il se peut que la régénération n\'ait pas fonctionné ou que le contenu soit vraiment identique');
+              }
+              
               if (attempt < maxAttempts) {
                 console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
                 await new Promise(r => setTimeout(r, delay));
@@ -1969,6 +1984,35 @@
     }
     window.__agiloRelanceInitialized = true;
     
+    // ⚠️ CRITIQUE : Cacher le bouton IMMÉDIATEMENT si erreur détectée (AVANT tout)
+    const immediateCheck = () => {
+      const allButtons = document.querySelectorAll('[data-action="relancer-compte-rendu"]');
+      if (allButtons.length === 0) return;
+      
+      // Vérifier rapidement si erreur présente
+      const hasError = checkSummaryErrorInDOM();
+      if (hasError) {
+        console.log('[AGILO:RELANCE] INIT - Erreur détectée immédiatement, cache tous les boutons');
+        allButtons.forEach((btn) => {
+          btn.style.setProperty('display', 'none', 'important');
+          btn.style.setProperty('visibility', 'hidden', 'important');
+          btn.style.setProperty('opacity', '0', 'important');
+          btn.style.setProperty('position', 'absolute', 'important');
+          btn.style.setProperty('left', '-9999px', 'important');
+          btn.style.setProperty('width', '0', 'important');
+          btn.style.setProperty('height', '0', 'important');
+          btn.classList.add('agilo-force-hide');
+        });
+      }
+    };
+    
+    // Vérifier immédiatement
+    immediateCheck();
+    
+    // Vérifier aussi après un court délai (au cas où le DOM n'est pas encore prêt)
+    setTimeout(immediateCheck, 100);
+    setTimeout(immediateCheck, 500);
+    
     // ⚠️ CRITIQUE : Démarrer la surveillance du DOM IMMÉDIATEMENT
     setupErrorWatcher();
     
@@ -2223,7 +2267,8 @@
     setupKeyboardShortcuts();
   }
   
-  // Ajouter les styles CSS pour le loader (respectant votre design system)
+  // ⚠️ CRITIQUE : Ajouter les styles CSS IMMÉDIATEMENT (avant même l'initialisation)
+  // Pour que la règle CSS soit disponible dès le chargement
   if (!document.querySelector('#relance-summary-styles')) {
     const style = document.createElement('style');
     style.id = 'relance-summary-styles';
@@ -2242,6 +2287,21 @@
         overflow: hidden !important;
         margin: 0 !important;
         padding: 0 !important;
+      }
+      
+      /* ⚠️ CRITIQUE : Règle CSS supplémentaire pour forcer le cache si erreur dans le DOM */
+      body:has(#pane-summary:has(.ag-alert--warn)),
+      body:has(#summaryEditor:has(.ag-alert--warn)) {
+        [data-action="relancer-compte-rendu"] {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+          position: absolute !important;
+          left: -9999px !important;
+          width: 0 !important;
+          height: 0 !important;
+        }
       }
       
       /* Conteneur de chargement - utilise vos variables CSS */
