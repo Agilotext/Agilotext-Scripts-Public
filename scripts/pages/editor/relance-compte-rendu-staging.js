@@ -805,7 +805,8 @@
         url: url
       });
       
-      // Vérifier d'abord si c'est du JSON avec un code d'erreur
+      // ⚠️ CRITIQUE : L'API peut retourner 200 OK avec du HTML contenant l'erreur
+      // OU du JSON avec status: "KO" et errorMessage
       const contentType = response.headers.get('content-type') || '';
       let text = '';
       let isJsonResponse = false;
@@ -814,12 +815,24 @@
         isJsonResponse = true;
         try {
           const json = await response.json();
-          console.log('[AGILO:RELANCE] Réponse JSON:', json);
+          console.log('[AGILO:RELANCE] ÉTAPE 4: Réponse JSON complète:', json);
           
-          // ⚠️ IMPORTANT : Si l'API retourne ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS, le compte-rendu n'existe pas
-          if (json.errorMessage === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' || 
-              (json.status === 'KO' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(json.errorMessage || ''))) {
-            console.log('[AGILO:RELANCE] ERREUR - Code d\'erreur API détecté: ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+          // ⚠️ CRITIQUE : Vérifier le code d'erreur dans le JSON
+          const errorMsg = String(json.errorMessage || '').toUpperCase();
+          const status = String(json.status || '').toUpperCase();
+          
+          console.log('[AGILO:RELANCE] Analyse JSON:', {
+            status,
+            errorMessage: errorMsg,
+            hasErrorCode: /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(errorMsg),
+            isKO: status === 'KO'
+          });
+          
+          // Si l'API retourne ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS, le compte-rendu n'existe pas
+          if (errorMsg === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' || 
+              (status === 'KO' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(errorMsg))) {
+            console.log('[AGILO:RELANCE] ❌ ERREUR - Code d\'erreur API détecté: ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+            console.log('[AGILO:RELANCE] ========================================');
             return false;
           }
           
@@ -827,11 +840,13 @@
           text = JSON.stringify(json);
         } catch (e) {
           console.error('[AGILO:RELANCE] Erreur parsing JSON:', e);
+          console.log('[AGILO:RELANCE] ========================================');
           return false;
         }
       } else {
-        // Si ce n'est pas du JSON, lire le texte normalement
+        // C'est du HTML - L'API peut retourner 200 OK avec du HTML contenant le message d'erreur
         text = await response.text();
+        console.log('[AGILO:RELANCE] ÉTAPE 4: Réponse HTML reçue, longueur:', text.length);
       }
       
       if (response.ok) {
