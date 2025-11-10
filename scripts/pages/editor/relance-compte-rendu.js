@@ -590,87 +590,13 @@
   /**
    * Vérifier si un compte-rendu existe déjà pour ce jobId
    */
-  /**
-   * Vérifier si le message d'erreur est affiché dans le DOM
-   * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
-   */
-  function checkSummaryErrorInDOM() {
-    // Chercher l'éditeur de compte-rendu (même s'il est caché)
-    const summaryEditor = document.querySelector('#summaryEditor, [id*="summaryEditor"], [id*="summary"]');
-    if (!summaryEditor) {
-      // Si l'éditeur n'existe pas, chercher dans tous les panneaux
-      const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
-      if (summaryPane) {
-        const text = summaryPane.textContent || summaryPane.innerText || '';
-        const html = summaryPane.innerHTML || '';
-        
-        // Vérifier les messages d'erreur possibles
-        const errorMessages = [
-          'pas encore disponible',
-          'fichier manquant',
-          'non publié',
-          'n\'est pas encore disponible',
-          'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-        ];
-        
-        const hasError = errorMessages.some(msg => 
-          text.toLowerCase().includes(msg.toLowerCase()) || 
-          html.toLowerCase().includes(msg.toLowerCase())
-        );
-        
-        if (hasError) {
-          console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 100));
-        }
-        
-        return hasError;
-      }
-      return false;
-    }
-    
-    const text = summaryEditor.textContent || summaryEditor.innerText || '';
-    const html = summaryEditor.innerHTML || '';
-    
-    // Vérifier les messages d'erreur possibles
-    const errorMessages = [
-      'pas encore disponible',
-      'fichier manquant',
-      'non publié',
-      'n\'est pas encore disponible',
-      'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-    ];
-    
-    const hasError = errorMessages.some(msg => 
-      text.toLowerCase().includes(msg.toLowerCase()) || 
-      html.toLowerCase().includes(msg.toLowerCase())
-    );
-    
-    if (hasError) {
-      console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM:', text.substring(0, 100));
-    }
-    
-    return hasError;
-  }
-  
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
-      // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
-      if (checkSummaryErrorInDOM()) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
-        return false;
-      }
-      
-      // Ajouter cache-busting pour éviter le cache navigateur
-      const cacheBuster = Date.now();
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
       
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
+        cache: 'no-store'
       });
       
       console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
@@ -680,36 +606,12 @@
       
       if (response.ok) {
         const text = await response.text();
+        // Vérifier que ce n'est pas un message d'erreur
+        const isError = text.includes('pas encore disponible') || 
+                       text.includes('non publié') || 
+                       text.includes('fichier manquant');
         
-        // ⚠️ IMPORTANT : Vérifier plus strictement que ce n'est pas un message d'erreur
-        // L'API peut retourner 200 OK avec un message d'erreur dans le HTML
-        const errorPatterns = [
-          /pas encore disponible/i,
-          /non publié/i,
-          /fichier manquant/i,
-          /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,
-          /n'est pas encore disponible/i,
-          /résumé en préparation/i
-        ];
-        
-        const isError = errorPatterns.some(pattern => pattern.test(text));
-        const isValidContent = !isError && text.length > 100 && !text.trim().startsWith('<');
-        
-        // Log détaillé pour debug
-        console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
-          length: text.length,
-          isError,
-          isValidContent,
-          preview: text.substring(0, 150).replace(/\s+/g, ' ')
-        });
-        
-        if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide');
-          return false;
-        }
-        
-        console.log('[AGILO:RELANCE] ✅ Compte-rendu valide détecté');
-        return true;
+        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
       }
       
       return false;
@@ -722,90 +624,36 @@
   /**
    * Attendre que le compte-rendu soit prêt (polling)
    */
-  /**
-   * Récupérer le hash du contenu du compte-rendu (pour détecter les changements)
-   */
-  function getContentHash(text) {
-    // Hash simple basé sur la longueur et les premiers caractères
-    // Plus robuste qu'un hash complet mais suffisant pour détecter les changements
-    if (!text || text.length < 100) return '';
-    return text.length + '_' + text.substring(0, 200).replace(/\s/g, '').substring(0, 50);
-  }
-  
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000, oldContentHash = null) {
-    const waitStartTime = Date.now();
-    console.log('[AGILO:RELANCE] ========================================');
-    console.log('[AGILO:RELANCE] ⏳ Début vérification disponibilité NOUVEAU compte-rendu', {
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000) {
+    console.log('[AGILO:RELANCE] Début vérification disponibilité compte-rendu', {
       jobId,
       maxAttempts,
-      delay: delay + 'ms',
-      tempsMaxAttendu: Math.round((maxAttempts * delay) / 1000) + ' secondes',
-      oldContentHash: oldContentHash || 'aucun (première génération)'
+      delay
     });
-    console.log('[AGILO:RELANCE] ========================================');
-    
-    // ⚠️ IMPORTANT : Attendre un délai initial car l'API redoSummary retourne OK rapidement
-    // mais la génération réelle prend du temps (30-60 secondes généralement)
-    console.log('[AGILO:RELANCE] ⏳ Attente initiale de 5 secondes (génération en cours...)');
-    await new Promise(r => setTimeout(r, 5000));
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        // ⚠️ IMPORTANT : Ajouter un paramètre cache-busting pour éviter le cache navigateur
-        const cacheBuster = Date.now();
-        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
+        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
         
-        const checkStartTime = Date.now();
         const response = await fetch(url, {
           method: 'GET',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+          cache: 'no-store'
         });
-        const checkTime = Date.now() - checkStartTime;
         
-        const elapsedTime = Math.round((Date.now() - waitStartTime) / 1000);
-        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} (${elapsedTime}s écoulées) - Status: ${response.status} (${checkTime}ms)`);
+        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Status:`, response.status);
         
         // Si 200 OK, le compte-rendu est prêt
         if (response.ok) {
           const text = await response.text();
           // Vérifier que ce n'est pas un message d'erreur
-          const isError = text.includes('pas encore disponible') || 
-                         text.includes('non publié') || 
-                         text.includes('fichier manquant');
-          
-          if (!isError && text.length > 100) {
-            // ⚠️ IMPORTANT : Vérifier que c'est bien un NOUVEAU compte-rendu (différent de l'ancien)
-            const newContentHash = getContentHash(text);
-            
-            if (oldContentHash && newContentHash === oldContentHash) {
-              // Le contenu est identique à l'ancien, ce n'est pas encore le nouveau
-              console.log(`[AGILO:RELANCE] ⚠️ Compte-rendu identique à l'ancien (hash: ${newContentHash.substring(0, 20)}...) - Attente du nouveau...`);
-              if (attempt < maxAttempts) {
-                console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
-                await new Promise(r => setTimeout(r, delay));
-              }
-              continue;
-            }
-            
-            // C'est un nouveau compte-rendu (hash différent ou pas d'ancien hash)
-            const totalTime = Math.round((Date.now() - waitStartTime) / 1000);
-            console.log('[AGILO:RELANCE] ========================================');
-            console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible !', {
+          if (text && !text.includes('pas encore disponible') && !text.includes('non publié')) {
+            console.log('[AGILO:RELANCE] ✅ Compte-rendu disponible !', {
               attempt,
-              contentLength: text.length,
-              tempsTotal: totalTime + ' secondes',
-              newHash: newContentHash.substring(0, 30) + '...',
-              isNew: oldContentHash ? (newContentHash !== oldContentHash) : true
+              contentLength: text.length
             });
-            console.log('[AGILO:RELANCE] ========================================');
-            return { ready: true, contentHash: newContentHash };
+            return true;
           } else {
-            console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts}) - Message: ${text.substring(0, 50)}...`);
+            console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts})`);
           }
         } else if (response.status === 404 || response.status === 204) {
           // 404 ou 204 = pas encore disponible
@@ -816,7 +664,6 @@
         
         // Attendre avant la prochaine tentative (sauf dernière)
         if (attempt < maxAttempts) {
-          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
           await new Promise(r => setTimeout(r, delay));
         }
       } catch (error) {
@@ -828,12 +675,9 @@
     }
     
     // Si on arrive ici, le compte-rendu n'est pas prêt après toutes les tentatives
-    const totalTime = Math.round((Date.now() - waitStartTime) / 1000);
-    console.warn('[AGILO:RELANCE] ========================================');
-    console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après', maxAttempts, 'tentatives (' + totalTime + ' secondes)');
-    console.warn('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
-    console.warn('[AGILO:RELANCE] ========================================');
-    return { ready: false, contentHash: null };
+    console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après', maxAttempts, 'tentatives');
+    console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
+    return false;
   }
   
   /**
@@ -1037,31 +881,6 @@
     console.log('[AGILO:RELANCE] Vérification existence compte-rendu avant régénération...');
     const summaryExists = await checkSummaryExists(jobId, email, token, edition);
     
-    // Récupérer le hash de l'ancien compte-rendu pour vérifier que le nouveau est différent
-    let oldContentHash = null;
-    if (summaryExists) {
-      try {
-        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
-        const response = await fetch(url, {
-          method: 'GET',
-          cache: 'no-store',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache'
-          }
-        });
-        if (response.ok) {
-          const oldText = await response.text();
-          if (oldText && oldText.length > 100 && !oldText.includes('pas encore disponible')) {
-            oldContentHash = getContentHash(oldText);
-            console.log('[AGILO:RELANCE] Hash ancien compte-rendu récupéré:', oldContentHash.substring(0, 30) + '...');
-          }
-        }
-      } catch (e) {
-        console.warn('[AGILO:RELANCE] Impossible de récupérer l\'ancien compte-rendu pour comparaison:', e);
-      }
-    }
-    
     if (!summaryExists) {
       console.warn('[AGILO:RELANCE] ⚠️ Aucun compte-rendu existant détecté');
       const proceed = confirm(
@@ -1090,31 +909,18 @@
       formData.append('edition', edition);
       formData.append('jobId', jobId);
       
-      const apiStartTime = Date.now();
-      console.log('[AGILO:RELANCE] ========================================');
-      console.log('[AGILO:RELANCE] 🚀 APPEL API redoSummary');
       console.log('[AGILO:RELANCE] Envoi requête API redoSummary', {
         url: 'https://api.agilotext.com/api/v1/redoSummary',
         method: 'POST',
         jobId,
         edition,
-        email: email.substring(0, 10) + '...',
-        emailLength: email.length,
-        timestamp: new Date().toISOString()
+        emailLength: email.length
       });
-      console.log('[AGILO:RELANCE] ========================================');
       
       const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
         method: 'POST',
-        body: formData,
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
+        body: formData
       });
-      
-      const apiResponseTime = Date.now() - apiStartTime;
-      console.log('[AGILO:RELANCE] ⏱️ Temps réponse API:', apiResponseTime + 'ms');
       
       console.log('[AGILO:RELANCE] Réponse HTTP reçue:', {
         status: response.status,
@@ -1149,9 +955,6 @@
       });
       
       if (result.status === 'OK' || response.ok) {
-        console.log('[AGILO:RELANCE] ✅ API redoSummary a répondu OK');
-        console.log('[AGILO:RELANCE] ⏱️ Temps total API:', (Date.now() - apiStartTime) + 'ms');
-        
         // Vérifier que le jobId n'a pas changé pendant la requête
         const currentJobId = pickJobId();
         if (currentJobId !== jobId) {
@@ -1164,7 +967,7 @@
           return;
         }
         
-        console.log('[AGILO:RELANCE] ✅ Succès API - Incrémentation du compteur', {
+        console.log('[AGILO:RELANCE] ✅ Succès - Incrémentation du compteur', {
           jobId,
           edition,
           countBefore: getRegenerationCount(jobId)
@@ -1187,63 +990,15 @@
         // Ouvrir l'onglet Compte-rendu
         openSummaryTab();
         
-        // ⚠️ IMPORTANT : Attendre que le NOUVEAU compte-rendu soit généré
-        // L'API redoSummary retourne OK rapidement, mais la génération prend du temps
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] ⏳ Attente génération nouveau compte-rendu...');
-        console.log('[AGILO:RELANCE] L\'API a répondu OK, mais la génération peut prendre 30-60 secondes');
-        console.log('[AGILO:RELANCE] ========================================');
+        // Vérifier que le compte-rendu est prêt avant de recharger
+        console.log('[AGILO:RELANCE] Vérification disponibilité compte-rendu...');
+        await waitForSummaryReady(jobId, email, token, edition);
         
-        const waitStartTime = Date.now();
-        const waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 3000, oldContentHash); // 60 tentatives, 3 secondes entre chaque, avec hash ancien
-        
-        const waitTime = Date.now() - waitStartTime;
-        console.log('[AGILO:RELANCE] ⏱️ Temps d\'attente génération:', Math.round(waitTime / 1000) + ' secondes');
-        
-        if (waitResult.ready) {
-          console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible et vérifié !');
-          console.log('[AGILO:RELANCE] Hash nouveau:', waitResult.contentHash?.substring(0, 30) + '...');
-          console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 30) + '...' || 'aucun');
-          
-          // ⚠️ IMPORTANT : Mettre à jour les liens de téléchargement AVANT de recharger
-          // Les liens de téléchargement (PDF, DOC, etc.) pointent vers receiveSummary
-          // Ils doivent être mis à jour pour pointer vers le NOUVEAU compte-rendu
-          console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
-          try {
-            // Appeler la fonction updateDownloadLinks du script principal si elle existe
-            if (typeof window.updateDownloadLinks === 'function') {
-              const creds = await ensureCreds();
-              window.updateDownloadLinks(jobId, {
-                username: creds.email,
-                token: creds.token,
-                edition: creds.edition
-              }, { summaryEmpty: false });
-              console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
-            } else {
-              // Fallback : forcer le rechargement pour que le script principal mette à jour les liens
-              console.log('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée, rechargement nécessaire');
-            }
-          } catch (e) {
-            console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
-          }
-        } else {
-          console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas encore prêt après toutes les tentatives');
-          console.log('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu n\'est peut-être pas encore disponible');
-          console.log('[AGILO:RELANCE] ⚠️ Les liens de téléchargement peuvent pointer vers l\'ancien compte-rendu');
-          console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
-        }
-        
-        // Recharger la page avec cache-busting pour forcer le chargement du nouveau compte-rendu
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
-        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : Attendez que le compte-rendu soit complètement chargé avant de télécharger');
-        console.log('[AGILO:RELANCE] Le téléchargement PDF/DOC utilisera receiveSummary qui doit retourner le NOUVEAU compte-rendu');
-        console.log('[AGILO:RELANCE] ========================================');
+        // Recharger la page après confirmation que le compte-rendu est prêt
+        console.log('[AGILO:RELANCE] Compte-rendu prêt, rechargement de la page...');
         const url = new URL(window.location.href);
         url.searchParams.set('tab', 'summary');
-        url.searchParams.set('_regen', Date.now()); // Cache-busting pour forcer le rechargement
-        // Utiliser location.replace pour éviter le cache navigateur
-        window.location.replace(url.toString());
+        window.location.href = url.toString();
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
@@ -1345,6 +1100,61 @@
    * Mettre à jour la visibilité du bouton selon l'onglet actif
    * Vérifie aussi si le compte-rendu existe avant d'afficher le bouton
    */
+  // ⚠️ Vérification rapide du message d'erreur dans le DOM (sans appel API)
+  function hasErrorMessageInDOM() {
+    const editorRoot = document.getElementById('editorRoot');
+    
+    // Vérifier d'abord summaryEmpty (le plus rapide et fiable)
+    if (editorRoot?.dataset.summaryEmpty === '1') {
+      console.log('[AGILO:RELANCE] summaryEmpty=1 détecté (script principal)');
+      return true;
+    }
+    
+    // Vérifier le message d'erreur dans le DOM
+    const summaryEl = document.getElementById('summaryEditor') 
+      || document.getElementById('ag-summary') 
+      || document.querySelector('[data-editor="summary"]');
+    
+    if (!summaryEl) return false;
+    
+    const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
+    const html = (summaryEl.innerHTML || '').toLowerCase();
+    
+    // Message exact du script principal
+    const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
+    
+    // Vérifier le message exact
+    if (text.includes(exactMsg) || html.includes(exactMsg)) {
+      console.log('[AGILO:RELANCE] Message d\'erreur exact détecté dans le DOM');
+      return true;
+    }
+    
+    // Vérifier les patterns d'erreur
+    const hasError = text.includes('pas encore disponible') 
+      || text.includes('fichier manquant')
+      || text.includes('non publié')
+      || html.includes('pas encore disponible')
+      || html.includes('fichier manquant')
+      || html.includes('non publié');
+    
+    if (hasError) {
+      console.log('[AGILO:RELANCE] Pattern d\'erreur détecté dans le DOM');
+      return true;
+    }
+    
+    // Vérifier aussi les alertes
+    const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title');
+    for (const alert of alerts) {
+      const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
+      if (alertText.includes(exactMsg) || alertText.includes('pas encore disponible') || alertText.includes('fichier manquant')) {
+        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans une alerte');
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
   async function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
@@ -1364,27 +1174,57 @@
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
     const noSummaryMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
     
-    // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
-    // C'est plus rapide et plus fiable que l'API
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur dans le DOM - Bouton caché');
+    // ⚠️ IMPORTANT : Vérifier d'abord summaryEmpty et le message d'erreur dans le DOM (RAPIDE, sans appel API)
+    const editorRoot = document.getElementById('editorRoot');
+    if (editorRoot?.dataset.summaryEmpty === '1' || hasErrorMessageInDOM()) {
+      console.log('[AGILO:RELANCE] Pas de compte-rendu détecté (summaryEmpty ou message erreur) - Bouton caché');
       btn.style.display = 'none';
+      btn.style.visibility = 'hidden';
+      btn.style.opacity = '0';
+      btn.classList.add('agilo-force-hide');
+      btn.setAttribute('hidden', '');
+      btn.setAttribute('aria-hidden', 'true');
       if (counter) counter.style.display = 'none';
-      return;
+      // Afficher le message informatif si on est sur l'onglet Compte-rendu
+      if (isSummaryTab && !noSummaryMsg) {
+        const msg = document.createElement('div');
+        msg.className = 'regeneration-no-summary-message';
+        msg.innerHTML = `
+          <span style="font-size: 16px;">ℹ️</span>
+          <div>
+            <strong>Aucun compte-rendu demandé</strong>
+            <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+              Envoyez un audio avec l'option "Générer le compte-rendu".
+            </div>
+          </div>
+        `;
+        btn.parentElement.appendChild(msg);
+      }
+      return; // Ne pas continuer si le compte-rendu n'existe pas
     }
     
-    // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
+    // Si le compte-rendu existe (pas de summaryEmpty=1 et pas de message d'erreur), cacher le message informatif
+    if (noSummaryMsg) {
+      noSummaryMsg.remove();
+    }
+    
+    // ⚠️ Vérification API en fallback (seulement si summaryEmpty n'est pas défini et pas de message d'erreur)
     try {
       const creds = await ensureCreds();
       const { jobId, edition } = creds;
       
-      if (jobId && edition) {
+      if (jobId && edition && !editorRoot?.dataset.summaryEmpty) {
         const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
         
         // Si le compte-rendu n'existe pas, CACHER le bouton complètement
         if (!summaryExists) {
           console.log('[AGILO:RELANCE] Compte-rendu inexistant (API) - Bouton caché');
           btn.style.display = 'none';
+          btn.style.visibility = 'hidden';
+          btn.style.opacity = '0';
+          btn.classList.add('agilo-force-hide');
+          btn.setAttribute('hidden', '');
+          btn.setAttribute('aria-hidden', 'true');
           if (counter) counter.style.display = 'none';
           // Afficher le message informatif si on est sur l'onglet Compte-rendu
           if (isSummaryTab && !noSummaryMsg) {
@@ -1393,42 +1233,30 @@
             msg.innerHTML = `
               <span style="font-size: 16px;">ℹ️</span>
               <div>
-                <strong>Générez d'abord un compte-rendu</strong>
+                <strong>Aucun compte-rendu demandé</strong>
                 <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                  Envoyez un audio avec l'option "Générer le compte-rendu".
                 </div>
               </div>
             `;
             btn.parentElement.appendChild(msg);
           }
           return; // Ne pas continuer si le compte-rendu n'existe pas
-        } else {
-          // Si le compte-rendu existe, cacher le message informatif
-          if (noSummaryMsg) {
-            noSummaryMsg.remove();
-          }
         }
       }
     } catch (e) {
       console.error('[AGILO:RELANCE] Erreur vérification existence compte-rendu:', e);
-      // En cas d'erreur, vérifier quand même le DOM
-      if (checkSummaryErrorInDOM()) {
-        btn.style.display = 'none';
-        if (counter) counter.style.display = 'none';
-        return;
-      }
-    }
-    
-    // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
-    // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur détecté - Bouton caché (vérification finale)');
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
-      return;
+      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
+    // ⚠️ IMPORTANT : Retirer les classes/attributs de masquage si le compte-rendu existe
+    btn.classList.remove('agilo-force-hide');
+    btn.removeAttribute('hidden');
+    btn.removeAttribute('aria-hidden');
+    btn.style.removeProperty('visibility');
+    btn.style.removeProperty('opacity');
+    
     if (isSummaryTab) {
       // Visible sur l'onglet Compte-rendu (le compte-rendu existe, vérifié ci-dessus)
       btn.style.display = 'flex';
@@ -1440,20 +1268,21 @@
         btn.style.opacity = '0.5';
         btn.style.cursor = 'not-allowed';
         btn.title = 'Sauvegardez d\'abord le transcript pour régénérer le compte-rendu';
+      } else {
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        btn.removeAttribute('title');
       }
     } else if (isTranscriptTab && transcriptModified) {
       // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
-      // ⚠️ IMPORTANT : Vérifier encore une fois que le compte-rendu existe vraiment
-      // Car on peut être sur l'onglet Transcription alors que le compte-rendu n'existe pas
-      // Si le message d'erreur est dans le DOM, ne pas afficher le bouton
-      if (!checkSummaryErrorInDOM()) {
-        btn.style.display = 'flex';
-        if (counter) counter.style.display = '';
-      } else {
-        console.log('[AGILO:RELANCE] Sur onglet Transcription mais message d\'erreur détecté - Bouton caché');
-        btn.style.display = 'none';
-        if (counter) counter.style.display = 'none';
-      }
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
       btn.style.display = 'none';
@@ -1509,6 +1338,38 @@
   /**
    * Initialisation
    */
+  // ⚠️ Vérification immédiate synchrone (avant même l'init async)
+  function immediateCheck() {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    const editorRoot = document.getElementById('editorRoot');
+    
+    // Vérifier summaryEmpty immédiatement
+    if (editorRoot?.dataset.summaryEmpty === '1') {
+      console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: summaryEmpty=1 - Cache bouton');
+      btn.style.display = 'none';
+      btn.style.visibility = 'hidden';
+      btn.style.opacity = '0';
+      btn.classList.add('agilo-force-hide');
+      btn.setAttribute('hidden', '');
+      btn.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    
+    // Vérifier le message d'erreur dans le DOM immédiatement
+    if (hasErrorMessageInDOM()) {
+      console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: Message d\'erreur - Cache bouton');
+      btn.style.display = 'none';
+      btn.style.visibility = 'hidden';
+      btn.style.opacity = '0';
+      btn.classList.add('agilo-force-hide');
+      btn.setAttribute('hidden', '');
+      btn.setAttribute('aria-hidden', 'true');
+      return;
+    }
+  }
+
   function init() {
     // Vérifier si déjà initialisé (éviter les doublons)
     if (window.__agiloRelanceInitialized) {
@@ -1516,6 +1377,13 @@
       return;
     }
     window.__agiloRelanceInitialized = true;
+    
+    // ⚠️ VÉRIFICATION IMMÉDIATE AVANT TOUT
+    immediateCheck();
+    
+    // ⚠️ EXPOSER LES FONCTIONS POUR DEBUG
+    window.updateButtonVisibility = updateButtonVisibility;
+    window.hasErrorMessageInDOM = hasErrorMessageInDOM;
     
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
@@ -1540,38 +1408,25 @@
           }
         } catch (e) {}
         
-        // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe AVANT d'afficher le bouton
+        // Feedback visuel après sauvegarde
+        if (typeof window.toast === 'function') {
+          window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
+        }
+        
+        // Mettre à jour la visibilité (asynchrone maintenant)
+        updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+        // Mettre à jour les compteurs après sauvegarde
         setTimeout(async () => {
           try {
             const creds = await ensureCreds();
             if (creds.jobId && creds.edition) {
-              // Vérifier d'abord si le compte-rendu existe
-              const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
-              
-              if (summaryExists) {
-                // Feedback visuel seulement si le compte-rendu existe
-                if (typeof window.toast === 'function') {
-                  window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
-                }
-                
-                // Mettre à jour les compteurs et l'état
-                updateRegenerationCounter(creds.jobId, creds.edition);
-                updateButtonState(creds.jobId, creds.edition);
-              } else {
-                // Si pas de compte-rendu, ne pas afficher le bouton
-                console.log('[AGILO:RELANCE] Transcript sauvegardé mais aucun compte-rendu existant - Bouton caché');
-                if (typeof window.toast === 'function') {
-                  window.toast('✅ Transcript sauvegardé');
-                }
-              }
-              
-              // Re-vérifier la visibilité (cachera le bouton si pas de compte-rendu)
+              updateRegenerationCounter(creds.jobId, creds.edition);
+              updateButtonState(creds.jobId, creds.edition);
+              // Re-vérifier la visibilité après mise à jour des compteurs
               await updateButtonVisibility();
             }
           } catch (e) {
-            console.error('[AGILO:RELANCE] Erreur après sauvegarde:', e);
-            // En cas d'erreur, vérifier quand même la visibilité
-            updateButtonVisibility().catch(err => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', err));
+            console.log('Erreur mise à jour compteurs:', e);
           }
         }, 500);
         // ⚠️ IMPORTANT : On ne réinitialise PAS le compteur lors de la sauvegarde
@@ -1967,11 +1822,58 @@
     document.head.appendChild(style);
   }
   
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+  // ⚠️ VÉRIFICATION IMMÉDIATE même si le DOM n'est pas prêt
+  if (document.readyState !== 'loading') {
+    immediateCheck();
     init();
+  } else {
+    // Vérification immédiate dès que possible
+    document.addEventListener('DOMContentLoaded', () => {
+      immediateCheck();
+      init();
+    }, { once: true });
+    
+    // Vérification aussi après un court délai (au cas où le DOM est déjà là)
+    setTimeout(() => {
+      if (!window.__agiloRelanceInitialized) {
+        immediateCheck();
+      }
+    }, 100);
   }
+  
+  // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné)
+  setInterval(() => {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    // Si le bouton est visible mais qu'il ne devrait pas l'être
+    if (!btn.classList.contains('agilo-force-hide') && window.getComputedStyle(btn).display !== 'none') {
+      const editorRoot = document.getElementById('editorRoot');
+      
+      // Vérifier summaryEmpty
+      if (editorRoot?.dataset.summaryEmpty === '1') {
+        console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton');
+        btn.style.display = 'none';
+        btn.style.visibility = 'hidden';
+        btn.style.opacity = '0';
+        btn.classList.add('agilo-force-hide');
+        btn.setAttribute('hidden', '');
+        btn.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      
+      // Vérifier le message d'erreur
+      if (hasErrorMessageInDOM()) {
+        console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur - Cache bouton');
+        btn.style.display = 'none';
+        btn.style.visibility = 'hidden';
+        btn.style.opacity = '0';
+        btn.classList.add('agilo-force-hide');
+        btn.setAttribute('hidden', '');
+        btn.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }, 1000); // Vérifie toutes les secondes
   
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
