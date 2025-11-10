@@ -592,22 +592,13 @@
    */
   /**
    * Vérifier si le message d'erreur est affiché dans le DOM
-   */
-  /**
-   * Vérifier si le message d'erreur est affiché dans le DOM
    * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
    */
   function checkSummaryErrorInDOM() {
-    // ⚠️ IMPORTANT : Chercher d'abord les alertes spécifiques (plus fiable)
-    // Même si elles sont cachées (hidden), on peut les lire
-    const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title, [class*="alert"]');
-    console.log('[AGILO:RELANCE] Recherche alertes dans le DOM:', alertElements.length, 'éléments trouvés');
-    
+    // Chercher d'abord les alertes (plus fiable)
+    const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title');
     for (const alert of alertElements) {
       const text = alert.textContent || alert.innerText || '';
-      const html = alert.innerHTML || '';
-      
-      // Vérifier les messages d'erreur possibles
       const errorMessages = [
         'pas encore disponible',
         'fichier manquant',
@@ -615,91 +606,57 @@
         'n\'est pas encore disponible',
         'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
       ];
-      
-      const hasError = errorMessages.some(msg => 
-        text.toLowerCase().includes(msg.toLowerCase()) || 
-        html.toLowerCase().includes(msg.toLowerCase())
-      );
-      
-      if (hasError) {
-        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans une alerte:', text.substring(0, 150));
-        console.log('[AGILO:RELANCE] Element trouve:', alert.className, alert.id);
+      if (errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()))) {
         return true;
       }
     }
     
-    // Chercher l'éditeur de compte-rendu (même s'il est caché avec hidden)
-    const summaryEditor = document.querySelector('#summaryEditor');
-    if (summaryEditor) {
-      const text = summaryEditor.textContent || summaryEditor.innerText || '';
-      const html = summaryEditor.innerHTML || '';
-      
-      console.log('[AGILO:RELANCE] Contenu summaryEditor:', {
-        textLength: text.length,
-        htmlLength: html.length,
-        preview: text.substring(0, 200),
-        isHidden: summaryEditor.hasAttribute('hidden') || summaryEditor.closest('[hidden]')
-      });
-      
-      // Vérifier les messages d'erreur possibles
-      const errorMessages = [
-        'pas encore disponible',
-        'fichier manquant',
-        'non publié',
-        'n\'est pas encore disponible',
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-      ];
-      
-      const hasError = errorMessages.some(msg => 
-        text.toLowerCase().includes(msg.toLowerCase()) || 
-        html.toLowerCase().includes(msg.toLowerCase())
-      );
-      
-      if (hasError) {
-        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans summaryEditor:', text.substring(0, 150));
-        return true;
+    // Chercher l'éditeur de compte-rendu (même s'il est caché)
+    const summaryEditor = document.querySelector('#summaryEditor, [id*="summaryEditor"], [id*="summary"]');
+    if (!summaryEditor) {
+      // Si l'éditeur n'existe pas, chercher dans tous les panneaux
+      const summaryPane = document.querySelector('#pane-summary, [id*="pane-summary"]');
+      if (summaryPane) {
+        const text = summaryPane.textContent || summaryPane.innerText || '';
+        const html = summaryPane.innerHTML || '';
+        
+        // Vérifier les messages d'erreur possibles
+        const errorMessages = [
+          'pas encore disponible',
+          'fichier manquant',
+          'non publié',
+          'n\'est pas encore disponible',
+          'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+        ];
+        
+        const hasError = errorMessages.some(msg => 
+          text.toLowerCase().includes(msg.toLowerCase()) || 
+          html.toLowerCase().includes(msg.toLowerCase())
+        );
+        
+        return hasError;
       }
-    } else {
-      console.log('[AGILO:RELANCE] WARN - summaryEditor non trouvé');
+      return false;
     }
     
-    // Si l'éditeur n'existe pas, chercher dans tous les panneaux (même cachés)
-    const summaryPane = document.querySelector('#pane-summary');
-    if (summaryPane) {
-      const text = summaryPane.textContent || summaryPane.innerText || '';
-      const html = summaryPane.innerHTML || '';
-      
-      console.log('[AGILO:RELANCE] Contenu pane-summary:', {
-        textLength: text.length,
-        htmlLength: html.length,
-        preview: text.substring(0, 200),
-        isHidden: summaryPane.hasAttribute('hidden')
-      });
-      
-      // Vérifier les messages d'erreur possibles
-      const errorMessages = [
-        'pas encore disponible',
-        'fichier manquant',
-        'non publié',
-        'n\'est pas encore disponible',
-        'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
-      ];
-      
-      const hasError = errorMessages.some(msg => 
-        text.toLowerCase().includes(msg.toLowerCase()) || 
-        html.toLowerCase().includes(msg.toLowerCase())
-      );
-      
-      if (hasError) {
-        console.log('[AGILO:RELANCE] OK - Message d\'erreur détecté dans le panneau Compte-rendu:', text.substring(0, 150));
-        return true;
-      }
-    } else {
-      console.log('[AGILO:RELANCE] WARN - pane-summary non trouvé');
-    }
+    const text = summaryEditor.textContent || summaryEditor.innerText || '';
+    const html = summaryEditor.innerHTML || '';
     
-    console.log('[AGILO:RELANCE] Aucun message d\'erreur détecté dans le DOM');
-    return false;
+    // Vérifier les messages d'erreur possibles
+    const errorMessages = [
+      'pas encore disponible',
+      'fichier manquant',
+      'non publié',
+      'n\'est pas encore disponible',
+      'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+    ];
+    
+    const hasError = errorMessages.some(msg => 
+      text.toLowerCase().includes(msg.toLowerCase()) || 
+      html.toLowerCase().includes(msg.toLowerCase())
+    );
+    
+    return hasError;
   }
   
   async function checkSummaryExists(jobId, email, token, edition) {
@@ -744,42 +701,22 @@
         ];
         
         const isError = errorPatterns.some(pattern => pattern.test(text));
-        
-        // ⚠️ IMPORTANT : Vérifier aussi si c'est une structure HTML d'alerte
-        // Le message d'erreur peut être dans une div avec classe ag-alert
-        const isAlertHTML = /ag-alert/i.test(text) && (
-          /pas encore disponible/i.test(text) || 
-          /fichier manquant/i.test(text) || 
-          /non publié/i.test(text)
-        );
-        
-        // Un compte-rendu valide doit :
-        // 1. Ne pas contenir de message d'erreur
-        // 2. Ne pas être une alerte HTML
-        // 3. Avoir une longueur suffisante (> 100 caractères)
-        // 4. Ne pas commencer par une div d'alerte
-        const isValidContent = !isError && !isAlertHTML && text.length > 100 && 
-                               !text.trim().startsWith('<div class="ag-alert') &&
-                               !text.includes('ag-alert ag-alert--warn');
+        const isValidContent = !isError && text.length > 100 && !text.trim().startsWith('<');
         
         // Log détaillé pour debug
         console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
           length: text.length,
           isError,
-          isAlertHTML,
           isValidContent,
-          preview: text.substring(0, 200).replace(/\s+/g, ' '),
-          containsAlert: /ag-alert/i.test(text),
-          containsErrorMsg: /pas encore disponible|fichier manquant|non publié/i.test(text)
+          preview: text.substring(0, 150).replace(/\s+/g, ' ')
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ERREUR - Compte-rendu inexistant ou invalide (contenu:', 
-            isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
+          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide');
           return false;
         }
         
-        console.log('[AGILO:RELANCE] OK - Compte-rendu valide détecté');
+        console.log('[AGILO:RELANCE] ✅ Compte-rendu valide détecté');
         return true;
       }
       
@@ -1437,15 +1374,11 @@
     
     // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
-    console.log('[AGILO:RELANCE] Vérification DOM pour message d\'erreur...');
-    const hasErrorInDOM = checkSummaryErrorInDOM();
-    if (hasErrorInDOM) {
-      console.log('[AGILO:RELANCE] ERREUR - Message d\'erreur dans le DOM - Bouton CACHE');
+    if (checkSummaryErrorInDOM()) {
+      console.log('[AGILO:RELANCE] Message d\'erreur dans le DOM - Bouton caché');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
-    } else {
-      console.log('[AGILO:RELANCE] OK - Aucun message d\'erreur dans le DOM - Vérification API...');
     }
     
     // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
@@ -1496,15 +1429,11 @@
     
     // ⚠️ IMPORTANT : Vérifier une dernière fois le DOM avant d'afficher le bouton
     // Même si l'API dit que le compte-rendu existe, si le message d'erreur est dans le DOM, cacher le bouton
-    console.log('[AGILO:RELANCE] Vérification finale DOM avant affichage bouton...');
-    const hasErrorFinal = checkSummaryErrorInDOM();
-    if (hasErrorFinal) {
-      console.log('[AGILO:RELANCE] ERREUR - Message d\'erreur détecté - Bouton CACHE (vérification finale)');
+    if (checkSummaryErrorInDOM()) {
+      console.log('[AGILO:RELANCE] Message d\'erreur détecté - Bouton caché (vérification finale)');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
-    } else {
-      console.log('[AGILO:RELANCE] OK - Pas de message d\'erreur - Bouton peut être affiché');
     }
     
     // Gérer la visibilité selon l'onglet et l'état du transcript
