@@ -683,10 +683,12 @@
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
       // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
+      console.log('[AGILO:RELANCE] 🔍 Étape 1: Vérification DOM...');
       if (checkSummaryErrorInDOM()) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
+        console.log('[AGILO:RELANCE] ❌ Message d\'erreur détecté dans le DOM - Compte-rendu inexistant');
         return false;
       }
+      console.log('[AGILO:RELANCE] ✅ Pas de message d\'erreur dans le DOM - Vérification API...');
       
       // Ajouter cache-busting pour éviter le cache navigateur
       const cacheBuster = Date.now();
@@ -702,7 +704,7 @@
         }
       });
       
-      console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
+      console.log('[AGILO:RELANCE] 🔍 Étape 2: Réponse API:', {
         status: response.status,
         ok: response.ok
       });
@@ -718,22 +720,28 @@
           /fichier manquant/i,
           /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i,
           /n'est pas encore disponible/i,
-          /résumé en préparation/i
+          /résumé en préparation/i,
+          /ag-alert/i  // Si c'est une alerte HTML, c'est une erreur
         ];
         
         const isError = errorPatterns.some(pattern => pattern.test(text));
-        const isValidContent = !isError && text.length > 100 && !text.trim().startsWith('<');
+        // Vérifier aussi si c'est une structure HTML d'alerte
+        const isAlertHTML = text.includes('ag-alert') || text.includes('ag-alert__title');
+        const isValidContent = !isError && !isAlertHTML && text.length > 100 && !text.trim().startsWith('<div class="ag-alert');
         
         // Log détaillé pour debug
-        console.log('[AGILO:RELANCE] Analyse contenu compte-rendu:', {
+        console.log('[AGILO:RELANCE] 🔍 Étape 3: Analyse contenu compte-rendu:', {
           length: text.length,
           isError,
+          isAlertHTML,
           isValidContent,
-          preview: text.substring(0, 150).replace(/\s+/g, ' ')
+          preview: text.substring(0, 200).replace(/\s+/g, ' '),
+          containsAlert: text.includes('ag-alert'),
+          containsErrorMsg: text.includes('pas encore disponible') || text.includes('fichier manquant')
         });
         
         if (!isValidContent) {
-          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide');
+          console.log('[AGILO:RELANCE] ❌ Compte-rendu inexistant ou invalide (contenu:', isError ? 'message erreur' : (isAlertHTML ? 'alerte HTML' : 'trop court/invalide'), ')');
           return false;
         }
         
@@ -741,9 +749,10 @@
         return true;
       }
       
+      console.log('[AGILO:RELANCE] ❌ Réponse API non-OK:', response.status);
       return false;
     } catch (error) {
-      console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
+      console.error('[AGILO:RELANCE] ❌ Erreur vérification existence:', error);
       return false;
     }
   }
