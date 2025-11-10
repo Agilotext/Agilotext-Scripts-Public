@@ -2427,6 +2427,21 @@
         height: 0 !important;
       }
       
+      /* ⚠️ CRITIQUE : Règle CSS directe pour cacher le bouton si alerte présente */
+      #pane-summary .ag-alert--warn ~ [data-action="relancer-compte-rendu"],
+      #summaryEditor .ag-alert--warn ~ [data-action="relancer-compte-rendu"],
+      #pane-summary:has(.ag-alert--warn) [data-action="relancer-compte-rendu"],
+      #summaryEditor:has(.ag-alert--warn) [data-action="relancer-compte-rendu"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        position: absolute !important;
+        left: -9999px !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      
       /* Fallback pour navigateurs qui ne supportent pas :has() */
       .ag-alert--warn:has-text("pas encore disponible") ~ [data-action="relancer-compte-rendu"],
       .ag-alert__title:has-text("pas encore disponible") ~ [data-action="relancer-compte-rendu"] {
@@ -2661,7 +2676,18 @@
     init();
   }
   
+  // ⚠️ CRITIQUE : Exposer les fonctions globalement pour le diagnostic et le debug
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
+  window.checkSummaryErrorInDOM = checkSummaryErrorInDOM;
+  window.updateButtonVisibility = updateButtonVisibility;
+  window.checkSummaryExists = checkSummaryExists;
+  window.getContentHash = getContentHash;
+  
+  console.log('[AGILO:RELANCE] ✅ Fonctions exposées globalement:', {
+    checkSummaryErrorInDOM: typeof checkSummaryErrorInDOM === 'function',
+    updateButtonVisibility: typeof updateButtonVisibility === 'function',
+    checkSummaryExists: typeof checkSummaryExists === 'function'
+  });
 })();
 
