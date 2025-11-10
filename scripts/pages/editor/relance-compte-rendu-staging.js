@@ -595,13 +595,19 @@
    * Vérifie dans l'éditeur de compte-rendu même si l'onglet n'est pas actif
    */
   function checkSummaryErrorInDOM() {
+    console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - DEBUT');
+    
     // ⚠️ IMPORTANT : Chercher dans TOUS les éléments, même ceux qui sont cachés (hidden)
     // querySelectorAll trouve les éléments même s'ils sont dans un parent caché
     
     // 1. Chercher d'abord les alertes (plus fiable) - même si cachées
     const alertElements = document.querySelectorAll('.ag-alert, .ag-alert__title');
+    console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - Alertes trouvées:', alertElements.length);
+    
     for (const alert of alertElements) {
       const text = alert.textContent || alert.innerText || '';
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - Alerte texte:', text.substring(0, 150));
+      
       const errorMessages = [
         'pas encore disponible',
         'fichier manquant',
@@ -609,17 +615,23 @@
         'n\'est pas encore disponible',
         'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
       ];
-      if (errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()))) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans alerte:', text.substring(0, 100));
+      
+      const hasError = errorMessages.some(msg => text.toLowerCase().includes(msg.toLowerCase()));
+      if (hasError) {
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans alerte:', text.substring(0, 100));
         return true;
       }
     }
     
     // 2. Chercher dans #pane-summary (même s'il est caché avec hidden)
     const summaryPane = document.querySelector('#pane-summary');
+    console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary trouvé:', !!summaryPane);
+    
     if (summaryPane) {
       const text = summaryPane.textContent || summaryPane.innerText || '';
       const html = summaryPane.innerHTML || '';
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary texte longueur:', text.length);
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - pane-summary texte preview:', text.substring(0, 200));
       
       const errorMessages = [
         'pas encore disponible',
@@ -635,16 +647,20 @@
       );
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans pane-summary:', text.substring(0, 100));
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans pane-summary:', text.substring(0, 100));
         return true;
       }
     }
     
     // 3. Chercher dans #summaryEditor (même s'il est caché)
     const summaryEditor = document.querySelector('#summaryEditor');
+    console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor trouvé:', !!summaryEditor);
+    
     if (summaryEditor) {
       const text = summaryEditor.textContent || summaryEditor.innerText || '';
       const html = summaryEditor.innerHTML || '';
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor texte longueur:', text.length);
+      console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - summaryEditor texte preview:', text.substring(0, 200));
       
       const errorMessages = [
         'pas encore disponible',
@@ -660,11 +676,12 @@
       );
       
       if (hasError) {
-        console.log('[AGILO:RELANCE] Message d\'erreur détecté dans summaryEditor:', text.substring(0, 100));
+        console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - ERREUR DETECTEE dans summaryEditor:', text.substring(0, 100));
         return true;
       }
     }
     
+    console.log('[AGILO:RELANCE] checkSummaryErrorInDOM - FIN - Aucune erreur détectée');
     return false;
   }
   
@@ -1401,12 +1418,16 @@
     
     // ⚠️ IMPORTANT : Vérifier d'abord dans le DOM si le message d'erreur est affiché
     // C'est plus rapide et plus fiable que l'API
-    if (checkSummaryErrorInDOM()) {
-      console.log('[AGILO:RELANCE] Message d\'erreur dans le DOM - Bouton caché');
+    console.log('[AGILO:RELANCE] updateButtonVisibility - Appel checkSummaryErrorInDOM()...');
+    const hasErrorInDOM = checkSummaryErrorInDOM();
+    console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
+    if (hasErrorInDOM) {
+      console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE');
       btn.style.display = 'none';
       if (counter) counter.style.display = 'none';
       return;
     }
+    console.log('[AGILO:RELANCE] updateButtonVisibility - Pas de message d\'erreur dans le DOM - Vérification API...');
     
     // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
     try {
