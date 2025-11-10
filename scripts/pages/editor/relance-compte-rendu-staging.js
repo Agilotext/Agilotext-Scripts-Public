@@ -1174,13 +1174,41 @@
           console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible et vérifié !');
           console.log('[AGILO:RELANCE] Hash nouveau:', waitResult.contentHash?.substring(0, 30) + '...');
           console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 30) + '...' || 'aucun');
+          
+          // ⚠️ IMPORTANT : Mettre à jour les liens de téléchargement AVANT de recharger
+          // Les liens de téléchargement (PDF, DOC, etc.) pointent vers receiveSummary
+          // Ils doivent être mis à jour pour pointer vers le NOUVEAU compte-rendu
+          console.log('[AGILO:RELANCE] Mise à jour des liens de téléchargement...');
+          try {
+            // Appeler la fonction updateDownloadLinks du script principal si elle existe
+            if (typeof window.updateDownloadLinks === 'function') {
+              const creds = await ensureCreds();
+              window.updateDownloadLinks(jobId, {
+                username: creds.email,
+                token: creds.token,
+                edition: creds.edition
+              }, { summaryEmpty: false });
+              console.log('[AGILO:RELANCE] ✅ Liens de téléchargement mis à jour');
+            } else {
+              // Fallback : forcer le rechargement pour que le script principal mette à jour les liens
+              console.log('[AGILO:RELANCE] ⚠️ Fonction updateDownloadLinks non trouvée, rechargement nécessaire');
+            }
+          } catch (e) {
+            console.warn('[AGILO:RELANCE] Erreur mise à jour liens téléchargement:', e);
+          }
         } else {
           console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas encore prêt après toutes les tentatives');
+          console.log('[AGILO:RELANCE] ⚠️ ATTENTION : Le nouveau compte-rendu n\'est peut-être pas encore disponible');
+          console.log('[AGILO:RELANCE] ⚠️ Les liens de téléchargement peuvent pointer vers l\'ancien compte-rendu');
           console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
         }
         
         // Recharger la page avec cache-busting pour forcer le chargement du nouveau compte-rendu
+        console.log('[AGILO:RELANCE] ========================================');
         console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT : Attendez que le compte-rendu soit complètement chargé avant de télécharger');
+        console.log('[AGILO:RELANCE] Le téléchargement PDF/DOC utilisera receiveSummary qui doit retourner le NOUVEAU compte-rendu');
+        console.log('[AGILO:RELANCE] ========================================');
         const url = new URL(window.location.href);
         url.searchParams.set('tab', 'summary');
         url.searchParams.set('_regen', Date.now()); // Cache-busting pour forcer le rechargement
