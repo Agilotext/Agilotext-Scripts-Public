@@ -592,11 +592,18 @@
    */
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+      // Ajouter cache-busting pour éviter le cache navigateur
+      const cacheBuster = Date.now();
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
       
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
       });
       
       console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
@@ -624,14 +631,25 @@
   /**
    * Attendre que le compte-rendu soit prêt (polling)
    */
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000) {
+  /**
+   * Récupérer le hash du contenu du compte-rendu (pour détecter les changements)
+   */
+  function getContentHash(text) {
+    // Hash simple basé sur la longueur et les premiers caractères
+    // Plus robuste qu'un hash complet mais suffisant pour détecter les changements
+    if (!text || text.length < 100) return '';
+    return text.length + '_' + text.substring(0, 200).replace(/\s/g, '').substring(0, 50);
+  }
+  
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000, oldContentHash = null) {
     const waitStartTime = Date.now();
     console.log('[AGILO:RELANCE] ========================================');
-    console.log('[AGILO:RELANCE] ⏳ Début vérification disponibilité compte-rendu', {
+    console.log('[AGILO:RELANCE] ⏳ Début vérification disponibilité NOUVEAU compte-rendu', {
       jobId,
       maxAttempts,
       delay: delay + 'ms',
-      tempsMaxAttendu: Math.round((maxAttempts * delay) / 1000) + ' secondes'
+      tempsMaxAttendu: Math.round((maxAttempts * delay) / 1000) + ' secondes',
+      oldContentHash: oldContentHash || 'aucun (première génération)'
     });
     console.log('[AGILO:RELANCE] ========================================');
     
@@ -642,12 +660,19 @@
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+        // ⚠️ IMPORTANT : Ajouter un paramètre cache-busting pour éviter le cache navigateur
+        const cacheBuster = Date.now();
+        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${cacheBuster}`;
         
         const checkStartTime = Date.now();
         const response = await fetch(url, {
           method: 'GET',
-          cache: 'no-store'
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+          }
         });
         const checkTime = Date.now() - checkStartTime;
         
@@ -663,15 +688,31 @@
                          text.includes('fichier manquant');
           
           if (!isError && text.length > 100) {
+            // ⚠️ IMPORTANT : Vérifier que c'est bien un NOUVEAU compte-rendu (différent de l'ancien)
+            const newContentHash = getContentHash(text);
+            
+            if (oldContentHash && newContentHash === oldContentHash) {
+              // Le contenu est identique à l'ancien, ce n'est pas encore le nouveau
+              console.log(`[AGILO:RELANCE] ⚠️ Compte-rendu identique à l'ancien (hash: ${newContentHash.substring(0, 20)}...) - Attente du nouveau...`);
+              if (attempt < maxAttempts) {
+                console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine vérification...`);
+                await new Promise(r => setTimeout(r, delay));
+              }
+              continue;
+            }
+            
+            // C'est un nouveau compte-rendu (hash différent ou pas d'ancien hash)
             const totalTime = Math.round((Date.now() - waitStartTime) / 1000);
             console.log('[AGILO:RELANCE] ========================================');
             console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible !', {
               attempt,
               contentLength: text.length,
-              tempsTotal: totalTime + ' secondes'
+              tempsTotal: totalTime + ' secondes',
+              newHash: newContentHash.substring(0, 30) + '...',
+              isNew: oldContentHash ? (newContentHash !== oldContentHash) : true
             });
             console.log('[AGILO:RELANCE] ========================================');
-            return true;
+            return { ready: true, contentHash: newContentHash };
           } else {
             console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts}) - Message: ${text.substring(0, 50)}...`);
           }
@@ -701,7 +742,7 @@
     console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après', maxAttempts, 'tentatives (' + totalTime + ' secondes)');
     console.warn('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
     console.warn('[AGILO:RELANCE] ========================================');
-    return false;
+    return { ready: false, contentHash: null };
   }
   
   /**
@@ -905,6 +946,31 @@
     console.log('[AGILO:RELANCE] Vérification existence compte-rendu avant régénération...');
     const summaryExists = await checkSummaryExists(jobId, email, token, edition);
     
+    // Récupérer le hash de l'ancien compte-rendu pour vérifier que le nouveau est différent
+    let oldContentHash = null;
+    if (summaryExists) {
+      try {
+        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
+        const response = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache'
+          }
+        });
+        if (response.ok) {
+          const oldText = await response.text();
+          if (oldText && oldText.length > 100 && !oldText.includes('pas encore disponible')) {
+            oldContentHash = getContentHash(oldText);
+            console.log('[AGILO:RELANCE] Hash ancien compte-rendu récupéré:', oldContentHash.substring(0, 30) + '...');
+          }
+        }
+      } catch (e) {
+        console.warn('[AGILO:RELANCE] Impossible de récupérer l\'ancien compte-rendu pour comparaison:', e);
+      }
+    }
+    
     if (!summaryExists) {
       console.warn('[AGILO:RELANCE] ⚠️ Aucun compte-rendu existant détecté');
       const proceed = confirm(
@@ -949,7 +1015,11 @@
       
       const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
       });
       
       const apiResponseTime = Date.now() - apiStartTime;
@@ -1034,23 +1104,27 @@
         console.log('[AGILO:RELANCE] ========================================');
         
         const waitStartTime = Date.now();
-        const summaryReady = await waitForSummaryReady(jobId, email, token, edition, 60, 3000); // 60 tentatives, 3 secondes entre chaque
+        const waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 3000, oldContentHash); // 60 tentatives, 3 secondes entre chaque, avec hash ancien
         
         const waitTime = Date.now() - waitStartTime;
         console.log('[AGILO:RELANCE] ⏱️ Temps d\'attente génération:', Math.round(waitTime / 1000) + ' secondes');
         
-        if (summaryReady) {
-          console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu disponible !');
+        if (waitResult.ready) {
+          console.log('[AGILO:RELANCE] ✅ NOUVEAU compte-rendu disponible et vérifié !');
+          console.log('[AGILO:RELANCE] Hash nouveau:', waitResult.contentHash?.substring(0, 30) + '...');
+          console.log('[AGILO:RELANCE] Hash ancien:', oldContentHash?.substring(0, 30) + '...' || 'aucun');
         } else {
           console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas encore prêt après toutes les tentatives');
           console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
         }
         
-        // Recharger la page après confirmation que le compte-rendu est prêt
-        console.log('[AGILO:RELANCE] Compte-rendu prêt, rechargement de la page...');
+        // Recharger la page avec cache-busting pour forcer le chargement du nouveau compte-rendu
+        console.log('[AGILO:RELANCE] Rechargement avec cache-busting pour afficher le NOUVEAU compte-rendu...');
         const url = new URL(window.location.href);
         url.searchParams.set('tab', 'summary');
-        window.location.href = url.toString();
+        url.searchParams.set('_regen', Date.now()); // Cache-busting pour forcer le rechargement
+        // Utiliser location.replace pour éviter le cache navigateur
+        window.location.replace(url.toString());
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
