@@ -276,7 +276,7 @@
     const hasErrorInDOM = checkSummaryErrorInDOM();
     if (hasErrorInDOM) {
       console.log('[AGILO:RELANCE] updateRegenerationCounter - Message d\'erreur dans DOM - Bouton CACHE');
-      btn.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
       // Supprimer aussi le compteur s'il existe
       const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
       if (oldCounter) oldCounter.remove();
@@ -1530,8 +1530,8 @@
     console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat checkSummaryErrorInDOM():', hasErrorInDOM);
     if (hasErrorInDOM) {
       console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans le DOM - Bouton CACHE');
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
+      if (counter) counter.style.setProperty('display', 'none', 'important');
       return;
     }
     console.log('[AGILO:RELANCE] updateButtonVisibility - Pas de message d\'erreur dans le DOM - Vérification API...');
@@ -1547,8 +1547,8 @@
         // Si le compte-rendu n'existe pas, CACHER le bouton complètement
         if (!summaryExists) {
           console.log('[AGILO:RELANCE] Compte-rendu inexistant (API) - Bouton caché');
-          btn.style.display = 'none';
-          if (counter) counter.style.display = 'none';
+          btn.style.setProperty('display', 'none', 'important');
+          if (counter) counter.style.setProperty('display', 'none', 'important');
           // Afficher le message informatif si on est sur l'onglet Compte-rendu
           if (isSummaryTab && !noSummaryMsg) {
             const msg = document.createElement('div');
@@ -1576,8 +1576,8 @@
       console.error('[AGILO:RELANCE] Erreur vérification existence compte-rendu:', e);
       // En cas d'erreur, vérifier quand même le DOM
       if (checkSummaryErrorInDOM()) {
-        btn.style.display = 'none';
-        if (counter) counter.style.display = 'none';
+        btn.style.setProperty('display', 'none', 'important');
+        if (counter) counter.style.setProperty('display', 'none', 'important');
         return;
       }
     }
@@ -1589,8 +1589,8 @@
     console.log('[AGILO:RELANCE] updateButtonVisibility - Résultat vérification finale:', hasErrorFinal);
     if (hasErrorFinal) {
       console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur détecté - Bouton CACHE (vérification finale)');
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
+      if (counter) counter.style.setProperty('display', 'none', 'important');
       return;
     }
     
@@ -1603,16 +1603,16 @@
         const summaryExistsFinal = await checkSummaryExists(jobIdFinal, credsFinal.email, credsFinal.token, editionFinal);
         if (!summaryExistsFinal) {
           console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu inexistant (vérification finale API) - Bouton CACHE');
-          btn.style.display = 'none';
-          if (counter) counter.style.display = 'none';
+          btn.style.setProperty('display', 'none', 'important');
+          if (counter) counter.style.setProperty('display', 'none', 'important');
           return;
         }
       }
     } catch (e) {
       console.error('[AGILO:RELANCE] updateButtonVisibility - Erreur vérification finale:', e);
       // En cas d'erreur, cacher le bouton par sécurité
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
+      if (counter) counter.style.setProperty('display', 'none', 'important');
       return;
     }
     
@@ -1641,8 +1641,8 @@
       const hasErrorDOM = checkSummaryErrorInDOM();
       if (hasErrorDOM) {
         console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur dans DOM sur onglet Transcription - Bouton CACHE');
-        btn.style.display = 'none';
-        if (counter) counter.style.display = 'none';
+        btn.style.setProperty('display', 'none', 'important');
+        if (counter) counter.style.setProperty('display', 'none', 'important');
         return;
       }
       
@@ -1654,29 +1654,37 @@
           const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
           if (!summaryExists) {
             console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu inexistant sur onglet Transcription - Bouton CACHE');
-            btn.style.display = 'none';
-            if (counter) counter.style.display = 'none';
+            btn.style.setProperty('display', 'none', 'important');
+            if (counter) counter.style.setProperty('display', 'none', 'important');
             return;
           } else {
+            // ⚠️ Vérifier encore une fois le DOM avant d'afficher
+            const hasErrorBeforeShow = checkSummaryErrorInDOM();
+            if (hasErrorBeforeShow) {
+              console.log('[AGILO:RELANCE] updateButtonVisibility - Message d\'erreur détecté AVANT affichage - Bouton CACHE');
+              btn.style.setProperty('display', 'none', 'important');
+              if (counter) counter.style.setProperty('display', 'none', 'important');
+              return;
+            }
             console.log('[AGILO:RELANCE] updateButtonVisibility - Compte-rendu existe - Affichage bouton sur onglet Transcription');
             btn.style.display = 'flex';
             if (counter) counter.style.display = '';
           }
         } else {
           console.log('[AGILO:RELANCE] updateButtonVisibility - Credentials manquants - Bouton CACHE');
-          btn.style.display = 'none';
-          if (counter) counter.style.display = 'none';
+          btn.style.setProperty('display', 'none', 'important');
+          if (counter) counter.style.setProperty('display', 'none', 'important');
         }
       } catch (e) {
         console.error('[AGILO:RELANCE] updateButtonVisibility - Erreur vérification sur onglet Transcription:', e);
         // En cas d'erreur, cacher le bouton par sécurité
-        btn.style.display = 'none';
-        if (counter) counter.style.display = 'none';
+        btn.style.setProperty('display', 'none', 'important');
+        if (counter) counter.style.setProperty('display', 'none', 'important');
       }
     } else {
       // Caché sur les autres onglets ou si transcript non sauvegardé
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
+      if (counter) counter.style.setProperty('display', 'none', 'important');
     }
   }
   
@@ -1726,6 +1734,93 @@
   }
   
   /**
+   * Surveiller le DOM pour détecter l'apparition du message d'erreur
+   * et cacher le bouton automatiquement
+   */
+  function setupErrorWatcher() {
+    // Vérifier immédiatement
+    const checkAndHide = () => {
+      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+      if (!btn) return;
+      
+      const hasError = checkSummaryErrorInDOM();
+      if (hasError) {
+        console.log('[AGILO:RELANCE] ErrorWatcher - Message d\'erreur détecté, cache le bouton');
+        btn.style.setProperty('display', 'none', 'important');
+        const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+        if (counter) {
+          counter.style.setProperty('display', 'none', 'important');
+        }
+      }
+    };
+    
+    // Vérifier immédiatement
+    checkAndHide();
+    
+    // Vérifier périodiquement (toutes les 500ms)
+    const intervalId = setInterval(checkAndHide, 500);
+    
+    // Observer les changements dans le DOM
+    const observer = new MutationObserver((mutations) => {
+      let shouldCheck = false;
+      
+      mutations.forEach((mutation) => {
+        // Si un nœud a été ajouté
+        if (mutation.addedNodes.length > 0) {
+          mutation.addedNodes.forEach((node) => {
+            if (node.nodeType === 1) { // Element node
+              // Vérifier si c'est une alerte ou si elle contient une alerte
+              if (node.classList?.contains('ag-alert') || 
+                  node.classList?.contains('ag-alert__title') ||
+                  node.querySelector?.('.ag-alert, .ag-alert__title')) {
+                shouldCheck = true;
+              }
+              // Vérifier si c'est le pane-summary ou summaryEditor
+              if (node.id === 'pane-summary' || 
+                  node.id === 'summaryEditor' ||
+                  node.querySelector?.('#pane-summary, #summaryEditor')) {
+                shouldCheck = true;
+              }
+            }
+          });
+        }
+        
+        // Si le contenu textuel a changé
+        if (mutation.type === 'childList' || mutation.type === 'characterData') {
+          const target = mutation.target;
+          if (target && (
+            target.classList?.contains('ag-alert') ||
+            target.classList?.contains('ag-alert__title') ||
+            target.id === 'pane-summary' ||
+            target.id === 'summaryEditor'
+          )) {
+            shouldCheck = true;
+          }
+        }
+      });
+      
+      if (shouldCheck) {
+        checkAndHide();
+      }
+    });
+    
+    // Observer tout le document
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    
+    // Nettoyer au démontage
+    window.addEventListener('beforeunload', () => {
+      clearInterval(intervalId);
+      observer.disconnect();
+    });
+    
+    console.log('[AGILO:RELANCE] ErrorWatcher initialisé - Surveillance active du DOM');
+  }
+  
+  /**
    * Initialisation
    */
   function init() {
@@ -1735,6 +1830,9 @@
       return;
     }
     window.__agiloRelanceInitialized = true;
+    
+    // ⚠️ CRITIQUE : Démarrer la surveillance du DOM IMMÉDIATEMENT
+    setupErrorWatcher();
     
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
@@ -1772,9 +1870,9 @@
                 console.log('[AGILO:RELANCE] Après sauvegarde - Message d\'erreur dans DOM - Bouton CACHE');
                 const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
                 if (btn) {
-                  btn.style.display = 'none';
+                  btn.style.setProperty('display', 'none', 'important');
                   const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-                  if (counter) counter.style.display = 'none';
+                  if (counter) counter.style.setProperty('display', 'none', 'important');
                 }
                 if (typeof window.toast === 'function') {
                   window.toast('✅ Transcript sauvegardé');
@@ -1799,9 +1897,9 @@
                 console.log('[AGILO:RELANCE] Après sauvegarde - Aucun compte-rendu existant - Bouton CACHE');
                 const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
                 if (btn) {
-                  btn.style.display = 'none';
+                  btn.style.setProperty('display', 'none', 'important');
                   const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-                  if (counter) counter.style.display = 'none';
+                  if (counter) counter.style.setProperty('display', 'none', 'important');
                 }
                 if (typeof window.toast === 'function') {
                   window.toast('✅ Transcript sauvegardé');
