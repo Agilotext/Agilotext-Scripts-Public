@@ -719,20 +719,34 @@
       
       // Vérifier d'abord si c'est du JSON avec un code d'erreur
       const contentType = response.headers.get('content-type') || '';
+      let text = '';
+      let isJsonResponse = false;
+      
       if (contentType.includes('application/json')) {
-        const json = await response.json();
-        console.log('[AGILO:RELANCE] Réponse JSON:', json);
-        
-        // ⚠️ IMPORTANT : Si l'API retourne ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS, le compte-rendu n'existe pas
-        if (json.errorMessage === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' || 
-            json.status === 'KO' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(json.errorMessage || '')) {
-          console.log('[AGILO:RELANCE] ERREUR - Code d\'erreur API détecté: ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+        isJsonResponse = true;
+        try {
+          const json = await response.json();
+          console.log('[AGILO:RELANCE] Réponse JSON:', json);
+          
+          // ⚠️ IMPORTANT : Si l'API retourne ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS, le compte-rendu n'existe pas
+          if (json.errorMessage === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS' || 
+              (json.status === 'KO' && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(json.errorMessage || ''))) {
+            console.log('[AGILO:RELANCE] ERREUR - Code d\'erreur API détecté: ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS');
+            return false;
+          }
+          
+          // Si c'est du JSON valide mais pas d'erreur, convertir en texte pour vérification
+          text = JSON.stringify(json);
+        } catch (e) {
+          console.error('[AGILO:RELANCE] Erreur parsing JSON:', e);
           return false;
         }
+      } else {
+        // Si ce n'est pas du JSON, lire le texte normalement
+        text = await response.text();
       }
       
       if (response.ok) {
-        const text = await response.text();
         
         // ⚠️ IMPORTANT : Vérifier plus strictement que ce n'est pas un message d'erreur
         // L'API peut retourner 200 OK avec un message d'erreur dans le HTML
