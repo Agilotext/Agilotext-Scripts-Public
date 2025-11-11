@@ -750,87 +750,280 @@
     setTimeout(initLimits, 500);
   }
   
-  // STYLES CSS
+  // STYLES CSS - Design professionnel inspiré du style Agilotext
   if (!document.querySelector('#relance-summary-styles')) {
     const style = document.createElement('style');
     style.id = 'relance-summary-styles';
     style.textContent = `
+      /* Import de la police Inter si disponible */
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      
+      /* Variables de couleurs (style Agilotext) */
+      :root {
+        --agilo-primary: #174a96;
+        --agilo-primary-light: rgba(23, 74, 150, 0.1);
+        --agilo-primary-border: rgba(23, 74, 150, 0.25);
+        --agilo-text: #020202;
+        --agilo-text-secondary: #525252;
+        --agilo-text-muted: #666;
+        --agilo-surface: #ffffff;
+        --agilo-surface-2: #f8f9fa;
+        --agilo-border: rgba(0, 0, 0, 0.12);
+        --agilo-warning: #fd7e14;
+        --agilo-warning-light: rgba(253, 126, 20, 0.1);
+        --agilo-warning-border: rgba(253, 126, 20, 0.35);
+        --agilo-info: #2196f3;
+        --agilo-info-light: rgba(33, 150, 243, 0.1);
+        --agilo-info-border: rgba(33, 150, 243, 0.35);
+        --agilo-success: #4caf50;
+        --agilo-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        --agilo-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+      }
+      
+      /* Conteneur de chargement - Design épuré et moderne */
       .summary-loading-indicator {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 60px 20px;
+        padding: 80px 40px;
         text-align: center;
-        min-height: 300px;
-        background: #ffffff;
-        color: #020202;
+        min-height: 400px;
+        background: var(--agilo-surface);
+        color: var(--agilo-text);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        border-radius: 12px;
+        box-shadow: var(--agilo-shadow);
+        margin: 20px 0;
       }
       
+      /* Animation Lottie - Taille optimisée */
       .summary-loading-indicator #loading-summary,
       .summary-loading-indicator #loading-summary-clone {
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 24px;
+        width: 100px;
+        height: 100px;
+        margin: 0 auto 32px;
+        filter: drop-shadow(0 4px 8px rgba(23, 74, 150, 0.15));
       }
       
+      /* Texte de chargement - Typographie moderne */
       .summary-loading-indicator .loading-text {
-        font: 500 16px/1.35 system-ui, Arial;
-        margin: 8px 0 4px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1.5;
+        color: var(--agilo-text);
+        margin: 0 0 8px;
+        letter-spacing: -0.01em;
       }
       
       .summary-loading-indicator .loading-subtitle {
-        font: 400 14px/1.4 system-ui, Arial;
-        color: #525252;
-        margin-top: 8px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 15px;
+        font-weight: 400;
+        line-height: 1.6;
+        color: var(--agilo-text-secondary);
+        margin: 8px 0 0;
       }
       
+      /* Compte à rebours - Design premium */
       .loading-countdown {
-        font-size: 32px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 48px;
         font-weight: 700;
-        margin: 20px 0 10px;
-        color: #174a96;
+        margin: 32px 0 16px;
+        color: var(--agilo-primary);
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.05em;
+        text-shadow: 0 2px 4px rgba(23, 74, 150, 0.1);
+        background: linear-gradient(135deg, var(--agilo-primary) 0%, #1e5fb8 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
       }
       
+      /* Compteur de régénérations - Badge moderne */
       .regeneration-counter {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 4px;
-        font-size: 12px;
+        justify-content: center;
+        gap: 6px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 13px;
         font-weight: 500;
-        color: #525252;
-        margin-top: 6px;
-        padding: 4px 8px;
-        border-radius: 4px;
-        background: #f8f9fa;
+        color: var(--agilo-text-secondary);
+        margin-top: 10px;
+        padding: 8px 14px;
+        border-radius: 8px;
+        background: var(--agilo-surface-2);
+        border: 1px solid var(--agilo-border);
+        box-shadow: var(--agilo-shadow);
+        transition: all 0.2s ease;
+        letter-spacing: -0.01em;
+      }
+      
+      .regeneration-counter:hover {
+        box-shadow: var(--agilo-shadow-lg);
+        transform: translateY(-1px);
       }
       
       .regeneration-counter.has-warning {
-        color: #fd7e14;
+        color: var(--agilo-warning);
+        background: var(--agilo-warning-light);
+        border-color: var(--agilo-warning-border);
+      }
+      
+      /* Messages d'information - Design professionnel */
+      .regeneration-limit-message,
+      .regeneration-premium-message,
+      .regeneration-no-summary-message {
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        padding: 16px 20px;
+        margin-top: 12px;
+        border-radius: 10px;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--agilo-text);
+        box-shadow: var(--agilo-shadow);
+        transition: all 0.2s ease;
+        border-left: 4px solid;
       }
       
       .regeneration-limit-message {
-        display: flex;
-        gap: 10px;
-        padding: 10px 12px;
-        margin-top: 8px;
-        border-radius: 4px;
-        font-size: 13px;
-        background: rgba(253, 126, 20, 0.1);
-        border: 1px solid rgba(253, 126, 20, 0.35);
+        background: var(--agilo-warning-light);
+        border-color: var(--agilo-warning);
+        border-left-color: var(--agilo-warning);
+      }
+      
+      .regeneration-premium-message {
+        background: var(--agilo-primary-light);
+        border-color: var(--agilo-primary);
+        border-left-color: var(--agilo-primary);
       }
       
       .regeneration-no-summary-message {
-        display: flex;
-        gap: 10px;
-        padding: 10px 12px;
-        margin-top: 8px;
+        background: var(--agilo-info-light);
+        border-color: var(--agilo-info);
+        border-left-color: var(--agilo-info);
+      }
+      
+      .regeneration-limit-message strong,
+      .regeneration-premium-message strong,
+      .regeneration-no-summary-message strong {
+        display: block;
+        margin-bottom: 4px;
+        font-weight: 600;
+        font-size: 15px;
+        color: var(--agilo-text);
+      }
+      
+      .regeneration-limit-message div,
+      .regeneration-premium-message div,
+      .regeneration-no-summary-message div {
+        flex: 1;
+      }
+      
+      .regeneration-limit-message span,
+      .regeneration-premium-message span,
+      .regeneration-no-summary-message span {
+        font-size: 20px;
+        line-height: 1;
+        margin-top: 2px;
+      }
+      
+      /* Toast de succès - Animation fluide */
+      .agilo-toast-success {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.5;
+        padding: 16px 24px;
+        border-radius: 10px;
+        box-shadow: var(--agilo-shadow-lg);
+        animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
+      @keyframes slideOutRight {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+      
+      /* Bouton annuler - Style cohérent */
+      .cancel-polling-btn {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        padding: 10px 20px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        box-shadow: var(--agilo-shadow);
+      }
+      
+      .cancel-polling-btn:hover {
+        box-shadow: var(--agilo-shadow-lg);
+        transform: translateY(-1px);
+      }
+      
+      /* Responsive mobile */
+      @media (max-width: 560px) {
+        .summary-loading-indicator {
+          padding: 60px 24px;
+          min-height: 300px;
+        }
+        
+        .loading-countdown {
+          font-size: 36px;
+        }
+        
+        .regeneration-counter {
+          font-size: 12px;
+          padding: 6px 12px;
+        }
+        
+        .regeneration-limit-message,
+        .regeneration-premium-message,
+        .regeneration-no-summary-message {
+          padding: 12px 16px;
+          font-size: 13px;
+        }
+      }
+      
+      /* Accessibilité : Focus visible */
+      [data-action="relancer-compte-rendu"]:focus-visible {
+        outline: 2px solid var(--agilo-primary);
+        outline-offset: 2px;
         border-radius: 4px;
-        font-size: 13px;
-        background: rgba(33, 150, 243, 0.1);
-        border: 1px solid rgba(33, 150, 243, 0.35);
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .summary-loading-indicator,
+        .agilo-toast-success,
+        .regeneration-counter,
+        .cancel-polling-btn {
+          animation: none;
+          transition: none;
+        }
       }
     `;
     document.head.appendChild(style);
