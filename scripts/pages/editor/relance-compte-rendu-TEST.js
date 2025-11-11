@@ -769,13 +769,17 @@
    */
   async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000, oldHash = '') {
     console.log('[AGILO:RELANCE] ========================================');
+    console.log('[AGILO:RELANCE] 🎯 FONCTION waitForSummaryReady APPELÉE');
     console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY', {
       jobId,
       edition,
       maxAttempts,
       delay,
-      oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)'
+      oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
+      timestamp: new Date().toISOString()
     });
+    console.log('[AGILO:RELANCE] ⚠️ Cette fonction va faire des appels répétés à getTranscriptStatus');
+    console.log('[AGILO:RELANCE] ⚠️ Elle ne retournera ready:true QUE si le statut est READY_SUMMARY_READY');
     console.log('[AGILO:RELANCE] ========================================');
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -1256,33 +1260,80 @@
         });
         console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: Le loader doit rester affiché pendant le polling');
         console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: On attend vraiment READY_SUMMARY_READY avant d\'afficher');
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: Le script NE DOIT PAS recharger la page avant READY_SUMMARY_READY');
         console.log('[AGILO:RELANCE] ========================================');
         
         // S'assurer que le loader est bien affiché
+        console.log('[AGILO:RELANCE] 🔄 Affichage du loader...');
         showSummaryLoading();
         
+        // Vérifier que summaryEditor existe avant de commencer le polling
+        const summaryEditorCheck = document.querySelector('#summaryEditor');
+        console.log('[AGILO:RELANCE] 🔍 Vérification summaryEditor:', {
+          exists: !!summaryEditorCheck,
+          id: summaryEditorCheck ? summaryEditorCheck.id : 'N/A',
+          className: summaryEditorCheck ? summaryEditorCheck.className : 'N/A'
+        });
+        
+        if (!summaryEditorCheck) {
+          console.warn('[AGILO:RELANCE] ⚠️ summaryEditor n\'existe pas encore - Le polling va quand même démarrer');
+          console.warn('[AGILO:RELANCE] ⚠️ Si summaryEditor n\'est pas trouvé à la fin, on rechargera la page');
+        }
+        
+        console.log('[AGILO:RELANCE] ⏳ Démarrage du polling dans 100ms...');
+        await new Promise(r => setTimeout(r, 100));
+        
         const pollingStartTime = Date.now();
-        const waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash);
+        console.log('[AGILO:RELANCE] 🎬 APPEL waitForSummaryReady() - Début du polling réel');
+        
+        let waitResult;
+        try {
+          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash);
+        } catch (error) {
+          console.error('[AGILO:RELANCE] ❌ ERREUR dans waitForSummaryReady:', {
+            error: error.message,
+            stack: error.stack,
+            name: error.name
+          });
+          waitResult = { ready: false, error: 'EXCEPTION', exception: error.message };
+        }
+        
         const pollingTime = Date.now() - pollingStartTime;
         
         console.log('[AGILO:RELANCE] ========================================');
         console.log('[AGILO:RELANCE] 🏁 FIN POLLING');
-        console.log('[AGILO:RELANCE] Résultat:', {
+        console.log('[AGILO:RELANCE] Résultat détaillé:', {
           ready: waitResult.ready,
           hasContent: !!waitResult.content,
+          contentLength: waitResult.content ? waitResult.content.length : 0,
           hasHash: !!waitResult.hash,
+          hash: waitResult.hash ? waitResult.hash.substring(0, 50) + '...' : '(aucun)',
           error: waitResult.error,
           pollingTimeMs: pollingTime,
-          pollingTimeSec: Math.round(pollingTime / 1000)
+          pollingTimeSec: Math.round(pollingTime / 1000),
+          pollingTimeMin: Math.round(pollingTime / 60000)
         });
         console.log('[AGILO:RELANCE] ========================================');
         
+        console.log('[AGILO:RELANCE] 🔍 Analyse du résultat du polling...');
+        console.log('[AGILO:RELANCE] waitResult.ready:', waitResult.ready);
+        console.log('[AGILO:RELANCE] waitResult.content existe:', !!waitResult.content);
+        console.log('[AGILO:RELANCE] waitResult.content length:', waitResult.content ? waitResult.content.length : 0);
+        console.log('[AGILO:RELANCE] waitResult.error:', waitResult.error);
+        
         if (waitResult.ready && waitResult.content) {
           // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT DANS summaryEditor (sans recharger la page)
-          console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu prêt ! Affichage direct...');
+          console.log('[AGILO:RELANCE] ✅ CAS 1: Nouveau compte-rendu prêt avec contenu ! Affichage direct...');
+          console.log('[AGILO:RELANCE] 📏 Longueur du contenu:', waitResult.content.length);
           
           const summaryEditor = document.querySelector('#summaryEditor');
+          console.log('[AGILO:RELANCE] 🔍 Recherche summaryEditor:', {
+            found: !!summaryEditor,
+            selector: '#summaryEditor'
+          });
+          
           if (summaryEditor) {
+            console.log('[AGILO:RELANCE] ✅ summaryEditor trouvé - Affichage du nouveau compte-rendu...');
             // Nettoyer le HTML pour éviter les scripts malveillants
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = waitResult.content;
@@ -1317,32 +1368,48 @@
             console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché directement dans summaryEditor');
           } else {
             // Fallback : recharger la page si summaryEditor n'est pas trouvé
-            console.warn('[AGILO:RELANCE] ⚠️ summaryEditor non trouvé - Rechargement de la page');
+            console.warn('[AGILO:RELANCE] ⚠️ CAS 1B: summaryEditor non trouvé - Rechargement de la page');
+            console.warn('[AGILO:RELANCE] ⚠️ Le nouveau compte-rendu est prêt mais on ne peut pas l\'afficher directement');
+            console.warn('[AGILO:RELANCE] ⚠️ Rechargement avec cache-buster pour afficher le nouveau compte-rendu');
             const url = new URL(window.location.href);
             url.searchParams.set('tab', 'summary');
             url.searchParams.set('_regen', Date.now().toString());
             url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+            console.log('[AGILO:RELANCE] 🔄 Rechargement vers:', url.toString());
             window.location.href = url.toString();
           }
         } else if (waitResult.ready) {
           // Le statut est READY_SUMMARY_READY mais on n'a pas pu récupérer le contenu
           // Recharger la page avec cache-buster
-          console.log('[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY mais contenu non récupéré - Rechargement');
+          console.log('[AGILO:RELANCE] ⚠️ CAS 2: READY_SUMMARY_READY détecté mais contenu non récupéré');
+          console.log('[AGILO:RELANCE] ⚠️ Le statut est READY mais receiveSummary n\'a pas retourné de contenu valide');
+          console.log('[AGILO:RELANCE] ⚠️ Rechargement avec cache-buster pour récupérer le nouveau compte-rendu');
           const url = new URL(window.location.href);
           url.searchParams.set('tab', 'summary');
           url.searchParams.set('_regen', Date.now().toString());
           url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+          console.log('[AGILO:RELANCE] 🔄 Rechargement vers:', url.toString());
           window.location.href = url.toString();
         } else {
           // Timeout ou erreur
-          console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après polling:', waitResult.error);
+          console.warn('[AGILO:RELANCE] ⚠️ CAS 3: Compte-rendu pas prêt après polling');
+          console.warn('[AGILO:RELANCE] ⚠️ Détails:', {
+            ready: waitResult.ready,
+            error: waitResult.error,
+            hasContent: !!waitResult.content
+          });
           hideSummaryLoading();
           setGeneratingState(false);
           
           if (waitResult.error === 'TIMEOUT') {
+            console.warn('[AGILO:RELANCE] ⚠️ TIMEOUT: Le polling a atteint le maximum de tentatives sans obtenir READY_SUMMARY_READY');
             alert('⚠️ Le compte-rendu n\'est pas encore prêt. Il sera disponible dans quelques instants.\n\nVous pouvez recharger la page plus tard.');
+          } else if (waitResult.error) {
+            console.error('[AGILO:RELANCE] ❌ ERREUR lors du polling:', waitResult.error);
+            alert('⚠️ Erreur lors de la génération du compte-rendu.\n\nErreur: ' + waitResult.error + '\n\nVeuillez réessayer.');
           } else {
-            alert('⚠️ Erreur lors de la génération du compte-rendu.\n\nVeuillez réessayer.');
+            console.error('[AGILO:RELANCE] ❌ État inattendu du polling');
+            alert('⚠️ État inattendu lors de la génération du compte-rendu.\n\nVeuillez réessayer.');
           }
         }
         
@@ -2196,6 +2263,7 @@
     return await testRedoAndPoll(creds.jobId, creds.email, creds.token, creds.edition);
   };
   
+  // Exposer toutes les fonctions dans window
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
   window.getTranscriptStatus = getTranscriptStatus;
@@ -2203,6 +2271,27 @@
   window.testGetTranscriptStatus = testGetTranscriptStatus;
   window.testPollingSummary = testPollingSummary;
   window.testRedoAndPoll = testRedoAndPoll;
+  // Les fonctions testGetCreds, testGetTranscriptStatusAuto, etc. sont déjà assignées à window plus haut
   window.ensureCreds = ensureCreds;
+  
+  // Log de confirmation que les fonctions sont exposées
+  console.log('[AGILO:RELANCE] ✅ Script relance-compte-rendu-TEST.js chargé !');
+  console.log('[AGILO:RELANCE] 📋 Fonctions de test disponibles:', {
+    testGetCreds: typeof window.testGetCreds !== 'undefined' ? '✓ function' : '✗ undefined',
+    testGetTranscriptStatusAuto: typeof window.testGetTranscriptStatusAuto !== 'undefined' ? '✓ function' : '✗ undefined',
+    testPollingSummaryAuto: typeof window.testPollingSummaryAuto !== 'undefined' ? '✓ function' : '✗ undefined',
+    testRedoAndPollAuto: typeof window.testRedoAndPollAuto !== 'undefined' ? '✓ function' : '✗ undefined',
+    testGetTranscriptStatus: typeof window.testGetTranscriptStatus !== 'undefined' ? '✓ function' : '✗ undefined',
+    testPollingSummary: typeof window.testPollingSummary !== 'undefined' ? '✓ function' : '✗ undefined',
+    testRedoAndPoll: typeof window.testRedoAndPoll !== 'undefined' ? '✓ function' : '✗ undefined',
+    relancerCompteRendu: typeof window.relancerCompteRendu !== 'undefined' ? '✓ function' : '✗ undefined',
+    getTranscriptStatus: typeof window.getTranscriptStatus !== 'undefined' ? '✓ function' : '✗ undefined',
+    waitForSummaryReady: typeof window.waitForSummaryReady !== 'undefined' ? '✓ function' : '✗ undefined'
+  });
+  
+  // Exposer aussi directement pour faciliter l'accès
+  if (typeof window.testGetCreds === 'undefined') {
+    console.error('[AGILO:RELANCE] ❌ ERREUR: testGetCreds n\'est pas défini !');
+  }
 })();
 
