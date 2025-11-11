@@ -1245,12 +1245,20 @@
       // On continue quand même
     }
     
+    // ⚠️ CRITIQUE : Marquer comme "en génération" AVANT l'appel API
+    // Cela empêche les double-clics et indique que le processus a commencé
+    console.log('[AGILO:RELANCE] ========================================');
+    console.log('[AGILO:RELANCE] 🔒 MARQUAGE: isGenerating = true');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le processus commence MAINTENANT');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du processus');
+    console.log('[AGILO:RELANCE] ========================================');
+    
     setGeneratingState(true);
     
     try {
       // ⚠️ IMPORTANT : Logger tous les paramètres envoyés
       console.log('[AGILO:RELANCE] ========================================');
-      console.log('[AGILO:RELANCE] Paramètres pour redoSummary:', {
+      console.log('[AGILO:RELANCE] 📤 APPEL API redoSummary - Paramètres:', {
         jobId: jobId,
         edition: edition,
         username: email,
@@ -1258,6 +1266,8 @@
         tokenLength: token ? token.length : 0,
         tokenPreview: token ? token.substring(0, 10) + '...' : '(vide)'
       });
+      console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Après cet appel, on va afficher le loader et faire le polling');
+      console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
       console.log('[AGILO:RELANCE] ========================================');
       
       // ⚠️ Vérifier que tous les paramètres sont valides avant de construire l'URL
