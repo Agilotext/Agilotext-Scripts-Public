@@ -589,14 +589,23 @@
   // ============================================
   
   function init() {
-    if (window.__agiloRelanceInitialized) return;
+    if (window.__agiloRelanceInitialized) {
+      console.log('[AGILO:RELANCE] ⚠️ Script déjà initialisé, skip');
+      return;
+    }
     window.__agiloRelanceInitialized = true;
+    
+    console.log('[AGILO:RELANCE] 🔧 Initialisation du listener de clic...');
     
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
+      if (btn) {
+        console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur le bouton', { disabled: btn.disabled });
+      }
       if (btn && !btn.disabled) {
         e.preventDefault();
         e.stopPropagation();
+        console.log('[AGILO:RELANCE] ✅ Appel relancerCompteRendu()');
         relancerCompteRendu();
       }
     });
@@ -695,14 +704,22 @@
     document.head.appendChild(style);
   }
   
+  // Attendre que le DOM soit prêt
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    console.log('[AGILO:RELANCE] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[AGILO:RELANCE] ✅ DOMContentLoaded - Initialisation...');
+      init();
+    });
   } else {
-    init();
+    console.log('[AGILO:RELANCE] ✅ DOM déjà prêt - Initialisation immédiate...');
+    // Attendre un peu pour être sûr que tout est chargé
+    setTimeout(init, 100);
   }
   
   window.relancerCompteRendu = relancerCompteRendu;
   
   console.log('[AGILO:RELANCE] ✅ Script chargé (VERSION SIMPLIFIÉE)');
+  console.log('[AGILO:RELANCE] 🔍 Fonction relancerCompteRendu disponible:', typeof window.relancerCompteRendu);
 })();
 
