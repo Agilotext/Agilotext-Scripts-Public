@@ -765,10 +765,20 @@
   
   /**
    * Attendre que le compte-rendu soit prêt (polling avec getTranscriptStatus)
-   * Attend le statut READY_SUMMARY_READY avant de retourner true
-   * Retourne aussi le hash du nouveau contenu si disponible
+   * ⚠️ IMPORTANT : Après redoSummary, il faut attendre que le statut passe par READY_SUMMARY_PENDING
+   * pour s'assurer que la régénération a vraiment commencé, puis attendre qu'il redevienne READY_SUMMARY_READY
+   * avec un nouveau hash (différent de l'ancien)
+   * 
+   * @param {string} jobId - ID du job
+   * @param {string} email - Email de l'utilisateur
+   * @param {string} token - Token d'authentification
+   * @param {string} edition - Édition (free, pro, ent)
+   * @param {number} maxAttempts - Nombre maximum de tentatives (défaut: 60)
+   * @param {number} delay - Délai entre chaque tentative en ms (défaut: 2000)
+   * @param {string} oldHash - Hash de l'ancien compte-rendu (pour vérifier le changement)
+   * @param {boolean} waitForPending - Si true, attend que le statut passe par READY_SUMMARY_PENDING avant d'accepter READY_SUMMARY_READY (défaut: true après redoSummary)
    */
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000, oldHash = '') {
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000, oldHash = '', waitForPending = true) {
     console.log('[AGILO:RELANCE] ========================================');
     console.log('[AGILO:RELANCE] 🎯 FONCTION waitForSummaryReady APPELÉE');
     console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY', {
@@ -777,11 +787,26 @@
       maxAttempts,
       delay,
       oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
+      waitForPending: waitForPending,
       timestamp: new Date().toISOString()
     });
     console.log('[AGILO:RELANCE] ⚠️ Cette fonction va faire des appels répétés à getTranscriptStatus');
     console.log('[AGILO:RELANCE] ⚠️ Elle ne retournera ready:true QUE si le statut est READY_SUMMARY_READY');
+    if (waitForPending) {
+      console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: On attend d\'abord READY_SUMMARY_PENDING (régénération en cours)');
+      console.log('[AGILO:RELANCE] ⚠️ Puis on attend que le statut redevienne READY_SUMMARY_READY avec un nouveau hash');
+    }
     console.log('[AGILO:RELANCE] ========================================');
+    
+    // ⚠️ NOUVEAU : Délai initial après redoSummary pour laisser le backend démarrer la régénération
+    if (waitForPending) {
+      console.log('[AGILO:RELANCE] ⏳ Délai initial de 3 secondes pour laisser le backend démarrer la régénération...');
+      await new Promise(r => setTimeout(r, 3000));
+      console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
+    }
+    
+    let hasSeenPending = !waitForPending; // Si waitForPending=false, on considère qu'on a déjà vu PENDING
+    let lastReadyHash = null; // Hash du dernier READY_SUMMARY_READY vu
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -798,11 +823,40 @@
           timestamp: new Date().toISOString()
         });
         
+        // ⚠️ NOUVEAU : Si waitForPending=true, on doit d'abord voir READY_SUMMARY_PENDING
+        // Cela garantit que la régénération a vraiment commencé
+        if (status === 'READY_SUMMARY_PENDING') {
+          if (!hasSeenPending) {
+            console.log(`[AGILO:RELANCE] ✅✅✅ READY_SUMMARY_PENDING détecté ! La régénération a commencé ! (tentative ${attempt}/${maxAttempts})`);
+            hasSeenPending = true;
+          } else {
+            console.log(`[AGILO:RELANCE] ⏳ READY_SUMMARY_PENDING - En cours de génération (tentative ${attempt}/${maxAttempts})`);
+          }
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine tentative...`);
+          // Continuer le polling pour attendre READY_SUMMARY_READY
+          if (attempt < maxAttempts) {
+            await new Promise(r => setTimeout(r, delay));
+          }
+          continue;
+        }
+        
         // Si le statut est READY_SUMMARY_READY, le compte-rendu est prêt !
         if (status === 'READY_SUMMARY_READY') {
+          // ⚠️ NOUVEAU : Si waitForPending=true, on doit avoir vu PENDING avant d'accepter READY
+          if (waitForPending && !hasSeenPending) {
+            console.log(`[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY détecté MAIS on n'a pas encore vu READY_SUMMARY_PENDING`);
+            console.log(`[AGILO:RELANCE] ⚠️ C'est probablement l'ANCIEN statut - On continue le polling pour attendre PENDING puis le nouveau READY`);
+            if (attempt < maxAttempts) {
+              await new Promise(r => setTimeout(r, delay));
+            }
+            continue;
+          }
+          
           console.log('[AGILO:RELANCE] ✅ READY_SUMMARY_READY détecté ! Compte-rendu prêt !', {
             attempt,
-            status
+            status,
+            hasSeenPending: hasSeenPending,
+            waitForPending: waitForPending
           });
           
           // Récupérer le nouveau compte-rendu pour vérifier le hash
@@ -834,20 +888,46 @@
               
               const newHash = getContentHash(text);
               
-              console.log('[AGILO:RELANCE] Nouveau compte-rendu récupéré:', {
+              console.log('[AGILO:RELANCE] Compte-rendu récupéré:', {
                 contentLength: text.length,
                 newHash: newHash.substring(0, 50) + '...',
                 oldHash: oldHash ? oldHash.substring(0, 50) + '...' : '(aucun)',
-                hashChanged: !oldHash || newHash !== oldHash
+                lastReadyHash: lastReadyHash ? lastReadyHash.substring(0, 50) + '...' : '(aucun)',
+                hashChanged: !oldHash || newHash !== oldHash,
+                hashChangedFromLastReady: !lastReadyHash || newHash !== lastReadyHash
               });
+              
+              // ⚠️ NOUVEAU : Si on a un oldHash, on doit vérifier que le hash a vraiment changé
+              // Si le hash est identique à l'ancien, c'est probablement l'ancien compte-rendu
+              if (oldHash && newHash === oldHash) {
+                console.warn('[AGILO:RELANCE] ⚠️ Hash identique à l\'ancien - C\'est probablement l\'ANCIEN compte-rendu');
+                console.warn('[AGILO:RELANCE] ⚠️ On continue le polling pour attendre le NOUVEAU compte-rendu');
+                lastReadyHash = newHash; // Mémoriser ce hash pour la prochaine fois
+                if (attempt < maxAttempts) {
+                  await new Promise(r => setTimeout(r, delay));
+                }
+                continue;
+              }
+              
+              // ⚠️ NOUVEAU : Si on a déjà vu un READY avec un hash, vérifier que le nouveau hash est différent
+              if (lastReadyHash && newHash === lastReadyHash) {
+                console.warn('[AGILO:RELANCE] ⚠️ Hash identique au dernier READY vu - Le compte-rendu n\'a pas changé');
+                console.warn('[AGILO:RELANCE] ⚠️ On continue le polling pour attendre le NOUVEAU compte-rendu');
+                if (attempt < maxAttempts) {
+                  await new Promise(r => setTimeout(r, delay));
+                }
+                continue;
+              }
               
               // Si le hash a changé (ou si on n'avait pas d'ancien hash), c'est bon
               if (!oldHash || newHash !== oldHash) {
-                console.log('[AGILO:RELANCE] ✅ Hash différent détecté - Nouveau compte-rendu confirmé !');
+                console.log('[AGILO:RELANCE] ✅✅✅ Hash différent détecté - NOUVEAU compte-rendu confirmé !');
+                lastReadyHash = newHash; // Mémoriser pour référence
                 return { ready: true, hash: newHash, content: text };
               } else {
+                // Ce cas ne devrait pas arriver (déjà géré plus haut)
                 console.warn('[AGILO:RELANCE] ⚠️ Hash identique - Le compte-rendu n\'a peut-être pas changé');
-                // On retourne quand même true car le statut est READY_SUMMARY_READY
+                lastReadyHash = newHash;
                 return { ready: true, hash: newHash, content: text };
               }
             } else {
@@ -863,12 +943,6 @@
             // On retourne quand même true car le statut est READY_SUMMARY_READY
             return { ready: true, hash: null, content: null };
           }
-        }
-        
-        // Si le statut est READY_SUMMARY_PENDING, c'est en cours
-        if (status === 'READY_SUMMARY_PENDING') {
-          console.log(`[AGILO:RELANCE] ⏳ READY_SUMMARY_PENDING - En cours de génération (tentative ${attempt}/${maxAttempts})`);
-          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine tentative...`);
         }
         
         // Si erreur, on arrête
@@ -1299,15 +1373,20 @@
           console.warn('[AGILO:RELANCE] ⚠️ Si summaryEditor n\'est pas trouvé à la fin, on rechargera la page');
         }
         
-        console.log('[AGILO:RELANCE] ⏳ Démarrage du polling dans 100ms...');
-        await new Promise(r => setTimeout(r, 100));
+        // ⚠️ NOUVEAU : Délai initial de 3 secondes après redoSummary pour laisser le backend démarrer
+        console.log('[AGILO:RELANCE] ⏳ Délai initial de 3 secondes après redoSummary pour laisser le backend démarrer la régénération...');
+        await new Promise(r => setTimeout(r, 3000));
+        console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
         
         const pollingStartTime = Date.now();
         console.log('[AGILO:RELANCE] 🎬 APPEL waitForSummaryReady() - Début du polling réel');
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: waitForPending=true pour s\'assurer qu\'on voit PENDING puis le nouveau READY');
         
         let waitResult;
         try {
-          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash);
+          // ⚠️ NOUVEAU : waitForPending=true pour forcer l'attente de READY_SUMMARY_PENDING
+          // Cela garantit qu'on ne récupère pas l'ancien compte-rendu
+          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash, true);
         } catch (error) {
           console.error('[AGILO:RELANCE] ❌ ERREUR dans waitForSummaryReady:', {
             error: error.message,
