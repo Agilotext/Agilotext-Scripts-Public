@@ -352,8 +352,30 @@
     counter.title = `Il vous reste ${canRegen.remaining} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript`;
     counter.setAttribute('aria-live', 'polite');
     counter.setAttribute('aria-atomic', 'true');
+    
+    // Vérifier que le parent existe
+    if (!btn.parentElement) {
+      console.error('[AGILO:RELANCE] ❌ Le bouton n\'a pas de parent !');
+      return;
+    }
+    
     btn.parentElement.appendChild(counter);
-    console.log('[AGILO:RELANCE] ✅ Compteur créé et ajouté:', counter.textContent);
+    console.log('[AGILO:RELANCE] ✅ Compteur créé et ajouté:', {
+      text: counter.textContent,
+      parent: btn.parentElement.tagName,
+      parentClass: btn.parentElement.className,
+      counterVisible: window.getComputedStyle(counter).display !== 'none'
+    });
+    
+    // Vérifier visuellement que le compteur est bien ajouté
+    setTimeout(() => {
+      const addedCounter = btn.parentElement.querySelector('.regeneration-counter');
+      if (addedCounter) {
+        console.log('[AGILO:RELANCE] ✅ Vérification: Compteur bien présent dans le DOM');
+      } else {
+        console.error('[AGILO:RELANCE] ❌ Vérification: Compteur NON trouvé dans le DOM !');
+      }
+    }, 100);
   }
   
   /**
@@ -1327,7 +1349,16 @@
     };
     
     // Attendre un peu que les credentials soient disponibles
+    // Essayer plusieurs fois pour s'assurer que les credentials sont disponibles
     setTimeout(initLimits, 500);
+    setTimeout(initLimits, 1500);
+    setTimeout(initLimits, 3000);
+    
+    // Écouter l'événement agilo:load pour réinitialiser les compteurs
+    window.addEventListener('agilo:load', () => {
+      console.log('[AGILO:RELANCE] 📡 Événement agilo:load détecté - Réinitialisation compteurs');
+      setTimeout(initLimits, 500);
+    });
     
     // Réinitialiser les compteurs quand on change de transcript
     // Utiliser MutationObserver au lieu de setInterval pour meilleure performance
