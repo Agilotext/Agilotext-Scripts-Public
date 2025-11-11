@@ -555,6 +555,113 @@
   white-space:nowrap;
   border:0;
 }
+
+/* =====================================================================
+   COMPTE-RENDU (SUMMARY) - Gestion du débordement
+   ===================================================================== */
+#summaryEditor,
+#ag-summary,
+[data-editor="summary"],
+.edtr-pane#pane-summary{
+  overflow-x: auto;
+  overflow-y: visible;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Tableaux dans le compte-rendu */
+#summaryEditor table,
+#ag-summary table,
+[data-editor="summary"] table{
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: auto;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  box-sizing: border-box;
+}
+
+/* Cellules de tableau */
+#summaryEditor table td,
+#summaryEditor table th,
+#ag-summary table td,
+#ag-summary table th,
+[data-editor="summary"] table td,
+[data-editor="summary"] table th{
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+/* Blocs de code et pre */
+#summaryEditor pre,
+#summaryEditor code,
+#ag-summary pre,
+#ag-summary code,
+[data-editor="summary"] pre,
+[data-editor="summary"] code{
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  box-sizing: border-box;
+}
+
+/* Divs et conteneurs génériques */
+#summaryEditor > div,
+#summaryEditor > *,
+#ag-summary > div,
+#ag-summary > *,
+[data-editor="summary"] > div,
+[data-editor="summary"] > *{
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* Images dans le compte-rendu */
+#summaryEditor img,
+#ag-summary img,
+[data-editor="summary"] img{
+  max-width: 100%;
+  height: auto;
+  box-sizing: border-box;
+}
+
+/* Éléments avec largeur fixe ou pourcentage */
+#summaryEditor [width],
+#summaryEditor [style*="width"],
+#ag-summary [width],
+#ag-summary [style*="width"],
+[data-editor="summary"] [width],
+[data-editor="summary"] [style*="width"]{
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+/* Assurer que les tableaux avec width="85%" respectent le conteneur */
+#summaryEditor table[width],
+#ag-summary table[width],
+[data-editor="summary"] table[width]{
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Conteneurs avec align="center" */
+#summaryEditor [align="center"],
+#ag-summary [align="center"],
+[data-editor="summary"] [align="center"]{
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
 `;
 
   const style = document.createElement('style');
