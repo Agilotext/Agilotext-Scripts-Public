@@ -595,52 +595,110 @@
     try {
       const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       
-      console.log('[AGILO:RELANCE] Appel getTranscriptStatus', {
+      console.log('[AGILO:RELANCE] 🔍 APPEL API getTranscriptStatus', {
+        url: url.substring(0, 100) + '...',
         jobId,
         edition,
         emailLength: email ? email.length : 0,
-        tokenLength: token ? token.length : 0
+        tokenLength: token ? token.length : 0,
+        timestamp: new Date().toISOString()
       });
       
+      const startTime = Date.now();
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      });
+      const responseTime = Date.now() - startTime;
+      
+      console.log('[AGILO:RELANCE] 📡 Réponse HTTP getTranscriptStatus reçue:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        timeMs: responseTime,
+        headers: Object.fromEntries(response.headers.entries())
       });
       
       if (!response.ok) {
-        console.error('[AGILO:RELANCE] Erreur HTTP getTranscriptStatus:', {
+        console.error('[AGILO:RELANCE] ❌ Erreur HTTP getTranscriptStatus:', {
           status: response.status,
-          statusText: response.statusText
+          statusText: response.statusText,
+          url: url.substring(0, 100) + '...'
         });
         return null;
       }
       
       const data = await response.json();
       
-      console.log('[AGILO:RELANCE] Réponse getTranscriptStatus:', {
+      console.log('[AGILO:RELANCE] 📋 Réponse JSON getTranscriptStatus:', {
         status: data.status,
         transcriptStatus: data.transcriptStatus,
-        javaException: data.javaException
+        javaException: data.javaException,
+        errorMessage: data.errorMessage,
+        fullResponse: data
       });
       
       if (data.status === 'OK' && data.transcriptStatus) {
+        console.log('[AGILO:RELANCE] ✅ Statut récupéré:', data.transcriptStatus);
         return data.transcriptStatus;
       }
       
       if (data.status === 'KO') {
-        console.error('[AGILO:RELANCE] Erreur API getTranscriptStatus:', data.errorMessage);
+        console.error('[AGILO:RELANCE] ❌ Erreur API getTranscriptStatus:', data.errorMessage);
         // Vérifier si c'est l'erreur "fichier manquant"
         if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          console.log('[AGILO:RELANCE] ⚠️ ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS détecté');
           return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
         }
       }
       
+      console.warn('[AGILO:RELANCE] ⚠️ Statut non reconnu ou manquant');
       return null;
     } catch (error) {
-      console.error('[AGILO:RELANCE] Erreur réseau getTranscriptStatus:', error);
+      console.error('[AGILO:RELANCE] ❌ Erreur réseau getTranscriptStatus:', {
+        error: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       return null;
     }
   }
+  
+  /**
+   * Fonction de test console pour vérifier le statut manuellement
+   * Usage: testGetTranscriptStatus(jobId, email, token, edition)
+   */
+  window.testGetTranscriptStatus = async function(jobId, email, token, edition) {
+    console.log('🧪 TEST MANUEL getTranscriptStatus');
+    console.log('Paramètres:', { jobId, email, token: token ? token.substring(0, 10) + '...' : '(vide)', edition });
+    
+    if (!jobId || !email || !token || !edition) {
+      console.error('❌ Paramètres manquants !');
+      console.log('Usage: testGetTranscriptStatus(jobId, email, token, edition)');
+      return;
+    }
+    
+    const status = await getTranscriptStatus(jobId, email, token, edition);
+    console.log('📊 Résultat:', status);
+    
+    if (status === 'READY_SUMMARY_READY') {
+      console.log('✅ READY_SUMMARY_READY - Le compte-rendu est prêt !');
+    } else if (status === 'READY_SUMMARY_PENDING') {
+      console.log('⏳ READY_SUMMARY_PENDING - Le compte-rendu est en cours de génération');
+    } else if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ON_ERROR') {
+      console.log('❌ Erreur:', status);
+    } else if (status === null) {
+      console.log('⚠️ Statut null - Vérifiez les paramètres ou la connexion');
+    } else {
+      console.log('ℹ️ Autre statut:', status);
+    }
+    
+    return status;
+  };
   
   /**
    * Calculer un hash simple du contenu pour détecter les changements
@@ -722,10 +780,18 @@
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        // ⚠️ IMPORTANT : Utiliser getTranscriptStatus pour vérifier le statut
-        const status = await getTranscriptStatus(jobId, email, token, edition);
+        console.log(`[AGILO:RELANCE] 🔄 Tentative ${attempt}/${maxAttempts} - Début vérification statut...`);
         
-        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Statut:`, status);
+        // ⚠️ IMPORTANT : Utiliser getTranscriptStatus pour vérifier le statut
+        const statusStartTime = Date.now();
+        const status = await getTranscriptStatus(jobId, email, token, edition);
+        const statusTime = Date.now() - statusStartTime;
+        
+        console.log(`[AGILO:RELANCE] 📊 Tentative ${attempt}/${maxAttempts} - Statut obtenu:`, {
+          status: status,
+          timeMs: statusTime,
+          timestamp: new Date().toISOString()
+        });
         
         // Si le statut est READY_SUMMARY_READY, le compte-rendu est prêt !
         if (status === 'READY_SUMMARY_READY') {
@@ -793,7 +859,8 @@
         
         // Si le statut est READY_SUMMARY_PENDING, c'est en cours
         if (status === 'READY_SUMMARY_PENDING') {
-          console.log(`[AGILO:RELANCE] READY_SUMMARY_PENDING - En cours de génération (tentative ${attempt}/${maxAttempts})`);
+          console.log(`[AGILO:RELANCE] ⏳ READY_SUMMARY_PENDING - En cours de génération (tentative ${attempt}/${maxAttempts})`);
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine tentative...`);
         }
         
         // Si erreur, on arrête
@@ -804,12 +871,23 @@
         
         // Si le statut est null ou autre chose, continuer le polling
         if (status === null) {
-          console.log(`[AGILO:RELANCE] Statut null - Continuation du polling (tentative ${attempt}/${maxAttempts})`);
+          console.log(`[AGILO:RELANCE] ⚠️ Statut null - Continuation du polling (tentative ${attempt}/${maxAttempts})`);
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine tentative...`);
+        }
+        
+        // Si le statut est autre chose (non géré), continuer aussi
+        if (status && status !== 'READY_SUMMARY_READY' && status !== 'READY_SUMMARY_PENDING' && 
+            status !== 'READY_SUMMARY_ON_ERROR' && status !== 'ON_ERROR' && 
+            status !== 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+          console.log(`[AGILO:RELANCE] ℹ️ Statut non géré: "${status}" - Continuation du polling (tentative ${attempt}/${maxAttempts})`);
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant prochaine tentative...`);
         }
         
         // Attendre avant la prochaine tentative (sauf dernière)
         if (attempt < maxAttempts) {
+          console.log(`[AGILO:RELANCE] ⏳ Attente ${delay}ms avant tentative ${attempt + 1}/${maxAttempts}...`);
           await new Promise(r => setTimeout(r, delay));
+          console.log(`[AGILO:RELANCE] ✅ Attente terminée, passage à la tentative ${attempt + 1}/${maxAttempts}`);
         }
       } catch (error) {
         console.error(`[AGILO:RELANCE] Erreur polling (tentative ${attempt}/${maxAttempts}):`, error);
@@ -1166,17 +1244,38 @@
         // ⚠️ IMPORTANT : Vérifier que le compte-rendu est prêt avec getTranscriptStatus
         // et attendre READY_SUMMARY_READY avant d'afficher
         console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY...');
+        console.log('[AGILO:RELANCE] 🚀 DÉBUT POLLING POUR READY_SUMMARY_READY');
         console.log('[AGILO:RELANCE] Paramètres pour polling:', {
           jobId,
           edition,
           emailLength: email ? email.length : 0,
           tokenLength: token ? token.length : 0,
-          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)'
+          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
+          maxAttempts: 60,
+          delay: 2000
         });
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: Le loader doit rester affiché pendant le polling');
+        console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: On attend vraiment READY_SUMMARY_READY avant d\'afficher');
         console.log('[AGILO:RELANCE] ========================================');
         
+        // S'assurer que le loader est bien affiché
+        showSummaryLoading();
+        
+        const pollingStartTime = Date.now();
         const waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash);
+        const pollingTime = Date.now() - pollingStartTime;
+        
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] 🏁 FIN POLLING');
+        console.log('[AGILO:RELANCE] Résultat:', {
+          ready: waitResult.ready,
+          hasContent: !!waitResult.content,
+          hasHash: !!waitResult.hash,
+          error: waitResult.error,
+          pollingTimeMs: pollingTime,
+          pollingTimeSec: Math.round(pollingTime / 1000)
+        });
+        console.log('[AGILO:RELANCE] ========================================');
         
         if (waitResult.ready && waitResult.content) {
           // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT DANS summaryEditor (sans recharger la page)
@@ -1926,7 +2025,96 @@
     init();
   }
   
+  /**
+   * Fonction de test console pour tester le polling complet
+   * Usage: testPollingSummary(jobId, email, token, edition)
+   */
+  window.testPollingSummary = async function(jobId, email, token, edition) {
+    console.log('🧪 TEST MANUEL - Polling complet pour READY_SUMMARY_READY');
+    console.log('Paramètres:', { jobId, email, token: token ? token.substring(0, 10) + '...' : '(vide)', edition });
+    
+    if (!jobId || !email || !token || !edition) {
+      console.error('❌ Paramètres manquants !');
+      console.log('Usage: testPollingSummary(jobId, email, token, edition)');
+      return;
+    }
+    
+    console.log('⏳ Début du polling (max 10 tentatives, 2 secondes entre chaque)...');
+    const result = await waitForSummaryReady(jobId, email, token, edition, 10, 2000, '');
+    
+    console.log('📊 Résultat final:', result);
+    
+    if (result.ready && result.content) {
+      console.log('✅ SUCCÈS ! Compte-rendu prêt avec contenu');
+      console.log('Longueur du contenu:', result.content.length);
+      console.log('Hash:', result.hash);
+    } else if (result.ready) {
+      console.log('⚠️ Statut READY mais pas de contenu récupéré');
+    } else {
+      console.log('❌ Échec:', result.error);
+    }
+    
+    return result;
+  };
+  
+  /**
+   * Fonction de test console pour tester redoSummary + polling
+   * Usage: testRedoAndPoll(jobId, email, token, edition)
+   */
+  window.testRedoAndPoll = async function(jobId, email, token, edition) {
+    console.log('🧪 TEST MANUEL - redoSummary + polling complet');
+    console.log('Paramètres:', { jobId, email, token: token ? token.substring(0, 10) + '...' : '(vide)', edition });
+    
+    if (!jobId || !email || !token || !edition) {
+      console.error('❌ Paramètres manquants !');
+      console.log('Usage: testRedoAndPoll(jobId, email, token, edition)');
+      return;
+    }
+    
+    // 1. Appel redoSummary
+    console.log('📤 Étape 1: Appel redoSummary...');
+    const formData = new FormData();
+    formData.append('username', email);
+    formData.append('token', token);
+    formData.append('edition', edition);
+    formData.append('jobId', jobId);
+    
+    try {
+      const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
+        method: 'POST',
+        body: formData
+      });
+      
+      const result = await response.json();
+      console.log('📥 Réponse redoSummary:', {
+        status: result.status,
+        httpStatus: response.status,
+        ok: response.ok,
+        fullResult: result
+      });
+      
+      if (result.status === 'OK' || response.ok) {
+        console.log('✅ redoSummary OK - Début du polling...');
+        
+        // 2. Polling
+        console.log('⏳ Étape 2: Polling pour READY_SUMMARY_READY (max 10 tentatives)...');
+        const pollResult = await waitForSummaryReady(jobId, email, token, edition, 10, 2000, '');
+        
+        console.log('📊 Résultat polling:', pollResult);
+        return { redoSuccess: true, pollResult };
+      } else {
+        console.error('❌ redoSummary échoué:', result);
+        return { redoSuccess: false, error: result };
+      }
+    } catch (error) {
+      console.error('❌ Erreur redoSummary:', error);
+      return { redoSuccess: false, error: error.message };
+    }
+  };
+  
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
+  window.getTranscriptStatus = getTranscriptStatus;
+  window.waitForSummaryReady = waitForSummaryReady;
 })();
 
