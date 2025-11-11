@@ -810,12 +810,13 @@
     }
     console.log('[AGILO:RELANCE] ========================================');
     
-    // ⚠️ NOTE : Le délai initial de 40 secondes est déjà fait AVANT l'appel à waitForSummaryReady
+    // ⚠️ NOTE : Le délai initial de 10 secondes est déjà fait AVANT l'appel à waitForSummaryReady
     // Donc on ne le refait pas ici pour éviter d'attendre deux fois
     // Le délai initial est géré dans relancerCompteRendu() avant l'appel à waitForSummaryReady
     if (waitForPending) {
       console.log('[AGILO:RELANCE] ⚠️ waitForPending=true - On attend d\'abord READY_SUMMARY_PENDING');
       console.log('[AGILO:RELANCE] ⚠️ Puis on attend que le statut redevienne READY_SUMMARY_READY avec un nouveau hash');
+      console.log('[AGILO:RELANCE] ⚠️ Nicolas dit que ça peut prendre 2-3 minutes, donc on a 120 tentatives (6 minutes max)');
     }
     
     let hasSeenPending = !waitForPending; // Si waitForPending=false, on considère qu'on a déjà vu PENDING
