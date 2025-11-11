@@ -589,56 +589,26 @@
   // ============================================
   
   function init() {
-    if (window.__agiloRelanceInitialized) return;
+    if (window.__agiloRelanceInitialized) {
+      console.log('[AGILO:RELANCE] ⚠️ Script déjà initialisé, skip');
+      return;
+    }
     window.__agiloRelanceInitialized = true;
     
-    // ⚠️ CRITIQUE : Désactiver tout href sur le bouton AVANT d'attacher le listener
-    const disableButtonHref = () => {
-      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-      if (btn) {
-        if (btn.href && btn.href !== '#' && btn.href !== 'javascript:void(0)') {
-          console.warn('[AGILO:RELANCE] ⚠️ Bouton a un href:', btn.href, '- Suppression...');
-          btn.removeAttribute('href');
-        }
-        if (btn.onclick) {
-          btn.onclick = null;
-        }
-      }
-    };
+    console.log('[AGILO:RELANCE] 🔧 Initialisation du listener de clic...');
     
-    disableButtonHref();
-    
-    // Observer pour réappliquer la protection si le bouton est recréé
-    const hrefObserver = new MutationObserver(() => {
-      disableButtonHref();
-    });
-    hrefObserver.observe(document.body, { childList: true, subtree: true });
-    
-    // ⚠️ CRITIQUE : Capturer les clics en PHASE DE CAPTURE (true) pour intercepter AVANT les autres listeners
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
       if (btn) {
-        console.log('[AGILO:RELANCE] 🖱️ CLIC DÉTECTÉ SUR LE BOUTON RÉGÉNÉRER');
-        
+        console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur le bouton', { disabled: btn.disabled });
+      }
+      if (btn && !btn.disabled) {
         e.preventDefault();
         e.stopPropagation();
-        e.stopImmediatePropagation();
-        
-        if (btn.disabled) {
-          console.warn('[AGILO:RELANCE] ⚠️ Bouton désactivé, ignore le clic');
-          return false;
-        }
-        
-        relancerCompteRendu().catch(err => {
-          console.error('[AGILO:RELANCE] ❌ ERREUR:', err);
-          isGenerating = false;
-          hideSummaryLoading();
-          alert('❌ Erreur lors de la régénération: ' + err.message);
-        });
-        
-        return false;
+        console.log('[AGILO:RELANCE] ✅ Appel relancerCompteRendu()');
+        relancerCompteRendu();
       }
-    }, true); // ⚠️ CRITIQUE : true = capture phase
+    });
     
     const tabs = document.querySelectorAll('[role="tab"]');
     tabs.forEach(tab => {
@@ -734,13 +704,21 @@
     document.head.appendChild(style);
   }
   
+  // Attendre que le DOM soit prêt
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    console.log('[AGILO:RELANCE] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
+    document.addEventListener('DOMContentLoaded', function() {
+      console.log('[AGILO:RELANCE] ✅ DOMContentLoaded - Initialisation...');
+      init();
+    });
   } else {
-    init();
+    console.log('[AGILO:RELANCE] ✅ DOM déjà prêt - Initialisation immédiate...');
+    // Attendre un peu pour être sûr que tout est chargé
+    setTimeout(init, 100);
   }
   
   window.relancerCompteRendu = relancerCompteRendu;
   
   console.log('[AGILO:RELANCE] ✅ Script chargé (VERSION SIMPLIFIÉE)');
+  console.log('[AGILO:RELANCE] 🔍 Fonction relancerCompteRendu disponible:', typeof window.relancerCompteRendu);
 })();
