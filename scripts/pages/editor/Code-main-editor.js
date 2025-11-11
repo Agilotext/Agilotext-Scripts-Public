@@ -1134,24 +1134,37 @@ function isStale(seq){ return (seq !== __loadSeq); }
 let __wdTimer;
 let __wdToken = 0;
 
-window.addEventListener('agilo:beforeload', () => {
-try { __activeFetchCtl?.abort?.(); } catch {}
+window.addEventListener('agilo:beforeload', (e) => {
+  // ⚠️ AMÉLIORATION : Nettoyer immédiatement tous les états précédents
+  try { __activeFetchCtl?.abort?.(); } catch {}
+  clearTimeout(__wdTimer);
+  __wdToken++;
+  
+  // ⚠️ AMÉLIORATION : Cacher le loader du compte-rendu lors du changement
+  hideSummaryLoading();
 
   editors.transcript = pickTranscriptEl();
   editors.summary    = pickSummaryEl();
 
-  clearTimeout(__wdTimer);
-  __wdToken++;
-
   const tr = editors.transcript, sm = editors.summary;
-  if (tr) { tr.setAttribute('aria-busy','true'); if (!tr.querySelector('.ag-loader')) tr.innerHTML = '<div class="ag-loader">Chargement du transcript…</div>'; }
-  if (sm) { sm.setAttribute('aria-busy','true'); if (!sm.querySelector('.ag-loader')) sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>'; }
+  
+  // ⚠️ AMÉLIORATION : Toujours réinitialiser le contenu pour éviter les messages qui restent
+  if (tr) { 
+    tr.setAttribute('aria-busy','true'); 
+    tr.innerHTML = '<div class="ag-loader">Chargement du transcript…</div>';
+  }
+  if (sm) { 
+    sm.setAttribute('aria-busy','true'); 
+    sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
+  }
 
   const my = __wdToken;
   __wdTimer = setTimeout(() => {
     if (my !== __wdToken) return;
-    const trL = tr?.querySelector('.ag-loader'); if (tr?.getAttribute('aria-busy')==='true' && trL) trL.textContent = 'Chargement plus long que prévu…';
-    const smL = sm?.querySelector('.ag-loader'); if (sm?.getAttribute('aria-busy')==='true' && smL) smL.textContent = 'Chargement plus long que prévu…';
+    const trL = tr?.querySelector('.ag-loader'); 
+    if (tr?.getAttribute('aria-busy')==='true' && trL) trL.textContent = 'Chargement plus long que prévu…';
+    const smL = sm?.querySelector('.ag-loader'); 
+    if (sm?.getAttribute('aria-busy')==='true' && smL) smL.textContent = 'Chargement plus long que prévu…';
   }, 8000);
 });
 
@@ -1159,6 +1172,11 @@ try { __activeFetchCtl?.abort?.(); } catch {}
   async function loadJob(jobId){
     const id = String(jobId||'').trim();
     if (!id) return;
+    
+    // ⚠️ AMÉLIORATION : Nettoyer immédiatement le timer précédent
+    clearTimeout(__wdTimer);
+    __wdToken++;
+    
     __lastLoadJobId = id;
 
     if (!SOFT_CANCEL) { try { __activeFetchCtl?.abort?.(); } catch {} }
@@ -1185,7 +1203,15 @@ cancel() {
 
 
     const auth = await ensureAuth();
-    if (isStale(seq)) return;
+    if (isStale(seq)) {
+      // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+      clearTimeout(__wdTimer);
+      __wdToken++;
+      editors.transcript?.removeAttribute('aria-busy');
+      editors.summary?.removeAttribute('aria-busy');
+      hideSummaryLoading();
+      return;
+    }
 
 if (!auth.username || !auth.token) {
   clearTimeout(__wdTimer);
@@ -1194,6 +1220,7 @@ if (!auth.username || !auth.token) {
   toast('Authentification manquante');
   editors.transcript?.removeAttribute('aria-busy');
   editors.summary?.removeAttribute('aria-busy');
+  hideSummaryLoading();
   return;
 }
     try{
@@ -1201,7 +1228,15 @@ if (!auth.username || !auth.token) {
         apiGetWithRetry('transcript', id, {...auth}, 0, __activeFetchCtl.signal),
         apiGetWithRetry('summary',    id, {...auth}, 0, __activeFetchCtl.signal)
       ]);
-      if (isStale(seq)) return;
+      if (isStale(seq)) {
+        // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+        clearTimeout(__wdTimer);
+        __wdToken++;
+        editors.transcript?.removeAttribute('aria-busy');
+        editors.summary?.removeAttribute('aria-busy');
+        hideSummaryLoading();
+        return;
+      }
 
       if (tRes.status === 'fulfilled' && tRes.value.ok) {
  
@@ -1372,16 +1407,25 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
       if (editors.summary)    editors.summary.replaceChildren(errBox.cloneNode(true));
       if (window.AGILO_DEBUG) console.error(e);
 		} finally {
+		  // ⚠️ AMÉLIORATION : Toujours nettoyer le timer et les états, même si stale
+		  clearTimeout(__wdTimer);
+		  __wdToken++;
+		  
+		  // ⚠️ AMÉLIORATION : Toujours retirer aria-busy, même si stale (évite les états bloqués)
+		  // Seule exception : si vraiment en cours de chargement d'un autre job
+		  const currentJobId = String(id || '').trim();
+          const editorJobId = editorRoot?.dataset?.jobId || '';
+          
+          // Si le jobId correspond toujours, on peut retirer aria-busy
+          // Sinon, c'est qu'un autre job est en cours, on laisse le beforeload gérer
+          if (!currentJobId || currentJobId === editorJobId || isStale(seq)) {
+            editors.transcript?.removeAttribute('aria-busy');
+            editors.summary?.removeAttribute('aria-busy');
+          }
+		  
 		  // S'assurer que le loader est toujours caché à la fin (sauf si vraiment en cours)
 		  if (!isSummaryPending) {
 		    hideSummaryLoading();
-		  }
-		  clearTimeout(__wdTimer);
-		  __wdToken++;
-		
-		  if (!isStale(seq)) {
-		    editors.transcript?.removeAttribute('aria-busy');
-		    editors.summary?.removeAttribute('aria-busy');
 		  }
 		}
   }
@@ -1400,12 +1444,21 @@ window.addEventListener('agilo:load', (e) => {
   const id  = String(raw || '').trim();
   if (!id) return;
 
+  // ⚠️ AMÉLIORATION : Nettoyer le timer précédent au cas où
+  clearTimeout(__wdTimer);
+  __wdToken++;
+
   const uiReadySameJob =
     id === __lastLoadJobId &&
     editors.transcript?.getAttribute('aria-busy') !== 'true' &&
     editorRoot?.dataset.jobId === id;
 
-  if (uiReadySameJob) return;
+  if (uiReadySameJob) {
+    // ⚠️ AMÉLIORATION : S'assurer que aria-busy est bien retiré même si on skip
+    editors.transcript?.removeAttribute('aria-busy');
+    editors.summary?.removeAttribute('aria-busy');
+    return;
+  }
   loadJob(id);
 });
 
