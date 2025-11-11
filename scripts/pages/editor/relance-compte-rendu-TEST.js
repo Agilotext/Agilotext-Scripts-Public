@@ -1,4 +1,4 @@
-// Agilotext – Relance Compte-Rendu (VERSION FINALE CORRIGÉE)
+// Agilotext – Relance Compte-Rendu (VERSION SIMPLIFIÉE SELON NICOLAS)
 // ⚠️ Ce fichier est chargé depuis GitHub
 (function() {
   'use strict';
@@ -124,14 +124,86 @@
   }
   
   // ============================================
-  // LOGIQUE PRINCIPALE
+  // VARIABLES GLOBALES
   // ============================================
   
   let transcriptModified = false;
   let isGenerating = false;
   
   // ============================================
-  // SYSTÈME DE LIMITES DE RÉGÉNÉRATION
+  // VÉRIFICATION EXISTENCE COMPTE-RENDU
+  // ============================================
+  
+  async function getTranscriptStatus(jobId, email, token, edition) {
+    try {
+      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.transcriptStatus) {
+        return data.transcriptStatus;
+      }
+      
+      if (data.status === 'KO') {
+        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+  
+  async function checkSummaryExists(jobId, email, token, edition) {
+    try {
+      const status = await getTranscriptStatus(jobId, email, token, edition);
+      
+      log('Vérification existence compte-rendu:', { status, jobId });
+      
+      // Si le statut est READY_SUMMARY_READY ou READY_SUMMARY_PENDING, le compte-rendu existe
+      if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
+        return true;
+      }
+      
+      // Si c'est l'erreur "fichier manquant", le compte-rendu n'existe pas
+      if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        return false;
+      }
+      
+      // Fallback : vérifier via receiveSummary
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        if (text && !text.includes('pas encore disponible') && !text.includes('non publié') && !text.includes('fichier manquant')) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  // ============================================
+  // SYSTÈME DE LIMITES
   // ============================================
   
   function getRegenerationLimit(edition) {
@@ -201,7 +273,7 @@
     const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
     if (oldCounter) oldCounter.remove();
     
-    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
     if (oldMessage) oldMessage.remove();
     
     const canRegen = canRegenerate(jobId, edition);
@@ -213,39 +285,39 @@
     
     btn.style.display = 'flex';
     
-    if (canRegen.reason === 'limit') {
-      const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
-      const limitMsg = document.createElement('div');
-      limitMsg.className = 'regeneration-limit-message';
-      
-      let upgradeButton = '';
-      if (edition === 'pro' && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
-        upgradeButton = `
-          <button class="button bleu" style="margin-top: 8px; width: 100%;" 
-                  data-plan-min="ent" 
-                  data-upgrade-reason="Régénération de compte-rendu - Limite augmentée">
-            Passer en Business (4 régénérations)
-          </button>`;
-      }
-      
-      limitMsg.innerHTML = `
-        <span style="font-size: 16px;">⚠️</span>
-        <div>
-          <strong>Limite atteinte</strong>
-          <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-            Vous avez utilisé ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} pour ce transcript (plan ${planName})
+      if (canRegen.reason === 'limit') {
+        const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
+        const limitMsg = document.createElement('div');
+        limitMsg.className = 'regeneration-limit-message';
+        
+        let upgradeButton = '';
+        if (edition === 'pro' && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+          upgradeButton = `
+            <button class="button bleu" style="margin-top: 8px; width: 100%;" 
+                    data-plan-min="ent" 
+                    data-upgrade-reason="Régénération de compte-rendu - Limite augmentée">
+              Passer en Business (4 régénérations)
+            </button>`;
+        }
+        
+        limitMsg.innerHTML = `
+          <span style="font-size: 16px;">⚠️</span>
+          <div>
+            <strong>Limite atteinte</strong>
+            <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+              Vous avez utilisé ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} pour ce transcript (plan ${planName})
+            </div>
+            ${upgradeButton}
           </div>
-          ${upgradeButton}
-        </div>
-      `;
-      btn.parentElement.appendChild(limitMsg);
-      
-      if (upgradeButton && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
-        setTimeout(() => window.AgiloGate.decorate(), 100);
+        `;
+        btn.parentElement.appendChild(limitMsg);
+        
+        if (upgradeButton && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+          setTimeout(() => window.AgiloGate.decorate(), 100);
+        }
+        
+        return;
       }
-      
-      return;
-    }
     
     const counter = document.createElement('div');
     counter.id = 'regeneration-info';
@@ -292,6 +364,10 @@
       btn.style.cursor = 'pointer';
     }
   }
+  
+  // ============================================
+  // FONCTIONS UI
+  // ============================================
   
   function openSummaryTab() {
     const summaryTab = document.querySelector('#tab-summary');
@@ -373,7 +449,7 @@
       
       const loadingSubtitle = document.createElement('p');
       loadingSubtitle.className = 'loading-subtitle';
-      loadingSubtitle.textContent = 'Cela peut prendre quelques minutes';
+      loadingSubtitle.textContent = 'La page se rechargera automatiquement dans :';
       
       summaryEditor.innerHTML = '';
       summaryEditor.appendChild(loaderContainer);
@@ -415,197 +491,6 @@
     if (lottieElement) lottieElement.style.display = 'none';
   }
   
-  function disableEditorActions(disable) {
-    const saveBtn = document.querySelector('[data-action="save-transcript"]');
-    if (saveBtn) {
-      saveBtn.disabled = disable;
-      saveBtn.style.opacity = disable ? '0.5' : '1';
-      saveBtn.style.cursor = disable ? 'not-allowed' : 'pointer';
-    }
-    
-    const transcriptEditor = document.querySelector('#transcriptEditor');
-    if (transcriptEditor) {
-      if (disable) {
-        transcriptEditor.setAttribute('contenteditable', 'false');
-        transcriptEditor.style.opacity = '0.7';
-        transcriptEditor.style.pointerEvents = 'none';
-      } else {
-        transcriptEditor.setAttribute('contenteditable', 'true');
-        transcriptEditor.style.opacity = '1';
-        transcriptEditor.style.pointerEvents = 'auto';
-      }
-    }
-  }
-  
-  async function getTranscriptStatus(jobId, email, token, edition) {
-    try {
-      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) return null;
-      
-      const data = await response.json();
-      
-      if (data.status === 'OK' && data.transcriptStatus) {
-        return data.transcriptStatus;
-      }
-      
-      if (data.status === 'KO') {
-        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
-          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-  
-  function getContentHash(text) {
-    const s = String(text || '');
-    if (s.length < 60) return `len:${s.length}`;
-    const head = s.slice(0, 180).replace(/\s+/g, '');
-    const tail = s.slice(-180).replace(/\s+/g, '');
-    return `${s.length}:${head.slice(0, 40)}:${tail.slice(-40)}`;
-  }
-  
-  async function checkSummaryExists(jobId, email, token, edition) {
-    try {
-      const status = await getTranscriptStatus(jobId, email, token, edition);
-      
-      if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
-        return true;
-      }
-      
-      if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
-        return false;
-      }
-      
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'omit'
-      });
-      
-      if (response.ok) {
-        const text = await response.text();
-        const isError = text.includes('pas encore disponible') || 
-                       text.includes('non publié') || 
-                       text.includes('fichier manquant');
-        
-        return !isError && text.length > 100;
-      }
-      
-      return false;
-    } catch (error) {
-      return false;
-    }
-  }
-  
-  // ============================================
-  // POLLING INTELLIGENT (9 MINUTES MAX)
-  // ============================================
-  
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 180, delay = 3000, oldHash = '') {
-    log('========================================');
-    log('🎯 Début polling READY_SUMMARY_READY', {
-      jobId,
-      maxAttempts,
-      delay,
-      maxDuration: Math.round((maxAttempts * delay) / 60000) + ' minutes'
-    });
-    log('========================================');
-    
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const status = await getTranscriptStatus(jobId, email, token, edition);
-        
-        log(`📊 Tentative ${attempt}/${maxAttempts} - Statut:`, status);
-        
-        if (status === 'READY_SUMMARY_READY') {
-          log('✅ READY_SUMMARY_READY détecté !');
-          
-          try {
-            const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
-            const response = await fetch(url, {
-              method: 'GET',
-              cache: 'no-store',
-              credentials: 'omit'
-            });
-            
-            if (response.ok) {
-              const text = await response.text();
-              
-              if (!text || text.length < 100 || 
-                  text.includes('pas encore disponible') || 
-                  text.includes('non publié') || 
-                  text.includes('fichier manquant')) {
-                warn('Contenu invalide - Continuation du polling');
-                if (attempt < maxAttempts) {
-                  await new Promise(r => setTimeout(r, delay));
-                }
-                continue;
-              }
-              
-              const newHash = getContentHash(text);
-              
-              log('Nouveau compte-rendu récupéré:', {
-                contentLength: text.length,
-                hashChanged: !oldHash || newHash !== oldHash
-              });
-              
-              if (!oldHash || newHash !== oldHash) {
-                log('✅ Hash différent - Nouveau compte-rendu confirmé !');
-                return { ready: true, hash: newHash, content: text };
-              } else {
-                log('✅ READY_SUMMARY_READY confirmé');
-                return { ready: true, hash: newHash, content: text };
-              }
-            } else {
-              warn('receiveSummary HTTP error:', response.status);
-              if (attempt < maxAttempts) {
-                await new Promise(r => setTimeout(r, delay));
-              }
-              continue;
-            }
-          } catch (error) {
-            error('Erreur récupération CR:', error);
-            return { ready: true, hash: null, content: null };
-          }
-        }
-        
-        if (status === 'READY_SUMMARY_PENDING') {
-          log(`⏳ READY_SUMMARY_PENDING (${attempt}/${maxAttempts})`);
-        }
-        
-        if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ON_ERROR') {
-          error('❌ Erreur génération:', status);
-          return { ready: false, error: status };
-        }
-        
-        if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, delay));
-        }
-      } catch (error) {
-        error(`Erreur polling (${attempt}/${maxAttempts}):`, error);
-        if (attempt < maxAttempts) {
-          await new Promise(r => setTimeout(r, delay));
-        }
-      }
-    }
-    
-    warn('⚠️ Timeout après', maxAttempts, 'tentatives');
-    return { ready: false, error: 'TIMEOUT' };
-  }
-  
   function showSuccessMessage(message) {
     if (typeof window.toast === 'function') {
       window.toast('✅ ' + message);
@@ -623,20 +508,101 @@
         border-radius: 4px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         z-index: 10000;
-        animation: slideInRight 0.3s ease-out;
         max-width: 400px;
       `;
       document.body.appendChild(toast);
       
-      setTimeout(() => {
-        toast.style.animation = 'slideOutRight 0.3s ease-out';
-        setTimeout(() => toast.remove(), 300);
-      }, 4000);
+      setTimeout(() => toast.remove(), 4000);
+    }
+  }
+  
+  function getButtonText() {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (activeTab?.id === 'tab-summary') return 'Régénérer';
+    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
+    return 'Relancer';
+  }
+  
+  // ============================================
+  // VISIBILITÉ DU BOUTON (AVEC VÉRIFICATION COMPTE-RENDU)
+  // ============================================
+  
+  async function updateButtonVisibility() {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (!activeTab) return;
+    
+    const isSummaryTab = activeTab.id === 'tab-summary';
+    const isTranscriptTab = activeTab.id === 'tab-transcript';
+    
+    const textDiv = btn.querySelector('div');
+    if (textDiv) textDiv.textContent = getButtonText();
+    
+    const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
+    
+    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe via getTranscriptStatus
+    try {
+      const creds = await ensureCreds();
+      if (creds.jobId && creds.email && creds.token) {
+        const status = await getTranscriptStatus(creds.jobId, creds.email, creds.token, creds.edition);
+        
+        log('Vérification statut pour visibilité:', status);
+        
+        // Si le statut indique qu'aucun compte-rendu n'existe, cacher le bouton
+        if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+          log('⚠️ Aucun compte-rendu détecté - Bouton caché');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          
+          // Ajouter un message informatif
+          const infoMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
+          if (!infoMsg) {
+            const msg = document.createElement('div');
+            msg.className = 'regeneration-no-summary-message';
+            msg.innerHTML = `
+              <span style="font-size: 16px;">ℹ️</span>
+              <div>
+                <strong>Générez d'abord un compte-rendu</strong>
+                <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                </div>
+              </div>
+            `;
+            btn.parentElement.appendChild(msg);
+          }
+          return;
+        }
+        
+        // Si le statut n'est pas READY_SUMMARY_READY ou READY_SUMMARY_PENDING, cacher le bouton
+        if (status !== 'READY_SUMMARY_READY' && status !== 'READY_SUMMARY_PENDING') {
+          log('⚠️ Compte-rendu non disponible (statut:', status, ') - Bouton caché');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return;
+        }
+      }
+    } catch (error) {
+      error('Erreur vérification statut:', error);
+      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
+    }
+    
+    // Gérer la visibilité (si compte-rendu existe)
+    if (isSummaryTab) {
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+    } else if (isTranscriptTab && transcriptModified) {
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+    } else {
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
     }
   }
   
   // ============================================
-  // FONCTION PRINCIPALE
+  // FONCTION PRINCIPALE (VERSION SIMPLIFIÉE - COMPTE À REBOURS 2:30)
   // ============================================
   
   async function relancerCompteRendu() {
@@ -699,44 +665,10 @@
     const confirmed = confirm(
       `Remplacer le compte-rendu actuel ?\n\n` +
       `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-      `La génération peut prendre plusieurs minutes.`
+      `⏳ La page se rechargera automatiquement après 2 min 30.`
     );
     
     if (!confirmed) return;
-    
-    log('Vérification existence compte-rendu...');
-    const summaryExists = await checkSummaryExists(jobId, email, token, edition);
-    
-    if (!summaryExists) {
-      warn('Aucun compte-rendu existant');
-      const proceed = confirm(
-        '⚠️ Aucun compte-rendu existant détecté.\n\n' +
-        'Voulez-vous quand même essayer ?'
-      );
-      
-      if (!proceed) return;
-    }
-    
-    // Récupérer hash ancien CR
-    let oldHash = '';
-    try {
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'omit'
-      });
-      
-      if (response.ok) {
-        const text = await response.text();
-        if (text && !text.includes('pas encore disponible')) {
-          oldHash = getContentHash(text);
-          log('Hash ancien CR:', oldHash.substring(0, 30) + '...');
-        }
-      }
-    } catch (e) {
-      warn('Erreur récupération hash:', e);
-    }
     
     isGenerating = true;
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
@@ -748,7 +680,7 @@
     }
     
     try {
-      // ✅ APPEL API redoSummary (GET)
+      // ✅ APPEL redoSummary (GET)
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       
       log('🚀 Appel redoSummary (GET)');
@@ -772,6 +704,10 @@
         if (currentJobId !== jobId) {
           warn('JobId a changé pendant génération');
           isGenerating = false;
+          if (btn) {
+            btn.disabled = false;
+            if (btnText) btnText.textContent = 'Relancer';
+          }
           alert('⚠️ Le transcript a changé.');
           return;
         }
@@ -782,130 +718,116 @@
         showSuccessMessage('Régénération lancée...');
         
         // ✅ AFFICHER LE LOADER
-        showSummaryLoading();
         openSummaryTab();
+        showSummaryLoading();
         
-        // ✅ AJOUTER BOUTON "ANNULER"
-        let pollingCancelled = false;
+        // ⏳ COMPTE À REBOURS 2 MIN 30 (150 secondes)
         const loaderContainer = document.querySelector('.summary-loading-indicator');
         
-        if (loaderContainer && !loaderContainer.querySelector('.cancel-polling-btn')) {
-          const cancelBtn = document.createElement('button');
-          cancelBtn.className = 'button cancel-polling-btn';
-          cancelBtn.textContent = 'Annuler et recharger plus tard';
-          cancelBtn.style.cssText = 'margin-top: 20px; opacity: 0.8; cursor: pointer;';
-          cancelBtn.onclick = () => {
-            pollingCancelled = true;
-            hideSummaryLoading();
-            isGenerating = false;
-            if (btn) {
-              btn.disabled = false;
-              if (btnText) btnText.textContent = 'Relancer';
-            }
-            disableEditorActions(false);
-            showSuccessMessage('Génération en cours - Rechargez dans quelques minutes');
-          };
-          loaderContainer.appendChild(cancelBtn);
-        }
-        
-        // ⏳ POLLING (180 tentatives x 3 secondes = 9 minutes max)
-        log('========================================');
-        log('⏳ Début polling (9 minutes max)...');
-        log('========================================');
-        
-        const waitResult = await waitForSummaryReady(jobId, email, token, edition, 180, 3000, oldHash);
-        
-        log('========================================');
-        log('📊 Résultat polling:', waitResult);
-        log('========================================');
-        
-        if (pollingCancelled) {
-          log('Polling annulé par utilisateur');
-          return;
-        }
-        
-        if (waitResult.ready && waitResult.content) {
-          // ✅ AFFICHER LE NOUVEAU CR DIRECTEMENT
-          log('✅ Nouveau CR prêt ! Affichage direct...');
+        if (loaderContainer) {
+          // Mise à jour du texte
+          const loadingText = loaderContainer.querySelector('.loading-text');
+          const loadingSubtitle = loaderContainer.querySelector('.loading-subtitle');
           
-          const summaryEditor = document.querySelector('#summaryEditor');
-          if (summaryEditor) {
-            // Nettoyer HTML
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = waitResult.content;
+          if (loadingText) {
+            loadingText.textContent = 'Génération du compte-rendu en cours...';
+          }
+          if (loadingSubtitle) {
+            loadingSubtitle.textContent = 'La page se rechargera automatiquement dans :';
+          }
+          
+          // Créer ou récupérer le compte à rebours
+          let countdown = loaderContainer.querySelector('.loading-countdown');
+          if (!countdown) {
+            countdown = document.createElement('p');
+            countdown.className = 'loading-countdown';
+            countdown.style.cssText = `
+              font-size: 32px;
+              font-weight: 700;
+              margin: 20px 0 10px;
+              color: #174a96;
+              font-variant-numeric: tabular-nums;
+              letter-spacing: 0.05em;
+            `;
+            loaderContainer.appendChild(countdown);
+          }
+          
+          let secondsLeft = 150; // 2 min 30
+          let countdownInterval = null;
+          
+          const updateCountdown = () => {
+            const minutes = Math.floor(secondsLeft / 60);
+            const seconds = secondsLeft % 60;
+            countdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            // Supprimer scripts/styles dangereux
-            tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-            
-            // Nettoyer attributs dangereux
-            tempDiv.querySelectorAll('*').forEach(n => {
-              [...n.attributes].forEach(a => {
-                const name = a.name.toLowerCase();
-                const val = String(a.value || '');
-                if (name.startsWith('on') || /^javascript:/i.test(val)) {
-                  n.removeAttribute(a.name);
-                }
-              });
-            });
-            
-            summaryEditor.innerHTML = tempDiv.innerHTML;
-            
-            // MAJ summaryEmpty
-            const root = document.querySelector('#editorRoot');
-            if (root) root.dataset.summaryEmpty = '0';
-            
-            hideSummaryLoading();
-            isGenerating = false;
-            if (btn) {
-              btn.disabled = false;
-              if (btnText) btnText.textContent = 'Relancer';
+            if (secondsLeft <= 0) {
+              clearInterval(countdownInterval);
+              countdown.textContent = 'Rechargement...';
+              
+              // ✅ RECHARGER LA PAGE AVEC CACHE-BUSTER
+              setTimeout(() => {
+                log('🔄 Rechargement de la page pour afficher le nouveau compte-rendu...');
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('tab', 'summary');
+                newUrl.searchParams.set('_regen', Date.now().toString());
+                newUrl.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+                log('🔄 URL de rechargement:', newUrl.toString());
+                window.location.href = newUrl.toString();
+              }, 500);
             }
-            disableEditorActions(false);
             
-            showSuccessMessage('Compte-rendu régénéré avec succès !');
-            
-            log('✅ CR affiché directement');
-          } else {
-            // Fallback : recharger
-            warn('summaryEditor non trouvé - Rechargement');
+            secondsLeft--;
+          };
+          
+          updateCountdown(); // Affichage initial
+          countdownInterval = setInterval(updateCountdown, 1000);
+          
+          // ✅ BOUTON ANNULER
+          let cancelBtn = loaderContainer.querySelector('.cancel-polling-btn');
+          if (!cancelBtn) {
+            cancelBtn = document.createElement('button');
+            cancelBtn.className = 'button cancel-polling-btn';
+            cancelBtn.textContent = 'Annuler et recharger plus tard';
+            cancelBtn.style.cssText = 'margin-top: 20px; opacity: 0.8; cursor: pointer;';
+            cancelBtn.onclick = () => {
+              clearInterval(countdownInterval);
+              hideSummaryLoading();
+              isGenerating = false;
+              if (btn) {
+      btn.disabled = false;
+                if (btnText) btnText.textContent = 'Relancer';
+              }
+              showSuccessMessage('Annulé - Rechargez manuellement dans quelques minutes');
+            };
+            loaderContainer.appendChild(cancelBtn);
+          }
+        } else {
+          // Fallback si loaderContainer n'existe pas
+          warn('loaderContainer non trouvé - Attente simple sans compte à rebours');
+          setTimeout(() => {
+            log('🔄 Rechargement de la page (fallback)...');
             const newUrl = new URL(window.location.href);
             newUrl.searchParams.set('tab', 'summary');
-            newUrl.searchParams.set('_t', Date.now());
+            newUrl.searchParams.set('_regen', Date.now().toString());
+            newUrl.searchParams.set('_nocache', Math.random().toString(36).slice(2));
             window.location.href = newUrl.toString();
-          }
-        } else if (waitResult.ready) {
-          // READY mais pas de contenu → recharger
-          log('⚠️ READY mais pas de contenu - Rechargement');
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('tab', 'summary');
-          newUrl.searchParams.set('_t', Date.now());
-          window.location.href = newUrl.toString();
-        } else {
-          // Timeout ou erreur
-          warn('⚠️ Polling timeout/erreur:', waitResult.error);
-          hideSummaryLoading();
-          isGenerating = false;
-          if (btn) {
-            btn.disabled = false;
-            if (btnText) btnText.textContent = 'Relancer';
-          }
-          disableEditorActions(false);
-          
-          if (waitResult.error === 'TIMEOUT') {
-            alert('⚠️ La génération prend plus de temps que prévu (max 9 minutes atteint).\n\nLe compte-rendu sera disponible dans quelques instants.\n\nVous pouvez recharger la page plus tard.');
-          } else {
-            alert('⚠️ Erreur lors de la génération.\n\nVeuillez réessayer.');
-          }
+          }, 150000); // 2 min 30
         }
         
-      } else {
-        error('Erreur API:', result);
-        alert('❌ Erreur lors de la régénération.\n\n' + (result.message || result.error || 'Erreur inconnue'));
+      } else if (result.status === 'KO') {
         isGenerating = false;
         if (btn) {
           btn.disabled = false;
           if (btnText) btnText.textContent = 'Relancer';
         }
+        alert('⚠️ Une génération est déjà en cours.');
+      } else {
+        isGenerating = false;
+        if (btn) {
+          btn.disabled = false;
+          if (btnText) btnText.textContent = 'Relancer';
+        }
+        alert('❌ Erreur: ' + (result.message || result.error || 'Inconnue'));
       }
       
     } catch (err) {
@@ -919,77 +841,6 @@
     }
   }
   
-  function getButtonText() {
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    if (activeTab?.id === 'tab-summary') return 'Régénérer';
-    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
-    return 'Relancer';
-  }
-  
-  function updateButtonVisibility() {
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
-    
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    if (!activeTab) return;
-    
-    const isSummaryTab = activeTab.id === 'tab-summary';
-    const isTranscriptTab = activeTab.id === 'tab-transcript';
-    
-    const textDiv = btn.querySelector('div');
-    if (textDiv) textDiv.textContent = getButtonText();
-    
-    const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-    
-    if (isSummaryTab) {
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
-    } else if (isTranscriptTab && transcriptModified) {
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
-    } else {
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
-    }
-  }
-  
-  function setupKeyboardShortcuts() {
-    document.addEventListener('keydown', function(e) {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
-        const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-        if (btn && btn.style.display !== 'none' && !btn.disabled) {
-          e.preventDefault();
-          relancerCompteRendu();
-        }
-      }
-    });
-    
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (btn) {
-      btn.title = 'Régénérer le compte-rendu (Ctrl+Shift+R)';
-      btn.setAttribute('aria-label', 'Régénérer le compte-rendu');
-      btn.setAttribute('aria-describedby', 'regeneration-info');
-    }
-  }
-  
-  async function checkIfRegenerationPossible(jobId, edition) {
-    try {
-      const creds = await ensureCreds();
-      if (!creds.email || !creds.token) {
-        return { possible: false, reason: 'no-credentials' };
-      }
-      
-      const exists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
-      if (!exists) {
-        return { possible: false, reason: 'no-summary' };
-      }
-      
-      return { possible: true };
-    } catch (e) {
-      return { possible: false, reason: 'error' };
-    }
-  }
-  
   // ============================================
   // INITIALISATION
   // ============================================
@@ -997,21 +848,66 @@
   function init() {
     if (window.__agiloRelanceInitialized) {
       log('Script déjà initialisé');
-      return;
-    }
+          return;
+        }
     window.__agiloRelanceInitialized = true;
     
     log('🚀 Initialisation script relance');
     
+    // ⚠️ CRITIQUE : Désactiver tout href sur le bouton pour éviter les rechargements
+    const disableButtonHref = () => {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (btn) {
+        if (btn.href && btn.href !== '#' && btn.href !== 'javascript:void(0)') {
+          warn('Bouton a un href:', btn.href, '- Suppression...');
+          btn.removeAttribute('href');
+        }
+        if (btn.onclick) {
+          btn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            warn('onclick intercepté et bloqué');
+            return false;
+          };
+        }
+      }
+    };
+    
+    disableButtonHref();
+    
+    const hrefObserver = new MutationObserver(() => {
+      disableButtonHref();
+    });
+    hrefObserver.observe(document.body, { childList: true, subtree: true });
+    
+    // ⚠️ CRITIQUE : Capturer TOUS les clics AVANT qu'ils ne déclenchent un rechargement
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn && !btn.disabled) {
+      if (btn) {
+        log('🖱️ CLIC DÉTECTÉ SUR LE BOUTON RÉGÉNÉRER');
+        
         e.preventDefault();
         e.stopPropagation();
-        relancerCompteRendu();
+        e.stopImmediatePropagation();
+        
+        if (btn.disabled) {
+          warn('Bouton désactivé, ignore le clic');
+          return false;
+        }
+        
+        relancerCompteRendu().catch(error => {
+          error('ERREUR:', error);
+          isGenerating = false;
+          hideSummaryLoading();
+          alert('❌ Erreur lors de la régénération: ' + error.message);
+        });
+        
+        return false;
       }
-    }, { passive: false });
+    }, true); // ⚠️ CRITIQUE : Utiliser capture phase (true) pour capturer AVANT les autres listeners
     
+    // Détecter la sauvegarde du transcript
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
     if (saveBtn) {
       saveBtn.addEventListener('click', function() {
@@ -1040,6 +936,7 @@
       });
     }
     
+    // Vérifier si le transcript a déjà été sauvegardé
     const currentJobId = pickJobId();
     if (currentJobId) {
       try {
@@ -1078,17 +975,6 @@
         if (jobId && edition) {
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
-          
-          const canRegen = await checkIfRegenerationPossible(jobId, edition);
-          if (!canRegen.possible && canRegen.reason === 'no-summary') {
-            const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-            if (btn) {
-              btn.disabled = true;
-              btn.setAttribute('aria-disabled', 'true');
-              btn.title = 'Générez d\'abord un compte-rendu';
-            }
-          }
-          
           updateButtonVisibility();
         }
       } catch (e) {}
@@ -1096,42 +982,38 @@
     
     setTimeout(initLimits, 500);
     
+    // Observer les changements de jobId
     let lastJobId = pickJobId();
     
-    window.addEventListener('popstate', () => {
-      const currentJobId = pickJobId();
-      if (currentJobId && currentJobId !== lastJobId) {
-        lastJobId = currentJobId;
-        setTimeout(initLimits, 300);
-      }
-    });
-    
-    window.addEventListener('hashchange', () => {
-      const currentJobId = pickJobId();
-      if (currentJobId && currentJobId !== lastJobId) {
-        lastJobId = currentJobId;
-        setTimeout(initLimits, 300);
-      }
-    });
-    
-    const editorRoot = document.querySelector('#editorRoot');
-    if (editorRoot) {
-      const observer = new MutationObserver(() => {
+      window.addEventListener('popstate', () => {
         const currentJobId = pickJobId();
         if (currentJobId && currentJobId !== lastJobId) {
           lastJobId = currentJobId;
           setTimeout(initLimits, 300);
         }
       });
-      observer.observe(editorRoot, { attributes: true, attributeFilter: ['data-job-id'] });
+      
+      window.addEventListener('hashchange', () => {
+        const currentJobId = pickJobId();
+        if (currentJobId && currentJobId !== lastJobId) {
+          lastJobId = currentJobId;
+          setTimeout(initLimits, 300);
+        }
+      });
+      
+      const editorRoot = document.querySelector('#editorRoot');
+      if (editorRoot) {
+      const jobIdObserver = new MutationObserver(() => {
+          const currentJobId = pickJobId();
+          if (currentJobId && currentJobId !== lastJobId) {
+            lastJobId = currentJobId;
+            setTimeout(initLimits, 300);
+          }
+        });
+      jobIdObserver.observe(editorRoot, { attributes: true, attributeFilter: ['data-job-id'] });
     }
     
-    tabs.forEach(tab => {
-      tab.addEventListener('click', function() {
-        setTimeout(() => initLimits(), 200);
-      });
-    });
-    
+    // Ouvrir l'onglet Compte-rendu si demandé dans l'URL
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('tab') === 'summary') {
       setTimeout(() => {
@@ -1141,8 +1023,6 @@
         window.history.replaceState({}, '', newUrl);
       }, 300);
     }
-    
-    setupKeyboardShortcuts();
   }
   
   // ============================================
@@ -1201,19 +1081,13 @@
         margin-top: 8px;
       }
       
-      .summary-loading-indicator {
-        animation: fadeIn 0.3s ease-out;
-      }
-      
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-          transform: translateY(10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
+      .loading-countdown {
+        font-size: 32px;
+        font-weight: 700;
+        margin: 20px 0 10px;
+        color: #174a96;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.05em;
       }
       
       .regeneration-counter {
@@ -1237,7 +1111,8 @@
       }
       
       .regeneration-limit-message,
-      .regeneration-premium-message {
+      .regeneration-premium-message,
+      .regeneration-no-summary-message {
         display: flex;
         align-items: flex-start;
         gap: 10px;
@@ -1259,39 +1134,17 @@
         border: 1px solid color-mix(in srgb, #174a96 25%, transparent);
       }
       
+      .regeneration-no-summary-message {
+        background: color-mix(in srgb, #2196f3 10%, #ffffff 90%);
+        border: 1px solid color-mix(in srgb, #2196f3 35%, transparent);
+      }
+      
       .regeneration-limit-message strong,
-      .regeneration-premium-message strong {
+      .regeneration-premium-message strong,
+      .regeneration-no-summary-message strong {
         display: block;
         margin-bottom: 2px;
         font-weight: 600;
-      }
-      
-      @keyframes slideInRight {
-        from {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-        to {
-          transform: translateX(0);
-          opacity: 1;
-        }
-      }
-      
-      @keyframes slideOutRight {
-        from {
-          transform: translateX(0);
-          opacity: 1;
-        }
-        to {
-          transform: translateX(100%);
-          opacity: 0;
-        }
-      }
-      
-      .agilo-toast-success {
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-        font-size: 14px;
-        line-height: 1.4;
       }
       
       @media (max-width: 560px) {
@@ -1302,28 +1155,16 @@
         }
         
         .regeneration-limit-message,
-        .regeneration-premium-message {
+        .regeneration-premium-message,
+        .regeneration-no-summary-message {
           padding: 8px 10px;
           font-size: 12px;
-        }
-        
-        .agilo-toast-success {
-          right: 10px;
-          left: 10px;
-          max-width: none;
         }
       }
       
       [data-action="relancer-compte-rendu"]:focus-visible {
         outline: 2px solid #174a96;
         outline-offset: 2px;
-      }
-      
-      @media (prefers-reduced-motion: reduce) {
-        .summary-loading-indicator,
-        .agilo-toast-success {
-          animation: none;
-        }
       }
     `;
     document.head.appendChild(style);
@@ -1340,4 +1181,3 @@
   
   log('✅ Script chargé avec succès !');
 })();
-
