@@ -593,21 +593,21 @@
     }
   }
   
-  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC IMMÉDIATEMENT (même avant DOMContentLoaded)
+  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC IMMÉDIATEMENT (mais de façon non-bloquante)
   attachClickHandler();
   
-  // Démarrer
-  if (document.readyState !== 'loading') {
+  // Démarrer l'initialisation (non-bloquante)
+  setTimeout(() => {
     init();
-  } else {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  }
+  }, 50);
   
-  // Fallback si DOMContentLoaded n'a pas été déclenché
+  // Fallback si init n'a pas été appelé
   setTimeout(() => {
     if (!window.__agiloRelanceSimpleInit) {
       init();
     }
   }, 1000);
+  
+  } // Fin de startScript()
 })();
 
