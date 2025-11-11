@@ -608,10 +608,7 @@
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache'
-        }
+        credentials: 'omit'
       });
       const responseTime = Date.now() - startTime;
       
@@ -1166,25 +1163,25 @@
       });
       console.log('[AGILO:RELANCE] ========================================');
       
-      const formData = new FormData();
-      formData.append('username', email);
-      formData.append('token', token);
-      formData.append('edition', edition);
-      formData.append('jobId', jobId);
+      // ⚠️ Utiliser GET avec query parameters comme les autres scripts (Code-main-editor.js)
+      // Le README dit "GET or POST", GET est plus simple et évite les problèmes de FormData
+      const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&_t=${Date.now()}`;
       
       console.log('[AGILO:RELANCE] Envoi requête API redoSummary', {
-        url: 'https://api.agilotext.com/api/v1/redoSummary',
-        method: 'POST',
+        url: url.substring(0, 100) + '...',
+        method: 'GET',
         jobId,
         edition,
-        emailLength: email.length,
+        emailLength: email ? email.length : 0,
+        tokenLength: token ? token.length : 0,
         timestamp: new Date().toISOString()
       });
       
       const apiStartTime = Date.now();
-      const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
-        method: 'POST',
-        body: formData
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
       });
       const apiTime = Date.now() - apiStartTime;
       
@@ -2138,18 +2135,15 @@
       return;
     }
     
-    // 1. Appel redoSummary
+    // 1. Appel redoSummary avec GET (comme les autres scripts)
     console.log('📤 Étape 1: Appel redoSummary...');
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('token', token);
-    formData.append('edition', edition);
-    formData.append('jobId', jobId);
+    const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&_t=${Date.now()}`;
     
     try {
-      const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
-        method: 'POST',
-        body: formData
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
       });
       
       const result = await response.json();
