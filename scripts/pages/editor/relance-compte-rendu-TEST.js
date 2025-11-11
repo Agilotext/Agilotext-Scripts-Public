@@ -1742,9 +1742,42 @@
     }
     window.__agiloRelanceInitialized = true;
     
+    // ⚠️ CRITIQUE : Désactiver tout href sur le bouton pour éviter les rechargements
+    const disableButtonHref = () => {
+      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+      if (btn) {
+        // Supprimer tout href qui pourrait causer un rechargement
+        if (btn.href && btn.href !== '#' && btn.href !== 'javascript:void(0)') {
+          console.warn('[AGILO:RELANCE] ⚠️ Bouton a un href:', btn.href, '- Suppression...');
+          btn.removeAttribute('href');
+        }
+        // S'assurer qu'il n'y a pas d'onclick qui recharge
+        if (btn.onclick) {
+          const originalOnclick = btn.onclick;
+          btn.onclick = function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            console.warn('[AGILO:RELANCE] ⚠️ onclick intercepté et bloqué');
+            return false;
+          };
+        }
+      }
+    };
+    
+    // Désactiver le href immédiatement
+    disableButtonHref();
+    
+    // Observer les changements du DOM pour réappliquer si le bouton est recréé
+    const observer = new MutationObserver(() => {
+      disableButtonHref();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    
+    // ⚠️ CRITIQUE : Capturer TOUS les clics AVANT qu'ils ne déclenchent un rechargement
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn && !btn.disabled) {
+      if (btn) {
         console.log('[AGILO:RELANCE] ========================================');
         console.log('[AGILO:RELANCE] 🖱️ CLIC DÉTECTÉ SUR LE BOUTON RÉGÉNÉRER');
         console.log('[AGILO:RELANCE] ========================================');
@@ -1752,24 +1785,39 @@
           exists: !!btn,
           disabled: btn.disabled,
           id: btn.id,
-          className: btn.className
+          className: btn.className,
+          href: btn.href || btn.getAttribute('href') || 'N/A',
+          onclick: btn.onclick ? 'EXISTS' : 'N/A',
+          tagName: btn.tagName
         });
+        
+        // ⚠️ CRITIQUE : TOUJOURS empêcher le comportement par défaut
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation(); // Empêcher les autres listeners
+        
+        if (btn.disabled) {
+          console.warn('[AGILO:RELANCE] ⚠️ Bouton désactivé, ignore le clic');
+          return false;
+        }
+        
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On va appeler relancerCompteRendu()');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: La page NE DOIT PAS se recharger avant la fin du processus');
         console.log('[AGILO:RELANCE] ========================================');
         
-        e.preventDefault();
-        e.stopPropagation();
-        
         // ⚠️ CRITIQUE : Appel asynchrone - ne pas attendre pour éviter de bloquer
         relancerCompteRendu().catch(error => {
           console.error('[AGILO:RELANCE] ❌ ERREUR dans relancerCompteRendu:', error);
+          isGenerating = false;
           setGeneratingState(false);
           hideSummaryLoading();
           alert('❌ Erreur lors de la régénération: ' + error.message);
         });
+        
+        // ⚠️ CRITIQUE : Retourner false pour empêcher tout comportement par défaut
+        return false;
       }
-    }, { passive: false });
+    }, true); // ⚠️ CRITIQUE : Utiliser capture phase (true) pour capturer AVANT les autres listeners
     
     // Détecter la sauvegarde du transcript
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
