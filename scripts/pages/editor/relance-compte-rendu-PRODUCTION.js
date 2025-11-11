@@ -803,6 +803,67 @@
       }
     });
     
+    // Détecter la sauvegarde du transcript
+    const saveBtn = document.querySelector('[data-action="save-transcript"]');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        transcriptModified = true;
+        
+        // Sauvegarder l'état dans localStorage pour persister après rechargement
+        try {
+          const jobId = pickJobId();
+          if (jobId) {
+            localStorage.setItem(`agilo:transcript-saved:${jobId}`, 'true');
+            localStorage.setItem('agilo:last-jobId', jobId);
+          }
+        } catch (e) {}
+        
+        // Feedback visuel après sauvegarde
+        if (typeof window.toast === 'function') {
+          window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
+        }
+        
+        // Mettre à jour la visibilité du bouton
+        updateButtonVisibility();
+        
+        // Mettre à jour les compteurs après sauvegarde
+        setTimeout(async () => {
+          try {
+            const creds = await ensureCreds();
+            if (creds.jobId && creds.edition) {
+              updateRegenerationCounter(creds.jobId, creds.edition);
+              updateButtonState(creds.jobId, creds.edition);
+            }
+          } catch (e) {
+            log('Erreur mise à jour compteurs:', e);
+          }
+        }, 500);
+      });
+    }
+    
+    // Vérifier si le transcript a déjà été sauvegardé (au chargement)
+    const currentJobId = pickJobId();
+    if (currentJobId) {
+      try {
+        const wasSaved = localStorage.getItem(`agilo:transcript-saved:${currentJobId}`);
+        const lastJobId = localStorage.getItem('agilo:last-jobId');
+        if (wasSaved === 'true' && lastJobId === currentJobId) {
+          transcriptModified = true;
+          log('Transcript déjà sauvegardé détecté');
+        }
+      } catch (e) {}
+    }
+    
+    // Écouter les changements d'onglets
+    const tabs = document.querySelectorAll('[role="tab"]');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        setTimeout(() => {
+          updateButtonVisibility();
+        }, 100);
+      });
+    });
+    
     // Observer les changements de summaryEmpty (optimisé avec debounce)
     const root = document.querySelector('#editorRoot');
     if (root) {
