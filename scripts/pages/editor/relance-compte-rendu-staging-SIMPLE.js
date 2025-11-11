@@ -10,7 +10,7 @@
   
   console.log('[AGILO:RELANCE-SIMPLE] Script chargé');
   
-  const DEBUG = true; // Activer pour voir les logs
+  const DEBUG = false; // Désactivé par défaut pour moins de lag (mettre à true pour debug)
   const log = (...a) => { if (DEBUG) console.log('[AGILO:RELANCE-SIMPLE]', ...a); };
   
   // Helpers
@@ -94,7 +94,8 @@
     btn.disabled = false;
   }
   
-  // Fonction SIMPLE pour mettre à jour la visibilité
+  // Fonction SIMPLE pour mettre à jour la visibilité (avec cache pour éviter appels inutiles)
+  let lastState = null; // 'hidden' ou 'visible'
   function updateVisibility() {
     const btn = $('[data-action="relancer-compte-rendu"]');
     if (!btn) {
@@ -102,7 +103,17 @@
       return;
     }
     
-    if (shouldHideButton()) {
+    const shouldHide = shouldHideButton();
+    const currentState = shouldHide ? 'hidden' : 'visible';
+    
+    // Ne rien faire si l'état n'a pas changé
+    if (lastState === currentState) {
+      return; // État identique, pas besoin de modifier
+    }
+    
+    lastState = currentState;
+    
+    if (shouldHide) {
       hideButton(btn);
     } else {
       showButton(btn);
@@ -121,14 +132,15 @@
     // Vérifier immédiatement
     updateVisibility();
     
-    // Vérifier périodiquement (toutes les 500ms)
-    setInterval(updateVisibility, 500);
+    // Vérifier périodiquement (toutes les 1000ms pour moins de lag)
+    setInterval(updateVisibility, 1000);
     
-    // Écouter les changements de summaryEmpty
+    // Écouter les changements de summaryEmpty (avec reset du cache)
     const root = byId('editorRoot');
     if (root) {
       const observer = new MutationObserver(() => {
         log('📊 summaryEmpty changé:', root.dataset.summaryEmpty);
+        lastState = null; // Reset cache pour forcer la vérification
         updateVisibility();
       });
       observer.observe(root, { attributes: true, attributeFilter: ['data-summary-empty'] });
