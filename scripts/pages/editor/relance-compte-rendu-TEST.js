@@ -592,14 +592,53 @@
     if (window.__agiloRelanceInitialized) return;
     window.__agiloRelanceInitialized = true;
     
+    // ⚠️ CRITIQUE : Désactiver tout href sur le bouton AVANT d'attacher le listener
+    const disableButtonHref = () => {
+      const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+      if (btn) {
+        if (btn.href && btn.href !== '#' && btn.href !== 'javascript:void(0)') {
+          console.warn('[AGILO:RELANCE] ⚠️ Bouton a un href:', btn.href, '- Suppression...');
+          btn.removeAttribute('href');
+        }
+        if (btn.onclick) {
+          btn.onclick = null;
+        }
+      }
+    };
+    
+    disableButtonHref();
+    
+    // Observer pour réappliquer la protection si le bouton est recréé
+    const hrefObserver = new MutationObserver(() => {
+      disableButtonHref();
+    });
+    hrefObserver.observe(document.body, { childList: true, subtree: true });
+    
+    // ⚠️ CRITIQUE : Capturer les clics en PHASE DE CAPTURE (true) pour intercepter AVANT les autres listeners
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn && !btn.disabled) {
+      if (btn) {
+        console.log('[AGILO:RELANCE] 🖱️ CLIC DÉTECTÉ SUR LE BOUTON RÉGÉNÉRER');
+        
         e.preventDefault();
         e.stopPropagation();
-        relancerCompteRendu();
+        e.stopImmediatePropagation();
+        
+        if (btn.disabled) {
+          console.warn('[AGILO:RELANCE] ⚠️ Bouton désactivé, ignore le clic');
+          return false;
+        }
+        
+        relancerCompteRendu().catch(err => {
+          console.error('[AGILO:RELANCE] ❌ ERREUR:', err);
+          isGenerating = false;
+          hideSummaryLoading();
+          alert('❌ Erreur lors de la régénération: ' + err.message);
+        });
+        
+        return false;
       }
-    });
+    }, true); // ⚠️ CRITIQUE : true = capture phase
     
     const tabs = document.querySelectorAll('[role="tab"]');
     tabs.forEach(tab => {
