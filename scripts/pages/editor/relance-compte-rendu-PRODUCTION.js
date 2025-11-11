@@ -694,27 +694,35 @@
           cancelBtn.className = 'loading-cancel-btn';
           cancelBtn.textContent = 'Annuler';
           cancelBtn.onclick = () => {
-            clearInterval(countdownInterval);
-            
-            // ⚠️ IMPORTANT : Prévenir l'utilisateur que la régénération est déjà lancée
+            // ⚠️ IMPORTANT : Demander confirmation AVANT d'arrêter le compteur
             const confirmed = confirm(
               '⚠️ La régénération est déjà en cours sur le serveur.\n\n' +
-              'Si vous annulez maintenant, vous devrez recharger la page dans 2-3 minutes pour voir le nouveau compte-rendu.\n\n' +
+              'Si vous annulez maintenant :\n' +
+              '• Le compte-rendu actuel sera remplacé dans 2-3 minutes\n' +
+              '• Vous devrez recharger la page pour voir le nouveau compte-rendu\n\n' +
+              '💡 CONSEIL : Téléchargez et sauvegardez votre compte-rendu actuel avant de continuer, car il sera remplacé.\n\n' +
               'Souhaitez-vous vraiment annuler ?'
             );
             
+            // ⚠️ CRITIQUE : Ne stopper le compteur QUE si l'utilisateur confirme
             if (confirmed) {
+              clearInterval(countdownInterval);
               hideSummaryLoading();
               isGenerating = false;
               
-              // Afficher un message informatif
+              // Afficher un message informatif avec avertissement sur le CR actuel
               const infoMsg = document.createElement('div');
               infoMsg.className = 'regeneration-cancel-info';
               infoMsg.innerHTML = `
                 <div style="padding: 1rem; background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%); border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent); border-radius: var(--agilo-radius, 0.5rem); margin-top: 1rem;">
-                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 0.5rem; font-size: 0.875rem;">ℹ️ Régénération en cours</strong>
+                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 0.5rem; font-size: 0.875rem;">ℹ️ Régénération en cours sur le serveur</strong>
                   <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
-                    La régénération du compte-rendu est en cours sur le serveur. 
+                    <strong>⚠️ Important :</strong> La régénération est déjà lancée. Votre compte-rendu actuel sera remplacé dans 2-3 minutes.
+                  </p>
+                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
+                    💡 <strong>Si vous souhaitez conserver le compte-rendu actuel</strong>, téléchargez-le maintenant via les boutons de téléchargement avant qu'il ne soit remplacé.
+                  </p>
+                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.75rem; line-height: 1.5;">
                     Rechargez la page dans 2-3 minutes pour voir le nouveau compte-rendu.
                   </p>
                   <button class="loading-cancel-btn" style="margin-top: 0.5rem; width: 100%;" onclick="window.location.reload()">
@@ -730,8 +738,10 @@
               }
               
               showSuccessMessage('Régénération annulée - Rechargez la page dans 2-3 minutes');
+            } else {
+              // Si l'utilisateur ne confirme pas, le compteur continue normalement
+              log('Annulation non confirmée - Le compteur continue');
             }
-            // Si l'utilisateur annule la confirmation, on ne fait rien (le loader continue)
           };
           loaderContainer.appendChild(cancelBtn);
         }
