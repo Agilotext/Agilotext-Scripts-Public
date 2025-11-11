@@ -1,11 +1,8 @@
-// Agilotext – Relance Compte-Rendu
+// Agilotext – Relance Compte-Rendu (STAGING SIMPLE)
 // ⚠️ Ce fichier est chargé depuis GitHub
-// Version avec compteurs de régénération (Business=4, Pro=2, Free=0)
+// Version avec détection du compte-rendu par défaut
 (function() {
   'use strict';
-  
-  // ⚠️ LOG D'IDENTIFICATION (pour vérifier que c'est la bonne version)
-  console.log('[AGILO:RELANCE] ✅ Script chargé (version avec compteurs - commit 17b2021 restauré)');
   
   // ============================================
   // RÉCUPÉRATION DES CREDENTIALS
@@ -272,29 +269,21 @@
    * Créer ou mettre à jour le badge de compteur
    */
   function updateRegenerationCounter(jobId, edition) {
-    console.log('[AGILO:RELANCE] 📊 updateRegenerationCounter appelée', { jobId, edition });
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) {
-      console.warn('[AGILO:RELANCE] ⚠️ Bouton relancer-compte-rendu non trouvé');
-      return;
-    }
-    console.log('[AGILO:RELANCE] ✅ Bouton trouvé, parent:', btn.parentElement);
+    if (!btn) return;
     
     // Supprimer l'ancien compteur s'il existe
     const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
     if (oldCounter) {
-      console.log('[AGILO:RELANCE] 🗑️ Suppression ancien compteur');
       oldCounter.remove();
     }
     
     const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
     if (oldMessage) {
-      console.log('[AGILO:RELANCE] 🗑️ Suppression ancien message');
       oldMessage.remove();
     }
     
     const canRegen = canRegenerate(jobId, edition);
-    console.log('[AGILO:RELANCE] 📈 État régénération:', canRegen);
     
     // Utilisateur Free : Garder le bouton visible mais avec apparence désactivée
     // Le message premium est caché, le bouton affichera directement la pop-up au clic
@@ -356,30 +345,7 @@
     counter.title = `Il vous reste ${canRegen.remaining} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript`;
     counter.setAttribute('aria-live', 'polite');
     counter.setAttribute('aria-atomic', 'true');
-    
-    // Vérifier que le parent existe
-    if (!btn.parentElement) {
-      console.error('[AGILO:RELANCE] ❌ Le bouton n\'a pas de parent !');
-      return;
-    }
-    
     btn.parentElement.appendChild(counter);
-    console.log('[AGILO:RELANCE] ✅ Compteur créé et ajouté:', {
-      text: counter.textContent,
-      parent: btn.parentElement.tagName,
-      parentClass: btn.parentElement.className,
-      counterVisible: window.getComputedStyle(counter).display !== 'none'
-    });
-    
-    // Vérifier visuellement que le compteur est bien ajouté
-    setTimeout(() => {
-      const addedCounter = btn.parentElement.querySelector('.regeneration-counter');
-      if (addedCounter) {
-        console.log('[AGILO:RELANCE] ✅ Vérification: Compteur bien présent dans le DOM');
-      } else {
-        console.error('[AGILO:RELANCE] ❌ Vérification: Compteur NON trouvé dans le DOM !');
-      }
-    }, 100);
   }
   
   /**
@@ -1114,8 +1080,9 @@
   
   /**
    * Mettre à jour la visibilité du bouton selon l'onglet actif
+   * ⚠️ MODIFIÉ : Vérifie maintenant si un compte-rendu existe avant d'afficher le bouton
    */
-  function updateButtonVisibility() {
+  async function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
@@ -1132,6 +1099,25 @@
     
     // Cacher aussi le compteur/message si le bouton est caché
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+    
+    // ⚠️ NOUVEAU : Vérifier si un compte-rendu existe avant d'afficher le bouton
+    try {
+      const creds = await ensureCreds();
+      if (creds.jobId && creds.email && creds.token) {
+        const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
+        
+        // Si aucun compte-rendu n'existe, cacher le bouton
+        if (!summaryExists) {
+          console.log('[AGILO:RELANCE] ⚠️ Aucun compte-rendu détecté - Bouton caché');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur vérification compte-rendu:', error);
+      // En cas d'erreur, on continue avec la logique normale
+    }
     
     // Gérer la visibilité
     if (isSummaryTab) {
@@ -1208,37 +1194,19 @@
   function init() {
     // Vérifier si déjà initialisé (éviter les doublons)
     if (window.__agiloRelanceInitialized) {
-      console.log('[AGILO:RELANCE] Script déjà initialisé, skip');
+      console.log('Script de relance déjà initialisé, skip');
       return;
     }
     window.__agiloRelanceInitialized = true;
-    console.log('[AGILO:RELANCE] ✅ Initialisation du script de relance (version avec compteurs)');
     
-    // ⚠️ GESTIONNAIRE DE CLIC AMÉLIORÉ (avec logs pour debug)
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (!btn) return;
-      
-      console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur bouton Relancer', {
-        disabled: btn.disabled,
-        hasDisabledAttr: btn.hasAttribute('disabled'),
-        styleDisplay: window.getComputedStyle(btn).display,
-        styleVisibility: window.getComputedStyle(btn).visibility,
-        styleOpacity: window.getComputedStyle(btn).opacity
-      });
-      
-      // Ne pas bloquer si le bouton est visuellement désactivé mais pas vraiment disabled
-      // (pour Free users qui doivent voir la popup AgiloGate)
-      if (btn.hasAttribute('disabled') && btn.disabled === true) {
-        console.log('[AGILO:RELANCE] ⚠️ Bouton vraiment désactivé - Clic ignoré');
-        return;
+      if (btn && !btn.disabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        relancerCompteRendu();
       }
-      
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('[AGILO:RELANCE] ✅ Clic validé - Lancement relancerCompteRendu()');
-      relancerCompteRendu();
-    }, { passive: false, capture: true }); // capture: true pour intercepter tôt
+    }, { passive: false });
     
     // Détecter la sauvegarde du transcript
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
@@ -1325,12 +1293,9 @@
     // Initialiser les compteurs et limites
     const initLimits = async () => {
       try {
-        console.log('[AGILO:RELANCE] 🔄 Initialisation des compteurs...');
         const creds = await ensureCreds();
         const { edition, jobId } = creds;
-        console.log('[AGILO:RELANCE] 📊 Credentials récupérées:', { jobId, edition, email: creds.email ? '✓' : '✗' });
         if (jobId && edition) {
-          console.log('[AGILO:RELANCE] ✅ Appel updateRegenerationCounter...');
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
           
@@ -1371,16 +1336,7 @@
     };
     
     // Attendre un peu que les credentials soient disponibles
-    // Essayer plusieurs fois pour s'assurer que les credentials sont disponibles
     setTimeout(initLimits, 500);
-    setTimeout(initLimits, 1500);
-    setTimeout(initLimits, 3000);
-    
-    // Écouter l'événement agilo:load pour réinitialiser les compteurs
-    window.addEventListener('agilo:load', () => {
-      console.log('[AGILO:RELANCE] 📡 Événement agilo:load détecté - Réinitialisation compteurs');
-      setTimeout(initLimits, 500);
-    });
     
     // Réinitialiser les compteurs quand on change de transcript
     // Utiliser MutationObserver au lieu de setInterval pour meilleure performance
@@ -1698,4 +1654,3 @@
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
 })();
-
