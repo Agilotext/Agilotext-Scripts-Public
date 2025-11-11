@@ -331,16 +331,28 @@
     
     if (shouldHide) {
       log('Cache le bouton (pas de compte-rendu)');
-      btn.style.display = 'none';
+      btn.style.setProperty('display', 'none', 'important');
+      btn.style.setProperty('visibility', 'hidden', 'important');
+      btn.style.setProperty('opacity', '0', 'important');
+      btn.style.setProperty('pointer-events', 'none', 'important');
       
-      const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message');
-      if (counter) counter.style.display = 'none';
+      const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message');
+      if (counter) {
+        counter.style.setProperty('display', 'none', 'important');
+        counter.style.setProperty('visibility', 'hidden', 'important');
+      }
     } else {
       log('Affiche le bouton (compte-rendu existe)');
-      btn.style.display = 'flex';
+      btn.style.removeProperty('display');
+      btn.style.removeProperty('visibility');
+      btn.style.removeProperty('opacity');
+      btn.style.removeProperty('pointer-events');
       
-      const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message');
-      if (counter) counter.style.display = '';
+      const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message');
+      if (counter) {
+        counter.style.removeProperty('display');
+        counter.style.removeProperty('visibility');
+      }
     }
   }
   
@@ -499,16 +511,16 @@
       toast.textContent = '✅ ' + message;
       toast.style.cssText = `
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 1.25rem;
+        right: 1.25rem;
         background: #4caf50;
         color: white;
-        padding: 16px 24px;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: 1rem 1.5rem;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.15);
         z-index: 10000;
-        max-width: 400px;
-        font-size: 14px;
+        max-width: 25rem;
+        font-size: 0.875rem;
         font-weight: 500;
         animation: slideInRight 0.3s ease-out;
       `;
@@ -655,13 +667,13 @@
               const infoMsg = document.createElement('div');
               infoMsg.className = 'regeneration-cancel-info';
               infoMsg.innerHTML = `
-                <div style="padding: 16px; background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%); border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent); border-radius: var(--agilo-radius, 0.5rem); margin-top: 16px;">
-                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 8px;">ℹ️ Régénération en cours</strong>
-                  <p style="font-size: 13px; color: var(--agilo-dim, #525252); margin: 0 0 8px;">
+                <div style="padding: 1rem; background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%); border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent); border-radius: var(--agilo-radius, 0.5rem); margin-top: 1rem;">
+                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 0.5rem; font-size: 0.875rem;">ℹ️ Régénération en cours</strong>
+                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
                     La régénération du compte-rendu est en cours sur le serveur. 
                     Rechargez la page dans 2-3 minutes pour voir le nouveau compte-rendu.
                   </p>
-                  <button class="loading-cancel-btn" style="margin-top: 8px; width: 100%;" onclick="window.location.reload()">
+                  <button class="loading-cancel-btn" style="margin-top: 0.5rem; width: 100%;" onclick="window.location.reload()">
                     Recharger la page maintenant
                   </button>
                 </div>
@@ -816,28 +828,29 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 60px 20px;
+        padding: 3.75rem 1.25rem;
         text-align: center;
-        min-height: 300px;
+        min-height: 18.75rem;
         background: var(--agilo-surface, var(--color--white, #ffffff));
         color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        animation: agilo-fadeIn 0.3s ease-out;
       }
       
       .summary-loading-indicator #loading-summary,
       .summary-loading-indicator #loading-summary-clone {
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 24px;
+        width: 5.5rem;
+        height: 5.5rem;
+        margin: 0 auto 1.5rem;
         display: block;
       }
       
       /* Fallback si Lottie ne charge pas - spinner CSS */
       .summary-loading-indicator .lottie-fallback {
-        width: 88px;
-        height: 88px;
-        margin: 0 auto 24px;
-        border: 4px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
-        border-top: 4px solid var(--agilo-primary, #174a96);
+        width: 5.5rem;
+        height: 5.5rem;
+        margin: 0 auto 1.5rem;
+        border: 0.25rem solid var(--agilo-border, rgba(52, 58, 64, 0.25));
+        border-top: 0.25rem solid var(--agilo-primary, #174a96);
         border-radius: 50%;
         animation: agilo-spin 1s linear infinite;
       }
@@ -847,15 +860,10 @@
         100% { transform: rotate(360deg); }
       }
       
-      /* Animation d'apparition douce */
-      .summary-loading-indicator {
-        animation: agilo-fadeIn 0.3s ease-out;
-      }
-      
       @keyframes agilo-fadeIn {
         from {
           opacity: 0;
-          transform: translateY(10px);
+          transform: translateY(0.625rem);
         }
         to {
           opacity: 1;
@@ -874,44 +882,44 @@
       }
       
       .summary-loading-indicator .loading-text {
-        font: 500 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        font: 500 1rem/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
         color: var(--agilo-text, var(--color--gris_foncé, #020202));
-        margin-top: 8px;
-        margin-bottom: 4px;
+        margin-top: 0.5rem;
+        margin-bottom: 0.25rem;
       }
       
       .summary-loading-indicator .loading-subtitle {
-        font: 400 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        font: 400 0.875rem/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
         color: var(--agilo-dim, var(--color--gris, #525252));
-        margin-top: 8px;
+        margin-top: 0.5rem;
       }
       
       .regeneration-cancel-info {
-        padding: 16px;
+        padding: 1rem;
         background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%);
         border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent);
         border-radius: var(--agilo-radius, 0.5rem);
-        margin-top: 16px;
+        margin-top: 1rem;
       }
       
       .regeneration-cancel-info strong {
         color: var(--agilo-primary, #174a96);
         display: block;
-        margin-bottom: 8px;
-        font-size: 14px;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
       }
       
       .regeneration-cancel-info p {
-        font-size: 13px;
+        font-size: 0.8125rem;
         color: var(--agilo-dim, #525252);
-        margin: 0 0 8px;
+        margin: 0 0 0.5rem;
         line-height: 1.5;
       }
       
       .loading-countdown {
-        font-size: 28px;
+        font-size: 1.75rem;
         font-weight: 700;
-        margin: 20px 0 12px;
+        margin: 1.25rem 0 0.75rem;
         color: var(--agilo-primary, #174a96);
         font-variant-numeric: tabular-nums;
         letter-spacing: 0.04em;
@@ -919,41 +927,74 @@
       }
       
       .loading-cancel-btn {
-        margin-top: 20px;
+        margin-top: 1.25rem;
         cursor: pointer;
-        padding: 10px 20px;
+        padding: 0.625rem 1.25rem;
         border-radius: var(--agilo-radius, 0.5rem);
         border: 1px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
         background: var(--agilo-text, #020202);
         color: var(--agilo-surface, #ffffff);
-        font: 500 14px/1.4 system-ui, -apple-system, Arial, sans-serif;
+        font: 500 0.875rem/1.4 system-ui, -apple-system, Arial, sans-serif;
         transition: all 0.15s ease;
         user-select: none;
       }
       
       .loading-cancel-btn:hover {
         background: color-mix(in srgb, var(--agilo-text, #020202) 90%, transparent);
-        transform: translateY(1px);
+        transform: translateY(0.0625rem);
       }
       
       .loading-cancel-btn:active {
-        transform: translateY(2px);
+        transform: translateY(0.125rem);
       }
       
       .loading-cancel-btn:focus-visible {
-        outline: var(--agilo-focus, 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));
-        outline-offset: 2px;
+        outline: var(--agilo-focus, 0.125rem solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));
+        outline-offset: 0.125rem;
+      }
+      
+      /* Responsive pour petits écrans */
+      @media (max-width: 40rem) {
+        .summary-loading-indicator {
+          padding: 2.5rem 1rem;
+          min-height: 15rem;
+        }
+        
+        .summary-loading-indicator #loading-summary,
+        .summary-loading-indicator #loading-summary-clone {
+          width: 4.5rem;
+          height: 4.5rem;
+          margin: 0 auto 1.25rem;
+        }
+        
+        .loading-countdown {
+          font-size: 1.5rem;
+          margin: 1rem 0 0.5rem;
+        }
+        
+        .summary-loading-indicator .loading-text {
+          font-size: 0.9375rem;
+        }
+        
+        .summary-loading-indicator .loading-subtitle {
+          font-size: 0.8125rem;
+        }
+        
+        .loading-cancel-btn {
+          padding: 0.5rem 1rem;
+          font-size: 0.8125rem;
+        }
       }
       
       .regeneration-counter {
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        font-size: 12px;
+        gap: 0.375rem;
+        font-size: 0.75rem;
         font-weight: 500;
         color: var(--agilo-dim, #525252);
-        margin-top: 6px;
-        padding: 5px 10px;
+        margin-top: 0.375rem;
+        padding: 0.3125rem 0.625rem;
         border-radius: var(--agilo-radius, 0.5rem);
         background: var(--agilo-surface-2, #f8f9fa);
         border: 1px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
@@ -973,18 +1014,18 @@
       
       .regeneration-limit-message {
         display: flex;
-        gap: 10px;
-        padding: 10px 12px;
-        margin-top: 8px;
+        gap: 0.625rem;
+        padding: 0.625rem 0.75rem;
+        margin-top: 0.5rem;
         border-radius: var(--agilo-radius, 0.5rem);
-        font-size: 13px;
+        font-size: 0.8125rem;
         background: color-mix(in srgb, var(--color--orange, #fd7e14) 8%, var(--agilo-surface, #ffffff) 92%);
         border: 1px solid color-mix(in srgb, var(--color--orange, #fd7e14) 25%, var(--agilo-border, rgba(52, 58, 64, 0.25)) 75%);
-        box-shadow: 0 1px 2px color-mix(in srgb, var(--color--orange, #fd7e14) 10%, transparent);
+        box-shadow: 0 0.0625rem 0.125rem color-mix(in srgb, var(--color--orange, #fd7e14) 10%, transparent);
       }
       
       .regeneration-limit-icon {
-        font-size: 16px;
+        font-size: 1rem;
         line-height: 1;
         flex-shrink: 0;
       }
@@ -998,14 +1039,14 @@
         color: var(--color--orange, #fd7e14);
         font-weight: 600;
         display: block;
-        margin-bottom: 2px;
-        font-size: 13px;
+        margin-bottom: 0.125rem;
+        font-size: 0.8125rem;
       }
       
       .regeneration-limit-detail {
-        font-size: 12px;
+        font-size: 0.75rem;
         color: var(--agilo-dim, #525252);
-        margin-top: 2px;
+        margin-top: 0.125rem;
       }
       
       .agilo-toast-success {
