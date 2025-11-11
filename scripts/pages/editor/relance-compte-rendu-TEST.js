@@ -1528,17 +1528,20 @@
             console.log('[AGILO:RELANCE] 🔄 Rechargement vers:', url.toString());
             window.location.href = url.toString();
           }
-        } else if (waitResult.ready) {
-          // Le statut est READY_SUMMARY_READY mais on n'a pas pu récupérer le contenu
-          // ⚠️ IMPORTANT : Ne PAS recharger immédiatement - Le compte-rendu peut encore être en cours de génération
-          // Attendre encore un peu et réessayer
+        } else if (waitResult.ready && !waitResult.content) {
+          // ⚠️ CRITIQUE : Le statut est READY_SUMMARY_READY mais on n'a pas de contenu
+          // Cela ne devrait JAMAIS arriver car waitForSummaryReady ne retourne ready:true que si le hash a changé
+          // Mais si ça arrive, c'est probablement que le hash n'a pas changé et qu'on a continué le polling
           console.log('[AGILO:RELANCE] ⚠️ CAS 2: READY_SUMMARY_READY détecté mais contenu non récupéré');
-          console.log('[AGILO:RELANCE] ⚠️ Le statut est READY mais receiveSummary n\'a pas retourné de contenu valide');
-          console.log('[AGILO:RELANCE] ⚠️ Le compte-rendu est peut-être encore en cours de génération');
-          console.log('[AGILO:RELANCE] ⚠️ On attend encore 10 secondes puis on réessaye...');
+          console.log('[AGILO:RELANCE] ⚠️ Cela ne devrait pas arriver - waitForSummaryReady devrait avoir le contenu');
+          console.log('[AGILO:RELANCE] ⚠️ Le hash n\'a peut-être pas changé, donc on a continué le polling jusqu\'au timeout');
+          console.log('[AGILO:RELANCE] ⚠️ On NE RECHARGE PAS - Le compte-rendu n\'est probablement pas encore prêt');
           
-          // Attendre encore 10 secondes
-          await new Promise(r => setTimeout(r, 10000));
+          hideSummaryLoading();
+          setGeneratingState(false);
+          
+          alert('⚠️ Le compte-rendu prend plus de temps que prévu.\n\nLe statut est READY mais le nouveau compte-rendu n\'est pas encore disponible.\n\nVeuillez recharger la page dans quelques instants pour voir le nouveau compte-rendu.');
+          return; // Sortir sans recharger
           
           // Réessayer une dernière fois
           console.log('[AGILO:RELANCE] 🔄 Nouvelle tentative de récupération du compte-rendu...');
