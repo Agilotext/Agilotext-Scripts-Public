@@ -1235,19 +1235,55 @@
   function init() {
     // Vérifier si déjà initialisé (éviter les doublons)
     if (window.__agiloRelanceInitialized) {
-      console.log('Script de relance déjà initialisé, skip');
+      console.log('[AGILO:RELANCE] Script déjà initialisé, skip');
       return;
     }
     window.__agiloRelanceInitialized = true;
+    console.log('[AGILO:RELANCE] ✅ Initialisation du script de relance');
     
+    // ⚠️ GESTIONNAIRE DE CLIC AMÉLIORÉ (avec logs pour debug)
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn && !btn.disabled) {
-        e.preventDefault();
-        e.stopPropagation();
-        relancerCompteRendu();
+      if (!btn) return;
+      
+      console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur bouton Relancer', {
+        disabled: btn.disabled,
+        hasDisabledAttr: btn.hasAttribute('disabled'),
+        styleDisplay: window.getComputedStyle(btn).display,
+        styleVisibility: window.getComputedStyle(btn).visibility,
+        styleOpacity: window.getComputedStyle(btn).opacity
+      });
+      
+      // Ne pas bloquer si le bouton est visuellement désactivé mais pas vraiment disabled
+      // (pour Free users qui doivent voir la popup AgiloGate)
+      if (btn.hasAttribute('disabled') && btn.disabled === true) {
+        console.log('[AGILO:RELANCE] ⚠️ Bouton vraiment désactivé - Clic ignoré');
+        return;
       }
-    }, { passive: false });
+      
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[AGILO:RELANCE] ✅ Clic validé - Lancement relancerCompteRendu()');
+      relancerCompteRendu();
+    }, { passive: false, capture: true }); // capture: true pour intercepter tôt
+    
+    // ⚠️ INITIALISER LES COMPTEURS AU DÉMARRAGE
+    setTimeout(async () => {
+      try {
+        const creds = await ensureCreds();
+        if (creds.jobId && creds.edition) {
+          console.log('[AGILO:RELANCE] 📊 Initialisation compteurs au démarrage', {
+            jobId: creds.jobId,
+            edition: creds.edition
+          });
+          updateRegenerationCounter(creds.jobId, creds.edition);
+          updateButtonState(creds.jobId, creds.edition);
+          await updateButtonVisibility();
+        }
+      } catch (e) {
+        console.error('[AGILO:RELANCE] Erreur initialisation compteurs:', e);
+      }
+    }, 1000);
     
     // Détecter la sauvegarde du transcript
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
@@ -1281,7 +1317,7 @@
               await updateButtonVisibility();
             }
           } catch (e) {
-            console.log('Erreur mise à jour compteurs:', e);
+            console.log('[AGILO:RELANCE] Erreur mise à jour compteurs:', e);
           }
         }, 500);
         // ⚠️ IMPORTANT : On ne réinitialise PAS le compteur lors de la sauvegarde
