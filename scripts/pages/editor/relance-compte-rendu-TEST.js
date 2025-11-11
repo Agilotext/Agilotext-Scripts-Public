@@ -1,4 +1,4 @@
-// Agilotext – Relance Compte-Rendu (VERSION SIMPLIFIÉE SELON NICOLAS)
+// Agilotext – Relance Compte-Rendu (VERSION FINALE PROPRE)
 (function() {
   'use strict';
   
@@ -125,6 +125,76 @@
   let isGenerating = false;
   
   // ============================================
+  // VÉRIFICATION EXISTENCE COMPTE-RENDU
+  // ============================================
+  
+  async function getTranscriptStatus(jobId, email, token, edition) {
+    try {
+      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      
+      if (!response.ok) return null;
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.transcriptStatus) {
+        return data.transcriptStatus;
+      }
+      
+      if (data.status === 'KO') {
+        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+  
+  async function checkSummaryExists(jobId, email, token, edition) {
+    try {
+      const status = await getTranscriptStatus(jobId, email, token, edition);
+      
+      // Si le statut est READY_SUMMARY_READY ou READY_SUMMARY_PENDING, le compte-rendu existe
+      if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
+        return true;
+      }
+      
+      // Si c'est l'erreur "fichier manquant", le compte-rendu n'existe pas
+      if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        return false;
+      }
+      
+      // Fallback : vérifier via receiveSummary
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit'
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        if (text && !text.includes('pas encore disponible') && !text.includes('non publié') && !text.includes('fichier manquant')) {
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  // ============================================
   // SYSTÈME DE LIMITES
   // ============================================
   
@@ -193,7 +263,7 @@
     const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
     if (oldCounter) oldCounter.remove();
     
-    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
     if (oldMessage) oldMessage.remove();
     
     const canRegen = canRegenerate(jobId, edition);
@@ -279,6 +349,10 @@
       btn.style.cursor = 'pointer';
     }
   }
+  
+  // ============================================
+  // FONCTIONS UI
+  // ============================================
   
   function openSummaryTab() {
     const summaryTab = document.querySelector('#tab-summary');
@@ -396,6 +470,86 @@
       document.body.appendChild(toast);
       
       setTimeout(() => toast.remove(), 4000);
+    }
+  }
+  
+  function getButtonText() {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (activeTab?.id === 'tab-summary') return 'Régénérer';
+    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
+    return 'Relancer';
+  }
+  
+  // ============================================
+  // VISIBILITÉ DU BOUTON (AVEC VÉRIFICATION COMPTE-RENDU)
+  // ============================================
+  
+  async function updateButtonVisibility() {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (!activeTab) return;
+    
+    const isSummaryTab = activeTab.id === 'tab-summary';
+    const isTranscriptTab = activeTab.id === 'tab-transcript';
+    
+    const textDiv = btn.querySelector('div');
+    if (textDiv) textDiv.textContent = getButtonText();
+    
+    const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
+    
+    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe via getTranscriptStatus
+    try {
+      const creds = await ensureCreds();
+      if (creds.jobId && creds.email && creds.token) {
+        const status = await getTranscriptStatus(creds.jobId, creds.email, creds.token, creds.edition);
+        
+        // Si le statut indique qu'aucun compte-rendu n'existe, cacher le bouton
+        if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          
+          // Ajouter un message informatif
+          const infoMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
+          if (!infoMsg) {
+            const msg = document.createElement('div');
+            msg.className = 'regeneration-no-summary-message';
+            msg.innerHTML = `
+              <span style="font-size: 16px;">ℹ️</span>
+              <div>
+                <strong>Générez d'abord un compte-rendu</strong>
+                <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                </div>
+              </div>
+            `;
+            btn.parentElement.appendChild(msg);
+          }
+          return;
+        }
+        
+        // Si le statut n'est pas READY_SUMMARY_READY ou READY_SUMMARY_PENDING, cacher le bouton
+        if (status !== 'READY_SUMMARY_READY' && status !== 'READY_SUMMARY_PENDING') {
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return;
+        }
+      }
+    } catch (error) {
+      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
+    }
+    
+    // Gérer la visibilité (si compte-rendu existe)
+    if (isSummaryTab) {
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+    } else if (isTranscriptTab && transcriptModified) {
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+    } else {
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
     }
   }
   
@@ -550,62 +704,19 @@
     }
   }
   
-  function getButtonText() {
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    if (activeTab?.id === 'tab-summary') return 'Régénérer';
-    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
-    return 'Relancer';
-  }
-  
-  function updateButtonVisibility() {
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
-    
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    if (!activeTab) return;
-    
-    const isSummaryTab = activeTab.id === 'tab-summary';
-    const isTranscriptTab = activeTab.id === 'tab-transcript';
-    
-    const textDiv = btn.querySelector('div');
-    if (textDiv) textDiv.textContent = getButtonText();
-    
-    const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message');
-    
-    if (isSummaryTab) {
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
-    } else if (isTranscriptTab && transcriptModified) {
-      btn.style.display = 'flex';
-      if (counter) counter.style.display = '';
-    } else {
-      btn.style.display = 'none';
-      if (counter) counter.style.display = 'none';
-    }
-  }
-  
   // ============================================
   // INITIALISATION
   // ============================================
   
   function init() {
-    if (window.__agiloRelanceInitialized) {
-      console.log('[AGILO:RELANCE] ⚠️ Script déjà initialisé, skip');
-      return;
-    }
+    if (window.__agiloRelanceInitialized) return;
     window.__agiloRelanceInitialized = true;
-    
-    console.log('[AGILO:RELANCE] 🔧 Initialisation du listener de clic...');
     
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (btn) {
-        console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur le bouton', { disabled: btn.disabled });
-      }
       if (btn && !btn.disabled) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[AGILO:RELANCE] ✅ Appel relancerCompteRendu()');
         relancerCompteRendu();
       }
     });
@@ -700,25 +811,28 @@
         background: rgba(253, 126, 20, 0.1);
         border: 1px solid rgba(253, 126, 20, 0.35);
       }
+      
+      .regeneration-no-summary-message {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        background: rgba(33, 150, 243, 0.1);
+        border: 1px solid rgba(33, 150, 243, 0.35);
+      }
     `;
     document.head.appendChild(style);
   }
   
-  // Attendre que le DOM soit prêt
   if (document.readyState === 'loading') {
-    console.log('[AGILO:RELANCE] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
-    document.addEventListener('DOMContentLoaded', function() {
-      console.log('[AGILO:RELANCE] ✅ DOMContentLoaded - Initialisation...');
-      init();
-    });
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    console.log('[AGILO:RELANCE] ✅ DOM déjà prêt - Initialisation immédiate...');
-    // Attendre un peu pour être sûr que tout est chargé
-    setTimeout(init, 100);
+    init();
   }
   
   window.relancerCompteRendu = relancerCompteRendu;
   
-  console.log('[AGILO:RELANCE] ✅ Script chargé (VERSION SIMPLIFIÉE)');
-  console.log('[AGILO:RELANCE] 🔍 Fonction relancerCompteRendu disponible:', typeof window.relancerCompteRendu);
+  console.log('[AGILO:RELANCE] ✅ Script chargé (VERSION FINALE PROPRE)');
 })();
