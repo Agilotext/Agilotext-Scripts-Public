@@ -1398,246 +1398,121 @@
           countAfter: getRegenerationCount(jobId)
         });
         
-        // ⚠️ CRITIQUE : Afficher le loader IMMÉDIATEMENT après redoSummary
-        // Le loader DOIT rester affiché pendant TOUTE la durée du processus
+        // ✅ SOLUTION SIMPLIFIÉE SELON NICOLAS
+        // Nicolas dit que redoSummary est asynchrone et que le statut ne change PAS pendant la génération
+        // Il faut juste attendre 2-3 minutes puis recharger la page
         console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] 🔄 AFFICHAGE DU LOADER - DÉBUT DU PROCESSUS');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader doit rester affiché pendant TOUT le processus');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: La page NE DOIT PAS se recharger avant que le nouveau CR soit prêt');
+        console.log('[AGILO:RELANCE] ✅ SOLUTION SIMPLIFIÉE SELON NICOLAS');
+        console.log('[AGILO:RELANCE] - redoSummary est asynchrone (OK = appel pris en compte)');
+        console.log('[AGILO:RELANCE] - Le statut NE CHANGE PAS pendant la génération');
+        console.log('[AGILO:RELANCE] - La génération prend 2-3 minutes');
+        console.log('[AGILO:RELANCE] - On attend 2 min 30 puis on recharge la page');
         console.log('[AGILO:RELANCE] ========================================');
         
         // Ouvrir l'onglet Compte-rendu AVANT d'afficher le loader
         openSummaryTab();
         
-        // Afficher le loader IMMÉDIATEMENT
+        // Afficher le loader avec compte à rebours
         showSummaryLoading();
-        console.log('[AGILO:RELANCE] ✅ Loader affiché - Il doit rester visible pendant tout le processus');
+        console.log('[AGILO:RELANCE] ✅ Loader affiché - Compte à rebours 2 min 30');
         
         // Afficher un message de succès non-bloquant
         showSuccessMessage('Régénération lancée...');
         
-        // ⚠️ CRITIQUE : Délai initial de 10 secondes APRÈS redoSummary
-        // Nicolas dit que redoSummary est asynchrone et retourne OK pour dire que l'appel est pris en compte
-        // Le backend a besoin d'un peu de temps pour démarrer la régénération
-        // Mais pas besoin d'attendre 40 secondes - on peut commencer le polling plus tôt
-        const initialDelay = 10000; // 10 secondes suffisent pour laisser le backend démarrer
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log(`[AGILO:RELANCE] ⏳ DÉLAI INITIAL DE ${initialDelay/1000} SECONDES`);
-        console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary');
-        console.log('[AGILO:RELANCE] ⏳ On attend AVANT de commencer le polling pour éviter de récupérer l\'ancien statut');
-        console.log('[AGILO:RELANCE] ⏳ Le loader reste affiché pendant cette attente');
-        console.log('[AGILO:RELANCE] ========================================');
+        // ⏳ COMPTE À REBOURS 2 MIN 30 (150 secondes)
+        const loaderContainer = document.querySelector('.summary-loading-indicator');
+        let countdownInterval = null;
         
-        // Afficher un compte à rebours toutes les 5 secondes
-        for (let remaining = initialDelay; remaining > 0; remaining -= 5000) {
-          const secondsLeft = Math.ceil(remaining / 1000);
-          console.log(`[AGILO:RELANCE] ⏳ Attente... ${secondsLeft} secondes restantes (loader toujours affiché)`);
-          await new Promise(r => setTimeout(r, Math.min(5000, remaining)));
-        }
-        
-        console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
-        
-        // Vérifier que summaryEditor existe avant de commencer le polling
-        const summaryEditorCheck = document.querySelector('#summaryEditor');
-        console.log('[AGILO:RELANCE] 🔍 Vérification summaryEditor:', {
-          exists: !!summaryEditorCheck,
-          id: summaryEditorCheck ? summaryEditorCheck.id : 'N/A',
-          className: summaryEditorCheck ? summaryEditorCheck.className : 'N/A'
-        });
-        
-        if (!summaryEditorCheck) {
-          console.warn('[AGILO:RELANCE] ⚠️ summaryEditor n\'existe pas encore - Le polling va quand même démarrer');
-          console.warn('[AGILO:RELANCE] ⚠️ Si summaryEditor n\'est pas trouvé à la fin, on rechargera la page');
-        }
-        
-        // ⚠️ IMPORTANT : Vérifier que le compte-rendu est prêt avec getTranscriptStatus
-        // et attendre READY_SUMMARY_READY avant d'afficher
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] 🚀 DÉBUT POLLING POUR READY_SUMMARY_READY');
-        console.log('[AGILO:RELANCE] Paramètres pour polling:', {
-          jobId,
-          edition,
-          emailLength: email ? email.length : 0,
-          tokenLength: token ? token.length : 0,
-          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
-          maxAttempts: 120, // ⚠️ 120 tentatives × 3s = 6 minutes max (Nicolas dit que ça peut prendre 2-3 minutes)
-          delay: 3000 // ⚠️ 3 secondes entre tentatives pour réduire les appels API
-        });
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader reste affiché pendant le polling');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On attend vraiment READY_SUMMARY_READY avec nouveau hash');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
-        console.log('[AGILO:RELANCE] ========================================');
-        
-        const pollingStartTime = Date.now();
-        console.log('[AGILO:RELANCE] 🎬 APPEL waitForSummaryReady() - Début du polling réel');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: waitForPending=true pour s\'assurer qu\'on voit PENDING puis le nouveau READY');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Délai entre tentatives = 3 secondes pour réduire les appels API');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader reste affiché pendant TOUT le polling');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
-        
-        let waitResult;
-        try {
-          // ⚠️ CRITIQUE : waitForPending=true pour forcer l'attente de READY_SUMMARY_PENDING
-          // Cela garantit qu'on ne récupère pas l'ancien compte-rendu
-          // ⚠️ IMPORTANT : Nicolas dit que ça peut prendre 2-3 minutes, donc on augmente à 120 tentatives (6 minutes max)
-          waitResult = await waitForSummaryReady(jobId, email, token, edition, 120, 3000, oldHash, true);
-        } catch (error) {
-          console.error('[AGILO:RELANCE] ❌ ERREUR dans waitForSummaryReady:', {
-            error: error.message,
-            stack: error.stack,
-            name: error.name
-          });
-          waitResult = { ready: false, error: 'EXCEPTION', exception: error.message };
-        }
-        
-        const pollingTime = Date.now() - pollingStartTime;
-        
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] 🏁 FIN POLLING');
-        console.log('[AGILO:RELANCE] Résultat détaillé:', {
-          ready: waitResult.ready,
-          hasContent: !!waitResult.content,
-          contentLength: waitResult.content ? waitResult.content.length : 0,
-          hasHash: !!waitResult.hash,
-          hash: waitResult.hash ? waitResult.hash.substring(0, 50) + '...' : '(aucun)',
-          error: waitResult.error,
-          pollingTimeMs: pollingTime,
-          pollingTimeSec: Math.round(pollingTime / 1000),
-          pollingTimeMin: Math.round(pollingTime / 60000)
-        });
-        console.log('[AGILO:RELANCE] ========================================');
-        
-        console.log('[AGILO:RELANCE] 🔍 Analyse du résultat du polling...');
-        console.log('[AGILO:RELANCE] waitResult.ready:', waitResult.ready);
-        console.log('[AGILO:RELANCE] waitResult.content existe:', !!waitResult.content);
-        console.log('[AGILO:RELANCE] waitResult.content length:', waitResult.content ? waitResult.content.length : 0);
-        console.log('[AGILO:RELANCE] waitResult.error:', waitResult.error);
-        
-        if (waitResult.ready && waitResult.content) {
-          // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT DANS summaryEditor (sans recharger la page)
-          console.log('[AGILO:RELANCE] ✅ CAS 1: Nouveau compte-rendu prêt avec contenu ! Affichage direct...');
-          console.log('[AGILO:RELANCE] 📏 Longueur du contenu:', waitResult.content.length);
+        if (loaderContainer) {
+          // Mise à jour du texte
+          const loadingText = loaderContainer.querySelector('.loading-text');
+          const loadingSubtitle = loaderContainer.querySelector('.loading-subtitle');
           
-          const summaryEditor = document.querySelector('#summaryEditor');
-          console.log('[AGILO:RELANCE] 🔍 Recherche summaryEditor:', {
-            found: !!summaryEditor,
-            selector: '#summaryEditor'
-          });
+          if (loadingText) {
+            loadingText.textContent = 'Génération du compte-rendu en cours...';
+          }
+          if (loadingSubtitle) {
+            loadingSubtitle.textContent = 'La page se rechargera automatiquement dans :';
+          }
           
-          if (summaryEditor) {
-            console.log('[AGILO:RELANCE] ✅ summaryEditor trouvé - Affichage du nouveau compte-rendu...');
-            // Nettoyer le HTML pour éviter les scripts malveillants
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = waitResult.content;
+          // Créer ou récupérer le compte à rebours
+          let countdown = loaderContainer.querySelector('.loading-countdown');
+          if (!countdown) {
+            countdown = document.createElement('p');
+            countdown.className = 'loading-countdown';
+            countdown.style.cssText = `
+              font-size: 32px;
+              font-weight: 700;
+              margin: 20px 0 10px;
+              color: #174a96;
+              font-variant-numeric: tabular-nums;
+              letter-spacing: 0.05em;
+            `;
+            loaderContainer.appendChild(countdown);
+          }
+          
+          let secondsLeft = 150; // 2 min 30
+          
+          const updateCountdown = () => {
+            const minutes = Math.floor(secondsLeft / 60);
+            const seconds = secondsLeft % 60;
+            countdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
             
-            // Supprimer les scripts et styles
-            tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-            
-            // Nettoyer les attributs dangereux
-            tempDiv.querySelectorAll('*').forEach(n => {
-              [...n.attributes].forEach(a => {
-                const name = a.name.toLowerCase();
-                const val = String(a.value || '');
-                if (name.startsWith('on') || /^javascript:/i.test(val)) {
-                  n.removeAttribute(a.name);
-                }
-              });
-            });
-            
-            summaryEditor.innerHTML = tempDiv.innerHTML;
-            
-            // Mettre à jour summaryEmpty dans editorRoot si disponible
-            const root = document.querySelector('#editorRoot');
-            if (root) {
-              root.dataset.summaryEmpty = '0';
+            if (secondsLeft <= 0) {
+              clearInterval(countdownInterval);
+              countdown.textContent = 'Rechargement...';
+              
+              // ✅ RECHARGER LA PAGE AVEC CACHE-BUSTER
+              setTimeout(() => {
+                console.log('[AGILO:RELANCE] 🔄 Rechargement de la page pour afficher le nouveau compte-rendu...');
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('tab', 'summary');
+                newUrl.searchParams.set('_regen', Date.now().toString());
+                newUrl.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+                console.log('[AGILO:RELANCE] 🔄 URL de rechargement:', newUrl.toString());
+                window.location.href = newUrl.toString();
+              }, 500);
             }
             
-            hideSummaryLoading();
-            setGeneratingState(false);
-            
-            showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
-            
-            console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché directement dans summaryEditor');
-          } else {
-            // ⚠️ CRITIQUE : summaryEditor non trouvé - On NE RECHARGE PAS immédiatement
-            // On attend un peu et on réessaye de trouver summaryEditor
-            console.warn('[AGILO:RELANCE] ⚠️ CAS 1B: summaryEditor non trouvé');
-            console.warn('[AGILO:RELANCE] ⚠️ Le nouveau compte-rendu est prêt mais summaryEditor n\'est pas disponible');
-            console.warn('[AGILO:RELANCE] ⚠️ On attend 2 secondes et on réessaye...');
-            
-            // Attendre 2 secondes et réessayer
-            await new Promise(r => setTimeout(r, 2000));
-            
-            const summaryEditorRetry = document.querySelector('#summaryEditor');
-            if (summaryEditorRetry) {
-              console.log('[AGILO:RELANCE] ✅ summaryEditor trouvé après attente - Affichage du compte-rendu');
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = waitResult.content;
-              tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-              tempDiv.querySelectorAll('*').forEach(n => {
-                [...n.attributes].forEach(a => {
-                  const name = a.name.toLowerCase();
-                  const val = String(a.value || '');
-                  if (name.startsWith('on') || /^javascript:/i.test(val)) {
-                    n.removeAttribute(a.name);
-                  }
-                });
-              });
-              summaryEditorRetry.innerHTML = tempDiv.innerHTML;
-              const root = document.querySelector('#editorRoot');
-              if (root) {
-                root.dataset.summaryEmpty = '0';
+            secondsLeft--;
+          };
+          
+          updateCountdown(); // Affichage initial
+          countdownInterval = setInterval(updateCountdown, 1000);
+          
+          // ✅ BOUTON ANNULER
+          let cancelBtn = loaderContainer.querySelector('.cancel-polling-btn');
+          if (!cancelBtn) {
+            cancelBtn = document.createElement('button');
+            cancelBtn.className = 'button cancel-polling-btn';
+            cancelBtn.textContent = 'Annuler et recharger plus tard';
+            cancelBtn.style.cssText = 'margin-top: 20px; opacity: 0.8; cursor: pointer;';
+            cancelBtn.onclick = () => {
+              clearInterval(countdownInterval);
+              hideSummaryLoading();
+              isGenerating = false;
+              setGeneratingState(false);
+              const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+              const btnText = btn?.querySelector('div');
+              if (btn) {
+                btn.disabled = false;
+                if (btnText) btnText.textContent = 'Relancer';
               }
-              hideSummaryLoading();
-              setGeneratingState(false);
-              showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
-              console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché après réessai');
-              return; // Sortir sans recharger
-            } else {
-              // Si summaryEditor n'est toujours pas trouvé, on affiche un message
-              console.warn('[AGILO:RELANCE] ⚠️ summaryEditor toujours non trouvé après réessai');
-              hideSummaryLoading();
-              setGeneratingState(false);
-              alert('✅ Le compte-rendu a été régénéré avec succès !\n\nVeuillez recharger la page pour voir le nouveau compte-rendu.');
-              // On NE RECHARGE PAS automatiquement - L'utilisateur peut recharger manuellement
-              return;
-            }
+              showSuccessMessage('Annulé - Rechargez manuellement dans quelques minutes');
+            };
+            loaderContainer.appendChild(cancelBtn);
           }
-        } else if (waitResult.ready && !waitResult.content) {
-          // ⚠️ CRITIQUE : Le statut est READY_SUMMARY_READY mais on n'a pas de contenu
-          // Cela ne devrait JAMAIS arriver car waitForSummaryReady ne retourne ready:true que si le hash a changé
-          // Mais si ça arrive, c'est probablement que le hash n'a pas changé et qu'on a continué le polling
-          console.log('[AGILO:RELANCE] ⚠️ CAS 2: READY_SUMMARY_READY détecté mais contenu non récupéré');
-          console.log('[AGILO:RELANCE] ⚠️ Cela ne devrait pas arriver - waitForSummaryReady devrait avoir le contenu');
-          console.log('[AGILO:RELANCE] ⚠️ Le hash n\'a peut-être pas changé, donc on a continué le polling jusqu\'au timeout');
-          console.log('[AGILO:RELANCE] ⚠️ On NE RECHARGE PAS - Le compte-rendu n\'est probablement pas encore prêt');
-          
-          hideSummaryLoading();
-          setGeneratingState(false);
-          
-          alert('⚠️ Le compte-rendu prend plus de temps que prévu.\n\nLe statut est READY mais le nouveau compte-rendu n\'est pas encore disponible.\n\nVeuillez recharger la page dans quelques instants pour voir le nouveau compte-rendu.');
-          return; // Sortir sans recharger
         } else {
-          // Timeout ou erreur
-          console.warn('[AGILO:RELANCE] ⚠️ CAS 3: Compte-rendu pas prêt après polling');
-          console.warn('[AGILO:RELANCE] ⚠️ Détails:', {
-            ready: waitResult.ready,
-            error: waitResult.error,
-            hasContent: !!waitResult.content
-          });
-          hideSummaryLoading();
-          setGeneratingState(false);
-          
-          if (waitResult.error === 'TIMEOUT') {
-            console.warn('[AGILO:RELANCE] ⚠️ TIMEOUT: Le polling a atteint le maximum de tentatives sans obtenir READY_SUMMARY_READY');
-            alert('⚠️ Le compte-rendu n\'est pas encore prêt. Il sera disponible dans quelques instants.\n\nVous pouvez recharger la page plus tard.');
-          } else if (waitResult.error) {
-            console.error('[AGILO:RELANCE] ❌ ERREUR lors du polling:', waitResult.error);
-            alert('⚠️ Erreur lors de la génération du compte-rendu.\n\nErreur: ' + waitResult.error + '\n\nVeuillez réessayer.');
-          } else {
-            console.error('[AGILO:RELANCE] ❌ État inattendu du polling');
-            alert('⚠️ État inattendu lors de la génération du compte-rendu.\n\nVeuillez réessayer.');
-          }
+          // Fallback si loaderContainer n'existe pas
+          console.warn('[AGILO:RELANCE] ⚠️ loaderContainer non trouvé - Attente simple sans compte à rebours');
+          setTimeout(() => {
+            console.log('[AGILO:RELANCE] 🔄 Rechargement de la page (fallback)...');
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('tab', 'summary');
+            newUrl.searchParams.set('_regen', Date.now().toString());
+            newUrl.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+            window.location.href = newUrl.toString();
+          }, 150000); // 2 min 30
         }
         
       } else {
