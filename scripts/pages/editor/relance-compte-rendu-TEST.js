@@ -1375,10 +1375,11 @@
         // Afficher un message de succès non-bloquant
         showSuccessMessage('Régénération lancée...');
         
-        // ⚠️ CRITIQUE : Délai initial de 40 secondes APRÈS redoSummary
-        // Le backend a besoin de temps pour traiter redoSummary et mettre à jour le statut
-        // On attend AVANT de commencer le polling pour éviter de récupérer l'ancien statut
-        const initialDelay = 40000; // 40 secondes comme demandé
+        // ⚠️ CRITIQUE : Délai initial de 10 secondes APRÈS redoSummary
+        // Nicolas dit que redoSummary est asynchrone et retourne OK pour dire que l'appel est pris en compte
+        // Le backend a besoin d'un peu de temps pour démarrer la régénération
+        // Mais pas besoin d'attendre 40 secondes - on peut commencer le polling plus tôt
+        const initialDelay = 10000; // 10 secondes suffisent pour laisser le backend démarrer
         console.log('[AGILO:RELANCE] ========================================');
         console.log(`[AGILO:RELANCE] ⏳ DÉLAI INITIAL DE ${initialDelay/1000} SECONDES`);
         console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary');
@@ -1418,8 +1419,8 @@
           emailLength: email ? email.length : 0,
           tokenLength: token ? token.length : 0,
           oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
-          maxAttempts: 60,
-          delay: 3000 // ⚠️ Augmenté à 3 secondes pour réduire les appels API
+          maxAttempts: 120, // ⚠️ 120 tentatives × 3s = 6 minutes max (Nicolas dit que ça peut prendre 2-3 minutes)
+          delay: 3000 // ⚠️ 3 secondes entre tentatives pour réduire les appels API
         });
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader reste affiché pendant le polling');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On attend vraiment READY_SUMMARY_READY avec nouveau hash');
@@ -1437,8 +1438,8 @@
         try {
           // ⚠️ CRITIQUE : waitForPending=true pour forcer l'attente de READY_SUMMARY_PENDING
           // Cela garantit qu'on ne récupère pas l'ancien compte-rendu
-          // Délai augmenté à 3 secondes entre tentatives pour réduire les appels API
-          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 3000, oldHash, true);
+          // ⚠️ IMPORTANT : Nicolas dit que ça peut prendre 2-3 minutes, donc on augmente à 120 tentatives (6 minutes max)
+          waitResult = await waitForSummaryReady(jobId, email, token, edition, 120, 3000, oldHash, true);
         } catch (error) {
           console.error('[AGILO:RELANCE] ❌ ERREUR dans waitForSummaryReady:', {
             error: error.message,
@@ -1517,16 +1518,49 @@
             
             console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché directement dans summaryEditor');
           } else {
-            // Fallback : recharger la page si summaryEditor n'est pas trouvé
-            console.warn('[AGILO:RELANCE] ⚠️ CAS 1B: summaryEditor non trouvé - Rechargement de la page');
-            console.warn('[AGILO:RELANCE] ⚠️ Le nouveau compte-rendu est prêt mais on ne peut pas l\'afficher directement');
-            console.warn('[AGILO:RELANCE] ⚠️ Rechargement avec cache-buster pour afficher le nouveau compte-rendu');
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', 'summary');
-            url.searchParams.set('_regen', Date.now().toString());
-            url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-            console.log('[AGILO:RELANCE] 🔄 Rechargement vers:', url.toString());
-            window.location.href = url.toString();
+            // ⚠️ CRITIQUE : summaryEditor non trouvé - On NE RECHARGE PAS immédiatement
+            // On attend un peu et on réessaye de trouver summaryEditor
+            console.warn('[AGILO:RELANCE] ⚠️ CAS 1B: summaryEditor non trouvé');
+            console.warn('[AGILO:RELANCE] ⚠️ Le nouveau compte-rendu est prêt mais summaryEditor n\'est pas disponible');
+            console.warn('[AGILO:RELANCE] ⚠️ On attend 2 secondes et on réessaye...');
+            
+            // Attendre 2 secondes et réessayer
+            await new Promise(r => setTimeout(r, 2000));
+            
+            const summaryEditorRetry = document.querySelector('#summaryEditor');
+            if (summaryEditorRetry) {
+              console.log('[AGILO:RELANCE] ✅ summaryEditor trouvé après attente - Affichage du compte-rendu');
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = waitResult.content;
+              tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+              tempDiv.querySelectorAll('*').forEach(n => {
+                [...n.attributes].forEach(a => {
+                  const name = a.name.toLowerCase();
+                  const val = String(a.value || '');
+                  if (name.startsWith('on') || /^javascript:/i.test(val)) {
+                    n.removeAttribute(a.name);
+                  }
+                });
+              });
+              summaryEditorRetry.innerHTML = tempDiv.innerHTML;
+              const root = document.querySelector('#editorRoot');
+              if (root) {
+                root.dataset.summaryEmpty = '0';
+              }
+              hideSummaryLoading();
+              setGeneratingState(false);
+              showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
+              console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché après réessai');
+              return; // Sortir sans recharger
+            } else {
+              // Si summaryEditor n'est toujours pas trouvé, on affiche un message
+              console.warn('[AGILO:RELANCE] ⚠️ summaryEditor toujours non trouvé après réessai');
+              hideSummaryLoading();
+              setGeneratingState(false);
+              alert('✅ Le compte-rendu a été régénéré avec succès !\n\nVeuillez recharger la page pour voir le nouveau compte-rendu.');
+              // On NE RECHARGE PAS automatiquement - L'utilisateur peut recharger manuellement
+              return;
+            }
           }
         } else if (waitResult.ready && !waitResult.content) {
           // ⚠️ CRITIQUE : Le statut est READY_SUMMARY_READY mais on n'a pas de contenu
