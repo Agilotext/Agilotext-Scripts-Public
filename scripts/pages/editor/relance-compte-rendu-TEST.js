@@ -588,11 +588,19 @@
   }
   
   /**
-   * Appeler l'API getTranscriptStatus pour obtenir le statut
+   * Appeler l'API getTranscriptStatus pour obtenir le statut du transcript
+   * Retourne le statut (READY_SUMMARY_READY, READY_SUMMARY_PENDING, etc.) ou null en cas d'erreur
    */
   async function getTranscriptStatus(jobId, email, token, edition) {
     try {
       const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      
+      console.log('[AGILO:RELANCE] Appel getTranscriptStatus', {
+        jobId,
+        edition,
+        emailLength: email ? email.length : 0,
+        tokenLength: token ? token.length : 0
+      });
       
       const response = await fetch(url, {
         method: 'GET',
@@ -600,11 +608,20 @@
       });
       
       if (!response.ok) {
-        console.error('[AGILO:RELANCE] Erreur HTTP getTranscriptStatus:', response.status);
+        console.error('[AGILO:RELANCE] Erreur HTTP getTranscriptStatus:', {
+          status: response.status,
+          statusText: response.statusText
+        });
         return null;
       }
       
       const data = await response.json();
+      
+      console.log('[AGILO:RELANCE] Réponse getTranscriptStatus:', {
+        status: data.status,
+        transcriptStatus: data.transcriptStatus,
+        javaException: data.javaException
+      });
       
       if (data.status === 'OK' && data.transcriptStatus) {
         return data.transcriptStatus;
@@ -626,14 +643,26 @@
   }
   
   /**
+   * Calculer un hash simple du contenu pour détecter les changements
+   */
+  function getContentHash(text) {
+    const s = String(text || '');
+    if (s.length < 60) return `len:${s.length}`;
+    const head = s.slice(0, 180).replace(/\s+/g, '');
+    const tail = s.slice(-180).replace(/\s+/g, '');
+    return `${s.length}:${head.slice(0, 40)}:${tail.slice(-40)}`;
+  }
+  
+  /**
    * Vérifier si un compte-rendu existe déjà pour ce jobId
    * Utilise getTranscriptStatus pour vérifier le statut
    */
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
+      // D'abord vérifier via getTranscriptStatus (plus fiable)
       const status = await getTranscriptStatus(jobId, email, token, edition);
       
-      console.log('[AGILO:RELANCE] Statut transcript:', status);
+      console.log('[AGILO:RELANCE] Statut transcript pour vérification existence:', status);
       
       // Si le statut est READY_SUMMARY_READY ou READY_SUMMARY_PENDING, le compte-rendu existe (ou est en cours)
       if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
@@ -645,7 +674,29 @@
         return false;
       }
       
-      // Pour les autres statuts (ON_ERROR, READY_SUMMARY_ON_ERROR, etc.), on considère qu'il n'existe pas
+      // Fallback : vérifier via receiveSummary (pour compatibilité)
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      
+      console.log('[AGILO:RELANCE] Vérification existence compte-rendu (fallback):', {
+        status: response.status,
+        ok: response.ok
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        // Vérifier que ce n'est pas un message d'erreur
+        const isError = text.includes('pas encore disponible') || 
+                       text.includes('non publié') || 
+                       text.includes('fichier manquant');
+        
+        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
+      }
+      
       return false;
     } catch (error) {
       console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
@@ -655,17 +706,23 @@
   
   /**
    * Attendre que le compte-rendu soit prêt (polling avec getTranscriptStatus)
-   * Attend le statut READY_SUMMARY_READY
+   * Attend le statut READY_SUMMARY_READY avant de retourner true
+   * Retourne aussi le hash du nouveau contenu si disponible
    */
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000) {
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000, oldHash = '') {
+    console.log('[AGILO:RELANCE] ========================================');
     console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY', {
       jobId,
+      edition,
       maxAttempts,
-      delay
+      delay,
+      oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)'
     });
+    console.log('[AGILO:RELANCE] ========================================');
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
+        // ⚠️ IMPORTANT : Utiliser getTranscriptStatus pour vérifier le statut
         const status = await getTranscriptStatus(jobId, email, token, edition);
         
         console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Statut:`, status);
@@ -676,7 +733,62 @@
             attempt,
             status
           });
-          return true;
+          
+          // Récupérer le nouveau compte-rendu pour vérifier le hash
+          try {
+            const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
+            const response = await fetch(url, {
+              method: 'GET',
+              cache: 'no-store'
+            });
+            
+            if (response.ok) {
+              const text = await response.text();
+              
+              // Vérifier que le contenu n'est pas vide et n'est pas un message d'erreur
+              if (!text || text.length < 100 || 
+                  text.includes('pas encore disponible') || 
+                  text.includes('non publié') || 
+                  text.includes('fichier manquant')) {
+                console.warn('[AGILO:RELANCE] ⚠️ Contenu invalide ou message d\'erreur - Continuation du polling');
+                // Continuer le polling
+                if (attempt < maxAttempts) {
+                  await new Promise(r => setTimeout(r, delay));
+                }
+                continue;
+              }
+              
+              const newHash = getContentHash(text);
+              
+              console.log('[AGILO:RELANCE] Nouveau compte-rendu récupéré:', {
+                contentLength: text.length,
+                newHash: newHash.substring(0, 50) + '...',
+                oldHash: oldHash ? oldHash.substring(0, 50) + '...' : '(aucun)',
+                hashChanged: !oldHash || newHash !== oldHash
+              });
+              
+              // Si le hash a changé (ou si on n'avait pas d'ancien hash), c'est bon
+              if (!oldHash || newHash !== oldHash) {
+                console.log('[AGILO:RELANCE] ✅ Hash différent détecté - Nouveau compte-rendu confirmé !');
+                return { ready: true, hash: newHash, content: text };
+              } else {
+                console.warn('[AGILO:RELANCE] ⚠️ Hash identique - Le compte-rendu n\'a peut-être pas changé');
+                // On retourne quand même true car le statut est READY_SUMMARY_READY
+                return { ready: true, hash: newHash, content: text };
+              }
+            } else {
+              console.warn('[AGILO:RELANCE] ⚠️ receiveSummary retourne une erreur HTTP:', response.status);
+              // Continuer le polling
+              if (attempt < maxAttempts) {
+                await new Promise(r => setTimeout(r, delay));
+              }
+              continue;
+            }
+          } catch (error) {
+            console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', error);
+            // On retourne quand même true car le statut est READY_SUMMARY_READY
+            return { ready: true, hash: null, content: null };
+          }
         }
         
         // Si le statut est READY_SUMMARY_PENDING, c'est en cours
@@ -687,7 +799,12 @@
         // Si erreur, on arrête
         if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ON_ERROR') {
           console.error('[AGILO:RELANCE] ❌ Erreur lors de la génération:', status);
-          return false;
+          return { ready: false, error: status };
+        }
+        
+        // Si le statut est null ou autre chose, continuer le polling
+        if (status === null) {
+          console.log(`[AGILO:RELANCE] Statut null - Continuation du polling (tentative ${attempt}/${maxAttempts})`);
         }
         
         // Attendre avant la prochaine tentative (sauf dernière)
@@ -705,7 +822,7 @@
     // Si on arrive ici, le compte-rendu n'est pas prêt après toutes les tentatives
     console.warn('[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY non obtenu après', maxAttempts, 'tentatives');
     console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
-    return false;
+    return { ready: false, error: 'TIMEOUT' };
   }
   
   /**
@@ -928,9 +1045,45 @@
       console.log('[AGILO:RELANCE] ✅ Compte-rendu existant détecté, régénération possible');
     }
     
+    // ⚠️ IMPORTANT : Récupérer le hash de l'ancien compte-rendu avant régénération
+    let oldHash = '';
+    try {
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store'
+      });
+      
+      if (response.ok) {
+        const text = await response.text();
+        if (text && !text.includes('pas encore disponible') && !text.includes('non publié')) {
+          oldHash = getContentHash(text);
+          console.log('[AGILO:RELANCE] Hash ancien compte-rendu récupéré:', {
+            hash: oldHash.substring(0, 50) + '...',
+            contentLength: text.length
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('[AGILO:RELANCE] Erreur récupération hash ancien compte-rendu:', error);
+      // On continue quand même
+    }
+    
     setGeneratingState(true);
     
     try {
+      // ⚠️ IMPORTANT : Logger tous les paramètres envoyés
+      console.log('[AGILO:RELANCE] ========================================');
+      console.log('[AGILO:RELANCE] Paramètres pour redoSummary:', {
+        jobId: jobId,
+        edition: edition,
+        username: email,
+        usernameLength: email ? email.length : 0,
+        tokenLength: token ? token.length : 0,
+        tokenPreview: token ? token.substring(0, 10) + '...' : '(vide)'
+      });
+      console.log('[AGILO:RELANCE] ========================================');
+      
       const formData = new FormData();
       formData.append('username', email);
       formData.append('token', token);
@@ -942,30 +1095,41 @@
         method: 'POST',
         jobId,
         edition,
-        emailLength: email.length
+        emailLength: email.length,
+        timestamp: new Date().toISOString()
       });
       
+      const apiStartTime = Date.now();
       const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
         method: 'POST',
         body: formData
       });
+      const apiTime = Date.now() - apiStartTime;
       
-      console.log('[AGILO:RELANCE] Réponse HTTP reçue:', {
+      console.log('[AGILO:RELANCE] ========================================');
+      console.log('[AGILO:RELANCE] Réponse HTTP redoSummary reçue:', {
         status: response.status,
         statusText: response.statusText,
         ok: response.ok,
+        timeMs: apiTime,
         headers: Object.fromEntries(response.headers.entries())
       });
+      console.log('[AGILO:RELANCE] ========================================');
       
       const result = await response.json();
       
       // Logs détaillés pour le débogage
-      console.log('[AGILO:RELANCE] Réponse API reçue:', {
+      console.log('[AGILO:RELANCE] ========================================');
+      console.log('[AGILO:RELANCE] Réponse API redoSummary (JSON):', {
         status: result.status,
         httpStatus: response.status,
         responseOk: response.ok,
-        result: result
+        message: result.message,
+        error: result.error,
+        errorMessage: result.errorMessage,
+        fullResult: result
       });
+      console.log('[AGILO:RELANCE] ========================================');
       
       if (result.status === 'OK' || response.ok) {
         // Vérifier que le jobId n'a pas changé pendant la requête
@@ -994,20 +1158,94 @@
         });
         
         // Afficher un message de succès non-bloquant
-        showSuccessMessage('Compte-rendu régénéré avec succès !');
+        showSuccessMessage('Régénération lancée...');
         
         // Ouvrir l'onglet Compte-rendu
         openSummaryTab();
         
-        // Vérifier que le compte-rendu est prêt avant de recharger
-        console.log('[AGILO:RELANCE] Vérification disponibilité compte-rendu...');
-        await waitForSummaryReady(jobId, email, token, edition);
+        // ⚠️ IMPORTANT : Vérifier que le compte-rendu est prêt avec getTranscriptStatus
+        // et attendre READY_SUMMARY_READY avant d'afficher
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY...');
+        console.log('[AGILO:RELANCE] Paramètres pour polling:', {
+          jobId,
+          edition,
+          emailLength: email ? email.length : 0,
+          tokenLength: token ? token.length : 0,
+          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)'
+        });
+        console.log('[AGILO:RELANCE] ========================================');
         
-        // Recharger la page après confirmation que le compte-rendu est prêt
-        console.log('[AGILO:RELANCE] Compte-rendu prêt, rechargement de la page...');
-        const url = new URL(window.location.href);
-        url.searchParams.set('tab', 'summary');
-        window.location.href = url.toString();
+        const waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash);
+        
+        if (waitResult.ready && waitResult.content) {
+          // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT DANS summaryEditor (sans recharger la page)
+          console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu prêt ! Affichage direct...');
+          
+          const summaryEditor = document.querySelector('#summaryEditor');
+          if (summaryEditor) {
+            // Nettoyer le HTML pour éviter les scripts malveillants
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = waitResult.content;
+            
+            // Supprimer les scripts et styles
+            tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+            
+            // Nettoyer les attributs dangereux
+            tempDiv.querySelectorAll('*').forEach(n => {
+              [...n.attributes].forEach(a => {
+                const name = a.name.toLowerCase();
+                const val = String(a.value || '');
+                if (name.startsWith('on') || /^javascript:/i.test(val)) {
+                  n.removeAttribute(a.name);
+                }
+              });
+            });
+            
+            summaryEditor.innerHTML = tempDiv.innerHTML;
+            
+            // Mettre à jour summaryEmpty dans editorRoot si disponible
+            const root = document.querySelector('#editorRoot');
+            if (root) {
+              root.dataset.summaryEmpty = '0';
+            }
+            
+            hideSummaryLoading();
+            setGeneratingState(false);
+            
+            showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
+            
+            console.log('[AGILO:RELANCE] ✅ Nouveau compte-rendu affiché directement dans summaryEditor');
+          } else {
+            // Fallback : recharger la page si summaryEditor n'est pas trouvé
+            console.warn('[AGILO:RELANCE] ⚠️ summaryEditor non trouvé - Rechargement de la page');
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', 'summary');
+            url.searchParams.set('_regen', Date.now().toString());
+            url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+            window.location.href = url.toString();
+          }
+        } else if (waitResult.ready) {
+          // Le statut est READY_SUMMARY_READY mais on n'a pas pu récupérer le contenu
+          // Recharger la page avec cache-buster
+          console.log('[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY mais contenu non récupéré - Rechargement');
+          const url = new URL(window.location.href);
+          url.searchParams.set('tab', 'summary');
+          url.searchParams.set('_regen', Date.now().toString());
+          url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+          window.location.href = url.toString();
+        } else {
+          // Timeout ou erreur
+          console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après polling:', waitResult.error);
+          hideSummaryLoading();
+          setGeneratingState(false);
+          
+          if (waitResult.error === 'TIMEOUT') {
+            alert('⚠️ Le compte-rendu n\'est pas encore prêt. Il sera disponible dans quelques instants.\n\nVous pouvez recharger la page plus tard.');
+          } else {
+            alert('⚠️ Erreur lors de la génération du compte-rendu.\n\nVeuillez réessayer.');
+          }
+        }
         
       } else {
         // Vérifier si l'erreur est due à l'absence de compte-rendu initial
