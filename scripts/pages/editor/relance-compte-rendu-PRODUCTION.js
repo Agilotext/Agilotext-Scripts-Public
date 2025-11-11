@@ -266,28 +266,14 @@
       const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
       const limitMsg = document.createElement('div');
       limitMsg.className = 'regeneration-limit-message';
-      
-      let upgradeButton = '';
-      if (edition === 'pro' && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
-        upgradeButton = `<button class="button bleu" style="margin-top: 8px; width: 100%;" data-plan-min="ent" data-upgrade-reason="Régénération de compte-rendu - Limite augmentée">Passer en Business (4 régénérations)</button>`;
-      }
-      
       limitMsg.innerHTML = `
-        <span style="font-size: 16px;">⚠️</span>
-        <div>
+        <span class="regeneration-limit-icon">⚠️</span>
+        <div class="regeneration-limit-content">
           <strong>Limite atteinte</strong>
-          <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-            Vous avez utilisé ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} pour ce transcript (plan ${planName})
-          </div>
-          ${upgradeButton}
+          <div class="regeneration-limit-detail">${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} utilisée${canRegen.limit > 1 ? 's' : ''} (plan ${planName})</div>
         </div>
       `;
       btn.parentElement.appendChild(limitMsg);
-      
-      if (upgradeButton && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
-        setTimeout(() => window.AgiloGate.decorate(), 100);
-      }
-      
       return;
     }
     
@@ -574,15 +560,6 @@
         if (loaderContainer) {
           const countdown = document.createElement('p');
           countdown.className = 'loading-countdown';
-          countdown.style.cssText = `
-            font-size: 36px;
-            font-weight: 700;
-            margin: 24px 0 12px;
-            color: #174a96;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: 0.05em;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          `;
           loaderContainer.appendChild(countdown);
           
           let secondsLeft = 150; // 2 min 30
@@ -610,15 +587,8 @@
           const countdownInterval = setInterval(updateCountdown, 1000);
           
           const cancelBtn = document.createElement('button');
-          cancelBtn.className = 'button';
+          cancelBtn.className = 'loading-cancel-btn';
           cancelBtn.textContent = 'Annuler';
-          cancelBtn.style.cssText = `
-            margin-top: 24px;
-            cursor: pointer;
-            padding: 10px 24px;
-            border-radius: 6px;
-            transition: all 0.2s ease;
-          `;
           cancelBtn.onclick = () => {
             clearInterval(countdownInterval);
             hideSummaryLoading();
@@ -764,88 +734,134 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 80px 40px;
+        padding: 60px 32px;
         text-align: center;
-        min-height: 400px;
-        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-        color: #020202;
-        border-radius: 12px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        min-height: 350px;
+        background: linear-gradient(135deg, var(--agilo-surface-2, #f8f9fa) 0%, var(--agilo-surface, #ffffff) 100%);
+        color: var(--agilo-text, #020202);
+        border-radius: var(--agilo-radius, 0.5rem);
+        box-shadow: var(--agilo-shadow, 0 1px 2px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.06));
       }
       
       .summary-loading-indicator #loading-summary,
       .summary-loading-indicator #loading-summary-clone {
-        width: 100px;
-        height: 100px;
-        margin: 0 auto 32px;
-        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.08));
       }
       
       .summary-loading-indicator .loading-text {
-        font: 600 18px/1.4 system-ui, -apple-system, Arial, sans-serif;
-        margin: 0 0 8px;
-        color: #1a1a1a;
+        font: 600 17px/1.4 system-ui, -apple-system, Arial, sans-serif;
+        margin: 0 0 6px;
+        color: var(--agilo-text, #020202);
         letter-spacing: -0.01em;
       }
       
       .summary-loading-indicator .loading-subtitle {
-        font: 400 14px/1.5 system-ui, -apple-system, Arial, sans-serif;
-        color: #6b7280;
-        margin-top: 4px;
+        font: 400 13px/1.5 system-ui, -apple-system, Arial, sans-serif;
+        color: var(--agilo-dim, #525252);
+        margin-top: 2px;
       }
       
       .loading-countdown {
-        font-size: 40px;
+        font-size: 28px;
         font-weight: 700;
-        margin: 28px 0 16px;
-        color: #174a96;
+        margin: 20px 0 12px;
+        color: var(--agilo-primary, #174a96);
         font-variant-numeric: tabular-nums;
-        letter-spacing: 0.05em;
-        text-shadow: 0 2px 8px rgba(23, 74, 150, 0.2);
-        font-family: system-ui, -apple-system, 'SF Mono', monospace;
+        letter-spacing: 0.04em;
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      
+      .loading-cancel-btn {
+        margin-top: 20px;
+        cursor: pointer;
+        padding: 10px 20px;
+        border-radius: var(--agilo-radius, 0.5rem);
+        border: 1px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
+        background: var(--agilo-text, #020202);
+        color: var(--agilo-surface, #ffffff);
+        font: 500 14px/1.4 system-ui, -apple-system, Arial, sans-serif;
+        transition: all 0.15s ease;
+        user-select: none;
+      }
+      
+      .loading-cancel-btn:hover {
+        background: color-mix(in srgb, var(--agilo-text, #020202) 90%, transparent);
+        transform: translateY(1px);
+      }
+      
+      .loading-cancel-btn:active {
+        transform: translateY(2px);
+      }
+      
+      .loading-cancel-btn:focus-visible {
+        outline: var(--agilo-focus, 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));
+        outline-offset: 2px;
       }
       
       .regeneration-counter {
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 500;
-        color: #525252;
-        margin-top: 8px;
-        padding: 6px 12px;
-        border-radius: 6px;
-        background: #f8f9fa;
-        border: 1px solid #e5e7eb;
-        transition: all 0.2s ease;
+        color: var(--agilo-dim, #525252);
+        margin-top: 6px;
+        padding: 5px 10px;
+        border-radius: var(--agilo-radius, 0.5rem);
+        background: var(--agilo-surface-2, #f8f9fa);
+        border: 1px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
+        transition: all 0.15s ease;
       }
       
       .regeneration-counter:hover {
-        background: #f1f3f5;
-        border-color: #d1d5db;
+        background: color-mix(in srgb, var(--agilo-surface-2, #f8f9fa) 86%, var(--agilo-primary, #174a96) 14%);
+        border-color: var(--agilo-border, rgba(52, 58, 64, 0.35));
       }
       
       .regeneration-counter.has-warning {
-        color: #fd7e14;
-        background: #fff4e6;
-        border-color: #ffd89b;
+        color: var(--color--orange, #fd7e14);
+        background: color-mix(in srgb, var(--color--orange, #fd7e14) 8%, var(--agilo-surface, #ffffff) 92%);
+        border-color: color-mix(in srgb, var(--color--orange, #fd7e14) 25%, var(--agilo-border, rgba(52, 58, 64, 0.25)) 75%);
       }
       
       .regeneration-limit-message {
         display: flex;
-        gap: 12px;
-        padding: 14px 16px;
-        margin-top: 10px;
-        border-radius: 8px;
-        font-size: 14px;
-        background: rgba(253, 126, 20, 0.08);
-        border: 1px solid rgba(253, 126, 20, 0.25);
-        box-shadow: 0 2px 4px rgba(253, 126, 20, 0.1);
+        gap: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: var(--agilo-radius, 0.5rem);
+        font-size: 13px;
+        background: color-mix(in srgb, var(--color--orange, #fd7e14) 8%, var(--agilo-surface, #ffffff) 92%);
+        border: 1px solid color-mix(in srgb, var(--color--orange, #fd7e14) 25%, var(--agilo-border, rgba(52, 58, 64, 0.25)) 75%);
+        box-shadow: 0 1px 2px color-mix(in srgb, var(--color--orange, #fd7e14) 10%, transparent);
+      }
+      
+      .regeneration-limit-icon {
+        font-size: 16px;
+        line-height: 1;
+        flex-shrink: 0;
+      }
+      
+      .regeneration-limit-content {
+        flex: 1;
+        text-align: left;
       }
       
       .regeneration-limit-message strong {
-        color: #fd7e14;
+        color: var(--color--orange, #fd7e14);
         font-weight: 600;
+        display: block;
+        margin-bottom: 2px;
+        font-size: 13px;
+      }
+      
+      .regeneration-limit-detail {
+        font-size: 12px;
+        color: var(--agilo-dim, #525252);
+        margin-top: 2px;
       }
       
       .agilo-toast-success {
