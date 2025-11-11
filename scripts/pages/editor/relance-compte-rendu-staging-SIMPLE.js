@@ -162,53 +162,55 @@
       setTimeout(updateVisibility, 1500);
     });
     
-    // ⚠️ GESTIONNAIRE DE CLIC SUR LE BOUTON RÉGÉNÉRER (DÉLÉGATION D'ÉVÉNEMENTS)
-    // Utiliser la délégation pour fonctionner même si le bouton est créé dynamiquement
+    // ⚠️ GESTIONNAIRE DE CLIC SUR LE BOUTON RÉGÉNÉRER (comme dans staging)
     if (!window.__agiloRelanceSimpleClickBound) {
       window.__agiloRelanceSimpleClickBound = true;
       document.addEventListener('click', async (e) => {
-        // Vérifier si le clic est sur le bouton ou un de ses enfants
         const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-        if (!btn) return; // Pas notre bouton
+        if (!btn) return;
         
-        console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer', {
-          disabled: btn.disabled,
-          hasForceHide: btn.classList.contains('agilo-force-hide'),
-          visible: window.getComputedStyle(btn).display !== 'none'
-        });
+        console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer');
         
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (btn.disabled || btn.classList.contains('agilo-force-hide')) {
-          console.warn('[AGILO:RELANCE-SIMPLE] ⚠️ Bouton désactivé ou caché - Ignorer clic');
+        // Vérifier que le bouton n'est pas caché
+        if (btn.classList.contains('agilo-force-hide')) {
+          console.log('[AGILO:RELANCE-SIMPLE] Bouton caché - Clic ignoré');
           return;
         }
         
+        // Vérifier que le bouton n'est pas désactivé
+        if (btn.disabled) {
+          console.log('[AGILO:RELANCE-SIMPLE] Bouton désactivé - Clic ignoré');
+          return;
+        }
+        
+        // Vérifier une dernière fois si le message d'erreur est présent
+        if (shouldHideButton()) {
+          console.log('[AGILO:RELANCE-SIMPLE] Message d\'erreur détecté au clic - Action annulée');
+          if (window.toast) window.toast('Aucun compte-rendu disponible pour régénérer');
+          return;
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[AGILO:RELANCE-SIMPLE] Clic sur bouton régénérer - Lancement...');
+        
+        // Lancer la régénération (avec confirmation)
         const root = byId('editorRoot');
         const jobId = root?.dataset.jobId || new URLSearchParams(location.search).get('jobId');
         if (!jobId) {
-          console.error('[AGILO:RELANCE-SIMPLE] ❌ Job ID introuvable');
           alert('❌ Job ID introuvable');
           return;
         }
         
-        console.log('[AGILO:RELANCE-SIMPLE] 🚀 Démarrage régénération', { jobId });
-        
-        // Récupérer auth
         const auth = await ensureAuth();
         if (!auth.username || !auth.token) {
-          console.error('[AGILO:RELANCE-SIMPLE] ❌ Authentification manquante', { username: !!auth.username, token: !!auth.token });
           alert('❌ Authentification manquante');
           return;
         }
         
-        console.log('[AGILO:RELANCE-SIMPLE] ✅ Auth OK - Lancement régénération');
-        
-        // Lancer la régénération
         await relancerCompteRendu(jobId, auth);
-      }, { passive: false, capture: true }); // capture: true pour intercepter avant les autres handlers
-      console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic (délégation) ajouté au document');
+      }, { passive: false }); // Comme dans staging, sans capture
+      console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic ajouté au document');
     }
   }
   
@@ -439,11 +441,18 @@
     if (loader) loader.style.display = 'none';
   }
   
-  // Fonction principale de régénération
+  // Fonction principale de régénération (avec confirmation comme dans staging)
   let __isGenerating = false;
   async function relancerCompteRendu(jobId, auth) {
     if (__isGenerating) {
-      log('⚠️ Régénération déjà en cours');
+      console.log('[AGILO:RELANCE-SIMPLE] ⚠️ Régénération déjà en cours');
+      return;
+    }
+    
+    // ⚠️ CONFIRMATION (comme dans staging)
+    const confirmed = confirm('Remplacer le compte-rendu actuel ?\n\nCette action va régénérer le compte-rendu avec le transcript actuel.');
+    if (!confirmed) {
+      console.log('[AGILO:RELANCE-SIMPLE] Régénération annulée par l\'utilisateur');
       return;
     }
     
