@@ -12,7 +12,7 @@
   'use strict';
   
   /************* Réglages *************/
-  const DEBUG = true; // Activé pour staging
+  const DEBUG = false; // Désactivé par défaut pour moins de lag (mettre à true pour debug)
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const SOFT_CANCEL = true;
   const MAX_POLL = 70;
@@ -21,6 +21,9 @@
   const log = (...a) => { if (DEBUG) console.log('[AGILO:RELANCE]', ...a); };
   const warn = (...a) => console.warn('[AGILO:RELANCE]', ...a);
   const err  = (...a) => console.error('[AGILO:RELANCE]', ...a);
+  
+  // Log d'initialisation (toujours affiché)
+  console.log('[AGILO:RELANCE] Script staging chargé');
 
   /************* Helpers DOM *************/
   const $  = (s, r=document) => r.querySelector(s);
@@ -705,8 +708,9 @@
     // ⚠️ PRIORITÉ ABSOLUE 1 : Vérifier summaryEmpty du script principal
     const root = byId('editorRoot');
     if (root?.dataset.summaryEmpty === '1') {
-      log('⚠️ PRIORITÉ ABSOLUE: summaryEmpty=1 - Cache bouton immédiatement');
+      if (DEBUG) log('⚠️ PRIORITÉ ABSOLUE: summaryEmpty=1 - Cache bouton immédiatement');
       hideButton(btn, 'summary-empty-absolute');
+      hideCounter(btn); // Cacher aussi le compteur
       if (!$('.regeneration-no-summary-message', btn.parentElement)) {
         const msg = document.createElement('div');
         msg.className = 'regeneration-no-summary-message';
@@ -716,39 +720,13 @@
       return; // ⚠️ ARRÊT IMMÉDIAT - Ne pas continuer
     }
 
-    // ⚠️ PRIORITÉ ABSOLUE 2 : Vérifier le message d'erreur dans le DOM (plusieurs fois pour être sûr)
-    const hasError = hasErrorMessageInDOM();
-    if (hasError) {
-      log('⚠️ PRIORITÉ ABSOLUE: Message d\'erreur détecté dans le DOM - Cache bouton immédiatement');
-      hideButton(btn, 'error-message-in-dom-absolute');
-      if (!$('.regeneration-no-summary-message', btn.parentElement)) {
-        const msg = document.createElement('div');
-        msg.className = 'regeneration-no-summary-message';
-        msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
-        btn.parentElement.appendChild(msg);
-      }
-      return; // ⚠️ ARRÊT IMMÉDIAT - Ne pas continuer
-    }
-
-    // ⚠️ PRIORITÉ 3 : Vérifier l'état d'erreur stocké (au cas où le DOM n'est pas encore mis à jour)
-    const errorState = readSummaryErrorState(jobId);
-    if (errorState?.hasError) {
-      log('⚠️ PRIORITÉ 3: État d\'erreur stocké détecté - Cache bouton', errorState.errorCode);
-      hideButton(btn, 'error-state-stored');
-      if (!$('.regeneration-no-summary-message', btn.parentElement)) {
-        const msg = document.createElement('div');
-        msg.className = 'regeneration-no-summary-message';
-        msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
-        btn.parentElement.appendChild(msg);
-      }
-      return; // ⚠️ ARRÊT - Ne pas continuer
-    }
-
-    // ⚠️ PRIORITÉ 4 : Vérifier via API si le compte-rendu a été demandé
+    // ⚠️ PRIORITÉ 2 : Vérifier via API si le compte-rendu a été demandé (AVANT de vérifier le DOM)
+    // Cette vérification est plus fiable que le DOM qui peut être en transition
     const requested = await wasSummaryEverRequested(jobId, auth);
     if (!requested){
-      log('⚠️ PRIORITÉ 4: Summary jamais demandé (API) - Cache bouton');
+      if (DEBUG) log('⚠️ PRIORITÉ 2: Summary jamais demandé (API) - Cache bouton');
       hideButton(btn, 'never-requested-api');
+      hideCounter(btn); // Cacher aussi le compteur
       if (!$('.regeneration-no-summary-message', btn.parentElement)) {
         const msg = document.createElement('div');
         msg.className = 'regeneration-no-summary-message';
@@ -756,15 +734,76 @@
         btn.parentElement.appendChild(msg);
       }
       return; // ⚠️ ARRÊT - Ne pas continuer
+    }
+
+    // ⚠️ PRIORITÉ 3 : Vérifier le message d'erreur dans le DOM (double vérification)
+    const hasError = hasErrorMessageInDOM();
+    if (hasError) {
+      // Double vérification : si l'API dit qu'un summary existe, on fait confiance à l'API
+      const st = await getTranscriptStatus(jobId, auth);
+      if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        if (DEBUG) log('⚠️ PRIORITÉ 3: Message d\'erreur confirmé par API - Cache bouton');
+        hideButton(btn, 'error-confirmed-by-api');
+        hideCounter(btn);
+        if (!$('.regeneration-no-summary-message', btn.parentElement)) {
+          const msg = document.createElement('div');
+          msg.className = 'regeneration-no-summary-message';
+          msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
+          btn.parentElement.appendChild(msg);
+        }
+        return; // ⚠️ ARRÊT - Ne pas continuer
+      }
+      // Si l'API dit qu'un summary existe, on ignore le message DOM (probablement une transition)
+      if (DEBUG) log('⚠️ Message d\'erreur dans DOM mais summary existe selon API - Bouton activé');
+    }
+
+    // ⚠️ PRIORITÉ 4 : Vérifier l'état d'erreur stocké (au cas où le DOM n'est pas encore mis à jour)
+    const errorState = readSummaryErrorState(jobId);
+    if (errorState?.hasError) {
+      // Double vérification avec l'API
+      const st = await getTranscriptStatus(jobId, auth);
+      if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        if (DEBUG) log('⚠️ PRIORITÉ 4: État d\'erreur stocké confirmé par API - Cache bouton');
+        hideButton(btn, 'error-state-confirmed');
+        hideCounter(btn);
+        if (!$('.regeneration-no-summary-message', btn.parentElement)) {
+          const msg = document.createElement('div');
+          msg.className = 'regeneration-no-summary-message';
+          msg.innerHTML = `<span style="font-size:16px;">ℹ️</span><div><strong>Aucun compte-rendu demandé</strong><div style="font-size:12px;margin-top:2px;color:var(--agilo-dim,#525252);">Envoyez un audio avec l'option "Générer le compte-rendu".</div></div>`;
+          btn.parentElement.appendChild(msg);
+        }
+        return; // ⚠️ ARRÊT - Ne pas continuer
+      }
+      // Si l'API dit qu'un summary existe, on ignore l'état stocké (peut être obsolète)
+      if (DEBUG) log('⚠️ État d\'erreur stocké mais summary existe selon API - Bouton activé');
     }
 
     // ✅ Si on arrive ici, le compte-rendu existe vraiment → bouton visible
-    log('✅ Compte-rendu existe - Affiche bouton');
+    if (DEBUG) log('✅ Compte-rendu existe - Affiche bouton');
     showButton(btn);
+    showCounter(btn); // Réafficher le compteur
     updateRegenerationCounter(jobId, auth.edition);
     // updateButtonState est maintenant async, on doit attendre
     updateButtonState(jobId, auth.edition).catch(e => {
       warn('Erreur updateButtonState:', e);
+    });
+  }
+  
+  function hideCounter(btn) {
+    if (!btn) return;
+    const counters = $$('.regeneration-counter, #regeneration-info', btn.parentElement || document);
+    counters.forEach(c => {
+      c.style.display = 'none';
+      c.style.visibility = 'hidden';
+    });
+  }
+  
+  function showCounter(btn) {
+    if (!btn) return;
+    const counters = $$('.regeneration-counter, #regeneration-info', btn.parentElement || document);
+    counters.forEach(c => {
+      c.style.removeProperty('display');
+      c.style.removeProperty('visibility');
     });
   }
 
@@ -792,7 +831,7 @@
               });
               saveSummaryHash(jobId, newHash);
               return { ok:true, html, hash:newHash };
-    } else {
+        } else {
               log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
             }
           }
@@ -803,8 +842,170 @@
     return { ok:false, code:'TIMEOUT' };
   }
 
+  /************* Helpers HTML et liens *************/
+  function sanitizeHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html || '';
+    div.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+    div.querySelectorAll('*').forEach(n => {
+      [...n.attributes].forEach(a => {
+        const name = a.name.toLowerCase();
+        const val = String(a.value || '');
+        if (name.startsWith('on') || /^javascript:/i.test(val)) n.removeAttribute(a.name);
+      });
+    });
+    return div.innerHTML;
+  }
+  
+  function enableLink(el, href){
+    if (!el) return;
+    if (el.__agiloBlocker) {
+      el.removeEventListener('click', el.__agiloBlocker);
+      el.__agiloBlocker=null;
+    }
+    el.classList.remove('is-disabled');
+    el.removeAttribute('aria-disabled');
+    el.removeAttribute('title');
+    el.setAttribute('href', href);
+    el.setAttribute('target','_blank');
+  }
+  
+  function disableLink(el, msg='Indisponible'){
+    if (!el) return;
+    if (el.__agiloBlocker) el.removeEventListener('click', el.__agiloBlocker);
+    el.__agiloBlocker = (e)=>{ e.preventDefault(); if (window.toast) window.toast(msg); };
+    el.addEventListener('click', el.__agiloBlocker);
+    el.classList.add('is-disabled');
+    el.setAttribute('aria-disabled','true');
+    el.setAttribute('title', msg);
+    el.removeAttribute('target');
+    el.setAttribute('href', 'javascript:void(0)');
+  }
+  
+  function updateDownloadLinks(jobId, auth, {summaryEmpty=false} = {}) {
+    const dl = {
+      t_txt: $('.download_wrapper-link_transcript_txt'),
+      t_rtf: $('.download_wrapper-link_transcript_rtf'),
+      t_doc: $('.download_wrapper-link_transcript_doc'),
+      t_docx: $('.download_wrapper-link_transcript_docx'),
+      t_pdf: $('.download_wrapper-link_transcript_pdf'),
+      s_txt: $('.download_wrapper-link_summary_txt'),
+      s_rtf: $('.download_wrapper-link_summary_rtf'),
+      s_doc: $('.download_wrapper-link_summary_doc'),
+      s_docx: $('.download_wrapper-link_summary_docx'),
+      s_pdf: $('.download_wrapper-link_summary_pdf')
+    };
+    if (!jobId || !auth?.username || !auth?.token) return;
+    const baseQ = `jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+    enableLink(dl.t_txt, `${API_BASE}/receiveText?${baseQ}&format=txt`);
+    enableLink(dl.t_rtf, `${API_BASE}/receiveText?${baseQ}&format=rtf`);
+    enableLink(dl.t_doc, `${API_BASE}/receiveText?${baseQ}&format=doc`);
+    enableLink(dl.t_docx, `${API_BASE}/receiveText?${baseQ}&format=docx`);
+    enableLink(dl.t_pdf, `${API_BASE}/receiveText?${baseQ}&format=pdf`);
+    if (summaryEmpty) {
+      ['s_txt','s_rtf','s_doc','s_docx','s_pdf'].forEach(k=> disableLink(dl[k], 'Résumé non disponible pour le moment'));
+    } else {
+      enableLink(dl.s_txt, `${API_BASE}/receiveSummary?${baseQ}&format=html`);
+      enableLink(dl.s_rtf, `${API_BASE}/receiveSummary?${baseQ}&format=rtf`);
+      enableLink(dl.s_doc, `${API_BASE}/receiveSummary?${baseQ}&format=doc`);
+      enableLink(dl.s_docx, `${API_BASE}/receiveSummary?${baseQ}&format=docx`);
+      enableLink(dl.s_pdf, `${API_BASE}/receiveSummary?${baseQ}&format=pdf`);
+    }
+    const share = byId('shareLink');
+    if (share) {
+      const u = new URL(share.href || location.href);
+      u.searchParams.set('jobId', jobId);
+      u.searchParams.set('edition', auth.edition);
+      share.href = u.toString();
+    }
+  }
+
+  /************* Loader Lottie pour régénération *************/
+  function showSummaryLoading(){
+    const summaryEditor = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
+    if (!summaryEditor) return;
+    
+    // Créer le conteneur de chargement
+    let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
+    
+    if (!loaderContainer) {
+      loaderContainer = document.createElement('div');
+      loaderContainer.className = 'summary-loading-indicator';
+      loaderContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;min-height:200px;';
+      
+      // Créer l'élément Lottie
+      const lottieElement = document.createElement('div');
+      lottieElement.id = 'loading-summary-regen';
+      lottieElement.className = 'lottie-check-statut';
+      lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
+      lottieElement.setAttribute('data-animation-type', 'lottie');
+      lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
+      lottieElement.setAttribute('data-loop', '1');
+      lottieElement.setAttribute('data-direction', '1');
+      lottieElement.setAttribute('data-autoplay', '1');
+      lottieElement.setAttribute('data-is-ix2-target', '0');
+      lottieElement.setAttribute('data-renderer', 'svg');
+      lottieElement.style.cssText = 'width:120px;height:120px;';
+      
+      // Ajouter les textes
+      const loadingText = document.createElement('p');
+      loadingText.className = 'loading-text';
+      loadingText.style.cssText = 'font-size:18px;font-weight:600;margin-top:20px;color:var(--agilo-text,#020202);';
+      loadingText.textContent = 'Régénération du compte-rendu en cours...';
+      
+      const loadingSubtitle = document.createElement('p');
+      loadingSubtitle.className = 'loading-subtitle';
+      loadingSubtitle.style.cssText = 'font-size:14px;margin-top:8px;color:var(--agilo-dim,#525252);';
+      loadingSubtitle.textContent = 'Cela peut prendre quelques instants';
+      
+      summaryEditor.innerHTML = '';
+      summaryEditor.appendChild(loaderContainer);
+      loaderContainer.appendChild(lottieElement);
+      loaderContainer.appendChild(loadingText);
+      loaderContainer.appendChild(loadingSubtitle);
+      
+      // Initialiser l'animation Lottie si Webflow est disponible
+      setTimeout(() => {
+        if (window.Webflow && window.Webflow.require) {
+          try {
+            window.Webflow.require('ix2').init();
+          } catch (e) {
+            // Fallback: spinner CSS si Lottie ne charge pas
+            setTimeout(() => {
+              const hasLottieContent = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
+              if (!hasLottieContent) {
+                const fallback = document.createElement('div');
+                fallback.className = 'lottie-fallback';
+                fallback.style.cssText = 'width:60px;height:60px;border:4px solid #f3f3f3;border-top:4px solid #174a96;border-radius:50%;animation:spin 1s linear infinite;';
+                lottieElement.style.display = 'none';
+                loaderContainer.insertBefore(fallback, lottieElement);
+                // Ajouter l'animation CSS si elle n'existe pas
+                if (!document.getElementById('spin-animation')) {
+                  const style = document.createElement('style');
+                  style.id = 'spin-animation';
+                  style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
+                  document.head.appendChild(style);
+                }
+              }
+            }, 1000);
+          }
+        }
+      }, 100);
+    } else {
+      loaderContainer.style.display = 'flex';
+    }
+  }
+  
+  function hideSummaryLoading(){
+    const loader = $('.summary-loading-indicator');
+    if (loader) {
+      loader.style.display = 'none';
+    }
+  }
+
   /************* Relancer le résumé *************/
   let __isGenerating = false;
+  let __activePollingJobId = null; // Pour gérer le changement de job pendant le polling
   async function relancerCompteRendu(){
     if (__isGenerating) return;
     const now = Date.now();
@@ -815,16 +1016,16 @@
     const jobId = pickJobId();
     if (!auth.username || !auth.token || !jobId){
       alert('❌ Informations incomplètes.');
-      return;
-    }
-    
+        return;
+      }
+      
     // limites
     const gate = canRegenerate(jobId, auth.edition);
     if (!gate.allowed){
       if (gate.reason === 'free'){
         if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
           window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
-        } else {
+    } else {
           alert('🔒 Fonctionnalité Premium — disponible en Pro/Business.');
           }
         } else {
@@ -837,9 +1038,9 @@
     const requested = await wasSummaryEverRequested(jobId, auth);
     if (!requested){
       alert('⚠️ Aucun compte-rendu initial demandé pour cet audio.');
-        return;
-      }
-      
+          return;
+        }
+        
     const ok = confirm(`Remplacer le compte-rendu actuel ?\n\n${gate.remaining}/${gate.limit} régénération${gate.remaining>1?'s':''} restante${gate.remaining>1?'s':''}.`);
     if (!ok) return;
 
@@ -854,12 +1055,16 @@
     } catch {}
 
     __isGenerating = true;
+    __activePollingJobId = jobId; // Mémoriser le jobId actif pour le polling
     const btn = $('[data-action="relancer-compte-rendu"]');
     const btnText = btn?.querySelector('div');
     if (btn) { btn.disabled = true; if (btnText) btnText.textContent = 'Génération…'; }
 
+    // ⚠️ AFFICHER LE LOADER IMMÉDIATEMENT
+    showSummaryLoading();
+
     try{
-      log('🚀 APPEL API redoSummary', { jobId, edition: auth.edition, timestamp: new Date().toISOString() });
+      if (DEBUG) log('🚀 APPEL API redoSummary', { jobId, edition: auth.edition, timestamp: new Date().toISOString() });
       
       const fd = new FormData();
       fd.append('username', auth.username);
@@ -871,49 +1076,105 @@
       const redo = await fetchWithTimeout(`${API_BASE}/redoSummary`, { method:'POST', body: fd, timeout: 20000 });
       const apiTime = Date.now() - apiStartTime;
       
-      log('⏱️ Temps réponse API:', apiTime + 'ms');
+      if (DEBUG) log('⏱️ Temps réponse API:', apiTime + 'ms');
       
       const j = await redo.json().catch(()=>({ status:'KO' }));
       
-      log('Réponse API:', { status: j.status, httpStatus: redo.status, ok: redo.ok });
+      if (DEBUG) log('Réponse API:', { status: j.status, httpStatus: redo.status, ok: redo.ok });
       
       if (!redo.ok || !(j.status==='OK' || j.ok === true)) {
+        hideSummaryLoading();
         alert('❌ Erreur lors de la régénération.\n\n' + (j.message || j.error || j.errorMessage || 'Erreur inconnue'));
-          return;
-        }
+        return;
+      }
         
-      log('✅ API redoSummary OK - Incrémentation compteur');
+      if (DEBUG) log('✅ API redoSummary OK - Incrémentation compteur');
       incrementRegenerationCount(jobId, auth.edition);
       updateRegenerationCounter(jobId, auth.edition);
       updateButtonState(jobId, auth.edition);
       if (window.toast) window.toast('✅ Régénération lancée');
 
-      // poll jusqu'à READY + nouveau hash
-      log('⏳ Attente génération nouveau compte-rendu...');
-      const result = await pollSummaryUntilReady(jobId, {...auth}, { oldHash, max: MAX_POLL + 10, baseDelay: BASE_DELAY, signal: null });
+      // ⚠️ POLLER jusqu'à READY + nouveau hash (avec gestion du changement de job)
+      if (DEBUG) log('⏳ Attente génération nouveau compte-rendu...');
+      const signal = new AbortController();
+      
+      // Vérifier périodiquement si le job a changé pendant le polling
+      const checkJobChange = setInterval(() => {
+        const currentJobId = pickJobId();
+        if (currentJobId !== jobId) {
+          if (DEBUG) log('⚠️ Job changé pendant le polling - Annulation');
+          signal.abort();
+          clearInterval(checkJobChange);
+          __activePollingJobId = null;
+        }
+      }, 1000);
+      
+      const result = await pollSummaryUntilReady(jobId, {...auth}, { oldHash, max: MAX_POLL + 10, baseDelay: BASE_DELAY, signal: signal.signal });
+      
+      clearInterval(checkJobChange);
+      
+      // ⚠️ Vérifier si le job est toujours actif avant d'afficher le résultat
+      const currentJobId = pickJobId();
+      if (currentJobId !== jobId) {
+        if (DEBUG) log('⚠️ Job changé - Ne pas afficher le résultat');
+        __activePollingJobId = null;
+        return;
+      }
       
       if (result.ok) {
-        log('✅ NOUVEAU compte-rendu prêt !', {
+        if (DEBUG) log('✅ NOUVEAU compte-rendu prêt !', {
           hash: result.hash?.substring(0, 30) + '...',
           htmlLength: result.html?.length
         });
-    } else {
-        warn('⚠️ Compte-rendu pas prêt après toutes les tentatives');
+        
+        // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT DANS summaryEditor (sans recharger la page)
+        const summaryEditor = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
+        if (summaryEditor && result.html) {
+          hideSummaryLoading();
+          summaryEditor.innerHTML = sanitizeHtml(result.html);
+          
+          // Mettre à jour summaryEmpty dans editorRoot
+          const root = byId('editorRoot');
+          if (root) {
+            root.dataset.summaryEmpty = '0';
+          }
+          
+          // Mettre à jour les liens de téléchargement
+          updateDownloadLinks(jobId, auth, { summaryEmpty: false });
+          
+          // Sauvegarder le hash
+          if (result.hash) saveSummaryHash(jobId, result.hash);
+          
+          // Mettre à jour la visibilité du bouton
+          updateButtonVisibility().catch(() => {});
+          
+          if (window.toast) window.toast('✅ Compte-rendu régénéré avec succès');
+        } else {
+          // Fallback: recharger la page si summaryEditor n'est pas trouvé
+          const url = new URL(location.href);
+          url.searchParams.set('tab','summary');
+          url.searchParams.set('_regen', Date.now().toString());
+          url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
+          if (result.hash) saveSummaryHash(jobId, result.hash);
+          window.location.replace(url.toString());
+        }
+      } else {
+        hideSummaryLoading();
+        if (result.code === 'CANCELLED') {
+          if (DEBUG) log('⚠️ Polling annulé (job changé)');
+        } else {
+          warn('⚠️ Compte-rendu pas prêt après toutes les tentatives');
+          alert('⚠️ Le compte-rendu n\'est pas encore prêt. Il sera disponible dans quelques instants.');
+        }
       }
-
-      // recharge forcée (avec cache-buster)
-      const url = new URL(location.href);
-      url.searchParams.set('tab','summary');
-      url.searchParams.set('_regen', Date.now().toString());
-      url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-      if (result?.ok && result.hash) saveSummaryHash(jobId, result.hash);
-      window.location.replace(url.toString());
     } catch (e){
       err('redo error', e);
+      hideSummaryLoading();
       alert('❌ Erreur réseau lors de la régénération.');
     } finally {
       __isGenerating = false;
-      if (btn) { btn.disabled = false; if (btnText) btnText.textContent = 'Relancer'; }
+      __activePollingJobId = null;
+      if (btn) { btn.disabled = false; if (btnText) btnText.textContent = 'Régénérer'; }
     }
   }
 
@@ -1179,7 +1440,7 @@
     setupSaveObserver();
 
     // MAJ bouton à l'ouverture (plusieurs fois pour être sûr)
-    await updateButtonVisibility();
+          await updateButtonVisibility();
     setTimeout(() => updateButtonVisibility().catch(() => {}), 500);
     setTimeout(() => updateButtonVisibility().catch(() => {}), 1500);
     setTimeout(() => updateButtonVisibility().catch(() => {}), 3000);
@@ -1223,7 +1484,7 @@
       const id = String(raw||'').trim();
       if (!id) return;
       
-      log('agilo:load détecté - Vérifications progressives de la visibilité');
+      if (DEBUG) log('agilo:load détecté - Vérifications progressives de la visibilité pour jobId:', id);
       
       // Retirer l'état de chargement
       const btn = $('[data-action="relancer-compte-rendu"]');
@@ -1235,12 +1496,18 @@
       
       // ⚠️ Vérifications progressives : le script principal met 1-3 secondes à charger le summary
       // Vérification immédiate (au cas où le DOM est déjà prêt)
-      await updateButtonVisibility();
-      
+      try {
+        await updateButtonVisibility();
+      } catch (e) {
+        console.error('[AGILO:RELANCE] Erreur updateButtonVisibility (agilo:load immédiat):', e);
+      }
+    
       // Vérifications avec délais progressifs pour laisser le temps au script principal
       setTimeout(() => {
-        log('Vérification 1 (500ms après agilo:load)');
-        updateButtonVisibility().catch(() => {});
+        if (DEBUG) log('Vérification 1 (500ms après agilo:load)');
+        updateButtonVisibility().catch(e => {
+          console.error('[AGILO:RELANCE] Erreur updateButtonVisibility (agilo:load 500ms):', e);
+        });
       }, 500);
       
       setTimeout(() => {
@@ -1280,107 +1547,152 @@
     }
   }
 
-  // ⚠️ VÉRIFICATION IMMÉDIATE même si le DOM n'est pas prêt
-  // Appel immédiat
-  immediateCheck();
-  
-  if (document.readyState !== 'loading') {
-    // DOM déjà prêt, vérifier plusieurs fois
-    setTimeout(() => immediateCheck(), 100);
-    setTimeout(() => immediateCheck(), 500);
-    init();
-  } else {
-    // Vérification immédiate dès que possible
-    document.addEventListener('DOMContentLoaded', () => {
-      immediateCheck();
-      setTimeout(() => immediateCheck(), 100);
-      setTimeout(() => immediateCheck(), 500);
+  // ⚠️ INITIALISATION ROBUSTE avec try/catch global
+  function safeInit() {
+    try {
+      if (window.__agiloEditorRelanceInit) {
+        if (DEBUG) log('init() déjà exécuté, skip');
+        return;
+      }
+      
+      console.log('[AGILO:RELANCE] Début initialisation...');
       init();
+      console.log('[AGILO:RELANCE] Initialisation terminée, __agiloEditorRelanceInit:', window.__agiloEditorRelanceInit);
+    } catch (e) {
+      console.error('[AGILO:RELANCE] ❌ ERREUR lors de l\'initialisation:', e);
+      // Réessayer après un délai
+      setTimeout(() => {
+        if (!window.__agiloEditorRelanceInit) {
+          console.log('[AGILO:RELANCE] Nouvelle tentative d\'initialisation...');
+          try {
+            init();
+          } catch (e2) {
+            console.error('[AGILO:RELANCE] ❌ ERREUR lors de la 2ème tentative:', e2);
+          }
+        }
+      }, 1000);
+    }
+  }
+  
+  // ⚠️ VÉRIFICATION IMMÉDIATE même si le DOM n'est pas prêt
+  try {
+    immediateCheck();
+  } catch (e) {
+    console.error('[AGILO:RELANCE] Erreur immediateCheck:', e);
+  }
+  
+  // Initialisation immédiate si DOM prêt, sinon attendre
+  if (document.readyState !== 'loading') {
+    // DOM déjà prêt
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (100ms):', e); }
+    }, 100);
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (500ms):', e); }
+    }, 500);
+    safeInit();
+  } else {
+    // Attendre DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (DOMContentLoaded):', e); }
+      setTimeout(() => {
+        try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (DOMContentLoaded+100ms):', e); }
+      }, 100);
+      setTimeout(() => {
+        try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (DOMContentLoaded+500ms):', e); }
+      }, 500);
+      safeInit();
     }, { once:true });
     
     // Vérifications multiples (au cas où le DOM est déjà là)
-    setTimeout(() => immediateCheck(), 100);
-    setTimeout(() => immediateCheck(), 300);
-    setTimeout(() => immediateCheck(), 500);
-    setTimeout(() => immediateCheck(), 1000);
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (timeout 100ms):', e); }
+    }, 100);
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (timeout 300ms):', e); }
+    }, 300);
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (timeout 500ms):', e); }
+    }, 500);
+    setTimeout(() => {
+      try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (timeout 1000ms):', e); }
+    }, 1000);
     setTimeout(() => {
       if (!window.__agiloEditorRelanceInit) {
-        immediateCheck();
-        init();
+        console.log('[AGILO:RELANCE] Initialisation différée (2000ms) - __agiloEditorRelanceInit toujours undefined');
+        try { immediateCheck(); } catch (e) { console.error('[AGILO:RELANCE] Erreur immediateCheck (timeout 2000ms):', e); }
+        safeInit();
       }
     }, 2000);
   }
   
-  // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné) - PLUS AGRESSIVE
+  // ⚠️ Vérification périodique de sécurité (même si init n'a pas encore tourné) - OPTIMISÉE
   setInterval(() => {
-    // ⚠️ SUPPRIMER LES DOUBLONS D'ABORD
-    removeDuplicateButtons();
-    
-    // ⚠️ TRAITER TOUS LES BOUTONS (au cas où il y en aurait plusieurs)
-    const allButtons = $$('[data-action="relancer-compte-rendu"]');
-    if (allButtons.length === 0) return;
-    
-    // Traiter chaque bouton
-    for (const btn of allButtons) {
-      // Récupérer editorRoot à chaque fois
-      const root = byId('editorRoot');
-      const styles = window.getComputedStyle(btn);
-      const isVisible = styles.display !== 'none' && 
-                        styles.visibility !== 'hidden' &&
-                        !btn.classList.contains('agilo-force-hide') &&
-                        styles.opacity !== '0';
+    try {
+      // ⚠️ SUPPRIMER LES DOUBLONS D'ABORD
+      removeDuplicateButtons();
       
-      // ⚠️ Si le bouton est visible, on vérifie TOUJOURS s'il devrait être caché
-      if (isVisible) {
-        // PRIORITÉ 1 : summaryEmpty
-        if (root?.dataset.summaryEmpty === '1') {
-          log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton FORCÉ', {
-            summaryEmpty: root.dataset.summaryEmpty,
-            btnVisible: true,
-            display: styles.display,
-            visibility: styles.visibility,
-            opacity: styles.opacity
-          });
-          hideButton(btn, 'periodic-check-summary-empty');
-          continue;
-        }
+      // ⚠️ TRAITER TOUS LES BOUTONS (au cas où il y en aurait plusieurs)
+      const allButtons = $$('[data-action="relancer-compte-rendu"]');
+      if (allButtons.length === 0) return;
+      
+      // Traiter chaque bouton
+      for (const btn of allButtons) {
+        // Récupérer editorRoot à chaque fois
+        const root = byId('editorRoot');
+        const styles = window.getComputedStyle(btn);
+        const isVisible = styles.display !== 'none' && 
+                          styles.visibility !== 'hidden' &&
+                          !btn.classList.contains('agilo-force-hide') &&
+                          styles.opacity !== '0';
         
-        // PRIORITÉ 2 : Message d'erreur dans le DOM
-        const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-        if (summaryEl) {
-          const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-          const html = (summaryEl.innerHTML || '').toLowerCase();
-          const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-          
-          if (text.includes(exactMsg) || html.includes(exactMsg) || 
-              text.includes('pas encore disponible') || text.includes('fichier manquant')) {
-            log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur détecté - Cache bouton FORCÉ', {
-              textPreview: text.substring(0, 100),
-              btnVisible: true,
-              display: styles.display,
-              visibility: styles.visibility,
-              opacity: styles.opacity
-            });
-            hideButton(btn, 'periodic-check-error-message');
+        // ⚠️ Si le bouton est visible, on vérifie TOUJOURS s'il devrait être caché
+        if (isVisible) {
+          // PRIORITÉ 1 : summaryEmpty
+          if (root?.dataset.summaryEmpty === '1') {
+            if (DEBUG) log('⚠️ VÉRIFICATION PÉRIODIQUE: summaryEmpty=1 - Cache bouton FORCÉ');
+            hideButton(btn, 'periodic-check-summary-empty');
             continue;
           }
-        }
-        
-        // PRIORITÉ 3 : État d'erreur stocké
-        const jobId = pickJobId();
-        if (jobId) {
-          const errorState = readSummaryErrorState(jobId);
-          if (errorState?.hasError) {
-            log('⚠️ VÉRIFICATION PÉRIODIQUE: État erreur stocké - Cache bouton FORCÉ', {
-              errorCode: errorState.errorCode,
-              btnVisible: true
-            });
-            hideButton(btn, 'periodic-check-error-state');
-            continue;
+          
+          // PRIORITÉ 2 : Message d'erreur dans le DOM
+          const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
+          if (summaryEl) {
+            const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
+            const html = (summaryEl.innerHTML || '').toLowerCase();
+            const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
+            
+            if (text.includes(exactMsg) || html.includes(exactMsg) || 
+                text.includes('pas encore disponible') || text.includes('fichier manquant')) {
+              if (DEBUG) log('⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur détecté - Cache bouton FORCÉ');
+              hideButton(btn, 'periodic-check-error-message');
+              continue;
+            }
+          }
+          
+          // PRIORITÉ 3 : État d'erreur stocké
+          const jobId = pickJobId();
+          if (jobId) {
+            const errorState = readSummaryErrorState(jobId);
+            if (errorState?.hasError) {
+              if (DEBUG) log('⚠️ VÉRIFICATION PÉRIODIQUE: État erreur stocké - Cache bouton FORCÉ');
+              hideButton(btn, 'periodic-check-error-state');
+              continue;
+            }
           }
         }
       }
+    } catch (e) {
+      console.error('[AGILO:RELANCE] Erreur vérification périodique:', e);
     }
-  }, 300); // Checks every 300ms (plus fréquent)
+  }, 500); // Checks every 500ms (optimisé pour moins de lag)
+  
+  // ⚠️ S'assurer que init() s'exécute même en cas d'erreur
+  setTimeout(() => {
+    if (!window.__agiloEditorRelanceInit) {
+      console.warn('[AGILO:RELANCE] ⚠️ init() n\'a pas été exécuté après 3 secondes - Forçage...');
+      safeInit();
+    }
+  }, 3000);
 })();
 
