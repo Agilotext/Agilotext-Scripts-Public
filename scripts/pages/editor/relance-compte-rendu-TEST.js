@@ -1769,10 +1769,10 @@
     disableButtonHref();
     
     // Observer les changements du DOM pour réappliquer si le bouton est recréé
-    const observer = new MutationObserver(() => {
+    const hrefObserver = new MutationObserver(() => {
       disableButtonHref();
     });
-    observer.observe(document.body, { childList: true, subtree: true });
+    hrefObserver.observe(document.body, { childList: true, subtree: true });
     
     // ⚠️ CRITIQUE : Capturer TOUS les clics AVANT qu'ils ne déclenchent un rechargement
     document.addEventListener('click', function(e) {
