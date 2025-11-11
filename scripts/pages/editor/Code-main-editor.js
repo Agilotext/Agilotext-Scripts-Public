@@ -1139,9 +1139,6 @@ window.addEventListener('agilo:beforeload', (e) => {
   try { __activeFetchCtl?.abort?.(); } catch {}
   clearTimeout(__wdTimer);
   __wdToken++;
-  
-  // ⚠️ AMÉLIORATION : Cacher le loader du compte-rendu lors du changement
-  hideSummaryLoading();
 
   editors.transcript = pickTranscriptEl();
   editors.summary    = pickSummaryEl();
@@ -1155,7 +1152,12 @@ window.addEventListener('agilo:beforeload', (e) => {
   }
   if (sm) { 
     sm.setAttribute('aria-busy','true'); 
-    sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
+    // ⚠️ AMÉLIORATION : Ne pas réinitialiser si un loader Lottie est déjà présent
+    // (il sera géré par loadJob qui vérifiera le statut PENDING)
+    const existingLoader = sm.querySelector('.summary-loading-indicator');
+    if (!existingLoader) {
+      sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
+    }
   }
 
   const my = __wdToken;
@@ -1181,6 +1183,10 @@ window.addEventListener('agilo:beforeload', (e) => {
 
     if (!SOFT_CANCEL) { try { __activeFetchCtl?.abort?.(); } catch {} }
     __activeFetchCtl = new AbortController();
+    
+    // ⚠️ AMÉLIORATION : S'assurer que les éditeurs sont à jour
+    editors.transcript = pickTranscriptEl();
+    editors.summary    = pickSummaryEl();
 
     if (window.__agiloOrchestrator && !window.__agiloOrchestrator.__editorSubscribed){
 window.__agiloOrchestrator.subscribe('editor', {
