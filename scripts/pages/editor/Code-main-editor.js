@@ -178,13 +178,49 @@ function renderAlert(htmlMsg, details = '') {
 
 
   async function resolveEmail(){
+    // 1. Essayer d'abord les sources directes
     const fromAttr = document.querySelector('[name="memberEmail"]')?.getAttribute('value') || '';
     const fromText = document.querySelector('[data-ms-member="email"]')?.textContent || '';
-    let now = (byId('memberEmail')?.value || fromAttr || fromText || window.memberEmail || '').trim();
+    let now = (byId('memberEmail')?.value || fromAttr || fromText || window.memberEmail || localStorage.getItem('agilo:username') || '').trim();
     if (now) return now;
+    
+    // 2. Essayer Memberstack avec timeout et gestion d'erreur améliorée
     if (window.$memberstackDom?.getMember){
-      try { const r = await window.$memberstackDom.getMember(); now = (r?.data?.email||'').trim(); if (now) return now; } catch {}
+      try { 
+        // Timeout pour éviter d'attendre trop longtemps en cas de connexion instable
+        const memberstackPromise = window.$memberstackDom.getMember();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Memberstack timeout')), 5000)
+        );
+        
+        const r = await Promise.race([memberstackPromise, timeoutPromise]);
+        now = (r?.data?.email||'').trim();
+        if (now) {
+          // Sauvegarder dans localStorage pour les prochaines fois
+          try {
+            localStorage.setItem('agilo:username', now);
+          } catch (e) {}
+          return now;
+        }
+      } catch (err) {
+        // Détecter les erreurs réseau spécifiques
+        const isNetworkError = err?.code === 'ERR_NETWORK' 
+          || err?.message?.includes('Network Error')
+          || err?.message?.includes('ERR_ADDRESS_UNREACHABLE')
+          || err?.message?.includes('timeout')
+          || err?.name === 'NetworkError';
+        
+        if (window.AGILO_DEBUG || isNetworkError) {
+          console.warn('[agilo] getMember error (Memberstack non accessible):', err);
+        }
+        // En cas d'erreur réseau, on continue avec les fallbacks
+      }
     }
+    
+    // 3. Dernier recours : vérifier localStorage
+    const lastChance = localStorage.getItem('agilo:username');
+    if (lastChance) return lastChance.trim();
+    
     return '';
   }
   function readAuthSnapshot(){
@@ -836,6 +872,194 @@ window.renderSegments = renderSegments;
 }
 window.attachAudioSync = attachAudioSync;
 
+  /* ====================== Fonctions Lottie pour le chargement du compte-rendu ====================== */
+  
+  /**
+   * Appeler l'API getTranscriptStatus pour obtenir le statut
+   */
+  async function getTranscriptStatus(jobId, auth) {
+    try {
+      const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+      
+      const response = await fetchWithTimeout(url, { timeout: 10000 });
+      
+      if (!response.ok) {
+        if (window.AGILO_DEBUG) console.error('[Editor] Erreur HTTP getTranscriptStatus:', response.status);
+        return null;
+      }
+      
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.transcriptStatus) {
+        return data.transcriptStatus;
+      }
+      
+      if (data.status === 'KO') {
+        if (window.AGILO_DEBUG) console.error('[Editor] Erreur API getTranscriptStatus:', data.errorMessage);
+        // Vérifier si c'est l'erreur "fichier manquant"
+        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      if (window.AGILO_DEBUG) console.error('[Editor] Erreur réseau getTranscriptStatus:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Initialiser l'animation Lottie avec Webflow
+   */
+  function initLottieAnimation(element) {
+    // Méthode 1: Utiliser Webflow IX2 si disponible
+    if (window.Webflow && window.Webflow.require) {
+      try {
+        const ix2 = window.Webflow.require('ix2');
+        if (ix2 && typeof ix2.init === 'function') {
+          setTimeout(() => {
+            ix2.init();
+          }, 100);
+        }
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.log('[Editor] Webflow IX2 non disponible');
+      }
+    }
+    
+    // Méthode 2: Utiliser directement la bibliothèque Lottie si disponible
+    if (window.lottie && typeof window.lottie.loadAnimation === 'function') {
+      try {
+        const animationData = {
+          container: element,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          path: 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json'
+        };
+        
+        if (!element._lottie) {
+          element._lottie = window.lottie.loadAnimation(animationData);
+        }
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.log('[Editor] Lottie direct non disponible:', e);
+      }
+    }
+    
+    // Méthode 3: Attendre que Webflow charge l'animation
+    setTimeout(() => {
+      if (window.Webflow && window.Webflow.require) {
+        try {
+          window.Webflow.require('ix2').init();
+        } catch (e) {}
+      }
+    }, 200);
+  }
+  
+  /**
+   * Afficher un indicateur de chargement dans l'onglet Compte-rendu
+   * Utilise l'animation Lottie existante
+   */
+  function showSummaryLoading() {
+    const summaryEditor = editors.summary || pickSummaryEl();
+    if (!summaryEditor) return;
+    
+    // Créer le conteneur de chargement
+    let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
+    
+    if (!loaderContainer) {
+      loaderContainer = document.createElement('div');
+      loaderContainer.className = 'summary-loading-indicator';
+      
+      // Chercher l'élément Lottie existant dans le DOM (peut être ailleurs)
+      let lottieElement = document.querySelector('#loading-summary');
+      
+      // Si l'élément Lottie n'existe pas, le créer
+      if (!lottieElement) {
+        lottieElement = document.createElement('div');
+        lottieElement.id = 'loading-summary';
+        lottieElement.className = 'lottie-check-statut';
+        lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
+        lottieElement.setAttribute('data-animation-type', 'lottie');
+        lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
+        lottieElement.setAttribute('data-loop', '1');
+        lottieElement.setAttribute('data-direction', '1');
+        lottieElement.setAttribute('data-autoplay', '1');
+        lottieElement.setAttribute('data-is-ix2-target', '0');
+        lottieElement.setAttribute('data-renderer', 'svg');
+        lottieElement.setAttribute('data-default-duration', '2');
+        lottieElement.setAttribute('data-duration', '0');
+      } else {
+        // Si l'élément existe ailleurs, le cloner
+        const clonedLottie = lottieElement.cloneNode(true);
+        clonedLottie.id = 'loading-summary-clone';
+        lottieElement = clonedLottie;
+      }
+      
+      // Ajouter les textes
+      const loadingText = document.createElement('p');
+      loadingText.className = 'loading-text';
+      loadingText.textContent = 'Génération du compte-rendu en cours...';
+      
+      const loadingSubtitle = document.createElement('p');
+      loadingSubtitle.className = 'loading-subtitle';
+      loadingSubtitle.textContent = 'Cela peut prendre quelques instants';
+      
+      summaryEditor.innerHTML = '';
+      summaryEditor.appendChild(loaderContainer);
+      loaderContainer.appendChild(lottieElement);
+      loaderContainer.appendChild(loadingText);
+      loaderContainer.appendChild(loadingSubtitle);
+      
+      // Initialiser l'animation Lottie après l'ajout au DOM
+      setTimeout(() => {
+        initLottieAnimation(lottieElement);
+        
+        // Fallback: Si après 1 seconde l'animation ne s'affiche pas, afficher un spinner CSS
+        setTimeout(() => {
+          const hasLottieContent = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
+          if (!hasLottieContent) {
+            if (window.AGILO_DEBUG) console.log('[Editor] Lottie ne s\'est pas chargé, utilisation du fallback');
+            const fallback = document.createElement('div');
+            fallback.className = 'lottie-fallback';
+            lottieElement.style.display = 'none';
+            loaderContainer.insertBefore(fallback, lottieElement);
+          }
+        }, 1000);
+      }, 100);
+      
+    } else {
+      // Si le conteneur existe déjà, juste l'afficher
+      loaderContainer.style.display = 'flex';
+      
+      // Réinitialiser l'animation Lottie
+      const lottieElement = loaderContainer.querySelector('#loading-summary, #loading-summary-clone');
+      if (lottieElement) {
+        setTimeout(() => {
+          initLottieAnimation(lottieElement);
+        }, 100);
+      }
+    }
+    
+    // Afficher le conteneur
+    loaderContainer.style.display = 'flex';
+  }
+  
+  /**
+   * Masquer l'indicateur de chargement
+   */
+  function hideSummaryLoading() {
+    const loader = document.querySelector('.summary-loading-indicator');
+    const lottieElement = document.querySelector('#loading-summary');
+    
+    if (loader) {
+      loader.style.display = 'none';
+    }
+    
+    if (lottieElement) {
+      lottieElement.style.display = 'none';
+    }
+  }
 
   /* ====================== Summary repoll (annulable) ====================== */
 	async function pollSummaryUntilReady(jobId, auth, { max=50, baseDelay=900, signal, seq } = {}) {
@@ -980,19 +1204,48 @@ try {
 			}
 let summaryEmpty = true;
 
+// ⚠️ NOUVEAU : Vérifier le statut avec getTranscriptStatus pour savoir si le compte-rendu est en cours
+let transcriptStatus = null;
+try {
+  transcriptStatus = await getTranscriptStatus(id, auth);
+  if (window.AGILO_DEBUG) console.log('[Editor] Statut transcript:', transcriptStatus);
+} catch (e) {
+  if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus:', e);
+}
+
+// Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
+const isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
+if (isSummaryPending && editors.summary) {
+  showSummaryLoading();
+}
+
 if (sRes.status === 'fulfilled' && sRes.value.ok) {
   let cleaned = sanitizeHtml(sRes.value.payload);
   if (isBlankHtml(cleaned)) {
- const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
-    if (polled.ok) cleaned = polled.html || '';
+    // Si le statut est PENDING, on continue le polling avec le loader affiché
+    if (isSummaryPending) {
+      hideSummaryLoading(); // Cacher le loader avant de commencer le polling (il sera réaffiché si nécessaire)
+    }
+    const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
+    if (polled.ok) {
+      cleaned = polled.html || '';
+      hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
+    } else if (isSummaryPending) {
+      // Si toujours en cours après polling, réafficher le loader
+      showSummaryLoading();
+    }
   }
   if (!isBlankHtml(cleaned)) {
     summaryEmpty = false;
+    hideSummaryLoading(); // S'assurer que le loader est caché
     if (editors.summary) editors.summary.innerHTML = cleaned;
-  } else if (editors.summary) {
-    editors.summary.replaceChildren(
-      renderAlert("Résumé en préparation…", "Le serveur n'a pas encore publié le HTML du compte-rendu.")
-    );
+  } else if (editors.summary && !isSummaryPending) {
+    // Afficher le loader seulement si pas déjà affiché (statut PENDING)
+    if (!editors.summary.querySelector('.summary-loading-indicator')) {
+      editors.summary.replaceChildren(
+        renderAlert("Résumé en préparation…", "Le serveur n'a pas encore publié le HTML du compte-rendu.")
+      );
+    }
   }
 
 } else { 
@@ -1004,16 +1257,24 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
   const httpLooksPending = (val?.httpStatus === 404 || val?.httpStatus === 204);
 
   if (looksPending || httpLooksPending) {
- const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
+    // Si le statut est PENDING, afficher le loader Lottie
+    if (isSummaryPending && editors.summary) {
+      showSummaryLoading();
+    }
+    
+    const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
     if (polled.ok && !isBlankHtml(polled.html)) {
       summaryEmpty = false;
+      hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
       if (editors.summary) editors.summary.innerHTML = polled.html;
     } else if (editors.summary) {
+      hideSummaryLoading(); // Cacher le loader si erreur
       const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
       editors.summary.innerHTML = '';
       editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
     }
   } else if (editors.summary) {
+    hideSummaryLoading(); // Cacher le loader en cas d'erreur
     const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
     editors.summary.innerHTML = '';
     editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
@@ -1076,6 +1337,94 @@ window.addEventListener('agilo:token', () => {
   const summaryEmpty = editorRoot?.dataset.summaryEmpty === '1';
   updateDownloadLinks(jid, auth, { summaryEmpty });
 });
+
+  // Ajouter les styles CSS pour le loader Lottie
+  (function injectSummaryLoadingStyles() {
+    if (document.querySelector('#agilo-summary-loading-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'agilo-summary-loading-styles';
+    style.textContent = `
+      /* Conteneur de chargement - utilise vos variables CSS */
+      .summary-loading-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+        min-height: 300px;
+        background: var(--agilo-surface, var(--color--white, #ffffff));
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+      }
+      
+      /* Animation Lottie centrée */
+      .summary-loading-indicator #loading-summary,
+      .summary-loading-indicator #loading-summary-clone {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        display: block;
+      }
+      
+      /* Fallback si Lottie ne charge pas - spinner CSS */
+      .summary-loading-indicator .lottie-fallback {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        border: 4px solid var(--agilo-border, rgba(0,0,0,0.12));
+        border-top: 4px solid var(--agilo-primary, var(--color--blue, #174a96));
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Texte de chargement */
+      .summary-loading-indicator .loading-text {
+        font: 500 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
+      
+      .summary-loading-indicator .loading-subtitle {
+        font: 400 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-dim, var(--color--gris, #525252));
+        margin-top: 8px;
+      }
+      
+      /* Animation d'apparition douce */
+      .summary-loading-indicator {
+        animation: fadeIn 0.3s ease-out;
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .summary-loading-indicator {
+          animation: none;
+        }
+        .summary-loading-indicator .lottie-fallback {
+          animation: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  })();
 
 window.addEventListener('online', () => {
   const jid = (editorRoot?.dataset.jobId || new URLSearchParams(location.search).get('jobId') || '').trim();
