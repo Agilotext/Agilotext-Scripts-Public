@@ -798,22 +798,12 @@
     }
     console.log('[AGILO:RELANCE] ========================================');
     
-    // ⚠️ NOUVEAU : Délai initial après redoSummary pour laisser le backend démarrer la régénération
-    // ⚠️ IMPORTANT : Au moins 30 secondes car le backend a besoin de temps pour traiter redoSummary
+    // ⚠️ NOTE : Le délai initial de 40 secondes est déjà fait AVANT l'appel à waitForSummaryReady
+    // Donc on ne le refait pas ici pour éviter d'attendre deux fois
+    // Le délai initial est géré dans relancerCompteRendu() avant l'appel à waitForSummaryReady
     if (waitForPending) {
-      const initialDelay = 30000; // 30 secondes
-      console.log(`[AGILO:RELANCE] ⏳ Délai initial de ${initialDelay/1000} secondes pour laisser le backend démarrer la régénération...`);
-      console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary et mettre à jour le statut');
-      console.log('[AGILO:RELANCE] ⏳ On attend avant de commencer le polling pour éviter de récupérer l\'ancien statut');
-      
-      // Afficher un compte à rebours toutes les 5 secondes
-      for (let remaining = initialDelay; remaining > 0; remaining -= 5000) {
-        const secondsLeft = Math.ceil(remaining / 1000);
-        console.log(`[AGILO:RELANCE] ⏳ Attente... ${secondsLeft} secondes restantes`);
-        await new Promise(r => setTimeout(r, Math.min(5000, remaining)));
-      }
-      
-      console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
+      console.log('[AGILO:RELANCE] ⚠️ waitForPending=true - On attend d\'abord READY_SUMMARY_PENDING');
+      console.log('[AGILO:RELANCE] ⚠️ Puis on attend que le statut redevienne READY_SUMMARY_READY avec un nouveau hash');
     }
     
     let hasSeenPending = !waitForPending; // Si waitForPending=false, on considère qu'on a déjà vu PENDING
@@ -1245,20 +1235,12 @@
       // On continue quand même
     }
     
-    // ⚠️ CRITIQUE : Marquer comme "en génération" AVANT l'appel API
-    // Cela empêche les double-clics et indique que le processus a commencé
-    console.log('[AGILO:RELANCE] ========================================');
-    console.log('[AGILO:RELANCE] 🔒 MARQUAGE: isGenerating = true');
-    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le processus commence MAINTENANT');
-    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du processus');
-    console.log('[AGILO:RELANCE] ========================================');
-    
     setGeneratingState(true);
     
     try {
       // ⚠️ IMPORTANT : Logger tous les paramètres envoyés
       console.log('[AGILO:RELANCE] ========================================');
-      console.log('[AGILO:RELANCE] 📤 APPEL API redoSummary - Paramètres:', {
+      console.log('[AGILO:RELANCE] Paramètres pour redoSummary:', {
         jobId: jobId,
         edition: edition,
         username: email,
@@ -1266,8 +1248,6 @@
         tokenLength: token ? token.length : 0,
         tokenPreview: token ? token.substring(0, 10) + '...' : '(vide)'
       });
-      console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Après cet appel, on va afficher le loader et faire le polling');
-      console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
       console.log('[AGILO:RELANCE] ========================================');
       
       // ⚠️ Vérifier que tous les paramètres sont valides avant de construire l'URL
@@ -1333,7 +1313,7 @@
       console.log('[AGILO:RELANCE] ========================================');
       
       if (result.status === 'OK' || response.ok) {
-        // ⚠️ CRITIQUE : Vérifier que le jobId n'a pas changé pendant la requête
+        // Vérifier que le jobId n'a pas changé pendant la requête
         const currentJobId = pickJobId();
         if (currentJobId !== jobId) {
           console.warn('[AGILO:RELANCE] ⚠️ JobId a changé pendant la génération', {
@@ -1341,12 +1321,11 @@
             currentJobId: currentJobId
           });
           setGeneratingState(false);
-          hideSummaryLoading();
           alert('⚠️ Le transcript a changé pendant la génération.\n\nLe compteur n\'a pas été incrémenté.');
           return;
         }
         
-        console.log('[AGILO:RELANCE] ✅ redoSummary OK - Incrémentation du compteur', {
+        console.log('[AGILO:RELANCE] ✅ Succès - Incrémentation du compteur', {
           jobId,
           edition,
           countBefore: getRegenerationCount(jobId)
@@ -1359,43 +1338,34 @@
           countAfter: getRegenerationCount(jobId)
         });
         
-        // ⚠️ CRITIQUE : Afficher le loader IMMÉDIATEMENT et ouvrir l'onglet
-        // Le loader DOIT rester affiché pendant TOUT le processus (30s + polling)
+        // ⚠️ CRITIQUE : Afficher le loader IMMÉDIATEMENT après redoSummary
+        // Le loader DOIT rester affiché pendant TOUTE la durée du processus
         console.log('[AGILO:RELANCE] ========================================');
         console.log('[AGILO:RELANCE] 🔄 AFFICHAGE DU LOADER - DÉBUT DU PROCESSUS');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader doit rester affiché pendant TOUT le processus');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: La page NE DOIT PAS se recharger avant que le nouveau CR soit prêt');
         console.log('[AGILO:RELANCE] ========================================');
         
-        showSummaryLoading();
+        // Ouvrir l'onglet Compte-rendu AVANT d'afficher le loader
         openSummaryTab();
+        
+        // Afficher le loader IMMÉDIATEMENT
+        showSummaryLoading();
+        console.log('[AGILO:RELANCE] ✅ Loader affiché - Il doit rester visible pendant tout le processus');
+        
+        // Afficher un message de succès non-bloquant
         showSuccessMessage('Régénération lancée...');
         
-        console.log('[AGILO:RELANCE] ✅ Loader affiché - Le processus commence maintenant');
-        
-        // ⚠️ CRITIQUE : DÉBUT DU POLLING - Ne PAS recharger la page avant la fin
-        console.log('[AGILO:RELANCE] ========================================');
-        console.log('[AGILO:RELANCE] 🚀 DÉBUT POLLING POUR READY_SUMMARY_READY');
-        console.log('[AGILO:RELANCE] Paramètres pour polling:', {
-          jobId,
-          edition,
-          emailLength: email ? email.length : 0,
-          tokenLength: token ? token.length : 0,
-          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
-          maxAttempts: 60,
-          delay: 2000
-        });
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On attend vraiment READY_SUMMARY_READY avec nouveau hash');
-        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
-        console.log('[AGILO:RELANCE] ========================================');
-        
-        // ⚠️ CRITIQUE : Délai initial de 30 secondes après redoSummary
+        // ⚠️ CRITIQUE : Délai initial de 40 secondes APRÈS redoSummary
         // Le backend a besoin de temps pour traiter redoSummary et mettre à jour le statut
-        const initialDelay = 30000; // 30 secondes
-        console.log(`[AGILO:RELANCE] ⏳ Délai initial de ${initialDelay/1000} secondes après redoSummary...`);
-        console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary et mettre à jour le statut');
-        console.log('[AGILO:RELANCE] ⏳ On attend avant de commencer le polling pour éviter de récupérer l\'ancien statut');
+        // On attend AVANT de commencer le polling pour éviter de récupérer l'ancien statut
+        const initialDelay = 40000; // 40 secondes comme demandé
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log(`[AGILO:RELANCE] ⏳ DÉLAI INITIAL DE ${initialDelay/1000} SECONDES`);
+        console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary');
+        console.log('[AGILO:RELANCE] ⏳ On attend AVANT de commencer le polling pour éviter de récupérer l\'ancien statut');
         console.log('[AGILO:RELANCE] ⏳ Le loader reste affiché pendant cette attente');
+        console.log('[AGILO:RELANCE] ========================================');
         
         // Afficher un compte à rebours toutes les 5 secondes
         for (let remaining = initialDelay; remaining > 0; remaining -= 5000) {
@@ -1406,7 +1376,7 @@
         
         console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
         
-        // ⚠️ CRITIQUE : Vérifier que summaryEditor existe avant de commencer le polling
+        // Vérifier que summaryEditor existe avant de commencer le polling
         const summaryEditorCheck = document.querySelector('#summaryEditor');
         console.log('[AGILO:RELANCE] 🔍 Vérification summaryEditor:', {
           exists: !!summaryEditorCheck,
@@ -1419,10 +1389,28 @@
           console.warn('[AGILO:RELANCE] ⚠️ Si summaryEditor n\'est pas trouvé à la fin, on rechargera la page');
         }
         
-        // ⚠️ CRITIQUE : DÉBUT DU POLLING RÉEL
+        // ⚠️ IMPORTANT : Vérifier que le compte-rendu est prêt avec getTranscriptStatus
+        // et attendre READY_SUMMARY_READY avant d'afficher
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] 🚀 DÉBUT POLLING POUR READY_SUMMARY_READY');
+        console.log('[AGILO:RELANCE] Paramètres pour polling:', {
+          jobId,
+          edition,
+          emailLength: email ? email.length : 0,
+          tokenLength: token ? token.length : 0,
+          oldHash: oldHash ? oldHash.substring(0, 30) + '...' : '(aucun)',
+          maxAttempts: 60,
+          delay: 3000 // ⚠️ Augmenté à 3 secondes pour réduire les appels API
+        });
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader reste affiché pendant le polling');
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On attend vraiment READY_SUMMARY_READY avec nouveau hash');
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
+        console.log('[AGILO:RELANCE] ========================================');
+        
         const pollingStartTime = Date.now();
         console.log('[AGILO:RELANCE] 🎬 APPEL waitForSummaryReady() - Début du polling réel');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: waitForPending=true pour s\'assurer qu\'on voit PENDING puis le nouveau READY');
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Délai entre tentatives = 3 secondes pour réduire les appels API');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Le loader reste affiché pendant TOUT le polling');
         console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: PAS de rechargement avant la fin du polling');
         
@@ -1430,7 +1418,8 @@
         try {
           // ⚠️ CRITIQUE : waitForPending=true pour forcer l'attente de READY_SUMMARY_PENDING
           // Cela garantit qu'on ne récupère pas l'ancien compte-rendu
-          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 2000, oldHash, true);
+          // Délai augmenté à 3 secondes entre tentatives pour réduire les appels API
+          waitResult = await waitForSummaryReady(jobId, email, token, edition, 60, 3000, oldHash, true);
         } catch (error) {
           console.error('[AGILO:RELANCE] ❌ ERREUR dans waitForSummaryReady:', {
             error: error.message,
