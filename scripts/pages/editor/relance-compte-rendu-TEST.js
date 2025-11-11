@@ -702,14 +702,26 @@
   };
   
   /**
-   * Calculer un hash simple du contenu pour détecter les changements
+   * Générer un hash du contenu (compatible UTF-8)
+   * Utilise une méthode simple mais efficace pour détecter les changements
    */
   function getContentHash(text) {
-    const s = String(text || '');
-    if (s.length < 60) return `len:${s.length}`;
-    const head = s.slice(0, 180).replace(/\s+/g, '');
-    const tail = s.slice(-180).replace(/\s+/g, '');
-    return `${s.length}:${head.slice(0, 40)}:${tail.slice(-40)}`;
+    if (!text || text.length === 0) return '';
+    
+    // Utiliser une méthode compatible UTF-8 au lieu de btoa
+    // Prendre les premiers 2000 caractères pour le hash
+    const sample = text.substring(0, 2000);
+    
+    // Créer un hash simple en utilisant une fonction de hachage simple
+    let hash = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const char = sample.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    // Retourner un hash positif en hexadécimal + longueur pour plus de précision
+    return Math.abs(hash).toString(16) + '-' + text.length;
   }
   
   /**
@@ -920,16 +932,21 @@
                 continue;
               }
               
-              // Si le hash a changé (ou si on n'avait pas d'ancien hash), c'est bon
+              // ⚠️ CRITIQUE : Si le hash a changé, c'est le nouveau compte-rendu
               if (!oldHash || newHash !== oldHash) {
                 console.log('[AGILO:RELANCE] ✅✅✅ Hash différent détecté - NOUVEAU compte-rendu confirmé !');
                 lastReadyHash = newHash; // Mémoriser pour référence
                 return { ready: true, hash: newHash, content: text };
               } else {
-                // Ce cas ne devrait pas arriver (déjà géré plus haut)
-                console.warn('[AGILO:RELANCE] ⚠️ Hash identique - Le compte-rendu n\'a peut-être pas changé');
+                // ⚠️ CRITIQUE : Hash identique = ancien compte-rendu, on continue le polling
+                // On ne retourne JAMAIS ready:true si le hash n'a pas changé
+                console.warn('[AGILO:RELANCE] ⚠️ Hash identique - C\'est l\'ANCIEN compte-rendu');
+                console.warn('[AGILO:RELANCE] ⚠️ On continue le polling pour attendre le NOUVEAU compte-rendu');
                 lastReadyHash = newHash;
-                return { ready: true, hash: newHash, content: text };
+                if (attempt < maxAttempts) {
+                  await new Promise(r => setTimeout(r, delay));
+                }
+                continue;
               }
             } else {
               console.warn('[AGILO:RELANCE] ⚠️ receiveSummary retourne une erreur HTTP:', response.status);
@@ -986,9 +1003,11 @@
     }
     
     // Si on arrive ici, le compte-rendu n'est pas prêt après toutes les tentatives
-    console.warn('[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY non obtenu après', maxAttempts, 'tentatives');
-    console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
-    return { ready: false, error: 'TIMEOUT' };
+    console.warn('[AGILO:RELANCE] ⚠️ TIMEOUT: Le nouveau compte-rendu n\'est pas prêt après', maxAttempts, 'tentatives');
+    console.warn('[AGILO:RELANCE] ⚠️ Le statut est resté sur READY_SUMMARY_READY (ancien) ou n\'a jamais changé');
+    console.warn('[AGILO:RELANCE] ⚠️ Le backend n\'a peut-être pas commencé la régénération, ou elle prend plus de temps');
+    console.warn('[AGILO:RELANCE] ⚠️ On NE RECHARGE PAS la page - L\'utilisateur peut recharger manuellement plus tard');
+    return { ready: false, error: 'TIMEOUT', hasSeenPending: hasSeenPending };
   }
   
   /**
