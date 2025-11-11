@@ -1356,42 +1356,14 @@
         continue;
       }
       
-      // ⚠️ PRIORITÉ ABSOLUE : Vérifier le message d'erreur dans le DOM (même si summaryEmpty='0')
-      // Car le script principal peut avoir mis summaryEmpty='0' par erreur
-      const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-      if (summaryEl) {
-        const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-        const html = (summaryEl.innerHTML || '').toLowerCase();
-        const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-        
-        // Vérifier le message exact (plus fiable) - PRIORITÉ ABSOLUE
-        if (text.includes(exactMsg) || html.includes(exactMsg)) {
-          console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: Message exact détecté - Cache bouton (même si summaryEmpty=0)');
-          hideButton(btn, 'immediate-check-exact-message');
-          hideCounter(btn);
-          continue;
-        }
-        
-        // Vérifier les patterns - PRIORITÉ ABSOLUE
-        if (text.includes('pas encore disponible') || text.includes('fichier manquant') || text.includes('non publié')) {
-          console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: Pattern erreur détecté - Cache bouton (même si summaryEmpty=0)');
-          hideButton(btn, 'immediate-check-error-pattern');
-          hideCounter(btn);
-          continue;
-        }
-        
-        // Vérifier aussi dans les alertes - PRIORITÉ ABSOLUE
-        const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title, [class*="alert"]');
-        for (const alert of alerts) {
-          const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
-          if (alertText.includes(exactMsg) || alertText.includes('pas encore disponible') || alertText.includes('fichier manquant')) {
-            console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: Message erreur dans alerte - Cache bouton (même si summaryEmpty=0)');
-            hideButton(btn, 'immediate-check-alert-message');
-            hideCounter(btn);
-            break; // Sortir de la boucle alertes
-          }
-        }
-      }
+    // ⚠️ PRIORITÉ ABSOLUE : Vérifier le message d'erreur dans TOUT le DOM (même si summaryEmpty='0')
+    // Utiliser hasErrorMessageInDOM() qui cherche dans tout le document
+    if (hasErrorMessageInDOM()) {
+      console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION IMMÉDIATE: Message erreur détecté (hasErrorMessageInDOM) - Cache bouton (même si summaryEmpty=0)');
+      hideButton(btn, 'immediate-check-has-error-message');
+      hideCounter(btn);
+      continue;
+    }
     }
     
     log('immediateCheck: Vérification terminée pour tous les boutons');
@@ -1669,40 +1641,12 @@
         
         // ⚠️ Si le bouton est visible, on vérifie TOUJOURS s'il devrait être caché
         if (isVisible) {
-          // PRIORITÉ 1 : Message d'erreur dans le DOM (AVANT summaryEmpty car plus fiable)
-          const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-          if (summaryEl) {
-            const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-            const html = (summaryEl.innerHTML || '').toLowerCase();
-            const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-            
-            // Vérifier le message exact
-            if (text.includes(exactMsg) || html.includes(exactMsg)) {
-              console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: Message exact détecté - Cache bouton FORCÉ (même si summaryEmpty=0)');
-              hideButton(btn, 'periodic-check-exact-message');
-              hideCounter(btn);
-              continue;
-            }
-            
-            // Vérifier les patterns
-            if (text.includes('pas encore disponible') || text.includes('fichier manquant') || text.includes('non publié')) {
-              console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: Pattern erreur détecté - Cache bouton FORCÉ (même si summaryEmpty=0)');
-              hideButton(btn, 'periodic-check-error-message');
-              hideCounter(btn);
-              continue;
-            }
-            
-            // Vérifier aussi dans les alertes
-            const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title, [class*="alert"]');
-            for (const alert of alerts) {
-              const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
-              if (alertText.includes(exactMsg) || alertText.includes('pas encore disponible') || alertText.includes('fichier manquant')) {
-                console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur dans alerte - Cache bouton FORCÉ');
-                hideButton(btn, 'periodic-check-alert-message');
-                hideCounter(btn);
-                continue;
-              }
-            }
+          // PRIORITÉ 1 : Message d'erreur dans TOUT le DOM (utiliser hasErrorMessageInDOM qui cherche partout)
+          if (hasErrorMessageInDOM()) {
+            console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION PÉRIODIQUE: Message erreur détecté (hasErrorMessageInDOM) - Cache bouton FORCÉ (même si summaryEmpty=0)');
+            hideButton(btn, 'periodic-check-has-error-message');
+            hideCounter(btn);
+            continue;
           }
           
           // PRIORITÉ 2 : summaryEmpty
@@ -1753,40 +1697,13 @@
       
       if (!isVisible) return; // Déjà caché, pas besoin de vérifier
       
-      // Vérifier le message d'erreur dans le DOM (PRIORITÉ ABSOLUE)
-      const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-      if (summaryEl) {
-        const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-        const html = (summaryEl.innerHTML || '').toLowerCase();
-        const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).".toLowerCase();
-        
-        // Vérifier le message exact
-        if (text.includes(exactMsg) || html.includes(exactMsg)) {
-          console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION ULTRA-AGRESSIVE: Message exact détecté - Cache bouton (init() peut ne pas avoir tourné)');
-          hideButton(btn, 'ultra-aggressive-exact-message');
-          hideCounter(btn);
-          return;
-        }
-        
-        // Vérifier les patterns
-        if (text.includes('pas encore disponible') || text.includes('fichier manquant') || text.includes('non publié')) {
-          console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION ULTRA-AGRESSIVE: Pattern erreur détecté - Cache bouton (init() peut ne pas avoir tourné)');
-          hideButton(btn, 'ultra-aggressive-error-pattern');
-          hideCounter(btn);
-          return;
-        }
-        
-        // Vérifier aussi dans les alertes
-        const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title, [class*="alert"]');
-        for (const alert of alerts) {
-          const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
-          if (alertText.includes(exactMsg) || alertText.includes('pas encore disponible') || alertText.includes('fichier manquant')) {
-            console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION ULTRA-AGRESSIVE: Message erreur dans alerte - Cache bouton (init() peut ne pas avoir tourné)');
-            hideButton(btn, 'ultra-aggressive-alert-message');
-            hideCounter(btn);
-            return;
-          }
-        }
+      // Vérifier le message d'erreur dans TOUT le DOM (PRIORITÉ ABSOLUE)
+      // Utiliser hasErrorMessageInDOM() qui cherche dans tout le document
+      if (hasErrorMessageInDOM()) {
+        console.log('[AGILO:RELANCE] ⚠️ VÉRIFICATION ULTRA-AGRESSIVE: Message erreur détecté (hasErrorMessageInDOM) - Cache bouton (init() peut ne pas avoir tourné)');
+        hideButton(btn, 'ultra-aggressive-has-error-message');
+        hideCounter(btn);
+        return;
       }
     } catch (e) {
       console.error('[AGILO:RELANCE] Erreur vérification ultra-agressive:', e);
