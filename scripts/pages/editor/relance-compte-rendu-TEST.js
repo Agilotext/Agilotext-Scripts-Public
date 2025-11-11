@@ -832,12 +832,6 @@
         background: rgba(33, 150, 243, 0.1);
         border: 1px solid rgba(33, 150, 243, 0.35);
       }
-        margin-top: 8px;
-        border-radius: 4px;
-        font-size: 13px;
-        background: rgba(33, 150, 243, 0.1);
-        border: 1px solid rgba(33, 150, 243, 0.35);
-      }
     `;
     document.head.appendChild(style);
   }
