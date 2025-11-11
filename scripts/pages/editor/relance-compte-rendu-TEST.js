@@ -1118,27 +1118,44 @@
    */
   async function relancerCompteRendu() {
     console.log('[AGILO:RELANCE] ========================================');
+    console.log('[AGILO:RELANCE] 🚀 FONCTION relancerCompteRendu() APPELÉE');
     console.log('[AGILO:RELANCE] Début régénération compte-rendu');
+    console.log('[AGILO:RELANCE] ========================================');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: Cette fonction NE DOIT PAS recharger la page');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On va attendre que le nouveau compte-rendu soit prêt');
     console.log('[AGILO:RELANCE] ========================================');
     
     // Protection contre les double-clics
     if (isGenerating) {
       console.warn('[AGILO:RELANCE] ⚠️ Régénération déjà en cours, ignore le clic');
+      console.warn('[AGILO:RELANCE] ⚠️ isGenerating =', isGenerating);
       return;
     }
+    
+    console.log('[AGILO:RELANCE] ✅ isGenerating = false, on continue');
+    
+    // ⚠️ CRITIQUE : Marquer comme "en génération" IMMÉDIATEMENT pour éviter les double-clics
+    console.log('[AGILO:RELANCE] 🔒 MARQUAGE: isGenerating = true (AVANT ensureCreds)');
+    isGenerating = true;
+    setGeneratingState(true);
     
     // Debounce : éviter les clics trop rapides
     const now = Date.now();
     if (relancerCompteRendu._lastClick && (now - relancerCompteRendu._lastClick) < 500) {
       console.warn('[AGILO:RELANCE] ⚠️ Clic trop rapide, ignoré');
+      isGenerating = false;
+      setGeneratingState(false);
       return;
     }
     relancerCompteRendu._lastClick = now;
+    
+    console.log('[AGILO:RELANCE] ✅ Debounce OK, récupération des credentials...');
     
     // Vérifier les limites avant de continuer
     let creds;
     try {
       creds = await ensureCreds();
+      console.log('[AGILO:RELANCE] ✅ ensureCreds terminé');
       console.log('[AGILO:RELANCE] Credentials récupérées:', {
         email: creds.email ? '✓' : '✗',
         token: creds.token ? '✓ (' + creds.token.length + ' chars)' : '✗',
@@ -1147,6 +1164,8 @@
       });
     } catch (error) {
       console.error('[AGILO:RELANCE] ❌ Erreur récupération credentials:', error);
+      isGenerating = false;
+      setGeneratingState(false);
       alert('❌ Erreur : Impossible de récupérer les informations de connexion.\n\nVeuillez réessayer.');
       return;
     }
@@ -1159,6 +1178,8 @@
         token: !!token,
         jobId: !!jobId
       });
+      isGenerating = false;
+      setGeneratingState(false);
       alert('❌ Erreur : Informations incomplètes.\n\nEmail: ' + (email ? '✓' : '✗') + '\nToken: ' + (token ? '✓' : '✗') + '\nJobId: ' + (jobId ? '✓' : '✗'));
       return;
     }
@@ -1204,8 +1225,15 @@
     const confirmationMsg = getConfirmationMessage() + 
       `\n\nIl vous reste ${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript.`;
     
+    console.log('[AGILO:RELANCE] 📋 Affichage de la confirmation...');
     const confirmed = confirm(confirmationMsg);
-    if (!confirmed) return;
+    if (!confirmed) {
+      console.log('[AGILO:RELANCE] ❌ Utilisateur a annulé la confirmation');
+      isGenerating = false;
+      setGeneratingState(false);
+      return;
+    }
+    console.log('[AGILO:RELANCE] ✅ Utilisateur a confirmé, on continue');
     
     // ⚠️ IMPORTANT : Vérifier si un compte-rendu existe déjà
     // Si aucun compte-rendu n'existe, redoSummary ne peut pas fonctionner
@@ -1223,6 +1251,8 @@
       
       if (!proceed) {
         console.log('[AGILO:RELANCE] Utilisateur a annulé - pas de compte-rendu existant');
+        isGenerating = false;
+        setGeneratingState(false);
         return;
       }
       
@@ -1231,31 +1261,41 @@
       console.log('[AGILO:RELANCE] ✅ Compte-rendu existant détecté, régénération possible');
     }
     
+    console.log('[AGILO:RELANCE] 🔐 Récupération du hash de l\'ancien compte-rendu...');
+    
     // ⚠️ IMPORTANT : Récupérer le hash de l'ancien compte-rendu avant régénération
     let oldHash = '';
     try {
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
       const response = await fetch(url, {
         method: 'GET',
-        cache: 'no-store'
+        cache: 'no-store',
+        credentials: 'omit'
       });
       
       if (response.ok) {
         const text = await response.text();
         if (text && !text.includes('pas encore disponible') && !text.includes('non publié')) {
           oldHash = getContentHash(text);
-          console.log('[AGILO:RELANCE] Hash ancien compte-rendu récupéré:', {
+          console.log('[AGILO:RELANCE] ✅ Hash ancien compte-rendu récupéré:', {
             hash: oldHash.substring(0, 50) + '...',
             contentLength: text.length
           });
+        } else {
+          console.warn('[AGILO:RELANCE] ⚠️ Ancien compte-rendu non disponible ou invalide');
         }
+      } else {
+        console.warn('[AGILO:RELANCE] ⚠️ Erreur HTTP lors de la récupération de l\'ancien hash:', response.status);
       }
     } catch (error) {
-      console.warn('[AGILO:RELANCE] Erreur récupération hash ancien compte-rendu:', error);
+      console.warn('[AGILO:RELANCE] ⚠️ Erreur récupération hash ancien compte-rendu:', error);
       // On continue quand même
     }
     
-    setGeneratingState(true);
+    console.log('[AGILO:RELANCE] ✅ Hash récupéré (ou vide), on continue avec redoSummary');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: isGenerating =', isGenerating, '(doit être true)');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On va appeler redoSummary MAINTENANT');
+    console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: La page NE DOIT PAS se recharger avant la fin du processus');
     
     try {
       // ⚠️ IMPORTANT : Logger tous les paramètres envoyés
@@ -1830,9 +1870,29 @@
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
       if (btn && !btn.disabled) {
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] 🖱️ CLIC DÉTECTÉ SUR LE BOUTON RÉGÉNÉRER');
+        console.log('[AGILO:RELANCE] ========================================');
+        console.log('[AGILO:RELANCE] Bouton trouvé:', {
+          exists: !!btn,
+          disabled: btn.disabled,
+          id: btn.id,
+          className: btn.className
+        });
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: On va appeler relancerCompteRendu()');
+        console.log('[AGILO:RELANCE] ⚠️ CRITIQUE: La page NE DOIT PAS se recharger avant la fin du processus');
+        console.log('[AGILO:RELANCE] ========================================');
+        
         e.preventDefault();
         e.stopPropagation();
-        relancerCompteRendu();
+        
+        // ⚠️ CRITIQUE : Appel asynchrone - ne pas attendre pour éviter de bloquer
+        relancerCompteRendu().catch(error => {
+          console.error('[AGILO:RELANCE] ❌ ERREUR dans relancerCompteRendu:', error);
+          setGeneratingState(false);
+          hideSummaryLoading();
+          alert('❌ Erreur lors de la régénération: ' + error.message);
+        });
       }
     }, { passive: false });
     
