@@ -593,18 +593,22 @@
    */
   async function getTranscriptStatus(jobId, email, token, edition) {
     try {
-      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      // ⚠️ Utiliser EXACTEMENT la même logique que Code-main-editor.js ligne 897
+      // Ordre des paramètres : jobId, username, token, edition (sans _t pour éviter CORS)
+      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}`;
       
       console.log('[AGILO:RELANCE] 🔍 APPEL API getTranscriptStatus', {
-        url: url.substring(0, 100) + '...',
-        jobId,
-        edition,
+        url: url.substring(0, 150) + '...',
+        jobId: String(jobId),
+        edition: String(edition),
         emailLength: email ? email.length : 0,
         tokenLength: token ? token.length : 0,
         timestamp: new Date().toISOString()
       });
       
       const startTime = Date.now();
+      // ⚠️ Utiliser exactement la même logique que Code-main-editor.js (fetchWithTimeout ligne 899)
+      // fetchWithTimeout ajoute automatiquement credentials:'omit', cache:'no-store'
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
@@ -803,10 +807,13 @@
           
           // Récupérer le nouveau compte-rendu pour vérifier le hash
           try {
-            const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
+            // ⚠️ Utiliser EXACTEMENT la même logique que Code-main-editor.js ligne 320
+            // Ordre des paramètres : jobId, username, token, edition, format
+            const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}&format=html`;
             const response = await fetch(url, {
               method: 'GET',
-              cache: 'no-store'
+              cache: 'no-store',
+              credentials: 'omit'
             });
             
             if (response.ok) {
@@ -1163,21 +1170,23 @@
       });
       console.log('[AGILO:RELANCE] ========================================');
       
-      // ⚠️ Utiliser GET avec query parameters comme les autres scripts (Code-main-editor.js)
-      // Le README dit "GET or POST", GET est plus simple et évite les problèmes de FormData
-      const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&_t=${Date.now()}`;
+      // ⚠️ Utiliser GET avec query parameters EXACTEMENT comme Code-main-editor.js
+      // Ordre des paramètres : jobId, username, token, edition (comme dans receiveSummary)
+      const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}`;
       
       console.log('[AGILO:RELANCE] Envoi requête API redoSummary', {
-        url: url.substring(0, 100) + '...',
+        url: url.substring(0, 150) + '...',
         method: 'GET',
-        jobId,
-        edition,
+        jobId: String(jobId),
+        edition: String(edition),
         emailLength: email ? email.length : 0,
         tokenLength: token ? token.length : 0,
         timestamp: new Date().toISOString()
       });
       
       const apiStartTime = Date.now();
+      // ⚠️ Utiliser exactement la même logique que Code-main-editor.js (fetchWithTimeout)
+      // Mais comme on n'a pas fetchWithTimeout, on utilise fetch avec les mêmes options
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
@@ -2135,9 +2144,10 @@
       return;
     }
     
-    // 1. Appel redoSummary avec GET (comme les autres scripts)
+    // 1. Appel redoSummary avec GET (EXACTEMENT comme Code-main-editor.js)
     console.log('📤 Étape 1: Appel redoSummary...');
-    const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&_t=${Date.now()}`;
+    // Ordre des paramètres : jobId, username, token, edition (comme dans receiveSummary ligne 320)
+    const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}`;
     
     try {
       const response = await fetch(url, {
