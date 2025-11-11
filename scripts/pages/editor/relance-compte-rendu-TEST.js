@@ -1170,8 +1170,19 @@
       });
       console.log('[AGILO:RELANCE] ========================================');
       
+      // ⚠️ Vérifier que tous les paramètres sont valides avant de construire l'URL
+      if (!jobId || !email || !token || !edition) {
+        console.error('[AGILO:RELANCE] ❌ Paramètres invalides pour redoSummary:', {
+          jobId: jobId || '(null/undefined)',
+          email: email || '(null/undefined)',
+          token: token ? '✓ (' + token.length + ' chars)' : '(null/undefined)',
+          edition: edition || '(null/undefined)'
+        });
+        throw new Error('Paramètres invalides pour redoSummary');
+      }
+      
       // ⚠️ Utiliser GET avec query parameters EXACTEMENT comme Code-main-editor.js
-      // Ordre des paramètres : jobId, username, token, edition (comme dans receiveSummary)
+      // Ordre des paramètres : jobId, username, token, edition (comme dans receiveSummary ligne 320)
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}`;
       
       console.log('[AGILO:RELANCE] Envoi requête API redoSummary', {
@@ -1179,8 +1190,10 @@
         method: 'GET',
         jobId: String(jobId),
         edition: String(edition),
+        email: String(email).substring(0, 20) + '...',
         emailLength: email ? email.length : 0,
         tokenLength: token ? token.length : 0,
+        tokenPreview: token ? token.substring(0, 10) + '...' : '(vide)',
         timestamp: new Date().toISOString()
       });
       
