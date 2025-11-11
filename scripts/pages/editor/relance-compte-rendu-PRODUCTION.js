@@ -323,10 +323,26 @@
     }
   }
   
+  function getButtonText() {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (activeTab?.id === 'tab-summary') return 'Régénérer';
+    if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
+    return 'Relancer';
+  }
+  
   function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    const isSummaryTab = activeTab?.id === 'tab-summary';
+    const isTranscriptTab = activeTab?.id === 'tab-transcript';
+    
+    // Mettre à jour le texte du bouton
+    const textDiv = btn.querySelector('div');
+    if (textDiv) textDiv.textContent = getButtonText();
+    
+    // Vérifier d'abord si on doit cacher (pas de compte-rendu)
     const shouldHide = shouldHideButton();
     
     if (shouldHide) {
@@ -341,8 +357,12 @@
         counter.style.setProperty('display', 'none', 'important');
         counter.style.setProperty('visibility', 'hidden', 'important');
       }
-    } else {
-      log('Affiche le bouton (compte-rendu existe)');
+      return;
+    }
+    
+    // Si compte-rendu existe, gérer la visibilité selon l'onglet
+    if (isSummaryTab) {
+      log('Affiche le bouton (onglet compte-rendu)');
       btn.style.removeProperty('display');
       btn.style.removeProperty('visibility');
       btn.style.removeProperty('opacity');
@@ -352,6 +372,30 @@
       if (counter) {
         counter.style.removeProperty('display');
         counter.style.removeProperty('visibility');
+      }
+    } else if (isTranscriptTab && transcriptModified) {
+      log('Affiche le bouton (transcript modifié)');
+      btn.style.removeProperty('display');
+      btn.style.removeProperty('visibility');
+      btn.style.removeProperty('opacity');
+      btn.style.removeProperty('pointer-events');
+      
+      const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message');
+      if (counter) {
+        counter.style.removeProperty('display');
+        counter.style.removeProperty('visibility');
+      }
+    } else {
+      log('Cache le bouton (transcript non modifié ou autre onglet)');
+      btn.style.setProperty('display', 'none', 'important');
+      btn.style.setProperty('visibility', 'hidden', 'important');
+      btn.style.setProperty('opacity', '0', 'important');
+      btn.style.setProperty('pointer-events', 'none', 'important');
+      
+      const counter = btn.parentElement?.querySelector('.regeneration-counter, .regeneration-limit-message');
+      if (counter) {
+        counter.style.setProperty('display', 'none', 'important');
+        counter.style.setProperty('visibility', 'hidden', 'important');
       }
     }
   }
