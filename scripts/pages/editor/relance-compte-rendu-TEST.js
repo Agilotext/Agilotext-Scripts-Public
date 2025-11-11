@@ -489,46 +489,26 @@
     const textDiv = btn.querySelector('div');
     if (textDiv) textDiv.textContent = getButtonText();
     
+    // Cacher aussi le compteur/message si le bouton est caché
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message, .regeneration-no-summary-message');
     
-    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe via getTranscriptStatus
+    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe avant d'afficher le bouton
+    // (Logique exacte du script staging qui fonctionne)
     try {
       const creds = await ensureCreds();
       if (creds.jobId && creds.email && creds.token) {
-        const status = await getTranscriptStatus(creds.jobId, creds.email, creds.token, creds.edition);
+        const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
         
-        // Si le statut indique qu'aucun compte-rendu n'existe, cacher le bouton
-        if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        // Si aucun compte-rendu n'existe, cacher le bouton et RETOURNER IMMÉDIATEMENT
+        if (!summaryExists) {
+          console.log('[AGILO:RELANCE] ⚠️ Aucun compte-rendu détecté - Bouton caché');
           btn.style.display = 'none';
           if (counter) counter.style.display = 'none';
-          
-          // Ajouter un message informatif
-          const infoMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
-          if (!infoMsg) {
-            const msg = document.createElement('div');
-            msg.className = 'regeneration-no-summary-message';
-            msg.innerHTML = `
-              <span style="font-size: 16px;">ℹ️</span>
-              <div>
-                <strong>Générez d'abord un compte-rendu</strong>
-                <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
-                </div>
-              </div>
-            `;
-            btn.parentElement.appendChild(msg);
-          }
-          return;
-        }
-        
-        // Si le statut n'est pas READY_SUMMARY_READY ou READY_SUMMARY_PENDING, cacher le bouton
-        if (status !== 'READY_SUMMARY_READY' && status !== 'READY_SUMMARY_PENDING') {
-          btn.style.display = 'none';
-          if (counter) counter.style.display = 'none';
-          return;
+          return; // ⚠️ IMPORTANT : Retour immédiat pour ne pas continuer avec la logique normale
         }
       }
     } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur vérification compte-rendu:', error);
       // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
     }
     
@@ -852,11 +832,6 @@
         background: rgba(33, 150, 243, 0.1);
         border: 1px solid rgba(33, 150, 243, 0.35);
       }
-      
-      .regeneration-no-summary-message {
-        display: flex;
-        gap: 10px;
-        padding: 10px 12px;
         margin-top: 8px;
         border-radius: 4px;
         font-size: 13px;
