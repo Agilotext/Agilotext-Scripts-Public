@@ -128,51 +128,12 @@
   // VÉRIFICATION EXISTENCE COMPTE-RENDU
   // ============================================
   
-  async function getTranscriptStatus(jobId, email, token, edition) {
-    try {
-      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'omit'
-      });
-      
-      if (!response.ok) return null;
-      
-      const data = await response.json();
-      
-      if (data.status === 'OK' && data.transcriptStatus) {
-        return data.transcriptStatus;
-      }
-      
-      if (data.status === 'KO') {
-        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
-          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      return null;
-    }
-  }
-  
+  /**
+   * Vérifier si un compte-rendu existe déjà pour ce jobId
+   * Utilise receiveSummary directement (comme dans le script staging qui fonctionne)
+   */
   async function checkSummaryExists(jobId, email, token, edition) {
     try {
-      const status = await getTranscriptStatus(jobId, email, token, edition);
-      
-      // Si le statut est READY_SUMMARY_READY ou READY_SUMMARY_PENDING, le compte-rendu existe
-      if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
-        return true;
-      }
-      
-      // Si c'est l'erreur "fichier manquant", le compte-rendu n'existe pas
-      if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
-        return false;
-      }
-      
-      // Fallback : vérifier via receiveSummary
       const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
       
       const response = await fetch(url, {
@@ -181,16 +142,47 @@
         credentials: 'omit'
       });
       
+      console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
+        status: response.status,
+        ok: response.ok
+      });
+      
       if (response.ok) {
         const text = await response.text();
-        if (text && !text.includes('pas encore disponible') && !text.includes('non publié') && !text.includes('fichier manquant')) {
-          return true;
-        }
+        // Vérifier que ce n'est pas un message d'erreur
+        const isError = text.includes('pas encore disponible') || 
+                       text.includes('non publié') || 
+                       text.includes('fichier manquant');
+        
+        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
       }
       
       return false;
     } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
       return false;
+    }
+  }
+  
+  /**
+   * Vérifier si la régénération est possible (compte-rendu existe)
+   */
+  async function checkIfRegenerationPossible(jobId, edition) {
+    try {
+      const creds = await ensureCreds();
+      if (!creds.email || !creds.token) {
+        return { possible: false, reason: 'no-credentials' };
+      }
+      
+      const exists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
+      if (!exists) {
+        return { possible: false, reason: 'no-summary' };
+      }
+      
+      return { possible: true };
+    } catch (e) {
+      console.error('[AGILO:RELANCE] Erreur vérification régénération possible:', e);
+      return { possible: false, reason: 'error' };
     }
   }
   
@@ -728,16 +720,54 @@
     
     updateButtonVisibility();
     
-    setTimeout(async () => {
+    // Initialiser les compteurs et limites (avec vérification compte-rendu)
+    const initLimits = async () => {
       try {
         const creds = await ensureCreds();
-        if (creds.jobId && creds.edition) {
-          updateRegenerationCounter(creds.jobId, creds.edition);
-          updateButtonState(creds.jobId, creds.edition);
+        const { edition, jobId } = creds;
+        if (jobId && edition) {
+          updateRegenerationCounter(jobId, edition);
+          updateButtonState(jobId, edition);
+          
+          // ⚠️ Vérifier si un compte-rendu existe (pour désactiver le bouton si nécessaire)
+          // (Logique copiée du script staging qui fonctionne)
+          const canRegen = await checkIfRegenerationPossible(jobId, edition);
+          if (!canRegen.possible && canRegen.reason === 'no-summary') {
+            const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+            if (btn) {
+              btn.disabled = true;
+              btn.setAttribute('aria-disabled', 'true');
+              btn.title = 'Générez d\'abord un compte-rendu via le formulaire d\'upload pour pouvoir le régénérer';
+              
+              // Ajouter un message informatif
+              const infoMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
+              if (!infoMsg) {
+                const msg = document.createElement('div');
+                msg.className = 'regeneration-no-summary-message';
+                msg.innerHTML = `
+                  <span style="font-size: 16px;">ℹ️</span>
+                  <div>
+                    <strong>Générez d'abord un compte-rendu</strong>
+                    <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+                      Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                    </div>
+                  </div>
+                `;
+                btn.parentElement.appendChild(msg);
+              }
+            }
+          }
+          
+          // Mettre à jour la visibilité après initialisation des compteurs
           updateButtonVisibility();
         }
-      } catch (e) {}
-    }, 500);
+      } catch (e) {
+        console.log('[AGILO:RELANCE] Limites non initialisées:', e);
+      }
+    };
+    
+    // Attendre un peu que les credentials soient disponibles
+    setTimeout(initLimits, 500);
   }
   
   // STYLES CSS
@@ -810,6 +840,17 @@
         font-size: 13px;
         background: rgba(253, 126, 20, 0.1);
         border: 1px solid rgba(253, 126, 20, 0.35);
+      }
+      
+      .regeneration-no-summary-message {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        background: rgba(33, 150, 243, 0.1);
+        border: 1px solid rgba(33, 150, 243, 0.35);
       }
       
       .regeneration-no-summary-message {
