@@ -389,7 +389,9 @@
   }
   
   function showSummaryLoading() {
-    const summaryEditor = document.querySelector('#summaryEditor');
+    const summaryEditor = document.querySelector('#summaryEditor') || 
+                          document.querySelector('#ag-summary') || 
+                          document.querySelector('[data-editor="summary"]');
     if (!summaryEditor) return;
     
     let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
@@ -398,17 +400,26 @@
       loaderContainer = document.createElement('div');
       loaderContainer.className = 'summary-loading-indicator';
       
+      // Chercher l'élément Lottie existant dans le DOM (peut être ailleurs)
       let lottieElement = document.querySelector('#loading-summary');
       
+      // Si l'élément Lottie n'existe pas, le créer (identique à Code-main-editor.js)
       if (!lottieElement) {
         lottieElement = document.createElement('div');
         lottieElement.id = 'loading-summary';
         lottieElement.className = 'lottie-check-statut';
+        lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
         lottieElement.setAttribute('data-animation-type', 'lottie');
         lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
         lottieElement.setAttribute('data-loop', '1');
+        lottieElement.setAttribute('data-direction', '1');
         lottieElement.setAttribute('data-autoplay', '1');
+        lottieElement.setAttribute('data-is-ix2-target', '0');
+        lottieElement.setAttribute('data-renderer', 'svg');
+        lottieElement.setAttribute('data-default-duration', '2');
+        lottieElement.setAttribute('data-duration', '0');
       } else {
+        // Si l'élément existe ailleurs, le cloner
         const clonedLottie = lottieElement.cloneNode(true);
         clonedLottie.id = 'loading-summary-clone';
         lottieElement = clonedLottie;
@@ -428,18 +439,55 @@
       loaderContainer.appendChild(loadingText);
       loaderContainer.appendChild(loadingSubtitle);
       
-      setTimeout(() => initLottieAnimation(lottieElement), 100);
+      // Initialiser l'animation Lottie après l'ajout au DOM
+      setTimeout(() => {
+        initLottieAnimation(lottieElement);
+        
+        // Fallback: Si après 1 seconde l'animation ne s'affiche pas, afficher un spinner CSS
+        setTimeout(() => {
+          const hasLottieContent = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
+          if (!hasLottieContent) {
+            const fallback = document.createElement('div');
+            fallback.className = 'lottie-fallback';
+            lottieElement.style.display = 'none';
+            loaderContainer.insertBefore(fallback, lottieElement);
+          }
+        }, 1000);
+      }, 100);
       
     } else {
+      // Si le conteneur existe déjà, juste l'afficher
       loaderContainer.style.display = 'flex';
+      
+      // Réinitialiser l'animation Lottie
+      const lottieEl = loaderContainer.querySelector('#loading-summary, #loading-summary-clone');
+      if (lottieEl) {
+        setTimeout(() => {
+          initLottieAnimation(lottieEl);
+        }, 100);
+      }
     }
     
     loaderContainer.style.display = 'flex';
   }
   
   function hideSummaryLoading() {
-    const loader = document.querySelector('.summary-loading-indicator');
-    if (loader) loader.style.display = 'none';
+    const summaryEditor = document.querySelector('#summaryEditor') || 
+                          document.querySelector('#ag-summary') || 
+                          document.querySelector('[data-editor="summary"]');
+    if (!summaryEditor) return;
+    
+    // Chercher uniquement dans summaryEditor, pas dans tout le document
+    const loader = summaryEditor.querySelector('.summary-loading-indicator');
+    const lottieElement = summaryEditor.querySelector('#loading-summary, #loading-summary-clone');
+    
+    if (loader) {
+      loader.style.display = 'none';
+    }
+    
+    if (lottieElement) {
+      lottieElement.style.display = 'none';
+    }
   }
   
   function showSuccessMessage(message) {
@@ -591,9 +639,43 @@
           cancelBtn.textContent = 'Annuler';
           cancelBtn.onclick = () => {
             clearInterval(countdownInterval);
-            hideSummaryLoading();
-            isGenerating = false;
-            showSuccessMessage('Annulé - Rechargez plus tard');
+            
+            // ⚠️ IMPORTANT : Prévenir l'utilisateur que la régénération est déjà lancée
+            const confirmed = confirm(
+              '⚠️ La régénération est déjà en cours sur le serveur.\n\n' +
+              'Si vous annulez maintenant, vous devrez recharger la page dans 2-3 minutes pour voir le nouveau compte-rendu.\n\n' +
+              'Souhaitez-vous vraiment annuler ?'
+            );
+            
+            if (confirmed) {
+              hideSummaryLoading();
+              isGenerating = false;
+              
+              // Afficher un message informatif
+              const infoMsg = document.createElement('div');
+              infoMsg.className = 'regeneration-cancel-info';
+              infoMsg.innerHTML = `
+                <div style="padding: 16px; background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%); border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent); border-radius: var(--agilo-radius, 0.5rem); margin-top: 16px;">
+                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 8px;">ℹ️ Régénération en cours</strong>
+                  <p style="font-size: 13px; color: var(--agilo-dim, #525252); margin: 0 0 8px;">
+                    La régénération du compte-rendu est en cours sur le serveur. 
+                    Rechargez la page dans 2-3 minutes pour voir le nouveau compte-rendu.
+                  </p>
+                  <button class="loading-cancel-btn" style="margin-top: 8px; width: 100%;" onclick="window.location.reload()">
+                    Recharger la page maintenant
+                  </button>
+                </div>
+              `;
+              
+              const summaryEditor = document.querySelector('#summaryEditor');
+              if (summaryEditor) {
+                summaryEditor.innerHTML = '';
+                summaryEditor.appendChild(infoMsg);
+              }
+              
+              showSuccessMessage('Régénération annulée - Rechargez la page dans 2-3 minutes');
+            }
+            // Si l'utilisateur annule la confirmation, on ne fait rien (le loader continue)
           };
           loaderContainer.appendChild(cancelBtn);
         }
@@ -734,13 +816,11 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: 60px 32px;
+        padding: 60px 20px;
         text-align: center;
-        min-height: 350px;
-        background: linear-gradient(135deg, var(--agilo-surface-2, #f8f9fa) 0%, var(--agilo-surface, #ffffff) 100%);
-        color: var(--agilo-text, #020202);
-        border-radius: var(--agilo-radius, 0.5rem);
-        box-shadow: var(--agilo-shadow, 0 1px 2px rgba(0,0,0,0.08), 0 4px 10px rgba(0,0,0,0.06));
+        min-height: 300px;
+        background: var(--agilo-surface, var(--color--white, #ffffff));
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
       }
       
       .summary-loading-indicator #loading-summary,
@@ -748,20 +828,84 @@
         width: 88px;
         height: 88px;
         margin: 0 auto 24px;
-        filter: drop-shadow(0 2px 6px rgba(0,0,0,0.08));
+        display: block;
+      }
+      
+      /* Fallback si Lottie ne charge pas - spinner CSS */
+      .summary-loading-indicator .lottie-fallback {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        border: 4px solid var(--agilo-border, rgba(52, 58, 64, 0.25));
+        border-top: 4px solid var(--agilo-primary, #174a96);
+        border-radius: 50%;
+        animation: agilo-spin 1s linear infinite;
+      }
+      
+      @keyframes agilo-spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Animation d'apparition douce */
+      .summary-loading-indicator {
+        animation: agilo-fadeIn 0.3s ease-out;
+      }
+      
+      @keyframes agilo-fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .summary-loading-indicator {
+          animation: none;
+        }
+        .summary-loading-indicator .lottie-fallback {
+          animation: none;
+        }
       }
       
       .summary-loading-indicator .loading-text {
-        font: 600 17px/1.4 system-ui, -apple-system, Arial, sans-serif;
-        margin: 0 0 6px;
-        color: var(--agilo-text, #020202);
-        letter-spacing: -0.01em;
+        font: 500 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        margin-top: 8px;
+        margin-bottom: 4px;
       }
       
       .summary-loading-indicator .loading-subtitle {
-        font: 400 13px/1.5 system-ui, -apple-system, Arial, sans-serif;
+        font: 400 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-dim, var(--color--gris, #525252));
+        margin-top: 8px;
+      }
+      
+      .regeneration-cancel-info {
+        padding: 16px;
+        background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%);
+        border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent);
+        border-radius: var(--agilo-radius, 0.5rem);
+        margin-top: 16px;
+      }
+      
+      .regeneration-cancel-info strong {
+        color: var(--agilo-primary, #174a96);
+        display: block;
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      
+      .regeneration-cancel-info p {
+        font-size: 13px;
         color: var(--agilo-dim, #525252);
-        margin-top: 2px;
+        margin: 0 0 8px;
+        line-height: 1.5;
       }
       
       .loading-countdown {
