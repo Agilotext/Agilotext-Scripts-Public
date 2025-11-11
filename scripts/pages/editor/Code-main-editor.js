@@ -875,35 +875,68 @@ window.attachAudioSync = attachAudioSync;
   /* ====================== Fonctions Lottie pour le chargement du compte-rendu ====================== */
   
   /**
-   * Appeler l'API getTranscriptStatus pour obtenir le statut
+   * Cache simple pour getTranscriptStatus (évite les appels multiples)
    */
-  async function getTranscriptStatus(jobId, auth) {
+  const __statusCache = new Map();
+  const STATUS_CACHE_TTL = 2000; // 2 secondes
+
+  /**
+   * Appeler l'API getTranscriptStatus pour obtenir le statut
+   * ⚠️ AMÉLIORATION : Ajout de retry et cache
+   */
+  async function getTranscriptStatus(jobId, auth, retryCount = 0) {
+    // Vérifier le cache
+    const cacheKey = `${jobId}:${auth.username}:${auth.edition}`;
+    const cached = __statusCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < STATUS_CACHE_TTL) {
+      if (window.AGILO_DEBUG) console.log('[Editor] Statut depuis cache:', cached.status);
+      return cached.status;
+    }
+
     try {
       const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
       
       const response = await fetchWithTimeout(url, { timeout: 10000 });
       
       if (!response.ok) {
+        // Retry pour les erreurs 5xx (erreurs serveur)
+        if ((response.status >= 500 || response.status === 0) && retryCount < 2) {
+          if (window.AGILO_DEBUG) console.log(`[Editor] Retry getTranscriptStatus (${retryCount + 1}/2) pour erreur ${response.status}`);
+          await wait(500 * Math.pow(2, retryCount));
+          return getTranscriptStatus(jobId, auth, retryCount + 1);
+        }
         if (window.AGILO_DEBUG) console.error('[Editor] Erreur HTTP getTranscriptStatus:', response.status);
         return null;
       }
       
       const data = await response.json();
+      let status = null;
       
       if (data.status === 'OK' && data.transcriptStatus) {
-        return data.transcriptStatus;
-      }
-      
-      if (data.status === 'KO') {
+        status = data.transcriptStatus;
+      } else if (data.status === 'KO') {
         if (window.AGILO_DEBUG) console.error('[Editor] Erreur API getTranscriptStatus:', data.errorMessage);
         // Vérifier si c'est l'erreur "fichier manquant"
         if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
-          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+          status = 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
         }
       }
       
-      return null;
+      // Mettre en cache
+      if (status !== null) {
+        __statusCache.set(cacheKey, { status, timestamp: Date.now() });
+        // Nettoyer le cache après 10 secondes pour éviter la croissance infinie
+        setTimeout(() => __statusCache.delete(cacheKey), 10000);
+      }
+      
+      return status;
     } catch (error) {
+      // Retry pour les erreurs réseau
+      if (retryCount < 2 && (error?.name === 'AbortError' || error?.message?.includes('timeout') || error?.message?.includes('network'))) {
+        if (window.AGILO_DEBUG) console.log(`[Editor] Retry getTranscriptStatus (${retryCount + 1}/2) pour erreur réseau`);
+        await wait(500 * Math.pow(2, retryCount));
+        return getTranscriptStatus(jobId, auth, retryCount + 1);
+      }
       if (window.AGILO_DEBUG) console.error('[Editor] Erreur réseau getTranscriptStatus:', error);
       return null;
     }
@@ -1047,10 +1080,15 @@ window.attachAudioSync = attachAudioSync;
   
   /**
    * Masquer l'indicateur de chargement
+   * ⚠️ AMÉLIORATION : Cherche uniquement dans editors.summary pour éviter les conflits
    */
   function hideSummaryLoading() {
-    const loader = document.querySelector('.summary-loading-indicator');
-    const lottieElement = document.querySelector('#loading-summary');
+    const summaryEditor = editors.summary || pickSummaryEl();
+    if (!summaryEditor) return;
+    
+    // Chercher uniquement dans summaryEditor, pas dans tout le document
+    const loader = summaryEditor.querySelector('.summary-loading-indicator');
+    const lottieElement = summaryEditor.querySelector('#loading-summary, #loading-summary-clone');
     
     if (loader) {
       loader.style.display = 'none';
@@ -1062,6 +1100,10 @@ window.attachAudioSync = attachAudioSync;
   }
 
   /* ====================== Summary repoll (annulable) ====================== */
+  /**
+   * ⚠️ AMÉLIORATION : Fonction pure qui ne gère plus l'UI directement
+   * La gestion du loader est faite dans loadJob()
+   */
 	async function pollSummaryUntilReady(jobId, auth, { max=50, baseDelay=900, signal, seq } = {}) {
 	  const ref = seq ?? __loadSeq;
 	  for (let i = 0; i < max; i++) {
@@ -1072,22 +1114,13 @@ window.attachAudioSync = attachAudioSync;
       if (r.ok){
         const safe = sanitizeHtml(r.payload||'');
         if (!isBlankHtml(safe)) {
-          // ⚠️ AMÉLIORATION : S'assurer que le loader est caché quand on trouve le compte-rendu
-          hideSummaryLoading();
           return { ok:true, html: safe };
         }
       } else if (!/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(String(r.code||''))) {
-        // ⚠️ AMÉLIORATION : Cacher le loader en cas d'erreur définitive
-        hideSummaryLoading();
         return r;
-      }
-      // ⚠️ AMÉLIORATION : Afficher le loader si pas déjà affiché après quelques tentatives
-      if (i === 2 && editors.summary && !editors.summary.querySelector('.summary-loading-indicator')) {
-        showSummaryLoading();
       }
       await wait(baseDelay*Math.pow(1.3,i));
     }
-    // ⚠️ AMÉLIORATION : Ne pas cacher le loader si timeout (peut être encore en cours)
     return { ok:false, code:'READY_SUMMARY_PENDING' };
   }
 
@@ -1256,7 +1289,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
         showSummaryLoading();
       }
     } else {
-      hideSummaryLoading(); // Cacher le loader en cas d'erreur
+      // ⚠️ AMÉLIORATION : Cacher le loader en cas d'erreur définitive
+      hideSummaryLoading();
     }
   }
   if (!isBlankHtml(cleaned)) {
@@ -1311,7 +1345,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
           showSummaryLoading();
         }
       } else {
-        hideSummaryLoading(); // Cacher le loader si erreur définitive
+        // ⚠️ AMÉLIORATION : Toujours cacher le loader en cas d'erreur définitive
+        hideSummaryLoading();
         const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
         editors.summary.innerHTML = '';
         editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
@@ -1525,4 +1560,5 @@ window.AgiloEditors = { ...(window.AgiloEditors||{}), loadJob, serializeSmart };
     }, { passive:true });
   }
 });
+
 
