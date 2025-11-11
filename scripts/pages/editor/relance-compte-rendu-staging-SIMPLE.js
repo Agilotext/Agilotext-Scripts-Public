@@ -146,9 +146,10 @@
       observer.observe(root, { attributes: true, attributeFilter: ['data-summary-empty'] });
     }
     
-    // Écouter agilo:load
+    // Écouter agilo:load (avec reset du cache)
     window.addEventListener('agilo:load', () => {
       log('📡 agilo:load détecté');
+      lastState = null; // Reset cache pour forcer la vérification
       setTimeout(updateVisibility, 100);
       setTimeout(updateVisibility, 500);
       setTimeout(updateVisibility, 1500);
