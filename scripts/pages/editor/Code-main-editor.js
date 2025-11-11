@@ -1303,8 +1303,15 @@ if (needsStatusCheck) {
     if (window.AGILO_DEBUG) console.log('[Editor] Statut transcript:', transcriptStatus);
     isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
     
-    // Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
+    // ⚠️ AMÉLIORATION : Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
+    // Remplacer le loader simple de beforeload par le loader Lottie
     if (isSummaryPending && editors.summary) {
+      // Vérifier si on a encore le loader simple de beforeload
+      const simpleLoader = editors.summary.querySelector('.ag-loader');
+      if (simpleLoader) {
+        // Remplacer par le loader Lottie
+        editors.summary.innerHTML = '';
+      }
       showSummaryLoading();
     }
   } catch (e) {
