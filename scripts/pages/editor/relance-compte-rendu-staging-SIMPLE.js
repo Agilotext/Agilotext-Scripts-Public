@@ -1,489 +1,509 @@
-/* AGILO — Script SIMPLE pour cacher/afficher le bouton Régénérer + Régénération
-   APPROCHE SIMPLE : 
-   1. Si summaryEmpty='1' → CACHER
-   2. Si message d'erreur dans summaryEditor → CACHER
-   3. Sinon → AFFICHER
-   4. Régénération avec polling jusqu'au NOUVEAU compte-rendu (hash différent)
-*/
-
-(function () {
+// Agilotext – Relance Compte-Rendu
+// ⚠️ Ce fichier est chargé depuis GitHub
+(function() {
   'use strict';
   
-  console.log('[AGILO:RELANCE-SIMPLE] Script chargé');
+  // ============================================
+  // RÉCUPÉRATION DES CREDENTIALS
+  // ============================================
   
-  const DEBUG = false; // Désactivé par défaut pour moins de lag (mettre à true pour debug)
-  const log = (...a) => { if (DEBUG) console.log('[AGILO:RELANCE-SIMPLE]', ...a); };
-  
-  // Helpers
-  const $ = (s, r=document) => r.querySelector(s);
-  const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
-  const byId = (id) => document.getElementById(id);
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
-  
-  // Constantes API (définies en premier)
-  const API_BASE = 'https://api.agilotext.com/api/v1';
-  const MAX_POLL = 60; // Max 60 tentatives
-  const BASE_DELAY = 1500; // 1.5s entre chaque tentative
-  
-  // Message d'erreur exact
-  const ERROR_MSG = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
-  
-  // Fonction SIMPLE pour vérifier si on doit cacher le bouton
-  function shouldHideButton() {
-    const root = byId('editorRoot');
-    const summaryEl = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-    
-    // PRIORITÉ 1 : summaryEmpty='1'
-    if (root?.dataset.summaryEmpty === '1') {
-      log('✅ CACHER : summaryEmpty=1');
-      return true;
-    }
-    
-    // PRIORITÉ 2 : Message d'erreur dans summaryEditor
-    if (summaryEl) {
-      const text = (summaryEl.textContent || summaryEl.innerText || '').toLowerCase();
-      const html = (summaryEl.innerHTML || '').toLowerCase();
-      const errorLower = ERROR_MSG.toLowerCase();
-      
-      // Vérifier le message exact
-      if (text.includes(errorLower) || html.includes(errorLower)) {
-        log('✅ CACHER : Message erreur détecté dans summaryEditor');
-        return true;
-      }
-      
-      // Vérifier les patterns (seulement si contenu court)
-      if (text.length < 300 && (
-          text.includes('pas encore disponible') && 
-          (text.includes('fichier manquant') || text.includes('non publié'))
-        )) {
-        log('✅ CACHER : Pattern erreur détecté dans summaryEditor');
-        return true;
-      }
-      
-      // Vérifier dans les alertes
-      const alerts = summaryEl.querySelectorAll('.ag-alert, .ag-alert--warn, .ag-alert__title');
-      for (const alert of alerts) {
-        const alertText = (alert.textContent || alert.innerText || '').toLowerCase();
-        if (alertText.includes(errorLower) || 
-            (alertText.includes('pas encore disponible') && alertText.includes('fichier manquant'))) {
-          log('✅ CACHER : Message erreur dans alerte');
-          return true;
-        }
-      }
-    }
-    
-    log('❌ AFFICHER : Aucune raison de cacher');
-    return false;
-  }
-  
-  // Fonction SIMPLE pour cacher le bouton
-  function hideButton(btn) {
-    if (!btn) return;
-    log('🔒 Cache bouton');
-    btn.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;';
-    btn.classList.add('agilo-force-hide');
-    btn.setAttribute('hidden', '');
-    btn.setAttribute('aria-hidden', 'true');
-    btn.disabled = true;
-  }
-  
-  // Fonction SIMPLE pour afficher le bouton
-  function showButton(btn) {
-    if (!btn) return;
-    log('🔓 Affiche bouton');
-    btn.style.removeProperty('display');
-    btn.style.removeProperty('visibility');
-    btn.style.removeProperty('opacity');
-    btn.style.removeProperty('pointer-events');
-    btn.classList.remove('agilo-force-hide');
-    btn.removeAttribute('hidden');
-    btn.removeAttribute('aria-hidden');
-    btn.disabled = false;
-  }
-  
-  // Fonction SIMPLE pour mettre à jour la visibilité (avec cache pour éviter appels inutiles)
-  let lastState = null; // 'hidden' ou 'visible'
-  function updateVisibility() {
-    const btn = $('[data-action="relancer-compte-rendu"]');
-    if (!btn) {
-      log('⚠️ Bouton non trouvé');
-      return;
-    }
-    
-    const shouldHide = shouldHideButton();
-    const currentState = shouldHide ? 'hidden' : 'visible';
-    
-    // Ne rien faire si l'état n'a pas changé
-    if (lastState === currentState) {
-      return; // État identique, pas besoin de modifier
-    }
-    
-    lastState = currentState;
-    
-    if (shouldHide) {
-      hideButton(btn);
-    } else {
-      showButton(btn);
-    }
-  }
-  
-  // Initialisation SIMPLE
-  function init() {
-    if (window.__agiloRelanceSimpleInit) {
-      log('⚠️ Déjà initialisé');
-      return;
-    }
-    window.__agiloRelanceSimpleInit = true;
-    log('✅ Initialisation');
-    
-    // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC (comme dans staging)
-    bindRelanceClick();
-    
-    // Exposer la fonction pour debug
-    window.relancerCompteRendu = relancerCompteRendu;
-    
-    // Vérifier immédiatement
-    updateVisibility();
-    
-    // Vérifier périodiquement (toutes les 1000ms pour moins de lag)
-    setInterval(updateVisibility, 1000);
-    
-    // Écouter les changements de summaryEmpty (avec reset du cache)
-    const root = byId('editorRoot');
-    if (root) {
-      const observer = new MutationObserver(() => {
-        log('📊 summaryEmpty changé:', root.dataset.summaryEmpty);
-        lastState = null; // Reset cache pour forcer la vérification
-        updateVisibility();
-      });
-      observer.observe(root, { attributes: true, attributeFilter: ['data-summary-empty'] });
-    }
-    
-    // Écouter agilo:load (avec reset du cache)
-    window.addEventListener('agilo:load', () => {
-      log('📡 agilo:load détecté');
-      lastState = null; // Reset cache pour forcer la vérification
-      setTimeout(updateVisibility, 100);
-      setTimeout(updateVisibility, 500);
-      setTimeout(updateVisibility, 1500);
-    });
-  }
-  
-  /************* FONCTIONS DE RÉGÉNÉRATION *************/
-  
-  // Hash du contenu pour détecter les changements
-  function getContentHash(text) {
-    const s = String(text || '');
-    if (s.length < 60) return `len:${s.length}`;
-    // Prendre le début et la fin (plus robuste que juste le début)
-    const head = s.slice(0, 300).replace(/\s+/g, '');
-    const tail = s.slice(-300).replace(/\s+/g, '');
-    // Inclure aussi quelques mots du milieu pour détecter les changements de noms
-    const mid = s.length > 1000 ? s.slice(Math.floor(s.length/2) - 100, Math.floor(s.length/2) + 100).replace(/\s+/g, '') : '';
-    return `${s.length}:${head.slice(0, 60)}:${mid.slice(0, 40)}:${tail.slice(-60)}`;
-  }
-  
-  // Récupérer l'auth (comme dans staging)
+  /**
+   * Récupérer l'édition (même logique que votre script principal)
+   * Compatible avec toutes les éditions via URL, dataset, localStorage, etc.
+   */
   function pickEdition() {
+    const root = document.querySelector('#editorRoot');
+    
+    // Ordre de priorité (identique au script principal) :
+    // 1. window.AGILO_EDITION (variable globale)
+    // 2. URL parameter ?edition=
+    // 3. editorRoot dataset
+    // 4. localStorage
+    // 5. Par défaut 'ent'
     const raw = window.AGILO_EDITION
       || new URLSearchParams(location.search).get('edition')
-      || byId('editorRoot')?.dataset.edition
+      || root?.dataset.edition
       || localStorage.getItem('agilo:edition')
-      || 'free';
-    const v = String(raw||'').toLowerCase().trim();
-    if (['enterprise','entreprise','business','team','ent'].includes(v)) return 'ent';
+      || 'ent';
+    
+    const v = String(raw || '').toLowerCase().trim();
+    
+    // Normalisation (identique au script principal)
+    if (['enterprise', 'entreprise', 'business', 'team', 'ent'].includes(v)) return 'ent';
     if (v.startsWith('pro')) return 'pro';
-    if (v.startsWith('free') || v==='gratuit') return 'free';
-    return 'free';
+    if (v.startsWith('free') || v === 'gratuit') return 'free';
+    
+    // Par défaut 'ent' (Business/Enterprise)
+    return 'ent';
   }
   
   function pickJobId() {
     const u = new URL(location.href);
-    const root = byId('editorRoot');
-    return u.searchParams.get('jobId')
-      || root?.dataset.jobId
-      || $('.rail-item.is-active')?.dataset?.jobId
-      || window.__agiloOrchestrator?.currentJobId
-      || '';
+    const root = document.querySelector('#editorRoot');
+    return (
+      u.searchParams.get('jobId') ||
+      root?.dataset.jobId ||
+      window.__agiloOrchestrator?.currentJobId ||
+      document.querySelector('.rail-item.is-active')?.dataset?.jobId ||
+      ''
+    );
   }
   
-  async function ensureAuth() {
-    const edition = pickEdition();
-    const root = byId('editorRoot');
-    let email = root?.dataset.username
-      || byId('memberEmail')?.value
-      || $('[name="memberEmail"]')?.value
-      || localStorage.getItem('agilo:username')
-      || window.memberEmail
-      || '';
+  function pickEmail() {
+    const root = document.querySelector('#editorRoot');
+    return (
+      root?.dataset.username ||
+      document.querySelector('[name="memberEmail"]')?.value ||
+      window.memberEmail ||
+      window.__agiloOrchestrator?.credentials?.email ||
+      localStorage.getItem('agilo:username') ||
+      document.querySelector('[data-ms-member="email"]')?.textContent ||
+      ''
+    );
+  }
+  
+  function pickToken(edition, email) {
+    const root = document.querySelector('#editorRoot');
+    const k = `agilo:token:${edition}:${String(email || '').toLowerCase()}`;
+    return (
+      root?.dataset.token ||
+      window.__agiloOrchestrator?.credentials?.token ||
+      window.globalToken ||
+      localStorage.getItem(k) ||
+      localStorage.getItem(`agilo:token:${edition}`) ||
+      localStorage.getItem('agilo:token') ||
+      ''
+    );
+  }
+  
+  async function ensureToken(email, edition) {
+    const have = pickToken(edition, email);
+    if (have) return have;
     
-    // Essayer de résoudre l'email si manquant
-    if (!email && window.$memberstackDom?.getMember) {
-      try {
-        const r = await window.$memberstackDom.getMember();
-        if (r?.data?.email) email = r.data.email.trim();
-      } catch {}
-    }
-    
-    const key = `agilo:token:${edition}:${String(email||'').toLowerCase()}`;
-    let token = root?.dataset.token
-      || window.globalToken
-      || localStorage.getItem(key)
-      || localStorage.getItem('agilo:token')
-      || '';
-    
-    // Essayer de récupérer le token via getToken si manquant
-    if (!token && email && typeof window.getToken === 'function') {
+    if (typeof window.getToken === 'function' && email) {
       try {
         window.getToken(email, edition);
-        // Attendre un peu pour que le token arrive
-        for (let i = 0; i < 50; i++) {
-          await wait(100);
-          token = root?.dataset.token || window.globalToken || localStorage.getItem(key) || '';
-          if (token) break;
-        }
-      } catch {}
+      } catch (_) {}
+      for (let i = 0; i < 80; i++) {
+        const t = pickToken(edition, email);
+        if (t) return t;
+        await new Promise(r => setTimeout(r, 100));
+      }
     }
     
     if (email) {
-      try { localStorage.setItem('agilo:username', email); } catch {}
-    }
-    try { localStorage.setItem('agilo:edition', edition); } catch {}
-    
-    return { username: (email||'').trim(), token: token||'', edition };
-  }
-  
-  // Fetch avec timeout et cache-busting
-  async function fetchWithTimeout(url, opts = {}) {
-    const { timeout = 20000, signal } = opts;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), timeout);
-    const composite = new AbortController();
-    
-    if (signal) {
-      if (signal.aborted) composite.abort();
-      signal.addEventListener('abort', () => composite.abort(), { once: true });
-    }
-    if (ctrl.signal) {
-      if (ctrl.signal.aborted) composite.abort();
-      ctrl.signal.addEventListener('abort', () => composite.abort(), { once: true });
-    }
-    
-    try {
-      // Cache-busting FORCÉ
-      const urlObj = new URL(url);
-      urlObj.searchParams.set('_t', Date.now().toString());
-      urlObj.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-      
-      return await fetch(urlObj.toString(), {
-        ...opts,
-        signal: composite.signal,
-        credentials: 'omit',
-        cache: 'no-store',
-        headers: {
-          ...(opts.headers || {}),
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
+      try {
+        const url = `https://api.agilotext.com/api/v1/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
+        const r = await fetch(url, { method: 'GET' });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j?.status === 'OK' && j.token) {
+          try {
+            localStorage.setItem(`agilo:token:${edition}:${email.toLowerCase()}`, j.token);
+            localStorage.setItem('agilo:username', email);
+            localStorage.setItem('agilo:edition', edition);
+          } catch (_) {}
+          window.globalToken = j.token;
+          return j.token;
         }
-      });
-    } finally {
-      clearTimeout(t);
+      } catch (_) {}
     }
+    return '';
   }
   
-  // ⚠️ FONCTIONS API (comme dans staging)
-  function parseMaybeJson(raw, contentType=''){
-    const looksJson = (contentType||'').includes('application/json') || /^\s*\{/.test(raw||'');
-    if (!looksJson) return null;
-    try { return JSON.parse(raw); } catch { return null; }
-  }
-  
-  async function apiGetWithRetry(kind, jobId, auth, retryCount=0, signal){
-    const ts = Date.now();
-    const baseQ = `jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&_ts=${ts}`;
-    const url =
-      (kind === 'summary')
-        ? `${API_BASE}/receiveSummary?${baseQ}&format=html`
-        : (kind === 'status')
-          ? `${API_BASE}/getTranscriptStatus?${baseQ}`
-          : `${API_BASE}/${kind}?${baseQ}`;
-    let r, raw;
-    try{ r = await fetchWithTimeout(url, { signal, timeout: 15000 }); raw = await r.text(); }
-    catch(e){
-      if (e?.name === 'AbortError') return { ok:false, code:'CANCELLED', httpStatus:0, json:null, raw:'' };
-      return { ok:false, code:'NETWORK_ERROR', httpStatus:0, json:null, raw:'' };
+  async function ensureCreds() {
+    const edition = pickEdition();
+    let email = pickEmail();
+    for (let i = 0; i < 20 && !email; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      email = pickEmail();
     }
-    if (!r.ok){
-      const json = parseMaybeJson(raw, r.headers.get('content-type')||'');
-      return { ok:false, code:'HTTP_ERROR', httpStatus:r.status, json, raw, headers:r.headers };
+    const token = await ensureToken(email, edition);
+    let jobId = pickJobId();
+    for (let i = 0; i < 10 && !jobId; i++) {
+      await new Promise(r => setTimeout(r, 60));
+      jobId = pickJobId();
     }
-    const ct = r.headers.get('content-type') || '';
-    const json = parseMaybeJson(raw, ct);
-    if (json && (json.status==='KO' || json.errorMessage)){
-      return { ok:false, code: json.errorMessage || json.status || 'ON_ERROR', json, raw, headers:r.headers };
-    }
-    return { ok:true, payload: raw, contentType: ct, headers: r.headers };
+    return {
+      email: (email || '').trim(),
+      token: (token || '').trim(),
+      edition,
+      jobId: String(jobId || '').trim()
+    };
   }
   
-  function isBlankHtml(html){
-    const s = String(html||'').replace(/<!--[\s\S]*?-->/g,'').replace(/<[^>]+>/g,'').replace(/\s+/g,'').trim();
-    return s.length === 0;
-  }
+  // ============================================
+  // LOGIQUE PRINCIPALE
+  // ============================================
   
-  function looksLikeNotReady(text){
-    const lower = String(text||'').toLowerCase();
-    return ERROR_PATTERNS.some(p => lower.includes(p)) || /ready_summary_pending|not_ready|pending/.test(lower);
-  }
+  let transcriptModified = false;
+  let isGenerating = false;
   
-  // ⚠️ FONCTIONS LIMITES (comme dans staging)
-  function getRegenerationLimit(edition){
-    const ed = String(edition||'').toLowerCase().trim();
+  // ============================================
+  // SYSTÈME DE LIMITES DE RÉGÉNÉRATION
+  // ============================================
+  
+  /**
+   * Obtenir la limite de régénérations selon l'édition
+   * Compatible avec toutes les variantes d'édition
+   */
+  function getRegenerationLimit(edition) {
+    const ed = String(edition || '').toLowerCase().trim();
+    
+    // Pro (toutes variantes : 'pro', 'pro+', etc.)
     if (ed.startsWith('pro')) return 2;
-    if (['ent','business','enterprise','entreprise','team'].includes(ed)) return 4;
-    return 0;
+    
+    // Business/Enterprise (ent, business, enterprise, entreprise, team)
+    if (ed === 'ent' || 
+        ed === 'business' || 
+        ed === 'enterprise' || 
+        ed === 'entreprise' || 
+        ed === 'team') {
+      return 4;
+    }
+    
+    // Free (toutes variantes : 'free', 'gratuit', etc.)
+    return 0; // Free = pas de régénération
   }
   
-  function getRegenerationCount(jobId){
-    try { return (JSON.parse(localStorage.getItem('agilo:regenerations')||'{}')[jobId]?.count) || 0; } catch { return 0; }
-  }
-  
-  function incrementRegenerationCount(jobId, edition){
+  /**
+   * Obtenir le compteur de régénérations pour un jobId
+   */
+  function getRegenerationCount(jobId) {
+    if (!jobId) return 0;
+    
     try {
-      const data = JSON.parse(localStorage.getItem('agilo:regenerations')||'{}');
-      const row = data[jobId] || { count:0 };
-      data[jobId] = { ...row, count:(row.count||0)+1, max:getRegenerationLimit(edition), edition, lastUsed:new Date().toISOString() };
+      const storage = localStorage.getItem('agilo:regenerations');
+      if (!storage) return 0;
+      
+      const data = JSON.parse(storage);
+      return data[jobId]?.count || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  
+  /**
+   * Incrémenter le compteur de régénérations
+   */
+  function incrementRegenerationCount(jobId, edition) {
+    if (!jobId) return;
+    
+    try {
+      const storage = localStorage.getItem('agilo:regenerations');
+      const data = storage ? JSON.parse(storage) : {};
+      
+      if (!data[jobId]) {
+        data[jobId] = {
+          count: 0,
+          max: getRegenerationLimit(edition),
+          edition: edition,
+          lastReset: new Date().toISOString()
+        };
+      }
+      
+      data[jobId].count += 1;
+      data[jobId].lastUsed = new Date().toISOString();
+      
       localStorage.setItem('agilo:regenerations', JSON.stringify(data));
-    } catch {}
+    } catch (e) {
+      console.error('Erreur sauvegarde compteur:', e);
+    }
   }
   
-  // ⚠️ Vérifier si le summary a été demandé (comme dans staging)
-  async function wasSummaryEverRequested(jobId, auth, signal){
-    // Vérifier d'abord via getTranscriptStatus
-    const st = await getTranscriptStatus(jobId, auth, signal);
-    if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
-      log('❌ Summary jamais demandé (ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS)');
-      return false;
-    }
-    if (st === 'READY_SUMMARY_READY' || st === 'READY_SUMMARY_PENDING' || st === 'READY_SUMMARY_ON_ERROR') {
-      log('✅ Summary demandé (statut:', st, ')');
-      return true;
-    }
-    
-    // Fallback : vérifier dans le DOM
-    const summaryEl = byId('summaryEditor') || $('[data-editor="summary"]');
-    if (summaryEl) {
-      const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
-      const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
-      if (text && !text.includes(exactMsg) && text.length > 50) {
-        log('✅ Summary détecté dans le DOM (contenu présent)');
-        return true;
-      }
-    }
-    
-    log('❌ Summary jamais demandé (aucune preuve)');
-    return false;
-  }
-  
-  // Patterns d'erreur
-  const ERROR_PATTERNS = [
-    'error_summary_transcript_file_not_exists',
-    'pas encore disponible',
-    'fichier manquant',
-    'non publié'
-  ];
-  
-  // Vérifier le statut du transcript
-  async function getTranscriptStatus(jobId, auth, signal) {
-    const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+  /**
+   * Réinitialiser le compteur (UNIQUEMENT lors du changement de jobId)
+   * ⚠️ IMPORTANT : On ne réinitialise PAS quand on modifie le transcript
+   * Le compteur est lié au jobId/audio, pas aux modifications du transcript
+   */
+  function resetRegenerationCount(jobId) {
+    if (!jobId) return;
     
     try {
-      const r = await fetchWithTimeout(url, { signal, timeout: 10000 });
-      if (!r.ok) return null;
-      const json = await r.json().catch(() => null);
-      return json?.transcriptStatus || null;
-    } catch {
-      return null;
+      const storage = localStorage.getItem('agilo:regenerations');
+      if (!storage) return;
+      
+      const data = JSON.parse(storage);
+      if (data[jobId]) {
+        data[jobId].count = 0;
+        data[jobId].lastReset = new Date().toISOString();
+        localStorage.setItem('agilo:regenerations', JSON.stringify(data));
+      }
+    } catch (e) {
+      console.error('Erreur réinitialisation compteur:', e);
     }
   }
   
-  // Poller jusqu'à ce que le nouveau compte-rendu soit prêt (hash différent) - COMME DANS STAGING
-  async function pollSummaryUntilReady(jobId, auth, { oldHash = '', max = MAX_POLL, baseDelay = BASE_DELAY, signal } = {}) {
-    log('⏳ Début poll pour nouveau compte-rendu', { jobId, oldHash: oldHash.substring(0, 30) + '...', max });
+  /**
+   * Vérifier si l'utilisateur peut régénérer
+   * Compatible avec toutes les variantes d'édition
+   */
+  function canRegenerate(jobId, edition) {
+    const ed = String(edition || '').toLowerCase().trim();
     
-    for (let i = 0; i < max; i++) {
-      if (signal?.aborted) {
-        log('⚠️ Polling annulé');
-        return { ok: false, code: 'CANCELLED' };
-      }
-      
-      // Vérifier le statut
-      const st = await getTranscriptStatus(jobId, auth, signal);
-      
-      if (st === 'READY_SUMMARY_READY') {
-        // Récupérer le compte-rendu via apiGetWithRetry (comme dans staging)
-        const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, signal);
-        if (r.ok) {
-          const html = String(r.payload||'');
-          if (!looksLikeNotReady(html) && !isBlankHtml(html)) {
-            const newHash = getContentHash(html);
-            log(`Tentative ${i+1}/${max} - Hash: ${newHash.substring(0, 30)}...`);
-            
-            // ⚠️ VÉRIFIER QUE LE HASH EST DIFFÉRENT (nouveau compte-rendu)
-            if (!oldHash || newHash !== oldHash) {
-              log('✅ NOUVEAU compte-rendu détecté !', {
-                oldHash: oldHash.substring(0, 30) + '...',
-                newHash: newHash.substring(0, 30) + '...',
-                htmlLength: html.length
-              });
-              return { ok: true, html, hash: newHash };
-            } else {
-              log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
-            }
-          }
+    // Free (toutes variantes)
+    if (ed.startsWith('free') || ed === 'gratuit') {
+      return { allowed: false, reason: 'free' };
+    }
+    
+    const limit = getRegenerationLimit(edition);
+    const count = getRegenerationCount(jobId);
+    
+    if (count >= limit) {
+      return { allowed: false, reason: 'limit', count, limit };
+    }
+    
+    return { allowed: true, count, limit, remaining: limit - count };
+  }
+  
+  /**
+   * Obtenir la classe CSS pour le compteur selon l'état
+   */
+  function getCounterClass(canRegen) {
+    if (!canRegen.allowed) return 'is-limit';
+    if (canRegen.remaining <= canRegen.limit * 0.5) return 'has-warning';
+    return '';
+  }
+  
+  /**
+   * Créer ou mettre à jour le badge de compteur
+   */
+  function updateRegenerationCounter(jobId, edition) {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    // Supprimer l'ancien compteur s'il existe
+    const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
+    if (oldCounter) {
+      oldCounter.remove();
+    }
+    
+    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+    if (oldMessage) {
+      oldMessage.remove();
+    }
+    
+    const canRegen = canRegenerate(jobId, edition);
+    
+    // Utilisateur Free : Garder le bouton visible mais avec apparence désactivée
+    // Le message premium est caché, le bouton affichera directement la pop-up au clic
+    if (canRegen.reason === 'free') {
+      // Ne pas créer le message premium (on le cache)
+      // Le bouton reste visible et cliquable
+      btn.style.display = 'flex';
+      return;
+    }
+    
+    // Afficher le bouton pour Pro/Business
+    btn.style.display = 'flex';
+    
+      // Limite atteinte : Afficher message avec option d'upgrade si Pro
+      if (canRegen.reason === 'limit') {
+        const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
+        const limitMsg = document.createElement('div');
+        limitMsg.className = 'regeneration-limit-message';
+        
+        let upgradeButton = '';
+        // Si c'est Pro et qu'AgiloGate est disponible, proposer Business
+        if (edition === 'pro' && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+          upgradeButton = `
+            <button class="button bleu" style="margin-top: 8px; width: 100%;" 
+                    data-plan-min="ent" 
+                    data-upgrade-reason="Régénération de compte-rendu - Limite augmentée">
+              Passer en Business (4 régénérations)
+            </button>`;
         }
+        
+        limitMsg.innerHTML = `
+          <span style="font-size: 16px;">⚠️</span>
+          <div>
+            <strong>Limite atteinte</strong>
+            <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+              Vous avez utilisé ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} pour ce transcript (plan ${planName})
+            </div>
+            <div style="font-size: 11px; margin-top: 4px; color: var(--agilo-dim, #525252); font-style: italic;">
+              La limite est par audio/jobId, même si vous modifiez le transcript.
+            </div>
+            ${upgradeButton}
+          </div>
+        `;
+        btn.parentElement.appendChild(limitMsg);
+        
+        // S'assurer que le bouton d'upgrade fonctionne avec AgiloGate
+        if (upgradeButton && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+          setTimeout(() => window.AgiloGate.decorate(), 100);
+        }
+        
+        return;
       }
-      
-      // Attendre avant la prochaine tentative (délai progressif comme dans staging)
-      await wait(baseDelay * Math.pow(1.25, i));
-    }
     
-    log('⚠️ Timeout - Compte-rendu pas prêt après', max, 'tentatives');
-    return { ok: false, code: 'TIMEOUT' };
+    // Afficher le compteur
+    const counter = document.createElement('div');
+    counter.id = 'regeneration-info';
+    counter.className = `regeneration-counter ${getCounterClass(canRegen)}`;
+    counter.textContent = `${canRegen.remaining}/${canRegen.limit} régénérations restantes`;
+    counter.title = `Il vous reste ${canRegen.remaining} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript`;
+    counter.setAttribute('aria-live', 'polite');
+    counter.setAttribute('aria-atomic', 'true');
+    btn.parentElement.appendChild(counter);
   }
   
-  // Afficher le loader Lottie
-  function showSummaryLoading() {
-    const summaryEditor = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-    if (!summaryEditor) return;
+  /**
+   * Mettre à jour l'état du bouton selon les limites
+   * Intègre AgiloGate pour Free (désactive + badge)
+   */
+  function updateButtonState(jobId, edition) {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
     
-    // Créer le loader si nécessaire
+    const canRegen = canRegenerate(jobId, edition);
+    
+    // Pour Free : garder le bouton cliquable mais avec apparence désactivée + badge AgiloGate
+    if (canRegen.reason === 'free') {
+      // Ne PAS désactiver le bouton (disabled = false) pour qu'il reste cliquable
+      btn.disabled = false;
+      btn.removeAttribute('aria-disabled');
+      btn.setAttribute('data-plan-min', 'pro');
+      btn.setAttribute('data-upgrade-reason', 'Régénération de compte-rendu');
+      // Apparence désactivée visuellement mais reste cliquable
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'pointer'; // Pointer au lieu de not-allowed
+      
+      // S'assurer que AgiloGate décore ce bouton (badge Pro)
+      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+        window.AgiloGate.decorate();
+      }
+      
+      return;
+    }
+    
+    // Pour Pro/Business : gérer selon la limite
+    if (!canRegen.allowed) {
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.disabled = false;
+      btn.setAttribute('aria-disabled', 'false');
+      btn.removeAttribute('data-plan-min');
+      btn.removeAttribute('data-upgrade-reason');
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+  }
+  
+  /**
+   * Ouvrir l'onglet Compte-rendu
+   */
+  function openSummaryTab() {
+    const summaryTab = document.querySelector('#tab-summary');
+    if (summaryTab) {
+      summaryTab.click();
+    }
+  }
+  
+  /**
+   * Initialiser l'animation Lottie avec Webflow
+   */
+  function initLottieAnimation(element) {
+    // Méthode 1: Utiliser Webflow IX2 si disponible
+    if (window.Webflow && window.Webflow.require) {
+      try {
+        const ix2 = window.Webflow.require('ix2');
+        if (ix2 && typeof ix2.init === 'function') {
+          // Réinitialiser IX2 pour prendre en compte le nouvel élément
+          setTimeout(() => {
+            ix2.init();
+          }, 100);
+        }
+      } catch (e) {
+        console.log('Webflow IX2 non disponible');
+      }
+    }
+    
+    // Méthode 2: Utiliser directement la bibliothèque Lottie si disponible
+    if (window.lottie && typeof window.lottie.loadAnimation === 'function') {
+      try {
+        const animationData = {
+          container: element,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          path: 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json'
+        };
+        
+        // Vérifier si l'animation n'est pas déjà chargée
+        if (!element._lottie) {
+          element._lottie = window.lottie.loadAnimation(animationData);
+        }
+      } catch (e) {
+        console.log('Lottie direct non disponible:', e);
+      }
+    }
+    
+    // Méthode 3: Attendre que Webflow charge l'animation
+    // Webflow charge automatiquement les éléments avec data-animation-type="lottie"
+    // On attend un peu pour que le DOM soit prêt
+    setTimeout(() => {
+      // Déclencher un événement personnalisé pour forcer le rechargement
+      if (window.Webflow && window.Webflow.require) {
+        try {
+          window.Webflow.require('ix2').init();
+        } catch (e) {}
+      }
+    }, 200);
+  }
+  
+  /**
+   * Afficher un indicateur de chargement dans l'onglet Compte-rendu
+   * Utilise l'animation Lottie existante
+   */
+  function showSummaryLoading() {
+    const summaryPane = document.querySelector('#pane-summary');
+    const summaryEditor = document.querySelector('#summaryEditor');
+    
+    if (!summaryPane || !summaryEditor) return;
+    
+    // Créer le conteneur de chargement
     let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
+    
     if (!loaderContainer) {
       loaderContainer = document.createElement('div');
       loaderContainer.className = 'summary-loading-indicator';
-      loaderContainer.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;min-height:200px;';
       
-      // Lottie
-      const lottieElement = document.createElement('div');
-      lottieElement.id = 'loading-summary-regen';
-      lottieElement.className = 'lottie-check-statut';
-      lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
-      lottieElement.setAttribute('data-animation-type', 'lottie');
-      lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
-      lottieElement.setAttribute('data-loop', '1');
-      lottieElement.setAttribute('data-direction', '1');
-      lottieElement.setAttribute('data-autoplay', '1');
-      lottieElement.setAttribute('data-is-ix2-target', '0');
-      lottieElement.setAttribute('data-renderer', 'svg');
-      lottieElement.style.cssText = 'width:120px;height:120px;';
+      // Chercher l'élément Lottie existant dans le DOM (peut être ailleurs)
+      let lottieElement = document.querySelector('#loading-summary');
       
+      // Si l'élément Lottie n'existe pas, le créer
+      if (!lottieElement) {
+        lottieElement = document.createElement('div');
+        lottieElement.id = 'loading-summary';
+        lottieElement.className = 'lottie-check-statut';
+        lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
+        lottieElement.setAttribute('data-animation-type', 'lottie');
+        lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
+        lottieElement.setAttribute('data-loop', '1');
+        lottieElement.setAttribute('data-direction', '1');
+        lottieElement.setAttribute('data-autoplay', '1');
+        lottieElement.setAttribute('data-is-ix2-target', '0');
+        lottieElement.setAttribute('data-renderer', 'svg');
+        lottieElement.setAttribute('data-default-duration', '2');
+        lottieElement.setAttribute('data-duration', '0');
+      } else {
+        // Si l'élément existe ailleurs, le cloner ou le déplacer
+        // On préfère le cloner pour ne pas casser l'original
+        const clonedLottie = lottieElement.cloneNode(true);
+        clonedLottie.id = 'loading-summary-clone';
+        lottieElement = clonedLottie;
+      }
+      
+      // Ajouter les textes
       const loadingText = document.createElement('p');
-      loadingText.style.cssText = 'font-size:18px;font-weight:600;margin-top:20px;color:var(--agilo-text,#020202);';
-      loadingText.textContent = 'Régénération du compte-rendu en cours...';
+      loadingText.className = 'loading-text';
+      loadingText.textContent = 'Génération du compte-rendu en cours...';
       
       const loadingSubtitle = document.createElement('p');
-      loadingSubtitle.style.cssText = 'font-size:14px;margin-top:8px;color:var(--agilo-dim,#525252);';
+      loadingSubtitle.className = 'loading-subtitle';
       loadingSubtitle.textContent = 'Cela peut prendre quelques instants';
       
       summaryEditor.innerHTML = '';
@@ -492,273 +512,1178 @@
       loaderContainer.appendChild(loadingText);
       loaderContainer.appendChild(loadingSubtitle);
       
-      // Initialiser Lottie
+      // Initialiser l'animation Lottie après l'ajout au DOM
       setTimeout(() => {
-        if (window.Webflow && window.Webflow.require) {
-          try {
-            window.Webflow.require('ix2').init();
-          } catch (e) {
-            // Fallback spinner CSS
-            setTimeout(() => {
-              if (!lottieElement.querySelector('svg, canvas') && !lottieElement._lottie) {
-                const fallback = document.createElement('div');
-                fallback.style.cssText = 'width:60px;height:60px;border:4px solid #f3f3f3;border-top:4px solid #174a96;border-radius:50%;animation:spin 1s linear infinite;';
-                lottieElement.style.display = 'none';
-                loaderContainer.insertBefore(fallback, lottieElement);
-                if (!document.getElementById('spin-animation')) {
-                  const style = document.createElement('style');
-                  style.id = 'spin-animation';
-                  style.textContent = '@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }';
-                  document.head.appendChild(style);
-                }
-              }
-            }, 1000);
+        initLottieAnimation(lottieElement);
+        
+        // Fallback: Si après 1 seconde l'animation ne s'affiche pas, afficher un spinner CSS
+        setTimeout(() => {
+          const hasLottieContent = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
+          if (!hasLottieContent) {
+            console.log('Lottie ne s\'est pas chargé, utilisation du fallback');
+            const fallback = document.createElement('div');
+            fallback.className = 'lottie-fallback';
+            lottieElement.style.display = 'none';
+            loaderContainer.insertBefore(fallback, lottieElement);
           }
-        }
+        }, 1000);
       }, 100);
+      
     } else {
+      // Si le conteneur existe déjà, juste l'afficher
       loaderContainer.style.display = 'flex';
+      
+      // Réinitialiser l'animation Lottie
+      const lottieElement = loaderContainer.querySelector('#loading-summary, #loading-summary-clone');
+      if (lottieElement) {
+        setTimeout(() => {
+          initLottieAnimation(lottieElement);
+        }, 100);
+      }
     }
+    
+    // Afficher le conteneur
+    loaderContainer.style.display = 'flex';
   }
   
+  /**
+   * Masquer l'indicateur de chargement
+   */
   function hideSummaryLoading() {
-    const loader = $('.summary-loading-indicator');
-    if (loader) loader.style.display = 'none';
+    const loader = document.querySelector('.summary-loading-indicator');
+    const lottieElement = document.querySelector('#loading-summary');
+    
+    if (loader) {
+      loader.style.display = 'none';
+    }
+    
+    if (lottieElement) {
+      lottieElement.style.display = 'none';
+    }
   }
   
-  // Fonction principale de régénération (REPRISE DU STAGING qui fonctionne)
-  let __isGenerating = false;
-  async function relancerCompteRendu() {
-    if (__isGenerating) {
-      console.log('[AGILO:RELANCE-SIMPLE] ⚠️ Régénération déjà en cours');
-      return;
+  /**
+   * Désactiver les actions pendant la génération
+   */
+  function disableEditorActions(disable) {
+    const saveBtn = document.querySelector('[data-action="save-transcript"]');
+    if (saveBtn) {
+      saveBtn.disabled = disable;
+      saveBtn.style.opacity = disable ? '0.5' : '1';
+      saveBtn.style.cursor = disable ? 'not-allowed' : 'pointer';
     }
     
-    const now = Date.now();
-    if (relancerCompteRendu._last && (now - relancerCompteRendu._last) < 500) return;
-    relancerCompteRendu._last = now;
-    
-    // Récupérer auth et jobId (comme dans staging)
-    const auth = await ensureAuth();
-    const jobId = pickJobId();
-    
-    if (!auth.username || !auth.token || !jobId) {
-      alert('❌ Informations incomplètes.');
-      return;
-    }
-    
-    // ⚠️ Vérifier les limites (comme dans staging)
-    const limit = getRegenerationLimit(auth.edition);
-    const count = getRegenerationCount(jobId);
-    const remaining = limit - count;
-    
-    if (auth.edition === 'free' || auth.edition.startsWith('free')) {
-      // Free : afficher AgiloGate
-      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
-        window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
+    const transcriptEditor = document.querySelector('#transcriptEditor');
+    if (transcriptEditor) {
+      if (disable) {
+        transcriptEditor.setAttribute('contenteditable', 'false');
+        transcriptEditor.style.opacity = '0.7';
+        transcriptEditor.style.pointerEvents = 'none';
       } else {
-        alert('🔒 Fonctionnalité Premium — disponible en Pro/Business.');
+        transcriptEditor.setAttribute('contenteditable', 'true');
+        transcriptEditor.style.opacity = '1';
+        transcriptEditor.style.pointerEvents = 'auto';
       }
-      return;
     }
-    
-    if (count >= limit) {
-      alert(`⚠️ Limite atteinte\n\n${count}/${limit} régénérations utilisées.`);
-      return;
-    }
-    
-    // ⚠️ Vérifier que le summary a été demandé (comme dans staging)
-    const requested = await wasSummaryEverRequested(jobId, auth);
-    if (!requested) {
-      alert('⚠️ Aucun compte-rendu initial demandé pour cet audio.');
-      return;
-    }
-    
-    // ⚠️ CONFIRMATION (comme dans staging)
-    const ok = confirm(`Remplacer le compte-rendu actuel ?\n\n${remaining}/${limit} régénération${remaining>1?'s':''} restante${remaining>1?'s':''}.`);
-    if (!ok) return;
-    
-    // Hash avant régénération (comme dans staging)
-    let oldHash = '';
+  }
+  
+  /**
+   * Vérifier si un compte-rendu existe déjà pour ce jobId
+   */
+  async function checkSummaryExists(jobId, email, token, edition) {
     try {
-      const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, null);
-      if (r.ok) {
-        const html = String(r.payload||'');
-        if (!isBlankHtml(html) && !looksLikeNotReady(html)) {
-          oldHash = getContentHash(html);
-          log('Hash ancien compte-rendu:', oldHash.substring(0, 50) + '...');
-        }
-      }
-    } catch (e) {
-      log('Pas d\'ancien compte-rendu ou erreur:', e);
-    }
-    
-    __isGenerating = true;
-    const btn = $('[data-action="relancer-compte-rendu"]');
-    const btnText = btn?.querySelector('div') || btn;
-    const originalText = btnText?.textContent || 'Régénérer';
-    
-    try {
-      // Désactiver le bouton
-      if (btn) {
-        btn.disabled = true;
-        if (btnText) btnText.textContent = 'Génération…';
-      }
+      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
       
-      // Afficher le loader IMMÉDIATEMENT (comme dans staging)
-      showSummaryLoading();
-      
-      // Appel API redoSummary (comme dans staging)
-      log('🚀 Appel API redoSummary', { jobId, edition: auth.edition });
-      const fd = new FormData();
-      fd.append('username', auth.username);
-      fd.append('token', auth.token);
-      fd.append('edition', auth.edition);
-      fd.append('jobId', jobId);
-      
-      const redo = await fetchWithTimeout(`${API_BASE}/redoSummary`, {
-        method: 'POST',
-        body: fd,
-        timeout: 20000
+      const response = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store'
       });
       
-      const j = await redo.json().catch(() => ({ status: 'KO' }));
-      
-      if (!redo.ok || !(j.status === 'OK' || j.ok === true)) {
-        hideSummaryLoading();
-        alert('❌ Erreur lors de la régénération.\n\n' + (j.message || j.error || j.errorMessage || 'Erreur inconnue'));
-        return;
-      }
-      
-      log('✅ API redoSummary OK - Incrémentation compteur');
-      incrementRegenerationCount(jobId, auth.edition);
-      if (window.toast) window.toast('✅ Régénération lancée');
-      
-      // ⚠️ POLLER jusqu'à READY + nouveau hash (comme dans staging)
-      log('⏳ Attente génération nouveau compte-rendu...');
-      const signal = new AbortController();
-      
-      const result = await pollSummaryUntilReady(jobId, auth, {
-        oldHash,
-        max: MAX_POLL,
-        signal: signal.signal
+      console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
+        status: response.status,
+        ok: response.ok
       });
       
-      if (result.ok && result.html) {
-        log('✅ NOUVEAU compte-rendu prêt !', {
-          hash: result.hash?.substring(0, 50) + '...',
-          htmlLength: result.html.length
+      if (response.ok) {
+        const text = await response.text();
+        // Vérifier que ce n'est pas un message d'erreur
+        const isError = text.includes('pas encore disponible') || 
+                       text.includes('non publié') || 
+                       text.includes('fichier manquant');
+        
+        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
+      return false;
+    }
+  }
+  
+  /**
+   * Attendre que le compte-rendu soit prêt (polling)
+   */
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000) {
+    console.log('[AGILO:RELANCE] Début vérification disponibilité compte-rendu', {
+      jobId,
+      maxAttempts,
+      delay
+    });
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store'
         });
         
-        // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT (comme dans staging)
-        const summaryEditor = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-        if (summaryEditor && result.html) {
-          hideSummaryLoading();
-          
-          // Nettoyer le HTML (sécurité)
-          const div = document.createElement('div');
-          div.innerHTML = result.html;
-          div.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-          div.querySelectorAll('*').forEach(n => {
-            [...n.attributes].forEach(a => {
-              const name = a.name.toLowerCase();
-              const val = String(a.value || '');
-              if (name.startsWith('on') || /^javascript:/i.test(val)) n.removeAttribute(a.name);
+        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Status:`, response.status);
+        
+        // Si 200 OK, le compte-rendu est prêt
+        if (response.ok) {
+          const text = await response.text();
+          // Vérifier que ce n'est pas un message d'erreur
+          if (text && !text.includes('pas encore disponible') && !text.includes('non publié')) {
+            console.log('[AGILO:RELANCE] ✅ Compte-rendu disponible !', {
+              attempt,
+              contentLength: text.length
             });
-          });
-          
-          summaryEditor.innerHTML = div.innerHTML;
-          
-          // Mettre à jour summaryEmpty
-          const root = byId('editorRoot');
-          if (root) {
-            root.dataset.summaryEmpty = '0';
+            return true;
+          } else {
+            console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts})`);
           }
-          
-          // Mettre à jour la visibilité du bouton
-          lastState = null;
-          updateVisibility();
-          
-          if (window.toast) window.toast('✅ Compte-rendu régénéré avec succès');
+        } else if (response.status === 404 || response.status === 204) {
+          // 404 ou 204 = pas encore disponible
+          console.log(`[AGILO:RELANCE] Compte-rendu pas encore disponible (${response.status}) - tentative ${attempt}/${maxAttempts}`);
         } else {
-          // Fallback: recharger la page avec cache-buster
-          const url = new URL(location.href);
-          url.searchParams.set('tab', 'summary');
-          url.searchParams.set('_regen', Date.now().toString());
-          url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-          window.location.replace(url.toString());
+          console.warn(`[AGILO:RELANCE] Erreur HTTP ${response.status} - tentative ${attempt}/${maxAttempts}`);
         }
-      } else {
-        hideSummaryLoading();
-        if (result.code === 'CANCELLED') {
-          log('⚠️ Polling annulé');
-        } else {
-          alert('⚠️ Le compte-rendu n\'est pas encore prêt. Il sera disponible dans quelques instants.');
+        
+        // Attendre avant la prochaine tentative (sauf dernière)
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, delay));
+        }
+      } catch (error) {
+        console.error(`[AGILO:RELANCE] Erreur vérification (tentative ${attempt}/${maxAttempts}):`, error);
+        if (attempt < maxAttempts) {
+          await new Promise(r => setTimeout(r, delay));
         }
       }
-    } catch (e) {
-      log('❌ Erreur régénération:', e);
-      hideSummaryLoading();
-      alert('❌ Erreur réseau lors de la régénération.');
-    } finally {
-      __isGenerating = false;
-      if (btn) {
-        btn.disabled = false;
-        if (btnText) btnText.textContent = originalText;
-      }
+    }
+    
+    // Si on arrive ici, le compte-rendu n'est pas prêt après toutes les tentatives
+    console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après', maxAttempts, 'tentatives');
+    console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
+    return false;
+  }
+  
+  /**
+   * Afficher un message de succès (non-bloquant)
+   */
+  function showSuccessMessage(message) {
+    // Utiliser toast si disponible, sinon alert
+    if (typeof window.toast === 'function') {
+      window.toast('✅ ' + message);
+    } else {
+      // Créer un toast simple
+      const toast = document.createElement('div');
+      toast.className = 'agilo-toast-success';
+      toast.textContent = '✅ ' + message;
+      toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: #4caf50;
+        color: white;
+        padding: 16px 24px;
+        border-radius: 4px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        animation: slideInRight 0.3s ease-out;
+        max-width: 400px;
+      `;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
     }
   }
   
-  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC (EXACTEMENT COMME DANS STAGING)
-  function bindRelanceClick() {
-    if (window.__agiloRelanceSimpleClickBound) return;
-    window.__agiloRelanceSimpleClickBound = true;
-    console.log('[AGILO:RELANCE-SIMPLE] ⚡ Attachement gestionnaire de clic (comme staging)');
+  /**
+   * Gérer les erreurs avec messages contextuels
+   */
+  function handleError(error, result) {
+    let errorMessage = '❌ Erreur lors de la régénération.';
+    let suggestion = '';
     
-    document.addEventListener('click', (e) => {
+    if (error && error.type === 'offline') {
+      errorMessage = '❌ Pas de connexion Internet.';
+      suggestion = 'Vérifiez votre connexion et réessayez.';
+    } else if (error && error.type === 'timeout') {
+      errorMessage = '⏱️ La requête a pris trop de temps.';
+      suggestion = 'Le serveur peut être surchargé. Réessayez dans quelques instants.';
+    } else if (result && result.error) {
+      const errorCode = result.error.toLowerCase();
+      if (errorCode.includes('token') || errorCode.includes('auth')) {
+        errorMessage = '❌ Erreur d\'authentification.';
+        suggestion = 'Veuillez vous reconnecter.';
+      } else if (errorCode.includes('job') || errorCode.includes('not found')) {
+        errorMessage = '❌ Transcript introuvable.';
+        suggestion = 'Le transcript sélectionné n\'existe plus ou a été supprimé.';
+      } else if (errorCode.includes('limit') || errorCode.includes('quota')) {
+        errorMessage = '⚠️ Limite atteinte.';
+        suggestion = 'Vous avez atteint votre limite de générations. Vérifiez votre abonnement.';
+      } else {
+        errorMessage = '❌ ' + (result.message || result.error || 'Erreur inconnue');
+      }
+    }
+    
+    const fullMessage = suggestion 
+      ? `${errorMessage}\n\n${suggestion}`
+      : errorMessage;
+    
+    // Utiliser toast si disponible pour les erreurs non-critiques
+    if (error && (error.type === 'timeout' || error.type === 'offline')) {
+      if (typeof window.toast === 'function') {
+        window.toast('❌ ' + errorMessage + (suggestion ? '\n' + suggestion : ''));
+      } else {
+        alert(fullMessage);
+      }
+    } else {
+      // Erreurs critiques : toujours utiliser alert
+      alert(fullMessage);
+    }
+    
+    setGeneratingState(false);
+  }
+  
+  /**
+   * Obtenir le message de confirmation selon le contexte
+   */
+  function getConfirmationMessage() {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    const isSummaryTab = activeTab?.id === 'tab-summary';
+    
+    if (transcriptModified) {
+      return 'Le transcript a été modifié.\n\n' +
+             'Le compte-rendu actuel sera remplacé par une nouvelle version basée sur les modifications.\n\n' +
+             'Voulez-vous continuer ?';
+    } else if (isSummaryTab) {
+      return 'Le compte-rendu actuel sera remplacé par une nouvelle version.\n\n' +
+             'Voulez-vous continuer ?';
+    } else {
+      return 'Le compte-rendu actuel sera remplacé par une nouvelle version.\n\n' +
+             'Voulez-vous continuer ?';
+    }
+  }
+  
+  /**
+   * Fonction principale pour relancer le compte-rendu
+   */
+  async function relancerCompteRendu() {
+    console.log('[AGILO:RELANCE] ========================================');
+    console.log('[AGILO:RELANCE] Début régénération compte-rendu');
+    console.log('[AGILO:RELANCE] ========================================');
+    
+    // Protection contre les double-clics
+    if (isGenerating) {
+      console.warn('[AGILO:RELANCE] ⚠️ Régénération déjà en cours, ignore le clic');
+      return;
+    }
+    
+    // Debounce : éviter les clics trop rapides
+    const now = Date.now();
+    if (relancerCompteRendu._lastClick && (now - relancerCompteRendu._lastClick) < 500) {
+      console.warn('[AGILO:RELANCE] ⚠️ Clic trop rapide, ignoré');
+      return;
+    }
+    relancerCompteRendu._lastClick = now;
+    
+    // Vérifier les limites avant de continuer
+    let creds;
+    try {
+      creds = await ensureCreds();
+      console.log('[AGILO:RELANCE] Credentials récupérées:', {
+        email: creds.email ? '✓' : '✗',
+        token: creds.token ? '✓ (' + creds.token.length + ' chars)' : '✗',
+        edition: creds.edition,
+        jobId: creds.jobId
+      });
+    } catch (error) {
+      console.error('[AGILO:RELANCE] ❌ Erreur récupération credentials:', error);
+      alert('❌ Erreur : Impossible de récupérer les informations de connexion.\n\nVeuillez réessayer.');
+      return;
+    }
+    
+    const { email, token, edition, jobId } = creds;
+    
+    if (!email || !token || !jobId) {
+      console.error('[AGILO:RELANCE] ❌ Informations incomplètes:', {
+        email: !!email,
+        token: !!token,
+        jobId: !!jobId
+      });
+      alert('❌ Erreur : Informations incomplètes.\n\nEmail: ' + (email ? '✓' : '✗') + '\nToken: ' + (token ? '✓' : '✗') + '\nJobId: ' + (jobId ? '✓' : '✗'));
+      return;
+    }
+    
+    // Vérifier les limites
+    const canRegen = canRegenerate(jobId, edition);
+    console.log('[AGILO:RELANCE] Vérification limites:', {
+      allowed: canRegen.allowed,
+      reason: canRegen.reason,
+      count: canRegen.count,
+      limit: canRegen.limit,
+      remaining: canRegen.remaining
+    });
+    
+    if (!canRegen.allowed) {
+      if (canRegen.reason === 'free') {
+        // Utiliser AgiloGate pour afficher la pop-up d'upgrade
+        if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+          window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
+        } else {
+          // Fallback si AgiloGate n'est pas disponible
+          alert('🔒 Fonctionnalité Premium\n\nLa régénération de compte-rendu est disponible pour les plans Pro et Business.\n\nUpgradez votre compte pour accéder à cette fonctionnalité.');
+        }
+      } else if (canRegen.reason === 'limit') {
+        // Message pour limite atteinte (Pro ou Business)
+        const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
+        const message = `⚠️ Limite atteinte\n\nVous avez utilisé ${canRegen.count}/${canRegen.limit} régénérations pour ce transcript.\n\nLa limite est de ${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} par audio (jobId), même si vous modifiez le transcript.`;
+        
+        // Si c'est Pro et qu'il veut plus, proposer Business
+        if (edition === 'pro' && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+          const upgrade = confirm(message + '\n\nSouhaitez-vous passer en Business pour avoir 4 régénérations ?');
+          if (upgrade) {
+            window.AgiloGate.showUpgrade('ent', 'Régénération de compte-rendu - Limite augmentée');
+          }
+        } else {
+          alert(message);
+        }
+      }
+      return;
+    }
+    
+    // Afficher le compteur dans la confirmation
+    const confirmationMsg = getConfirmationMessage() + 
+      `\n\nIl vous reste ${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript.`;
+    
+    const confirmed = confirm(confirmationMsg);
+    if (!confirmed) return;
+    
+    // ⚠️ IMPORTANT : Vérifier si un compte-rendu existe déjà
+    // Si aucun compte-rendu n'existe, redoSummary ne peut pas fonctionner
+    console.log('[AGILO:RELANCE] Vérification existence compte-rendu avant régénération...');
+    const summaryExists = await checkSummaryExists(jobId, email, token, edition);
+    
+    if (!summaryExists) {
+      console.warn('[AGILO:RELANCE] ⚠️ Aucun compte-rendu existant détecté');
+      const proceed = confirm(
+        '⚠️ Aucun compte-rendu existant détecté pour ce transcript.\n\n' +
+        'Le bouton "Régénérer" nécessite qu\'un compte-rendu ait déjà été généré.\n\n' +
+        'Si c\'est la première fois, vous devez d\'abord générer un compte-rendu via le formulaire d\'upload avec l\'option "Générer le compte-rendu" activée.\n\n' +
+        'Voulez-vous quand même essayer de régénérer ?'
+      );
+      
+      if (!proceed) {
+        console.log('[AGILO:RELANCE] Utilisateur a annulé - pas de compte-rendu existant');
+        return;
+      }
+      
+      console.log('[AGILO:RELANCE] Utilisateur a choisi de continuer malgré l\'absence de compte-rendu');
+    } else {
+      console.log('[AGILO:RELANCE] ✅ Compte-rendu existant détecté, régénération possible');
+    }
+    
+    setGeneratingState(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('username', email);
+      formData.append('token', token);
+      formData.append('edition', edition);
+      formData.append('jobId', jobId);
+      
+      console.log('[AGILO:RELANCE] Envoi requête API redoSummary', {
+        url: 'https://api.agilotext.com/api/v1/redoSummary',
+        method: 'POST',
+        jobId,
+        edition,
+        emailLength: email.length
+      });
+      
+      const response = await fetch('https://api.agilotext.com/api/v1/redoSummary', {
+        method: 'POST',
+        body: formData
+      });
+      
+      console.log('[AGILO:RELANCE] Réponse HTTP reçue:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        headers: Object.fromEntries(response.headers.entries())
+      });
+      
+      let result;
+      try {
+        const responseText = await response.text();
+        try {
+          result = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[AGILO:RELANCE] ❌ Erreur parsing JSON:', e);
+          console.error('[AGILO:RELANCE] Réponse texte brute:', responseText);
+          throw new Error('Réponse API invalide (non-JSON): ' + responseText.substring(0, 200));
+        }
+      } catch (e) {
+        console.error('[AGILO:RELANCE] ❌ Erreur lecture réponse:', e);
+        throw e;
+      }
+      
+      // Logs détaillés pour le débogage
+      console.log('[AGILO:RELANCE] Réponse API reçue:', {
+        status: result.status,
+        httpStatus: response.status,
+        responseOk: response.ok,
+        edition,
+        jobId,
+        result: result
+      });
+      
+      if (result.status === 'OK' || response.ok) {
+        // Vérifier que le jobId n'a pas changé pendant la requête
+        const currentJobId = pickJobId();
+        if (currentJobId !== jobId) {
+          console.warn('[AGILO:RELANCE] ⚠️ JobId a changé pendant la génération', {
+            initialJobId: jobId,
+            currentJobId: currentJobId
+          });
+          setGeneratingState(false);
+          alert('⚠️ Le transcript a changé pendant la génération.\n\nLe compteur n\'a pas été incrémenté.');
+          return;
+        }
+        
+        console.log('[AGILO:RELANCE] ✅ Succès - Incrémentation du compteur', {
+          jobId,
+          edition,
+          countBefore: getRegenerationCount(jobId)
+        });
+        
+        // Incrémenter le compteur seulement après vérification
+        incrementRegenerationCount(jobId, edition);
+        
+        console.log('[AGILO:RELANCE] Compteur incrémenté', {
+          countAfter: getRegenerationCount(jobId)
+        });
+        
+        // Mettre à jour l'état du bouton et les compteurs après régénération
+        updateRegenerationCounter(jobId, edition);
+        updateButtonState(jobId, edition);
+        
+        // Afficher un message de succès non-bloquant
+        showSuccessMessage('Compte-rendu régénéré avec succès !');
+        
+        // Ouvrir l'onglet Compte-rendu
+        openSummaryTab();
+        
+        // Vérifier que le compte-rendu est prêt avant de recharger
+        console.log('[AGILO:RELANCE] Vérification disponibilité compte-rendu...');
+        await waitForSummaryReady(jobId, email, token, edition);
+        
+        // Recharger la page après confirmation que le compte-rendu est prêt
+        console.log('[AGILO:RELANCE] Compte-rendu prêt, rechargement de la page...');
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'summary');
+        window.location.href = url.toString();
+        
+      } else {
+        // Vérifier si l'erreur est due à l'absence de compte-rendu initial
+        const errorMsg = result?.message || result?.error || '';
+        const isNoSummaryError = errorMsg.includes('pas encore disponible') ||
+                                 errorMsg.includes('non publié') ||
+                                 errorMsg.includes('fichier manquant') ||
+                                 response.status === 404;
+        
+        if (isNoSummaryError) {
+          console.error('[AGILO:RELANCE] ❌ Erreur : Aucun compte-rendu initial pour régénérer', {
+            status: response.status,
+            message: errorMsg
+          });
+          
+          alert(
+            '⚠️ Impossible de régénérer le compte-rendu\n\n' +
+            'Aucun compte-rendu n\'a été généré initialement pour ce transcript.\n\n' +
+            'Le bouton "Régénérer" nécessite qu\'un compte-rendu existe déjà.\n\n' +
+            'Pour générer un compte-rendu pour la première fois, utilisez le formulaire d\'upload avec l\'option "Générer le compte-rendu" activée.'
+          );
+          
+          setGeneratingState(false);
+          return;
+        }
+        
+        handleError(null, result);
+      }
+      
+    } catch (error) {
+      console.error('[AGILO:RELANCE] ❌ Erreur API:', {
+        error,
+        message: error.message,
+        stack: error.stack,
+        jobId,
+        edition
+      });
+      handleError(error, null);
+    }
+  }
+  
+  /**
+   * Gérer l'état "génération en cours"
+   */
+  function setGeneratingState(generating) {
+    isGenerating = generating;
+    
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    const textDiv = btn.querySelector('div');
+    
+    if (generating) {
+      btn.disabled = true;
+      btn.setAttribute('aria-disabled', 'true');
+      if (textDiv) {
+        textDiv.textContent = 'Génération...';
+      }
+      btn.style.opacity = '0.6';
+      btn.style.cursor = 'not-allowed';
+      
+      // Désactiver les actions
+      disableEditorActions(true);
+      
+      // Afficher le loader dans l'onglet Compte-rendu
+      showSummaryLoading();
+      openSummaryTab();
+      
+    } else {
+      btn.disabled = false;
+      btn.setAttribute('aria-disabled', 'false');
+      if (textDiv) {
+        textDiv.textContent = getButtonText();
+      }
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+      
+      // Réactiver les actions
+      disableEditorActions(false);
+      hideSummaryLoading();
+    }
+  }
+  
+  /**
+   * Obtenir le texte du bouton selon le contexte
+   */
+  function getButtonText() {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (activeTab?.id === 'tab-summary') {
+      return 'Régénérer';
+    }
+    if (activeTab?.id === 'tab-transcript' && transcriptModified) {
+      return 'Régénérer compte-rendu';
+    }
+    return 'Relancer';
+  }
+  
+  /**
+   * Mettre à jour la visibilité du bouton selon l'onglet actif
+   * Vérifie aussi si le compte-rendu existe avant d'afficher le bouton
+   */
+  async function updateButtonVisibility() {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn) return;
+    
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (!activeTab) return;
+    
+    const isSummaryTab = activeTab.id === 'tab-summary';
+    const isTranscriptTab = activeTab.id === 'tab-transcript';
+    
+    const textDiv = btn.querySelector('div');
+    if (textDiv) {
+      textDiv.textContent = getButtonText();
+    }
+    
+    // Cacher aussi le compteur/message si le bouton est caché
+    const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
+    const noSummaryMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
+    
+    // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
+    try {
+      const creds = await ensureCreds();
+      const { jobId, edition } = creds;
+      
+      if (jobId && edition) {
+        const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
+        
+        // Si le compte-rendu n'existe pas, CACHER le bouton complètement
+        if (!summaryExists) {
+          console.log('[AGILO:RELANCE] Compte-rendu inexistant - Bouton caché');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          // Afficher le message informatif si on est sur l'onglet Compte-rendu
+          if (isSummaryTab && !noSummaryMsg) {
+            const msg = document.createElement('div');
+            msg.className = 'regeneration-no-summary-message';
+            msg.innerHTML = `
+              <span style="font-size: 16px;">ℹ️</span>
+              <div>
+                <strong>Générez d'abord un compte-rendu</strong>
+                <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                </div>
+              </div>
+            `;
+            btn.parentElement.appendChild(msg);
+          }
+          return; // Ne pas continuer si le compte-rendu n'existe pas
+        } else {
+          // Si le compte-rendu existe, cacher le message informatif
+          if (noSummaryMsg) {
+            noSummaryMsg.remove();
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[AGILO:RELANCE] Erreur vérification existence compte-rendu:', e);
+      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
+    }
+    
+    // Gérer la visibilité selon l'onglet et l'état du transcript
+    if (isSummaryTab) {
+      // Visible sur l'onglet Compte-rendu (le compte-rendu existe, vérifié ci-dessus)
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+      // Désactiver le bouton si transcript non sauvegardé
+      if (!transcriptModified) {
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+        btn.title = 'Sauvegardez d\'abord le transcript pour régénérer le compte-rendu';
+      }
+    } else if (isTranscriptTab && transcriptModified) {
+      // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
+      btn.style.display = 'flex';
+      if (counter) counter.style.display = '';
+    } else {
+      // Caché sur les autres onglets ou si transcript non sauvegardé
+      btn.style.display = 'none';
+      if (counter) counter.style.display = 'none';
+    }
+  }
+  
+  /**
+   * Gérer les raccourcis clavier
+   */
+  function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+        const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+        if (btn && btn.style.display !== 'none' && !btn.disabled) {
+          e.preventDefault();
+          relancerCompteRendu();
+        }
+      }
+    });
+    
+    // Ajouter tooltip et ARIA labels sur le bouton
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (btn) {
+      btn.title = 'Régénérer le compte-rendu (Ctrl+Shift+R)';
+      btn.setAttribute('aria-label', 'Régénérer le compte-rendu');
+      btn.setAttribute('aria-describedby', 'regeneration-info');
+    }
+  }
+  
+  /**
+   * Vérifier si la régénération est possible (compte-rendu existe)
+   */
+  async function checkIfRegenerationPossible(jobId, edition) {
+    try {
+      const creds = await ensureCreds();
+      if (!creds.email || !creds.token) {
+        return { possible: false, reason: 'no-credentials' };
+      }
+      
+      const exists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
+      if (!exists) {
+        return { possible: false, reason: 'no-summary' };
+      }
+      
+      return { possible: true };
+    } catch (e) {
+      console.error('[AGILO:RELANCE] Erreur vérification régénération possible:', e);
+      return { possible: false, reason: 'error' };
+    }
+  }
+  
+  /**
+   * Initialisation
+   */
+  function init() {
+    // Vérifier si déjà initialisé (éviter les doublons)
+    if (window.__agiloRelanceInitialized) {
+      console.log('Script de relance déjà initialisé, skip');
+      return;
+    }
+    window.__agiloRelanceInitialized = true;
+    
+    document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (!btn) return;
-      
-      console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer');
-      
-      // Vérifier que le bouton n'est pas caché
-      if (btn.classList.contains('agilo-force-hide')) {
-        console.log('[AGILO:RELANCE-SIMPLE] Bouton caché - Clic ignoré');
-        return;
+      if (btn && !btn.disabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        relancerCompteRendu();
       }
-      
-      // Vérifier que le bouton n'est pas désactivé
-      if (btn.disabled) {
-        console.log('[AGILO:RELANCE-SIMPLE] Bouton désactivé - Clic ignoré');
-        return;
-      }
-      
-      // Vérifier une dernière fois si le message d'erreur est présent
-      if (shouldHideButton()) {
-        console.log('[AGILO:RELANCE-SIMPLE] Message d\'erreur détecté au clic - Action annulée');
-        if (window.toast) window.toast('Aucun compte-rendu disponible pour régénérer');
-        return;
-      }
-      
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('[AGILO:RELANCE-SIMPLE] ✅ Clic validé - Lancement régénération...');
-      
-      // ⚠️ APPELER DIRECTEMENT relancerCompteRendu() SANS PARAMÈTRES (comme dans staging)
-      relancerCompteRendu();
-    }, { passive: false }); // Exactement comme dans staging
+    }, { passive: false });
     
-    console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic attaché');
+    // Détecter la sauvegarde du transcript
+    const saveBtn = document.querySelector('[data-action="save-transcript"]');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function() {
+        transcriptModified = true;
+        // Sauvegarder l'état dans localStorage pour persister après rechargement
+        try {
+          const jobId = pickJobId();
+          if (jobId) {
+            localStorage.setItem(`agilo:transcript-saved:${jobId}`, 'true');
+            localStorage.setItem('agilo:last-jobId', jobId);
+          }
+        } catch (e) {}
+        
+        // Feedback visuel après sauvegarde
+        if (typeof window.toast === 'function') {
+          window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
+        }
+        
+        // Mettre à jour la visibilité (asynchrone maintenant)
+        updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+        // Mettre à jour les compteurs après sauvegarde
+        setTimeout(async () => {
+          try {
+            const creds = await ensureCreds();
+            if (creds.jobId && creds.edition) {
+              updateRegenerationCounter(creds.jobId, creds.edition);
+              updateButtonState(creds.jobId, creds.edition);
+              // Re-vérifier la visibilité après mise à jour des compteurs
+              await updateButtonVisibility();
+            }
+          } catch (e) {
+            console.log('Erreur mise à jour compteurs:', e);
+          }
+        }, 500);
+        // ⚠️ IMPORTANT : On ne réinitialise PAS le compteur lors de la sauvegarde
+        // Le compteur est lié au jobId/audio, pas aux modifications du transcript
+        // Même si l'utilisateur modifie le transcript plusieurs fois, il ne peut régénérer
+        // que 2 fois (Pro) ou 4 fois (Business) par audio/jobId
+      });
+    }
+    
+    // Vérifier si le transcript a déjà été sauvegardé (au chargement)
+    // Utiliser le jobId pour un état par transcript
+    const currentJobId = pickJobId();
+    if (currentJobId) {
+      try {
+        const wasSaved = localStorage.getItem(`agilo:transcript-saved:${currentJobId}`);
+        if (wasSaved === 'true') {
+          transcriptModified = true;
+        }
+        
+        // Nettoyer les anciens états (garder seulement les 10 derniers jobIds)
+        const allKeys = Object.keys(localStorage).filter(k => k.startsWith('agilo:transcript-saved:'));
+        if (allKeys.length > 10) {
+          // Supprimer les plus anciens (garder les 10 plus récents)
+          allKeys.sort().slice(0, allKeys.length - 10).forEach(k => {
+            localStorage.removeItem(k);
+          });
+        }
+      } catch (e) {}
+    }
+    
+    const tabs = document.querySelectorAll('[role="tab"]');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', function() {
+        setTimeout(() => {
+          updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+        }, 100);
+      });
+    });
+    
+    const observer = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
+          updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+        }
+      });
+    });
+    
+    tabs.forEach(tab => {
+      observer.observe(tab, { attributes: true });
+    });
+    
+    // Initialiser les compteurs et limites
+    const initLimits = async () => {
+      try {
+        const creds = await ensureCreds();
+        const { edition, jobId } = creds;
+        if (jobId && edition) {
+          console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
+          
+          // Mettre à jour les compteurs et l'état du bouton
+          updateRegenerationCounter(jobId, edition);
+          updateButtonState(jobId, edition);
+          
+          // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
+          await updateButtonVisibility();
+          
+          // Logs pour debug Pro/Business
+          const canRegen = canRegenerate(jobId, edition);
+          console.log('[AGILO:RELANCE] État régénération:', {
+            allowed: canRegen.allowed,
+            reason: canRegen.reason,
+            count: canRegen.count,
+            limit: canRegen.limit,
+            remaining: canRegen.remaining,
+            edition
+          });
+        }
+      } catch (e) {
+        console.error('[AGILO:RELANCE] Erreur initialisation limites:', e);
+      }
+    };
+    
+    // Attendre un peu que les credentials soient disponibles
+    setTimeout(initLimits, 500);
+    
+    // Réinitialiser les compteurs quand on change de transcript
+    // Utiliser MutationObserver au lieu de setInterval pour meilleure performance
+    let lastJobId = pickJobId();
+    let jobIdCheckInterval = null;
+    
+    // Observer les changements dans l'URL ou le DOM qui indiquent un changement de transcript
+    if (window.location) {
+      // Observer les changements d'URL (popstate, hashchange)
+      window.addEventListener('popstate', () => {
+        const currentJobId = pickJobId();
+        if (currentJobId && currentJobId !== lastJobId) {
+          lastJobId = currentJobId;
+          setTimeout(initLimits, 300);
+        }
+      });
+      
+      // Observer les changements de hash
+      window.addEventListener('hashchange', () => {
+        const currentJobId = pickJobId();
+        if (currentJobId && currentJobId !== lastJobId) {
+          lastJobId = currentJobId;
+          console.log('[AGILO:RELANCE] JobId changé (hashchange):', currentJobId);
+          setTimeout(initLimits, 300);
+        }
+      });
+      
+      // Observer les changements de #editorRoot dataset
+      const editorRoot = document.querySelector('#editorRoot');
+      if (editorRoot) {
+        const observer = new MutationObserver(() => {
+          const currentJobId = pickJobId();
+          if (currentJobId && currentJobId !== lastJobId) {
+            lastJobId = currentJobId;
+            setTimeout(initLimits, 300);
+          }
+        });
+        observer.observe(editorRoot, { attributes: true, attributeFilter: ['data-job-id'] });
+      }
+      
+      // Fallback : vérification périodique (mais moins fréquente et nettoyable)
+      jobIdCheckInterval = setInterval(() => {
+        const currentJobId = pickJobId();
+        if (currentJobId && currentJobId !== lastJobId) {
+          lastJobId = currentJobId;
+          setTimeout(initLimits, 300);
+        }
+      }, 2000); // 2 secondes au lieu de 1
+      
+      // Nettoyer l'interval au démontage
+      window.addEventListener('beforeunload', () => {
+        if (jobIdCheckInterval) {
+          clearInterval(jobIdCheckInterval);
+          jobIdCheckInterval = null;
+        }
+      });
+    }
+    
+    // Mettre à jour les compteurs quand on change d'onglet
+    tabs.forEach(tab => {
+      tab.addEventListener('click', function() {
+        setTimeout(async () => {
+          await initLimits();
+          // Re-vérifier la visibilité après changement d'onglet
+          await updateButtonVisibility();
+        }, 200);
+      });
+    });
+    
+    // Ouvrir l'onglet Compte-rendu si demandé dans l'URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tab') === 'summary') {
+      setTimeout(() => {
+        openSummaryTab();
+        urlParams.delete('tab');
+        const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
+        window.history.replaceState({}, '', newUrl);
+      }, 300);
+    }
+    
+    // Raccourcis clavier
+    setupKeyboardShortcuts();
   }
   
-  // Démarrer
-  if (document.readyState !== 'loading') {
-    init();
+  // Ajouter les styles CSS pour le loader (respectant votre design system)
+  if (!document.querySelector('#relance-summary-styles')) {
+    const style = document.createElement('style');
+    style.id = 'relance-summary-styles';
+    style.textContent = `
+      /* Conteneur de chargement - utilise vos variables CSS */
+      .summary-loading-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+        min-height: 300px;
+        background: var(--agilo-surface, var(--color--white, #ffffff));
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+      }
+      
+      /* Animation Lottie centrée */
+      .summary-loading-indicator #loading-summary,
+      .summary-loading-indicator #loading-summary-clone {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        display: block;
+      }
+      
+      /* Fallback si Lottie ne charge pas - spinner CSS */
+      .summary-loading-indicator .lottie-fallback {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        border: 4px solid var(--agilo-border, rgba(0,0,0,0.12));
+        border-top: 4px solid var(--agilo-primary, var(--color--blue, #174a96));
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Texte de chargement */
+      .summary-loading-indicator .loading-text {
+        font: 500 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
+      
+      .summary-loading-indicator .loading-subtitle {
+        font: 400 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-dim, var(--color--gris, #525252));
+        margin-top: 8px;
+      }
+      
+      /* Animation d'apparition douce */
+      .summary-loading-indicator {
+        animation: fadeIn 0.3s ease-out;
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .summary-loading-indicator {
+          animation: none;
+        }
+      }
+      
+      /* =====================================================================
+         COMPTEUR DE RÉGÉNÉRATIONS
+         ===================================================================== */
+      
+      .regeneration-counter {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--agilo-dim, var(--color--gris, #525252));
+        margin-top: 6px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+        transition: all 0.2s ease;
+      }
+      
+      .regeneration-counter.has-warning {
+        color: var(--color--orange, #fd7e14);
+        background: color-mix(in srgb, var(--color--orange, #fd7e14) 10%, var(--agilo-surface, #ffffff) 90%);
+      }
+      
+      .regeneration-counter.is-limit {
+        color: var(--color--red, #dc3545);
+        background: color-mix(in srgb, var(--color--red, #dc3545) 10%, var(--agilo-surface, #ffffff) 90%);
+      }
+      
+      /* Messages d'information */
+      .regeneration-limit-message,
+      .regeneration-premium-message {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+      }
+      
+      .regeneration-limit-message {
+        background: color-mix(in srgb, var(--color--orange, #fd7e14) 10%, var(--agilo-surface, #ffffff) 90%);
+        border: 1px solid color-mix(in srgb, var(--color--orange, #fd7e14) 35%, transparent);
+      }
+      
+      .regeneration-premium-message {
+        background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 8%, var(--agilo-surface, #ffffff) 92%);
+        border: 1px solid color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 25%, transparent);
+      }
+      
+      .regeneration-limit-message strong,
+      .regeneration-premium-message strong {
+        display: block;
+        margin-bottom: 2px;
+        font-weight: 600;
+      }
+      
+      /* Message : Aucun compte-rendu initial */
+      .regeneration-no-summary-message {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        background: color-mix(in srgb, var(--color--blue, #174a96) 8%, var(--agilo-surface, #ffffff) 92%);
+        border: 1px solid color-mix(in srgb, var(--color--blue, #174a96) 25%, transparent);
+      }
+      
+      .regeneration-no-summary-message strong {
+        display: block;
+        margin-bottom: 2px;
+        font-weight: 600;
+      }
+      
+      /* Toast de succès */
+      @keyframes slideInRight {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+      
+      @keyframes slideOutRight {
+        from {
+          transform: translateX(0);
+          opacity: 1;
+        }
+        to {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+      }
+      
+      .agilo-toast-success {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      
+      /* Responsive mobile */
+      @media (max-width: 560px) {
+        .regeneration-counter {
+          font-size: 11px;
+          padding: 3px 6px;
+          margin-top: 4px;
+        }
+        
+        .regeneration-limit-message,
+        .regeneration-premium-message {
+          padding: 8px 10px;
+          font-size: 12px;
+        }
+        
+        .agilo-toast-success {
+          right: 10px;
+          left: 10px;
+          max-width: none;
+        }
+      }
+      
+      /* Accessibilité : Focus visible */
+      [data-action="relancer-compte-rendu"]:focus-visible {
+        outline: 2px solid var(--agilo-primary, var(--color--blue, #174a96));
+        outline-offset: 2px;
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .agilo-toast-success {
+          animation: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
+    init();
   }
   
-  // Fallback si DOMContentLoaded n'a pas été déclenché
-  setTimeout(init, 1000);
+  window.relancerCompteRendu = relancerCompteRendu;
+  window.openSummaryTab = openSummaryTab;
 })();
 
