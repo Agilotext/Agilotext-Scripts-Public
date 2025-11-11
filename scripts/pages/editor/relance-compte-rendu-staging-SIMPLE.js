@@ -127,6 +127,67 @@
     }
   }
   
+  // ⚠️ GESTIONNAIRE DE CLIC (ATTACHÉ AVANT init() pour être sûr qu'il soit toujours là)
+  function attachClickHandler() {
+    if (window.__agiloRelanceSimpleClickBound) {
+      console.log('[AGILO:RELANCE-SIMPLE] Gestionnaire déjà attaché');
+      return;
+    }
+    window.__agiloRelanceSimpleClickBound = true;
+    
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
+      if (!btn) return;
+      
+      console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer', {
+        disabled: btn.disabled,
+        hasForceHide: btn.classList.contains('agilo-force-hide'),
+        visible: window.getComputedStyle(btn).display !== 'none'
+      });
+      
+      // Vérifier que le bouton n'est pas caché
+      if (btn.classList.contains('agilo-force-hide')) {
+        console.log('[AGILO:RELANCE-SIMPLE] Bouton caché - Clic ignoré');
+        return;
+      }
+      
+      // Vérifier que le bouton n'est pas désactivé
+      if (btn.disabled) {
+        console.log('[AGILO:RELANCE-SIMPLE] Bouton désactivé - Clic ignoré');
+        return;
+      }
+      
+      // Vérifier une dernière fois si le message d'erreur est présent
+      if (shouldHideButton()) {
+        console.log('[AGILO:RELANCE-SIMPLE] Message d\'erreur détecté au clic - Action annulée');
+        if (window.toast) window.toast('Aucun compte-rendu disponible pour régénérer');
+        return;
+      }
+      
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[AGILO:RELANCE-SIMPLE] Clic sur bouton régénérer - Lancement...');
+      
+      // Lancer la régénération (avec confirmation)
+      const root = byId('editorRoot');
+      const jobId = root?.dataset.jobId || new URLSearchParams(location.search).get('jobId');
+      if (!jobId) {
+        alert('❌ Job ID introuvable');
+        return;
+      }
+      
+      const auth = await ensureAuth();
+      if (!auth.username || !auth.token) {
+        alert('❌ Authentification manquante');
+        return;
+      }
+      
+      await relancerCompteRendu(jobId, auth);
+    }, { passive: false, capture: false }); // passive: false pour permettre preventDefault
+    
+    console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic ajouté au document');
+  }
+  
   // Initialisation SIMPLE
   function init() {
     if (window.__agiloRelanceSimpleInit) {
@@ -135,6 +196,9 @@
     }
     window.__agiloRelanceSimpleInit = true;
     log('✅ Initialisation');
+    
+    // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC EN PREMIER
+    attachClickHandler();
     
     // Vérifier immédiatement
     updateVisibility();
@@ -161,57 +225,6 @@
       setTimeout(updateVisibility, 500);
       setTimeout(updateVisibility, 1500);
     });
-    
-    // ⚠️ GESTIONNAIRE DE CLIC SUR LE BOUTON RÉGÉNÉRER (comme dans staging)
-    if (!window.__agiloRelanceSimpleClickBound) {
-      window.__agiloRelanceSimpleClickBound = true;
-      document.addEventListener('click', async (e) => {
-        const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-        if (!btn) return;
-        
-        console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer');
-        
-        // Vérifier que le bouton n'est pas caché
-        if (btn.classList.contains('agilo-force-hide')) {
-          console.log('[AGILO:RELANCE-SIMPLE] Bouton caché - Clic ignoré');
-          return;
-        }
-        
-        // Vérifier que le bouton n'est pas désactivé
-        if (btn.disabled) {
-          console.log('[AGILO:RELANCE-SIMPLE] Bouton désactivé - Clic ignoré');
-          return;
-        }
-        
-        // Vérifier une dernière fois si le message d'erreur est présent
-        if (shouldHideButton()) {
-          console.log('[AGILO:RELANCE-SIMPLE] Message d\'erreur détecté au clic - Action annulée');
-          if (window.toast) window.toast('Aucun compte-rendu disponible pour régénérer');
-          return;
-        }
-        
-        e.preventDefault();
-        e.stopPropagation();
-        console.log('[AGILO:RELANCE-SIMPLE] Clic sur bouton régénérer - Lancement...');
-        
-        // Lancer la régénération (avec confirmation)
-        const root = byId('editorRoot');
-        const jobId = root?.dataset.jobId || new URLSearchParams(location.search).get('jobId');
-        if (!jobId) {
-          alert('❌ Job ID introuvable');
-          return;
-        }
-        
-        const auth = await ensureAuth();
-        if (!auth.username || !auth.token) {
-          alert('❌ Authentification manquante');
-          return;
-        }
-        
-        await relancerCompteRendu(jobId, auth);
-      }, { passive: false }); // Comme dans staging, sans capture
-      console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic ajouté au document');
-    }
   }
   
   /************* FONCTIONS DE RÉGÉNÉRATION *************/
@@ -580,6 +593,9 @@
     }
   }
   
+  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC IMMÉDIATEMENT (même avant DOMContentLoaded)
+  attachClickHandler();
+  
   // Démarrer
   if (document.readyState !== 'loading') {
     init();
@@ -588,6 +604,10 @@
   }
   
   // Fallback si DOMContentLoaded n'a pas été déclenché
-  setTimeout(init, 1000);
+  setTimeout(() => {
+    if (!window.__agiloRelanceSimpleInit) {
+      init();
+    }
+  }, 1000);
 })();
 
