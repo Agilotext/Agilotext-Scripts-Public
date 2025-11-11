@@ -588,32 +588,64 @@
   }
   
   /**
-   * Vérifier si un compte-rendu existe déjà pour ce jobId
+   * Appeler l'API getTranscriptStatus pour obtenir le statut
    */
-  async function checkSummaryExists(jobId, email, token, edition) {
+  async function getTranscriptStatus(jobId, email, token, edition) {
     try {
-      const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+      const url = `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       
       const response = await fetch(url, {
         method: 'GET',
         cache: 'no-store'
       });
       
-      console.log('[AGILO:RELANCE] Vérification existence compte-rendu:', {
-        status: response.status,
-        ok: response.ok
-      });
-      
-      if (response.ok) {
-        const text = await response.text();
-        // Vérifier que ce n'est pas un message d'erreur
-        const isError = text.includes('pas encore disponible') || 
-                       text.includes('non publié') || 
-                       text.includes('fichier manquant');
-        
-        return !isError && text.length > 100; // Au moins 100 caractères pour être valide
+      if (!response.ok) {
+        console.error('[AGILO:RELANCE] Erreur HTTP getTranscriptStatus:', response.status);
+        return null;
       }
       
+      const data = await response.json();
+      
+      if (data.status === 'OK' && data.transcriptStatus) {
+        return data.transcriptStatus;
+      }
+      
+      if (data.status === 'KO') {
+        console.error('[AGILO:RELANCE] Erreur API getTranscriptStatus:', data.errorMessage);
+        // Vérifier si c'est l'erreur "fichier manquant"
+        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          return 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur réseau getTranscriptStatus:', error);
+      return null;
+    }
+  }
+  
+  /**
+   * Vérifier si un compte-rendu existe déjà pour ce jobId
+   * Utilise getTranscriptStatus pour vérifier le statut
+   */
+  async function checkSummaryExists(jobId, email, token, edition) {
+    try {
+      const status = await getTranscriptStatus(jobId, email, token, edition);
+      
+      console.log('[AGILO:RELANCE] Statut transcript:', status);
+      
+      // Si le statut est READY_SUMMARY_READY ou READY_SUMMARY_PENDING, le compte-rendu existe (ou est en cours)
+      if (status === 'READY_SUMMARY_READY' || status === 'READY_SUMMARY_PENDING') {
+        return true;
+      }
+      
+      // Si c'est l'erreur "fichier manquant", le compte-rendu n'existe pas
+      if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+        return false;
+      }
+      
+      // Pour les autres statuts (ON_ERROR, READY_SUMMARY_ON_ERROR, etc.), on considère qu'il n'existe pas
       return false;
     } catch (error) {
       console.error('[AGILO:RELANCE] Erreur vérification existence:', error);
@@ -622,10 +654,11 @@
   }
   
   /**
-   * Attendre que le compte-rendu soit prêt (polling)
+   * Attendre que le compte-rendu soit prêt (polling avec getTranscriptStatus)
+   * Attend le statut READY_SUMMARY_READY
    */
-  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 30, delay = 2000) {
-    console.log('[AGILO:RELANCE] Début vérification disponibilité compte-rendu', {
+  async function waitForSummaryReady(jobId, email, token, edition, maxAttempts = 60, delay = 2000) {
+    console.log('[AGILO:RELANCE] Début polling pour READY_SUMMARY_READY', {
       jobId,
       maxAttempts,
       delay
@@ -633,33 +666,28 @@
     
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+        const status = await getTranscriptStatus(jobId, email, token, edition);
         
-        const response = await fetch(url, {
-          method: 'GET',
-          cache: 'no-store'
-        });
+        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Statut:`, status);
         
-        console.log(`[AGILO:RELANCE] Tentative ${attempt}/${maxAttempts} - Status:`, response.status);
+        // Si le statut est READY_SUMMARY_READY, le compte-rendu est prêt !
+        if (status === 'READY_SUMMARY_READY') {
+          console.log('[AGILO:RELANCE] ✅ READY_SUMMARY_READY détecté ! Compte-rendu prêt !', {
+            attempt,
+            status
+          });
+          return true;
+        }
         
-        // Si 200 OK, le compte-rendu est prêt
-        if (response.ok) {
-          const text = await response.text();
-          // Vérifier que ce n'est pas un message d'erreur
-          if (text && !text.includes('pas encore disponible') && !text.includes('non publié')) {
-            console.log('[AGILO:RELANCE] ✅ Compte-rendu disponible !', {
-              attempt,
-              contentLength: text.length
-            });
-            return true;
-          } else {
-            console.log(`[AGILO:RELANCE] Compte-rendu pas encore prêt (tentative ${attempt}/${maxAttempts})`);
-          }
-        } else if (response.status === 404 || response.status === 204) {
-          // 404 ou 204 = pas encore disponible
-          console.log(`[AGILO:RELANCE] Compte-rendu pas encore disponible (${response.status}) - tentative ${attempt}/${maxAttempts}`);
-        } else {
-          console.warn(`[AGILO:RELANCE] Erreur HTTP ${response.status} - tentative ${attempt}/${maxAttempts}`);
+        // Si le statut est READY_SUMMARY_PENDING, c'est en cours
+        if (status === 'READY_SUMMARY_PENDING') {
+          console.log(`[AGILO:RELANCE] READY_SUMMARY_PENDING - En cours de génération (tentative ${attempt}/${maxAttempts})`);
+        }
+        
+        // Si erreur, on arrête
+        if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ON_ERROR') {
+          console.error('[AGILO:RELANCE] ❌ Erreur lors de la génération:', status);
+          return false;
         }
         
         // Attendre avant la prochaine tentative (sauf dernière)
@@ -667,7 +695,7 @@
           await new Promise(r => setTimeout(r, delay));
         }
       } catch (error) {
-        console.error(`[AGILO:RELANCE] Erreur vérification (tentative ${attempt}/${maxAttempts}):`, error);
+        console.error(`[AGILO:RELANCE] Erreur polling (tentative ${attempt}/${maxAttempts}):`, error);
         if (attempt < maxAttempts) {
           await new Promise(r => setTimeout(r, delay));
         }
@@ -675,7 +703,7 @@
     }
     
     // Si on arrive ici, le compte-rendu n'est pas prêt après toutes les tentatives
-    console.warn('[AGILO:RELANCE] ⚠️ Compte-rendu pas prêt après', maxAttempts, 'tentatives');
+    console.warn('[AGILO:RELANCE] ⚠️ READY_SUMMARY_READY non obtenu après', maxAttempts, 'tentatives');
     console.log('[AGILO:RELANCE] Rechargement quand même - le compte-rendu apparaîtra quand il sera prêt');
     return false;
   }
@@ -1079,7 +1107,7 @@
   
   /**
    * Mettre à jour la visibilité du bouton selon l'onglet actif
-   * ⚠️ MODIFIÉ : Vérifie maintenant si un compte-rendu existe avant d'afficher le bouton
+   * ⚠️ MODIFIÉ : Vérifie maintenant si un compte-rendu existe via getTranscriptStatus
    */
   async function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
@@ -1099,28 +1127,38 @@
     // Cacher aussi le compteur/message si le bouton est caché
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
     
-    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe avant d'afficher le bouton
+    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe via getTranscriptStatus
     try {
       const creds = await ensureCreds();
       if (creds.jobId && creds.email && creds.token) {
-        const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
+        const status = await getTranscriptStatus(creds.jobId, creds.email, creds.token, creds.edition);
         
-        // Si aucun compte-rendu n'existe, cacher le bouton et le compteur
-        if (!summaryExists) {
-          console.log('[AGILO:RELANCE] ⚠️ Aucun compte-rendu détecté - Bouton et compteur cachés');
+        console.log('[AGILO:RELANCE] Vérification statut pour visibilité:', status);
+        
+        // Si le statut indique qu'aucun compte-rendu n'existe, cacher le bouton
+        if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+          console.log('[AGILO:RELANCE] ⚠️ Aucun compte-rendu détecté (ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS) - Bouton caché');
           btn.style.display = 'none';
           if (counter) counter.style.display = 'none';
-          return; // Sortir immédiatement, ne pas continuer avec la logique normale
+          return;
+        }
+        
+        // Si le statut n'est pas READY_SUMMARY_READY ou READY_SUMMARY_PENDING, cacher le bouton
+        if (status !== 'READY_SUMMARY_READY' && status !== 'READY_SUMMARY_PENDING') {
+          console.log('[AGILO:RELANCE] ⚠️ Compte-rendu non disponible (statut:', status, ') - Bouton caché');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return;
         }
       }
     } catch (error) {
-      console.error('[AGILO:RELANCE] Erreur vérification compte-rendu:', error);
+      console.error('[AGILO:RELANCE] Erreur vérification statut:', error);
       // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
     }
     
-    // Gérer la visibilité (logique normale si compte-rendu existe)
+    // Gérer la visibilité (si compte-rendu existe)
     if (isSummaryTab) {
-      // Visible sur l'onglet Compte-rendu (compte-rendu existe)
+      // Toujours visible sur l'onglet Compte-rendu (même si transcript non sauvegardé)
       btn.style.display = 'flex';
       if (counter) counter.style.display = '';
       // Désactiver le bouton si transcript non sauvegardé
