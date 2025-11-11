@@ -136,6 +136,12 @@
     window.__agiloRelanceSimpleInit = true;
     log('✅ Initialisation');
     
+    // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC (comme dans staging)
+    bindRelanceClick();
+    
+    // Exposer la fonction pour debug
+    window.relancerCompteRendu = relancerCompteRendu;
+    
     // Vérifier immédiatement
     updateVisibility();
     
@@ -161,9 +167,6 @@
       setTimeout(updateVisibility, 500);
       setTimeout(updateVisibility, 1500);
     });
-    
-    // Le gestionnaire de clic est déjà attaché en haut du script (avant init)
-    // Pas besoin de le réattacher ici
   }
   
   /************* FONCTIONS DE RÉGÉNÉRATION *************/
@@ -180,14 +183,74 @@
     return `${s.length}:${head.slice(0, 60)}:${mid.slice(0, 40)}:${tail.slice(-60)}`;
   }
   
-  // Récupérer l'auth
-  async function ensureAuth() {
+  // Récupérer l'auth (comme dans staging)
+  function pickEdition() {
+    const raw = window.AGILO_EDITION
+      || new URLSearchParams(location.search).get('edition')
+      || byId('editorRoot')?.dataset.edition
+      || localStorage.getItem('agilo:edition')
+      || 'free';
+    const v = String(raw||'').toLowerCase().trim();
+    if (['enterprise','entreprise','business','team','ent'].includes(v)) return 'ent';
+    if (v.startsWith('pro')) return 'pro';
+    if (v.startsWith('free') || v==='gratuit') return 'free';
+    return 'free';
+  }
+  
+  function pickJobId() {
+    const u = new URL(location.href);
     const root = byId('editorRoot');
-    const edition = root?.dataset.edition || new URLSearchParams(location.search).get('edition') || 'ent';
-    const username = root?.dataset.username || document.querySelector('[name="memberEmail"]')?.value || localStorage.getItem('agilo:username') || '';
-    const token = root?.dataset.token || window.globalToken || localStorage.getItem(`agilo:token:${edition}:${username}`) || '';
+    return u.searchParams.get('jobId')
+      || root?.dataset.jobId
+      || $('.rail-item.is-active')?.dataset?.jobId
+      || window.__agiloOrchestrator?.currentJobId
+      || '';
+  }
+  
+  async function ensureAuth() {
+    const edition = pickEdition();
+    const root = byId('editorRoot');
+    let email = root?.dataset.username
+      || byId('memberEmail')?.value
+      || $('[name="memberEmail"]')?.value
+      || localStorage.getItem('agilo:username')
+      || window.memberEmail
+      || '';
     
-    return { username, token, edition };
+    // Essayer de résoudre l'email si manquant
+    if (!email && window.$memberstackDom?.getMember) {
+      try {
+        const r = await window.$memberstackDom.getMember();
+        if (r?.data?.email) email = r.data.email.trim();
+      } catch {}
+    }
+    
+    const key = `agilo:token:${edition}:${String(email||'').toLowerCase()}`;
+    let token = root?.dataset.token
+      || window.globalToken
+      || localStorage.getItem(key)
+      || localStorage.getItem('agilo:token')
+      || '';
+    
+    // Essayer de récupérer le token via getToken si manquant
+    if (!token && email && typeof window.getToken === 'function') {
+      try {
+        window.getToken(email, edition);
+        // Attendre un peu pour que le token arrive
+        for (let i = 0; i < 50; i++) {
+          await wait(100);
+          token = root?.dataset.token || window.globalToken || localStorage.getItem(key) || '';
+          if (token) break;
+        }
+      } catch {}
+    }
+    
+    if (email) {
+      try { localStorage.setItem('agilo:username', email); } catch {}
+    }
+    try { localStorage.setItem('agilo:edition', edition); } catch {}
+    
+    return { username: (email||'').trim(), token: token||'', edition };
   }
   
   // Fetch avec timeout et cache-busting
@@ -229,36 +292,106 @@
     }
   }
   
-  // Récupérer le compte-rendu avec cache-busting
-  async function getSummary(jobId, auth, signal) {
-    const url = `${API_BASE}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&format=html`;
-    
-    try {
-      const r = await fetchWithTimeout(url, { signal, timeout: 15000 });
-      if (!r.ok) {
-        if (r.status === 404 || r.status === 204) {
-          return { ok: false, code: 'NOT_READY', html: '' };
-        }
-        return { ok: false, code: 'HTTP_ERROR', httpStatus: r.status, html: '' };
-      }
-      
-      const html = await r.text();
-      if (!html || html.trim().length < 50) {
-        return { ok: false, code: 'EMPTY', html: '' };
-      }
-      
-      // Vérifier si c'est un message d'erreur
-      const lower = html.toLowerCase();
-      if (lower.includes('pas encore disponible') || lower.includes('fichier manquant') || lower.includes('non publié')) {
-        return { ok: false, code: 'NOT_READY', html: '' };
-      }
-      
-      return { ok: true, html };
-    } catch (e) {
-      if (e.name === 'AbortError') return { ok: false, code: 'CANCELLED', html: '' };
-      return { ok: false, code: 'NETWORK_ERROR', html: '' };
-    }
+  // ⚠️ FONCTIONS API (comme dans staging)
+  function parseMaybeJson(raw, contentType=''){
+    const looksJson = (contentType||'').includes('application/json') || /^\s*\{/.test(raw||'');
+    if (!looksJson) return null;
+    try { return JSON.parse(raw); } catch { return null; }
   }
+  
+  async function apiGetWithRetry(kind, jobId, auth, retryCount=0, signal){
+    const ts = Date.now();
+    const baseQ = `jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&_ts=${ts}`;
+    const url =
+      (kind === 'summary')
+        ? `${API_BASE}/receiveSummary?${baseQ}&format=html`
+        : (kind === 'status')
+          ? `${API_BASE}/getTranscriptStatus?${baseQ}`
+          : `${API_BASE}/${kind}?${baseQ}`;
+    let r, raw;
+    try{ r = await fetchWithTimeout(url, { signal, timeout: 15000 }); raw = await r.text(); }
+    catch(e){
+      if (e?.name === 'AbortError') return { ok:false, code:'CANCELLED', httpStatus:0, json:null, raw:'' };
+      return { ok:false, code:'NETWORK_ERROR', httpStatus:0, json:null, raw:'' };
+    }
+    if (!r.ok){
+      const json = parseMaybeJson(raw, r.headers.get('content-type')||'');
+      return { ok:false, code:'HTTP_ERROR', httpStatus:r.status, json, raw, headers:r.headers };
+    }
+    const ct = r.headers.get('content-type') || '';
+    const json = parseMaybeJson(raw, ct);
+    if (json && (json.status==='KO' || json.errorMessage)){
+      return { ok:false, code: json.errorMessage || json.status || 'ON_ERROR', json, raw, headers:r.headers };
+    }
+    return { ok:true, payload: raw, contentType: ct, headers: r.headers };
+  }
+  
+  function isBlankHtml(html){
+    const s = String(html||'').replace(/<!--[\s\S]*?-->/g,'').replace(/<[^>]+>/g,'').replace(/\s+/g,'').trim();
+    return s.length === 0;
+  }
+  
+  function looksLikeNotReady(text){
+    const lower = String(text||'').toLowerCase();
+    return ERROR_PATTERNS.some(p => lower.includes(p)) || /ready_summary_pending|not_ready|pending/.test(lower);
+  }
+  
+  // ⚠️ FONCTIONS LIMITES (comme dans staging)
+  function getRegenerationLimit(edition){
+    const ed = String(edition||'').toLowerCase().trim();
+    if (ed.startsWith('pro')) return 2;
+    if (['ent','business','enterprise','entreprise','team'].includes(ed)) return 4;
+    return 0;
+  }
+  
+  function getRegenerationCount(jobId){
+    try { return (JSON.parse(localStorage.getItem('agilo:regenerations')||'{}')[jobId]?.count) || 0; } catch { return 0; }
+  }
+  
+  function incrementRegenerationCount(jobId, edition){
+    try {
+      const data = JSON.parse(localStorage.getItem('agilo:regenerations')||'{}');
+      const row = data[jobId] || { count:0 };
+      data[jobId] = { ...row, count:(row.count||0)+1, max:getRegenerationLimit(edition), edition, lastUsed:new Date().toISOString() };
+      localStorage.setItem('agilo:regenerations', JSON.stringify(data));
+    } catch {}
+  }
+  
+  // ⚠️ Vérifier si le summary a été demandé (comme dans staging)
+  async function wasSummaryEverRequested(jobId, auth, signal){
+    // Vérifier d'abord via getTranscriptStatus
+    const st = await getTranscriptStatus(jobId, auth, signal);
+    if (st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+      log('❌ Summary jamais demandé (ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS)');
+      return false;
+    }
+    if (st === 'READY_SUMMARY_READY' || st === 'READY_SUMMARY_PENDING' || st === 'READY_SUMMARY_ON_ERROR') {
+      log('✅ Summary demandé (statut:', st, ')');
+      return true;
+    }
+    
+    // Fallback : vérifier dans le DOM
+    const summaryEl = byId('summaryEditor') || $('[data-editor="summary"]');
+    if (summaryEl) {
+      const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
+      const exactMsg = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
+      if (text && !text.includes(exactMsg) && text.length > 50) {
+        log('✅ Summary détecté dans le DOM (contenu présent)');
+        return true;
+      }
+    }
+    
+    log('❌ Summary jamais demandé (aucune preuve)');
+    return false;
+  }
+  
+  // Patterns d'erreur
+  const ERROR_PATTERNS = [
+    'error_summary_transcript_file_not_exists',
+    'pas encore disponible',
+    'fichier manquant',
+    'non publié'
+  ];
   
   // Vérifier le statut du transcript
   async function getTranscriptStatus(jobId, auth, signal) {
@@ -274,9 +407,9 @@
     }
   }
   
-  // Poller jusqu'à ce que le nouveau compte-rendu soit prêt (hash différent)
-  async function pollSummaryUntilReady(jobId, auth, { oldHash = '', max = MAX_POLL, signal } = {}) {
-    log('⏳ Début polling pour nouveau compte-rendu', { jobId, oldHash: oldHash.substring(0, 30) + '...', max });
+  // Poller jusqu'à ce que le nouveau compte-rendu soit prêt (hash différent) - COMME DANS STAGING
+  async function pollSummaryUntilReady(jobId, auth, { oldHash = '', max = MAX_POLL, baseDelay = BASE_DELAY, signal } = {}) {
+    log('⏳ Début poll pour nouveau compte-rendu', { jobId, oldHash: oldHash.substring(0, 30) + '...', max });
     
     for (let i = 0; i < max; i++) {
       if (signal?.aborted) {
@@ -285,34 +418,34 @@
       }
       
       // Vérifier le statut
-      const status = await getTranscriptStatus(jobId, auth, signal);
-      if (status === 'READY_SUMMARY_READY') {
-        // Récupérer le compte-rendu
-        const result = await getSummary(jobId, auth, signal);
-        if (result.ok && result.html) {
-          const newHash = getContentHash(result.html);
-          log(`Tentative ${i + 1}/${max} - Hash: ${newHash.substring(0, 50)}...`);
-          
-          // ⚠️ VÉRIFIER QUE LE HASH EST DIFFÉRENT (nouveau compte-rendu)
-          if (!oldHash || newHash !== oldHash) {
-            log('✅ NOUVEAU compte-rendu détecté !', {
-              oldHash: oldHash.substring(0, 50) + '...',
-              newHash: newHash.substring(0, 50) + '...',
-              htmlLength: result.html.length
-            });
-            return { ok: true, html: result.html, hash: newHash };
-          } else {
-            log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
+      const st = await getTranscriptStatus(jobId, auth, signal);
+      
+      if (st === 'READY_SUMMARY_READY') {
+        // Récupérer le compte-rendu via apiGetWithRetry (comme dans staging)
+        const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, signal);
+        if (r.ok) {
+          const html = String(r.payload||'');
+          if (!looksLikeNotReady(html) && !isBlankHtml(html)) {
+            const newHash = getContentHash(html);
+            log(`Tentative ${i+1}/${max} - Hash: ${newHash.substring(0, 30)}...`);
+            
+            // ⚠️ VÉRIFIER QUE LE HASH EST DIFFÉRENT (nouveau compte-rendu)
+            if (!oldHash || newHash !== oldHash) {
+              log('✅ NOUVEAU compte-rendu détecté !', {
+                oldHash: oldHash.substring(0, 30) + '...',
+                newHash: newHash.substring(0, 30) + '...',
+                htmlLength: html.length
+              });
+              return { ok: true, html, hash: newHash };
+            } else {
+              log(`⚠️ Hash identique (${newHash.substring(0, 30)}...) - Attente continue...`);
+            }
           }
         }
-      } else if (status && !/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(status)) {
-        // Erreur autre que "en cours"
-        log('⚠️ Statut erreur:', status);
-        return { ok: false, code: status };
       }
       
-      // Attendre avant la prochaine tentative (délai progressif)
-      await wait(BASE_DELAY * Math.pow(1.2, i));
+      // Attendre avant la prochaine tentative (délai progressif comme dans staging)
+      await wait(baseDelay * Math.pow(1.25, i));
     }
     
     log('⚠️ Timeout - Compte-rendu pas prêt après', max, 'tentatives');
@@ -393,19 +526,71 @@
     if (loader) loader.style.display = 'none';
   }
   
-  // Fonction principale de régénération (avec confirmation comme dans staging)
+  // Fonction principale de régénération (REPRISE DU STAGING qui fonctionne)
   let __isGenerating = false;
-  async function relancerCompteRendu(jobId, auth) {
+  async function relancerCompteRendu() {
     if (__isGenerating) {
       console.log('[AGILO:RELANCE-SIMPLE] ⚠️ Régénération déjà en cours');
       return;
     }
     
-    // ⚠️ CONFIRMATION (comme dans staging)
-    const confirmed = confirm('Remplacer le compte-rendu actuel ?\n\nCette action va régénérer le compte-rendu avec le transcript actuel.');
-    if (!confirmed) {
-      console.log('[AGILO:RELANCE-SIMPLE] Régénération annulée par l\'utilisateur');
+    const now = Date.now();
+    if (relancerCompteRendu._last && (now - relancerCompteRendu._last) < 500) return;
+    relancerCompteRendu._last = now;
+    
+    // Récupérer auth et jobId (comme dans staging)
+    const auth = await ensureAuth();
+    const jobId = pickJobId();
+    
+    if (!auth.username || !auth.token || !jobId) {
+      alert('❌ Informations incomplètes.');
       return;
+    }
+    
+    // ⚠️ Vérifier les limites (comme dans staging)
+    const limit = getRegenerationLimit(auth.edition);
+    const count = getRegenerationCount(jobId);
+    const remaining = limit - count;
+    
+    if (auth.edition === 'free' || auth.edition.startsWith('free')) {
+      // Free : afficher AgiloGate
+      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+        window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
+      } else {
+        alert('🔒 Fonctionnalité Premium — disponible en Pro/Business.');
+      }
+      return;
+    }
+    
+    if (count >= limit) {
+      alert(`⚠️ Limite atteinte\n\n${count}/${limit} régénérations utilisées.`);
+      return;
+    }
+    
+    // ⚠️ Vérifier que le summary a été demandé (comme dans staging)
+    const requested = await wasSummaryEverRequested(jobId, auth);
+    if (!requested) {
+      alert('⚠️ Aucun compte-rendu initial demandé pour cet audio.');
+      return;
+    }
+    
+    // ⚠️ CONFIRMATION (comme dans staging)
+    const ok = confirm(`Remplacer le compte-rendu actuel ?\n\n${remaining}/${limit} régénération${remaining>1?'s':''} restante${remaining>1?'s':''}.`);
+    if (!ok) return;
+    
+    // Hash avant régénération (comme dans staging)
+    let oldHash = '';
+    try {
+      const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, null);
+      if (r.ok) {
+        const html = String(r.payload||'');
+        if (!isBlankHtml(html) && !looksLikeNotReady(html)) {
+          oldHash = getContentHash(html);
+          log('Hash ancien compte-rendu:', oldHash.substring(0, 50) + '...');
+        }
+      }
+    } catch (e) {
+      log('Pas d\'ancien compte-rendu ou erreur:', e);
     }
     
     __isGenerating = true;
@@ -420,22 +605,10 @@
         if (btnText) btnText.textContent = 'Génération…';
       }
       
-      // Récupérer le hash de l'ancien compte-rendu
-      let oldHash = '';
-      try {
-        const oldResult = await getSummary(jobId, auth, null);
-        if (oldResult.ok && oldResult.html) {
-          oldHash = getContentHash(oldResult.html);
-          log('Hash ancien compte-rendu:', oldHash.substring(0, 50) + '...');
-        }
-      } catch (e) {
-        log('Pas d\'ancien compte-rendu ou erreur:', e);
-      }
-      
-      // Afficher le loader
+      // Afficher le loader IMMÉDIATEMENT (comme dans staging)
       showSummaryLoading();
       
-      // Appel API redoSummary
+      // Appel API redoSummary (comme dans staging)
       log('🚀 Appel API redoSummary', { jobId, edition: auth.edition });
       const fd = new FormData();
       fd.append('username', auth.username);
@@ -457,10 +630,14 @@
         return;
       }
       
-      log('✅ API redoSummary OK - Début polling');
+      log('✅ API redoSummary OK - Incrémentation compteur');
+      incrementRegenerationCount(jobId, auth.edition);
+      if (window.toast) window.toast('✅ Régénération lancée');
       
-      // Poller jusqu'au nouveau compte-rendu (hash différent)
+      // ⚠️ POLLER jusqu'à READY + nouveau hash (comme dans staging)
+      log('⏳ Attente génération nouveau compte-rendu...');
       const signal = new AbortController();
+      
       const result = await pollSummaryUntilReady(jobId, auth, {
         oldHash,
         max: MAX_POLL,
@@ -473,9 +650,9 @@
           htmlLength: result.html.length
         });
         
-        // Afficher le nouveau compte-rendu
+        // ⚠️ AFFICHER LE NOUVEAU COMPTE-RENDU DIRECTEMENT (comme dans staging)
         const summaryEditor = byId('summaryEditor') || byId('ag-summary') || $('[data-editor="summary"]');
-        if (summaryEditor) {
+        if (summaryEditor && result.html) {
           hideSummaryLoading();
           
           // Nettoyer le HTML (sécurité)
@@ -504,7 +681,7 @@
           
           if (window.toast) window.toast('✅ Compte-rendu régénéré avec succès');
         } else {
-          // Fallback: recharger la page
+          // Fallback: recharger la page avec cache-buster
           const url = new URL(location.href);
           url.searchParams.set('tab', 'summary');
           url.searchParams.set('_regen', Date.now().toString());
@@ -532,23 +709,17 @@
     }
   }
   
-  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC APRÈS TOUTES LES DÉFINITIONS
-  // Pour garantir que toutes les fonctions sont disponibles
-  if (!window.__agiloRelanceSimpleClickBound) {
+  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC (EXACTEMENT COMME DANS STAGING)
+  function bindRelanceClick() {
+    if (window.__agiloRelanceSimpleClickBound) return;
     window.__agiloRelanceSimpleClickBound = true;
-    console.log('[AGILO:RELANCE-SIMPLE] ⚡ Attachement du gestionnaire de clic');
+    console.log('[AGILO:RELANCE-SIMPLE] ⚡ Attachement gestionnaire de clic (comme staging)');
     
-    document.addEventListener('click', async (e) => {
+    document.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
       if (!btn) return;
       
-      console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer', {
-        btn: btn,
-        disabled: btn.disabled,
-        hasForceHide: btn.classList.contains('agilo-force-hide'),
-        visible: window.getComputedStyle(btn).display !== 'none',
-        hasDataAction: btn.hasAttribute('data-action')
-      });
+      console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer');
       
       // Vérifier que le bouton n'est pas caché
       if (btn.classList.contains('agilo-force-hide')) {
@@ -573,30 +744,11 @@
       e.stopPropagation();
       console.log('[AGILO:RELANCE-SIMPLE] ✅ Clic validé - Lancement régénération...');
       
-      // Lancer la régénération (avec confirmation)
-      const root = byId('editorRoot');
-      const jobId = root?.dataset.jobId || new URLSearchParams(location.search).get('jobId');
-      if (!jobId) {
-        console.error('[AGILO:RELANCE-SIMPLE] ❌ Job ID introuvable');
-        alert('❌ Job ID introuvable');
-        return;
-      }
-      
-      console.log('[AGILO:RELANCE-SIMPLE] Job ID trouvé:', jobId);
-      
-      const auth = await ensureAuth();
-      if (!auth.username || !auth.token) {
-        console.error('[AGILO:RELANCE-SIMPLE] ❌ Authentification manquante', { username: !!auth.username, token: !!auth.token });
-        alert('❌ Authentification manquante');
-        return;
-      }
-      
-      console.log('[AGILO:RELANCE-SIMPLE] ✅ Auth OK - Appel relancerCompteRendu');
-      
-      await relancerCompteRendu(jobId, auth);
-    }, { passive: false }); // Comme dans staging
+      // ⚠️ APPELER DIRECTEMENT relancerCompteRendu() SANS PARAMÈTRES (comme dans staging)
+      relancerCompteRendu();
+    }, { passive: false }); // Exactement comme dans staging
     
-    console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic attaché au document');
+    console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic attaché');
   }
   
   // Démarrer
