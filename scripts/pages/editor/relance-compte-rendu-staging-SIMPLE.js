@@ -4,12 +4,26 @@
    2. Si message d'erreur dans summaryEditor → CACHER
    3. Sinon → AFFICHER
    4. Régénération avec polling jusqu'au NOUVEAU compte-rendu (hash différent)
+   
+   ⚠️ NON-BLOQUANT : Utilise setTimeout pour ne pas bloquer le chargement
 */
 
 (function () {
   'use strict';
   
-  console.log('[AGILO:RELANCE-SIMPLE] Script chargé');
+  // ⚠️ NE PAS BLOQUER - Attendre que la page soit prête
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => start(), 100);
+    }, { once: true });
+    return;
+  }
+  
+  // Si déjà chargé, attendre un peu pour ne pas bloquer
+  setTimeout(() => start(), 50);
+  
+  function start() {
+  console.log('[AGILO:RELANCE-SIMPLE] Script démarré');
   
   const DEBUG = false; // Désactivé par défaut pour moins de lag (mettre à true pour debug)
   const log = (...a) => { if (DEBUG) console.log('[AGILO:RELANCE-SIMPLE]', ...a); };
@@ -593,7 +607,7 @@
     }
   }
   
-  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC IMMÉDIATEMENT (mais de façon non-bloquante)
+  // ⚠️ ATTACHER LE GESTIONNAIRE DE CLIC IMMÉDIATEMENT
   attachClickHandler();
   
   // Démarrer l'initialisation (non-bloquante)
@@ -608,6 +622,6 @@
     }
   }, 1000);
   
-  } // Fin de startScript()
+  } // Fin de start()
 })();
 
