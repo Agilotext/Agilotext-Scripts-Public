@@ -759,25 +759,36 @@
       }
     });
     
+    // Observer les changements de summaryEmpty (optimisé avec debounce)
     const root = document.querySelector('#editorRoot');
     if (root) {
+      let debounceTimer;
       const observer = new MutationObserver(() => {
-        log('Changement summaryEmpty détecté');
-        updateButtonVisibility();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          log('Changement summaryEmpty détecté');
+          updateButtonVisibility();
+        }, 100); // Debounce 100ms pour éviter appels multiples
       });
       observer.observe(root, { attributes: true, attributeFilter: ['data-summary-empty'] });
     }
     
+    // Observer les changements dans summaryEditor (optimisé avec debounce)
     const summaryEl = document.querySelector('#summaryEditor');
     if (summaryEl) {
+      let debounceTimer;
       const observer = new MutationObserver(() => {
-        log('Changement DOM summaryEditor détecté');
-        updateButtonVisibility();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          log('Changement DOM summaryEditor détecté');
+          updateButtonVisibility();
+        }, 150); // Debounce 150ms pour éviter appels multiples
       });
-      observer.observe(summaryEl, { childList: true, subtree: true });
+      observer.observe(summaryEl, { childList: true, subtree: true, characterData: true });
     }
     
-    setInterval(onJobIdChange, 1000);
+    // Vérification périodique du jobId (changement d'audio) - optimisé pour moins de charge
+    setInterval(onJobIdChange, 2000); // Toutes les 2 secondes au lieu de 1
     
     setTimeout(async () => {
       try {
