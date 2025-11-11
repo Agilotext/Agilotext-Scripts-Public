@@ -799,9 +799,20 @@
     console.log('[AGILO:RELANCE] ========================================');
     
     // ⚠️ NOUVEAU : Délai initial après redoSummary pour laisser le backend démarrer la régénération
+    // ⚠️ IMPORTANT : Au moins 30 secondes car le backend a besoin de temps pour traiter redoSummary
     if (waitForPending) {
-      console.log('[AGILO:RELANCE] ⏳ Délai initial de 3 secondes pour laisser le backend démarrer la régénération...');
-      await new Promise(r => setTimeout(r, 3000));
+      const initialDelay = 30000; // 30 secondes
+      console.log(`[AGILO:RELANCE] ⏳ Délai initial de ${initialDelay/1000} secondes pour laisser le backend démarrer la régénération...`);
+      console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary et mettre à jour le statut');
+      console.log('[AGILO:RELANCE] ⏳ On attend avant de commencer le polling pour éviter de récupérer l\'ancien statut');
+      
+      // Afficher un compte à rebours toutes les 5 secondes
+      for (let remaining = initialDelay; remaining > 0; remaining -= 5000) {
+        const secondsLeft = Math.ceil(remaining / 1000);
+        console.log(`[AGILO:RELANCE] ⏳ Attente... ${secondsLeft} secondes restantes`);
+        await new Promise(r => setTimeout(r, Math.min(5000, remaining)));
+      }
+      
       console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
     }
     
@@ -1373,9 +1384,20 @@
           console.warn('[AGILO:RELANCE] ⚠️ Si summaryEditor n\'est pas trouvé à la fin, on rechargera la page');
         }
         
-        // ⚠️ NOUVEAU : Délai initial de 3 secondes après redoSummary pour laisser le backend démarrer
-        console.log('[AGILO:RELANCE] ⏳ Délai initial de 3 secondes après redoSummary pour laisser le backend démarrer la régénération...');
-        await new Promise(r => setTimeout(r, 3000));
+        // ⚠️ NOUVEAU : Délai initial de 30 secondes après redoSummary pour laisser le backend démarrer
+        // ⚠️ IMPORTANT : Le backend a besoin de temps pour traiter redoSummary et mettre à jour le statut
+        const initialDelay = 30000; // 30 secondes
+        console.log(`[AGILO:RELANCE] ⏳ Délai initial de ${initialDelay/1000} secondes après redoSummary...`);
+        console.log('[AGILO:RELANCE] ⏳ Nicolas a besoin de temps pour traiter redoSummary et mettre à jour le statut');
+        console.log('[AGILO:RELANCE] ⏳ On attend avant de commencer le polling pour éviter de récupérer l\'ancien statut');
+        
+        // Afficher un compte à rebours toutes les 5 secondes
+        for (let remaining = initialDelay; remaining > 0; remaining -= 5000) {
+          const secondsLeft = Math.ceil(remaining / 1000);
+          console.log(`[AGILO:RELANCE] ⏳ Attente... ${secondsLeft} secondes restantes`);
+          await new Promise(r => setTimeout(r, Math.min(5000, remaining)));
+        }
+        
         console.log('[AGILO:RELANCE] ✅ Délai initial terminé - Début du polling');
         
         const pollingStartTime = Date.now();
