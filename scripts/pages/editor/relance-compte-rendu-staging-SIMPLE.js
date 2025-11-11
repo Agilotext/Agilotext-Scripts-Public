@@ -268,21 +268,29 @@
    * Créer ou mettre à jour le badge de compteur
    */
   function updateRegenerationCounter(jobId, edition) {
+    console.log('[AGILO:RELANCE] 📊 updateRegenerationCounter appelée', { jobId, edition });
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
+    if (!btn) {
+      console.warn('[AGILO:RELANCE] ⚠️ Bouton relancer-compte-rendu non trouvé');
+      return;
+    }
+    console.log('[AGILO:RELANCE] ✅ Bouton trouvé, parent:', btn.parentElement);
     
     // Supprimer l'ancien compteur s'il existe
     const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
     if (oldCounter) {
+      console.log('[AGILO:RELANCE] 🗑️ Suppression ancien compteur');
       oldCounter.remove();
     }
     
     const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
     if (oldMessage) {
+      console.log('[AGILO:RELANCE] 🗑️ Suppression ancien message');
       oldMessage.remove();
     }
     
     const canRegen = canRegenerate(jobId, edition);
+    console.log('[AGILO:RELANCE] 📈 État régénération:', canRegen);
     
     // Utilisateur Free : Garder le bouton visible mais avec apparence désactivée
     // Le message premium est caché, le bouton affichera directement la pop-up au clic
@@ -345,6 +353,7 @@
     counter.setAttribute('aria-live', 'polite');
     counter.setAttribute('aria-atomic', 'true');
     btn.parentElement.appendChild(counter);
+    console.log('[AGILO:RELANCE] ✅ Compteur créé et ajouté:', counter.textContent);
   }
   
   /**
@@ -1272,9 +1281,12 @@
     // Initialiser les compteurs et limites
     const initLimits = async () => {
       try {
+        console.log('[AGILO:RELANCE] 🔄 Initialisation des compteurs...');
         const creds = await ensureCreds();
         const { edition, jobId } = creds;
+        console.log('[AGILO:RELANCE] 📊 Credentials récupérées:', { jobId, edition, email: creds.email ? '✓' : '✗' });
         if (jobId && edition) {
+          console.log('[AGILO:RELANCE] ✅ Appel updateRegenerationCounter...');
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
           
