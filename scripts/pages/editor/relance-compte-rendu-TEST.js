@@ -1079,8 +1079,9 @@
   
   /**
    * Mettre à jour la visibilité du bouton selon l'onglet actif
+   * ⚠️ MODIFIÉ : Vérifie maintenant si un compte-rendu existe avant d'afficher le bouton
    */
-  function updateButtonVisibility() {
+  async function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
@@ -1098,9 +1099,28 @@
     // Cacher aussi le compteur/message si le bouton est caché
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
     
-    // Gérer la visibilité
+    // ⚠️ PRIORITÉ 1 : Vérifier si un compte-rendu existe avant d'afficher le bouton
+    try {
+      const creds = await ensureCreds();
+      if (creds.jobId && creds.email && creds.token) {
+        const summaryExists = await checkSummaryExists(creds.jobId, creds.email, creds.token, creds.edition);
+        
+        // Si aucun compte-rendu n'existe, cacher le bouton et le compteur
+        if (!summaryExists) {
+          console.log('[AGILO:RELANCE] ⚠️ Aucun compte-rendu détecté - Bouton et compteur cachés');
+          btn.style.display = 'none';
+          if (counter) counter.style.display = 'none';
+          return; // Sortir immédiatement, ne pas continuer avec la logique normale
+        }
+      }
+    } catch (error) {
+      console.error('[AGILO:RELANCE] Erreur vérification compte-rendu:', error);
+      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
+    }
+    
+    // Gérer la visibilité (logique normale si compte-rendu existe)
     if (isSummaryTab) {
-      // Toujours visible sur l'onglet Compte-rendu (même si transcript non sauvegardé)
+      // Visible sur l'onglet Compte-rendu (compte-rendu existe)
       btn.style.display = 'flex';
       if (counter) counter.style.display = '';
       // Désactiver le bouton si transcript non sauvegardé
