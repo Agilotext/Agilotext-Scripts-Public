@@ -929,28 +929,13 @@
         headers: Object.fromEntries(response.headers.entries())
       });
       
-      let result;
-      try {
-        const responseText = await response.text();
-        try {
-          result = JSON.parse(responseText);
-        } catch (e) {
-          console.error('[AGILO:RELANCE] ❌ Erreur parsing JSON:', e);
-          console.error('[AGILO:RELANCE] Réponse texte brute:', responseText);
-          throw new Error('Réponse API invalide (non-JSON): ' + responseText.substring(0, 200));
-        }
-      } catch (e) {
-        console.error('[AGILO:RELANCE] ❌ Erreur lecture réponse:', e);
-        throw e;
-      }
+      const result = await response.json();
       
       // Logs détaillés pour le débogage
       console.log('[AGILO:RELANCE] Réponse API reçue:', {
         status: result.status,
         httpStatus: response.status,
         responseOk: response.ok,
-        edition,
-        jobId,
         result: result
       });
       
@@ -979,10 +964,6 @@
         console.log('[AGILO:RELANCE] Compteur incrémenté', {
           countAfter: getRegenerationCount(jobId)
         });
-        
-        // Mettre à jour l'état du bouton et les compteurs après régénération
-        updateRegenerationCounter(jobId, edition);
-        updateButtonState(jobId, edition);
         
         // Afficher un message de succès non-bloquant
         showSuccessMessage('Compte-rendu régénéré avec succès !');
@@ -1098,9 +1079,8 @@
   
   /**
    * Mettre à jour la visibilité du bouton selon l'onglet actif
-   * Vérifie aussi si le compte-rendu existe avant d'afficher le bouton
    */
-  async function updateButtonVisibility() {
+  function updateButtonVisibility() {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
@@ -1117,52 +1097,10 @@
     
     // Cacher aussi le compteur/message si le bouton est caché
     const counter = btn.parentElement.querySelector('.regeneration-counter, .regeneration-limit-message, .regeneration-premium-message');
-    const noSummaryMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
     
-    // ⚠️ IMPORTANT : Vérifier si le compte-rendu existe avant d'afficher le bouton
-    try {
-      const creds = await ensureCreds();
-      const { jobId, edition } = creds;
-      
-      if (jobId && edition) {
-        const summaryExists = await checkSummaryExists(jobId, creds.email, creds.token, edition);
-        
-        // Si le compte-rendu n'existe pas, CACHER le bouton complètement
-        if (!summaryExists) {
-          console.log('[AGILO:RELANCE] Compte-rendu inexistant - Bouton caché');
-          btn.style.display = 'none';
-          if (counter) counter.style.display = 'none';
-          // Afficher le message informatif si on est sur l'onglet Compte-rendu
-          if (isSummaryTab && !noSummaryMsg) {
-            const msg = document.createElement('div');
-            msg.className = 'regeneration-no-summary-message';
-            msg.innerHTML = `
-              <span style="font-size: 16px;">ℹ️</span>
-              <div>
-                <strong>Générez d'abord un compte-rendu</strong>
-                <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
-                  Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
-                </div>
-              </div>
-            `;
-            btn.parentElement.appendChild(msg);
-          }
-          return; // Ne pas continuer si le compte-rendu n'existe pas
-        } else {
-          // Si le compte-rendu existe, cacher le message informatif
-          if (noSummaryMsg) {
-            noSummaryMsg.remove();
-          }
-        }
-      }
-    } catch (e) {
-      console.error('[AGILO:RELANCE] Erreur vérification existence compte-rendu:', e);
-      // En cas d'erreur, on continue avec la logique normale (ne pas bloquer)
-    }
-    
-    // Gérer la visibilité selon l'onglet et l'état du transcript
+    // Gérer la visibilité
     if (isSummaryTab) {
-      // Visible sur l'onglet Compte-rendu (le compte-rendu existe, vérifié ci-dessus)
+      // Toujours visible sur l'onglet Compte-rendu (même si transcript non sauvegardé)
       btn.style.display = 'flex';
       if (counter) counter.style.display = '';
       // Désactiver le bouton si transcript non sauvegardé
@@ -1174,7 +1112,7 @@
         btn.title = 'Sauvegardez d\'abord le transcript pour régénérer le compte-rendu';
       }
     } else if (isTranscriptTab && transcriptModified) {
-      // Visible sur Transcription uniquement si transcript modifié ET sauvegardé ET compte-rendu existe
+      // Visible sur Transcription uniquement si transcript modifié ET sauvegardé
       btn.style.display = 'flex';
       if (counter) counter.style.display = '';
     } else {
@@ -1235,55 +1173,19 @@
   function init() {
     // Vérifier si déjà initialisé (éviter les doublons)
     if (window.__agiloRelanceInitialized) {
-      console.log('[AGILO:RELANCE] Script déjà initialisé, skip');
+      console.log('Script de relance déjà initialisé, skip');
       return;
     }
     window.__agiloRelanceInitialized = true;
-    console.log('[AGILO:RELANCE] ✅ Initialisation du script de relance');
     
-    // ⚠️ GESTIONNAIRE DE CLIC AMÉLIORÉ (avec logs pour debug)
     document.addEventListener('click', function(e) {
       const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
-      if (!btn) return;
-      
-      console.log('[AGILO:RELANCE] 🖱️ Clic détecté sur bouton Relancer', {
-        disabled: btn.disabled,
-        hasDisabledAttr: btn.hasAttribute('disabled'),
-        styleDisplay: window.getComputedStyle(btn).display,
-        styleVisibility: window.getComputedStyle(btn).visibility,
-        styleOpacity: window.getComputedStyle(btn).opacity
-      });
-      
-      // Ne pas bloquer si le bouton est visuellement désactivé mais pas vraiment disabled
-      // (pour Free users qui doivent voir la popup AgiloGate)
-      if (btn.hasAttribute('disabled') && btn.disabled === true) {
-        console.log('[AGILO:RELANCE] ⚠️ Bouton vraiment désactivé - Clic ignoré');
-        return;
+      if (btn && !btn.disabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        relancerCompteRendu();
       }
-      
-      e.preventDefault();
-      e.stopPropagation();
-      console.log('[AGILO:RELANCE] ✅ Clic validé - Lancement relancerCompteRendu()');
-      relancerCompteRendu();
-    }, { passive: false, capture: true }); // capture: true pour intercepter tôt
-    
-    // ⚠️ INITIALISER LES COMPTEURS AU DÉMARRAGE
-    setTimeout(async () => {
-      try {
-        const creds = await ensureCreds();
-        if (creds.jobId && creds.edition) {
-          console.log('[AGILO:RELANCE] 📊 Initialisation compteurs au démarrage', {
-            jobId: creds.jobId,
-            edition: creds.edition
-          });
-          updateRegenerationCounter(creds.jobId, creds.edition);
-          updateButtonState(creds.jobId, creds.edition);
-          await updateButtonVisibility();
-        }
-      } catch (e) {
-        console.error('[AGILO:RELANCE] Erreur initialisation compteurs:', e);
-      }
-    }, 1000);
+    }, { passive: false });
     
     // Détecter la sauvegarde du transcript
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
@@ -1304,8 +1206,7 @@
           window.toast('✅ Transcript sauvegardé - Vous pouvez régénérer le compte-rendu');
         }
         
-        // Mettre à jour la visibilité (asynchrone maintenant)
-        updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+        updateButtonVisibility();
         // Mettre à jour les compteurs après sauvegarde
         setTimeout(async () => {
           try {
@@ -1313,11 +1214,9 @@
             if (creds.jobId && creds.edition) {
               updateRegenerationCounter(creds.jobId, creds.edition);
               updateButtonState(creds.jobId, creds.edition);
-              // Re-vérifier la visibilité après mise à jour des compteurs
-              await updateButtonVisibility();
             }
           } catch (e) {
-            console.log('[AGILO:RELANCE] Erreur mise à jour compteurs:', e);
+            console.log('Erreur mise à jour compteurs:', e);
           }
         }, 500);
         // ⚠️ IMPORTANT : On ne réinitialise PAS le compteur lors de la sauvegarde
@@ -1351,16 +1250,14 @@
     const tabs = document.querySelectorAll('[role="tab"]');
     tabs.forEach(tab => {
       tab.addEventListener('click', function() {
-        setTimeout(() => {
-          updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
-        }, 100);
+        setTimeout(updateButtonVisibility, 100);
       });
     });
     
     const observer = new MutationObserver(function(mutations) {
       mutations.forEach(function(mutation) {
         if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
-          updateButtonVisibility().catch(e => console.error('[AGILO:RELANCE] Erreur updateButtonVisibility:', e));
+          updateButtonVisibility();
         }
       });
     });
@@ -1369,34 +1266,51 @@
       observer.observe(tab, { attributes: true });
     });
     
+    // Initialiser la visibilité (caché par défaut sauf si transcript sauvegardé)
+    updateButtonVisibility();
+    
     // Initialiser les compteurs et limites
     const initLimits = async () => {
       try {
         const creds = await ensureCreds();
         const { edition, jobId } = creds;
         if (jobId && edition) {
-          console.log('[AGILO:RELANCE] Initialisation limites:', { jobId, edition });
-          
-          // Mettre à jour les compteurs et l'état du bouton
           updateRegenerationCounter(jobId, edition);
           updateButtonState(jobId, edition);
           
-          // Mettre à jour la visibilité (vérifie aussi si le compte-rendu existe)
-          await updateButtonVisibility();
+          // Vérifier si un compte-rendu existe (pour désactiver le bouton si nécessaire)
+          const canRegen = await checkIfRegenerationPossible(jobId, edition);
+          if (!canRegen.possible && canRegen.reason === 'no-summary') {
+            const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+            if (btn) {
+              btn.disabled = true;
+              btn.setAttribute('aria-disabled', 'true');
+              btn.title = 'Générez d\'abord un compte-rendu via le formulaire d\'upload pour pouvoir le régénérer';
+              
+              // Ajouter un message informatif
+              const infoMsg = btn.parentElement.querySelector('.regeneration-no-summary-message');
+              if (!infoMsg) {
+                const msg = document.createElement('div');
+                msg.className = 'regeneration-no-summary-message';
+                msg.innerHTML = `
+                  <span style="font-size: 16px;">ℹ️</span>
+                  <div>
+                    <strong>Générez d'abord un compte-rendu</strong>
+                    <div style="font-size: 12px; margin-top: 2px; color: var(--agilo-dim, #525252);">
+                      Utilisez le formulaire d'upload avec l'option "Générer le compte-rendu" activée
+                    </div>
+                  </div>
+                `;
+                btn.parentElement.appendChild(msg);
+              }
+            }
+          }
           
-          // Logs pour debug Pro/Business
-          const canRegen = canRegenerate(jobId, edition);
-          console.log('[AGILO:RELANCE] État régénération:', {
-            allowed: canRegen.allowed,
-            reason: canRegen.reason,
-            count: canRegen.count,
-            limit: canRegen.limit,
-            remaining: canRegen.remaining,
-            edition
-          });
+          // Mettre à jour la visibilité après initialisation des compteurs
+          updateButtonVisibility();
         }
       } catch (e) {
-        console.error('[AGILO:RELANCE] Erreur initialisation limites:', e);
+        console.log('[AGILO:RELANCE] Limites non initialisées:', e);
       }
     };
     
@@ -1424,7 +1338,6 @@
         const currentJobId = pickJobId();
         if (currentJobId && currentJobId !== lastJobId) {
           lastJobId = currentJobId;
-          console.log('[AGILO:RELANCE] JobId changé (hashchange):', currentJobId);
           setTimeout(initLimits, 300);
         }
       });
@@ -1463,10 +1376,8 @@
     // Mettre à jour les compteurs quand on change d'onglet
     tabs.forEach(tab => {
       tab.addEventListener('click', function() {
-        setTimeout(async () => {
-          await initLimits();
-          // Re-vérifier la visibilité après changement d'onglet
-          await updateButtonVisibility();
+        setTimeout(() => {
+          initLimits();
         }, 200);
       });
     });
