@@ -951,8 +951,13 @@
             }
           } catch (error) {
             console.error('[AGILO:RELANCE] Erreur récupération nouveau compte-rendu:', error);
-            // On retourne quand même true car le statut est READY_SUMMARY_READY
-            return { ready: true, hash: null, content: null };
+            // ⚠️ IMPORTANT : Ne pas retourner ready:true si on n'a pas pu récupérer le contenu
+            // Continuer le polling pour réessayer
+            console.warn('[AGILO:RELANCE] ⚠️ Erreur lors de la récupération - Continuation du polling');
+            if (attempt < maxAttempts) {
+              await new Promise(r => setTimeout(r, delay));
+            }
+            continue;
           }
         }
         
@@ -1367,9 +1372,11 @@
         console.log('[AGILO:RELANCE] ⚠️ IMPORTANT: Le script NE DOIT PAS recharger la page avant READY_SUMMARY_READY');
         console.log('[AGILO:RELANCE] ========================================');
         
-        // S'assurer que le loader est bien affiché
+        // ⚠️ IMPORTANT : Afficher le loader AVANT le délai initial et le polling
+        // Le loader doit rester affiché pendant TOUTE la durée du processus
         console.log('[AGILO:RELANCE] 🔄 Affichage du loader...');
         showSummaryLoading();
+        console.log('[AGILO:RELANCE] ✅ Loader affiché - Il doit rester visible pendant tout le processus');
         
         // Vérifier que summaryEditor existe avant de commencer le polling
         const summaryEditorCheck = document.querySelector('#summaryEditor');
@@ -1500,10 +1507,65 @@
           }
         } else if (waitResult.ready) {
           // Le statut est READY_SUMMARY_READY mais on n'a pas pu récupérer le contenu
-          // Recharger la page avec cache-buster
+          // ⚠️ IMPORTANT : Ne PAS recharger immédiatement - Le compte-rendu peut encore être en cours de génération
+          // Attendre encore un peu et réessayer
           console.log('[AGILO:RELANCE] ⚠️ CAS 2: READY_SUMMARY_READY détecté mais contenu non récupéré');
           console.log('[AGILO:RELANCE] ⚠️ Le statut est READY mais receiveSummary n\'a pas retourné de contenu valide');
-          console.log('[AGILO:RELANCE] ⚠️ Rechargement avec cache-buster pour récupérer le nouveau compte-rendu');
+          console.log('[AGILO:RELANCE] ⚠️ Le compte-rendu est peut-être encore en cours de génération');
+          console.log('[AGILO:RELANCE] ⚠️ On attend encore 10 secondes puis on réessaye...');
+          
+          // Attendre encore 10 secondes
+          await new Promise(r => setTimeout(r, 10000));
+          
+          // Réessayer une dernière fois
+          console.log('[AGILO:RELANCE] 🔄 Nouvelle tentative de récupération du compte-rendu...');
+          try {
+            const retryUrl = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}&format=html`;
+            const retryResponse = await fetch(retryUrl, {
+              method: 'GET',
+              cache: 'no-store',
+              credentials: 'omit'
+            });
+            
+            if (retryResponse.ok) {
+              const retryText = await retryResponse.text();
+              if (retryText && retryText.length > 100 && 
+                  !retryText.includes('pas encore disponible') && 
+                  !retryText.includes('non publié')) {
+                // Afficher le compte-rendu directement
+                const summaryEditor = document.querySelector('#summaryEditor');
+                if (summaryEditor) {
+                  const tempDiv = document.createElement('div');
+                  tempDiv.innerHTML = retryText;
+                  tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+                  tempDiv.querySelectorAll('*').forEach(n => {
+                    [...n.attributes].forEach(a => {
+                      const name = a.name.toLowerCase();
+                      const val = String(a.value || '');
+                      if (name.startsWith('on') || /^javascript:/i.test(val)) {
+                        n.removeAttribute(a.name);
+                      }
+                    });
+                  });
+                  summaryEditor.innerHTML = tempDiv.innerHTML;
+                  const root = document.querySelector('#editorRoot');
+                  if (root) {
+                    root.dataset.summaryEmpty = '0';
+                  }
+                  hideSummaryLoading();
+                  setGeneratingState(false);
+                  showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
+                  console.log('[AGILO:RELANCE] ✅ Compte-rendu récupéré et affiché après nouvelle tentative');
+                  return; // Sortir de la fonction sans recharger
+                }
+              }
+            }
+          } catch (retryError) {
+            console.error('[AGILO:RELANCE] ❌ Erreur lors de la nouvelle tentative:', retryError);
+          }
+          
+          // Si la nouvelle tentative a échoué, recharger la page avec cache-buster
+          console.log('[AGILO:RELANCE] ⚠️ Nouvelle tentative échouée - Rechargement avec cache-buster');
           const url = new URL(window.location.href);
           url.searchParams.set('tab', 'summary');
           url.searchParams.set('_regen', Date.now().toString());
