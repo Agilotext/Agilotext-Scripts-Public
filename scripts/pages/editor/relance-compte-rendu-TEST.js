@@ -1542,62 +1542,6 @@
           
           alert('⚠️ Le compte-rendu prend plus de temps que prévu.\n\nLe statut est READY mais le nouveau compte-rendu n\'est pas encore disponible.\n\nVeuillez recharger la page dans quelques instants pour voir le nouveau compte-rendu.');
           return; // Sortir sans recharger
-          
-          // Réessayer une dernière fois
-          console.log('[AGILO:RELANCE] 🔄 Nouvelle tentative de récupération du compte-rendu...');
-          try {
-            const retryUrl = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(String(jobId))}&username=${encodeURIComponent(String(email))}&token=${encodeURIComponent(String(token))}&edition=${encodeURIComponent(String(edition))}&format=html`;
-            const retryResponse = await fetch(retryUrl, {
-              method: 'GET',
-              cache: 'no-store',
-              credentials: 'omit'
-            });
-            
-            if (retryResponse.ok) {
-              const retryText = await retryResponse.text();
-              if (retryText && retryText.length > 100 && 
-                  !retryText.includes('pas encore disponible') && 
-                  !retryText.includes('non publié')) {
-                // Afficher le compte-rendu directement
-                const summaryEditor = document.querySelector('#summaryEditor');
-                if (summaryEditor) {
-                  const tempDiv = document.createElement('div');
-                  tempDiv.innerHTML = retryText;
-                  tempDiv.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
-                  tempDiv.querySelectorAll('*').forEach(n => {
-                    [...n.attributes].forEach(a => {
-                      const name = a.name.toLowerCase();
-                      const val = String(a.value || '');
-                      if (name.startsWith('on') || /^javascript:/i.test(val)) {
-                        n.removeAttribute(a.name);
-                      }
-                    });
-                  });
-                  summaryEditor.innerHTML = tempDiv.innerHTML;
-                  const root = document.querySelector('#editorRoot');
-                  if (root) {
-                    root.dataset.summaryEmpty = '0';
-                  }
-                  hideSummaryLoading();
-                  setGeneratingState(false);
-                  showSuccessMessage('✅ Compte-rendu régénéré avec succès !');
-                  console.log('[AGILO:RELANCE] ✅ Compte-rendu récupéré et affiché après nouvelle tentative');
-                  return; // Sortir de la fonction sans recharger
-                }
-              }
-            }
-          } catch (retryError) {
-            console.error('[AGILO:RELANCE] ❌ Erreur lors de la nouvelle tentative:', retryError);
-          }
-          
-          // Si la nouvelle tentative a échoué, recharger la page avec cache-buster
-          console.log('[AGILO:RELANCE] ⚠️ Nouvelle tentative échouée - Rechargement avec cache-buster');
-          const url = new URL(window.location.href);
-          url.searchParams.set('tab', 'summary');
-          url.searchParams.set('_regen', Date.now().toString());
-          url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-          console.log('[AGILO:RELANCE] 🔄 Rechargement vers:', url.toString());
-          window.location.href = url.toString();
         } else {
           // Timeout ou erreur
           console.warn('[AGILO:RELANCE] ⚠️ CAS 3: Compte-rendu pas prêt après polling');
