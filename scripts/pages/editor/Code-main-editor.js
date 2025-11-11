@@ -1071,12 +1071,23 @@ window.attachAudioSync = attachAudioSync;
       const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, signal);
       if (r.ok){
         const safe = sanitizeHtml(r.payload||'');
-        if (!isBlankHtml(safe)) return { ok:true, html: safe };
+        if (!isBlankHtml(safe)) {
+          // ⚠️ AMÉLIORATION : S'assurer que le loader est caché quand on trouve le compte-rendu
+          hideSummaryLoading();
+          return { ok:true, html: safe };
+        }
       } else if (!/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(String(r.code||''))) {
+        // ⚠️ AMÉLIORATION : Cacher le loader en cas d'erreur définitive
+        hideSummaryLoading();
         return r;
+      }
+      // ⚠️ AMÉLIORATION : Afficher le loader si pas déjà affiché après quelques tentatives
+      if (i === 2 && editors.summary && !editors.summary.querySelector('.summary-loading-indicator')) {
+        showSummaryLoading();
       }
       await wait(baseDelay*Math.pow(1.3,i));
     }
+    // ⚠️ AMÉLIORATION : Ne pas cacher le loader si timeout (peut être encore en cours)
     return { ok:false, code:'READY_SUMMARY_PENDING' };
   }
 
@@ -1205,34 +1216,47 @@ try {
 let summaryEmpty = true;
 
 // ⚠️ NOUVEAU : Vérifier le statut avec getTranscriptStatus pour savoir si le compte-rendu est en cours
+// ⚠️ OPTIMISATION : Ne vérifier que si on n'a pas déjà le compte-rendu
 let transcriptStatus = null;
-try {
-  transcriptStatus = await getTranscriptStatus(id, auth);
-  if (window.AGILO_DEBUG) console.log('[Editor] Statut transcript:', transcriptStatus);
-} catch (e) {
-  if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus:', e);
-}
+let isSummaryPending = false;
 
-// Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
-const isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
-if (isSummaryPending && editors.summary) {
-  showSummaryLoading();
+// Vérifier le statut seulement si nécessaire (pas de compte-rendu reçu ou vide)
+const needsStatusCheck = !(sRes.status === 'fulfilled' && sRes.value.ok && !isBlankHtml(sanitizeHtml(sRes.value.payload || '')));
+
+if (needsStatusCheck) {
+  try {
+    transcriptStatus = await getTranscriptStatus(id, auth);
+    if (window.AGILO_DEBUG) console.log('[Editor] Statut transcript:', transcriptStatus);
+    isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
+    
+    // Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
+    if (isSummaryPending && editors.summary) {
+      showSummaryLoading();
+    }
+  } catch (e) {
+    if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus:', e);
+  }
 }
 
 if (sRes.status === 'fulfilled' && sRes.value.ok) {
   let cleaned = sanitizeHtml(sRes.value.payload);
   if (isBlankHtml(cleaned)) {
-    // Si le statut est PENDING, on continue le polling avec le loader affiché
-    if (isSummaryPending) {
-      hideSummaryLoading(); // Cacher le loader avant de commencer le polling (il sera réaffiché si nécessaire)
+    // Si le statut est PENDING, garder le loader affiché pendant le polling
+    if (!isSummaryPending && editors.summary) {
+      showSummaryLoading(); // Afficher le loader si pas déjà affiché
     }
+    
     const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
     if (polled.ok) {
       cleaned = polled.html || '';
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
-    } else if (isSummaryPending) {
-      // Si toujours en cours après polling, réafficher le loader
-      showSummaryLoading();
+    } else if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
+      // Si toujours en cours après polling, garder le loader affiché
+      if (editors.summary && !editors.summary.querySelector('.summary-loading-indicator')) {
+        showSummaryLoading();
+      }
+    } else {
+      hideSummaryLoading(); // Cacher le loader en cas d'erreur
     }
   }
   if (!isBlankHtml(cleaned)) {
@@ -1258,8 +1282,21 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
 
   if (looksPending || httpLooksPending) {
     // Si le statut est PENDING, afficher le loader Lottie
-    if (isSummaryPending && editors.summary) {
-      showSummaryLoading();
+    if (!isSummaryPending && editors.summary) {
+      // Vérifier à nouveau le statut si on ne l'a pas déjà fait
+      if (!transcriptStatus) {
+        try {
+          transcriptStatus = await getTranscriptStatus(id, auth);
+          isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
+        } catch (e) {
+          if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus (retry):', e);
+        }
+      }
+      if (isSummaryPending || looksPending) {
+        showSummaryLoading();
+      }
+    } else if (isSummaryPending && editors.summary) {
+      showSummaryLoading(); // S'assurer que le loader est affiché
     }
     
     const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
@@ -1268,10 +1305,17 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
       if (editors.summary) editors.summary.innerHTML = polled.html;
     } else if (editors.summary) {
-      hideSummaryLoading(); // Cacher le loader si erreur
-      const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
-      editors.summary.innerHTML = '';
-      editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
+      // Si toujours en cours, garder le loader, sinon afficher l'erreur
+      if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
+        if (!editors.summary.querySelector('.summary-loading-indicator')) {
+          showSummaryLoading();
+        }
+      } else {
+        hideSummaryLoading(); // Cacher le loader si erreur définitive
+        const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
+        editors.summary.innerHTML = '';
+        editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
+      }
     }
   } else if (editors.summary) {
     hideSummaryLoading(); // Cacher le loader en cas d'erreur
@@ -1287,11 +1331,16 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
       }
     }catch(e){
       if (e?.name === 'AbortError') return;
+      hideSummaryLoading(); // S'assurer que le loader est caché en cas d'erreur
       const errBox = renderAlert("Erreur de chargement.", e?.message || '');
       if (editors.transcript) editors.transcript.replaceChildren(errBox.cloneNode(true));
       if (editors.summary)    editors.summary.replaceChildren(errBox.cloneNode(true));
       if (window.AGILO_DEBUG) console.error(e);
 		} finally {
+		  // S'assurer que le loader est toujours caché à la fin (sauf si vraiment en cours)
+		  if (!isSummaryPending) {
+		    hideSummaryLoading();
+		  }
 		  clearTimeout(__wdTimer);
 		  __wdToken++;
 		
