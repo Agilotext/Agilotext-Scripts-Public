@@ -2082,9 +2082,97 @@
     }
   };
   
+  /**
+   * Fonction de test console pour récupérer les credentials automatiquement
+   * Usage: testGetCreds()
+   */
+  window.testGetCreds = async function() {
+    console.log('🧪 TEST - Récupération automatique des credentials...');
+    try {
+      const creds = await ensureCreds();
+      console.log('✅ Credentials récupérés:', {
+        email: creds.email ? '✓ (' + creds.email.length + ' chars)' : '✗',
+        token: creds.token ? '✓ (' + creds.token.length + ' chars)' : '✗',
+        edition: creds.edition || '✗',
+        jobId: creds.jobId || '✗'
+      });
+      return creds;
+    } catch (error) {
+      console.error('❌ Erreur récupération credentials:', error);
+      return null;
+    }
+  };
+  
+  /**
+   * Fonction de test console pour tester getTranscriptStatus avec credentials automatiques
+   * Usage: testGetTranscriptStatusAuto()
+   */
+  window.testGetTranscriptStatusAuto = async function() {
+    console.log('🧪 TEST MANUEL getTranscriptStatus (credentials automatiques)');
+    
+    const creds = await window.testGetCreds();
+    if (!creds || !creds.email || !creds.token || !creds.jobId || !creds.edition) {
+      console.error('❌ Credentials incomplets !');
+      return null;
+    }
+    
+    return await testGetTranscriptStatus(creds.jobId, creds.email, creds.token, creds.edition);
+  };
+  
+  /**
+   * Fonction de test console pour tester le polling complet avec credentials automatiques
+   * Usage: testPollingSummaryAuto()
+   */
+  window.testPollingSummaryAuto = async function() {
+    console.log('🧪 TEST MANUEL - Polling complet pour READY_SUMMARY_READY (credentials automatiques)');
+    
+    const creds = await window.testGetCreds();
+    if (!creds || !creds.email || !creds.token || !creds.jobId || !creds.edition) {
+      console.error('❌ Credentials incomplets !');
+      return null;
+    }
+    
+    console.log('⏳ Début du polling (max 10 tentatives, 2 secondes entre chaque)...');
+    const result = await waitForSummaryReady(creds.jobId, creds.email, creds.token, creds.edition, 10, 2000, '');
+    
+    console.log('📊 Résultat final:', result);
+    
+    if (result.ready && result.content) {
+      console.log('✅ SUCCÈS ! Compte-rendu prêt avec contenu');
+      console.log('Longueur du contenu:', result.content.length);
+      console.log('Hash:', result.hash);
+    } else if (result.ready) {
+      console.log('⚠️ Statut READY mais pas de contenu récupéré');
+    } else {
+      console.log('❌ Échec:', result.error);
+    }
+    
+    return result;
+  };
+  
+  /**
+   * Fonction de test console pour tester redoSummary + polling avec credentials automatiques
+   * Usage: testRedoAndPollAuto()
+   */
+  window.testRedoAndPollAuto = async function() {
+    console.log('🧪 TEST MANUEL - redoSummary + polling complet (credentials automatiques)');
+    
+    const creds = await window.testGetCreds();
+    if (!creds || !creds.email || !creds.token || !creds.jobId || !creds.edition) {
+      console.error('❌ Credentials incomplets !');
+      return null;
+    }
+    
+    return await testRedoAndPoll(creds.jobId, creds.email, creds.token, creds.edition);
+  };
+  
   window.relancerCompteRendu = relancerCompteRendu;
   window.openSummaryTab = openSummaryTab;
   window.getTranscriptStatus = getTranscriptStatus;
   window.waitForSummaryReady = waitForSummaryReady;
+  window.testGetTranscriptStatus = testGetTranscriptStatus;
+  window.testPollingSummary = testPollingSummary;
+  window.testRedoAndPoll = testRedoAndPoll;
+  window.ensureCreds = ensureCreds;
 })();
 
