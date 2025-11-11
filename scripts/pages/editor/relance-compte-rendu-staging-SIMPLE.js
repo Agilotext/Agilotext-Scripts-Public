@@ -162,37 +162,53 @@
       setTimeout(updateVisibility, 1500);
     });
     
-    // ⚠️ GESTIONNAIRE DE CLIC SUR LE BOUTON RÉGÉNÉRER
-    const btn = $('[data-action="relancer-compte-rendu"]');
-    if (btn && !btn.__agiloClickBound) {
-      btn.__agiloClickBound = true;
-      btn.addEventListener('click', async (e) => {
+    // ⚠️ GESTIONNAIRE DE CLIC SUR LE BOUTON RÉGÉNÉRER (DÉLÉGATION D'ÉVÉNEMENTS)
+    // Utiliser la délégation pour fonctionner même si le bouton est créé dynamiquement
+    if (!window.__agiloRelanceSimpleClickBound) {
+      window.__agiloRelanceSimpleClickBound = true;
+      document.addEventListener('click', async (e) => {
+        // Vérifier si le clic est sur le bouton ou un de ses enfants
+        const btn = e.target.closest('[data-action="relancer-compte-rendu"]');
+        if (!btn) return; // Pas notre bouton
+        
+        console.log('[AGILO:RELANCE-SIMPLE] 🖱️ Clic détecté sur bouton Régénérer', {
+          disabled: btn.disabled,
+          hasForceHide: btn.classList.contains('agilo-force-hide'),
+          visible: window.getComputedStyle(btn).display !== 'none'
+        });
+        
         e.preventDefault();
         e.stopPropagation();
         
         if (btn.disabled || btn.classList.contains('agilo-force-hide')) {
-          log('⚠️ Bouton désactivé ou caché - Ignorer clic');
+          console.warn('[AGILO:RELANCE-SIMPLE] ⚠️ Bouton désactivé ou caché - Ignorer clic');
           return;
         }
         
         const root = byId('editorRoot');
         const jobId = root?.dataset.jobId || new URLSearchParams(location.search).get('jobId');
         if (!jobId) {
+          console.error('[AGILO:RELANCE-SIMPLE] ❌ Job ID introuvable');
           alert('❌ Job ID introuvable');
           return;
         }
         
+        console.log('[AGILO:RELANCE-SIMPLE] 🚀 Démarrage régénération', { jobId });
+        
         // Récupérer auth
         const auth = await ensureAuth();
         if (!auth.username || !auth.token) {
+          console.error('[AGILO:RELANCE-SIMPLE] ❌ Authentification manquante', { username: !!auth.username, token: !!auth.token });
           alert('❌ Authentification manquante');
           return;
         }
         
+        console.log('[AGILO:RELANCE-SIMPLE] ✅ Auth OK - Lancement régénération');
+        
         // Lancer la régénération
         await relancerCompteRendu(jobId, auth);
-      });
-      log('✅ Gestionnaire de clic ajouté au bouton');
+      }, { passive: false, capture: true }); // capture: true pour intercepter avant les autres handlers
+      console.log('[AGILO:RELANCE-SIMPLE] ✅ Gestionnaire de clic (délégation) ajouté au document');
     }
   }
   
