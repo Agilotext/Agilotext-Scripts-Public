@@ -1039,6 +1039,12 @@ window.attachAudioSync = attachAudioSync;
       loadingSubtitle.textContent = 'Cela peut prendre quelques instants';
       
       summaryEditor.innerHTML = '';
+      // Réinitialiser les attributs de lecture seule pendant le chargement
+      summaryEditor.removeAttribute('contenteditable');
+      summaryEditor.removeAttribute('readonly');
+      summaryEditor.style.userSelect = '';
+      summaryEditor.style.cursor = '';
+      summaryEditor.classList.remove('ag-summary-readonly');
       summaryEditor.appendChild(loaderContainer);
       loaderContainer.appendChild(lottieElement);
       loaderContainer.appendChild(loadingText);
@@ -1311,6 +1317,12 @@ if (needsStatusCheck) {
       if (simpleLoader) {
         // Remplacer par le loader Lottie
         editors.summary.innerHTML = '';
+        // Réinitialiser les attributs de lecture seule (pendant le chargement)
+        editors.summary.removeAttribute('contenteditable');
+        editors.summary.removeAttribute('readonly');
+        editors.summary.style.userSelect = '';
+        editors.summary.style.cursor = '';
+        editors.summary.classList.remove('ag-summary-readonly');
       }
       showSummaryLoading();
     }
@@ -1344,13 +1356,27 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
   if (!isBlankHtml(cleaned)) {
     summaryEmpty = false;
     hideSummaryLoading(); // S'assurer que le loader est caché
-    if (editors.summary) editors.summary.innerHTML = cleaned;
+    if (editors.summary) {
+      editors.summary.innerHTML = cleaned;
+      // ⚠️ RENDRE LE RÉSUMÉ EN LECTURE SEULE (demandé par Nicolas)
+      editors.summary.setAttribute('contenteditable', 'false');
+      editors.summary.setAttribute('readonly', 'true');
+      editors.summary.style.userSelect = 'text'; // Permettre la sélection pour copier
+      editors.summary.style.cursor = 'default';
+      editors.summary.classList.add('ag-summary-readonly');
+    }
   } else if (editors.summary && !isSummaryPending) {
     // Afficher le loader seulement si pas déjà affiché (statut PENDING)
     if (!editors.summary.querySelector('.summary-loading-indicator')) {
       editors.summary.replaceChildren(
         renderAlert("Résumé en préparation…", "Le serveur n'a pas encore publié le HTML du compte-rendu.")
       );
+      // Réinitialiser les attributs de lecture seule si pas de contenu
+      editors.summary.removeAttribute('contenteditable');
+      editors.summary.removeAttribute('readonly');
+      editors.summary.style.userSelect = '';
+      editors.summary.style.cursor = '';
+      editors.summary.classList.remove('ag-summary-readonly');
     }
   }
 
@@ -1385,7 +1411,15 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     if (polled.ok && !isBlankHtml(polled.html)) {
       summaryEmpty = false;
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
-      if (editors.summary) editors.summary.innerHTML = polled.html;
+      if (editors.summary) {
+        editors.summary.innerHTML = polled.html;
+        // ⚠️ RENDRE LE RÉSUMÉ EN LECTURE SEULE
+        editors.summary.setAttribute('contenteditable', 'false');
+        editors.summary.setAttribute('readonly', 'true');
+        editors.summary.style.userSelect = 'text';
+        editors.summary.style.cursor = 'default';
+        editors.summary.classList.add('ag-summary-readonly');
+      }
     } else if (editors.summary) {
       // Si toujours en cours, garder le loader, sinon afficher l'erreur
       if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
