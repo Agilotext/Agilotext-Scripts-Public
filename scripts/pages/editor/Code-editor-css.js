@@ -571,6 +571,27 @@
   box-sizing: border-box;
 }
 
+/* ⚠️ RÉSUMÉ EN LECTURE SEULE (demandé par Nicolas) */
+#summaryEditor.ag-summary-readonly,
+#ag-summary.ag-summary-readonly,
+[data-editor="summary"].ag-summary-readonly{
+  contenteditable: false !important;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  cursor: default;
+  pointer-events: auto; /* Permettre la sélection et le clic pour copier */
+}
+
+/* Empêcher l'édition même si contenteditable est activé ailleurs */
+#summaryEditor.ag-summary-readonly *,
+#ag-summary.ag-summary-readonly *,
+[data-editor="summary"].ag-summary-readonly *{
+  contenteditable: false !important;
+  pointer-events: auto; /* Permettre la sélection du texte */
+}
+
 /* Tableaux dans le compte-rendu */
 #summaryEditor table,
 #ag-summary table,
