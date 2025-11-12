@@ -1431,6 +1431,12 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
         hideSummaryLoading();
         const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
         editors.summary.innerHTML = '';
+        // Réinitialiser les attributs de lecture seule en cas d'erreur
+        editors.summary.removeAttribute('contenteditable');
+        editors.summary.removeAttribute('readonly');
+        editors.summary.style.userSelect = '';
+        editors.summary.style.cursor = '';
+        editors.summary.classList.remove('ag-summary-readonly');
         editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
       }
     }
