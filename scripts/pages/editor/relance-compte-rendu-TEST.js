@@ -693,12 +693,51 @@
       }
     });
     
+    // ⚠️ CORRECTION : Détecter l'onglet actif au chargement ET au changement
+    function checkActiveTabAndUpdate() {
+      const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+      if (activeTab) {
+        updateButtonVisibility();
+        
+        // ⚠️ IMPORTANT : Cacher le bouton "Sauvegarder" si on est sur l'onglet Compte-rendu
+        const saveBtn = document.querySelector('[data-action="save-transcript"]');
+        if (saveBtn && activeTab.id === 'tab-summary') {
+          saveBtn.style.display = 'none';
+          saveBtn.style.visibility = 'hidden';
+        } else if (saveBtn && activeTab.id === 'tab-transcript') {
+          saveBtn.style.display = '';
+          saveBtn.style.visibility = '';
+        }
+      }
+    }
+    
+    // Vérifier immédiatement au chargement
+    checkActiveTabAndUpdate();
+    
+    // Écouter les clics sur les onglets
     const tabs = document.querySelectorAll('[role="tab"]');
     tabs.forEach(tab => {
-      tab.addEventListener('click', () => setTimeout(updateButtonVisibility, 100));
+      tab.addEventListener('click', () => {
+        setTimeout(checkActiveTabAndUpdate, 100);
+      });
     });
     
-    updateButtonVisibility();
+    // ⚠️ AJOUT : MutationObserver pour détecter les changements d'onglets (même sans clic)
+    const tabObserver = new MutationObserver(function(mutations) {
+      mutations.forEach(function(mutation) {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
+          setTimeout(checkActiveTabAndUpdate, 50);
+        }
+      });
+    });
+    
+    tabs.forEach(tab => {
+      tabObserver.observe(tab, { attributes: true, attributeFilter: ['aria-selected'] });
+    });
+    
+    // Vérifier aussi après un court délai (au cas où les onglets ne sont pas encore initialisés)
+    setTimeout(checkActiveTabAndUpdate, 300);
+    setTimeout(checkActiveTabAndUpdate, 1000);
     
     // Initialiser les compteurs et limites (avec vérification compte-rendu)
     const initLimits = async () => {
