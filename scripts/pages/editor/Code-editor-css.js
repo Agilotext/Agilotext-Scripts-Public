@@ -462,6 +462,41 @@
   to{ transform:translateY(-50%) rotate(360deg) }
 }
 
+/* =====================================================================
+   CACHE BOUTON SAUVEGARDER SUR ONGLETS CONVERSATION ET COMPTE-RENDU
+   ===================================================================== */
+/* ✅ Cacher le bouton Sauvegarder quand l'onglet Conversation est actif */
+#tab-chat[aria-selected="true"] ~ * button[data-action="save-transcript"],
+#tab-chat[aria-selected="true"] ~ * .button.save,
+body:has(#tab-chat[aria-selected="true"]) button[data-action="save-transcript"],
+body:has(#tab-chat[aria-selected="true"]) .button.save,
+/* ✅ Cacher le bouton Sauvegarder quand l'onglet Compte-rendu est actif */
+#tab-summary[aria-selected="true"] ~ * button[data-action="save-transcript"],
+#tab-summary[aria-selected="true"] ~ * .button.save,
+body:has(#tab-summary[aria-selected="true"]) button[data-action="save-transcript"],
+body:has(#tab-summary[aria-selected="true"]) .button.save,
+/* ✅ Cacher via classe (fallback pour navigateurs sans :has) */
+button[data-action="save-transcript"].agilo-hide-save,
+.button.save.agilo-hide-save,
+/* ✅ Cacher quand le panneau Conversation est visible */
+#pane-chat:not([hidden]) ~ * button[data-action="save-transcript"],
+#pane-chat.is-active ~ * button[data-action="save-transcript"],
+/* ✅ Cacher quand le panneau Compte-rendu est visible */
+#pane-summary:not([hidden]) ~ * button[data-action="save-transcript"],
+#pane-summary.is-active ~ * button[data-action="save-transcript"]{
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: absolute !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
 #agilo-audio-wrap{
   position:relative;
 }
