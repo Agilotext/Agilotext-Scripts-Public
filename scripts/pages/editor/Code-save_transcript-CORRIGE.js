@@ -1166,11 +1166,48 @@
       return;
     }
     
-    // Vérifier l'onglet actif
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
-    const isChatTab = activeTab && activeTab.id === 'tab-chat';
-    const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
+    // ✅ Vérifier l'onglet actif avec plusieurs méthodes pour être sûr
+    let activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    
+    // ✅ Fallback : chercher aussi par classe is-active
+    if (!activeTab || !activeTab.getAttribute('aria-selected')) {
+      activeTab = document.querySelector('[role="tab"].is-active') || 
+                   document.querySelector('#tab-transcript.is-active') ||
+                   document.querySelector('#tab-summary.is-active') ||
+                   document.querySelector('#tab-chat.is-active');
+    }
+    
+    // ✅ Fallback : chercher par data-tab et vérifier le pane correspondant (non caché)
+    if (!activeTab || activeTabId === 'inconnu') {
+      const panes = document.querySelectorAll('[role="tabpanel"]');
+      panes.forEach(pane => {
+        const isHidden = pane.hasAttribute('hidden');
+        const hasIsActive = pane.classList.contains('is-active');
+        const computedDisplay = window.getComputedStyle(pane).display;
+        
+        // Le pane actif n'est pas caché et a la classe is-active
+        if (!isHidden && hasIsActive && computedDisplay !== 'none') {
+          const paneId = pane.id;
+          if (paneId === 'pane-transcript') activeTab = document.querySelector('#tab-transcript');
+          else if (paneId === 'pane-summary') activeTab = document.querySelector('#tab-summary');
+          else if (paneId === 'pane-chat') activeTab = document.querySelector('#tab-chat');
+        }
+      });
+    }
+    
+    const activeTabId = activeTab?.id || 'inconnu';
+    const isSummaryTab = activeTabId === 'tab-summary';
+    const isChatTab = activeTabId === 'tab-chat';
+    const isTranscriptTab = activeTabId === 'tab-transcript';
+    
+    console.log('[agilo:save] 🔍 Détection onglet:', {
+      activeTabId,
+      ariaSelected: activeTab?.getAttribute('aria-selected'),
+      hasIsActive: activeTab?.classList.contains('is-active'),
+      isSummaryTab,
+      isChatTab,
+      isTranscriptTab
+    });
     
     // ✅ Ajouter une classe CSS pour forcer le masquage (plus robuste que style inline)
     if (!document.querySelector('#agilo-save-button-hide-style')) {
@@ -1287,6 +1324,11 @@
   window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
   window.updateSaveButtonVisibility = updateSaveButtonVisibility; // ✅ Exposer pour debug et appel manuel
+  
+  // ✅ Exposer aussi immédiatement pour éviter problèmes de timing
+  if (typeof updateSaveButtonVisibility === 'function') {
+    window.updateSaveButtonVisibility = updateSaveButtonVisibility;
+  }
 
   // ✅ Script de diagnostic complet
   window.agiloDebugSave = async function() {
