@@ -1178,8 +1178,11 @@
     }
     
     // ✅ Fallback : chercher par data-tab et vérifier le pane correspondant (non caché)
-    if (!activeTab || activeTabId === 'inconnu') {
-      const panes = document.querySelectorAll('[role="tabpanel"]');
+    let activePane = null;
+    const panes = document.querySelectorAll('[role="tabpanel"]');
+    
+    // Si on n'a pas d'activeTab, chercher par les panes
+    if (!activeTab) {
       panes.forEach(pane => {
         const isHidden = pane.hasAttribute('hidden');
         const hasIsActive = pane.classList.contains('is-active');
@@ -1187,21 +1190,74 @@
         
         // Le pane actif n'est pas caché et a la classe is-active
         if (!isHidden && hasIsActive && computedDisplay !== 'none') {
+          activePane = pane;
           const paneId = pane.id;
           if (paneId === 'pane-transcript') activeTab = document.querySelector('#tab-transcript');
           else if (paneId === 'pane-summary') activeTab = document.querySelector('#tab-summary');
           else if (paneId === 'pane-chat') activeTab = document.querySelector('#tab-chat');
         }
       });
+    } else {
+      // Si on a déjà un activeTab, trouver le pane correspondant pour vérification
+      const tabId = activeTab.id;
+      if (tabId === 'tab-transcript') activePane = document.querySelector('#pane-transcript');
+      else if (tabId === 'tab-summary') activePane = document.querySelector('#pane-summary');
+      else if (tabId === 'tab-chat') activePane = document.querySelector('#pane-chat');
+      
+      // ✅ Vérifier que le pane correspondant est bien actif (double vérification)
+      if (activePane) {
+        const isHidden = activePane.hasAttribute('hidden');
+        const hasIsActive = activePane.classList.contains('is-active');
+        const computedDisplay = window.getComputedStyle(activePane).display;
+        
+        // Si le pane n'est pas actif, chercher le vrai pane actif
+        if (isHidden || !hasIsActive || computedDisplay === 'none') {
+          activePane = null;
+          panes.forEach(pane => {
+            const paneIsHidden = pane.hasAttribute('hidden');
+            const paneHasIsActive = pane.classList.contains('is-active');
+            const paneComputedDisplay = window.getComputedStyle(pane).display;
+            
+            if (!paneIsHidden && paneHasIsActive && paneComputedDisplay !== 'none') {
+              activePane = pane;
+              const paneId = pane.id;
+              if (paneId === 'pane-transcript') activeTab = document.querySelector('#tab-transcript');
+              else if (paneId === 'pane-summary') activeTab = document.querySelector('#tab-summary');
+              else if (paneId === 'pane-chat') activeTab = document.querySelector('#tab-chat');
+            }
+          });
+        }
+      }
     }
     
-    const activeTabId = activeTab?.id || 'inconnu';
-    const isSummaryTab = activeTabId === 'tab-summary';
-    const isChatTab = activeTabId === 'tab-chat';
-    const isTranscriptTab = activeTabId === 'tab-transcript';
+    // ✅ Détection finale : utiliser activeTab trouvé ou recalculer
+    let finalActiveTabId = activeTab?.id;
+    
+    // ✅ Si on n'a pas trouvé, essayer de détecter par les panes
+    if (!finalActiveTabId || finalActiveTabId === 'inconnu') {
+      if (activePane) {
+        const paneId = activePane.id;
+        if (paneId === 'pane-transcript') finalActiveTabId = 'tab-transcript';
+        else if (paneId === 'pane-summary') finalActiveTabId = 'tab-summary';
+        else if (paneId === 'pane-chat') finalActiveTabId = 'tab-chat';
+      }
+    }
+    
+    // ✅ Vérification directe : chercher l'onglet avec aria-selected="true" OU is-active
+    if (!finalActiveTabId) {
+      const directTab = document.querySelector('[role="tab"][aria-selected="true"]') ||
+                        document.querySelector('[role="tab"].is-active');
+      finalActiveTabId = directTab?.id;
+    }
+    
+    const isSummaryTab = finalActiveTabId === 'tab-summary';
+    const isChatTab = finalActiveTabId === 'tab-chat';
+    const isTranscriptTab = finalActiveTabId === 'tab-transcript';
     
     console.log('[agilo:save] 🔍 Détection onglet:', {
-      activeTabId,
+      finalActiveTabId,
+      activeTabId: activeTab?.id,
+      activePaneId: activePane?.id,
       ariaSelected: activeTab?.getAttribute('aria-selected'),
       hasIsActive: activeTab?.classList.contains('is-active'),
       isSummaryTab,
