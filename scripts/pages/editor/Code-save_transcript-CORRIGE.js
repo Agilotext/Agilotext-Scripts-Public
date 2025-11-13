@@ -798,7 +798,7 @@
           const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
           if (activeTab && activeTab.id !== 'tab-transcript') {
             const tabName = activeTab.id === 'tab-summary' ? 'Compte-rendu' : activeTab.id === 'tab-chat' ? 'Conversation' : activeTab.id;
-            const errorMessage = '⚠️ Erreur : La sauvegarde ne peut se faire que sur l\'onglet "Transcription".\n\nVous êtes actuellement sur l\'onglet "' + tabName + '".\n\nVeuillez d\'abord cliquer sur l\'onglet "Transcription".';
+            const errorMessage = `⚠️ Erreur : La sauvegarde ne peut se faire que sur l'onglet "Transcription".\n\nVous êtes actuellement sur l'onglet "${tabName}".\n\nVeuillez d'abord cliquer sur l'onglet "Transcription".`;
             console.error('[agilo:save:security] ❌ BLOQUÉ : Tentative de sauvegarde sur l\'onglet', activeTab.id);
             
             if (btn){ 
@@ -1168,23 +1168,32 @@
     
     // Vérifier l'onglet actif
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
+    const isChatTab = activeTab && activeTab.id === 'tab-chat';
     const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
     
     if (isTranscriptTab) {
-      // Afficher le bouton SEULEMENT si on est sur l'onglet Transcription
+      // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
       saveBtn.style.display = '';
       saveBtn.style.visibility = '';
       saveBtn.style.opacity = '';
       saveBtn.style.pointerEvents = '';
       console.log('[agilo:save] Bouton Sauvegarder affiché (onglet Transcription actif)');
-    } else {
-      // Cacher le bouton pour tous les autres onglets (Compte-rendu, Conversation, etc.)
+    } else if (isSummaryTab || isChatTab) {
+      // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
       saveBtn.style.display = 'none';
       saveBtn.style.visibility = 'hidden';
       saveBtn.style.opacity = '0';
       saveBtn.style.pointerEvents = 'none';
-      const tabName = activeTab ? (activeTab.id === 'tab-summary' ? 'Compte-rendu' : activeTab.id === 'tab-chat' ? 'Conversation' : activeTab.id) : 'inconnu';
-      console.log('[agilo:save] Bouton Sauvegarder caché (onglet', tabName, 'actif)');
+      const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
+      console.log(`[agilo:save] Bouton Sauvegarder caché (onglet ${tabName} actif)`);
+    } else {
+      // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
+      saveBtn.style.display = 'none';
+      saveBtn.style.visibility = 'hidden';
+      saveBtn.style.opacity = '0';
+      saveBtn.style.pointerEvents = 'none';
+      console.log('[agilo:save] Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
   }
   
