@@ -1305,10 +1305,29 @@
     // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
     setTimeout(updateSaveButtonVisibility, 100);
     setTimeout(updateSaveButtonVisibility, 300);
+    setTimeout(updateSaveButtonVisibility, 500);
     setTimeout(updateSaveButtonVisibility, 1000);
+    setTimeout(updateSaveButtonVisibility, 2000);
     
     // Observer les changements d'onglets
     setupTabObserver();
+    
+    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
+    const domObserver = new MutationObserver(() => {
+      updateSaveButtonVisibility();
+    });
+    
+    // Observer les changements d'attributs sur les onglets
+    const tabs = document.querySelectorAll('[role="tab"]');
+    tabs.forEach(tab => {
+      domObserver.observe(tab, { attributes: true, attributeFilter: ['aria-selected', 'class'] });
+    });
+    
+    // Observer aussi le conteneur d'onglets
+    const tabList = document.querySelector('[role="tablist"]');
+    if (tabList) {
+      domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
+    }
 
     console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
   }
