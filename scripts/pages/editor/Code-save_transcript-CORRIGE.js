@@ -1255,15 +1255,35 @@
     const isChatTab = finalActiveTabId === 'tab-chat';
     const isTranscriptTab = finalActiveTabId === 'tab-transcript';
     
+    // ✅ Vérification supplémentaire : si on n'a toujours pas trouvé, vérifier directement les panes
+    if (!isSummaryTab && !isChatTab && !isTranscriptTab) {
+      // Dernière tentative : vérifier quel pane est visible
+      panes.forEach(pane => {
+        const isHidden = pane.hasAttribute('hidden');
+        const computedDisplay = window.getComputedStyle(pane).display;
+        if (!isHidden && computedDisplay !== 'none') {
+          const paneId = pane.id;
+          if (paneId === 'pane-transcript') finalActiveTabId = 'tab-transcript';
+          else if (paneId === 'pane-summary') finalActiveTabId = 'tab-summary';
+          else if (paneId === 'pane-chat') finalActiveTabId = 'tab-chat';
+        }
+      });
+    }
+    
+    // Recalculer après vérification supplémentaire
+    const finalIsSummaryTab = finalActiveTabId === 'tab-summary';
+    const finalIsChatTab = finalActiveTabId === 'tab-chat';
+    const finalIsTranscriptTab = finalActiveTabId === 'tab-transcript';
+    
     console.log('[agilo:save] 🔍 Détection onglet:', {
       finalActiveTabId,
       activeTabId: activeTab?.id,
       activePaneId: activePane?.id,
       ariaSelected: activeTab?.getAttribute('aria-selected'),
       hasIsActive: activeTab?.classList.contains('is-active'),
-      isSummaryTab,
-      isChatTab,
-      isTranscriptTab
+      isSummaryTab: finalIsSummaryTab,
+      isChatTab: finalIsChatTab,
+      isTranscriptTab: finalIsTranscriptTab
     });
     
     // ✅ Ajouter une classe CSS pour forcer le masquage (plus robuste que style inline)
@@ -1281,7 +1301,7 @@
       document.head.appendChild(style);
     }
     
-    if (isTranscriptTab) {
+    if (finalIsTranscriptTab) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
       saveBtn.classList.remove('agilo-hide-save');
       // ✅ Retirer aussi les styles inline pour permettre l'affichage normal
@@ -1299,11 +1319,12 @@
         saveBtn.removeAttribute('style');
       }
       console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)', {
-        activeTab: activeTab?.id,
+        finalActiveTabId,
         buttonId: saveBtn.id
       });
-    } else if (isSummaryTab || isChatTab) {
-      // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
+    } else if (finalIsSummaryTab || finalIsChatTab) {
+      // ✅ Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
+      // ⚠️ MÊME LOGIQUE pour les deux onglets
       saveBtn.classList.add('agilo-hide-save');
       // ✅ Double protection : classe CSS + style inline avec !important
       const currentStyle = saveBtn.getAttribute('style') || '';
@@ -1314,9 +1335,11 @@
       } else {
         saveBtn.setAttribute('style', hideStyle);
       }
-      const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
+      const tabName = finalIsSummaryTab ? 'Compte-rendu' : 'Conversation';
       console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
-        activeTab: activeTab?.id,
+        finalActiveTabId,
+        isSummaryTab: finalIsSummaryTab,
+        isChatTab: finalIsChatTab,
         buttonId: saveBtn.id,
         hasClass: saveBtn.classList.contains('agilo-hide-save'),
         style: saveBtn.getAttribute('style')?.substring(0, 100)
@@ -1465,15 +1488,27 @@
       }, 50);
     };
     
-    // Vérifier immédiatement au chargement
+    // ✅ Vérifier immédiatement au chargement
     checkAndUpdateVisibility();
     
-    // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
+    // ✅ Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
+    // ⚠️ IMPORTANT : Vérifier même si on charge directement sur Conversation ou Compte-rendu
+    setTimeout(checkAndUpdateVisibility, 50);
     setTimeout(checkAndUpdateVisibility, 100);
+    setTimeout(checkAndUpdateVisibility, 200);
     setTimeout(checkAndUpdateVisibility, 300);
     setTimeout(checkAndUpdateVisibility, 500);
     setTimeout(checkAndUpdateVisibility, 1000);
     setTimeout(checkAndUpdateVisibility, 2000);
+    
+    // ✅ Vérifier aussi après que tout le DOM soit complètement chargé
+    if (document.readyState === 'complete') {
+      setTimeout(checkAndUpdateVisibility, 100);
+    } else {
+      window.addEventListener('load', () => {
+        setTimeout(checkAndUpdateVisibility, 100);
+      }, { once: true });
+    }
     
     // Observer les changements d'onglets
     setupTabObserver();
