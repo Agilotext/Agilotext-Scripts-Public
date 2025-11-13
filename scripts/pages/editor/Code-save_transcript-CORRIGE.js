@@ -1547,6 +1547,30 @@
     console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
   }
 
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
+  if (document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  } else {
+    init();
+  }
+  
+  // ✅ Vérification supplémentaire après chargement complet de la page
+  // ⚠️ IMPORTANT : Au cas où on charge directement sur l'onglet Conversation ou Compte-rendu
+  if (window.updateSaveButtonVisibility && typeof window.updateSaveButtonVisibility === 'function') {
+    // Vérifier immédiatement si le DOM est déjà complètement chargé
+    if (document.readyState === 'complete') {
+      setTimeout(() => {
+        console.log('[agilo:save] 🔄 Vérification immédiate (DOM déjà chargé)');
+        window.updateSaveButtonVisibility();
+      }, 200);
+    } else {
+      // Sinon, attendre l'événement 'load'
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          console.log('[agilo:save] 🔄 Vérification après chargement complet de la page');
+          window.updateSaveButtonVisibility();
+        }, 300);
+      }, { once: true });
+    }
+  }
 })();
 
