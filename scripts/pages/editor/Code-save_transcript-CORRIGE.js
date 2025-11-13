@@ -1155,8 +1155,22 @@
   }
 
   /* ===== GESTION VISIBILITÉ BOUTON SAUVEGARDER ===== */
+  // ✅ NOUVEAU : Créer le style CSS avec !important pour forcer le masquage
+  if (!document.querySelector('#agilo-save-button-hide-style')) {
+    const style = document.createElement('style');
+    style.id = 'agilo-save-button-hide-style';
+    style.textContent = `
+      button[data-action="save-transcript"].agilo-hide-save {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
   // ✅ NOUVEAU : Fonction pour gérer la visibilité du bouton selon l'onglet actif
-  // ⚠️ IMPORTANT : Définie AVANT init() pour être disponible immédiatement
   function updateSaveButtonVisibility() {
     const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
                     document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
@@ -1167,193 +1181,54 @@
       return;
     }
     
-    // ✅ Vérifier l'onglet actif avec plusieurs méthodes pour être sûr
-    let activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    
-    // ✅ Fallback : chercher aussi par classe is-active
-    if (!activeTab || !activeTab.getAttribute('aria-selected')) {
-      activeTab = document.querySelector('[role="tab"].is-active') || 
-                   document.querySelector('#tab-transcript.is-active') ||
-                   document.querySelector('#tab-summary.is-active') ||
-                   document.querySelector('#tab-chat.is-active');
-    }
-    
-    // ✅ Fallback : chercher par data-tab et vérifier le pane correspondant (non caché)
-    let activePane = null;
-    const panes = document.querySelectorAll('[role="tabpanel"]');
-    
-    // Si on n'a pas d'activeTab, chercher par les panes
-    if (!activeTab) {
-      panes.forEach(pane => {
-        const isHidden = pane.hasAttribute('hidden');
-        const hasIsActive = pane.classList.contains('is-active');
-        const computedDisplay = window.getComputedStyle(pane).display;
-        
-        // Le pane actif n'est pas caché et a la classe is-active
-        if (!isHidden && hasIsActive && computedDisplay !== 'none') {
-          activePane = pane;
-          const paneId = pane.id;
-          if (paneId === 'pane-transcript') activeTab = document.querySelector('#tab-transcript');
-          else if (paneId === 'pane-summary') activeTab = document.querySelector('#tab-summary');
-          else if (paneId === 'pane-chat') activeTab = document.querySelector('#tab-chat');
-        }
-      });
-    } else {
-      // Si on a déjà un activeTab, trouver le pane correspondant pour vérification
-      const tabId = activeTab.id;
-      if (tabId === 'tab-transcript') activePane = document.querySelector('#pane-transcript');
-      else if (tabId === 'tab-summary') activePane = document.querySelector('#pane-summary');
-      else if (tabId === 'tab-chat') activePane = document.querySelector('#pane-chat');
-      
-      // ✅ Vérifier que le pane correspondant est bien actif (double vérification)
-      if (activePane) {
-        const isHidden = activePane.hasAttribute('hidden');
-        const hasIsActive = activePane.classList.contains('is-active');
-        const computedDisplay = window.getComputedStyle(activePane).display;
-        
-        // Si le pane n'est pas actif, chercher le vrai pane actif
-        if (isHidden || !hasIsActive || computedDisplay === 'none') {
-          activePane = null;
-          panes.forEach(pane => {
-            const paneIsHidden = pane.hasAttribute('hidden');
-            const paneHasIsActive = pane.classList.contains('is-active');
-            const paneComputedDisplay = window.getComputedStyle(pane).display;
-            
-            if (!paneIsHidden && paneHasIsActive && paneComputedDisplay !== 'none') {
-              activePane = pane;
-              const paneId = pane.id;
-              if (paneId === 'pane-transcript') activeTab = document.querySelector('#tab-transcript');
-              else if (paneId === 'pane-summary') activeTab = document.querySelector('#tab-summary');
-              else if (paneId === 'pane-chat') activeTab = document.querySelector('#tab-chat');
-            }
-          });
-        }
-      }
-    }
-    
-    // ✅ Détection finale : utiliser activeTab trouvé ou recalculer
-    let finalActiveTabId = activeTab?.id;
-    
-    // ✅ Si on n'a pas trouvé, essayer de détecter par les panes
-    if (!finalActiveTabId || finalActiveTabId === 'inconnu') {
-      if (activePane) {
-        const paneId = activePane.id;
-        if (paneId === 'pane-transcript') finalActiveTabId = 'tab-transcript';
-        else if (paneId === 'pane-summary') finalActiveTabId = 'tab-summary';
-        else if (paneId === 'pane-chat') finalActiveTabId = 'tab-chat';
-      }
-    }
-    
-    // ✅ Vérification directe : chercher l'onglet avec aria-selected="true" OU is-active
-    if (!finalActiveTabId) {
-      const directTab = document.querySelector('[role="tab"][aria-selected="true"]') ||
-                        document.querySelector('[role="tab"].is-active');
-      finalActiveTabId = directTab?.id;
-    }
-    
-    const isSummaryTab = finalActiveTabId === 'tab-summary';
-    const isChatTab = finalActiveTabId === 'tab-chat';
-    const isTranscriptTab = finalActiveTabId === 'tab-transcript';
-    
-    // ✅ Vérification supplémentaire : si on n'a toujours pas trouvé, vérifier directement les panes
-    if (!isSummaryTab && !isChatTab && !isTranscriptTab) {
-      // Dernière tentative : vérifier quel pane est visible
-      panes.forEach(pane => {
-        const isHidden = pane.hasAttribute('hidden');
-        const computedDisplay = window.getComputedStyle(pane).display;
-        if (!isHidden && computedDisplay !== 'none') {
-          const paneId = pane.id;
-          if (paneId === 'pane-transcript') finalActiveTabId = 'tab-transcript';
-          else if (paneId === 'pane-summary') finalActiveTabId = 'tab-summary';
-          else if (paneId === 'pane-chat') finalActiveTabId = 'tab-chat';
-        }
-      });
-    }
-    
-    // Recalculer après vérification supplémentaire
-    const finalIsSummaryTab = finalActiveTabId === 'tab-summary';
-    const finalIsChatTab = finalActiveTabId === 'tab-chat';
-    const finalIsTranscriptTab = finalActiveTabId === 'tab-transcript';
+    // Vérifier l'onglet actif
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
+    const isChatTab = activeTab && activeTab.id === 'tab-chat';
+    const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
     
     console.log('[agilo:save] 🔍 Détection onglet:', {
-      finalActiveTabId,
       activeTabId: activeTab?.id,
-      activePaneId: activePane?.id,
-      ariaSelected: activeTab?.getAttribute('aria-selected'),
-      hasIsActive: activeTab?.classList.contains('is-active'),
-      isSummaryTab: finalIsSummaryTab,
-      isChatTab: finalIsChatTab,
-      isTranscriptTab: finalIsTranscriptTab
+      isSummaryTab,
+      isChatTab,
+      isTranscriptTab,
+      buttonFound: !!saveBtn
     });
     
-    // ✅ Ajouter une classe CSS pour forcer le masquage (plus robuste que style inline)
-    if (!document.querySelector('#agilo-save-button-hide-style')) {
-      const style = document.createElement('style');
-      style.id = 'agilo-save-button-hide-style';
-      style.textContent = `
-        button[data-action="save-transcript"].agilo-hide-save {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
-    if (finalIsTranscriptTab) {
+    if (isTranscriptTab) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
       saveBtn.classList.remove('agilo-hide-save');
-      // ✅ Retirer aussi les styles inline pour permettre l'affichage normal
-      const currentStyle = saveBtn.getAttribute('style') || '';
-      // Garder seulement les styles transform (GSAP) mais retirer display/visibility
-      const cleanedStyle = currentStyle
-        .replace(/display\s*:\s*[^;]+;?/gi, '')
-        .replace(/visibility\s*:\s*[^;]+;?/gi, '')
-        .replace(/opacity\s*:\s*[^;]+;?/gi, '')
-        .replace(/pointer-events\s*:\s*[^;]+;?/gi, '')
-        .trim();
-      if (cleanedStyle) {
-        saveBtn.setAttribute('style', cleanedStyle);
-      } else {
-        saveBtn.removeAttribute('style');
-      }
-      console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)', {
-        finalActiveTabId,
-        buttonId: saveBtn.id
-      });
-    } else if (finalIsSummaryTab || finalIsChatTab) {
-      // ✅ Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      // ⚠️ MÊME LOGIQUE pour les deux onglets
-      saveBtn.classList.add('agilo-hide-save');
+      saveBtn.style.setProperty('display', '', 'important');
+      saveBtn.style.setProperty('visibility', '', 'important');
+      saveBtn.style.setProperty('opacity', '', 'important');
+      saveBtn.style.setProperty('pointer-events', '', 'important');
+      console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
+    } else if (isSummaryTab || isChatTab) {
+      // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
       // ✅ Double protection : classe CSS + style inline avec !important
-      const currentStyle = saveBtn.getAttribute('style') || '';
-      const hideStyle = 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;';
-      // Préserver les styles transform (GSAP) mais ajouter le masquage
-      if (currentStyle && !currentStyle.includes('display: none')) {
-        saveBtn.setAttribute('style', hideStyle + ' ' + currentStyle);
-      } else {
-        saveBtn.setAttribute('style', hideStyle);
-      }
-      const tabName = finalIsSummaryTab ? 'Compte-rendu' : 'Conversation';
+      saveBtn.classList.add('agilo-hide-save');
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
       console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
-        finalActiveTabId,
-        isSummaryTab: finalIsSummaryTab,
-        isChatTab: finalIsChatTab,
-        buttonId: saveBtn.id,
         hasClass: saveBtn.classList.contains('agilo-hide-save'),
-        style: saveBtn.getAttribute('style')?.substring(0, 100)
+        computedDisplay: window.getComputedStyle(saveBtn).display
       });
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
       saveBtn.classList.add('agilo-hide-save');
-      saveBtn.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
-      console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)', {
-        activeTab: activeTab?.id || 'aucun',
-        buttonId: saveBtn.id
-      });
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
   }
+  
+  // ✅ Exposer la fonction globalement pour pouvoir l'appeler manuellement
+  window.updateSaveButtonVisibility = updateSaveButtonVisibility;
   
   // ✅ NOUVEAU : Observer les changements d'onglets
   function setupTabObserver() {
@@ -1389,28 +1264,6 @@
   }
 
   /* ===== EXPOSE ===== */
-  // ✅ Exposer updateSaveButtonVisibility IMMÉDIATEMENT (avant init)
-  // ⚠️ IMPORTANT : Exposer dès la définition pour être disponible même si init() n'est pas encore appelé
-  window.updateSaveButtonVisibility = updateSaveButtonVisibility;
-  
-  // ✅ Créer le style CSS immédiatement (même si le bouton n'existe pas encore)
-  if (typeof document !== 'undefined' && document.head) {
-    if (!document.querySelector('#agilo-save-button-hide-style')) {
-      const style = document.createElement('style');
-      style.id = 'agilo-save-button-hide-style';
-      style.textContent = `
-        button[data-action="save-transcript"].agilo-hide-save {
-          display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-          pointer-events: none !important;
-        }
-      `;
-      document.head.appendChild(style);
-      console.log('[agilo:save] ✅ Style CSS agilo-hide-save créé (au chargement)');
-    }
-  }
-  
   function findSaveButton(){ return document.querySelector('[data-action="save-transcript"]') || document.querySelector('button.button.save[data-opentech-ux-zone-id]') || document.querySelector('button.button.save'); }
   window.restoreTranscriptBackup = function(){
     const jobId=pickJobId(); const b=readBackup(jobId); const {main}=getAllPanes();
@@ -1479,43 +1332,22 @@
     setupConflictDetection();
     
     // ✅ NOUVEAU : Gérer la visibilité du bouton selon l'onglet actif
-    // Fonction pour vérifier et mettre à jour avec debounce
-    let visibilityCheckTimeout = null;
-    const checkAndUpdateVisibility = () => {
-      if (visibilityCheckTimeout) clearTimeout(visibilityCheckTimeout);
-      visibilityCheckTimeout = setTimeout(() => {
-        updateSaveButtonVisibility();
-      }, 50);
-    };
+    // Vérifier immédiatement au chargement
+    updateSaveButtonVisibility();
     
-    // ✅ Vérifier immédiatement au chargement
-    checkAndUpdateVisibility();
-    
-    // ✅ Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
-    // ⚠️ IMPORTANT : Vérifier même si on charge directement sur Conversation ou Compte-rendu
-    setTimeout(checkAndUpdateVisibility, 50);
-    setTimeout(checkAndUpdateVisibility, 100);
-    setTimeout(checkAndUpdateVisibility, 200);
-    setTimeout(checkAndUpdateVisibility, 300);
-    setTimeout(checkAndUpdateVisibility, 500);
-    setTimeout(checkAndUpdateVisibility, 1000);
-    setTimeout(checkAndUpdateVisibility, 2000);
-    
-    // ✅ Vérifier aussi après que tout le DOM soit complètement chargé
-    if (document.readyState === 'complete') {
-      setTimeout(checkAndUpdateVisibility, 100);
-    } else {
-      window.addEventListener('load', () => {
-        setTimeout(checkAndUpdateVisibility, 100);
-      }, { once: true });
-    }
+    // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
+    setTimeout(updateSaveButtonVisibility, 100);
+    setTimeout(updateSaveButtonVisibility, 300);
+    setTimeout(updateSaveButtonVisibility, 500);
+    setTimeout(updateSaveButtonVisibility, 1000);
+    setTimeout(updateSaveButtonVisibility, 2000);
     
     // Observer les changements d'onglets
     setupTabObserver();
     
     // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
     const domObserver = new MutationObserver(() => {
-      checkAndUpdateVisibility();
+      updateSaveButtonVisibility();
     });
     
     // Observer les changements d'attributs sur les onglets
@@ -1529,48 +1361,10 @@
     if (tabList) {
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
     }
-    
-    // ✅ Observer aussi les changements de style sur le bouton (au cas où GSAP le modifie)
-    const saveBtn = document.querySelector('[data-action="save-transcript"]');
-    if (saveBtn) {
-      const btnObserver = new MutationObserver((mutations) => {
-        mutations.forEach((mutation) => {
-          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-            // Si le style change, revérifier la visibilité
-            checkAndUpdateVisibility();
-          }
-        });
-      });
-      btnObserver.observe(saveBtn, { attributes: true, attributeFilter: ['style', 'class'] });
-    }
 
     console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
   }
 
-  if (document.readyState==='loading') {
-    document.addEventListener('DOMContentLoaded', init, {once:true});
-  } else {
-    init();
-  }
-  
-  // ✅ Vérification supplémentaire après chargement complet de la page
-  // ⚠️ IMPORTANT : Au cas où on charge directement sur l'onglet Conversation ou Compte-rendu
-  if (window.updateSaveButtonVisibility && typeof window.updateSaveButtonVisibility === 'function') {
-    // Vérifier immédiatement si le DOM est déjà complètement chargé
-    if (document.readyState === 'complete') {
-      setTimeout(() => {
-        console.log('[agilo:save] 🔄 Vérification immédiate (DOM déjà chargé)');
-        window.updateSaveButtonVisibility();
-      }, 200);
-    } else {
-      // Sinon, attendre l'événement 'load'
-      window.addEventListener('load', () => {
-        setTimeout(() => {
-          console.log('[agilo:save] 🔄 Vérification après chargement complet de la page');
-          window.updateSaveButtonVisibility();
-        }, 300);
-      }, { once: true });
-    }
-  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
 })();
 
