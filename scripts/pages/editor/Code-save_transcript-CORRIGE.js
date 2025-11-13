@@ -1172,26 +1172,64 @@
     const isChatTab = activeTab && activeTab.id === 'tab-chat';
     const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
     
+    // ✅ Ajouter une classe CSS pour forcer le masquage (plus robuste que style inline)
+    if (!document.querySelector('#agilo-save-button-hide-style')) {
+      const style = document.createElement('style');
+      style.id = 'agilo-save-button-hide-style';
+      style.textContent = `
+        button[data-action="save-transcript"].agilo-hide-save {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
     if (isTranscriptTab) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
-      // ✅ Retirer les styles inline pour permettre l'affichage normal
-      saveBtn.removeAttribute('style');
+      saveBtn.classList.remove('agilo-hide-save');
+      // ✅ Retirer aussi les styles inline pour permettre l'affichage normal
+      const currentStyle = saveBtn.getAttribute('style') || '';
+      // Garder seulement les styles transform (GSAP) mais retirer display/visibility
+      const cleanedStyle = currentStyle
+        .replace(/display\s*:\s*[^;]+;?/gi, '')
+        .replace(/visibility\s*:\s*[^;]+;?/gi, '')
+        .replace(/opacity\s*:\s*[^;]+;?/gi, '')
+        .replace(/pointer-events\s*:\s*[^;]+;?/gi, '')
+        .trim();
+      if (cleanedStyle) {
+        saveBtn.setAttribute('style', cleanedStyle);
+      } else {
+        saveBtn.removeAttribute('style');
+      }
       console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)', {
         activeTab: activeTab?.id,
         buttonId: saveBtn.id
       });
     } else if (isSummaryTab || isChatTab) {
       // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      // ✅ Utiliser !important pour forcer le style même si un autre CSS le surcharge
-      saveBtn.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
+      saveBtn.classList.add('agilo-hide-save');
+      // ✅ Double protection : classe CSS + style inline avec !important
+      const currentStyle = saveBtn.getAttribute('style') || '';
+      const hideStyle = 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;';
+      // Préserver les styles transform (GSAP) mais ajouter le masquage
+      if (currentStyle && !currentStyle.includes('display: none')) {
+        saveBtn.setAttribute('style', hideStyle + ' ' + currentStyle);
+      } else {
+        saveBtn.setAttribute('style', hideStyle);
+      }
       const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
       console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
         activeTab: activeTab?.id,
         buttonId: saveBtn.id,
-        buttonClass: saveBtn.className
+        hasClass: saveBtn.classList.contains('agilo-hide-save'),
+        style: saveBtn.getAttribute('style')?.substring(0, 100)
       });
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
+      saveBtn.classList.add('agilo-hide-save');
       saveBtn.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
       console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)', {
         activeTab: activeTab?.id || 'aucun',
@@ -1303,22 +1341,31 @@
     setupConflictDetection();
     
     // ✅ NOUVEAU : Gérer la visibilité du bouton selon l'onglet actif
+    // Fonction pour vérifier et mettre à jour avec debounce
+    let visibilityCheckTimeout = null;
+    const checkAndUpdateVisibility = () => {
+      if (visibilityCheckTimeout) clearTimeout(visibilityCheckTimeout);
+      visibilityCheckTimeout = setTimeout(() => {
+        updateSaveButtonVisibility();
+      }, 50);
+    };
+    
     // Vérifier immédiatement au chargement
-    updateSaveButtonVisibility();
+    checkAndUpdateVisibility();
     
     // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
-    setTimeout(updateSaveButtonVisibility, 100);
-    setTimeout(updateSaveButtonVisibility, 300);
-    setTimeout(updateSaveButtonVisibility, 500);
-    setTimeout(updateSaveButtonVisibility, 1000);
-    setTimeout(updateSaveButtonVisibility, 2000);
+    setTimeout(checkAndUpdateVisibility, 100);
+    setTimeout(checkAndUpdateVisibility, 300);
+    setTimeout(checkAndUpdateVisibility, 500);
+    setTimeout(checkAndUpdateVisibility, 1000);
+    setTimeout(checkAndUpdateVisibility, 2000);
     
     // Observer les changements d'onglets
     setupTabObserver();
     
     // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
     const domObserver = new MutationObserver(() => {
-      updateSaveButtonVisibility();
+      checkAndUpdateVisibility();
     });
     
     // Observer les changements d'attributs sur les onglets
@@ -1331,6 +1378,20 @@
     const tabList = document.querySelector('[role="tablist"]');
     if (tabList) {
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
+    }
+    
+    // ✅ Observer aussi les changements de style sur le bouton (au cas où GSAP le modifie)
+    const saveBtn = document.querySelector('[data-action="save-transcript"]');
+    if (saveBtn) {
+      const btnObserver = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+            // Si le style change, revérifier la visibilité
+            checkAndUpdateVisibility();
+          }
+        });
+      });
+      btnObserver.observe(saveBtn, { attributes: true, attributeFilter: ['style', 'class'] });
     }
 
     console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
