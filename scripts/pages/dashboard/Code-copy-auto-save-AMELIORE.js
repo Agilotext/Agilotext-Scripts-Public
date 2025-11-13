@@ -553,7 +553,8 @@ ${html}
           const markdown = getSummaryContentWithFormatting();
           const html = getSummaryHTML();
           
-          if (markdown) {
+          // ✅ CORRECTION : Vérifier que markdown n'est pas vide
+          if (markdown && markdown.trim().length > 0) {
             e.preventDefault();
             e.stopPropagation();
             
@@ -570,10 +571,17 @@ ${html}
               log('✅ Compte-rendu copié en Markdown/HTML');
             } else {
               log('❌ Échec copie compte-rendu');
+              // Afficher un message d'erreur si nécessaire
+              if (window.agiloDashboardDebug) {
+                console.warn('[agilo:copy-auto-save] Échec copie compte-rendu');
+              }
             }
             
             // Ne pas faire l'auto-sauvegarde pour le compte-rendu (pas de transcript à sauvegarder)
             return;
+          } else {
+            // Si pas de contenu summary trouvé, laisser le comportement par défaut
+            log('⚠️ Aucun contenu compte-rendu trouvé, comportement par défaut');
           }
         }
         
