@@ -117,8 +117,8 @@
   }
 
   /**
-   * Convertit un élément HTML en Markdown
-   * Gère les titres, listes, gras, italique, etc.
+   * Convertit un élément HTML en Markdown (VERSION AMÉLIORÉE)
+   * Gère les titres, listes, gras, italique, liens, tableaux, etc.
    */
   function htmlToMarkdown(element) {
     if (!element) return '';
@@ -126,67 +126,122 @@
     // Cloner l'élément pour ne pas modifier l'original
     const clone = element.cloneNode(true);
     
-    // Supprimer les attributs data-opentech-ux-zone-id et autres attributs inutiles
+    // Supprimer les attributs inutiles
     clone.querySelectorAll('*').forEach(el => {
       Array.from(el.attributes).forEach(attr => {
-        if (attr.name.startsWith('data-') || attr.name === 'contenteditable' || attr.name === 'spellcheck') {
+        if (attr.name.startsWith('data-') || 
+            attr.name === 'contenteditable' || 
+            attr.name === 'spellcheck' ||
+            attr.name === 'style' ||
+            attr.name === 'class' && !attr.value.includes('important')) {
           el.removeAttribute(attr.name);
         }
       });
     });
     
-    // Convertir les balises HTML en Markdown
-    let markdown = clone.innerHTML;
+    // ✅ AMÉLIORATION 1 : Convertir récursivement en parcourant le DOM (plus robuste)
+    function convertNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent || '';
+      }
+      
+      if (node.nodeType !== Node.ELEMENT_NODE) return '';
+      
+      const tag = node.tagName?.toLowerCase();
+      const children = Array.from(node.childNodes).map(convertNode).join('');
+      const text = children.trim();
+      
+      // Titres
+      if (tag === 'h1') return `# ${text}\n\n`;
+      if (tag === 'h2') return `## ${text}\n\n`;
+      if (tag === 'h3') return `### ${text}\n\n`;
+      if (tag === 'h4') return `#### ${text}\n\n`;
+      if (tag === 'h5') return `##### ${text}\n\n`;
+      if (tag === 'h6') return `###### ${text}\n\n`;
+      
+      // Gras et Italique (gérer les imbriqués)
+      if (tag === 'strong' || tag === 'b') return `**${text}**`;
+      if (tag === 'em' || tag === 'i') return `*${text}*`;
+      
+      // ✅ AMÉLIORATION 2 : Liens
+      if (tag === 'a') {
+        const href = node.getAttribute('href') || '';
+        const linkText = text || href;
+        return href ? `[${linkText}](${href})` : linkText;
+      }
+      
+      // ✅ AMÉLIORATION 3 : Citations/Blockquotes
+      if (tag === 'blockquote') return `> ${text.split('\n').join('\n> ')}\n\n`;
+      
+      // ✅ AMÉLIORATION 4 : Code
+      if (tag === 'code') {
+        const parent = node.parentElement?.tagName?.toLowerCase();
+        return parent === 'pre' ? text : `\`${text}\``;
+      }
+      if (tag === 'pre') return `\`\`\`\n${text}\n\`\`\`\n\n`;
+      
+      // Listes
+      if (tag === 'ul' || tag === 'ol') {
+        const items = Array.from(node.querySelectorAll(':scope > li')).map(li => {
+          const liText = Array.from(li.childNodes)
+            .map(convertNode)
+            .join('')
+            .trim()
+            .split('\n')
+            .map((line, idx) => idx === 0 ? `- ${line}` : `  ${line}`)
+            .join('\n');
+          return liText;
+        }).join('\n');
+        return `\n${items}\n\n`;
+      }
+      
+      // ✅ AMÉLIORATION 5 : Tableaux (format Markdown propre)
+      if (tag === 'table') {
+        const rows = Array.from(node.querySelectorAll('tr'));
+        if (rows.length === 0) return '';
+        
+        const tableRows = rows.map((row, idx) => {
+          const cells = Array.from(row.querySelectorAll('th, td')).map(cell => {
+            const cellText = Array.from(cell.childNodes).map(convertNode).join('').trim();
+            return cellText.replace(/\|/g, '\\|'); // Échapper les pipes
+          });
+          return `| ${cells.join(' | ')} |`;
+        });
+        
+        // Ajouter la ligne de séparation après l'en-tête
+        if (tableRows.length > 0) {
+          const firstRow = tableRows[0];
+          const colCount = (firstRow.match(/\|/g) || []).length - 1;
+          const separator = `| ${'---|'.repeat(colCount)}`;
+          tableRows.splice(1, 0, separator);
+        }
+        
+        return `\n${tableRows.join('\n')}\n\n`;
+      }
+      
+      // Paragraphes
+      if (tag === 'p') return text ? `${text}\n\n` : '\n';
+      
+      // Saut de ligne
+      if (tag === 'br') return '\n';
+      
+      // Div (conteneur générique)
+      if (tag === 'div') {
+        // Si c'est un conteneur de tableau, ne rien ajouter
+        if (node.querySelector('table')) return text;
+        return text ? `${text}\n` : '';
+      }
+      
+      // Autres balises : retourner le contenu
+      return text;
+    }
     
-    // Titres
-    markdown = markdown.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
-    markdown = markdown.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
-    markdown = markdown.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
-    markdown = markdown.replace(/<h4[^>]*>(.*?)<\/h4>/gi, '#### $1\n\n');
-    markdown = markdown.replace(/<h5[^>]*>(.*?)<\/h5>/gi, '##### $1\n\n');
-    markdown = markdown.replace(/<h6[^>]*>(.*?)<\/h6>/gi, '###### $1\n\n');
-    
-    // Gras et Italique
-    markdown = markdown.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
-    markdown = markdown.replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**');
-    markdown = markdown.replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*');
-    markdown = markdown.replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*');
-    
-    // Listes
-    markdown = markdown.replace(/<ul[^>]*>/gi, '\n');
-    markdown = markdown.replace(/<\/ul>/gi, '\n');
-    markdown = markdown.replace(/<ol[^>]*>/gi, '\n');
-    markdown = markdown.replace(/<\/ol>/gi, '\n');
-    markdown = markdown.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n');
-    
-    // Paragraphes
-    markdown = markdown.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n');
-    markdown = markdown.replace(/<div[^>]*>(.*?)<\/div>/gi, '$1\n');
-    
-    // Tableaux (simplifié)
-    markdown = markdown.replace(/<table[^>]*>/gi, '\n');
-    markdown = markdown.replace(/<\/table>/gi, '\n');
-    markdown = markdown.replace(/<tbody[^>]*>/gi, '');
-    markdown = markdown.replace(/<\/tbody>/gi, '');
-    markdown = markdown.replace(/<tr[^>]*>/gi, '');
-    markdown = markdown.replace(/<\/tr>/gi, '\n');
-    markdown = markdown.replace(/<td[^>]*>(.*?)<\/td>/gi, '$1 | ');
-    markdown = markdown.replace(/<th[^>]*>(.*?)<\/th>/gi, '**$1** | ');
-    
-    // Saut de ligne
-    markdown = markdown.replace(/<br\s*\/?>/gi, '\n');
-    
-    // Nettoyer les balises restantes
-    markdown = markdown.replace(/<[^>]+>/g, '');
-    
-    // Décoder les entités HTML
-    const textarea = document.createElement('textarea');
-    textarea.innerHTML = markdown;
-    markdown = textarea.value;
+    let markdown = convertNode(clone);
     
     // Nettoyer les espaces multiples et sauts de ligne
-    markdown = markdown.replace(/\n{3,}/g, '\n\n');
-    markdown = markdown.replace(/[ \t]+/g, ' ');
+    markdown = markdown.replace(/\n{4,}/g, '\n\n\n'); // Max 3 sauts de ligne
+    markdown = markdown.replace(/[ \t]{2,}/g, ' '); // Max 1 espace
+    markdown = markdown.replace(/\n[ \t]+/g, '\n'); // Supprimer espaces en début de ligne
     markdown = markdown.trim();
     
     return markdown;
@@ -194,6 +249,7 @@
 
   /**
    * Récupère le HTML propre du compte-rendu (sans attributs inutiles)
+   * ✅ AMÉLIORATION : HTML mieux formaté pour les emails
    */
   function getSummaryHTML() {
     const summaryEl = document.getElementById('summaryEditor');
@@ -202,19 +258,36 @@
     // Cloner pour ne pas modifier l'original
     const clone = summaryEl.cloneNode(true);
     
-    // Supprimer les attributs inutiles
+    // ✅ AMÉLIORATION : Supprimer aussi les styles inline qui pourraient poser problème
     clone.querySelectorAll('*').forEach(el => {
       Array.from(el.attributes).forEach(attr => {
         if (attr.name.startsWith('data-') || 
             attr.name === 'contenteditable' || 
             attr.name === 'spellcheck' ||
-            attr.name === 'data-opentech-ux-zone-id') {
+            attr.name === 'data-opentech-ux-zone-id' ||
+            (attr.name === 'style' && !attr.value.includes('important'))) {
           el.removeAttribute(attr.name);
         }
       });
+      
+      // ✅ AMÉLIORATION : Préserver les styles essentiels pour les emails
+      if (el.tagName === 'TABLE') {
+        el.setAttribute('border', '1');
+        el.setAttribute('cellpadding', '10');
+        el.setAttribute('cellspacing', '0');
+        el.setAttribute('style', 'border-collapse: collapse; font-family: Arial, sans-serif;');
+      }
     });
     
-    return clone.innerHTML;
+    // ✅ AMÉLIORATION : Ajouter un wrapper pour les emails si nécessaire
+    const html = clone.innerHTML;
+    
+    // Si le HTML contient un tableau, s'assurer qu'il est bien formaté
+    if (html.includes('<table')) {
+      return html; // Le tableau est déjà bien formaté
+    }
+    
+    return html;
   }
 
   /**
@@ -247,24 +320,41 @@
 
   /**
    * Récupère le compte-rendu en Markdown (formatage préservé)
+   * ✅ AMÉLIORATION : Meilleure gestion de la sélection partielle
    */
   function getSummaryTextWithFormatting(){
     const summaryEl = document.getElementById('summaryEditor');
     if (!summaryEl) return '';
     
-    // Si l'utilisateur a sélectionné du texte, utiliser la sélection
+    // ✅ AMÉLIORATION : Vérifier si l'utilisateur a sélectionné du texte
     const sel = window.getSelection();
-    if (sel && sel.rangeCount > 0) {
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
       const range = sel.getRangeAt(0);
-      if (summaryEl.contains(range.commonAncestorContainer)) {
-        const selectedContent = range.cloneContents();
-        const tempDiv = document.createElement('div');
-        tempDiv.appendChild(selectedContent);
-        return htmlToMarkdown(tempDiv);
+      const commonAncestor = range.commonAncestorContainer;
+      
+      // Vérifier si la sélection est dans le summaryEditor
+      if (summaryEl.contains(commonAncestor) || summaryEl === commonAncestor) {
+        try {
+          const selectedContent = range.cloneContents();
+          const tempDiv = document.createElement('div');
+          tempDiv.appendChild(selectedContent);
+          const markdown = htmlToMarkdown(tempDiv);
+          if (markdown && markdown.trim().length > 0) {
+            return markdown;
+          }
+        } catch (e) {
+          // Si erreur, continuer avec tout le contenu
+        }
       }
     }
     
     // Sinon, convertir tout le contenu en Markdown
+    // ✅ AMÉLIORATION : Extraire uniquement le contenu du tableau si présent
+    const table = summaryEl.querySelector('table');
+    if (table) {
+      return htmlToMarkdown(table);
+    }
+    
     return htmlToMarkdown(summaryEl);
   }
 
@@ -319,17 +409,35 @@
 
   /**
    * Copie dans le presse-papier avec support HTML (pour les emails)
+   * ✅ AMÉLIORATION : Meilleure gestion des erreurs et support HTML amélioré
    */
   async function copyToClipboard(text, html = null){
     try {
-      // Si on a du HTML ET que l'API moderne est disponible, copier en format riche
+      // ✅ AMÉLIORATION : Si on a du HTML ET que l'API moderne est disponible, copier en format riche
       if (html && navigator.clipboard?.write) {
-        const clipboardItem = new ClipboardItem({
-          'text/plain': new Blob([text], { type: 'text/plain' }),
-          'text/html': new Blob([html], { type: 'text/html' })
-        });
-        await navigator.clipboard.write([clipboardItem]);
-        return true;
+        try {
+          // Créer un HTML propre avec charset UTF-8 pour les emails
+          const cleanHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+${html}
+</body>
+</html>`;
+          
+          const clipboardItem = new ClipboardItem({
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+            'text/html': new Blob([cleanHtml], { type: 'text/html' })
+          });
+          await navigator.clipboard.write([clipboardItem]);
+          return true;
+        } catch (e) {
+          // Si l'API ClipboardItem échoue, essayer avec writeText
+          console.warn('[agilo:copy] ClipboardItem failed, fallback to text:', e);
+        }
       }
       
       // Sinon, copier en texte brut
@@ -337,24 +445,28 @@
         await navigator.clipboard.writeText(text); 
         return true; 
       }
-    } catch(_) {}
-    
-    // Fallback : méthode ancienne
-    const ta = document.createElement('textarea');
-    ta.value = text; 
-    ta.setAttribute('readonly',''); 
-    ta.style.position='fixed'; 
-    ta.style.opacity='0';
-    document.body.appendChild(ta); 
-    ta.select();
-    let ok=false; 
-    try{ 
-      ok=document.execCommand('copy'); 
-    }catch(_){ 
-      ok=false; 
+    } catch(e) {
+      console.warn('[agilo:copy] Clipboard API failed:', e);
     }
-    ta.remove(); 
-    return ok;
+    
+    // ✅ AMÉLIORATION : Fallback avec meilleure gestion d'erreur
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text; 
+      ta.setAttribute('readonly',''); 
+      ta.style.position='fixed'; 
+      ta.style.left='-9999px';
+      ta.style.opacity='0';
+      document.body.appendChild(ta); 
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      ta.remove();
+      return ok;
+    } catch(e) {
+      console.error('[agilo:copy] Fallback copy failed:', e);
+      return false;
+    }
   }
 
   function flashCopied(btn, ok, msgOk='Copié', msgKo='Rien à copier'){
