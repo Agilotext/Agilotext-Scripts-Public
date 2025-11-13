@@ -265,14 +265,69 @@
   }
   
   /**
+   * Vérifier si un compte-rendu existe (même logique que updateButtonVisibility)
+   */
+  function hasSummaryExists() {
+    const root = document.querySelector('#editorRoot');
+    
+    // PRIORITÉ 1 : summaryEmpty=1 (le plus fiable)
+    if (root?.dataset.summaryEmpty === '1') {
+      return false; // Pas de compte-rendu
+    }
+    
+    // PRIORITÉ 2 : Message d'erreur dans le DOM
+    const summaryEl = document.querySelector('#summaryEditor') || 
+                      document.querySelector('#ag-summary') || 
+                      document.querySelector('[data-editor="summary"]');
+    
+    if (!summaryEl) return true; // Si pas de summaryEditor, on assume qu'il existe (sécurité)
+    
+    const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
+    const lowerText = text.toLowerCase();
+    const EXACT_ERROR_MESSAGE = "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).";
+    const exactLower = EXACT_ERROR_MESSAGE.toLowerCase();
+    
+    // Vérifier le message exact
+    if (lowerText.includes(exactLower)) {
+      return false; // Pas de compte-rendu
+    }
+    
+    // Vérifier les patterns d'erreur (seulement si le contenu est court)
+    if (text.length < 200 && (
+      lowerText.includes('pas encore disponible') || 
+      lowerText.includes('fichier manquant') ||
+      lowerText.includes('non publié')
+    )) {
+      return false; // Pas de compte-rendu
+    }
+    
+    return true; // Compte-rendu existe
+  }
+
+  /**
    * Créer ou mettre à jour le badge de compteur
+   * ✅ CORRECTION : Ne crée le compteur QUE si un compte-rendu existe
    */
   function updateRegenerationCounter(jobId, edition) {
     const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
     if (!btn) return;
     
+    // ✅ NOUVEAU : Vérifier d'abord si un compte-rendu existe
+    // Si pas de compte-rendu, supprimer le compteur et ne rien créer
+    if (!hasSummaryExists()) {
+      const oldCounter = btn.parentElement.querySelector('.regeneration-counter, #regeneration-info');
+      if (oldCounter) {
+        oldCounter.remove();
+      }
+      const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+      if (oldMessage) {
+        oldMessage.remove();
+      }
+      return; // Ne pas créer de compteur si pas de compte-rendu
+    }
+    
     // Supprimer l'ancien compteur s'il existe
-    const oldCounter = btn.parentElement.querySelector('.regeneration-counter');
+    const oldCounter = btn.parentElement.querySelector('.regeneration-counter, #regeneration-info');
     if (oldCounter) {
       oldCounter.remove();
     }
@@ -336,7 +391,7 @@
         return;
       }
     
-    // Afficher le compteur
+    // ✅ Afficher le compteur UNIQUEMENT si un compte-rendu existe (vérifié au début de la fonction)
     const counter = document.createElement('div');
     counter.id = 'regeneration-info';
     counter.className = `regeneration-counter ${getCounterClass(canRegen)}`;
@@ -803,13 +858,13 @@
           // Récupérer le nouveau compte-rendu pour vérifier le hash
           try {
             const url = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html&_t=${Date.now()}`;
-            const response = await fetch(url, {
-              method: 'GET',
-              cache: 'no-store'
-            });
-            
-            if (response.ok) {
-              const text = await response.text();
+        const response = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store'
+        });
+        
+        if (response.ok) {
+          const text = await response.text();
               
               // Vérifier que le contenu n'est pas vide et n'est pas un message d'erreur
               if (!text || text.length < 100 || 
@@ -837,12 +892,12 @@
               if (!oldHash || newHash !== oldHash) {
                 console.log('[AGILO:RELANCE] ✅ Hash différent détecté - Nouveau compte-rendu confirmé !');
                 return { ready: true, hash: newHash, content: text };
-              } else {
+          } else {
                 console.warn('[AGILO:RELANCE] ⚠️ Hash identique - Le compte-rendu n\'a peut-être pas changé');
                 // On retourne quand même true car le statut est READY_SUMMARY_READY
                 return { ready: true, hash: newHash, content: text };
-              }
-            } else {
+          }
+        } else {
               console.warn('[AGILO:RELANCE] ⚠️ receiveSummary retourne une erreur HTTP:', response.status);
               // Continuer le polling
               if (attempt < maxAttempts) {
@@ -1318,11 +1373,11 @@
           } else {
             // Fallback : recharger la page si summaryEditor n'est pas trouvé
             console.warn('[AGILO:RELANCE] ⚠️ summaryEditor non trouvé - Rechargement de la page');
-            const url = new URL(window.location.href);
-            url.searchParams.set('tab', 'summary');
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'summary');
             url.searchParams.set('_regen', Date.now().toString());
             url.searchParams.set('_nocache', Math.random().toString(36).slice(2));
-            window.location.href = url.toString();
+        window.location.href = url.toString();
           }
         } else if (waitResult.ready) {
           // Le statut est READY_SUMMARY_READY mais on n'a pas pu récupérer le contenu
