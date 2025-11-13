@@ -1156,11 +1156,43 @@
 
   /* ===== GESTION VISIBILITÉ BOUTON SAUVEGARDER ===== */
   // ✅ NOUVEAU : Créer le style CSS avec !important pour forcer le masquage
+  // ✅ RENFORCÉ : Protection contre GSAP et autres scripts
   if (!document.querySelector('#agilo-save-button-hide-style')) {
     const style = document.createElement('style');
     style.id = 'agilo-save-button-hide-style';
     style.textContent = `
-      button[data-action="save-transcript"].agilo-hide-save {
+      /* Protection par classe */
+      button[data-action="save-transcript"].agilo-hide-save,
+      button.button.save.agilo-hide-save {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: none !important;
+      }
+      
+      /* Protection par attribut data */
+      button[data-action="save-transcript"][data-agilo-hidden="true"],
+      button.button.save[data-agilo-hidden="true"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: none !important;
+      }
+      
+      /* Protection spécifique pour l'onglet Conversation */
+      #tab-chat[aria-selected="true"] ~ * button[data-action="save-transcript"],
+      #tab-chat[aria-selected="true"] ~ * button.button.save {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+      
+      /* Protection spécifique pour l'onglet Compte-rendu */
+      #tab-summary[aria-selected="true"] ~ * button[data-action="save-transcript"],
+      #tab-summary[aria-selected="true"] ~ * button.button.save {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -1171,6 +1203,7 @@
   }
   
   // ✅ NOUVEAU : Fonction pour gérer la visibilité du bouton selon l'onglet actif
+  // ✅ RENFORCÉE : Protection contre les interférences de GSAP et autres scripts
   function updateSaveButtonVisibility() {
     const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
                     document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
@@ -1198,33 +1231,96 @@
     if (isTranscriptTab) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
       saveBtn.classList.remove('agilo-hide-save');
-      saveBtn.style.setProperty('display', '', 'important');
-      saveBtn.style.setProperty('visibility', '', 'important');
-      saveBtn.style.setProperty('opacity', '', 'important');
-      saveBtn.style.setProperty('pointer-events', '', 'important');
+      // ✅ RENFORCÉ : Utiliser requestAnimationFrame pour s'assurer que les styles sont appliqués après GSAP
+      requestAnimationFrame(() => {
+        saveBtn.style.setProperty('display', '', 'important');
+        saveBtn.style.setProperty('visibility', '', 'important');
+        saveBtn.style.setProperty('opacity', '', 'important');
+        saveBtn.style.setProperty('pointer-events', '', 'important');
+        // ✅ RENFORCÉ : Supprimer aussi les attributs data-* que GSAP pourrait ajouter
+        saveBtn.removeAttribute('data-gsap-hidden');
+      });
       console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
     } else if (isSummaryTab || isChatTab) {
       // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      // ✅ Double protection : classe CSS + style inline avec !important
+      // ✅ Triple protection : classe CSS + style inline avec !important + attribut data
       saveBtn.classList.add('agilo-hide-save');
-      saveBtn.style.setProperty('display', 'none', 'important');
-      saveBtn.style.setProperty('visibility', 'hidden', 'important');
-      saveBtn.style.setProperty('opacity', '0', 'important');
-      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      saveBtn.setAttribute('data-agilo-hidden', 'true');
+      // ✅ RENFORCÉ : Utiliser requestAnimationFrame pour s'assurer que les styles sont appliqués après GSAP
+      requestAnimationFrame(() => {
+        saveBtn.style.setProperty('display', 'none', 'important');
+        saveBtn.style.setProperty('visibility', 'hidden', 'important');
+        saveBtn.style.setProperty('opacity', '0', 'important');
+        saveBtn.style.setProperty('pointer-events', 'none', 'important');
+        // ✅ RENFORCÉ : Forcer aussi le transform si GSAP l'a modifié
+        if (window.gsap && saveBtn._gsap) {
+          try {
+            window.gsap.set(saveBtn, { display: 'none', visibility: 'hidden', opacity: 0, pointerEvents: 'none', clearProps: 'transform' });
+          } catch(e) {
+            console.warn('[agilo:save] Erreur lors de la réinitialisation GSAP:', e);
+          }
+        }
+      });
       const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
       console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
         hasClass: saveBtn.classList.contains('agilo-hide-save'),
-        computedDisplay: window.getComputedStyle(saveBtn).display
+        computedDisplay: window.getComputedStyle(saveBtn).display,
+        hasDataAttr: saveBtn.hasAttribute('data-agilo-hidden')
       });
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
       saveBtn.classList.add('agilo-hide-save');
-      saveBtn.style.setProperty('display', 'none', 'important');
-      saveBtn.style.setProperty('visibility', 'hidden', 'important');
-      saveBtn.style.setProperty('opacity', '0', 'important');
-      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      saveBtn.setAttribute('data-agilo-hidden', 'true');
+      requestAnimationFrame(() => {
+        saveBtn.style.setProperty('display', 'none', 'important');
+        saveBtn.style.setProperty('visibility', 'hidden', 'important');
+        saveBtn.style.setProperty('opacity', '0', 'important');
+        saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      });
       console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
+  }
+  
+  // ✅ NOUVEAU : Observer les modifications de styles du bouton pour réappliquer la visibilité si nécessaire
+  function setupButtonStyleProtection() {
+    const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
+                    document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
+                    document.querySelector('button.button.save');
+    
+    if (!saveBtn) {
+      // Réessayer après un délai si le bouton n'est pas encore chargé
+      setTimeout(setupButtonStyleProtection, 500);
+      return;
+    }
+    
+    // Observer les changements de styles inline (pour détecter les modifications de GSAP)
+    const styleObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+          // Vérifier si le bouton devrait être caché mais qu'il est visible
+          const shouldBeHidden = saveBtn.classList.contains('agilo-hide-save') || saveBtn.hasAttribute('data-agilo-hidden');
+          const computedStyle = window.getComputedStyle(saveBtn);
+          const isVisible = computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
+          
+          if (shouldBeHidden && isVisible) {
+            console.warn('[agilo:save] ⚠️ Détection : Le bouton devrait être caché mais est visible. Réapplication...');
+            // Réappliquer la visibilité après un court délai pour éviter les boucles
+            setTimeout(() => {
+              updateSaveButtonVisibility();
+            }, 50);
+          }
+        }
+      });
+    });
+    
+    // Observer les changements de styles inline
+    styleObserver.observe(saveBtn, { 
+      attributes: true, 
+      attributeFilter: ['style', 'class'],
+      attributeOldValue: true
+    });
+    
+    console.log('[agilo:save] ✅ Protection des styles du bouton activée');
   }
   
   // ✅ Exposer la fonction globalement pour pouvoir l'appeler manuellement
@@ -1335,12 +1431,32 @@
     // Vérifier immédiatement au chargement
     updateSaveButtonVisibility();
     
+    // ✅ RENFORCÉ : Activer la protection contre les modifications de styles (GSAP, etc.)
+    setupButtonStyleProtection();
+    
     // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
     setTimeout(updateSaveButtonVisibility, 100);
     setTimeout(updateSaveButtonVisibility, 300);
     setTimeout(updateSaveButtonVisibility, 500);
     setTimeout(updateSaveButtonVisibility, 1000);
     setTimeout(updateSaveButtonVisibility, 2000);
+    
+    // ✅ RENFORCÉ : Réappliquer après que GSAP ait fini de charger (si présent)
+    if (window.gsap) {
+      // GSAP est déjà chargé, réappliquer immédiatement
+      setTimeout(updateSaveButtonVisibility, 100);
+    } else {
+      // Attendre que GSAP se charge
+      const checkGSAP = setInterval(() => {
+        if (window.gsap) {
+          clearInterval(checkGSAP);
+          console.log('[agilo:save] GSAP détecté, réapplication de la visibilité...');
+          setTimeout(updateSaveButtonVisibility, 200);
+        }
+      }, 500);
+      // Arrêter après 10 secondes si GSAP ne charge pas
+      setTimeout(() => clearInterval(checkGSAP), 10000);
+    }
     
     // Observer les changements d'onglets
     setupTabObserver();
