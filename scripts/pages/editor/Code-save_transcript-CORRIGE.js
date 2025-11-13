@@ -1156,6 +1156,7 @@
 
   /* ===== GESTION VISIBILITÉ BOUTON SAUVEGARDER ===== */
   // ✅ NOUVEAU : Fonction pour gérer la visibilité du bouton selon l'onglet actif
+  // ⚠️ IMPORTANT : Définie AVANT init() pour être disponible immédiatement
   function updateSaveButtonVisibility() {
     const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
                     document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
@@ -1365,6 +1366,28 @@
   }
 
   /* ===== EXPOSE ===== */
+  // ✅ Exposer updateSaveButtonVisibility IMMÉDIATEMENT (avant init)
+  // ⚠️ IMPORTANT : Exposer dès la définition pour être disponible même si init() n'est pas encore appelé
+  window.updateSaveButtonVisibility = updateSaveButtonVisibility;
+  
+  // ✅ Créer le style CSS immédiatement (même si le bouton n'existe pas encore)
+  if (typeof document !== 'undefined' && document.head) {
+    if (!document.querySelector('#agilo-save-button-hide-style')) {
+      const style = document.createElement('style');
+      style.id = 'agilo-save-button-hide-style';
+      style.textContent = `
+        button[data-action="save-transcript"].agilo-hide-save {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
+      `;
+      document.head.appendChild(style);
+      console.log('[agilo:save] ✅ Style CSS agilo-hide-save créé (au chargement)');
+    }
+  }
+  
   function findSaveButton(){ return document.querySelector('[data-action="save-transcript"]') || document.querySelector('button.button.save[data-opentech-ux-zone-id]') || document.querySelector('button.button.save'); }
   window.restoreTranscriptBackup = function(){
     const jobId=pickJobId(); const b=readBackup(jobId); const {main}=getAllPanes();
@@ -1379,12 +1402,6 @@
   window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
   window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
-  window.updateSaveButtonVisibility = updateSaveButtonVisibility; // ✅ Exposer pour debug et appel manuel
-  
-  // ✅ Exposer aussi immédiatement pour éviter problèmes de timing
-  if (typeof updateSaveButtonVisibility === 'function') {
-    window.updateSaveButtonVisibility = updateSaveButtonVisibility;
-  }
 
   // ✅ Script de diagnostic complet
   window.agiloDebugSave = async function() {
