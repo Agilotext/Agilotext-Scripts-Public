@@ -17,30 +17,46 @@
                     document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
                     document.querySelector('button.button.save');
     
+    if (!saveBtn) return; // Pas de bouton, on arrête
+    
     // 2. Bouton Régénérer
     const regenBtn = document.querySelector('[data-action="relancer-compte-rendu"]');
     
-    // 3. Détecter l'onglet actif (plusieurs méthodes pour être sûr)
+    // 3. ✅ DÉTECTION ULTRA-ROBUSTE : Priorité absolue à aria-selected
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    const paneChat = document.querySelector('#pane-chat');
-    const paneSummary = document.querySelector('#pane-summary');
-    const paneTranscript = document.querySelector('#pane-transcript');
     
-    // Vérifier quel panneau est visible
-    const isChatActive = (activeTab?.id === 'tab-chat') || 
-                         (paneChat && !paneChat.hasAttribute('hidden') && 
-                          (paneChat.classList.contains('is-active') || 
-                           window.getComputedStyle(paneChat).display !== 'none'));
+    // Si on a un onglet avec aria-selected="true", c'est la source de vérité absolue
+    let isChatActive = false;
+    let isSummaryActive = false;
+    let isTranscriptActive = false;
     
-    const isSummaryActive = (activeTab?.id === 'tab-summary') || 
-                            (paneSummary && !paneSummary.hasAttribute('hidden') && 
-                             (paneSummary.classList.contains('is-active') || 
-                              window.getComputedStyle(paneSummary).display !== 'none'));
-    
-    const isTranscriptActive = (activeTab?.id === 'tab-transcript') || 
-                               (paneTranscript && !paneTranscript.hasAttribute('hidden') && 
-                                (paneTranscript.classList.contains('is-active') || 
-                                 window.getComputedStyle(paneTranscript).display !== 'none'));
+    if (activeTab) {
+      // Source de vérité : aria-selected="true"
+      if (activeTab.id === 'tab-chat') {
+        isChatActive = true;
+      } else if (activeTab.id === 'tab-summary') {
+        isSummaryActive = true;
+      } else if (activeTab.id === 'tab-transcript') {
+        isTranscriptActive = true;
+      }
+    } else {
+      // Fallback : vérifier les panneaux
+      const paneChat = document.querySelector('#pane-chat');
+      const paneSummary = document.querySelector('#pane-summary');
+      const paneTranscript = document.querySelector('#pane-transcript');
+      
+      isChatActive = paneChat && !paneChat.hasAttribute('hidden') && 
+                     (paneChat.classList.contains('is-active') || 
+                      window.getComputedStyle(paneChat).display !== 'none');
+      
+      isSummaryActive = paneSummary && !paneSummary.hasAttribute('hidden') && 
+                        (paneSummary.classList.contains('is-active') || 
+                         window.getComputedStyle(paneSummary).display !== 'none');
+      
+      isTranscriptActive = paneTranscript && !paneTranscript.hasAttribute('hidden') && 
+                           (paneTranscript.classList.contains('is-active') || 
+                            window.getComputedStyle(paneTranscript).display !== 'none');
+    }
     
     console.log('[AGILO:CACHE] 🔍 État onglets:', {
       activeTabId: activeTab?.id,
