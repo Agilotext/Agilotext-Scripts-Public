@@ -1184,7 +1184,7 @@
     // ✅ AMÉLIORATION : Vérifier à la fois les onglets ET les panneaux
     // (car Code-main-editor.js modifie directement les panneaux)
     
-    // 1. Vérifier l'onglet actif via aria-selected
+    // 1. Vérifier l'onglet actif via aria-selected (MÉTHODE PRINCIPALE)
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
     const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
     const isChatTab = activeTab && activeTab.id === 'tab-chat';
@@ -1195,40 +1195,87 @@
     const paneSummary = document.querySelector('#pane-summary');
     const paneTranscript = document.querySelector('#pane-transcript');
     
-    // Vérifier si un panneau est visible (pas hidden et is-active)
+    // ✅ AMÉLIORATION : Vérification plus robuste des panneaux
+    // Vérifier si un panneau est visible (pas hidden et is-active OU display !== none)
+    const getPaneComputedStyle = (pane) => {
+      if (!pane) return { display: 'none', visibility: 'hidden' };
+      try {
+        return window.getComputedStyle(pane);
+      } catch {
+        return { display: 'none', visibility: 'hidden' };
+      }
+    };
+    
+    const chatStyle = getPaneComputedStyle(paneChat);
+    const summaryStyle = getPaneComputedStyle(paneSummary);
+    const transcriptStyle = getPaneComputedStyle(paneTranscript);
+    
     const isChatPaneActive = paneChat && 
                              !paneChat.hasAttribute('hidden') && 
                              (paneChat.classList.contains('is-active') || 
-                              window.getComputedStyle(paneChat).display !== 'none');
+                              chatStyle.display !== 'none' && chatStyle.visibility !== 'hidden');
     
     const isSummaryPaneActive = paneSummary && 
                                 !paneSummary.hasAttribute('hidden') && 
                                 (paneSummary.classList.contains('is-active') || 
-                                 window.getComputedStyle(paneSummary).display !== 'none');
+                                 summaryStyle.display !== 'none' && summaryStyle.visibility !== 'hidden');
     
     const isTranscriptPaneActive = paneTranscript && 
                                    !paneTranscript.hasAttribute('hidden') && 
                                    (paneTranscript.classList.contains('is-active') || 
-                                    window.getComputedStyle(paneTranscript).display !== 'none');
+                                    transcriptStyle.display !== 'none' && transcriptStyle.visibility !== 'hidden');
     
-    // ✅ Décision finale : Combiner l'état des onglets ET des panneaux
-    // Si un panneau est actif, cela prime sur l'onglet (car Code-main-editor.js peut modifier les panneaux directement)
-    const finalIsChat = isChatTab || isChatPaneActive;
-    const finalIsSummary = isSummaryTab || isSummaryPaneActive;
-    const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
+    // 3. ✅ NOUVEAU : Vérifier aussi les classes des onglets (certains scripts modifient les classes)
+    const tabChat = document.querySelector('#tab-chat');
+    const tabSummary = document.querySelector('#tab-summary');
+    const tabTranscript = document.querySelector('#tab-transcript');
+    
+    const chatTabHasActive = tabChat && (tabChat.classList.contains('is-active') || tabChat.getAttribute('aria-selected') === 'true');
+    const summaryTabHasActive = tabSummary && (tabSummary.classList.contains('is-active') || tabSummary.getAttribute('aria-selected') === 'true');
+    const transcriptTabHasActive = tabTranscript && (tabTranscript.classList.contains('is-active') || tabTranscript.getAttribute('aria-selected') === 'true');
+    
+    // ✅ Décision finale : PRIORITÉ ABSOLUE à l'onglet actif (aria-selected)
+    // Si aria-selected="true" sur un onglet, c'est la source de vérité
+    // Sinon, on vérifie les panneaux et les classes
+    let finalIsChat = false;
+    let finalIsSummary = false;
+    let finalIsTranscript = false;
+    
+    if (activeTab) {
+      // Si on a un onglet avec aria-selected="true", c'est la source de vérité
+      if (activeTab.id === 'tab-chat') {
+        finalIsChat = true;
+      } else if (activeTab.id === 'tab-summary') {
+        finalIsSummary = true;
+      } else if (activeTab.id === 'tab-transcript') {
+        finalIsTranscript = true;
+      }
+    } else {
+      // Fallback : vérifier les panneaux et les classes
+      finalIsChat = isChatPaneActive || chatTabHasActive;
+      finalIsSummary = isSummaryPaneActive || summaryTabHasActive;
+      finalIsTranscript = isTranscriptPaneActive || transcriptTabHasActive;
+    }
     
     console.log('[agilo:save] 🔍 Détection onglet + panneau:', {
       activeTabId: activeTab?.id,
+      activeTabAriaSelected: activeTab?.getAttribute('aria-selected'),
       isSummaryTab,
       isChatTab,
       isTranscriptTab,
       isChatPaneActive,
       isSummaryPaneActive,
       isTranscriptPaneActive,
+      chatTabHasActive: chatTabHasActive || false,
+      summaryTabHasActive: summaryTabHasActive || false,
+      transcriptTabHasActive: transcriptTabHasActive || false,
       finalIsChat,
       finalIsSummary,
       finalIsTranscript,
-      buttonFound: !!saveBtn
+      buttonFound: !!saveBtn,
+      paneChatHidden: paneChat?.hasAttribute('hidden'),
+      paneChatDisplay: chatStyle.display,
+      paneChatVisibility: chatStyle.visibility
     });
     
     if (finalIsTranscript && !finalIsChat && !finalIsSummary) {
