@@ -1174,26 +1174,29 @@
     
     if (isTranscriptTab) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
-      saveBtn.style.display = '';
-      saveBtn.style.visibility = '';
-      saveBtn.style.opacity = '';
-      saveBtn.style.pointerEvents = '';
-      console.log('[agilo:save] Bouton Sauvegarder affiché (onglet Transcription actif)');
+      // ✅ Retirer les styles inline pour permettre l'affichage normal
+      saveBtn.removeAttribute('style');
+      console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)', {
+        activeTab: activeTab?.id,
+        buttonId: saveBtn.id
+      });
     } else if (isSummaryTab || isChatTab) {
       // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      saveBtn.style.display = 'none';
-      saveBtn.style.visibility = 'hidden';
-      saveBtn.style.opacity = '0';
-      saveBtn.style.pointerEvents = 'none';
+      // ✅ Utiliser !important pour forcer le style même si un autre CSS le surcharge
+      saveBtn.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
       const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
-      console.log(`[agilo:save] Bouton Sauvegarder caché (onglet ${tabName} actif)`);
+      console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
+        activeTab: activeTab?.id,
+        buttonId: saveBtn.id,
+        buttonClass: saveBtn.className
+      });
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
-      saveBtn.style.display = 'none';
-      saveBtn.style.visibility = 'hidden';
-      saveBtn.style.opacity = '0';
-      saveBtn.style.pointerEvents = 'none';
-      console.log('[agilo:save] Bouton Sauvegarder caché par défaut (onglet inconnu)');
+      saveBtn.setAttribute('style', 'display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important;');
+      console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)', {
+        activeTab: activeTab?.id || 'aucun',
+        buttonId: saveBtn.id
+      });
     }
   }
   
@@ -1245,6 +1248,7 @@
   window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
   window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
+  window.updateSaveButtonVisibility = updateSaveButtonVisibility; // ✅ Exposer pour debug et appel manuel
 
   // ✅ Script de diagnostic complet
   window.agiloDebugSave = async function() {
