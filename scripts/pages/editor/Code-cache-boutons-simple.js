@@ -52,33 +52,65 @@
     });
     
     // ============================================
-    // BOUTON SAUVEGARDER
+    // BOUTON SAUVEGARDER - FORCE ABSOLUE
     // ============================================
-    if (saveBtn) {
-      if (isChatActive || isSummaryActive) {
-        // CACHER avec animation
-        saveBtn.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-        saveBtn.style.opacity = '0';
-        saveBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-          saveBtn.style.setProperty('display', 'none', 'important');
-          saveBtn.style.setProperty('visibility', 'hidden', 'important');
-          saveBtn.style.setProperty('pointer-events', 'none', 'important');
-          saveBtn.classList.add('agilo-hide-save');
-        }, 300);
-        console.log('[AGILO:CACHE] ✅ Bouton Sauvegarder caché (onglet Conversation ou Compte-rendu)');
-      } else if (isTranscriptActive) {
-        // AFFICHER avec animation
-        saveBtn.style.setProperty('display', 'flex', 'important');
-        saveBtn.style.setProperty('visibility', 'visible', 'important');
-        saveBtn.style.setProperty('pointer-events', 'auto', 'important');
-        saveBtn.classList.remove('agilo-hide-save');
-        setTimeout(() => {
-          saveBtn.style.opacity = '1';
-          saveBtn.style.transform = 'scale(1)';
-        }, 10);
-        console.log('[AGILO:CACHE] ✅ Bouton Sauvegarder affiché (onglet Transcription)');
+    if (isChatActive || isSummaryActive) {
+      // ✅ CACHER IMMÉDIATEMENT ET FORCER avec !important
+      // Pas d'animation, on force directement pour éviter qu'un autre script le réaffiche
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      saveBtn.style.setProperty('position', 'absolute', 'important');
+      saveBtn.style.setProperty('left', '-9999px', 'important');
+      saveBtn.classList.add('agilo-hide-save');
+      saveBtn.setAttribute('aria-hidden', 'true');
+      saveBtn.setAttribute('hidden', 'true');
+      
+      // ✅ Créer un style CSS global pour forcer le cache (au cas où)
+      if (!document.querySelector('#agilo-force-hide-save-style')) {
+        const style = document.createElement('style');
+        style.id = 'agilo-force-hide-save-style';
+        style.textContent = `
+          button[data-action="save-transcript"].agilo-hide-save,
+          button.button.save.agilo-hide-save {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            position: absolute !important;
+            left: -9999px !important;
+          }
+        `;
+        document.head.appendChild(style);
       }
+      
+      const tabName = isChatActive ? 'Conversation' : 'Compte-rendu';
+      console.log(`[AGILO:CACHE] ✅✅✅ Bouton Sauvegarder FORCÉ à être caché (onglet ${tabName})`, {
+        activeTabId: activeTab?.id,
+        computedDisplay: window.getComputedStyle(saveBtn).display,
+        styleDisplay: saveBtn.style.display
+      });
+    } else if (isTranscriptActive) {
+      // AFFICHER uniquement si on est vraiment sur Transcription
+      saveBtn.style.removeProperty('display');
+      saveBtn.style.removeProperty('visibility');
+      saveBtn.style.removeProperty('opacity');
+      saveBtn.style.removeProperty('pointer-events');
+      saveBtn.style.removeProperty('position');
+      saveBtn.style.removeProperty('left');
+      saveBtn.classList.remove('agilo-hide-save');
+      saveBtn.removeAttribute('aria-hidden');
+      saveBtn.removeAttribute('hidden');
+      console.log('[AGILO:CACHE] ✅ Bouton Sauvegarder affiché (onglet Transcription)');
+    } else {
+      // Par défaut, cacher (sécurité)
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
+      saveBtn.classList.add('agilo-hide-save');
+      console.log('[AGILO:CACHE] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
     
     // ============================================
@@ -138,15 +170,34 @@
   // ============================================
   
   function setupListeners() {
-    // 1. Écouter les clics sur les onglets
+    // 1. ✅ Écouter les clics sur les onglets EN PHASE DE CAPTURE (avant tout)
     document.addEventListener('click', (e) => {
       const tab = e.target.closest('[role="tab"]');
       if (tab) {
         console.log('[AGILO:CACHE] 🖱️ Clic sur onglet:', tab.id);
-        setTimeout(cacheBoutons, 100); // Attendre que le DOM se mette à jour
-        setTimeout(cacheBoutons, 300); // Double vérification
+        // Forcer immédiatement
+        cacheBoutons();
+        // Puis vérifier plusieurs fois pour être sûr
+        setTimeout(cacheBoutons, 50);
+        setTimeout(cacheBoutons, 100);
+        setTimeout(cacheBoutons, 200);
+        setTimeout(cacheBoutons, 500);
       }
-    }, true); // Capture phase pour intercepter avant les autres scripts
+    }, true); // Capture phase pour intercepter AVANT les autres scripts
+    
+    // ✅ NOUVEAU : Surveiller en continu avec un intervalle (solution de force brute)
+    setInterval(() => {
+      const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+      if (activeTab && (activeTab.id === 'tab-chat' || activeTab.id === 'tab-summary')) {
+        const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
+                        document.querySelector('button.button.save');
+        if (saveBtn && window.getComputedStyle(saveBtn).display !== 'none') {
+          // Un autre script l'a réaffiché, on le cache à nouveau
+          console.warn('[AGILO:CACHE] ⚠️ Bouton réaffiché par un autre script, re-cache...');
+          cacheBoutons();
+        }
+      }
+    }, 500); // Vérifier toutes les 500ms
     
     // 2. Observer les changements d'attributs
     const observer = new MutationObserver(() => {
