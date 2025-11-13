@@ -655,7 +655,7 @@
                     <strong>⚠️ Important :</strong> La régénération est déjà lancée. Votre compte-rendu actuel sera remplacé dans 2-3 minutes.
                   </p>
                   <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
-                    💡 <strong>Si vous souhaitez conserver le compte-rendu actuel</strong>, téléchargez-le maintenant via les boutons de téléchargement avant qu'il ne soit remplacé.
+                    💡 Si vous souhaitez conserver le compte-rendu actuel, <strong>téléchargez-le maintenant</strong> via les boutons de téléchargement avant qu'il ne soit remplacé.
                   </p>
                   <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.75rem; line-height: 1.5;">
                     Rechargez la page dans 2-3 minutes pour voir le nouveau compte-rendu.
