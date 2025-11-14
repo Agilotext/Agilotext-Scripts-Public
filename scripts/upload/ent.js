@@ -11,7 +11,8 @@ function fetchWithTimeout(url, options = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
   
-  return fetch(url, { ...options, signal: ctrl.signal })
+  // ⭐ Ajouter les options CORS comme dans Code-save_transcript.js
+  return fetch(url, { ...options, signal: ctrl.signal, mode: 'cors', credentials: 'omit', cache: 'no-store' })
     .then(response => {
       if (!response.ok) {
         const status = response.status;
@@ -81,6 +82,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const translateCheckbox    = document.getElementById('toggle-translate');
   const translateSelect      = document.getElementById('translate-select');
 
+  // YouTube upload source tabs
+  const fileTabLink          = document.querySelector('[data-w-tab="File"]');
+  const youtubeTabLink       = document.querySelector('[data-w-tab="YouTube"]');
+  const youtubeInput         = document.getElementById('youtube-url-input');
+  const youtubeContainer     = document.querySelector('.youtube-input-container');
+  const youtubeToggleLink    = document.querySelector('.youtube-toggle-link');
+
   /* ------------ Error mapping ------------- */
   const errorMessageDivs = {
     default:      document.getElementById('form_error'),
@@ -95,6 +103,9 @@ document.addEventListener('DOMContentLoaded', () => {
     timeout:      document.getElementById('form_error_timeout'),
     tooManyHours: document.getElementById('form_error_too_many_hours'),
     unreachable:  document.getElementById('form_error_unreachable'),
+    youtubeInvalid: document.getElementById('form_error'),
+    youtubePrivate: document.getElementById('form_error'),
+    youtubeNotFound: document.getElementById('form_error'),
   };
 
   /* ---------------- Helpers ---------------- */
@@ -109,6 +120,68 @@ document.addEventListener('DOMContentLoaded', () => {
     if (successDiv) successDiv.style.display = 'flex';
   };
   const scrollToEl = (el, offset=0) => window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset + offset, behavior:'smooth'});
+
+  // Détecter la source active (Fichier ou YouTube)
+  function getActiveUploadSource() {
+    // Si onglets présents, utiliser la logique des onglets
+    if (fileTabLink && fileTabLink.classList.contains('w--current')) return 'file';
+    if (youtubeTabLink && youtubeTabLink.classList.contains('w--current')) return 'youtube';
+    
+    // Sinon, détection automatique selon ce qui est rempli
+    // ⭐ PRIORITÉ ABSOLUE : Si le container YouTube est visible, c'est YouTube
+    if (youtubeContainer && youtubeContainer.classList.contains('is-visible')) {
+      // Si l'input a une valeur, c'est définitivement YouTube
+      if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) {
+        console.log('🔍 Source détectée: YouTube (container visible + valeur)');
+        return 'youtube';
+      }
+      // Si le container est visible mais vide, c'est quand même YouTube (utilisateur en train de remplir)
+      console.log('🔍 Source détectée: YouTube (container visible mais vide)');
+      return 'youtube';
+    }
+    
+    // Si l'input YouTube a une valeur même si le container n'est pas visible, c'est YouTube
+    if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) {
+      console.log('🔍 Source détectée: YouTube (valeur présente)');
+      return 'youtube';
+    }
+    
+    // Sinon, vérifier si un fichier est présent dans FilePond
+    const pond = FilePond.find(inputEl);
+    if (pond && pond.getFiles().length > 0) {
+      console.log('🔍 Source détectée: Fichier (FilePond)');
+      return 'file';
+    }
+    
+    // Par défaut, mode fichier (comportement existant)
+    console.log('🔍 Source détectée: Fichier (par défaut)');
+    return 'file';
+  }
+
+  // Valider l'URL YouTube
+  function validateYouTubeUrl(url) {
+    if (!url || !url.trim()) return { valid: false, error: 'Veuillez saisir une URL YouTube' };
+    
+    const trimmed = url.trim();
+    // Patterns YouTube acceptés
+    const patterns = [
+      /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+      /^https?:\/\/(www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+      /^https?:\/\/(www\.)?youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+    ];
+    
+    const isValid = patterns.some(pattern => pattern.test(trimmed));
+    if (!isValid) {
+      return { valid: false, error: 'URL YouTube invalide. Format attendu : https://www.youtube.com/watch?v=... ou https://youtu.be/...' };
+    }
+    
+    // Extraire l'ID de la vidéo
+    let videoId = null;
+    const match = trimmed.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/);
+    if (match) videoId = match[1];
+    
+    return { valid: true, url: trimmed, videoId };
+  }
 
   function adjustHtmlContent(html){
     const tmp=document.createElement('div'); tmp.innerHTML=html;
@@ -383,26 +456,70 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', on);
   });
 
-  async function sendWithRetry(fd, max = 3) {
-    const url = 'https://api.agilotext.com/api/v1/sendMultipleAudio';
+  async function sendWithRetry(data, max = 3, isYouTube = false) {
+    const url = isYouTube 
+      ? 'https://api.agilotext.com/api/v1/sendYoutubeUrl'
+      : 'https://api.agilotext.com/api/v1/sendMultipleAudio';
+    console.log(`🌐 Envoi vers: ${url} (YouTube: ${isYouTube})`);
+    
+    // ⭐ Pour YouTube : préparer le body en JSON, pour fichiers : FormData
+    const fetchOptions = {
+      method: 'POST',
+      timeout: 10 * 60 * 1000
+    };
+    
+    if (isYouTube) {
+      // YouTube : utiliser URLSearchParams comme dans Code-save_transcript.js pour éviter CORS
+      const body = new URLSearchParams();
+      Object.keys(data).forEach(key => {
+        body.append(key, String(data[key] || ''));
+      });
+      fetchOptions.body = body.toString();
+      fetchOptions.headers = {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+      };
+      console.log('📤 Payload URLSearchParams pour YouTube:', data);
+    } else {
+      // Fichiers : envoyer en FormData (pas de Content-Type, le navigateur l'ajoute automatiquement)
+      fetchOptions.body = data; // data est un FormData
+    }
+    
     for (let attempt = 1; attempt <= max; attempt++) {
       try {
         if (!navigator.onLine) await waitForOnline();
 
-        const res = await fetchWithTimeout(url, { method: 'POST', body: fd, timeout: 10 * 60 * 1000 });
-        let data = {};
-        try { data = await res.json(); } catch (_) {}
+        const res = await fetchWithTimeout(url, fetchOptions);
+        const textResponse = await res.text();
+        console.log('📄 Réponse brute:', textResponse);
+        let responseData = {};
+        try { 
+          responseData = JSON.parse(textResponse);
+        } catch (e) {
+          console.error('❌ Erreur parsing JSON:', e);
+          console.error('📄 Réponse texte brute:', textResponse);
+        }
 
-        if (res.ok && data && data.status === 'OK') return data;
+        console.log(`📥 Réponse API (tentative ${attempt}/${max}):`, {
+          status: res.status,
+          ok: res.ok,
+          data: responseData
+        });
 
-        const em = (data && data.errorMessage) || '';
+        if (res.ok && responseData && responseData.status === 'OK') {
+          console.log('✅ Succès!');
+          return responseData;
+        }
+
+        const em = (responseData && responseData.errorMessage) || '';
         if (
           em.includes('error_audio_format_not_supported') ||
           em.includes('error_duration_is_too_long_for_summary') ||
           em.includes('error_duration_is_too_long') ||
           em.includes('error_audio_file_not_found') ||
           em.includes('error_invalid_token') ||
-          em.includes('error_too_many_hours_for_last_30_days')
+          em.includes('error_too_many_hours_for_last_30_days') ||
+          em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
+          em.includes('ERROR_INVALID_YOUTUBE_URL')
         ) {
           return data;
         }
@@ -414,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await delay(backoff);
           continue;
         }
-        return data;
+        return responseData;
 
       } catch (err) {
         if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
@@ -443,6 +560,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const beforeUnloadGuard = (ev)=>{ if (form.dataset.sending === '1') { ev.preventDefault(); ev.returnValue=''; } };
     window.addEventListener('beforeunload', beforeUnloadGuard);
 
+    const uploadSource = getActiveUploadSource();
+    console.log('📤 Submit - Source détectée:', uploadSource);
+    console.log('📤 YouTube container visible:', youtubeContainer?.classList.contains('is-visible'));
+    console.log('📤 YouTube input value:', youtubeInput?.value);
+    
+    // ⭐ Pour YouTube, créer un FormData vide pour éviter les champs de fichier
+    const fd = uploadSource === 'youtube' ? new FormData() : new FormData(form);
+    
+    // Récupérer l'email (peut être dans value ou src selon Webflow)
+    let email;
+    if (uploadSource === 'youtube') {
+      const emailInput = document.querySelector('input[name="memberEmail"]');
+      email = emailInput?.value || emailInput?.getAttribute('src') || emailInput?.getAttribute('data-src') || '';
+      console.log('📧 Email récupéré pour YouTube:', email);
+    } else {
+      email = fd.get('memberEmail');
+    }
+    
+    // Vérifier que l'email est valide
+    if (!email || !email.trim()) {
+      console.error('❌ Email non trouvé !');
+      showError('invalidToken');
+      form.dataset.sending = '0';
+      window.removeEventListener('beforeunload', beforeUnloadGuard);
+      return;
+    }
+
+    // Validation selon la source
+    if (uploadSource === 'youtube') {
+      // Mode YouTube : valider l'URL
+      if (!youtubeInput || !youtubeInput.value) {
+        showError('youtubeInvalid');
+        alert('Veuillez saisir une URL YouTube');
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
+      
+      const validation = validateYouTubeUrl(youtubeInput.value);
+      if (!validation.valid) {
+        showError('youtubeInvalid');
+        alert(validation.error);
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
+    } else {
+      // Mode Fichier : vérifier qu'un fichier est présent
     const pond = FilePond.find(inputEl);
     if (!pond || pond.getFiles().length === 0) {
       showError('audioNotFound');
@@ -450,20 +615,28 @@ document.addEventListener('DOMContentLoaded', () => {
       window.removeEventListener('beforeunload', beforeUnloadGuard);
       return;
     }
+    }
 
-    formLoadingDiv.style.display='block';
-    submitBtn.disabled=true;
-
-    const fd=new FormData(form);
-    const email=fd.get('memberEmail');
     if(!globalToken){
       console.error('Token non disponible');
       submitBtn.disabled=false;
       formLoadingDiv.style.display='none';
       form.dataset.sending = '0';
       window.removeEventListener('beforeunload', beforeUnloadGuard);
+      
+      // Afficher un message d'erreur clair à l'utilisateur
+      if (!email || !email.trim()) {
+        showError('invalidToken');
+        alert('Impossible de récupérer vos informations de connexion. Cela peut être dû à une connexion internet instable. Veuillez rafraîchir la page ou vous reconnecter.');
+      } else {
+        showError('invalidToken');
+        alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page ou vous reconnecter.');
+      }
       return;
     }
+
+    formLoadingDiv.style.display='block';
+    submitBtn.disabled=true;
 
     const speakersChecked=speakersCheckbox.checked;
     const summaryChecked=summaryCheckbox.checked;
@@ -472,27 +645,73 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
-    fd.append('token',globalToken);
-    fd.append('username',email);
-    fd.append('edition',edition);
-    fd.append('timestampTranscript', speakersChecked?'true':'false');
-    if(speakersChecked){
-      fd.append('speakersExpected',speakersExpected);
-      fd.append('formatTranscript','false');
+    // ⭐ Pour YouTube : construire un objet qui sera converti en URLSearchParams (comme Code-save_transcript.js)
+    // Pour fichier : utiliser le FormData du formulaire
+    let payload;
+    
+    if (uploadSource === 'youtube') {
+      // Récupérer les champs nécessaires depuis le formulaire
+      const memberIdInput = document.querySelector('input[name="memberId"]');
+      const deviceIdInput = document.querySelector('input[name="deviceId"]');
+      
+      // Récupérer memberId (peut être dans value ou src selon Webflow)
+      const memberId = memberIdInput?.value || memberIdInput?.getAttribute('src') || memberIdInput?.getAttribute('data-src') || '';
+      
+      // Vérifier que le token est disponible
+      if (!globalToken) {
+        console.error('❌ Token non disponible pour YouTube !');
+        showError('invalidToken');
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
+      
+      const validation = validateYouTubeUrl(youtubeInput.value);
+      
+      // ⭐ Construire l'objet JSON pour YouTube
+      payload = {
+        token: globalToken,
+        username: email,
+        edition: edition,
+        timestampTranscript: speakersChecked ? 'true' : 'false',
+        formatTranscript: speakersChecked ? 'false' : (formatChecked ? 'true' : 'false'),
+        doSummary: summaryChecked ? 'true' : 'false',
+        url: validation.url, // ⭐ Le paramètre doit être 'url' selon l'API sendYoutubeUrl
+        deviceId: deviceIdInput?.value || window.DEVICE_ID || '',
+        mailTranscription: 'true'
+      };
+      
+      if (memberId) payload.memberId = memberId;
+      if (speakersChecked) payload.speakersExpected = speakersExpected;
+      if (translateCheckbox && translateCheckbox.checked) {
+        payload.translateTo = translateSelect.value;
+      }
+      
+      console.log('📋 Payload pour YouTube (sera envoyé en URLSearchParams):', payload);
     } else {
-      fd.append('formatTranscript',formatChecked?'true':'false');
+      // Mode fichier : utiliser le FormData du formulaire
+      fd.append('token', globalToken);
+      fd.append('username', email);
+      fd.append('edition', edition);
+      fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
+      if (speakersChecked) {
+        fd.append('speakersExpected', speakersExpected);
+        fd.append('formatTranscript', 'false');
+      } else {
+        fd.append('formatTranscript', formatChecked ? 'true' : 'false');
+      }
+      fd.append('doSummary', summaryChecked ? 'true' : 'false');
+      if (translateCheckbox && translateCheckbox.checked) {
+        fd.append('translateTo', translateSelect.value);
+      }
+      fd.append('fileUpload1', fd.get('audioFile')); 
+      fd.delete('audioFile');
+      fd.append('deviceId', window.DEVICE_ID || '');
+      fd.append('mailTranscription', 'true');
+      payload = fd; // Pour fichiers, payload est le FormData
     }
-    fd.append('doSummary', summaryChecked?'true':'false');
 
-    if (translateCheckbox && translateCheckbox.checked) {
-      fd.append('translateTo', translateSelect.value);
-    }
-
-    fd.append('fileUpload1',fd.get('audioFile')); fd.delete('audioFile');
-    fd.append('deviceId', window.DEVICE_ID || '');
-    fd.append('mailTranscription','true');
-
-    sendWithRetry(fd)
+    sendWithRetry(payload, 3, uploadSource === 'youtube')
       .then(data=>{
         formLoadingDiv.style.display='none';
         if(data.status==='OK'){
@@ -513,11 +732,14 @@ document.addEventListener('DOMContentLoaded', () => {
           else if(err.includes('error_audio_file_not_found'))              showError('audioNotFound');
           else if(err.includes('error_invalid_token'))                     showError('invalidToken');
           else if(err.includes('error_too_many_hours_for_last_30_days'))   showError('tooManyHours');
+          else if(err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.includes('youtube') && err.includes('invalid')))      showError('youtubeInvalid');
+          else if(err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || (err.includes('youtube') && err.includes('private')))    showError('youtubePrivate');
+          else if(err.includes('youtube') && err.includes('not found'))    showError('youtubeNotFound');
           else                                                             showError('default');
         }
       })
       .catch(err=>{
-        console.error('sendMultipleAudio:',err);
+        console.error('Erreur lors de l\'envoi:',err);
         showError(err.type||'default');
       })
       .finally(()=>{
@@ -529,5 +751,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   setSummaryUI('hidden');
+
+  // Gérer l'ouverture/fermeture du container YouTube
+  if (youtubeToggleLink && youtubeContainer) {
+    youtubeToggleLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      const isVisible = youtubeContainer.classList.contains('is-visible');
+      
+      if (isVisible) {
+        youtubeContainer.classList.remove('is-visible');
+        youtubeToggleLink.classList.remove('is-open');
+      } else {
+        youtubeContainer.classList.add('is-visible');
+        youtubeToggleLink.classList.add('is-open');
+        // Focus sur l'input après l'ouverture
+        setTimeout(() => {
+          if (youtubeInput) youtubeInput.focus();
+        }, 200);
+      }
+    });
+  }
 });
 
