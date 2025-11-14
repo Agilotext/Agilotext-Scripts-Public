@@ -127,9 +127,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (youtubeTabLink && youtubeTabLink.classList.contains('w--current')) return 'youtube';
     
     // Sinon, détection automatique selon ce qui est rempli
-    // Priorité : si input YouTube a une valeur, utiliser YouTube
-    if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) {
-      return 'youtube';
+    // ⭐ PRIORITÉ ABSOLUE : si input YouTube a une valeur (même vide mais visible), utiliser YouTube
+    if (youtubeInput) {
+      const youtubeValue = youtubeInput.value ? youtubeInput.value.trim() : '';
+      // Si l'input YouTube est visible ET a une valeur, c'est YouTube
+      if (youtubeContainer && youtubeContainer.classList.contains('is-visible') && youtubeValue) {
+        return 'youtube';
+      }
+      // Si l'input YouTube a une valeur même si le container n'est pas visible, c'est YouTube
+      if (youtubeValue) {
+        return 'youtube';
+      }
     }
     
     // Sinon, vérifier si un fichier est présent dans FilePond
