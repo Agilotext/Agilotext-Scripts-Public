@@ -126,7 +126,7 @@ function humanizeError({ where = 'summary', code = '', json = null, httpStatus =
   }
 
   const M = {
-    ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS: "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).",
+    ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS: "Vous n'avez pas demandé de compte-rendu pour cette transcription.",
     READY_SUMMARY_PENDING:                   "Résumé en préparation…",
     NOT_READY:                               "Résumé en préparation…",
     READY_SUMMARY_ON_ERROR:                  "La génération du compte-rendu a échoué.",
