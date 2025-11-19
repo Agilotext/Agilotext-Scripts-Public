@@ -1389,7 +1389,8 @@
 
     // ✅ NOUVELLES FONCTIONNALITÉS
     statusIndicator = createStatusIndicator();
-    startAutoSave();
+    // ✅ STAGING : Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+    // startAutoSave(); // Commenté pour version STAGING - test sauvegarde manuelle uniquement
     setupBeforeUnload();
     setupConflictDetection();
     
