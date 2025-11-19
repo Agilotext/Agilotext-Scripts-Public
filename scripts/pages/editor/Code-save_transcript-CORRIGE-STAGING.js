@@ -10,9 +10,10 @@
 
 (function(){
 
-  if (window.__agiloSave_FULL_12_JSON_CONTENT) return; 
+  // ✅ STAGING : Identifiant unique pour éviter conflit avec version normale
+  if (window.__agiloSave_FULL_12_JSON_CONTENT_STAGING) return; 
 
-  window.__agiloSave_FULL_12_JSON_CONTENT = true;
+  window.__agiloSave_FULL_12_JSON_CONTENT_STAGING = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
