@@ -776,6 +776,7 @@
 
   // ✅ CORRECTION DÉFINITIVE : doSave avec debounce, vérification de contenu ET vérification que le transcript est chargé
   async function doSave(btn){
+    console.log('[agilo:save:STAGING] 🚀 doSave appelé, btn:', btn);
     // ✅ NOUVEAU : Debounce pour éviter les sauvegardes multiples
     if (saveDebounceTimer) {
       clearTimeout(saveDebounceTimer);
@@ -1340,6 +1341,44 @@
   window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
   window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
+  
+  // ✅ DEBUG STAGING : Exposer des fonctions de debug
+  window.agiloDebug = {
+    findButton: findSaveButton,
+    testSave: () => {
+      const btn = findSaveButton();
+      console.log('🔍 [DEBUG] Bouton trouvé:', btn);
+      if (btn) {
+        console.log('🖱️ [DEBUG] Test du clic...');
+        btn.click();
+      } else {
+        console.error('❌ [DEBUG] Aucun bouton trouvé');
+      }
+    },
+    testDoSave: () => {
+      const btn = findSaveButton();
+      console.log('🚀 [DEBUG] Test doSave direct...');
+      doSave(btn || null).then(r => console.log('✅ [DEBUG] Résultat:', r)).catch(e => console.error('❌ [DEBUG] Erreur:', e));
+    },
+    checkInit: () => {
+      console.log('🔍 [DEBUG] Vérification init...');
+      const btn = findSaveButton();
+      console.log('[DEBUG] Bouton:', btn);
+      console.log('[DEBUG] Version:', VERSION);
+      console.log('[DEBUG] Auto-save désactivé:', true);
+    },
+    checkState: async () => {
+      console.log('🔍 [DEBUG] État complet...');
+      const state = window.agiloGetState();
+      console.log('[DEBUG] État:', state);
+      try {
+        const check = await verifyTranscriptReady();
+        console.log('[DEBUG] Transcript ready:', check);
+      } catch (e) {
+        console.error('[DEBUG] Erreur vérification transcript:', e);
+      }
+    }
+  };
 
   // ✅ Script de diagnostic complet
   window.agiloDebugSave = async function() {
@@ -1374,8 +1413,29 @@
   /* ===== BOOT ===== */
   function init(){
     const btn = findSaveButton();
-    if (btn){ btn.addEventListener('click', (e)=>{ e.preventDefault(); doSave(btn); }); }
-    else { console.warn('[agilo:save] bouton .button.save introuvable'); }
+    console.log('[agilo:save:STAGING] 🔍 Recherche du bouton de sauvegarde...');
+    console.log('[agilo:save:STAGING] Bouton trouvé:', btn);
+    if (btn){ 
+      console.log('[agilo:save:STAGING] ✅ Bouton trouvé, ajout du listener click');
+      btn.addEventListener('click', (e)=>{ 
+        console.log('[agilo:save:STAGING] 🖱️ Clic sur le bouton de sauvegarde détecté');
+        e.preventDefault(); 
+        e.stopPropagation();
+        console.log('[agilo:save:STAGING] Appel de doSave...');
+        doSave(btn).catch(err => {
+          console.error('[agilo:save:STAGING] ❌ Erreur dans doSave:', err);
+        });
+      }); 
+      console.log('[agilo:save:STAGING] ✅ Listener ajouté avec succès');
+    }
+    else { 
+      console.warn('[agilo:save:STAGING] ⚠️ bouton .button.save introuvable');
+      console.warn('[agilo:save:STAGING] Sélecteurs testés:', [
+        '[data-action="save-transcript"]',
+        'button.button.save[data-opentech-ux-zone-id]',
+        'button.button.save'
+      ]);
+    }
 
     window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
     document.addEventListener('agilo:save', ()=>{ const b=findSaveButton(); doSave(b||null); });
