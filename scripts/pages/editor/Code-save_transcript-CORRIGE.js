@@ -1215,89 +1215,56 @@
     document.head.appendChild(style);
   }
   
-  // ✅ NOUVEAU : Fonction pour gérer la visibilité du bouton selon l'onglet actif
   function updateSaveButtonVisibility() {
-    const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
-                    document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
-                    document.querySelector('button.button.save');
-    
-    if (!saveBtn) {
-      console.warn('[agilo:save] Bouton Sauvegarder non trouvé');
-      return;
-    }
-    
-    // ✅ AMÉLIORATION : Vérifier à la fois les onglets ET les panneaux
-    // (car Code-main-editor.js modifie directement les panneaux)
-    
-    // 1. Vérifier l'onglet actif via aria-selected
-    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
-    const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
-    const isChatTab = activeTab && activeTab.id === 'tab-chat';
-    const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
-    
-    // 2. Vérifier l'état des panneaux (Code-main-editor.js modifie directement les panneaux)
-    const paneChat = document.querySelector('#pane-chat');
-    const paneSummary = document.querySelector('#pane-summary');
-    const paneTranscript = document.querySelector('#pane-transcript');
-    
-    // Vérifier si un panneau est visible (pas hidden et is-active)
-    const isChatPaneActive = paneChat && 
-                             !paneChat.hasAttribute('hidden') && 
-                             (paneChat.classList.contains('is-active') || 
-                              window.getComputedStyle(paneChat).display !== 'none');
-    
-    const isSummaryPaneActive = paneSummary && 
-                                !paneSummary.hasAttribute('hidden') && 
-                                (paneSummary.classList.contains('is-active') || 
-                                 window.getComputedStyle(paneSummary).display !== 'none');
-    
-    const isTranscriptPaneActive = paneTranscript && 
-                                   !paneTranscript.hasAttribute('hidden') && 
-                                   (paneTranscript.classList.contains('is-active') || 
-                                    window.getComputedStyle(paneTranscript).display !== 'none');
-    
-    // ✅ Décision finale : Combiner l'état des onglets ET des panneaux
-    // Si un panneau est actif, cela prime sur l'onglet (car Code-main-editor.js peut modifier les panneaux directement)
-    const finalIsChat = isChatTab || isChatPaneActive;
-    const finalIsSummary = isSummaryTab || isSummaryPaneActive;
-    const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
-    
-    // ✅ Logs réduits (seulement si changement d'état)
-    const wasVisible = !saveBtn.classList.contains('agilo-hide-save') && 
-                      window.getComputedStyle(saveBtn).display !== 'none';
-    
-    if (finalIsTranscript && !finalIsChat && !finalIsSummary) {
-      // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
-      if (!wasVisible) {
-        console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
-      }
-      saveBtn.classList.remove('agilo-hide-save');
-      saveBtn.style.setProperty('display', '', 'important');
-      saveBtn.style.setProperty('visibility', '', 'important');
-      saveBtn.style.setProperty('opacity', '', 'important');
-      saveBtn.style.setProperty('pointer-events', '', 'important');
-    } else if (finalIsSummary || finalIsChat) {
-      // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      // ✅ Double protection : classe CSS + style inline avec !important
-      if (wasVisible) {
-        const tabName = finalIsSummary ? 'Compte-rendu' : 'Conversation';
-        console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`);
-      }
-      saveBtn.classList.add('agilo-hide-save');
-      saveBtn.style.setProperty('display', 'none', 'important');
-      saveBtn.style.setProperty('visibility', 'hidden', 'important');
-      saveBtn.style.setProperty('opacity', '0', 'important');
-      saveBtn.style.setProperty('pointer-events', 'none', 'important');
-    } else {
-      // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
-      saveBtn.classList.add('agilo-hide-save');
-      saveBtn.style.setProperty('display', 'none', 'important');
-      saveBtn.style.setProperty('visibility', 'hidden', 'important');
-      saveBtn.style.setProperty('opacity', '0', 'important');
-      saveBtn.style.setProperty('pointer-events', 'none', 'important');
-      console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
-    }
+  const saveBtn =
+    document.querySelector('[data-action="save-transcript"]') ||
+    document.querySelector('button.button.save[data-opentech-ux-zone-id]') ||
+    document.querySelector('button.button.save');
+
+  if (!saveBtn) {
+    console.warn('[agilo:save] Bouton Sauvegarder non trouvé');
+    return;
   }
+
+  // Onglet actif (barre Transcription / Compte rendu / Conversation)
+  const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+  const activeId  = activeTab?.id || '';  // si on ne sait pas, string vide
+
+  const isSummaryTab    = activeId === 'tab-summary';
+  const isChatTab       = activeId === 'tab-chat';
+  const isTranscriptTab = activeId === 'tab-transcript';
+
+  // 👉 Règle simple :
+  // - si onglet Summary OU Chat → on cache
+  // - dans tous les autres cas (Transcription, ou on ne sait pas) → on montre
+  const shouldHide = isSummaryTab || isChatTab;
+
+  const wasVisible =
+    !saveBtn.classList.contains('agilo-hide-save') &&
+    window.getComputedStyle(saveBtn).display !== 'none';
+
+  if (!shouldHide) {
+    if (!wasVisible) {
+      console.log('[agilo:save] Bouton Sauvegarder affiché (onglet Transcription ou inconnu)');
+    }
+    saveBtn.classList.remove('agilo-hide-save');
+    saveBtn.style.setProperty('display', '', 'important');
+    saveBtn.style.setProperty('visibility', '', 'important');
+    saveBtn.style.setProperty('opacity', '', 'important');
+    saveBtn.style.setProperty('pointer-events', '', 'important');
+  } else {
+    if (wasVisible) {
+      const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
+      console.log(`[agilo:save] Bouton Sauvegarder caché (onglet ${tabName} actif)`);
+    }
+    saveBtn.classList.add('agilo-hide-save');
+    saveBtn.style.setProperty('display', 'none', 'important');
+    saveBtn.style.setProperty('visibility', 'hidden', 'important');
+    saveBtn.style.setProperty('opacity', '0', 'important');
+    saveBtn.style.setProperty('pointer-events', 'none', 'important');
+  }
+}
+
   
   // ✅ Exposer la fonction globalement pour pouvoir l'appeler manuellement
   window.updateSaveButtonVisibility = updateSaveButtonVisibility;
