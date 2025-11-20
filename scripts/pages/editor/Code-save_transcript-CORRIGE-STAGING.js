@@ -1,30 +1,26 @@
-// Agilotext - Save Transcript (VERSION STAGING - CORRIGÉE avec toutes les protections)
+// Agilotext - Save Transcript (VERSION STAGING - Tests)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-save-transcript dans Webflow
+// ✅ VERSION STAGING : Protection suppression segments + Undo/Redo + Restauration brouillon
 // ✅ CORRECTIONS APPLIQUÉES :
 //   - Bug getAllPanes() : Force transcriptEditor (ne peut plus retourner summaryEditor)
 //   - Vérification onglet actif avant sauvegarde
 //   - Vérification que le transcript est chargé
 //   - Protection contre sauvegarde de transcript vide
-//   - ✅ STAGING : Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+//   - ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
 
 (function(){
 
-  // ✅ STAGING : Identifiant unique pour éviter conflit avec version normale
-  if (window.__agiloSave_FULL_12_JSON_CONTENT_STAGING) {
-    console.warn('[agilo:save:STAGING] ⚠️ Script déjà chargé (identifiant présent)');
-    return;
-  } 
+  if (window.__agiloSave_FULL_12_JSON_CONTENT) return; 
 
-  console.log('[agilo:save:STAGING] 🚀 Initialisation du script STAGING...');
-  window.__agiloSave_FULL_12_JSON_CONTENT_STAGING = true;
+  window.__agiloSave_FULL_12_JSON_CONTENT = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
   const TOKEN_GET = API_BASE + '/getToken';
   const CHECK_GET_JSON = API_BASE + '/receiveTextJson';
   const CHECK_GET_TXT = API_BASE + '/receiveText';
-  const VERSION = 'save-full-12-staging-manual-only (sauvegarde manuelle uniquement - STAGING)';
+  const VERSION = 'save-full-14-manual-only (sauvegarde manuelle uniquement + protection messages erreur + améliorations UX)';
 
   const MIN_SPINNER_MS = 400;
   const MAX_HTML_SNAPSHOT_CHARS = 1_000_000;
@@ -104,23 +100,31 @@
       const hasLoader = transcriptEditor.querySelector('.ag-loader, .loading, [data-loading="true"]');
       const hasPlaceholder = transcriptEditor.querySelector('[data-placeholder], .placeholder');
       
-      console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
-        segmentsCount,
-        textLength,
-        hasLoader: !!hasLoader,
-        hasPlaceholder: !!hasPlaceholder,
-        transcriptEditorExists: !!transcriptEditor
-      });
+      // ✅ Logs détaillés seulement en mode debug
+      if (window.agiloSaveDebug) {
+        console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
+          segmentsCount,
+          textLength,
+          hasLoader: !!hasLoader,
+          hasPlaceholder: !!hasPlaceholder,
+          transcriptEditorExists: !!transcriptEditor
+        });
+      }
       
       // ✅ Si on a du contenu valide, on peut sauvegarder
       if (segmentsCount >= MIN_SEGMENTS_COUNT || textLength >= MIN_CONTENT_LENGTH) {
         // Vérifier qu'il n'y a pas de loader actif
         if (!hasLoader && !hasPlaceholder) {
-          console.log('[agilo:save:security] ✅ Transcript prêt:', {
-            segmentsCount,
-            textLength,
-            preview: textContent.substring(0, 100)
-          });
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', {
+              segmentsCount,
+              textLength,
+              preview: textContent.substring(0, 100)
+            });
+          } else {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', `${segmentsCount} segments, ${textLength} caractères`);
+          }
           return { 
             isReady: true, 
             content: {
@@ -183,38 +187,9 @@
       __draftTimer = setTimeout(()=>{
         try{
           if (!main) return;
-          
-          // ✅ CORRECTION : Ne pas sauvegarder si le transcript est en cours de chargement
-          if (main.getAttribute('aria-busy') === 'true') {
-            return;
-          }
-          
-          // ✅ CORRECTION : Vérifier qu'il y a du contenu valide avant de sauvegarder
-          const text = (main.innerText ?? main.textContent ?? '').replace(/\r\n?/g,'\n').trim();
-          
-          // Ne pas sauvegarder si le texte est vide ou trop court
-          if (!text || text.length < 10) {
-            // Supprimer le brouillon vide pour éviter de le restaurer plus tard
-            try {
-              localStorage.removeItem(key);
-            } catch {}
-            return;
-          }
-          
-          // Vérifier qu'il y a des segments (transcript structuré) ou du texte valide
-          const segments = main.querySelectorAll('.ag-seg');
-          if (segments.length === 0 && text.length < 50) {
-            // Pas de segments et texte trop court = probablement un état vide
-            try {
-              localStorage.removeItem(key);
-            } catch {}
-            return;
-          }
-          
+          const text = (main.innerText ?? main.textContent ?? '').replace(/\r\n?/g,'\n');
           localStorage.setItem(key, JSON.stringify({ts:Date.now(), text}));
-        }catch(e){
-          console.warn('[agilo:save:STAGING] ⚠️ Erreur sauvegarde brouillon:', e);
-        }
+        }catch{}
       }, 1200);
     };
     main?.addEventListener('input', save, true);
@@ -222,42 +197,42 @@
   }
   function restoreDraftIfAny(jobId, main){
     try{
-      // ✅ CORRECTION CRITIQUE : Ne PAS restaurer si le transcript est en cours de chargement
-      // Attendre que le transcript soit chargé depuis l'API avant de restaurer un brouillon
-      if (main?.getAttribute('aria-busy') === 'true') {
-        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : transcript en cours de chargement');
-        return;
-      }
-      
-      // ✅ CORRECTION : Vérifier qu'il y a des segments chargés avant de restaurer
-      const segments = main?.querySelectorAll('.ag-seg');
-      if (segments && segments.length > 0) {
-        // Le transcript est déjà chargé depuis l'API, ne pas restaurer le brouillon
-        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : transcript déjà chargé depuis l\'API');
-        return;
-      }
-      
       const raw = localStorage.getItem(`agilo:draft:${jobId}`); if (!raw) return;
       const j = JSON.parse(raw);
       if (!j?.text || !main) return;
       
-      // ✅ CORRECTION : Vérifier que le brouillon n'est pas vide
-      const draftText = (j.text || '').trim();
+      // ✅ PROTECTION : Ne pas restaurer si le brouillon est vide ou suspect
+      const draftText = String(j.text || '').trim();
       if (!draftText || draftText.length < 10) {
-        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : brouillon vide ou trop court');
+        console.warn('[agilo:save] ⚠️ Brouillon local ignoré (trop court ou vide)');
         return;
       }
       
       const cur = (main.innerText ?? main.textContent ?? '').trim();
-      // ✅ CORRECTION : Ne restaurer QUE si vraiment vide ET que le brouillon est valide
-      if (!cur && draftText.length >= 10){
-        if (main.innerText!==undefined) main.innerText = j.text;
-        else main.textContent = j.text;
-        main.dispatchEvent(new Event('input', {bubbles:true}));
-        console.info('[agilo:save:STAGING] ✅ Brouillon local restauré:', draftText.length, 'caractères');
+      if (!cur){
+        // ✅ CORRECTION : Utiliser execCommand pour préserver l'historique undo/redo
+        main.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(main);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        
+        // Utiliser execCommand pour insérer le texte (préserve undo/redo)
+        if (document.execCommand && document.execCommand('insertText', false, draftText)) {
+          main.dispatchEvent(new Event('input', {bubbles:true}));
+          console.info('[agilo:save] ✅ Brouillon local restauré (undo/redo préservé)');
+        } else {
+          // Fallback si execCommand n'est pas disponible
+          if (main.innerText!==undefined) main.innerText = draftText;
+          else main.textContent = draftText;
+          main.dispatchEvent(new Event('input', {bubbles:true}));
+          console.info('[agilo:save] ⚠️ Brouillon local restauré (fallback, undo/redo non préservé)');
+        }
       }
     }catch(e){
-      console.warn('[agilo:save:STAGING] ⚠️ Erreur restauration brouillon:', e);
+      console.warn('[agilo:save] ⚠️ Erreur restauration brouillon:', e);
     }
   }
 
@@ -796,7 +771,12 @@
       }))
     };
     
-    console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    // ✅ Log JSON seulement en mode debug (réduit la pollution de la console)
+    if (window.agiloSaveDebug) {
+      console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    } else {
+      console.log('✅ JSON transcript_status:', `{jobId: ${transcriptStatusJson.job_meta.jobId}, segments: ${transcriptStatusJson.segments.length}, duration: ${transcriptStatusJson.job_meta.milli_duration}ms}`);
+    }
     
     const body = new URLSearchParams();
     body.append('username', params.username);
@@ -836,6 +816,26 @@
 
   // ✅ CORRECTION DÉFINITIVE : doSave avec debounce, vérification de contenu ET vérification que le transcript est chargé
   async function doSave(btn){
+    // ✅ NOUVEAU : Bloquer si la page est en cours de déchargement
+    if (document.visibilityState === 'hidden' || 
+        document.readyState === 'unloading') {
+      console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : page en cours de déchargement');
+      return {ok:false, reason:'page_unloading'};
+    }
+    
+    // ✅ NOUVEAU : Bloquer si un chargement est en cours
+    const transcriptEditor = document.querySelector('#transcriptEditor');
+    const isLoading = transcriptEditor?.getAttribute('aria-busy') === 'true' ||
+                      document.querySelector('#pane-summary')?.getAttribute('aria-busy') === 'true';
+    
+    if (isLoading) {
+      console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : chargement en cours');
+      if (btn) {
+        showToast('⚠️ Veuillez attendre la fin du chargement avant de sauvegarder', 'warning');
+      }
+      return {ok:false, reason:'loading_in_progress'};
+    }
+    
     // ✅ NOUVEAU : Debounce pour éviter les sauvegardes multiples
     if (saveDebounceTimer) {
       clearTimeout(saveDebounceTimer);
@@ -906,7 +906,13 @@
             return;
           }
           
-          console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          } else {
+            const { segmentsCount = 0, textLength = 0 } = transcriptCheck.content || {};
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt');
+          }
 
           const creds=await ensureCreds();
           const { email, token, edition, jobId } = creds;
@@ -1134,8 +1140,14 @@
     }
   }
 
-  // ✅ 5. SAUVEGARDE AVANT FERMETURE
+  // ✅ 5. SAUVEGARDE AVANT FERMETURE - DÉSACTIVÉE EN STAGING
   function setupBeforeUnload() {
+    // ✅ STAGING : DÉSACTIVÉ car cause des sauvegardes involontaires au rechargement
+    console.warn('[agilo:save:STAGING] ⚠️ beforeunload DÉSACTIVÉ (sauvegarde manuelle uniquement)');
+    return; // ⚠️ NE JAMAIS sauvegarder automatiquement au rechargement
+    
+    // Code original commenté pour référence :
+    /*
     window.addEventListener('beforeunload', async (e) => {
       if (isSaving) {
         e.preventDefault();
@@ -1144,33 +1156,68 @@
       }
       
       try {
-        // ✅ NOUVEAU : Vérifier que le transcript est chargé avant sauvegarde avant fermeture
+        // ✅ PROTECTION CRITIQUE : Vérifier que le transcript est chargé ET contient du contenu
         const transcriptCheck = await verifyTranscriptReady();
         if (!transcriptCheck.isReady) {
-          console.warn('[agilo:save:security] ⏭️ Sauvegarde avant fermeture ignorée : transcript non prêt');
-          return;
+          console.warn('[agilo:save:security] ⏭️ Sauvegarde avant fermeture IGNORÉE : transcript non prêt');
+          return; // NE PAS sauvegarder si le transcript n'est pas prêt
+        }
+        
+        // ✅ PROTECTION CRITIQUE : Vérifier le contenu AVANT de récupérer les credentials
+        const transcriptEditor = document.querySelector('#transcriptEditor');
+        if (transcriptEditor) {
+          const currentText = (transcriptEditor.innerText || transcriptEditor.textContent || '').trim();
+          const segmentsCount = transcriptEditor.querySelectorAll('.ag-seg').length;
+          
+          // ✅ PROTECTION RENFORCÉE : Ne JAMAIS sauvegarder un transcript vide
+          if (currentText.length < MIN_CONTENT_LENGTH || segmentsCount < MIN_SEGMENTS_COUNT) {
+            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - transcript vide ou invalide', {
+              textLength: currentText.length,
+              segmentsCount: segmentsCount,
+              minLength: MIN_CONTENT_LENGTH,
+              minSegments: MIN_SEGMENTS_COUNT
+            });
+            return; // NE JAMAIS sauvegarder un transcript vide
+          }
         }
         
         const creds = await ensureCreds();
         if (creds.email && creds.token && creds.jobId) {
           const pick = await serializeAll();
-          if (pick.text && pick.text.trim().length >= MIN_CONTENT_LENGTH) {
-            const currentContent = pick.text.trim();
-            if (currentContent !== lastSavedContent) {
-              updateStatusIndicator('saving');
-              await postCorrectAPI({
-                username: creds.email,
-                token: creds.token,
-                jobId: creds.jobId,
-                edition: creds.edition
-              }, pick, {});
-            }
+          
+          // ✅ PROTECTION TRIPLE : Vérifier à nouveau après sérialisation
+          if (!pick.text || pick.text.trim().length < MIN_CONTENT_LENGTH) {
+            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - texte vide après sérialisation');
+            return; // NE JAMAIS sauvegarder un transcript vide
+          }
+          
+          if (!pick.segments || pick.segments.length < MIN_SEGMENTS_COUNT) {
+            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - pas de segments');
+            return; // NE JAMAIS sauvegarder sans segments
+          }
+          
+          const currentContent = pick.text.trim();
+          
+          // ✅ PROTECTION : Ne sauvegarder que si le contenu a changé ET est valide
+          if (currentContent !== lastSavedContent && currentContent.length >= MIN_CONTENT_LENGTH) {
+            console.log('[agilo:save:security] ✅ Sauvegarde avant fermeture autorisée - contenu valide');
+            updateStatusIndicator('saving');
+            await postCorrectAPI({
+              username: creds.email,
+              token: creds.token,
+              jobId: creds.jobId,
+              edition: creds.edition
+            }, pick, {});
+          } else {
+            console.log('[agilo:save:security] ⏭️ Sauvegarde avant fermeture ignorée - pas de changement ou contenu invalide');
           }
         }
       } catch (error) {
-        console.warn('⚠️ Sauvegarde avant fermeture échouée:', error);
+        console.error('[agilo:save:security] 🚨 ERREUR sauvegarde avant fermeture:', error);
+        // En cas d'erreur, NE PAS sauvegarder (mieux vaut ne pas écraser avec du vide)
       }
     });
+    */
   }
 
   // ✅ 6. GESTION DES CONFLITS (multi-onglets) - moins agressive
@@ -1278,7 +1325,7 @@
     const finalIsSummary = isSummaryTab || isSummaryPaneActive;
     const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
     
-    // ✅ STAGING : Logs réduits (seulement si changement d'état)
+    // ✅ Logs réduits (seulement si changement d'état)
     const wasVisible = !saveBtn.classList.contains('agilo-hide-save') && 
                       window.getComputedStyle(saveBtn).display !== 'none';
     
@@ -1424,24 +1471,15 @@
 
   /* ===== BOOT ===== */
   function init(){
-    console.log('[agilo:save:STAGING] 🔧 Initialisation de init()...');
     const btn = findSaveButton();
-    console.log('[agilo:save:STAGING] 🔍 Bouton recherché:', btn);
     if (btn){ 
-      console.log('[agilo:save:STAGING] ✅ Bouton trouvé, ajout listener');
       btn.addEventListener('click', (e)=>{ 
-        console.log('[agilo:save:STAGING] 🖱️ Clic détecté');
         e.preventDefault(); 
-        doSave(btn).catch(err => console.error('[agilo:save:STAGING] ❌ Erreur:', err));
+        doSave(btn).catch(err => console.error('[agilo:save] ❌ Erreur:', err));
       }); 
     }
     else { 
-      console.warn('[agilo:save:STAGING] ⚠️ bouton .button.save introuvable');
-      console.warn('[agilo:save:STAGING] Sélecteurs testés:', [
-        '[data-action="save-transcript"]',
-        'button.button.save[data-opentech-ux-zone-id]',
-        'button.button.save'
-      ]);
+      console.warn('[agilo:save] ⚠️ bouton .button.save introuvable');
     }
 
     window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
@@ -1450,25 +1488,14 @@
     const { main } = getAllPanes();
     const jobId = pickJobId();
     if (jobId && main){
-      // ✅ CORRECTION CRITIQUE : Ne PAS restaurer le brouillon immédiatement
-      // Attendre que le transcript soit chargé depuis l'API (via loadJob)
-      // La restauration se fera après le chargement via un événement personnalisé
-      
-      // Écouter l'événement de fin de chargement du transcript
-      window.addEventListener('agilo:transcript-loaded', () => {
-        // Attendre un peu pour être sûr que le DOM est stable
-        setTimeout(() => {
-          restoreDraftIfAny(jobId, main);
-        }, 500);
-      }, { once: true });
-      
+      restoreDraftIfAny(jobId, main);
       startAutosaveDraft(jobId, main);
     }
 
     // ✅ NOUVELLES FONCTIONNALITÉS
     statusIndicator = createStatusIndicator();
-    // ✅ STAGING : Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
-    // startAutoSave(); // Commenté pour version STAGING
+    // ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+    // startAutoSave(); // Commenté : sauvegarde manuelle uniquement
     setupBeforeUnload();
     setupConflictDetection();
     
@@ -1513,16 +1540,12 @@
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
     }
 
-    console.info('[agilo:save:STAGING] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
+    console.info('[agilo:save] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
   }
 
-  // ✅ STAGING : Log pour vérifier que le script est bien chargé
-  console.log('[agilo:save:STAGING] 📦 Script chargé, état DOM:', document.readyState);
   if (document.readyState==='loading') {
-    console.log('[agilo:save:STAGING] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
     document.addEventListener('DOMContentLoaded', init, {once:true});
   } else {
-    console.log('[agilo:save:STAGING] ✅ DOM prêt, initialisation immédiate');
     init();
   }
 })();

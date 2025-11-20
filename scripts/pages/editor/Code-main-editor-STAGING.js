@@ -1,21 +1,13 @@
 // Agilotext - Main Editor (Transcript Editor Principal) - VERSION STAGING
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-main-editor dans Webflow
-// ✅ STAGING : Version de test avec toutes les corrections
+// ✅ VERSION STAGING : Protection RENFORCÉE contre suppression de segments (détection sélection + longueur)
 
 (function ready(fn){
   if (document.readyState !== 'loading') fn();
   else document.addEventListener('DOMContentLoaded', fn, { once:true });
 })(() => {
   'use strict';
-  
-  // ✅ STAGING : Identifiant unique pour éviter conflit avec version normale
-  if (window.__agiloMainEditor_STAGING) {
-    console.warn('[agilo:editor:STAGING] ⚠️ Script déjà chargé (identifiant présent)');
-    return;
-  }
-  console.log('[agilo:editor:STAGING] 🚀 Initialisation du script STAGING...');
-  window.__agiloMainEditor_STAGING = true;
 
   const API_BASE   = 'https://api.agilotext.com/api/v1';
   const editorRoot = document.getElementById('editorRoot');
@@ -160,17 +152,43 @@ function humanizeError({ where = 'summary', code = '', json = null, httpStatus =
   }
 })();
 // Canon CE -> texte visible (div/br -> \n), NBSP -> espace
+// ✅ PROTECTION RENFORCÉE : Vérifications contre états transitoires
 window.visibleTextFromBox = window.visibleTextFromBox || function(box){
   if (!box) return '';
+  
+  // ✅ NOUVEAU : Vérifier que l'élément est bien attaché au DOM
+  if (!box.isConnected) {
+    console.warn('[agilo:editor] ⚠️ visibleTextFromBox: élément non attaché au DOM');
+    return '';
+  }
+  
+  // ✅ NOUVEAU : Vérifier que l'élément n'est pas en cours d'édition problématique
+  if (box.classList.contains('is-deleting') || box.hasAttribute('data-transient')) {
+    console.warn('[agilo:editor] ⚠️ visibleTextFromBox: élément en état transitoire');
+    return '';
+  }
+  
   const clone = box.cloneNode(true);
   clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
   const BLOCKS = 'div,p,li,blockquote,pre,section,article,header,footer,h1,h2,h3,h4,h5,h6,ul,ol';
   clone.querySelectorAll(BLOCKS).forEach((el, i) => {
     if (i > 0 || el.previousSibling) el.before('\n');
   });
-  return (clone.textContent || '')
+  const result = (clone.textContent || '')
     .replace(/\r\n?/g,'\n')
     .replace(/\u00A0/g,' ');
+  
+  // ✅ NOUVEAU : Vérifier que le résultat n'est pas suspect (trop de perte)
+  if (result.length === 0 && box.textContent && box.textContent.trim().length > 10) {
+    console.error('[agilo:editor] 🚨 visibleTextFromBox: perte de contenu suspecte !', {
+      originalLength: box.textContent.length,
+      resultLength: result.length
+    });
+    // Retourner le textContent brut comme fallback
+    return box.textContent.replace(/\r\n?/g,'\n').replace(/\u00A0/g,' ');
+  }
+  
+  return result;
 };
 
 
@@ -573,68 +591,225 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
       doRenameFor(sp.closest('.ag-seg'), { triggerEl: sp });
     });
 
-    // ✅ PROTECTION : Empêcher la suppression complète d'un segment
-    root.addEventListener('beforeinput', (e)=>{
-      const node = e.target.closest('.ag-seg__text'); if (!node) return;
-      
-      // Si l'utilisateur essaie de supprimer tout le contenu d'un coup
-      if (e.inputType === 'deleteContent' || e.inputType === 'deleteContentBackward') {
-        const currentText = (node.innerText || node.textContent || '').trim();
-        const selection = window.getSelection();
-        
-        // Vérifier si la sélection couvre tout le contenu
-        if (selection && selection.rangeCount > 0) {
-          const range = selection.getRangeAt(0);
-          const selectedText = range.toString();
-          
-          // Si la sélection couvre tout le contenu (ou presque), empêcher la suppression
-          if (selectedText.length >= currentText.length * 0.9 && currentText.length > 0) {
-            e.preventDefault();
-            toast('⚠️ Impossible de supprimer tout le contenu d\'un segment. Sélectionnez une partie du texte à supprimer.');
-            return;
-          }
-        }
-        
-        // Vérifier aussi si après la suppression, le contenu serait vide
-        // (on ne peut pas le faire directement, mais on peut vérifier après)
-        setTimeout(() => {
-          const afterText = (node.innerText || node.textContent || '').trim();
-          if (!afterText && currentText) {
-            // Restaurer le contenu si tout a été supprimé
-            node.textContent = currentText;
-            toast('⚠️ Impossible de supprimer tout le contenu d\'un segment.');
-          }
-        }, 0);
-      }
-    }, { capture: true });
-
+    // ✅ NOUVEAU : Debounce pour éviter les mises à jour trop fréquentes et les états transitoires
+    let inputDebounceTimers = new Map();
+    
     root.addEventListener('input', (e)=>{
-      const node = e.target.closest('.ag-seg__text'); if (!node) return;
-      
-      // ✅ PROTECTION : Vérifier que le segment n'est pas vide après modification
-      const newText = window.visibleTextFromBox(node);
-      if (!newText.trim() && node.textContent.trim()) {
-        // Si le texte est devenu vide mais qu'il y avait du contenu, restaurer
-        const segEl = node.closest('.ag-seg');
-        const idx = Array.prototype.indexOf.call(root.children, segEl);
-        if (idx>-1 && window._segments[idx] && window._segments[idx].text) {
-          node.textContent = window._segments[idx].text;
-          toast('⚠️ Impossible de supprimer tout le contenu d\'un segment.');
-          return;
-        }
-      }
+      const node = e.target.closest('.ag-seg__text'); 
+      if (!node) return;
       
       const segEl = node.closest('.ag-seg');
       const idx = Array.prototype.indexOf.call(root.children, segEl);
-      if (idx>-1 && window._segments[idx]) {
-        window._segments[idx].text = newText;
+      
+      if (idx < 0) return;
+      
+      // ✅ NOUVEAU : Debounce de 150ms pour chaque segment
+      if (inputDebounceTimers.has(idx)) {
+        clearTimeout(inputDebounceTimers.get(idx));
       }
+      
+      inputDebounceTimers.set(idx, setTimeout(() => {
+        if (idx > -1 && window._segments[idx]) {
+          const oldText = window._segments[idx].text || '';
+          const newText = window.visibleTextFromBox(node);
+          
+          // ✅ SÉCURITÉ CRITIQUE : Ne jamais vider complètement un segment sans confirmation
+          if (newText.trim().length === 0 && oldText.trim().length > 10) {
+            console.error('[agilo:editor] 🚨 PROTECTION : Tentative de vidage complet du segment', idx, {
+              ancien: oldText.length,
+              nouveau: newText.length,
+              preview: oldText.substring(0, 50)
+            });
+            // On ne met PAS à jour pour éviter la perte accidentelle
+            // Restaurer le texte dans le DOM
+            if (node.textContent.trim().length === 0) {
+              node.textContent = oldText;
+              console.warn('[agilo:editor] ✅ Texte restauré dans le DOM');
+            }
+            return;
+          }
+          
+          // ✅ SÉCURITÉ : Vérifier qu'on ne perd pas trop de contenu d'un coup
+          const lossRatio = oldText.length > 0 ? (oldText.length - newText.length) / oldText.length : 0;
+          if (lossRatio > 0.8 && oldText.length > 20) {
+            console.error('[agilo:editor] 🚨 PROTECTION : Perte massive de contenu détectée', {
+              ancien: oldText.length,
+              nouveau: newText.length,
+              perte: Math.round(lossRatio * 100) + '%'
+            });
+            // Ne pas mettre à jour si perte > 80%
+            return;
+          }
+          
+          window._segments[idx].text = newText;
+        }
+        inputDebounceTimers.delete(idx);
+      }, 150));
     });
+
+    // ✅ PROTECTION CRITIQUE RENFORCÉE : Empêcher la suppression accidentelle de segments entiers
+    root.addEventListener('keydown', (e) => {
+      if (__mode !== 'structured') return;
+      
+      const node = e.target.closest('.ag-seg__text');
+      if (!node || !node.isContentEditable) return;
+      
+      const segEl = node.closest('.ag-seg');
+      if (!segEl) return;
+      
+      // Vérifier si on appuie sur Backspace ou Delete
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) return;
+        
+        const range = selection.getRangeAt(0);
+        
+        // ✅ Vérifier que la sélection est bien dans ce node
+        if (!node.contains(range.commonAncestorContainer) && range.commonAncestorContainer !== node) {
+          return; // La sélection n'est pas dans ce segment, laisser passer
+        }
+        
+        const currentText = (node.innerText || node.textContent || '').trim();
+        const currentLength = currentText.length;
+        
+        // ✅ NOUVEAU : Calculer ce qui sera supprimé de manière plus précise
+        let lengthToDelete = 0;
+        if (!range.collapsed) {
+          // Si on a une sélection, calculer la longueur du texte sélectionné
+          const selectedText = range.toString();
+          lengthToDelete = selectedText.length;
+        } else {
+          // Si pas de sélection (curseur seul), on supprime juste un caractère
+          lengthToDelete = 1;
+        }
+        
+        // ✅ NOUVEAU : Calculer la longueur après suppression
+        const lengthAfterDelete = Math.max(0, currentLength - lengthToDelete);
+        
+        // ✅ PROTECTION CRITIQUE : Empêcher si après suppression le segment serait vide ou presque vide
+        // Seuil : au moins 2 caractères doivent rester (pour éviter les segments vides)
+        if (lengthAfterDelete < 2) {
+          console.warn('[agilo:editor:protection] 🛡️ Suppression BLOQUÉE - segment deviendrait vide', {
+            avant: currentLength,
+            apres: lengthAfterDelete,
+            suppression: lengthToDelete,
+            key: e.key,
+            selection: !range.collapsed ? 'OUI' : 'NON'
+          });
+          
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          
+          // S'assurer qu'il reste au moins un espace
+          if (currentLength === 0 || lengthAfterDelete <= 0) {
+            if (node.textContent.trim().length === 0) {
+              node.textContent = ' ';
+              // Placer le curseur après l'espace
+              const newRange = document.createRange();
+              newRange.selectNodeContents(node);
+              newRange.collapse(false);
+              selection.removeAllRanges();
+              selection.addRange(newRange);
+            }
+          }
+          
+          return false;
+        }
+        
+        // ✅ PROTECTION ADDITIONNELLE : Si le segment est déjà très court (≤5 caractères), être très strict
+        if (currentLength <= 5 && lengthToDelete >= currentLength - 1) {
+          console.warn('[agilo:editor:protection] 🛡️ Suppression BLOQUÉE - segment trop court', {
+            avant: currentLength,
+            apres: lengthAfterDelete,
+            suppression: lengthToDelete
+          });
+          
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          return false;
+        }
+      }
+    }, true); // ✅ Utiliser capture phase pour intercepter avant les autres handlers
 
     root.__bound = true;
   }
 }
 window.renderSegments = renderSegments;
+
+  // ✅ NOUVEAU : Système d'undo/redo global pour contenteditable
+  let undoStack = [];
+  let redoStack = [];
+  const MAX_UNDO = 50;
+
+  function saveUndoState() {
+    if (!window._segments || !Array.isArray(window._segments)) return;
+    const state = JSON.parse(JSON.stringify(window._segments)); // Deep clone
+    undoStack.push(state);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = []; // Clear redo on new action
+  }
+
+  function undo() {
+    if (undoStack.length === 0) {
+      toast('Rien à annuler');
+      return;
+    }
+    
+    redoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const previousState = undoStack.pop();
+    window._segments = previousState;
+    renderSegments(window._segments);
+    toast('Annulation effectuée');
+  }
+
+  function redo() {
+    if (redoStack.length === 0) {
+      toast('Rien à rétablir');
+      return;
+    }
+    
+    undoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const nextState = redoStack.pop();
+    window._segments = nextState;
+    renderSegments(window._segments);
+    toast('Rétablissement effectué');
+  }
+
+  // Exposer globalement
+  window.agiloUndo = undo;
+  window.agiloRedo = redo;
+
+  // Sauvegarder l'état avant chaque modification
+  const transcriptRoot = editors.transcript;
+  if (transcriptRoot) {
+    transcriptRoot.addEventListener('beforeinput', (e) => {
+      // Sauvegarder seulement pour les modifications de texte
+      if (e.inputType && /insert|delete|format/.test(e.inputType)) {
+        saveUndoState();
+      }
+    }, { capture: true });
+  }
+
+  // Désactiver undo/redo natif et utiliser le nôtre
+  document.addEventListener('keydown', (e) => {
+    const target = e.target;
+    const isInTranscript = target?.closest('#transcriptEditor, .ag-seg__text');
+    
+    if (!isInTranscript) return;
+    
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      undo();
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !e.altKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      redo();
+    }
+  }, true);
 
 
   function normalizeName(name){
@@ -1341,12 +1516,6 @@ try {
    attachAudioSync();
  }
  
-        // ✅ NOUVEAU : Émettre un événement quand le transcript est chargé
-        // Cela permet à Code-save_transcript de savoir quand restaurer le brouillon
-        window.dispatchEvent(new CustomEvent('agilo:transcript-loaded', {
-          detail: { jobId: id, segmentsCount: window._segments.length }
-        }));
- 
         if ((toolbar.srch?.value||'').trim()) highlight();
 			} else {
 			  const val = (tRes.status==='fulfilled'?tRes.value:null);
@@ -1732,5 +1901,4 @@ window.AgiloEditors = { ...(window.AgiloEditors||{}), loadJob, serializeSmart };
     }, { passive:true });
   }
 });
-
 
