@@ -199,14 +199,40 @@
       const raw = localStorage.getItem(`agilo:draft:${jobId}`); if (!raw) return;
       const j = JSON.parse(raw);
       if (!j?.text || !main) return;
+      
+      // ✅ PROTECTION : Ne pas restaurer si le brouillon est vide ou suspect
+      const draftText = String(j.text || '').trim();
+      if (!draftText || draftText.length < 10) {
+        console.warn('[agilo:save] ⚠️ Brouillon local ignoré (trop court ou vide)');
+        return;
+      }
+      
       const cur = (main.innerText ?? main.textContent ?? '').trim();
       if (!cur){
-        if (main.innerText!==undefined) main.innerText = j.text;
-        else main.textContent = j.text;
-        main.dispatchEvent(new Event('input', {bubbles:true}));
-        console.info('[agilo:save] brouillon local restauré');
+        // ✅ CORRECTION : Utiliser execCommand pour préserver l'historique undo/redo
+        main.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(main);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        
+        // Utiliser execCommand pour insérer le texte (préserve undo/redo)
+        if (document.execCommand && document.execCommand('insertText', false, draftText)) {
+          main.dispatchEvent(new Event('input', {bubbles:true}));
+          console.info('[agilo:save] ✅ Brouillon local restauré (undo/redo préservé)');
+        } else {
+          // Fallback si execCommand n'est pas disponible
+          if (main.innerText!==undefined) main.innerText = draftText;
+          else main.textContent = draftText;
+          main.dispatchEvent(new Event('input', {bubbles:true}));
+          console.info('[agilo:save] ⚠️ Brouillon local restauré (fallback, undo/redo non préservé)');
+        }
       }
-    }catch{}
+    }catch(e){
+      console.warn('[agilo:save] ⚠️ Erreur restauration brouillon:', e);
+    }
   }
 
   const NBSP=/\u00A0/g;
@@ -1113,7 +1139,9 @@
         const creds = await ensureCreds();
         if (creds.email && creds.token && creds.jobId) {
           const pick = await serializeAll();
-          if (pick.text && pick.text.trim().length >= MIN_CONTENT_LENGTH) {
+          // ✅ PROTECTION RENFORCÉE : Vérifier que le contenu est valide avant sauvegarde
+          if (pick.text && pick.text.trim().length >= MIN_CONTENT_LENGTH && 
+              pick.segments && pick.segments.length >= MIN_SEGMENTS_COUNT) {
             const currentContent = pick.text.trim();
             if (currentContent !== lastSavedContent) {
               updateStatusIndicator('saving');
@@ -1124,6 +1152,8 @@
                 edition: creds.edition
               }, pick, {});
             }
+          } else {
+            console.warn('[agilo:save:security] ⏭️ Sauvegarde avant fermeture ignorée : contenu invalide (vide ou trop court)');
           }
         }
       } catch (error) {
