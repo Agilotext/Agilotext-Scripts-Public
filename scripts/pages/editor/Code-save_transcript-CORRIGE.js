@@ -18,7 +18,7 @@
   const TOKEN_GET = API_BASE + '/getToken';
   const CHECK_GET_JSON = API_BASE + '/receiveTextJson';
   const CHECK_GET_TXT = API_BASE + '/receiveText';
-  const VERSION = 'save-full-12-enhanced-secure (auto-save + notifications + protections critiques)';
+  const VERSION = 'save-full-13-enhanced-secure (auto-save + notifications + protections critiques + logs optimisés)';
 
   const MIN_SPINNER_MS = 400;
   const MAX_HTML_SNAPSHOT_CHARS = 1_000_000;
@@ -1217,41 +1217,32 @@
     const finalIsSummary = isSummaryTab || isSummaryPaneActive;
     const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
     
-    console.log('[agilo:save] 🔍 Détection onglet + panneau:', {
-      activeTabId: activeTab?.id,
-      isSummaryTab,
-      isChatTab,
-      isTranscriptTab,
-      isChatPaneActive,
-      isSummaryPaneActive,
-      isTranscriptPaneActive,
-      finalIsChat,
-      finalIsSummary,
-      finalIsTranscript,
-      buttonFound: !!saveBtn
-    });
+    // ✅ Logs réduits (seulement si changement d'état)
+    const wasVisible = !saveBtn.classList.contains('agilo-hide-save') && 
+                      window.getComputedStyle(saveBtn).display !== 'none';
     
     if (finalIsTranscript && !finalIsChat && !finalIsSummary) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
+      if (!wasVisible) {
+        console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
+      }
       saveBtn.classList.remove('agilo-hide-save');
       saveBtn.style.setProperty('display', '', 'important');
       saveBtn.style.setProperty('visibility', '', 'important');
       saveBtn.style.setProperty('opacity', '', 'important');
       saveBtn.style.setProperty('pointer-events', '', 'important');
-      console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
     } else if (finalIsSummary || finalIsChat) {
       // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
       // ✅ Double protection : classe CSS + style inline avec !important
+      if (wasVisible) {
+        const tabName = finalIsSummary ? 'Compte-rendu' : 'Conversation';
+        console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`);
+      }
       saveBtn.classList.add('agilo-hide-save');
       saveBtn.style.setProperty('display', 'none', 'important');
       saveBtn.style.setProperty('visibility', 'hidden', 'important');
       saveBtn.style.setProperty('opacity', '0', 'important');
       saveBtn.style.setProperty('pointer-events', 'none', 'important');
-      const tabName = finalIsSummary ? 'Compte-rendu' : 'Conversation';
-      console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
-        hasClass: saveBtn.classList.contains('agilo-hide-save'),
-        computedDisplay: window.getComputedStyle(saveBtn).display
-      });
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
       saveBtn.classList.add('agilo-hide-save');
@@ -1279,7 +1270,8 @@
       });
     });
     
-    // Observer les changements d'attributs avec MutationObserver
+    // Observer les changements d'attributs avec MutationObserver (avec debounce)
+    let updateTimeout = null;
     const observer = new MutationObserver((mutations) => {
       let shouldUpdate = false;
       mutations.forEach((mutation) => {
@@ -1297,8 +1289,10 @@
           }
         }
       });
+      // ✅ Debounce pour éviter trop d'appels
       if (shouldUpdate) {
-        setTimeout(updateSaveButtonVisibility, 50);
+        if (updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(updateSaveButtonVisibility, 100);
       }
     });
     
@@ -1406,9 +1400,11 @@
     // Observer les changements d'onglets
     setupTabObserver();
     
-    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
+    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic (avec debounce)
+    let domUpdateTimeout = null;
     const domObserver = new MutationObserver(() => {
-      updateSaveButtonVisibility();
+      if (domUpdateTimeout) clearTimeout(domUpdateTimeout);
+      domUpdateTimeout = setTimeout(updateSaveButtonVisibility, 100);
     });
     
     // Observer les changements d'attributs sur les onglets
