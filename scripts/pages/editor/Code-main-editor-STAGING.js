@@ -1,6 +1,7 @@
-// Agilotext - Main Editor (Transcript Editor Principal)
+// Agilotext - Main Editor (Transcript Editor Principal) - VERSION STAGING
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-main-editor dans Webflow
+// ✅ STAGING : Corrections critiques perte de données (debounce, protection vidage, undo/redo)
 
 (function ready(fn){
   if (document.readyState !== 'loading') fn();
