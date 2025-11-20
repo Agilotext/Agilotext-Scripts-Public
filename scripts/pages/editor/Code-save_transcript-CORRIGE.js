@@ -291,12 +291,32 @@
   }
 
   /* ===== CREDENTIALS ===== */
-  function normalizeEdition(v){ v=String(v||'').trim().toLowerCase(); if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent'; if (/^pro/.test(v)) return 'pro'; if (/^free|gratuit/.test(v)) return 'free'; return 'ent'; }
-  function pickEdition(){ const root=$('#editorRoot'); const qs=new URLSearchParams(location.search).get('edition'); const html=document.documentElement.getAttribute('data-edition'); const ls=localStorage.getItem('agilo:edition'); return normalizeEdition(qs || root?.dataset.edition || html || ls || 'ent'); }
-  function pickJobId(){ const u=new URL(location.href); const root=$('#editorRoot'); return (u.searchParams.get('jobId')||root?.dataset.jobId||window.__agiloOrchestrator?.currentJobId||$('.rail-item.is-active')?.dataset?.jobId||''); }
-  function pickEmail(){ const root=$('#editorRoot'); return (root?.dataset.username || $('[name="memberEmail"]')?.value || window.memberEmail || window.__agiloOrchestrator?.credentials?.email || localStorage.getItem('agilo:username') || $('[data-ms-member="email"]')?.textContent || ''); }
+  function normalizeEdition(v){ 
+    v=String(v||'').trim().toLowerCase(); 
+    if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent'; 
+    if (/^pro/.test(v)) return 'pro'; 
+    if (/^free|gratuit/.test(v)) return 'free'; 
+    return 'ent'; 
+  }
+  function pickEdition(){ 
+    const root=$('#editorRoot'); 
+    const qs=new URLSearchParams(location.search).get('edition'); 
+    const html=document.documentElement.getAttribute('data-edition'); 
+    const ls=localStorage.getItem('agilo:edition'); 
+    return normalizeEdition(qs || root?.dataset.edition || html || ls || 'ent'); 
+  }
+  function pickJobId(){ 
+    const u=new URL(location.href); 
+    const root=$('#editorRoot'); 
+    return (u.searchParams.get('jobId')||root?.dataset.jobId||window.__agiloOrchestrator?.currentJobId||$('.rail-item.is-active')?.dataset?.jobId||''); 
+  }
+  function pickEmail(){ 
+    const root=$('#editorRoot'); 
+    return (root?.dataset.username || $('[name="memberEmail"]')?.value || window.memberEmail || window.__agiloOrchestrator?.credentials?.email || localStorage.getItem('agilo:username') || $('[data-ms-member="email"]')?.textContent || ''); 
+  }
   function pickToken(edition,email){
-    const root=$('#editorRoot'); const k=`agilo:token:${edition}:${String(email||'').toLowerCase()}`;
+    const root=$('#editorRoot'); 
+    const k=`agilo:token:${edition}:${String(email||'').toLowerCase()}`;
     return (root?.dataset.token || window.__agiloOrchestrator?.credentials?.token || window.globalToken || localStorage.getItem(k) || localStorage.getItem(`agilo:token:${edition}`) || localStorage.getItem('agilo:token') || '');
   }
   async function ensureToken(email, edition){
@@ -310,10 +330,13 @@
         const url=`${TOKEN_GET}?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
         const r=await fetchRetry(url,{method:'GET'}); const j=await r.json().catch(()=>null);
         if (r.ok && j?.status==='OK' && j.token){
-          try{ localStorage.setItem(`agilo:token:${edition}:${email.toLowerCase()}`, j.token);
-               localStorage.setItem('agilo:username', email);
-               localStorage.setItem('agilo:edition', edition); }catch(_){}
-          window.globalToken=j.token; return j.token;
+          try{ 
+            localStorage.setItem(`agilo:token:${edition}:${email.toLowerCase()}`, j.token);
+            localStorage.setItem('agilo:username', email);
+            localStorage.setItem('agilo:edition', edition); 
+          }catch(_){}
+          window.globalToken=j.token; 
+          return j.token;
         }
       }catch(_){}
     }
@@ -321,9 +344,11 @@
   }
   async function ensureCreds(){
     const edition=pickEdition();
-    let email=pickEmail(); for (let i=0;i<20 && !email;i++){ await sleep(100); email=pickEmail(); }
+    let email=pickEmail(); 
+    for (let i=0;i<20 && !email;i++){ await sleep(100); email=pickEmail(); }
     const token=await ensureToken(email, edition);
-    let jobId=pickJobId(); for (let i=0;i<10 && !jobId;i++){ await sleep(60); jobId=pickJobId(); }
+    let jobId=pickJobId(); 
+    for (let i=0;i<10 && !jobId;i++){ await sleep(60); jobId=pickJobId(); }
     log('creds',{email,edition,jobId,hasToken:!!token});
     return { email:(email||'').trim(), token:(token||'').trim(), edition, jobId:String(jobId||'').trim() };
   }
@@ -1336,7 +1361,12 @@
   }
 
   /* ===== EXPOSE ===== */
-  function findSaveButton(){ return document.querySelector('[data-action="save-transcript"]') || document.querySelector('button.button.save[data-opentech-ux-zone-id]') || document.querySelector('button.button.save'); }
+  function findSaveButton(){ 
+    return document.querySelector('[data-action="save-transcript"]') || 
+           document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
+           document.querySelector('button.button.save'); 
+  }
+
   window.restoreTranscriptBackup = function(){
     const jobId=pickJobId(); const b=readBackup(jobId); const {main}=getAllPanes();
     if(!b||!main){ alert('Aucune sauvegarde locale disponible'); return; }
@@ -1345,10 +1375,29 @@
     document.dispatchEvent(new CustomEvent('agilo:restored',{detail:{jobId}}));
     alert('Version restaurée depuis le stockage local.');
   };
-  window.agiloSaveNow = function(){ const btn=findSaveButton(); return doSave(btn||null); };
-  window.serializeAll = serializeAll; window.ensureCreds = ensureCreds;
-  window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
-  window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
+
+  window.agiloSaveNow = function(){ 
+    const btn=findSaveButton(); 
+    return doSave(btn||null); 
+  };
+
+  window.serializeAll = serializeAll; 
+  window.ensureCreds = ensureCreds;
+
+  window.agiloGetPayload = async()=>{
+    const creds=await ensureCreds(); 
+    const pick=await serializeAll(); 
+    const meta=buildMeta(pick.segments,pick.from); 
+    return {creds,pick,meta}; 
+  };
+
+  window.agiloGetState = ()=>({
+    edition: pickEdition(), 
+    jobId: pickJobId(), 
+    email: pickEmail(), 
+    hasToken: !!pickToken(pickEdition(), pickEmail()) 
+  });
+
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
 
   // ✅ Script de diagnostic complet
@@ -1394,8 +1443,18 @@
       console.warn('[agilo:save] ⚠️ bouton .button.save introuvable');
     }
 
-    window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
-    document.addEventListener('agilo:save', ()=>{ const b=findSaveButton(); doSave(b||null); });
+    window.addEventListener('keydown', (e)=>{ 
+      if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ 
+        e.preventDefault(); 
+        const b=findSaveButton(); 
+        doSave(b||null); 
+      } 
+    });
+
+    document.addEventListener('agilo:save', ()=>{ 
+      const b=findSaveButton(); 
+      doSave(b||null); 
+    });
 
     const { main } = getAllPanes();
     const jobId = pickJobId();
@@ -1461,4 +1520,3 @@
     init();
   }
 })();
-
