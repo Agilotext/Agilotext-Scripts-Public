@@ -11,8 +11,12 @@
 (function(){
 
   // ✅ STAGING : Identifiant unique pour éviter conflit avec version normale
-  if (window.__agiloSave_FULL_12_JSON_CONTENT_STAGING) return; 
+  if (window.__agiloSave_FULL_12_JSON_CONTENT_STAGING) {
+    console.warn('[agilo:save:STAGING] ⚠️ Script déjà chargé (identifiant présent)');
+    return;
+  } 
 
+  console.log('[agilo:save:STAGING] 🚀 Initialisation du script STAGING...');
   window.__agiloSave_FULL_12_JSON_CONTENT_STAGING = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -1374,9 +1378,25 @@
 
   /* ===== BOOT ===== */
   function init(){
+    console.log('[agilo:save:STAGING] 🔧 Initialisation de init()...');
     const btn = findSaveButton();
-    if (btn){ btn.addEventListener('click', (e)=>{ e.preventDefault(); doSave(btn); }); }
-    else { console.warn('[agilo:save] bouton .button.save introuvable'); }
+    console.log('[agilo:save:STAGING] 🔍 Bouton recherché:', btn);
+    if (btn){ 
+      console.log('[agilo:save:STAGING] ✅ Bouton trouvé, ajout listener');
+      btn.addEventListener('click', (e)=>{ 
+        console.log('[agilo:save:STAGING] 🖱️ Clic détecté');
+        e.preventDefault(); 
+        doSave(btn).catch(err => console.error('[agilo:save:STAGING] ❌ Erreur:', err));
+      }); 
+    }
+    else { 
+      console.warn('[agilo:save:STAGING] ⚠️ bouton .button.save introuvable');
+      console.warn('[agilo:save:STAGING] Sélecteurs testés:', [
+        '[data-action="save-transcript"]',
+        'button.button.save[data-opentech-ux-zone-id]',
+        'button.button.save'
+      ]);
+    }
 
     window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
     document.addEventListener('agilo:save', ()=>{ const b=findSaveButton(); doSave(b||null); });
@@ -1436,9 +1456,17 @@
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
     }
 
-    console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
+    console.info('[agilo:save:STAGING] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
   }
 
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
+  // ✅ STAGING : Log pour vérifier que le script est bien chargé
+  console.log('[agilo:save:STAGING] 📦 Script chargé, état DOM:', document.readyState);
+  if (document.readyState==='loading') {
+    console.log('[agilo:save:STAGING] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  } else {
+    console.log('[agilo:save:STAGING] ✅ DOM prêt, initialisation immédiate');
+    init();
+  }
 })();
 
