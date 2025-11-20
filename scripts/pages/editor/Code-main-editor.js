@@ -126,7 +126,7 @@ function humanizeError({ where = 'summary', code = '', json = null, httpStatus =
   }
 
   const M = {
-    ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS: "Le compte-rendu n'est pas encore disponible (fichier manquant/non publié).",
+    ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS: "Vous n'avez pas demandé de compte-rendu pour cette transcription.",
     READY_SUMMARY_PENDING:                   "Résumé en préparation…",
     NOT_READY:                               "Résumé en préparation…",
     READY_SUMMARY_ON_ERROR:                  "La génération du compte-rendu a échoué.",
@@ -1178,6 +1178,8 @@ window.addEventListener('agilo:beforeload', (e) => {
 
 
   async function loadJob(jobId){
+    // ✅ CORRECTION : Déclarer isSummaryPending au début de la fonction pour qu'elle soit accessible dans le finally
+    let isSummaryPending = false;
     const id = String(jobId||'').trim();
     if (!id) return;
     
@@ -1298,7 +1300,7 @@ let summaryEmpty = true;
 // ⚠️ NOUVEAU : Vérifier le statut avec getTranscriptStatus pour savoir si le compte-rendu est en cours
 // ⚠️ OPTIMISATION : Ne vérifier que si on n'a pas déjà le compte-rendu
 let transcriptStatus = null;
-let isSummaryPending = false;
+// ✅ CORRECTION : isSummaryPending est maintenant déclaré au début de loadJob()
 
 // Vérifier le statut seulement si nécessaire (pas de compte-rendu reçu ou vide)
 const needsStatusCheck = !(sRes.status === 'fulfilled' && sRes.value.ok && !isBlankHtml(sanitizeHtml(sRes.value.payload || '')));
