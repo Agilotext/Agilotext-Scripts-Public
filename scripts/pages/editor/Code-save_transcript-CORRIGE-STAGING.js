@@ -1,8 +1,7 @@
-// Agilotext - Save Transcript (VERSION STAGING - Tests)
+// Agilotext - Save Transcript (VERSION STAGING - CORRIGÉE avec toutes les protections)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-save-transcript dans Webflow
-// ✅ VERSION STAGING : Protection suppression segments + Undo/Redo + Restauration brouillon
-// ✅ CORRECTIONS APPLIQUÉES :
+// ✅ STAGING : Corrections critiques perte de données (beforeunload désactivé, protection chargement)
 //   - Bug getAllPanes() : Force transcriptEditor (ne peut plus retourner summaryEditor)
 //   - Vérification onglet actif avant sauvegarde
 //   - Vérification que le transcript est chargé
@@ -816,26 +815,6 @@
 
   // ✅ CORRECTION DÉFINITIVE : doSave avec debounce, vérification de contenu ET vérification que le transcript est chargé
   async function doSave(btn){
-    // ✅ NOUVEAU : Bloquer si la page est en cours de déchargement
-    if (document.visibilityState === 'hidden' || 
-        document.readyState === 'unloading') {
-      console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : page en cours de déchargement');
-      return {ok:false, reason:'page_unloading'};
-    }
-    
-    // ✅ NOUVEAU : Bloquer si un chargement est en cours
-    const transcriptEditor = document.querySelector('#transcriptEditor');
-    const isLoading = transcriptEditor?.getAttribute('aria-busy') === 'true' ||
-                      document.querySelector('#pane-summary')?.getAttribute('aria-busy') === 'true';
-    
-    if (isLoading) {
-      console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : chargement en cours');
-      if (btn) {
-        showToast('⚠️ Veuillez attendre la fin du chargement avant de sauvegarder', 'warning');
-      }
-      return {ok:false, reason:'loading_in_progress'};
-    }
-    
     // ✅ NOUVEAU : Debounce pour éviter les sauvegardes multiples
     if (saveDebounceTimer) {
       clearTimeout(saveDebounceTimer);
@@ -848,6 +827,31 @@
           return;
         }
         isSaving=true;
+
+        // ✅ NOUVEAU : Bloquer si la page est en cours de déchargement
+        if (document.visibilityState === 'hidden' || document.readyState === 'unloading') {
+          console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : page en cours de déchargement');
+          isSaving = false;
+          resolve({ok:false, reason:'page_unloading'});
+          return;
+        }
+        
+        // ✅ NOUVEAU : Bloquer si un chargement est en cours
+        const transcriptEditor = document.querySelector('#transcriptEditor');
+        const summaryEditor = document.querySelector('#summaryEditor');
+        const isLoading = transcriptEditor?.getAttribute('aria-busy') === 'true' ||
+                          summaryEditor?.getAttribute('aria-busy') === 'true';
+        
+        if (isLoading) {
+          console.warn('[agilo:save:security] ❌ Sauvegarde bloquée : chargement en cours');
+          if (btn) btn.textContent = btn.__idleText;
+          if (typeof showToast === 'function') {
+            showToast('⚠️ Veuillez attendre la fin du chargement avant de sauvegarder', 'warning');
+          }
+          isSaving = false;
+          resolve({ok:false, reason:'loading_in_progress'});
+          return;
+        }
 
         if (btn && !btn.__idleText){ 
           btn.__idleText=(btn.textContent||'Sauvegarder').trim(); 
@@ -1140,14 +1144,14 @@
     }
   }
 
-  // ✅ 5. SAUVEGARDE AVANT FERMETURE - DÉSACTIVÉE EN STAGING
+  // ✅ 5. SAUVEGARDE AVANT FERMETURE
   function setupBeforeUnload() {
-    // ✅ STAGING : DÉSACTIVÉ car cause des sauvegardes involontaires au rechargement
-    console.warn('[agilo:save:STAGING] ⚠️ beforeunload DÉSACTIVÉ (sauvegarde manuelle uniquement)');
-    return; // ⚠️ NE JAMAIS sauvegarder automatiquement au rechargement
+    // ✅ DÉSACTIVÉ : beforeunload cause des sauvegardes involontaires au rechargement
+    // Cette fonction ne fait plus rien pour éviter la perte de données
+    console.warn('[agilo:save] ⚠️ beforeunload DÉSACTIVÉ (sauvegarde manuelle uniquement)');
+    return;
     
-    // Code original commenté pour référence :
-    /*
+    /* CODE ORIGINAL COMMENTÉ
     window.addEventListener('beforeunload', async (e) => {
       if (isSaving) {
         e.preventDefault();
@@ -1156,65 +1160,9 @@
       }
       
       try {
-        // ✅ PROTECTION CRITIQUE : Vérifier que le transcript est chargé ET contient du contenu
-        const transcriptCheck = await verifyTranscriptReady();
-        if (!transcriptCheck.isReady) {
-          console.warn('[agilo:save:security] ⏭️ Sauvegarde avant fermeture IGNORÉE : transcript non prêt');
-          return; // NE PAS sauvegarder si le transcript n'est pas prêt
-        }
-        
-        // ✅ PROTECTION CRITIQUE : Vérifier le contenu AVANT de récupérer les credentials
-        const transcriptEditor = document.querySelector('#transcriptEditor');
-        if (transcriptEditor) {
-          const currentText = (transcriptEditor.innerText || transcriptEditor.textContent || '').trim();
-          const segmentsCount = transcriptEditor.querySelectorAll('.ag-seg').length;
-          
-          // ✅ PROTECTION RENFORCÉE : Ne JAMAIS sauvegarder un transcript vide
-          if (currentText.length < MIN_CONTENT_LENGTH || segmentsCount < MIN_SEGMENTS_COUNT) {
-            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - transcript vide ou invalide', {
-              textLength: currentText.length,
-              segmentsCount: segmentsCount,
-              minLength: MIN_CONTENT_LENGTH,
-              minSegments: MIN_SEGMENTS_COUNT
-            });
-            return; // NE JAMAIS sauvegarder un transcript vide
-          }
-        }
-        
-        const creds = await ensureCreds();
-        if (creds.email && creds.token && creds.jobId) {
-          const pick = await serializeAll();
-          
-          // ✅ PROTECTION TRIPLE : Vérifier à nouveau après sérialisation
-          if (!pick.text || pick.text.trim().length < MIN_CONTENT_LENGTH) {
-            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - texte vide après sérialisation');
-            return; // NE JAMAIS sauvegarder un transcript vide
-          }
-          
-          if (!pick.segments || pick.segments.length < MIN_SEGMENTS_COUNT) {
-            console.error('[agilo:save:security] 🚨 BLOQUÉ : Sauvegarde avant fermeture IGNORÉE - pas de segments');
-            return; // NE JAMAIS sauvegarder sans segments
-          }
-          
-          const currentContent = pick.text.trim();
-          
-          // ✅ PROTECTION : Ne sauvegarder que si le contenu a changé ET est valide
-          if (currentContent !== lastSavedContent && currentContent.length >= MIN_CONTENT_LENGTH) {
-            console.log('[agilo:save:security] ✅ Sauvegarde avant fermeture autorisée - contenu valide');
-            updateStatusIndicator('saving');
-            await postCorrectAPI({
-              username: creds.email,
-              token: creds.token,
-              jobId: creds.jobId,
-              edition: creds.edition
-            }, pick, {});
-          } else {
-            console.log('[agilo:save:security] ⏭️ Sauvegarde avant fermeture ignorée - pas de changement ou contenu invalide');
-          }
-        }
+        // ... code de sauvegarde ...
       } catch (error) {
-        console.error('[agilo:save:security] 🚨 ERREUR sauvegarde avant fermeture:', error);
-        // En cas d'erreur, NE PAS sauvegarder (mieux vaut ne pas écraser avec du vide)
+        console.warn('⚠️ Sauvegarde avant fermeture échouée:', error);
       }
     });
     */
