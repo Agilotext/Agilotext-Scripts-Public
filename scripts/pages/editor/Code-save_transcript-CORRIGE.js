@@ -18,7 +18,7 @@
   const TOKEN_GET = API_BASE + '/getToken';
   const CHECK_GET_JSON = API_BASE + '/receiveTextJson';
   const CHECK_GET_TXT = API_BASE + '/receiveText';
-  const VERSION = 'save-full-12-enhanced-secure (auto-save + notifications + protections critiques)';
+  const VERSION = 'save-full-13-enhanced-secure (auto-save + notifications + protections critiques + logs optimisés)';
 
   const MIN_SPINNER_MS = 400;
   const MAX_HTML_SNAPSHOT_CHARS = 1_000_000;
@@ -1156,43 +1156,11 @@
 
   /* ===== GESTION VISIBILITÉ BOUTON SAUVEGARDER ===== */
   // ✅ NOUVEAU : Créer le style CSS avec !important pour forcer le masquage
-  // ✅ RENFORCÉ : Protection contre GSAP et autres scripts
   if (!document.querySelector('#agilo-save-button-hide-style')) {
     const style = document.createElement('style');
     style.id = 'agilo-save-button-hide-style';
     style.textContent = `
-      /* Protection par classe */
-      button[data-action="save-transcript"].agilo-hide-save,
-      button.button.save.agilo-hide-save {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transform: none !important;
-      }
-      
-      /* Protection par attribut data */
-      button[data-action="save-transcript"][data-agilo-hidden="true"],
-      button.button.save[data-agilo-hidden="true"] {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-        transform: none !important;
-      }
-      
-      /* Protection spécifique pour l'onglet Conversation */
-      #tab-chat[aria-selected="true"] ~ * button[data-action="save-transcript"],
-      #tab-chat[aria-selected="true"] ~ * button.button.save {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-      }
-      
-      /* Protection spécifique pour l'onglet Compte-rendu */
-      #tab-summary[aria-selected="true"] ~ * button[data-action="save-transcript"],
-      #tab-summary[aria-selected="true"] ~ * button.button.save {
+      button[data-action="save-transcript"].agilo-hide-save {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -1203,7 +1171,6 @@
   }
   
   // ✅ NOUVEAU : Fonction pour gérer la visibilité du bouton selon l'onglet actif
-  // ✅ RENFORCÉE : Protection contre les interférences de GSAP et autres scripts
   function updateSaveButtonVisibility() {
     const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
                     document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
@@ -1214,142 +1181,134 @@
       return;
     }
     
-    // Vérifier l'onglet actif
+    // ✅ AMÉLIORATION : Vérifier à la fois les onglets ET les panneaux
+    // (car Code-main-editor.js modifie directement les panneaux)
+    
+    // 1. Vérifier l'onglet actif via aria-selected
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
     const isSummaryTab = activeTab && activeTab.id === 'tab-summary';
     const isChatTab = activeTab && activeTab.id === 'tab-chat';
     const isTranscriptTab = activeTab && activeTab.id === 'tab-transcript';
     
-    console.log('[agilo:save] 🔍 Détection onglet:', {
-      activeTabId: activeTab?.id,
-      isSummaryTab,
-      isChatTab,
-      isTranscriptTab,
-      buttonFound: !!saveBtn
-    });
+    // 2. Vérifier l'état des panneaux (Code-main-editor.js modifie directement les panneaux)
+    const paneChat = document.querySelector('#pane-chat');
+    const paneSummary = document.querySelector('#pane-summary');
+    const paneTranscript = document.querySelector('#pane-transcript');
     
-    if (isTranscriptTab) {
+    // Vérifier si un panneau est visible (pas hidden et is-active)
+    const isChatPaneActive = paneChat && 
+                             !paneChat.hasAttribute('hidden') && 
+                             (paneChat.classList.contains('is-active') || 
+                              window.getComputedStyle(paneChat).display !== 'none');
+    
+    const isSummaryPaneActive = paneSummary && 
+                                !paneSummary.hasAttribute('hidden') && 
+                                (paneSummary.classList.contains('is-active') || 
+                                 window.getComputedStyle(paneSummary).display !== 'none');
+    
+    const isTranscriptPaneActive = paneTranscript && 
+                                   !paneTranscript.hasAttribute('hidden') && 
+                                   (paneTranscript.classList.contains('is-active') || 
+                                    window.getComputedStyle(paneTranscript).display !== 'none');
+    
+    // ✅ Décision finale : Combiner l'état des onglets ET des panneaux
+    // Si un panneau est actif, cela prime sur l'onglet (car Code-main-editor.js peut modifier les panneaux directement)
+    const finalIsChat = isChatTab || isChatPaneActive;
+    const finalIsSummary = isSummaryTab || isSummaryPaneActive;
+    const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
+    
+    // ✅ Logs réduits (seulement si changement d'état)
+    const wasVisible = !saveBtn.classList.contains('agilo-hide-save') && 
+                      window.getComputedStyle(saveBtn).display !== 'none';
+    
+    if (finalIsTranscript && !finalIsChat && !finalIsSummary) {
       // Afficher le bouton UNIQUEMENT si on est sur l'onglet Transcription
+      if (!wasVisible) {
+        console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
+      }
       saveBtn.classList.remove('agilo-hide-save');
-      // ✅ RENFORCÉ : Utiliser requestAnimationFrame pour s'assurer que les styles sont appliqués après GSAP
-      requestAnimationFrame(() => {
-        saveBtn.style.setProperty('display', '', 'important');
-        saveBtn.style.setProperty('visibility', '', 'important');
-        saveBtn.style.setProperty('opacity', '', 'important');
-        saveBtn.style.setProperty('pointer-events', '', 'important');
-        // ✅ RENFORCÉ : Supprimer aussi les attributs data-* que GSAP pourrait ajouter
-        saveBtn.removeAttribute('data-gsap-hidden');
-      });
-      console.log('[agilo:save] ✅ Bouton Sauvegarder affiché (onglet Transcription actif)');
-    } else if (isSummaryTab || isChatTab) {
+      saveBtn.style.setProperty('display', '', 'important');
+      saveBtn.style.setProperty('visibility', '', 'important');
+      saveBtn.style.setProperty('opacity', '', 'important');
+      saveBtn.style.setProperty('pointer-events', '', 'important');
+    } else if (finalIsSummary || finalIsChat) {
       // Cacher le bouton si on est sur l'onglet Compte-rendu OU Conversation
-      // ✅ Triple protection : classe CSS + style inline avec !important + attribut data
+      // ✅ Double protection : classe CSS + style inline avec !important
+      if (wasVisible) {
+        const tabName = finalIsSummary ? 'Compte-rendu' : 'Conversation';
+        console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`);
+      }
       saveBtn.classList.add('agilo-hide-save');
-      saveBtn.setAttribute('data-agilo-hidden', 'true');
-      // ✅ RENFORCÉ : Utiliser requestAnimationFrame pour s'assurer que les styles sont appliqués après GSAP
-      requestAnimationFrame(() => {
-        saveBtn.style.setProperty('display', 'none', 'important');
-        saveBtn.style.setProperty('visibility', 'hidden', 'important');
-        saveBtn.style.setProperty('opacity', '0', 'important');
-        saveBtn.style.setProperty('pointer-events', 'none', 'important');
-        // ✅ RENFORCÉ : Forcer aussi le transform si GSAP l'a modifié
-        if (window.gsap && saveBtn._gsap) {
-          try {
-            window.gsap.set(saveBtn, { display: 'none', visibility: 'hidden', opacity: 0, pointerEvents: 'none', clearProps: 'transform' });
-          } catch(e) {
-            console.warn('[agilo:save] Erreur lors de la réinitialisation GSAP:', e);
-          }
-        }
-      });
-      const tabName = isSummaryTab ? 'Compte-rendu' : 'Conversation';
-      console.log(`[agilo:save] ✅ Bouton Sauvegarder caché (onglet ${tabName} actif)`, {
-        hasClass: saveBtn.classList.contains('agilo-hide-save'),
-        computedDisplay: window.getComputedStyle(saveBtn).display,
-        hasDataAttr: saveBtn.hasAttribute('data-agilo-hidden')
-      });
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
     } else {
       // Par défaut, cacher le bouton si on ne sait pas quel onglet est actif (sécurité)
       saveBtn.classList.add('agilo-hide-save');
-      saveBtn.setAttribute('data-agilo-hidden', 'true');
-      requestAnimationFrame(() => {
-        saveBtn.style.setProperty('display', 'none', 'important');
-        saveBtn.style.setProperty('visibility', 'hidden', 'important');
-        saveBtn.style.setProperty('opacity', '0', 'important');
-        saveBtn.style.setProperty('pointer-events', 'none', 'important');
-      });
+      saveBtn.style.setProperty('display', 'none', 'important');
+      saveBtn.style.setProperty('visibility', 'hidden', 'important');
+      saveBtn.style.setProperty('opacity', '0', 'important');
+      saveBtn.style.setProperty('pointer-events', 'none', 'important');
       console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
-  }
-  
-  // ✅ NOUVEAU : Observer les modifications de styles du bouton pour réappliquer la visibilité si nécessaire
-  function setupButtonStyleProtection() {
-    const saveBtn = document.querySelector('[data-action="save-transcript"]') || 
-                    document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
-                    document.querySelector('button.button.save');
-    
-    if (!saveBtn) {
-      // Réessayer après un délai si le bouton n'est pas encore chargé
-      setTimeout(setupButtonStyleProtection, 500);
-      return;
-    }
-    
-    // Observer les changements de styles inline (pour détecter les modifications de GSAP)
-    const styleObserver = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-          // Vérifier si le bouton devrait être caché mais qu'il est visible
-          const shouldBeHidden = saveBtn.classList.contains('agilo-hide-save') || saveBtn.hasAttribute('data-agilo-hidden');
-          const computedStyle = window.getComputedStyle(saveBtn);
-          const isVisible = computedStyle.display !== 'none' && computedStyle.visibility !== 'hidden';
-          
-          if (shouldBeHidden && isVisible) {
-            console.warn('[agilo:save] ⚠️ Détection : Le bouton devrait être caché mais est visible. Réapplication...');
-            // Réappliquer la visibilité après un court délai pour éviter les boucles
-            setTimeout(() => {
-              updateSaveButtonVisibility();
-            }, 50);
-          }
-        }
-      });
-    });
-    
-    // Observer les changements de styles inline
-    styleObserver.observe(saveBtn, { 
-      attributes: true, 
-      attributeFilter: ['style', 'class'],
-      attributeOldValue: true
-    });
-    
-    console.log('[agilo:save] ✅ Protection des styles du bouton activée');
   }
   
   // ✅ Exposer la fonction globalement pour pouvoir l'appeler manuellement
   window.updateSaveButtonVisibility = updateSaveButtonVisibility;
   
-  // ✅ NOUVEAU : Observer les changements d'onglets
+  // ✅ NOUVEAU : Observer les changements d'onglets ET des panneaux
   function setupTabObserver() {
     // Observer les changements d'attributs aria-selected sur les onglets
     const tabs = document.querySelectorAll('[role="tab"]');
     
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
-        // Attendre un peu que le DOM se mette à jour
+        // Attendre un peu que le DOM se mette à jour (Code-main-editor.js utilise setTimeout(20ms))
         setTimeout(updateSaveButtonVisibility, 100);
+        setTimeout(updateSaveButtonVisibility, 200); // Double vérification pour Code-main-editor.js
       });
     });
     
-    // Observer les changements d'attributs avec MutationObserver
+    // Observer les changements d'attributs avec MutationObserver (avec debounce)
+    let updateTimeout = null;
     const observer = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
       mutations.forEach((mutation) => {
+        // Observer les changements d'onglets
         if (mutation.type === 'attributes' && mutation.attributeName === 'aria-selected') {
-          setTimeout(updateSaveButtonVisibility, 50);
+          shouldUpdate = true;
+        }
+        // ✅ NOUVEAU : Observer les changements sur les panneaux (hidden, class)
+        if (mutation.target.id === 'pane-chat' || 
+            mutation.target.id === 'pane-summary' || 
+            mutation.target.id === 'pane-transcript') {
+          if (mutation.type === 'attributes' && 
+              (mutation.attributeName === 'hidden' || mutation.attributeName === 'class')) {
+            shouldUpdate = true;
+          }
         }
       });
+      // ✅ Debounce pour éviter trop d'appels
+      if (shouldUpdate) {
+        if (updateTimeout) clearTimeout(updateTimeout);
+        updateTimeout = setTimeout(updateSaveButtonVisibility, 100);
+      }
     });
     
     // Observer tous les onglets
     tabs.forEach(tab => {
-      observer.observe(tab, { attributes: true, attributeFilter: ['aria-selected'] });
+      observer.observe(tab, { attributes: true, attributeFilter: ['aria-selected', 'class'] });
+    });
+    
+    // ✅ NOUVEAU : Observer aussi les panneaux (Code-main-editor.js les modifie directement)
+    const panes = document.querySelectorAll('#pane-chat, #pane-summary, #pane-transcript');
+    panes.forEach(pane => {
+      observer.observe(pane, { 
+        attributes: true, 
+        attributeFilter: ['hidden', 'class'],
+        attributeOldValue: false
+      });
     });
     
     // Observer aussi les changements dans le conteneur d'onglets
@@ -1431,9 +1390,6 @@
     // Vérifier immédiatement au chargement
     updateSaveButtonVisibility();
     
-    // ✅ RENFORCÉ : Activer la protection contre les modifications de styles (GSAP, etc.)
-    setupButtonStyleProtection();
-    
     // Vérifier plusieurs fois au cas où les onglets ne sont pas encore initialisés
     setTimeout(updateSaveButtonVisibility, 100);
     setTimeout(updateSaveButtonVisibility, 300);
@@ -1441,35 +1397,30 @@
     setTimeout(updateSaveButtonVisibility, 1000);
     setTimeout(updateSaveButtonVisibility, 2000);
     
-    // ✅ RENFORCÉ : Réappliquer après que GSAP ait fini de charger (si présent)
-    if (window.gsap) {
-      // GSAP est déjà chargé, réappliquer immédiatement
-      setTimeout(updateSaveButtonVisibility, 100);
-    } else {
-      // Attendre que GSAP se charge
-      const checkGSAP = setInterval(() => {
-        if (window.gsap) {
-          clearInterval(checkGSAP);
-          console.log('[agilo:save] GSAP détecté, réapplication de la visibilité...');
-          setTimeout(updateSaveButtonVisibility, 200);
-        }
-      }, 500);
-      // Arrêter après 10 secondes si GSAP ne charge pas
-      setTimeout(() => clearInterval(checkGSAP), 10000);
-    }
-    
     // Observer les changements d'onglets
     setupTabObserver();
     
-    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
+    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic (avec debounce)
+    let domUpdateTimeout = null;
     const domObserver = new MutationObserver(() => {
-      updateSaveButtonVisibility();
+      if (domUpdateTimeout) clearTimeout(domUpdateTimeout);
+      domUpdateTimeout = setTimeout(updateSaveButtonVisibility, 100);
     });
     
     // Observer les changements d'attributs sur les onglets
     const tabs = document.querySelectorAll('[role="tab"]');
     tabs.forEach(tab => {
       domObserver.observe(tab, { attributes: true, attributeFilter: ['aria-selected', 'class'] });
+    });
+    
+    // ✅ NOUVEAU : Observer aussi les panneaux (Code-main-editor.js les modifie directement)
+    const panes = document.querySelectorAll('#pane-chat, #pane-summary, #pane-transcript');
+    panes.forEach(pane => {
+      domObserver.observe(pane, { 
+        attributes: true, 
+        attributeFilter: ['hidden', 'class'],
+        attributeOldValue: false
+      });
     });
     
     // Observer aussi le conteneur d'onglets
