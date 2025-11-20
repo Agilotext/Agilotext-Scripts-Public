@@ -183,9 +183,38 @@
       __draftTimer = setTimeout(()=>{
         try{
           if (!main) return;
-          const text = (main.innerText ?? main.textContent ?? '').replace(/\r\n?/g,'\n');
+          
+          // ✅ CORRECTION : Ne pas sauvegarder si le transcript est en cours de chargement
+          if (main.getAttribute('aria-busy') === 'true') {
+            return;
+          }
+          
+          // ✅ CORRECTION : Vérifier qu'il y a du contenu valide avant de sauvegarder
+          const text = (main.innerText ?? main.textContent ?? '').replace(/\r\n?/g,'\n').trim();
+          
+          // Ne pas sauvegarder si le texte est vide ou trop court
+          if (!text || text.length < 10) {
+            // Supprimer le brouillon vide pour éviter de le restaurer plus tard
+            try {
+              localStorage.removeItem(key);
+            } catch {}
+            return;
+          }
+          
+          // Vérifier qu'il y a des segments (transcript structuré) ou du texte valide
+          const segments = main.querySelectorAll('.ag-seg');
+          if (segments.length === 0 && text.length < 50) {
+            // Pas de segments et texte trop court = probablement un état vide
+            try {
+              localStorage.removeItem(key);
+            } catch {}
+            return;
+          }
+          
           localStorage.setItem(key, JSON.stringify({ts:Date.now(), text}));
-        }catch{}
+        }catch(e){
+          console.warn('[agilo:save:STAGING] ⚠️ Erreur sauvegarde brouillon:', e);
+        }
       }, 1200);
     };
     main?.addEventListener('input', save, true);
@@ -193,17 +222,43 @@
   }
   function restoreDraftIfAny(jobId, main){
     try{
+      // ✅ CORRECTION CRITIQUE : Ne PAS restaurer si le transcript est en cours de chargement
+      // Attendre que le transcript soit chargé depuis l'API avant de restaurer un brouillon
+      if (main?.getAttribute('aria-busy') === 'true') {
+        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : transcript en cours de chargement');
+        return;
+      }
+      
+      // ✅ CORRECTION : Vérifier qu'il y a des segments chargés avant de restaurer
+      const segments = main?.querySelectorAll('.ag-seg');
+      if (segments && segments.length > 0) {
+        // Le transcript est déjà chargé depuis l'API, ne pas restaurer le brouillon
+        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : transcript déjà chargé depuis l\'API');
+        return;
+      }
+      
       const raw = localStorage.getItem(`agilo:draft:${jobId}`); if (!raw) return;
       const j = JSON.parse(raw);
       if (!j?.text || !main) return;
+      
+      // ✅ CORRECTION : Vérifier que le brouillon n'est pas vide
+      const draftText = (j.text || '').trim();
+      if (!draftText || draftText.length < 10) {
+        console.log('[agilo:save:STAGING] ⏭️ Restauration brouillon ignorée : brouillon vide ou trop court');
+        return;
+      }
+      
       const cur = (main.innerText ?? main.textContent ?? '').trim();
-      if (!cur){
+      // ✅ CORRECTION : Ne restaurer QUE si vraiment vide ET que le brouillon est valide
+      if (!cur && draftText.length >= 10){
         if (main.innerText!==undefined) main.innerText = j.text;
         else main.textContent = j.text;
         main.dispatchEvent(new Event('input', {bubbles:true}));
-        console.info('[agilo:save] brouillon local restauré');
+        console.info('[agilo:save:STAGING] ✅ Brouillon local restauré:', draftText.length, 'caractères');
       }
-    }catch{}
+    }catch(e){
+      console.warn('[agilo:save:STAGING] ⚠️ Erreur restauration brouillon:', e);
+    }
   }
 
   const NBSP=/\u00A0/g;
@@ -1395,7 +1450,18 @@
     const { main } = getAllPanes();
     const jobId = pickJobId();
     if (jobId && main){
-      restoreDraftIfAny(jobId, main);
+      // ✅ CORRECTION CRITIQUE : Ne PAS restaurer le brouillon immédiatement
+      // Attendre que le transcript soit chargé depuis l'API (via loadJob)
+      // La restauration se fera après le chargement via un événement personnalisé
+      
+      // Écouter l'événement de fin de chargement du transcript
+      window.addEventListener('agilo:transcript-loaded', () => {
+        // Attendre un peu pour être sûr que le DOM est stable
+        setTimeout(() => {
+          restoreDraftIfAny(jobId, main);
+        }, 500);
+      }, { once: true });
+      
       startAutosaveDraft(jobId, main);
     }
 
