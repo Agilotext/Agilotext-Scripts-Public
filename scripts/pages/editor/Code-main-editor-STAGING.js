@@ -1,7 +1,6 @@
-// Agilotext - Main Editor (Transcript Editor Principal) - VERSION STAGING
+// Agilotext - Main Editor (Transcript Editor Principal)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-main-editor dans Webflow
-// ✅ VERSION STAGING : Protection RENFORCÉE contre suppression de segments (détection sélection + longueur)
 
 (function ready(fn){
   if (document.readyState !== 'loading') fn();
@@ -152,20 +151,19 @@ function humanizeError({ where = 'summary', code = '', json = null, httpStatus =
   }
 })();
 // Canon CE -> texte visible (div/br -> \n), NBSP -> espace
-// ✅ PROTECTION RENFORCÉE : Vérifications contre états transitoires
 window.visibleTextFromBox = window.visibleTextFromBox || function(box){
   if (!box) return '';
   
   // ✅ NOUVEAU : Vérifier que l'élément est bien attaché au DOM
   if (!box.isConnected) {
-    console.warn('[agilo:editor] ⚠️ visibleTextFromBox: élément non attaché au DOM');
+    console.warn('[visibleTextFromBox] Élément non connecté au DOM');
     return '';
   }
   
-  // ✅ NOUVEAU : Vérifier que l'élément n'est pas en cours d'édition problématique
-  if (box.classList.contains('is-deleting') || box.hasAttribute('data-transient')) {
-    console.warn('[agilo:editor] ⚠️ visibleTextFromBox: élément en état transitoire');
-    return '';
+  // ✅ NOUVEAU : Vérifier que l'élément n'est pas en cours de suppression
+  if (box.classList.contains('is-deleting') || box.hasAttribute('data-deleting')) {
+    console.warn('[visibleTextFromBox] Élément en cours de suppression, retour texte existant');
+    return box.textContent || '';
   }
   
   const clone = box.cloneNode(true);
@@ -174,17 +172,14 @@ window.visibleTextFromBox = window.visibleTextFromBox || function(box){
   clone.querySelectorAll(BLOCKS).forEach((el, i) => {
     if (i > 0 || el.previousSibling) el.before('\n');
   });
+  
   const result = (clone.textContent || '')
     .replace(/\r\n?/g,'\n')
     .replace(/\u00A0/g,' ');
   
-  // ✅ NOUVEAU : Vérifier que le résultat n'est pas suspect (trop de perte)
-  if (result.length === 0 && box.textContent && box.textContent.trim().length > 10) {
-    console.error('[agilo:editor] 🚨 visibleTextFromBox: perte de contenu suspecte !', {
-      originalLength: box.textContent.length,
-      resultLength: result.length
-    });
-    // Retourner le textContent brut comme fallback
+  // ✅ SÉCURITÉ : Si le résultat est vide mais que box.textContent ne l'est pas, on retourne box.textContent
+  if (!result.trim() && box.textContent && box.textContent.trim()) {
+    console.warn('[visibleTextFromBox] Clone vide mais original non-vide, utilisation de textContent');
     return box.textContent.replace(/\r\n?/g,'\n').replace(/\u00A0/g,' ');
   }
   
@@ -491,7 +486,79 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
     return btn;
   }
 
-  function renderSegments(segments){
+  // ✅ NOUVEAU : Système d'undo/redo global
+let undoStack = [];
+let redoStack = [];
+const MAX_UNDO = 50;
+
+function saveUndoState() {
+  try {
+    const state = JSON.parse(JSON.stringify(window._segments || [])); // Deep clone
+    undoStack.push(state);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = []; // Clear redo on new action
+  } catch (e) {
+    console.warn('[undo] Échec sauvegarde état:', e);
+  }
+}
+
+function performUndo() {
+  if (undoStack.length === 0) {
+    toast('Rien à annuler');
+    return false;
+  }
+  
+  try {
+    redoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const previousState = undoStack.pop();
+    window._segments = previousState;
+    renderSegments(window._segments);
+    toast('✓ Annulation effectuée');
+    return true;
+  } catch (e) {
+    console.error('[undo] Erreur:', e);
+    return false;
+  }
+}
+
+function performRedo() {
+  if (redoStack.length === 0) {
+    toast('Rien à rétablir');
+    return false;
+  }
+  
+  try {
+    undoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const nextState = redoStack.pop();
+    window._segments = nextState;
+    renderSegments(window._segments);
+    toast('✓ Rétablissement effectué');
+    return true;
+  } catch (e) {
+    console.error('[redo] Erreur:', e);
+    return false;
+  }
+}
+
+// Exposer globalement
+window.agiloUndo = performUndo;
+window.agiloRedo = performRedo;
+
+// Raccourcis clavier
+document.addEventListener('keydown', (e) => {
+  // Ctrl/Cmd + Z = Undo
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    performUndo();
+  }
+  // Ctrl/Cmd + Y ou Ctrl/Cmd + Shift + Z = Redo
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    e.preventDefault();
+    performRedo();
+  }
+});
+
+function renderSegments(segments){
   const root = editors.transcript; if (!root) return;
 
   root.innerHTML = '';
@@ -591,17 +658,15 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
       doRenameFor(sp.closest('.ag-seg'), { triggerEl: sp });
     });
 
-    // ✅ NOUVEAU : Debounce pour éviter les mises à jour trop fréquentes et les états transitoires
+    // ✅ NOUVEAU : Debounce + protection contre vidage accidentel
     let inputDebounceTimers = new Map();
-    
+
     root.addEventListener('input', (e)=>{
       const node = e.target.closest('.ag-seg__text'); 
       if (!node) return;
       
       const segEl = node.closest('.ag-seg');
       const idx = Array.prototype.indexOf.call(root.children, segEl);
-      
-      if (idx < 0) return;
       
       // ✅ NOUVEAU : Debounce de 150ms pour chaque segment
       if (inputDebounceTimers.has(idx)) {
@@ -610,34 +675,14 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
       
       inputDebounceTimers.set(idx, setTimeout(() => {
         if (idx > -1 && window._segments[idx]) {
-          const oldText = window._segments[idx].text || '';
           const newText = window.visibleTextFromBox(node);
           
-          // ✅ SÉCURITÉ CRITIQUE : Ne jamais vider complètement un segment sans confirmation
+          // ✅ SÉCURITÉ : Ne jamais vider complètement un segment sans confirmation
+          const oldText = window._segments[idx].text || '';
           if (newText.trim().length === 0 && oldText.trim().length > 10) {
-            console.error('[agilo:editor] 🚨 PROTECTION : Tentative de vidage complet du segment', idx, {
-              ancien: oldText.length,
-              nouveau: newText.length,
-              preview: oldText.substring(0, 50)
-            });
+            console.warn('[agilo:editor] ⚠️ Tentative de vidage complet du segment', idx, 
+                         'ancien:', oldText.length, 'chars');
             // On ne met PAS à jour pour éviter la perte accidentelle
-            // Restaurer le texte dans le DOM
-            if (node.textContent.trim().length === 0) {
-              node.textContent = oldText;
-              console.warn('[agilo:editor] ✅ Texte restauré dans le DOM');
-            }
-            return;
-          }
-          
-          // ✅ SÉCURITÉ : Vérifier qu'on ne perd pas trop de contenu d'un coup
-          const lossRatio = oldText.length > 0 ? (oldText.length - newText.length) / oldText.length : 0;
-          if (lossRatio > 0.8 && oldText.length > 20) {
-            console.error('[agilo:editor] 🚨 PROTECTION : Perte massive de contenu détectée', {
-              ancien: oldText.length,
-              nouveau: newText.length,
-              perte: Math.round(lossRatio * 100) + '%'
-            });
-            // Ne pas mettre à jour si perte > 80%
             return;
           }
           
@@ -647,91 +692,57 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
       }, 150));
     });
 
-    // ✅ PROTECTION CRITIQUE RENFORCÉE : Empêcher la suppression accidentelle de segments entiers
+    // Sauvegarder l'état AVANT la modification (debounced)
+    let undoDebounceTimer = null;
+    root.addEventListener('beforeinput', () => {
+      clearTimeout(undoDebounceTimer);
+      undoDebounceTimer = setTimeout(() => {
+        saveUndoState();
+      }, 500);
+    }, { capture: true });
+
+    // ✅ PROTECTION CRITIQUE : Empêcher la suppression accidentelle de segments entiers
     root.addEventListener('keydown', (e) => {
       if (__mode !== 'structured') return;
       
       const node = e.target.closest('.ag-seg__text');
-      if (!node || !node.isContentEditable) return;
+      if (!node) return;
       
       const segEl = node.closest('.ag-seg');
       if (!segEl) return;
       
       // Vérifier si on appuie sur Backspace ou Delete
       if (e.key === 'Backspace' || e.key === 'Delete') {
+        const textContent = (node.innerText || node.textContent || '').trim();
         const selection = window.getSelection();
-        if (!selection || selection.rangeCount === 0) return;
+        const range = selection?.rangeCount > 0 ? selection.getRangeAt(0) : null;
         
-        const range = selection.getRangeAt(0);
-        
-        // ✅ Vérifier que la sélection est bien dans ce node
-        if (!node.contains(range.commonAncestorContainer) && range.commonAncestorContainer !== node) {
-          return; // La sélection n'est pas dans ce segment, laisser passer
-        }
-        
-        const currentText = (node.innerText || node.textContent || '').trim();
-        const currentLength = currentText.length;
-        
-        // ✅ NOUVEAU : Calculer ce qui sera supprimé de manière plus précise
-        let lengthToDelete = 0;
-        if (!range.collapsed) {
-          // Si on a une sélection, calculer la longueur du texte sélectionné
-          const selectedText = range.toString();
-          lengthToDelete = selectedText.length;
-        } else {
-          // Si pas de sélection (curseur seul), on supprime juste un caractère
-          lengthToDelete = 1;
-        }
-        
-        // ✅ NOUVEAU : Calculer la longueur après suppression
-        const lengthAfterDelete = Math.max(0, currentLength - lengthToDelete);
-        
-        // ✅ PROTECTION CRITIQUE : Empêcher si après suppression le segment serait vide ou presque vide
-        // Seuil : au moins 2 caractères doivent rester (pour éviter les segments vides)
-        if (lengthAfterDelete < 2) {
-          console.warn('[agilo:editor:protection] 🛡️ Suppression BLOQUÉE - segment deviendrait vide', {
-            avant: currentLength,
-            apres: lengthAfterDelete,
-            suppression: lengthToDelete,
-            key: e.key,
-            selection: !range.collapsed ? 'OUI' : 'NON'
-          });
+        // Si le contenu est vide ou presque vide
+        if (textContent.length <= 1) {
+          // Vérifier si on est au début ou à la fin du segment
+          const isAtStart = range && range.startOffset === 0 && range.startContainer === node;
+          const isAtEnd = range && range.endOffset === (node.textContent?.length || 0) && range.endContainer === node;
           
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          
-          // S'assurer qu'il reste au moins un espace
-          if (currentLength === 0 || lengthAfterDelete <= 0) {
-            if (node.textContent.trim().length === 0) {
+          // Si on est au début avec Backspace ou à la fin avec Delete, empêcher la suppression
+          if ((e.key === 'Backspace' && isAtStart) || (e.key === 'Delete' && isAtEnd)) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // S'assurer qu'il reste au moins un espace pour éviter la suppression du segment
+            if (!textContent) {
               node.textContent = ' ';
               // Placer le curseur après l'espace
               const newRange = document.createRange();
               newRange.selectNodeContents(node);
               newRange.collapse(false);
-              selection.removeAllRanges();
-              selection.addRange(newRange);
+              selection?.removeAllRanges();
+              selection?.addRange(newRange);
             }
+            return false;
           }
-          
-          return false;
-        }
-        
-        // ✅ PROTECTION ADDITIONNELLE : Si le segment est déjà très court (≤5 caractères), être très strict
-        if (currentLength <= 5 && lengthToDelete >= currentLength - 1) {
-          console.warn('[agilo:editor:protection] 🛡️ Suppression BLOQUÉE - segment trop court', {
-            avant: currentLength,
-            apres: lengthAfterDelete,
-            suppression: lengthToDelete
-          });
-          
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          return false;
         }
       }
-    }, true); // ✅ Utiliser capture phase pour intercepter avant les autres handlers
+    });
 
     root.__bound = true;
   }
@@ -1645,85 +1656,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
 		}
   }
 
-  // ✅ NOUVEAU : Système d'undo/redo global pour contenteditable
-  let undoStack = [];
-  let redoStack = [];
-  const MAX_UNDO = 50;
-
-  function saveUndoState() {
-    if (!window._segments || !Array.isArray(window._segments)) return;
-    const state = JSON.parse(JSON.stringify(window._segments)); // Deep clone
-    undoStack.push(state);
-    if (undoStack.length > MAX_UNDO) undoStack.shift();
-    redoStack = []; // Clear redo on new action
-  }
-
-  function undo() {
-    if (undoStack.length === 0) {
-      if (typeof toast === 'function') toast('Rien à annuler');
-      return;
-    }
-    
-    redoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
-    const previousState = undoStack.pop();
-    window._segments = previousState;
-    renderSegments(window._segments);
-    if (typeof toast === 'function') toast('Annulation effectuée');
-  }
-
-  function redo() {
-    if (redoStack.length === 0) {
-      if (typeof toast === 'function') toast('Rien à rétablir');
-      return;
-    }
-    
-    undoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
-    const nextState = redoStack.pop();
-    window._segments = nextState;
-    renderSegments(window._segments);
-    if (typeof toast === 'function') toast('Rétablissement effectué');
-  }
-
-  // Exposer globalement
-  window.agiloUndo = undo;
-  window.agiloRedo = redo;
-
-  // Initialiser undo/redo après que le DOM soit prêt
-  function setupUndoRedo() {
-    // Sauvegarder l'état avant chaque modification
-    const transcriptRoot = editors.transcript;
-    if (transcriptRoot) {
-      transcriptRoot.addEventListener('beforeinput', (e) => {
-        // Sauvegarder seulement pour les modifications de texte
-        if (e.inputType && /insert|delete|format/.test(e.inputType)) {
-          saveUndoState();
-        }
-      }, { capture: true });
-    }
-
-    // Désactiver undo/redo natif et utiliser le nôtre
-    document.addEventListener('keydown', (e) => {
-      const target = e.target;
-      const isInTranscript = target?.closest('#transcriptEditor, .ag-seg__text');
-      
-      if (!isInTranscript) return;
-      
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        undo();
-      }
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !e.altKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        redo();
-      }
-    }, true);
-  }
-
 (function init(){
   setupInsightShortcuts();
-  setupUndoRedo(); // ✅ Initialiser undo/redo
 
   const urlJob  = new URLSearchParams(location.search).get('jobId');
   const dataJob = editorRoot?.dataset.jobId || '';
@@ -1905,4 +1839,5 @@ window.AgiloEditors = { ...(window.AgiloEditors||{}), loadJob, serializeSmart };
     }, { passive:true });
   }
 });
+
 
