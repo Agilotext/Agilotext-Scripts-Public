@@ -738,79 +738,6 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
 }
 window.renderSegments = renderSegments;
 
-  // ✅ NOUVEAU : Système d'undo/redo global pour contenteditable
-  let undoStack = [];
-  let redoStack = [];
-  const MAX_UNDO = 50;
-
-  function saveUndoState() {
-    if (!window._segments || !Array.isArray(window._segments)) return;
-    const state = JSON.parse(JSON.stringify(window._segments)); // Deep clone
-    undoStack.push(state);
-    if (undoStack.length > MAX_UNDO) undoStack.shift();
-    redoStack = []; // Clear redo on new action
-  }
-
-  function undo() {
-    if (undoStack.length === 0) {
-      toast('Rien à annuler');
-      return;
-    }
-    
-    redoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
-    const previousState = undoStack.pop();
-    window._segments = previousState;
-    renderSegments(window._segments);
-    toast('Annulation effectuée');
-  }
-
-  function redo() {
-    if (redoStack.length === 0) {
-      toast('Rien à rétablir');
-      return;
-    }
-    
-    undoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
-    const nextState = redoStack.pop();
-    window._segments = nextState;
-    renderSegments(window._segments);
-    toast('Rétablissement effectué');
-  }
-
-  // Exposer globalement
-  window.agiloUndo = undo;
-  window.agiloRedo = redo;
-
-  // Sauvegarder l'état avant chaque modification
-  const transcriptRoot = editors.transcript;
-  if (transcriptRoot) {
-    transcriptRoot.addEventListener('beforeinput', (e) => {
-      // Sauvegarder seulement pour les modifications de texte
-      if (e.inputType && /insert|delete|format/.test(e.inputType)) {
-        saveUndoState();
-      }
-    }, { capture: true });
-  }
-
-  // Désactiver undo/redo natif et utiliser le nôtre
-  document.addEventListener('keydown', (e) => {
-    const target = e.target;
-    const isInTranscript = target?.closest('#transcriptEditor, .ag-seg__text');
-    
-    if (!isInTranscript) return;
-    
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !e.altKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      undo();
-    }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !e.altKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      redo();
-    }
-  }, true);
-
 
   function normalizeName(name){
     let s = String(name||'').trim();
@@ -1718,8 +1645,85 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
 		}
   }
 
+  // ✅ NOUVEAU : Système d'undo/redo global pour contenteditable
+  let undoStack = [];
+  let redoStack = [];
+  const MAX_UNDO = 50;
+
+  function saveUndoState() {
+    if (!window._segments || !Array.isArray(window._segments)) return;
+    const state = JSON.parse(JSON.stringify(window._segments)); // Deep clone
+    undoStack.push(state);
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack = []; // Clear redo on new action
+  }
+
+  function undo() {
+    if (undoStack.length === 0) {
+      if (typeof toast === 'function') toast('Rien à annuler');
+      return;
+    }
+    
+    redoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const previousState = undoStack.pop();
+    window._segments = previousState;
+    renderSegments(window._segments);
+    if (typeof toast === 'function') toast('Annulation effectuée');
+  }
+
+  function redo() {
+    if (redoStack.length === 0) {
+      if (typeof toast === 'function') toast('Rien à rétablir');
+      return;
+    }
+    
+    undoStack.push(JSON.parse(JSON.stringify(window._segments || [])));
+    const nextState = redoStack.pop();
+    window._segments = nextState;
+    renderSegments(window._segments);
+    if (typeof toast === 'function') toast('Rétablissement effectué');
+  }
+
+  // Exposer globalement
+  window.agiloUndo = undo;
+  window.agiloRedo = redo;
+
+  // Initialiser undo/redo après que le DOM soit prêt
+  function setupUndoRedo() {
+    // Sauvegarder l'état avant chaque modification
+    const transcriptRoot = editors.transcript;
+    if (transcriptRoot) {
+      transcriptRoot.addEventListener('beforeinput', (e) => {
+        // Sauvegarder seulement pour les modifications de texte
+        if (e.inputType && /insert|delete|format/.test(e.inputType)) {
+          saveUndoState();
+        }
+      }, { capture: true });
+    }
+
+    // Désactiver undo/redo natif et utiliser le nôtre
+    document.addEventListener('keydown', (e) => {
+      const target = e.target;
+      const isInTranscript = target?.closest('#transcriptEditor, .ag-seg__text');
+      
+      if (!isInTranscript) return;
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        undo();
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) && !e.altKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        redo();
+      }
+    }, true);
+  }
+
 (function init(){
   setupInsightShortcuts();
+  setupUndoRedo(); // ✅ Initialiser undo/redo
 
   const urlJob  = new URLSearchParams(location.search).get('jobId');
   const dataJob = editorRoot?.dataset.jobId || '';
