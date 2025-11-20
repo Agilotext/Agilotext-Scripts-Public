@@ -99,23 +99,31 @@
       const hasLoader = transcriptEditor.querySelector('.ag-loader, .loading, [data-loading="true"]');
       const hasPlaceholder = transcriptEditor.querySelector('[data-placeholder], .placeholder');
       
-      console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
-        segmentsCount,
-        textLength,
-        hasLoader: !!hasLoader,
-        hasPlaceholder: !!hasPlaceholder,
-        transcriptEditorExists: !!transcriptEditor
-      });
+      // ✅ Logs détaillés seulement en mode debug
+      if (window.agiloSaveDebug) {
+        console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
+          segmentsCount,
+          textLength,
+          hasLoader: !!hasLoader,
+          hasPlaceholder: !!hasPlaceholder,
+          transcriptEditorExists: !!transcriptEditor
+        });
+      }
       
       // ✅ Si on a du contenu valide, on peut sauvegarder
       if (segmentsCount >= MIN_SEGMENTS_COUNT || textLength >= MIN_CONTENT_LENGTH) {
         // Vérifier qu'il n'y a pas de loader actif
         if (!hasLoader && !hasPlaceholder) {
-          console.log('[agilo:save:security] ✅ Transcript prêt:', {
-            segmentsCount,
-            textLength,
-            preview: textContent.substring(0, 100)
-          });
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', {
+              segmentsCount,
+              textLength,
+              preview: textContent.substring(0, 100)
+            });
+          } else {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', `${segmentsCount} segments, ${textLength} caractères`);
+          }
           return { 
             isReady: true, 
             content: {
@@ -736,7 +744,12 @@
       }))
     };
     
-    console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    // ✅ Log JSON seulement en mode debug (réduit la pollution de la console)
+    if (window.agiloSaveDebug) {
+      console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    } else {
+      console.log('✅ JSON transcript_status:', `{jobId: ${transcriptStatusJson.job_meta.jobId}, segments: ${transcriptStatusJson.segments.length}, duration: ${transcriptStatusJson.job_meta.milli_duration}ms}`);
+    }
     
     const body = new URLSearchParams();
     body.append('username', params.username);
@@ -846,7 +859,13 @@
             return;
           }
           
-          console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          } else {
+            const { segmentsCount = 0, textLength = 0 } = transcriptCheck.content || {};
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt');
+          }
 
           const creds=await ensureCreds();
           const { email, token, edition, jobId } = creds;
