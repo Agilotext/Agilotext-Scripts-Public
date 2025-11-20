@@ -1,4 +1,4 @@
-// Agilotext - Save Transcript (VERSION STAGING - CORRIGÉE avec toutes les protections)
+// Agilotext - Save Transcript (VERSION CORRIGÉE avec toutes les protections)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-save-transcript dans Webflow
 // ✅ CORRECTIONS APPLIQUÉES :
@@ -6,25 +6,20 @@
 //   - Vérification onglet actif avant sauvegarde
 //   - Vérification que le transcript est chargé
 //   - Protection contre sauvegarde de transcript vide
-//   - ✅ STAGING : Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+//   - ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
 
 (function(){
 
-  // ✅ STAGING : Identifiant unique pour éviter conflit avec version normale
-  if (window.__agiloSave_FULL_12_JSON_CONTENT_STAGING) {
-    console.warn('[agilo:save:STAGING] ⚠️ Script déjà chargé (identifiant présent)');
-    return;
-  } 
+  if (window.__agiloSave_FULL_12_JSON_CONTENT) return; 
 
-  console.log('[agilo:save:STAGING] 🚀 Initialisation du script STAGING...');
-  window.__agiloSave_FULL_12_JSON_CONTENT_STAGING = true;
+  window.__agiloSave_FULL_12_JSON_CONTENT = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
   const TOKEN_GET = API_BASE + '/getToken';
   const CHECK_GET_JSON = API_BASE + '/receiveTextJson';
   const CHECK_GET_TXT = API_BASE + '/receiveText';
-  const VERSION = 'save-full-12-staging-manual-only (sauvegarde manuelle uniquement - STAGING)';
+  const VERSION = 'save-full-14-manual-only (sauvegarde manuelle uniquement + protection messages erreur + améliorations UX)';
 
   const MIN_SPINNER_MS = 400;
   const MAX_HTML_SNAPSHOT_CHARS = 1_000_000;
@@ -104,23 +99,31 @@
       const hasLoader = transcriptEditor.querySelector('.ag-loader, .loading, [data-loading="true"]');
       const hasPlaceholder = transcriptEditor.querySelector('[data-placeholder], .placeholder');
       
-      console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
-        segmentsCount,
-        textLength,
-        hasLoader: !!hasLoader,
-        hasPlaceholder: !!hasPlaceholder,
-        transcriptEditorExists: !!transcriptEditor
-      });
+      // ✅ Logs détaillés seulement en mode debug
+      if (window.agiloSaveDebug) {
+        console.log('[agilo:save:security] Vérification tentative', attempts + 1, {
+          segmentsCount,
+          textLength,
+          hasLoader: !!hasLoader,
+          hasPlaceholder: !!hasPlaceholder,
+          transcriptEditorExists: !!transcriptEditor
+        });
+      }
       
       // ✅ Si on a du contenu valide, on peut sauvegarder
       if (segmentsCount >= MIN_SEGMENTS_COUNT || textLength >= MIN_CONTENT_LENGTH) {
         // Vérifier qu'il n'y a pas de loader actif
         if (!hasLoader && !hasPlaceholder) {
-          console.log('[agilo:save:security] ✅ Transcript prêt:', {
-            segmentsCount,
-            textLength,
-            preview: textContent.substring(0, 100)
-          });
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', {
+              segmentsCount,
+              textLength,
+              preview: textContent.substring(0, 100)
+            });
+          } else {
+            console.log('[agilo:save:security] ✅ Transcript prêt:', `${segmentsCount} segments, ${textLength} caractères`);
+          }
           return { 
             isReady: true, 
             content: {
@@ -288,12 +291,32 @@
   }
 
   /* ===== CREDENTIALS ===== */
-  function normalizeEdition(v){ v=String(v||'').trim().toLowerCase(); if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent'; if (/^pro/.test(v)) return 'pro'; if (/^free|gratuit/.test(v)) return 'free'; return 'ent'; }
-  function pickEdition(){ const root=$('#editorRoot'); const qs=new URLSearchParams(location.search).get('edition'); const html=document.documentElement.getAttribute('data-edition'); const ls=localStorage.getItem('agilo:edition'); return normalizeEdition(qs || root?.dataset.edition || html || ls || 'ent'); }
-  function pickJobId(){ const u=new URL(location.href); const root=$('#editorRoot'); return (u.searchParams.get('jobId')||root?.dataset.jobId||window.__agiloOrchestrator?.currentJobId||$('.rail-item.is-active')?.dataset?.jobId||''); }
-  function pickEmail(){ const root=$('#editorRoot'); return (root?.dataset.username || $('[name="memberEmail"]')?.value || window.memberEmail || window.__agiloOrchestrator?.credentials?.email || localStorage.getItem('agilo:username') || $('[data-ms-member="email"]')?.textContent || ''); }
+  function normalizeEdition(v){ 
+    v=String(v||'').trim().toLowerCase(); 
+    if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent'; 
+    if (/^pro/.test(v)) return 'pro'; 
+    if (/^free|gratuit/.test(v)) return 'free'; 
+    return 'ent'; 
+  }
+  function pickEdition(){ 
+    const root=$('#editorRoot'); 
+    const qs=new URLSearchParams(location.search).get('edition'); 
+    const html=document.documentElement.getAttribute('data-edition'); 
+    const ls=localStorage.getItem('agilo:edition'); 
+    return normalizeEdition(qs || root?.dataset.edition || html || ls || 'ent'); 
+  }
+  function pickJobId(){ 
+    const u=new URL(location.href); 
+    const root=$('#editorRoot'); 
+    return (u.searchParams.get('jobId')||root?.dataset.jobId||window.__agiloOrchestrator?.currentJobId||$('.rail-item.is-active')?.dataset?.jobId||''); 
+  }
+  function pickEmail(){ 
+    const root=$('#editorRoot'); 
+    return (root?.dataset.username || $('[name="memberEmail"]')?.value || window.memberEmail || window.__agiloOrchestrator?.credentials?.email || localStorage.getItem('agilo:username') || $('[data-ms-member="email"]')?.textContent || ''); 
+  }
   function pickToken(edition,email){
-    const root=$('#editorRoot'); const k=`agilo:token:${edition}:${String(email||'').toLowerCase()}`;
+    const root=$('#editorRoot'); 
+    const k=`agilo:token:${edition}:${String(email||'').toLowerCase()}`;
     return (root?.dataset.token || window.__agiloOrchestrator?.credentials?.token || window.globalToken || localStorage.getItem(k) || localStorage.getItem(`agilo:token:${edition}`) || localStorage.getItem('agilo:token') || '');
   }
   async function ensureToken(email, edition){
@@ -307,10 +330,13 @@
         const url=`${TOKEN_GET}?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
         const r=await fetchRetry(url,{method:'GET'}); const j=await r.json().catch(()=>null);
         if (r.ok && j?.status==='OK' && j.token){
-          try{ localStorage.setItem(`agilo:token:${edition}:${email.toLowerCase()}`, j.token);
-               localStorage.setItem('agilo:username', email);
-               localStorage.setItem('agilo:edition', edition); }catch(_){}
-          window.globalToken=j.token; return j.token;
+          try{ 
+            localStorage.setItem(`agilo:token:${edition}:${email.toLowerCase()}`, j.token);
+            localStorage.setItem('agilo:username', email);
+            localStorage.setItem('agilo:edition', edition); 
+          }catch(_){}
+          window.globalToken=j.token; 
+          return j.token;
         }
       }catch(_){}
     }
@@ -318,9 +344,11 @@
   }
   async function ensureCreds(){
     const edition=pickEdition();
-    let email=pickEmail(); for (let i=0;i<20 && !email;i++){ await sleep(100); email=pickEmail(); }
+    let email=pickEmail(); 
+    for (let i=0;i<20 && !email;i++){ await sleep(100); email=pickEmail(); }
     const token=await ensureToken(email, edition);
-    let jobId=pickJobId(); for (let i=0;i<10 && !jobId;i++){ await sleep(60); jobId=pickJobId(); }
+    let jobId=pickJobId(); 
+    for (let i=0;i<10 && !jobId;i++){ await sleep(60); jobId=pickJobId(); }
     log('creds',{email,edition,jobId,hasToken:!!token});
     return { email:(email||'').trim(), token:(token||'').trim(), edition, jobId:String(jobId||'').trim() };
   }
@@ -741,7 +769,12 @@
       }))
     };
     
-    console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    // ✅ Log JSON seulement en mode debug (réduit la pollution de la console)
+    if (window.agiloSaveDebug) {
+      console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
+    } else {
+      console.log('✅ JSON transcript_status:', `{jobId: ${transcriptStatusJson.job_meta.jobId}, segments: ${transcriptStatusJson.segments.length}, duration: ${transcriptStatusJson.job_meta.milli_duration}ms}`);
+    }
     
     const body = new URLSearchParams();
     body.append('username', params.username);
@@ -851,7 +884,13 @@
             return;
           }
           
-          console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          // ✅ Log détaillé seulement en mode debug
+          if (window.agiloSaveDebug) {
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          } else {
+            const { segmentsCount = 0, textLength = 0 } = transcriptCheck.content || {};
+            console.log('[agilo:save:security] ✅ Transcript vérifié et prêt');
+          }
 
           const creds=await ensureCreds();
           const { email, token, edition, jobId } = creds;
@@ -1223,7 +1262,7 @@
     const finalIsSummary = isSummaryTab || isSummaryPaneActive;
     const finalIsTranscript = isTranscriptTab || isTranscriptPaneActive;
     
-    // ✅ STAGING : Logs réduits (seulement si changement d'état)
+    // ✅ Logs réduits (seulement si changement d'état)
     const wasVisible = !saveBtn.classList.contains('agilo-hide-save') && 
                       window.getComputedStyle(saveBtn).display !== 'none';
     
@@ -1322,7 +1361,12 @@
   }
 
   /* ===== EXPOSE ===== */
-  function findSaveButton(){ return document.querySelector('[data-action="save-transcript"]') || document.querySelector('button.button.save[data-opentech-ux-zone-id]') || document.querySelector('button.button.save'); }
+  function findSaveButton(){ 
+    return document.querySelector('[data-action="save-transcript"]') || 
+           document.querySelector('button.button.save[data-opentech-ux-zone-id]') || 
+           document.querySelector('button.button.save'); 
+  }
+
   window.restoreTranscriptBackup = function(){
     const jobId=pickJobId(); const b=readBackup(jobId); const {main}=getAllPanes();
     if(!b||!main){ alert('Aucune sauvegarde locale disponible'); return; }
@@ -1331,10 +1375,29 @@
     document.dispatchEvent(new CustomEvent('agilo:restored',{detail:{jobId}}));
     alert('Version restaurée depuis le stockage local.');
   };
-  window.agiloSaveNow = function(){ const btn=findSaveButton(); return doSave(btn||null); };
-  window.serializeAll = serializeAll; window.ensureCreds = ensureCreds;
-  window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
-  window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
+
+  window.agiloSaveNow = function(){ 
+    const btn=findSaveButton(); 
+    return doSave(btn||null); 
+  };
+
+  window.serializeAll = serializeAll; 
+  window.ensureCreds = ensureCreds;
+
+  window.agiloGetPayload = async()=>{
+    const creds=await ensureCreds(); 
+    const pick=await serializeAll(); 
+    const meta=buildMeta(pick.segments,pick.from); 
+    return {creds,pick,meta}; 
+  };
+
+  window.agiloGetState = ()=>({
+    edition: pickEdition(), 
+    jobId: pickJobId(), 
+    email: pickEmail(), 
+    hasToken: !!pickToken(pickEdition(), pickEmail()) 
+  });
+
   window.verifyTranscriptReady = verifyTranscriptReady; // ✅ Exposer pour debug
 
   // ✅ Script de diagnostic complet
@@ -1369,28 +1432,29 @@
 
   /* ===== BOOT ===== */
   function init(){
-    console.log('[agilo:save:STAGING] 🔧 Initialisation de init()...');
     const btn = findSaveButton();
-    console.log('[agilo:save:STAGING] 🔍 Bouton recherché:', btn);
     if (btn){ 
-      console.log('[agilo:save:STAGING] ✅ Bouton trouvé, ajout listener');
       btn.addEventListener('click', (e)=>{ 
-        console.log('[agilo:save:STAGING] 🖱️ Clic détecté');
         e.preventDefault(); 
-        doSave(btn).catch(err => console.error('[agilo:save:STAGING] ❌ Erreur:', err));
+        doSave(btn).catch(err => console.error('[agilo:save] ❌ Erreur:', err));
       }); 
     }
     else { 
-      console.warn('[agilo:save:STAGING] ⚠️ bouton .button.save introuvable');
-      console.warn('[agilo:save:STAGING] Sélecteurs testés:', [
-        '[data-action="save-transcript"]',
-        'button.button.save[data-opentech-ux-zone-id]',
-        'button.button.save'
-      ]);
+      console.warn('[agilo:save] ⚠️ bouton .button.save introuvable');
     }
 
-    window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
-    document.addEventListener('agilo:save', ()=>{ const b=findSaveButton(); doSave(b||null); });
+    window.addEventListener('keydown', (e)=>{ 
+      if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ 
+        e.preventDefault(); 
+        const b=findSaveButton(); 
+        doSave(b||null); 
+      } 
+    });
+
+    document.addEventListener('agilo:save', ()=>{ 
+      const b=findSaveButton(); 
+      doSave(b||null); 
+    });
 
     const { main } = getAllPanes();
     const jobId = pickJobId();
@@ -1401,8 +1465,8 @@
 
     // ✅ NOUVELLES FONCTIONNALITÉS
     statusIndicator = createStatusIndicator();
-    // ✅ STAGING : Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
-    // startAutoSave(); // Commenté pour version STAGING
+    // ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+    // startAutoSave(); // Commenté : sauvegarde manuelle uniquement
     setupBeforeUnload();
     setupConflictDetection();
     
@@ -1447,17 +1511,12 @@
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
     }
 
-    console.info('[agilo:save:STAGING] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
+    console.info('[agilo:save] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
   }
 
-  // ✅ STAGING : Log pour vérifier que le script est bien chargé
-  console.log('[agilo:save:STAGING] 📦 Script chargé, état DOM:', document.readyState);
   if (document.readyState==='loading') {
-    console.log('[agilo:save:STAGING] ⏳ DOM en cours de chargement, attente DOMContentLoaded...');
     document.addEventListener('DOMContentLoaded', init, {once:true});
   } else {
-    console.log('[agilo:save:STAGING] ✅ DOM prêt, initialisation immédiate');
     init();
   }
 })();
-
