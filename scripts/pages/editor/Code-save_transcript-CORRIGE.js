@@ -6,6 +6,7 @@
 //   - Vérification onglet actif avant sauvegarde
 //   - Vérification que le transcript est chargé
 //   - Protection contre sauvegarde de transcript vide
+//   - ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
 
 (function(){
 
@@ -18,7 +19,7 @@
   const TOKEN_GET = API_BASE + '/getToken';
   const CHECK_GET_JSON = API_BASE + '/receiveTextJson';
   const CHECK_GET_TXT = API_BASE + '/receiveText';
-  const VERSION = 'save-full-13-enhanced-secure (auto-save + notifications + protections critiques + logs optimisés)';
+  const VERSION = 'save-full-14-manual-only (sauvegarde manuelle uniquement + protection messages erreur + améliorations UX)';
 
   const MIN_SPINNER_MS = 400;
   const MAX_HTML_SNAPSHOT_CHARS = 1_000_000;
@@ -1270,8 +1271,7 @@
       });
     });
     
-    // Observer les changements d'attributs avec MutationObserver (avec debounce)
-    let updateTimeout = null;
+    // Observer les changements d'attributs avec MutationObserver
     const observer = new MutationObserver((mutations) => {
       let shouldUpdate = false;
       mutations.forEach((mutation) => {
@@ -1289,10 +1289,8 @@
           }
         }
       });
-      // ✅ Debounce pour éviter trop d'appels
       if (shouldUpdate) {
-        if (updateTimeout) clearTimeout(updateTimeout);
-        updateTimeout = setTimeout(updateSaveButtonVisibility, 100);
+        setTimeout(updateSaveButtonVisibility, 50);
       }
     });
     
@@ -1367,8 +1365,15 @@
   /* ===== BOOT ===== */
   function init(){
     const btn = findSaveButton();
-    if (btn){ btn.addEventListener('click', (e)=>{ e.preventDefault(); doSave(btn); }); }
-    else { console.warn('[agilo:save] bouton .button.save introuvable'); }
+    if (btn){ 
+      btn.addEventListener('click', (e)=>{ 
+        e.preventDefault(); 
+        doSave(btn).catch(err => console.error('[agilo:save] ❌ Erreur:', err));
+      }); 
+    }
+    else { 
+      console.warn('[agilo:save] ⚠️ bouton .button.save introuvable');
+    }
 
     window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey)&&!e.altKey&&!e.shiftKey&&String(e.key).toLowerCase()==='s'){ e.preventDefault(); const b=findSaveButton(); doSave(b||null); } });
     document.addEventListener('agilo:save', ()=>{ const b=findSaveButton(); doSave(b||null); });
@@ -1382,7 +1387,8 @@
 
     // ✅ NOUVELLES FONCTIONNALITÉS
     statusIndicator = createStatusIndicator();
-    startAutoSave();
+    // ✅ Auto-save DÉSACTIVÉ (sauvegarde manuelle uniquement)
+    // startAutoSave(); // Commenté : sauvegarde manuelle uniquement
     setupBeforeUnload();
     setupConflictDetection();
     
@@ -1400,11 +1406,9 @@
     // Observer les changements d'onglets
     setupTabObserver();
     
-    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic (avec debounce)
-    let domUpdateTimeout = null;
+    // Observer aussi les changements dans le DOM au cas où les onglets changent sans clic
     const domObserver = new MutationObserver(() => {
-      if (domUpdateTimeout) clearTimeout(domUpdateTimeout);
-      domUpdateTimeout = setTimeout(updateSaveButtonVisibility, 100);
+      updateSaveButtonVisibility();
     });
     
     // Observer les changements d'attributs sur les onglets
@@ -1429,9 +1433,13 @@
       domObserver.observe(tabList, { childList: true, subtree: true, attributes: true });
     }
 
-    console.info('[agilo:save] init OK ('+VERSION+') — transcriptContent = JSON complet + auto-save + notifications + protections critiques.');
+    console.info('[agilo:save] ✅ init OK ('+VERSION+') — transcriptContent = JSON complet + sauvegarde manuelle uniquement + notifications + protections critiques.');
   }
 
-  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
+  if (document.readyState==='loading') {
+    document.addEventListener('DOMContentLoaded', init, {once:true});
+  } else {
+    init();
+  }
 })();
 
