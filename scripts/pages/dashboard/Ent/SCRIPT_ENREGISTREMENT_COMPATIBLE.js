@@ -12,31 +12,31 @@ document.addEventListener('DOMContentLoaded', function () {
     sampleRate: 48000
   };
 
-  const MIX_PREGAIN_DB = 4.0; // Gain global augmenté pour volume plus fort
+  const MIX_PREGAIN_DB = 5.0; // Gain global modéré mais efficace (+5dB)
 
-  const MIC_BASE_GAIN = 1.4;  // Gain micro de base augmenté (+40% au lieu de +15%)
-  const SYS_BASE_GAIN = 1.00;
+  const MIC_BASE_GAIN = 1.5;  // Gain micro de base modéré (+50%)
+  const SYS_BASE_GAIN = 1.1;  // Gain audio système légèrement augmenté (+10%)
 
   const AGC_ENABLED   = true;
-  const AGC_TARGET    = 0.25; // Cible RMS augmentée (25% au lieu de 15%) pour volume plus fort
-  const AGC_SMOOTH    = 0.02;
-  const AGC_MIN_GAIN  = 0.80;
-  const AGC_MAX_GAIN  = 2.2;  // Amplification max augmentée (220% au lieu de 160%)
+  const AGC_TARGET    = 0.30; // Cible RMS élevée mais raisonnable (30%)
+  const AGC_SMOOTH    = 0.025; // Légèrement plus réactif
+  const AGC_MIN_GAIN  = 0.70; // Permet de baisser si trop fort
+  const AGC_MAX_GAIN  = 2.8;  // Amplification max raisonnable (280%)
 
   const MIC_COMP = {
-    threshold: -18,   // Seuil plus haut
-    knee: 20,         // Transition plus douce
-    ratio: 1.8,       // Compression plus légère
-    attack: 0.005,    // Un peu plus lent
-    release: 0.25     // Release plus long
+    threshold: -20,   // Compresse un peu plus tôt
+    knee: 15,         // Transition modérée
+    ratio: 2.2,       // Compression modérée
+    attack: 0.003,    // Rapide mais pas trop
+    release: 0.20     // Release modéré
   };
 
   const MIX_LIMITER = {
-    threshold: -1.0,
+    threshold: -0.7,  // Protection renforcée (plus proche de 0dB)
     knee: 0,
     ratio: 20,
     attack: 0.001,
-    release: 0.10
+    release: 0.09     // Légèrement plus rapide
   };
 
   /* --------- DOM --------- */
