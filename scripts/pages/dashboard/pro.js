@@ -511,6 +511,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const em = (responseData && responseData.errorMessage) || '';
+        // ⭐ Erreurs non retryables : retourner responseData pour traitement dans .then()
         if (
           em.includes('error_audio_format_not_supported') ||
           em.includes('error_duration_is_too_long_for_summary') ||
@@ -518,10 +519,17 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('error_audio_file_not_found') ||
           em.includes('error_invalid_token') ||
           em.includes('error_too_many_hours_for_last_30_days') ||
+          em.includes('error_account_pending_validation') ||
+          em.includes('error_limit_reached_for_user') ||
+          em.includes('error_invalid_audio_file_content') ||
+          em.includes('error_silent_audio_file') ||
+          em.includes('error_transcript_too_long_for_summary') ||
+          em.includes('error_too_many_devices_used_for_account') ||
+          em.includes('error_too_many_calls') ||
           em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_INVALID_YOUTUBE_URL')
         ) {
-          return data;
+          return responseData; // ⭐ CORRECTION : retourner responseData pour accéder à errorMessage
         }
 
         const retryableHttp = [408, 425, 429, 500, 502, 503, 504].includes(res.status);
@@ -706,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       fd.append('fileUpload1', fd.get('audioFile')); 
       fd.delete('audioFile');
-      fd.append('deviceId', window.DEVICE_ID || '');
+    fd.append('deviceId', window.DEVICE_ID || '');
       fd.append('mailTranscription', 'true');
       payload = fd; // Pour fichiers, payload est le FormData
     }
@@ -725,17 +733,31 @@ document.addEventListener('DOMContentLoaded', () => {
           scrollToEl(loadingAnimDiv,-80);
         } else {
           const err=data.errorMessage||'';
+          // ⭐ Gestion complète de toutes les erreurs du backend
           if(err==='error_too_much_traffic')                               showError('tooMuchTraffic');
+          else if(err.includes('error_account_pending_validation') || err.includes('error_limit_reached_for_user'))  showError('tooMuchTraffic'); // Limite d'abonnement atteinte
           else if(err.includes('error_duration_is_too_long_for_summary'))  showError('summaryLimit');
           else if(err.includes('error_duration_is_too_long'))              showError('audioTooLong');
+          else if(err.includes('error_transcript_too_long_for_summary'))  showError('summaryLimit');
           else if(err.includes('error_audio_format_not_supported'))        showError('audioFormat');
           else if(err.includes('error_audio_file_not_found'))              showError('audioNotFound');
+          else if(err.includes('error_invalid_audio_file_content'))        showError('invalidAudioContent');
+          else if(err.includes('error_silent_audio_file'))                 showError('audioFormat'); // Fichier audio silencieux
           else if(err.includes('error_invalid_token'))                     showError('invalidToken');
           else if(err.includes('error_too_many_hours_for_last_30_days'))   showError('tooManyHours');
+          else if(err.includes('error_too_many_devices_used_for_account')) showError('default'); // Trop de devices
+          else if(err.includes('error_too_many_calls'))                    showError('tooMuchTraffic'); // Trop d'appels
           else if(err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.includes('youtube') && err.includes('invalid')))      showError('youtubeInvalid');
           else if(err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || (err.includes('youtube') && err.includes('private')))    showError('youtubePrivate');
           else if(err.includes('youtube') && err.includes('not found'))    showError('youtubeNotFound');
-          else                                                             showError('default');
+          else {
+            // ⭐ Erreur non reconnue : afficher le message du backend si disponible
+            console.error('❌ Erreur non mappée:', err);
+            showError('default');
+            if(err && err.trim()) {
+              alert('Erreur: ' + err);
+            }
+          }
         }
       })
       .catch(err=>{

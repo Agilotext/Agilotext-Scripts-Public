@@ -699,14 +699,14 @@ document.addEventListener('DOMContentLoaded', () => {
         fd.append('formatTranscript', 'false');
       } else {
         fd.append('formatTranscript', formatChecked ? 'true' : 'false');
-      }
+    }
       fd.append('doSummary', summaryChecked ? 'true' : 'false');
-      if (translateCheckbox && translateCheckbox.checked) {
-        fd.append('translateTo', translateSelect.value);
-      }
+    if (translateCheckbox && translateCheckbox.checked) {
+      fd.append('translateTo', translateSelect.value);
+    }
       fd.append('fileUpload1', fd.get('audioFile')); 
       fd.delete('audioFile');
-      fd.append('deviceId', window.DEVICE_ID || '');
+    fd.append('deviceId', window.DEVICE_ID || '');
       fd.append('mailTranscription', 'true');
       payload = fd; // Pour fichiers, payload est le FormData
     }

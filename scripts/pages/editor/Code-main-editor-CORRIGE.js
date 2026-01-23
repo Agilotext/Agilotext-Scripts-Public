@@ -1,6 +1,10 @@
-// Agilotext - Main Editor (Transcript Editor Principal)
+// Agilotext - Main Editor (Transcript Editor Principal) - VERSION CORRIGÉE
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-main-editor dans Webflow
+// ✅ CORRECTIONS APPLIQUÉES :
+//   - Erreurs affichées dans un overlay séparé (pas dans editors.transcript)
+//   - Préservation du contenu de editors.transcript même en cas d'erreur
+//   - Protection contre sauvegarde des messages d'erreur
 
 (function ready(fn){
   if (document.readyState !== 'loading') fn();
@@ -174,6 +178,147 @@ function renderAlert(htmlMsg, details = '') {
     ${details ? `<details class="ag-alert__details"><summary>Détails techniques</summary><pre>${esc(details)}</pre></details>` : ''}
   `;
   return safe;
+}
+
+/* ====================== ✅ NOUVEAU : Overlay d'erreur séparé ====================== */
+/**
+ * Affiche une erreur dans un overlay séparé au-dessus de l'éditeur
+ * ⚠️ CRITIQUE : Ne modifie JAMAIS le contenu de editors.transcript
+ * @param {string} message - Message d'erreur à afficher
+ * @param {string} details - Détails techniques (optionnel)
+ * @param {string} target - 'transcript' ou 'summary' (défaut: 'transcript')
+ */
+function showErrorOverlay(message, details = '', target = 'transcript') {
+  // Supprimer les overlays existants pour ce target
+  const existingOverlay = document.getElementById(`agilo-error-overlay-${target}`);
+  if (existingOverlay) {
+    existingOverlay.remove();
+  }
+
+  // Trouver l'éditeur cible
+  const editor = target === 'transcript' 
+    ? (editors.transcript || pickTranscriptEl())
+    : (editors.summary || pickSummaryEl());
+  
+  if (!editor) {
+    // Fallback : utiliser toast si l'éditeur n'existe pas
+    toast(message);
+    if (window.AGILO_DEBUG) console.error('[Editor] Erreur (éditeur non trouvé):', message);
+    return;
+  }
+
+  // Créer l'overlay
+  const overlay = document.createElement('div');
+  overlay.id = `agilo-error-overlay-${target}`;
+  overlay.className = 'agilo-error-overlay';
+  overlay.setAttribute('role', 'alert');
+  overlay.setAttribute('aria-live', 'assertive');
+  
+  // Créer le contenu de l'alerte
+  const alertContent = renderAlert(message, details);
+  alertContent.className = 'ag-alert ag-alert--error ag-alert--overlay';
+  
+  // Bouton de fermeture
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.className = 'agilo-error-overlay__close';
+  closeBtn.setAttribute('aria-label', 'Fermer');
+  closeBtn.innerHTML = '×';
+  closeBtn.addEventListener('click', () => {
+    overlay.remove();
+  });
+  
+  overlay.appendChild(alertContent);
+  overlay.appendChild(closeBtn);
+  
+  // Positionner l'overlay par rapport à l'éditeur
+  const editorRect = editor.getBoundingClientRect();
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+  
+  overlay.style.cssText = `
+    position: absolute;
+    top: ${editorRect.top + scrollTop + 20}px;
+    left: ${editorRect.left + scrollLeft + 20}px;
+    right: ${window.innerWidth - editorRect.right - scrollLeft + 20}px;
+    max-width: 600px;
+    z-index: 10000;
+    background: #fff;
+    border: 2px solid #dc3545;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 20px;
+    animation: agilo-error-fadeIn 0.3s ease-out;
+  `;
+  
+  // Styles pour l'overlay
+  if (!document.getElementById('agilo-error-overlay-styles')) {
+    const style = document.createElement('style');
+    style.id = 'agilo-error-overlay-styles';
+    style.textContent = `
+      .agilo-error-overlay {
+        position: absolute !important;
+        z-index: 10000 !important;
+      }
+      .agilo-error-overlay__close {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: transparent;
+        border: none;
+        font-size: 24px;
+        line-height: 1;
+        cursor: pointer;
+        color: #666;
+        padding: 4px 8px;
+        border-radius: 4px;
+        transition: all 0.2s;
+      }
+      .agilo-error-overlay__close:hover {
+        background: #f0f0f0;
+        color: #000;
+      }
+      .ag-alert--overlay {
+        margin: 0;
+        border: none;
+        padding: 0;
+      }
+      @keyframes agilo-error-fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .agilo-error-overlay {
+          animation: none;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  // Ajouter l'overlay au body (pas dans l'éditeur !)
+  document.body.appendChild(overlay);
+  
+  // Fermer automatiquement après 10 secondes (optionnel)
+  const autoCloseTimer = setTimeout(() => {
+    overlay.remove();
+  }, 10000);
+  
+  // Annuler le timer si l'utilisateur ferme manuellement
+  closeBtn.addEventListener('click', () => {
+    clearTimeout(autoCloseTimer);
+  });
+  
+  // Logger pour debug
+  if (window.AGILO_DEBUG) {
+    console.error(`[Editor] Erreur affichée dans overlay (${target}):`, message);
+  }
 }
 
 
@@ -570,49 +715,6 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
       const idx = Array.prototype.indexOf.call(root.children, segEl);
       if (idx>-1 && window._segments[idx]) {
         window._segments[idx].text = window.visibleTextFromBox(node);
-      }
-    });
-
-    // ✅ PROTECTION CRITIQUE : Empêcher la suppression accidentelle de segments entiers
-    root.addEventListener('keydown', (e) => {
-      if (__mode !== 'structured') return;
-      
-      const node = e.target.closest('.ag-seg__text');
-      if (!node) return;
-      
-      const segEl = node.closest('.ag-seg');
-      if (!segEl) return;
-      
-      // Vérifier si on appuie sur Backspace ou Delete
-      if (e.key === 'Backspace' || e.key === 'Delete') {
-        const textContent = (node.innerText || node.textContent || '').trim();
-        const selection = window.getSelection();
-        const range = selection?.rangeCount > 0 ? selection.getRangeAt(0) : null;
-        
-        // Si le contenu est vide ou presque vide
-        if (textContent.length <= 1) {
-          // Vérifier si on est au début ou à la fin du segment
-          const isAtStart = range && range.startOffset === 0 && range.startContainer === node;
-          const isAtEnd = range && range.endOffset === (node.textContent?.length || 0) && range.endContainer === node;
-          
-          // Si on est au début avec Backspace ou à la fin avec Delete, empêcher la suppression
-          if ((e.key === 'Backspace' && isAtStart) || (e.key === 'Delete' && isAtEnd)) {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            // S'assurer qu'il reste au moins un espace pour éviter la suppression du segment
-            if (!textContent) {
-              node.textContent = ' ';
-              // Placer le curseur après l'espace
-              const newRange = document.createRange();
-              newRange.selectNodeContents(node);
-              newRange.collapse(false);
-              selection?.removeAllRanges();
-              selection?.addRange(newRange);
-            }
-            return false;
-          }
-        }
       }
     });
 
@@ -1221,8 +1323,6 @@ window.addEventListener('agilo:beforeload', (e) => {
 
 
   async function loadJob(jobId){
-    // ✅ CORRECTION : Déclarer isSummaryPending au début de la fonction pour qu'elle soit accessible dans le finally
-    let isSummaryPending = false;
     const id = String(jobId||'').trim();
     if (!id) return;
     
@@ -1332,10 +1432,18 @@ try {
 			  if (val?.code === 'CANCELLED') return; 
 			  const msg = val ? humanizeError({ where:'transcript', code:val.code, json:val.json, httpStatus:val.httpStatus })
 			                  : "Chargement du transcript annulé (veuillez recharger la page)";
-			  if (editors.transcript) {
-			    editors.transcript.innerHTML = '';
-			    editors.transcript.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || val?.raw || ''));
+			  
+			  // ✅ CORRECTION : Afficher l'erreur dans un overlay séparé (pas dans editors.transcript)
+			  // ⚠️ CRITIQUE : Ne pas modifier editors.transcript pour préserver le contenu existant
+			  showErrorOverlay(msg, val?.json?.exceptionStackTrace || val?.raw || '', 'transcript');
+			  
+			  // ✅ CORRECTION : Ne pas vider editors.transcript, juste afficher l'overlay
+			  // Si editors.transcript contient déjà du contenu, on le préserve
+			  if (editors.transcript && !editors.transcript.querySelector('.ag-seg') && !editors.transcript.querySelector('.ag-plain')) {
+			    // Seulement si vraiment vide, afficher un loader
+			    editors.transcript.innerHTML = '<div class="ag-loader">Erreur de chargement. Veuillez réessayer.</div>';
 			  }
+			  
 			 window._segments = []
 			}
 let summaryEmpty = true;
@@ -1343,7 +1451,7 @@ let summaryEmpty = true;
 // ⚠️ NOUVEAU : Vérifier le statut avec getTranscriptStatus pour savoir si le compte-rendu est en cours
 // ⚠️ OPTIMISATION : Ne vérifier que si on n'a pas déjà le compte-rendu
 let transcriptStatus = null;
-// ✅ CORRECTION : isSummaryPending est maintenant déclaré au début de loadJob()
+let isSummaryPending = false;
 
 // Vérifier le statut seulement si nécessaire (pas de compte-rendu reçu ou vide)
 const needsStatusCheck = !(sRes.status === 'fulfilled' && sRes.value.ok && !isBlankHtml(sanitizeHtml(sRes.value.payload || '')));
@@ -1500,9 +1608,22 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     }catch(e){
       if (e?.name === 'AbortError') return;
       hideSummaryLoading(); // S'assurer que le loader est caché en cas d'erreur
-      const errBox = renderAlert("Erreur de chargement.", e?.message || '');
-      if (editors.transcript) editors.transcript.replaceChildren(errBox.cloneNode(true));
-      if (editors.summary)    editors.summary.replaceChildren(errBox.cloneNode(true));
+      
+      // ✅ CORRECTION : Afficher l'erreur dans des overlays séparés (pas dans les éditeurs)
+      // ⚠️ CRITIQUE : Ne pas modifier editors.transcript/summary pour préserver le contenu existant
+      const errorMsg = "Erreur de chargement.";
+      const errorDetails = e?.message || '';
+      
+      showErrorOverlay(errorMsg, errorDetails, 'transcript');
+      showErrorOverlay(errorMsg, errorDetails, 'summary');
+      
+      // ✅ CORRECTION : Ne pas vider les éditeurs, juste afficher les overlays
+      // Si les éditeurs contiennent déjà du contenu, on le préserve
+      if (editors.transcript && !editors.transcript.querySelector('.ag-seg') && !editors.transcript.querySelector('.ag-plain')) {
+        // Seulement si vraiment vide, afficher un loader
+        editors.transcript.innerHTML = '<div class="ag-loader">Erreur de chargement. Veuillez réessayer.</div>';
+      }
+      
       if (window.AGILO_DEBUG) console.error(e);
 		} finally {
 		  // ⚠️ AMÉLIORATION : Toujours nettoyer le timer et les états, même si stale

@@ -1,0 +1,68 @@
+/* =====================================================================
+   NORMALISATION LARGEUR COMPTE-RENDU
+   Force le compte-rendu à prendre toute la largeur (100%)
+   ===================================================================== */
+
+/* Forcer toutes les tables du compte-rendu à 100% */
+#summaryEditor table,
+#summaryEditor > table {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* S'assurer que les cellules prennent aussi toute la largeur */
+#summaryEditor td,
+#summaryEditor th {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Éviter les marges auto qui centrent */
+#summaryEditor [style*="margin:auto"],
+#summaryEditor [style*="margin: auto"],
+#summaryEditor [style*="margin-left:auto"],
+#summaryEditor [style*="margin-right:auto"] {
+  margin: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+/* Forcer width à 100% pour les éléments avec width: 70% ou similaire */
+#summaryEditor [style*="width:70%"],
+#summaryEditor [style*="width: 70%"],
+#summaryEditor [style*="width:75%"],
+#summaryEditor [style*="width: 75%"],
+#summaryEditor [style*="width:80%"],
+#summaryEditor [style*="width: 80%"],
+#summaryEditor [style*="width:85%"],
+#summaryEditor [style*="width: 85%"] {
+  width: 100% !important;
+}
+
+/* Gérer aussi les attributs width (ex: width="85%") */
+#summaryEditor table[width],
+#summaryEditor [width] {
+  width: 100% !important;
+}
+
+/* Retirer l'alignement center */
+#summaryEditor table[align="center"],
+#summaryEditor [align="center"] {
+  text-align: left !important;
+}
+
+/* S'assurer que le conteneur prend toute la largeur */
+#summaryEditor {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Éviter les padding/margin qui créent des espaces */
+#summaryEditor > *:first-child {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+

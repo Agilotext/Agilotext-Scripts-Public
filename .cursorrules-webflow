@@ -1,0 +1,50 @@
+# Règles Cursor pour Webflow
+
+## 🔴 RÈGLE CRITIQUE : CDN pour scripts GitHub dans Webflow
+
+**TOUJOURS utiliser jsDelivr CDN au lieu de raw.githubusercontent.com pour les scripts chargés dans Webflow.**
+
+### ❌ NE JAMAIS FAIRE :
+```html
+<script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/main/scripts/pages/dashboard/Free/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```
+
+### ✅ TOUJOURS FAIRE :
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Free/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```
+
+### Format jsDelivr :
+```
+https://cdn.jsdelivr.net/gh/USERNAME/REPO@BRANCH/PATH/TO/FILE.js
+```
+
+### Pourquoi ?
+- ❌ `raw.githubusercontent.com` est souvent bloqué par Webflow (CORS, cache)
+- ✅ `jsdelivr.net` fonctionne parfaitement avec Webflow
+- ✅ CDN rapide et fiable
+- ✅ Cache-busting automatique
+- ✅ Support HTTPS garanti
+
+### Exemples pour Agilotext :
+
+**Version Ent (illimitée) :**
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Ent/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```
+
+**Version Pro (2 heures) :**
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Pro/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```
+
+**Version Free (30 minutes) :**
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Free/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```
+
+### Option avec version spécifique (cache-busting) :
+Pour forcer une version spécifique, utilisez le hash du commit :
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@2098763/scripts/pages/dashboard/Free/SCRIPT_ENREGISTREMENT_COMPATIBLE.js"></script>
+```

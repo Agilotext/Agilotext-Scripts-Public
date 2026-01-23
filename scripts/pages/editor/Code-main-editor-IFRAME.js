@@ -8,6 +8,44 @@
 })(() => {
   'use strict';
 
+  // ✅ ISOLATION : Fonction pour injecter le summary dans un iframe si contient des styles globaux
+  function injectSummaryContent(html) {
+    const el = editors.summary || pickSummaryEl();
+    if (!el) return;
+    
+    // Détecter si le HTML contient des styles globaux problématiques
+    const hasGlobalStyles = html.includes('<head') || 
+                            html.includes('<body') || 
+                            /\*\s*\{/.test(html) ||
+                            /body\s*\{/.test(html);
+    
+    if (hasGlobalStyles) {
+      // Isoler dans un iframe
+      const iframe = document.createElement('iframe');
+      iframe.className = 'ag-summary-iframe';
+      iframe.style.cssText = 'width:100%; border:none; min-height:600px; background:white;';
+      iframe.srcdoc = html;
+      iframe.onload = function() {
+        try {
+          const h = this.contentDocument.body.scrollHeight;
+          this.style.height = Math.max(600, h + 50) + 'px';
+        } catch(e) {}
+      };
+      el.innerHTML = '';
+      el.appendChild(iframe);
+    } else {
+      // Injection directe (templates simples)
+      el.innerHTML = html;
+    }
+    
+    // Appliquer les attributs readonly
+    el.setAttribute('contenteditable', 'false');
+    el.setAttribute('readonly', 'true');
+    el.style.userSelect = 'text';
+    el.style.cursor = 'default';
+    el.classList.add('ag-summary-readonly');
+  }
+
   const API_BASE   = 'https://api.agilotext.com/api/v1';
   const editorRoot = document.getElementById('editorRoot');
   const SOFT_CANCEL = true;
@@ -1402,13 +1440,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     summaryEmpty = false;
     hideSummaryLoading(); // S'assurer que le loader est caché
     if (editors.summary) {
-      editors.summary.innerHTML = cleaned;
-      // ⚠️ RENDRE LE RÉSUMÉ EN LECTURE SEULE (demandé par Nicolas)
-      editors.summary.setAttribute('contenteditable', 'false');
-      editors.summary.setAttribute('readonly', 'true');
-      editors.summary.style.userSelect = 'text'; // Permettre la sélection pour copier
-      editors.summary.style.cursor = 'default';
-      editors.summary.classList.add('ag-summary-readonly');
+      // ✅ ISOLATION : Utiliser injectSummaryContent au lieu de innerHTML direct
+      injectSummaryContent(cleaned);
     }
   } else if (editors.summary && !isSummaryPending) {
     // Afficher le loader seulement si pas déjà affiché (statut PENDING)
@@ -1457,13 +1490,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
       summaryEmpty = false;
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
       if (editors.summary) {
-        editors.summary.innerHTML = polled.html;
-        // ⚠️ RENDRE LE RÉSUMÉ EN LECTURE SEULE
-        editors.summary.setAttribute('contenteditable', 'false');
-        editors.summary.setAttribute('readonly', 'true');
-        editors.summary.style.userSelect = 'text';
-        editors.summary.style.cursor = 'default';
-        editors.summary.classList.add('ag-summary-readonly');
+        // ✅ ISOLATION : Utiliser injectSummaryContent au lieu de innerHTML direct
+        injectSummaryContent(polled.html);
       }
     } else if (editors.summary) {
       // Si toujours en cours, garder le loader, sinon afficher l'erreur

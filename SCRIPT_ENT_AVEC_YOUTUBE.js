@@ -1,8 +1,11 @@
-// Agilotext BUSINESS – Upload & Dashboard logic
-// ⚠️ Ce fichier est chargé depuis GitHub
-// Les CDN FilePond doivent être chargés AVANT ce script dans Webflow
+<!-- Agilotext BUSINESS – Upload & Dashboard logic (offline / timeout / unreachable ready) -->
+<!-- 1) FilePond & plugins -->
+<script src="https://unpkg.com/filepond@4.30.1/dist/filepond.js"></script>
+<script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+<script src="https://unpkg.com/filepond-plugin-file-validate-size/dist/filepond-plugin-file-validate-size.js"></script>
 
-// Helper: fetch with timeout + smart network errors
+<!-- 2) Helper: fetch with timeout + smart network errors -->
+<script>
 function fetchWithTimeout(url, options = {}) {
   const TIMEOUT = options.timeout || (3 * 60 * 60 * 1000); // 3 h par défaut
   
@@ -11,8 +14,7 @@ function fetchWithTimeout(url, options = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
   
-  // ⭐ Ajouter les options CORS comme dans Code-save_transcript.js
-  return fetch(url, { ...options, signal: ctrl.signal, mode: 'cors', credentials: 'omit', cache: 'no-store' })
+  return fetch(url, { ...options, signal: ctrl.signal })
     .then(response => {
       if (!response.ok) {
         const status = response.status;
@@ -34,8 +36,10 @@ function fetchWithTimeout(url, options = {}) {
       return Promise.reject({ type: 'unreachable' });
     });
 }
+</script>
 
-// Main logic
+<!-- 3) Main logic -->
+<script>
 document.addEventListener('DOMContentLoaded', () => {
   /* ---------------- FilePond init ---------------- */
   FilePond.registerPlugin(FilePondPluginFileValidateSize, FilePondPluginFileValidateType);
@@ -82,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const translateCheckbox    = document.getElementById('toggle-translate');
   const translateSelect      = document.getElementById('translate-select');
 
-  // YouTube upload source tabs
+  // ⭐ YOUTUBE : Variables pour YouTube
   const fileTabLink          = document.querySelector('[data-w-tab="File"]');
   const youtubeTabLink       = document.querySelector('[data-w-tab="YouTube"]');
   const youtubeInput         = document.getElementById('youtube-url-input');
@@ -103,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
     timeout:      document.getElementById('form_error_timeout'),
     tooManyHours: document.getElementById('form_error_too_many_hours'),
     unreachable:  document.getElementById('form_error_unreachable'),
+    // ⭐ YOUTUBE : Erreurs spécifiques YouTube
     youtubeInvalid: document.getElementById('form_error'),
     youtubePrivate: document.getElementById('form_error'),
     youtubeNotFound: document.getElementById('form_error'),
@@ -121,44 +126,36 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   const scrollToEl = (el, offset=0) => window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset + offset, behavior:'smooth'});
 
-  // Détecter la source active (Fichier ou YouTube)
+  function adjustHtmlContent(html){
+    const tmp=document.createElement('div'); tmp.innerHTML=html;
+    tmp.querySelectorAll('center').forEach(c=>c.outerHTML=c.innerHTML);
+    tmp.querySelectorAll('table').forEach(t=>t.style.width='100%');
+    return tmp.innerHTML;
+  }
+
+  // ⭐ YOUTUBE : Détecter la source active (Fichier ou YouTube)
   function getActiveUploadSource() {
     // Si onglets présents, utiliser la logique des onglets
     if (fileTabLink && fileTabLink.classList.contains('w--current')) return 'file';
     if (youtubeTabLink && youtubeTabLink.classList.contains('w--current')) return 'youtube';
     
     // Sinon, détection automatique selon ce qui est rempli
-    // ⭐ PRIORITÉ ABSOLUE : Si le container YouTube est visible, c'est YouTube
-    if (youtubeContainer && youtubeContainer.classList.contains('is-visible')) {
-      // Si l'input a une valeur, c'est définitivement YouTube
-      if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) {
-        console.log('🔍 Source détectée: YouTube (container visible + valeur)');
-        return 'youtube';
-      }
-      // Si le container est visible mais vide, c'est quand même YouTube (utilisateur en train de remplir)
-      console.log('🔍 Source détectée: YouTube (container visible mais vide)');
-      return 'youtube';
-    }
-    
-    // Si l'input YouTube a une valeur même si le container n'est pas visible, c'est YouTube
+    // Priorité : si input YouTube a une valeur, utiliser YouTube
     if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) {
-      console.log('🔍 Source détectée: YouTube (valeur présente)');
       return 'youtube';
     }
     
     // Sinon, vérifier si un fichier est présent dans FilePond
     const pond = FilePond.find(inputEl);
     if (pond && pond.getFiles().length > 0) {
-      console.log('🔍 Source détectée: Fichier (FilePond)');
       return 'file';
     }
     
     // Par défaut, mode fichier (comportement existant)
-    console.log('🔍 Source détectée: Fichier (par défaut)');
     return 'file';
   }
 
-  // Valider l'URL YouTube
+  // ⭐ YOUTUBE : Valider l'URL YouTube
   function validateYouTubeUrl(url) {
     if (!url || !url.trim()) return { valid: false, error: 'Veuillez saisir une URL YouTube' };
     
@@ -183,47 +180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return { valid: true, url: trimmed, videoId };
   }
 
-  function adjustHtmlContent(html){
-    const tmp=document.createElement('div'); tmp.innerHTML=html;
-    tmp.querySelectorAll('center').forEach(c=>c.outerHTML=c.innerHTML);
-    tmp.querySelectorAll('table').forEach(t=>t.style.width='100%');
-    return tmp.innerHTML;
-  }
-
-  // UX OPTIMISÉE : Afficher seulement l'étape quand elle change
-  function updateProgressUI(status) {
-    if (!loadingAnimDiv) return;
-    const oldStatus = loadingAnimDiv.querySelector('.progress-status');
-    if (oldStatus) oldStatus.remove();
-    if (status === 'READY_SUMMARY_PENDING') {
-      const statusText = document.createElement('div');
-      statusText.className = 'progress-status';
-      statusText.style.cssText = 'margin-top: 12px; font-size: 14px; color: #5d2de6; text-align: center; font-weight: 500;';
-      statusText.textContent = '✓ Transcription terminée - Génération du compte-rendu...';
-      loadingAnimDiv.appendChild(statusText);
-    }
-  }
-
-  // Fonction pour vérifier/rafraîchir le token
-  async function ensureValidToken(email) {
-    if (!globalToken) {
-      try {
-        const response = await fetch(`https://api.agilotext.com/api/v1/getToken?username=${email}&edition=${edition}`);
-        const data = await response.json();
-        if (data.status === 'OK') {
-          globalToken = data.token;
-          console.log('Token récupéré automatiquement');
-          return true;
-        }
-      } catch (err) {
-        console.error('Erreur lors de la récupération du token:', err);
-      }
-      return false;
-    }
-    return true;
-  }
-
-  // UI du Compte-rendu (Summary)
+  // --- UI du Compte-rendu (Summary) ---
   function setSummaryUI(state) {
     if (tabsMenu) tabsMenu.style.display = '';
     const hide = el => { if (el) el.style.display = 'none'; };
@@ -265,7 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
       `https://api.agilotext.com/api/v1/receiveText?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=txt`,
       { timeout: 2 * 60 * 1000 }
     )
-      .then(r=>r.text())
+      .then(r=>{
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}`);
+        }
+        return r.text();
+      })
       .then(txt=>{
         const ta = document.getElementById('transcriptText');
         if (ta) ta.value = txt;
@@ -287,7 +249,12 @@ document.addEventListener('DOMContentLoaded', () => {
       `https://api.agilotext.com/api/v1/receiveSummary?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=html`,
       { timeout: 2 * 60 * 1000 }
     )
-      .then(r=>r.text())
+      .then(r=>{
+        if (!r.ok) {
+          throw new Error(`HTTP ${r.status}`);
+        }
+        return r.text();
+      })
       .then(html=>{
         summaryText.innerHTML = adjustHtmlContent(html);
         setSummaryUI('ready');
@@ -315,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const MAX_CONSECUTIVE_ERRORS = 10;
     let pollCount = 0;
 
-    const intId=setInterval(async ()=>{
+    const intId=setInterval(()=>{
       pollCount++;
       
       const elapsed = Date.now() - startTime;
@@ -329,16 +296,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const tokenValid = await ensureValidToken(email);
-      if (!tokenValid) {
-        clearInterval(intId);
-        window._agiloStatusInt = null;
-        loadingAnimDiv.style.display='none';
-        showError('invalidToken');
-        alert('Votre session a expiré. Veuillez rafraîchir la page.');
-        return;
-      }
-
       if (pollCount % 6 === 0) {
         const minutes = Math.floor(elapsed / 60000);
         console.log(`⏳ Traitement en cours depuis ${minutes} minute(s)...`);
@@ -348,10 +305,14 @@ document.addEventListener('DOMContentLoaded', () => {
         `https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}`,
         { timeout: 30 * 1000 }
       )
-        .then(r=>r.json())
+        .then(r=>{
+          if (!r.ok) {
+            throw new Error(`HTTP ${r.status}`);
+          }
+          return r.json();
+        })
         .then(data=>{
           consecutiveErrors = 0;
-          updateProgressUI(data.transcriptStatus);
           
           switch(data.transcriptStatus){
             case 'READY_SUMMARY_PENDING':
@@ -365,9 +326,6 @@ document.addEventListener('DOMContentLoaded', () => {
               clearInterval(intId);
               window._agiloStatusInt = null;
               loadingAnimDiv.style.display='none';
-              readyAnimDiv.style.display='none';
-              const progressStatus = loadingAnimDiv.querySelector('.progress-status');
-              if (progressStatus) progressStatus.remove();
               readyAnimDiv.style.display='block';
               fetchTranscriptText(jobId,email);
               if (summaryCheckbox.checked) {
@@ -385,8 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
               clearInterval(intId);
               window._agiloStatusInt = null;
               loadingAnimDiv.style.display='none';
-              const progressStatusErr = loadingAnimDiv.querySelector('.progress-status');
-              if (progressStatusErr) progressStatusErr.remove();
               if (summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
               showError('default');
               alert(data.javaException||'Erreur inconnue');
@@ -397,22 +353,11 @@ document.addEventListener('DOMContentLoaded', () => {
           consecutiveErrors++;
           console.error(`getTranscriptStatus (tentative ${pollCount}, erreurs: ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, err);
           
-          if (err.type === 'invalidToken') {
-            clearInterval(intId);
-            window._agiloStatusInt = null;
-            loadingAnimDiv.style.display='none';
-            showError('invalidToken');
-            alert('Votre session a expiré. Veuillez rafraîchir la page.');
-            return;
-          }
-          
           if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
             clearInterval(intId);
             window._agiloStatusInt = null;
             loadingAnimDiv.style.display='none';
             readyAnimDiv.style.display='none';
-            const progressStatusErr2 = loadingAnimDiv.querySelector('.progress-status');
-            if (progressStatusErr2) progressStatusErr2.remove();
             
             if (err.type === 'timeout') {
               showError('timeout');
@@ -420,9 +365,6 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (err.type === 'offline') {
               showError('offline');
               alert('Vous êtes hors ligne. Veuillez vérifier votre connexion internet.');
-            } else if (err.type === 'serverError') {
-              showError('default');
-              alert('Erreur serveur. Veuillez réessayer dans quelques instants.');
             } else {
               showError('unreachable');
               alert('Impossible de contacter le serveur après plusieurs tentatives. Veuillez vérifier votre connexion internet et réessayer.');
@@ -437,15 +379,6 @@ document.addEventListener('DOMContentLoaded', () => {
     },5000);
 
     window._agiloStatusInt = intId;
-
-    const cleanup = () => {
-      if (window._agiloStatusInt === intId) {
-        clearInterval(intId);
-        window._agiloStatusInt = null;
-        console.log('Polling nettoyé (changement de page)');
-      }
-    };
-    window.addEventListener('beforeunload', cleanup);
   }
 
   /* -------------- Retry helpers -------------- */
@@ -456,70 +389,26 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('online', on);
   });
 
-  async function sendWithRetry(data, max = 3, isYouTube = false) {
-    const url = isYouTube 
-      ? 'https://api.agilotext.com/api/v1/sendYoutubeUrl'
-      : 'https://api.agilotext.com/api/v1/sendMultipleAudio';
-    console.log(`🌐 Envoi vers: ${url} (YouTube: ${isYouTube})`);
-    
-    // ⭐ Pour YouTube : préparer le body en JSON, pour fichiers : FormData
-    const fetchOptions = {
-      method: 'POST',
-      timeout: 10 * 60 * 1000
-    };
-    
-    if (isYouTube) {
-      // YouTube : utiliser URLSearchParams comme dans Code-save_transcript.js pour éviter CORS
-      const body = new URLSearchParams();
-      Object.keys(data).forEach(key => {
-        body.append(key, String(data[key] || ''));
-      });
-      fetchOptions.body = body.toString();
-      fetchOptions.headers = {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-      };
-      console.log('📤 Payload URLSearchParams pour YouTube:', data);
-    } else {
-      // Fichiers : envoyer en FormData (pas de Content-Type, le navigateur l'ajoute automatiquement)
-      fetchOptions.body = data; // data est un FormData
-    }
-    
+  async function sendWithRetry(fd, max = 3) {
+    const url = 'https://api.agilotext.com/api/v1/sendMultipleAudio';
     for (let attempt = 1; attempt <= max; attempt++) {
       try {
         if (!navigator.onLine) await waitForOnline();
 
-        const res = await fetchWithTimeout(url, fetchOptions);
-        const textResponse = await res.text();
-        console.log('📄 Réponse brute:', textResponse);
-        let responseData = {};
-        try { 
-          responseData = JSON.parse(textResponse);
-        } catch (e) {
-          console.error('❌ Erreur parsing JSON:', e);
-          console.error('📄 Réponse texte brute:', textResponse);
-        }
+        const res = await fetchWithTimeout(url, { method: 'POST', body: fd, timeout: 10 * 60 * 1000 });
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
 
-        console.log(`📥 Réponse API (tentative ${attempt}/${max}):`, {
-          status: res.status,
-          ok: res.ok,
-          data: responseData
-        });
+        if (res.ok && data && data.status === 'OK') return data;
 
-        if (res.ok && responseData && responseData.status === 'OK') {
-          console.log('✅ Succès!');
-          return responseData;
-        }
-
-        const em = (responseData && responseData.errorMessage) || '';
+        const em = (data && data.errorMessage) || '';
         if (
           em.includes('error_audio_format_not_supported') ||
           em.includes('error_duration_is_too_long_for_summary') ||
           em.includes('error_duration_is_too_long') ||
           em.includes('error_audio_file_not_found') ||
           em.includes('error_invalid_token') ||
-          em.includes('error_too_many_hours_for_last_30_days') ||
-          em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
-          em.includes('ERROR_INVALID_YOUTUBE_URL')
+          em.includes('error_too_many_hours_for_last_30_days')
         ) {
           return data;
         }
@@ -531,7 +420,7 @@ document.addEventListener('DOMContentLoaded', () => {
           await delay(backoff);
           continue;
         }
-        return responseData;
+        return data;
 
       } catch (err) {
         if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
@@ -560,34 +449,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const beforeUnloadGuard = (ev)=>{ if (form.dataset.sending === '1') { ev.preventDefault(); ev.returnValue=''; } };
     window.addEventListener('beforeunload', beforeUnloadGuard);
 
+    // ⭐ YOUTUBE : Détecter la source (fichier ou YouTube)
     const uploadSource = getActiveUploadSource();
-    console.log('📤 Submit - Source détectée:', uploadSource);
-    console.log('📤 YouTube container visible:', youtubeContainer?.classList.contains('is-visible'));
-    console.log('📤 YouTube input value:', youtubeInput?.value);
-    
-    // ⭐ Pour YouTube, créer un FormData vide pour éviter les champs de fichier
-    const fd = uploadSource === 'youtube' ? new FormData() : new FormData(form);
-    
-    // Récupérer l'email (peut être dans value ou src selon Webflow)
-    let email;
-    if (uploadSource === 'youtube') {
-      const emailInput = document.querySelector('input[name="memberEmail"]');
-      email = emailInput?.value || emailInput?.getAttribute('src') || emailInput?.getAttribute('data-src') || '';
-      console.log('📧 Email récupéré pour YouTube:', email);
-    } else {
-      email = fd.get('memberEmail');
-    }
-    
-    // Vérifier que l'email est valide
-    if (!email || !email.trim()) {
-      console.error('❌ Email non trouvé !');
-      showError('invalidToken');
-      form.dataset.sending = '0';
-      window.removeEventListener('beforeunload', beforeUnloadGuard);
-      return;
-    }
+    const fd=new FormData(form);
+    const email=fd.get('memberEmail');
 
-    // Validation selon la source
+    // ⭐ YOUTUBE : Validation selon la source
     if (uploadSource === 'youtube') {
       // Mode YouTube : valider l'URL
       if (!youtubeInput || !youtubeInput.value) {
@@ -608,13 +475,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } else {
       // Mode Fichier : vérifier qu'un fichier est présent
-    const pond = FilePond.find(inputEl);
-    if (!pond || pond.getFiles().length === 0) {
-      showError('audioNotFound');
-      form.dataset.sending = '0';
-      window.removeEventListener('beforeunload', beforeUnloadGuard);
-      return;
-    }
+      const pond = FilePond.find(inputEl);
+      if (!pond || pond.getFiles().length === 0) {
+        showError('audioNotFound');
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
     }
 
     if(!globalToken){
@@ -623,15 +490,6 @@ document.addEventListener('DOMContentLoaded', () => {
       formLoadingDiv.style.display='none';
       form.dataset.sending = '0';
       window.removeEventListener('beforeunload', beforeUnloadGuard);
-      
-      // Afficher un message d'erreur clair à l'utilisateur
-      if (!email || !email.trim()) {
-        showError('invalidToken');
-        alert('Impossible de récupérer vos informations de connexion. Cela peut être dû à une connexion internet instable. Veuillez rafraîchir la page ou vous reconnecter.');
-      } else {
-        showError('invalidToken');
-        alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page ou vous reconnecter.');
-      }
       return;
     }
 
@@ -645,73 +503,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
-    // ⭐ Pour YouTube : construire un objet qui sera converti en URLSearchParams (comme Code-save_transcript.js)
-    // Pour fichier : utiliser le FormData du formulaire
-    let payload;
-    
-    if (uploadSource === 'youtube') {
-      // Récupérer les champs nécessaires depuis le formulaire
-      const memberIdInput = document.querySelector('input[name="memberId"]');
-      const deviceIdInput = document.querySelector('input[name="deviceId"]');
-      
-      // Récupérer memberId (peut être dans value ou src selon Webflow)
-      const memberId = memberIdInput?.value || memberIdInput?.getAttribute('src') || memberIdInput?.getAttribute('data-src') || '';
-      
-      // Vérifier que le token est disponible
-      if (!globalToken) {
-        console.error('❌ Token non disponible pour YouTube !');
-        showError('invalidToken');
-        form.dataset.sending = '0';
-        window.removeEventListener('beforeunload', beforeUnloadGuard);
-        return;
-      }
-      
-      const validation = validateYouTubeUrl(youtubeInput.value);
-      
-      // ⭐ Construire l'objet JSON pour YouTube
-      payload = {
-        token: globalToken,
-        username: email,
-        edition: edition,
-        timestampTranscript: speakersChecked ? 'true' : 'false',
-        formatTranscript: speakersChecked ? 'false' : (formatChecked ? 'true' : 'false'),
-        doSummary: summaryChecked ? 'true' : 'false',
-        url: validation.url, // ⭐ Le paramètre doit être 'url' selon l'API sendYoutubeUrl
-        deviceId: deviceIdInput?.value || window.DEVICE_ID || '',
-        mailTranscription: 'true'
-      };
-      
-      if (memberId) payload.memberId = memberId;
-      if (speakersChecked) payload.speakersExpected = speakersExpected;
-      if (translateCheckbox && translateCheckbox.checked) {
-        payload.translateTo = translateSelect.value;
-      }
-      
-      console.log('📋 Payload pour YouTube (sera envoyé en URLSearchParams):', payload);
+    fd.append('token',globalToken);
+    fd.append('username',email);
+    fd.append('edition',edition);
+    fd.append('timestampTranscript', speakersChecked?'true':'false');
+    if(speakersChecked){
+      fd.append('speakersExpected',speakersExpected);
+      fd.append('formatTranscript','false');
     } else {
-      // Mode fichier : utiliser le FormData du formulaire
-      fd.append('token', globalToken);
-      fd.append('username', email);
-      fd.append('edition', edition);
-      fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
-      if (speakersChecked) {
-        fd.append('speakersExpected', speakersExpected);
-        fd.append('formatTranscript', 'false');
-      } else {
-        fd.append('formatTranscript', formatChecked ? 'true' : 'false');
+      fd.append('formatTranscript',formatChecked?'true':'false');
     }
-      fd.append('doSummary', summaryChecked ? 'true' : 'false');
+    fd.append('doSummary', summaryChecked?'true':'false');
+
     if (translateCheckbox && translateCheckbox.checked) {
       fd.append('translateTo', translateSelect.value);
     }
-      fd.append('fileUpload1', fd.get('audioFile')); 
-      fd.delete('audioFile');
-    fd.append('deviceId', window.DEVICE_ID || '');
-      fd.append('mailTranscription', 'true');
-      payload = fd; // Pour fichiers, payload est le FormData
-    }
 
-    sendWithRetry(payload, 3, uploadSource === 'youtube')
+    // ⭐ YOUTUBE : Ajouter la source (fichier ou YouTube)
+    if (uploadSource === 'youtube') {
+      const validation = validateYouTubeUrl(youtubeInput.value);
+      fd.append('youtubeUrl', validation.url);
+    } else {
+      fd.append('fileUpload1',fd.get('audioFile')); fd.delete('audioFile');
+    }
+    
+    fd.append('deviceId', window.DEVICE_ID || '');
+    fd.append('mailTranscription','true');
+
+    sendWithRetry(fd)
       .then(data=>{
         formLoadingDiv.style.display='none';
         if(data.status==='OK'){
@@ -732,14 +551,15 @@ document.addEventListener('DOMContentLoaded', () => {
           else if(err.includes('error_audio_file_not_found'))              showError('audioNotFound');
           else if(err.includes('error_invalid_token'))                     showError('invalidToken');
           else if(err.includes('error_too_many_hours_for_last_30_days'))   showError('tooManyHours');
-          else if(err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.includes('youtube') && err.includes('invalid')))      showError('youtubeInvalid');
-          else if(err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || (err.includes('youtube') && err.includes('private')))    showError('youtubePrivate');
+          // ⭐ YOUTUBE : Gestion des erreurs YouTube
+          else if(err.includes('youtube') && err.includes('invalid'))      showError('youtubeInvalid');
+          else if(err.includes('youtube') && err.includes('private'))    showError('youtubePrivate');
           else if(err.includes('youtube') && err.includes('not found'))    showError('youtubeNotFound');
           else                                                             showError('default');
         }
       })
       .catch(err=>{
-        console.error('Erreur lors de l\'envoi:',err);
+        console.error('sendMultipleAudio:',err);
         showError(err.type||'default');
       })
       .finally(()=>{
@@ -752,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setSummaryUI('hidden');
 
-  // Gérer l'ouverture/fermeture du container YouTube
+  // ⭐ YOUTUBE : Gérer l'ouverture/fermeture du container YouTube
   if (youtubeToggleLink && youtubeContainer) {
     youtubeToggleLink.addEventListener('click', (e) => {
       e.preventDefault();
@@ -772,4 +592,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+</script>
 

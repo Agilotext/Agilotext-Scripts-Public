@@ -1,0 +1,21 @@
+{
+  "name": "notion-tasks-adder",
+  "version": "1.0.0",
+  "description": "Script pour ajouter des tâches dans Notion via l'API REST",
+  "main": "add-tasks-notion.js",
+  "scripts": {
+    "start": "node add-tasks-notion.js",
+    "install-deps": "npm install @notionhq/client dotenv"
+  },
+  "keywords": [
+    "notion",
+    "api",
+    "tasks"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@notionhq/client": "^2.3.0",
+    "dotenv": "^16.6.1"
+  }
+}
