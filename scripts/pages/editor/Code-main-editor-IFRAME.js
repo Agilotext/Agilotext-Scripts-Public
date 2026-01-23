@@ -132,8 +132,8 @@ function mapNicoJsonToSegments(j){
         iframe.onload();
       }
     } else {
-      // Injection directe (templates simples)
-      el.innerHTML = html;
+      // ✅ Injection directe (templates simples) - Sanitizer UNIQUEMENT ici
+      el.innerHTML = sanitizeHtml(html);
     }
     
     // Appliquer les attributs readonly
@@ -1233,9 +1233,11 @@ window.attachAudioSync = attachAudioSync;
 	    }
       const r = await apiGetWithRetry('summary', jobId, {...auth}, 0, signal);
       if (r.ok){
-        const safe = sanitizeHtml(r.payload||'');
-        if (!isBlankHtml(safe)) {
-          return { ok:true, html: safe };
+        const raw = r.payload || '';
+        // ✅ CORRECTION : Vérifier si non-vide APRÈS sanitization (pour la logique)
+        // mais retourner le HTML BRUT pour permettre la détection des styles globaux
+        if (!isBlankHtml(sanitizeHtml(raw))) {
+          return { ok:true, html: raw };  // ✅ Retourner le HTML BRUT
         }
       } else if (!/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(String(r.code||''))) {
         return r;
@@ -1449,7 +1451,9 @@ if (needsStatusCheck) {
 }
 
 if (sRes.status === 'fulfilled' && sRes.value.ok) {
-  let cleaned = sanitizeHtml(sRes.value.payload);
+  // ✅ CORRECTION : Garder le HTML brut pour la détection des styles globaux
+  let rawHtml = sRes.value.payload || '';
+  let cleaned = sanitizeHtml(rawHtml);  // Pour vérifier si vide
   if (isBlankHtml(cleaned)) {
     // Si le statut est PENDING, garder le loader affiché pendant le polling
     if (!isSummaryPending && editors.summary) {
@@ -1458,7 +1462,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     
     const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
     if (polled.ok) {
-      cleaned = polled.html || '';
+      rawHtml = polled.html || '';  // ✅ polled.html est maintenant brut
+      cleaned = sanitizeHtml(rawHtml);  // Pour vérifier si vide
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
     } else if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
       // Si toujours en cours après polling, garder le loader affiché
@@ -1474,8 +1479,8 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     summaryEmpty = false;
     hideSummaryLoading(); // S'assurer que le loader est caché
     if (editors.summary) {
-      // ✅ ISOLATION : Utiliser injectSummaryContent au lieu de innerHTML direct
-      injectSummaryContent(cleaned);
+      // ✅ ISOLATION : Passer le HTML BRUT pour permettre la détection des styles globaux
+      injectSummaryContent(rawHtml);
     }
   } else if (editors.summary && !isSummaryPending) {
     // Afficher le loader seulement si pas déjà affiché (statut PENDING)
