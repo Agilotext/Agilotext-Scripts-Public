@@ -85,6 +85,10 @@ function mapNicoJsonToSegments(j){
                             /body\s*\{/.test(html);
     
     if (hasGlobalStyles) {
+      // ✅ STOCKER le HTML brut pour le PDF (Aspose ne peut pas accéder à l'iframe)
+      el.setAttribute('data-raw-html', html);
+      el.setAttribute('data-is-iframe', 'true');
+      
       // Isoler dans un iframe
       const iframe = document.createElement('iframe');
       iframe.className = 'ag-summary-iframe';
@@ -132,6 +136,10 @@ function mapNicoJsonToSegments(j){
         iframe.onload();
       }
     } else {
+      // ✅ STOCKER aussi le HTML brut pour les templates simples (cohérence)
+      el.setAttribute('data-raw-html', html);
+      el.setAttribute('data-is-iframe', 'false');
+      
       // ✅ Injection directe (templates simples) - Sanitizer UNIQUEMENT ici
       el.innerHTML = sanitizeHtml(html);
     }
@@ -143,6 +151,37 @@ function mapNicoJsonToSegments(j){
     el.style.cursor = 'default';
     el.classList.add('ag-summary-readonly');
   }
+
+  // ✅ FONCTION GLOBALE : Récupérer le HTML brut pour le PDF (Aspose)
+  // Cette fonction est utilisée par le backend pour récupérer le HTML complet
+  // même si le contenu est dans un iframe
+  window.getSummaryContentForPDF = function() {
+    const summaryEditor = document.getElementById('summaryEditor') || 
+                          document.getElementById('ag-summary') ||
+                          document.querySelector('[data-editor="summary"]');
+    
+    if (!summaryEditor) return '';
+    
+    // Priorité 1 : HTML brut stocké dans data-raw-html (recommandé)
+    const rawHtml = summaryEditor.getAttribute('data-raw-html');
+    if (rawHtml) {
+      return rawHtml;
+    }
+    
+    // Priorité 2 : Essayer d'extraire de l'iframe (fallback)
+    const iframe = summaryEditor.querySelector('.ag-summary-iframe');
+    if (iframe && iframe.contentDocument) {
+      try {
+        const doc = iframe.contentDocument;
+        return doc.documentElement.outerHTML;
+      } catch(e) {
+        console.warn('[Editor] Impossible d\'extraire le contenu de l\'iframe:', e);
+      }
+    }
+    
+    // Priorité 3 : innerHTML normal (templates simples sans iframe)
+    return summaryEditor.innerHTML;
+  };
 
   function toast(msg) {
     let tRoot = byId('toaster') || byId('ag-toasts');
