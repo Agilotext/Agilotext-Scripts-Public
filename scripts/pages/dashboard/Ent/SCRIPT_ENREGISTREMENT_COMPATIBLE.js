@@ -81,8 +81,8 @@ document.addEventListener('DOMContentLoaded', function () {
   // Détection de silence prolongé
   let silenceStartTime = null;
   const SILENCE_THRESHOLD = 0.02; // RMS minimum pour considérer comme "son" (2%)
-  const SILENCE_WARNING_MS = 2 * 60 * 1000; // 2 minutes avant avertissement
-  const SILENCE_AUTO_STOP_MS = 5 * 60 * 1000; // 5 minutes avant arrêt automatique
+  const SILENCE_WARNING_MS = 10 * 60 * 1000; // 10 minutes avant avertissement
+  const SILENCE_AUTO_STOP_MS = 12 * 60 * 1000; // 12 minutes avant arrêt automatique
   let silenceWarningShown = false;
   let silenceAutoStopWarned = false;
   let silenceStopTriggered = false; // Verrou pour éviter les déclenchements multiples
@@ -424,11 +424,11 @@ document.addEventListener('DOMContentLoaded', function () {
       } else {
         const silenceDuration = performance.now() - silenceStartTime;
         
-        // Avertissement après 2 minutes de silence
+        // Avertissement après 10 minutes de silence
         if (silenceDuration > SILENCE_WARNING_MS && !silenceWarningShown) {
           silenceWarningShown = true;
           const minutes = Math.floor(silenceDuration / 60000);
-          const message = `Aucun son détecté depuis ${minutes} minute(s).\n\nSi le silence continue pendant 5 minutes au total, l'enregistrement sera automatiquement arrêté pour éviter un fichier vide.`;
+          const message = `Aucun son détecté depuis ${minutes} minute(s).\n\nSi le silence continue pendant 12 minutes au total, l'enregistrement sera automatiquement arrêté pour éviter un fichier vide.`;
           
           // Forcer l'attention
           forcePageFocus('Silence détecté - Vérifiez votre micro');
@@ -436,7 +436,7 @@ document.addEventListener('DOMContentLoaded', function () {
           alert(`⚠️ Attention : ${message}`);
         }
         
-        // Avertissement avant arrêt automatique (après 4 minutes)
+        // Avertissement avant arrêt automatique (après 11 minutes)
         if (silenceDuration > (SILENCE_AUTO_STOP_MS - 60000) && !silenceAutoStopWarned) {
           silenceAutoStopWarned = true;
           const message = `Silence prolongé détecté.\n\nL'enregistrement sera arrêté automatiquement dans 1 minute si aucun son n'est détecté.`;
@@ -447,17 +447,17 @@ document.addEventListener('DOMContentLoaded', function () {
           alert(`⚠️ Attention : ${message}`);
         }
         
-        // Arrêt automatique après 5 minutes de silence
+        // Arrêt automatique après 12 minutes de silence
         if (silenceDuration > SILENCE_AUTO_STOP_MS && !silenceStopTriggered) {
           // Verrou : éviter les déclenchements multiples
           silenceStopTriggered = true;
           
-          warn('Arrêt automatique après 5 minutes de silence');
+          warn('Arrêt automatique après 12 minutes de silence');
           
           // Forcer l'attention avant l'arrêt
           forcePageFocus('Enregistrement arrêté automatiquement');
           
-          alert('⏹️ Enregistrement arrêté automatiquement : aucun son détecté pendant 5 minutes.\n\nL\'enregistrement a été interrompu pour éviter un fichier vide.\n\nLe fichier sera sauvegardé et envoyé automatiquement.');
+          alert('⏹️ Enregistrement arrêté automatiquement : aucun son détecté pendant 12 minutes.\n\nL\'enregistrement a été interrompu pour éviter un fichier vide.\n\nLe fichier sera sauvegardé et envoyé automatiquement.');
           
           // Utiliser Promise pour éviter les races
           Promise.resolve()
