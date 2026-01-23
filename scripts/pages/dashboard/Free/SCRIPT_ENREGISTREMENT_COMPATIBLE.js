@@ -12,31 +12,31 @@ document.addEventListener('DOMContentLoaded', function () {
     sampleRate: 48000
   };
 
-  const MIX_PREGAIN_DB = 5.0; // Gain global modéré mais efficace (+5dB)
+  const MIX_PREGAIN_DB = 6.0; // Traitement fort pour transcription : gain global élevé
 
-  const MIC_BASE_GAIN = 1.6;  // Gain micro de base équilibré (+60%)
-  const SYS_BASE_GAIN = 1.1;  // Gain audio système augmenté (+10%)
+  const MIC_BASE_GAIN = 1.8;  // Traitement fort : gain micro élevé (+80%)
+  const SYS_BASE_GAIN = 1.2;  // Traitement fort : gain audio système (+20%)
 
   const AGC_ENABLED   = true;
-  const AGC_TARGET    = 0.28; // Cible RMS optimale (28% - fort mais sûr)
-  const AGC_SMOOTH    = 0.025; // Un peu plus réactif
-  const AGC_MIN_GAIN  = 0.70;  // Permet de baisser si trop fort
-  const AGC_MAX_GAIN  = 2.8;   // Amplification max modérée (280%)
+  const AGC_TARGET    = 0.35; // Traitement fort : cible RMS élevée (35%) pour signal constant
+  const AGC_SMOOTH    = 0.03;  // Réactif pour traitement fort
+  const AGC_MIN_GAIN  = 0.60;  // Permet de baisser si trop fort
+  const AGC_MAX_GAIN  = 4.0;   // Traitement fort : amplification max élevée (400%)
 
   const MIC_COMP = {
-    threshold: -20,   // Compresse un peu plus tôt
-    knee: 15,         // Transition un peu plus nette
-    ratio: 2.2,       // Compression modérée
-    attack: 0.003,    // Plus rapide
-    release: 0.20     // Release plus court
+    threshold: -30,   // Traitement fort : compresse tôt
+    knee: 10,         // Transition nette
+    ratio: 3.5,       // Traitement fort : compression agressive
+    attack: 0.002,    // Très rapide
+    release: 0.15     // Release court
   };
 
   const MIX_LIMITER = {
-    threshold: -0.8,  // Un peu plus proche de 0dB (protection)
+    threshold: -0.5,  // Traitement fort : proche de 0dB pour niveau constant
     knee: 0,
     ratio: 20,
     attack: 0.001,
-    release: 0.09     // Un peu plus rapide
+    release: 0.08     // Rapide
   };
 
   /* --------- DOM --------- */
