@@ -1525,11 +1525,11 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     }
     
     const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
-    if (polled.ok && !isBlankHtml(polled.html)) {
+    if (polled.ok && !isBlankHtml(sanitizeHtml(polled.html || ''))) {
       summaryEmpty = false;
       hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
       if (editors.summary) {
-        // ✅ ISOLATION : Utiliser injectSummaryContent au lieu de innerHTML direct
+        // ✅ ISOLATION : polled.html est maintenant brut (non sanitizé)
         injectSummaryContent(polled.html);
       }
     } else if (editors.summary) {
