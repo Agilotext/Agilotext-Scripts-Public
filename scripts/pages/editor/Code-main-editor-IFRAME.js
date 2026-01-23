@@ -76,7 +76,7 @@ function mapNicoJsonToSegments(j){
   // ⚠️ IMPORTANT : Placée APRÈS la déclaration de editors et pickSummaryEl()
   function injectSummaryContent(html) {
     const el = editors.summary || pickSummaryEl();
-    if (!el) return;
+    if (!el || !html) return;
     
     // Détecter si le HTML contient des styles globaux problématiques
     const hasGlobalStyles = html.includes('<head') || 
@@ -89,15 +89,48 @@ function mapNicoJsonToSegments(j){
       const iframe = document.createElement('iframe');
       iframe.className = 'ag-summary-iframe';
       iframe.style.cssText = 'width:100%; border:none; min-height:600px; background:white;';
-      iframe.srcdoc = html;
-      iframe.onload = function() {
-        try {
-          const h = this.contentDocument.body.scrollHeight;
-          this.style.height = Math.max(600, h + 50) + 'px';
-        } catch(e) {}
-      };
+      
+      // Vider summaryEditor avant d'ajouter l'iframe
       el.innerHTML = '';
       el.appendChild(iframe);
+      
+      // Écrire le contenu dans l'iframe (plus fiable que srcdoc)
+      iframe.onload = function() {
+        try {
+          const doc = this.contentDocument || this.contentWindow.document;
+          doc.open();
+          doc.write(html);
+          doc.close();
+          
+          // Ajuster la hauteur après chargement
+          setTimeout(() => {
+            try {
+              const body = doc.body;
+              if (body) {
+                const h = Math.max(body.scrollHeight, body.offsetHeight, 600);
+                this.style.height = (h + 50) + 'px';
+              }
+            } catch(e) {
+              console.warn('[Editor] Erreur ajustement hauteur iframe:', e);
+            }
+          }, 100);
+        } catch(e) {
+          console.error('[Editor] Erreur écriture iframe:', e);
+          // Fallback : utiliser srcdoc si contentDocument ne fonctionne pas
+          try {
+            this.srcdoc = html;
+          } catch(e2) {
+            console.error('[Editor] Erreur srcdoc fallback:', e2);
+            // Dernier recours : injection directe
+            el.innerHTML = html;
+          }
+        }
+      };
+      
+      // Déclencher le chargement si l'iframe est déjà chargé
+      if (iframe.contentDocument) {
+        iframe.onload();
+      }
     } else {
       // Injection directe (templates simples)
       el.innerHTML = html;
