@@ -152,6 +152,61 @@ function mapNicoJsonToSegments(j){
     el.classList.add('ag-summary-readonly');
   }
 
+  // ✅ DÉTECTION ET CORRECTION DU PROBLÈME DE CACHE
+  // Vérifie si le HTML devrait être dans un iframe mais ne l'est pas (problème de cache)
+  function checkAndFixCacheIssue(html) {
+    // Ne vérifier qu'une seule fois par chargement de page
+    if (window.__agiloCacheCheckDone) return false;
+    
+    const summaryEl = editors.summary || pickSummaryEl();
+    if (!summaryEl || !html) return false;
+    
+    // Vérifier si on a déjà été rechargé à cause du cache (éviter les boucles infinies)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('_cache_bust') || urlParams.has('_force_reload')) {
+      window.__agiloCacheCheckDone = true;
+      return false;
+    }
+    
+    // Détecter si le HTML devrait être dans un iframe
+    const shouldBeIframe = html.includes('<head') || 
+                           html.includes('<body') || 
+                           /\*\s*\{/.test(html) ||
+                           /body\s*\{/.test(html);
+    
+    if (!shouldBeIframe) return false; // Pas de problème si pas besoin d'iframe
+    
+    // Vérifier l'état actuel
+    const isIframe = summaryEl.getAttribute('data-is-iframe');
+    const hasIframeElement = summaryEl.querySelector('iframe.ag-summary-iframe');
+    
+    // Si le HTML devrait être dans un iframe mais ne l'est pas → problème de cache
+    if (shouldBeIframe && (isIframe !== 'true' || !hasIframeElement)) {
+      console.warn('[Editor] ⚠️ Problème de cache détecté : iframe manquant alors que requis. Rechargement avec cache-buster...');
+      
+      // Afficher un message à l'utilisateur (optionnel)
+      if (window.toast) {
+        window.toast('Mise à jour nécessaire, rechargement en cours...', { duration: 2000 });
+      }
+      
+      // Marquer comme fait pour éviter les appels multiples
+      window.__agiloCacheCheckDone = true;
+      
+      // Recharger avec cache-buster après un court délai
+      setTimeout(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('_cache_bust', Date.now().toString());
+        url.searchParams.set('_force_reload', '1');
+        // Utiliser replace pour éviter d'ajouter une entrée dans l'historique
+        window.location.replace(url.toString());
+      }, 500);
+      
+      return true;
+    }
+    
+    return false;
+  }
+
   // ✅ FONCTION GLOBALE : Récupérer le HTML brut pour le PDF (Aspose)
   // Cette fonction est utilisée par le backend pour récupérer le HTML complet
   // même si le contenu est dans un iframe
@@ -1520,6 +1575,11 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
     if (editors.summary) {
       // ✅ ISOLATION : Passer le HTML BRUT pour permettre la détection des styles globaux
       injectSummaryContent(rawHtml);
+      
+      // ✅ VÉRIFICATION CACHE : Détecter et corriger les problèmes de cache après injection
+      if (!checkAndFixCacheIssue(rawHtml)) {
+        // Si pas de problème de cache, continuer normalement
+      }
     }
   } else if (editors.summary && !isSummaryPending) {
     // Afficher le loader seulement si pas déjà affiché (statut PENDING)
@@ -1570,6 +1630,11 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
       if (editors.summary) {
         // ✅ ISOLATION : polled.html est maintenant brut (non sanitizé)
         injectSummaryContent(polled.html);
+        
+        // ✅ VÉRIFICATION CACHE : Détecter et corriger les problèmes de cache après injection
+        if (!checkAndFixCacheIssue(polled.html)) {
+          // Si pas de problème de cache, continuer normalement
+        }
       }
     } else if (editors.summary) {
       // Si toujours en cours, garder le loader, sinon afficher l'erreur
