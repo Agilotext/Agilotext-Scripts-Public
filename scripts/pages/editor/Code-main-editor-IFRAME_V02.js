@@ -512,6 +512,12 @@
     const ct = r.headers.get('content-type') || '';
     const json = parseMaybeJson(raw, ct);
 
+    // ⚠️ PROTECTION : Si le JSON est mal formé mais contient une erreur explicite, on force le KO
+    if (!json && (raw.includes('"status": "KO"') || raw.includes('"status":"KO"') || raw.includes('"errorMessage"'))) {
+      const fallbackJson = { status: 'KO', errorMessage: 'INVALID_JSON_RESPONSE', exceptionStackTrace: raw };
+      return { ok: false, code: 'API_ERROR_BAD_JSON', httpStatus: r.status, json: fallbackJson, raw };
+    }
+
     if (json && (json.status === 'KO' || json.errorMessage)) {
       const code = String(json.errorMessage || json.status || '').toLowerCase();
       const tech = (json?.exceptionName || json?.javaException || '') + ' ' + (json?.exceptionStackTrace || '');
