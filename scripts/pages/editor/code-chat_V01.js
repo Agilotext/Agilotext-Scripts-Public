@@ -554,52 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           bubbleDiv.appendChild(actionsDiv);
-
-          // === WOW FEATURE: SMART CHIPS (Last message only) ===
-          if (idx === MESSAGES.length - 1) {
-            const chipsDiv = document.createElement('div');
-            chipsDiv.className = 'msg-chips';
-            chipsDiv.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
-
-            const prevQuestion = (MESSAGES[idx - 1]?.role === 'user' ? MESSAGES[idx - 1].text : '').toLowerCase();
-            const suggestions = [];
-
-            // 1. Logique "Chain of Thought" (Lien entre agents)
-            if (prevQuestion.includes('linkedin') || prevQuestion.includes('post')) {
-              suggestions.push({ label: '📧 Convertir en Email', prompt: 'Transforme ce post en un email de suivi court et pro pour mes équipes.' });
-            } else if (prevQuestion.includes('email') || prevQuestion.includes('mail')) {
-              suggestions.push({ label: '📝 Extraire les tâches', prompt: 'Liste uniquement les tâches, les responsables et les deadlines sous forme de tableau.' });
-            }
-
-            // 2. Toujours proposer Traduction et Résumé si pertinent
-            if (!prevQuestion.includes('translate') && !prevQuestion.includes('anglais')) {
-              suggestions.push({ label: '🇬🇧 Translate to EN', prompt: 'Translate this response to English (Business tone).' });
-            }
-            if (m.text.length > 500 && !prevQuestion.includes('résumé')) {
-              suggestions.push({ label: '✂️ Résumer', prompt: 'Fais-moi un résumé ultra-court (3 bullet points) de ça.' });
-            }
-
-            suggestions.forEach(s => {
-              const chip = document.createElement('button');
-              chip.textContent = s.label;
-              // Style "Chip" moderne et cliquable
-              chip.style.cssText = 'font-size:11px;font-weight:500;padding:4px 12px;border-radius:16px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px;box-shadow:0 1px 2px rgba(0,0,0,0.02)';
-
-              chip.onmouseenter = () => { chip.style.background = '#eff6ff'; chip.style.color = '#2563eb'; chip.style.borderColor = '#dbeafe'; };
-              chip.onmouseleave = () => { chip.style.background = '#f8fafc'; chip.style.color = '#475569'; chip.style.borderColor = '#e2e8f0'; };
-
-              chip.onclick = () => {
-                // Feedback visuel immédiat
-                chip.style.transform = 'scale(0.95)';
-                setTimeout(() => chip.style.transform = 'scale(1)', 100);
-                // Appel de l'IA via hiddenAsk (titre chip, prompt chip)
-                window.AgiloChat.hiddenAsk(s.label, s.prompt);
-              };
-              chipsDiv.appendChild(chip);
-            });
-
-            if (suggestions.length > 0) bubbleDiv.appendChild(chipsDiv);
-          }
         }
       } else {
         bubbleDiv.textContent = m.text;
@@ -676,17 +630,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ✅ PAR CETTE VERSION AMÉLIORÉE (DYNAMIC THINKING V2)
+  // ✅ PAR CETTE VERSION STANDARD (Safe)
   function updateThinking(jobId, runId, cycle) {
-    let status = 'Assistant réfléchit';
-    const steps = ['🔍 Analyse du transcript...', '🧠 Structuration des idées...', '✍️ Rédaction en cours...'];
-    // Change toutes les 3 sec (cycle ~ 1s/call ?) - ajuster selon fréquence d'appel
-    if (cycle < 6) status = steps[0];
-    else if (cycle < 15) status = steps[1];
-    else status = steps[2];
-
     const thinkingHtml = `
     <div class="thinking-indicator">
-      <span>${status}</span>
+      <span>Assistant réfléchit</span>
       <div class="thinking-dots">
         <div class="thinking-dot"></div>
         <div class="thinking-dot"></div>
@@ -807,8 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function computeStyle(persona, useCase, lang) {
     const base = { ...STYLE_PRESETS.defaults };
     const p = STYLE_PRESETS.personas[norm(persona)] || {};
-    theU = STYLE_PRESETS.usecases[norm(useCase)] || {}; // avoid shadow name
-    const u = theU;
+    const u = STYLE_PRESETS.usecases[norm(useCase)] || {}; // fixed syntax error
     const merged = { ...base, ...p, ...u };
     const sections = (lang === 'en' ? merged.sectionsEN : merged.sectionsFR) || (lang === 'en' ? base.sectionsEN : base.sectionsFR);
     return { ...merged, sections };
@@ -1114,7 +1061,8 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== ENVOI (PROMPT CACHÉ POUR INSIGHTS) ================== */
   async function handleHiddenAsk(label, hiddenPrompt) {
     // Ouvre l'onglet Conversation automatiquement
-    try { openConversation(); } catch { }
+    // Ouvre l'onglet Conversation automatiquement (via embed script, removed here to avoid conflict)
+    // try { openConversation(); } catch { }
     const jobId = ACTIVE_JOB;
     if (SENDING.has(jobId)) return;       // anti double déclenchement
     SENDING.add(jobId);
@@ -1135,9 +1083,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       let prompt = String(hiddenPrompt || '').trim();
-      if (/linkedin/i.test(String(label || ''))) {
-        prompt = buildPrompt('Post LinkedIn');
-      }
+      // Prompt logic was here but simplified for stability
       if (!prompt) throw new Error('prompt vide');
 
       const txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
@@ -1152,31 +1098,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* ================== NAV CHAT (ouvrir panneau) ================== */
-  function openConversation() {
-    const tab = document.querySelector('#tab-chat,[data-tab="chat"][role="tab"],button[aria-controls="pane-chat"]');
-    const pane = byId('pane-chat');
-    if (tab) {
-      tab.removeAttribute('disabled');
-      if (tab.getAttribute('aria-selected') !== 'true') {
-        tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      }
-    }
-    setTimeout(() => {
-      if (pane && (pane.hasAttribute('hidden') || !pane.classList.contains('is-active'))) {
-        document.querySelectorAll('[role="tab"]').forEach(t => {
-          const isChat = t === tab || t.getAttribute('aria-controls') === 'pane-chat' || t.dataset.tab === 'chat';
-          t.setAttribute('aria-selected', isChat ? 'true' : 'false');
-          t.tabIndex = isChat ? 0 : -1;
-        });
-        document.querySelectorAll('.edtr-pane, .ag-panel').forEach(p => {
-          if (p.id === 'pane-chat') { p.classList.add('is-active'); p.removeAttribute('hidden'); }
-          else { p.classList.remove('is-active'); p.setAttribute('hidden', ''); }
-        });
-      }
-      try { byId('chatPrompt')?.focus({ preventScroll: true }); } catch { }
-    }, 0);
-  }
+  // openConversation removed for stability revert
+
 
 
   /* ================== WIRING ================== */
@@ -1206,7 +1129,8 @@ document.addEventListener('DOMContentLoaded', () => {
   window.AgiloChat = {
     ask: () => handleAsk(),
     hiddenAsk: (label, prompt) => handleHiddenAsk(label, prompt), // ← pour Insights
-    openConversation,
+    // openConversation legacy
+
     creds: () => resolveAuth(),
     getJobId: () => (ACTIVE_JOB || getJobId()),
     export: (msgIdx, fmt) => exportMessage(msgIdx, fmt),
@@ -1236,4 +1160,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
   log('ready. API_BASE=', API_BASE, 'jobId=', ACTIVE_JOB);
 });
-
