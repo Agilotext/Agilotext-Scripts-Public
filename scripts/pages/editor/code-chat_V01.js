@@ -554,43 +554,53 @@ document.addEventListener('DOMContentLoaded', () => {
           });
 
           bubbleDiv.appendChild(actionsDiv);
-        }
 
-        // --- SMART CHIPS (Suggestions contextuelles) ---
-        if (!m.text.includes('thinking-indicator') && !m.text.includes('réfléchit') && idx === MESSAGES.length - 1) {
-          const isLinkedin = m.text.includes('Post LinkedIn') || m.text.includes('Unicode') || m.text.includes('→');
-          const isEmail = m.text.includes('Objet :') || m.text.includes('Cordialement');
+          // === WOW FEATURE: SMART CHIPS (Last message only) ===
+          if (idx === MESSAGES.length - 1) {
+            const chipsDiv = document.createElement('div');
+            chipsDiv.className = 'msg-chips';
+            chipsDiv.style.cssText = 'display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
 
-          // Définir les chips selon le contexte
-          const chips = [];
-          if (isLinkedin) {
-            chips.push({ label: '✉️ Transformer en Email', prompt: 'Email suivi' });
-            chips.push({ label: '📊 Créer une Infographie', prompt: 'Infographie' });
-          } else if (isEmail) {
-            chips.push({ label: 'LinkedIn', prompt: 'Post LinkedIn' });
-            chips.push({ label: '🇬🇧 Traduire en Anglais', prompt: 'Traduire ce mail en anglais professionnel' });
-          } else {
-            chips.push({ label: '✉️ Email Recap', prompt: 'Email suivi' });
-            chips.push({ label: 'LinkedIn', prompt: 'Post LinkedIn' });
+            const prevQuestion = (MESSAGES[idx - 1]?.role === 'user' ? MESSAGES[idx - 1].text : '').toLowerCase();
+            const suggestions = [];
+
+            // 1. Logique "Chain of Thought" (Lien entre agents)
+            if (prevQuestion.includes('linkedin') || prevQuestion.includes('post')) {
+              suggestions.push({ label: '📧 Convertir en Email', prompt: 'Transforme ce post en un email de suivi court et pro pour mes équipes.' });
+            } else if (prevQuestion.includes('email') || prevQuestion.includes('mail')) {
+              suggestions.push({ label: '📝 Extraire les tâches', prompt: 'Liste uniquement les tâches, les responsables et les deadlines sous forme de tableau.' });
+            }
+
+            // 2. Toujours proposer Traduction et Résumé si pertinent
+            if (!prevQuestion.includes('translate') && !prevQuestion.includes('anglais')) {
+              suggestions.push({ label: '🇬🇧 Translate to EN', prompt: 'Translate this response to English (Business tone).' });
+            }
+            if (m.text.length > 500 && !prevQuestion.includes('résumé')) {
+              suggestions.push({ label: '✂️ Résumer', prompt: 'Fais-moi un résumé ultra-court (3 bullet points) de ça.' });
+            }
+
+            suggestions.forEach(s => {
+              const chip = document.createElement('button');
+              chip.textContent = s.label;
+              // Style "Chip" moderne et cliquable
+              chip.style.cssText = 'font-size:11px;font-weight:500;padding:4px 12px;border-radius:16px;border:1px solid #e2e8f0;background:#f8fafc;color:#475569;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:4px;box-shadow:0 1px 2px rgba(0,0,0,0.02)';
+
+              chip.onmouseenter = () => { chip.style.background = '#eff6ff'; chip.style.color = '#2563eb'; chip.style.borderColor = '#dbeafe'; };
+              chip.onmouseleave = () => { chip.style.background = '#f8fafc'; chip.style.color = '#475569'; chip.style.borderColor = '#e2e8f0'; };
+
+              chip.onclick = () => {
+                // Feedback visuel immédiat
+                chip.style.transform = 'scale(0.95)';
+                setTimeout(() => chip.style.transform = 'scale(1)', 100);
+                // Appel de l'IA via hiddenAsk (titre chip, prompt chip)
+                window.AgiloChat.hiddenAsk(s.label, s.prompt);
+              };
+              chipsDiv.appendChild(chip);
+            });
+
+            if (suggestions.length > 0) bubbleDiv.appendChild(chipsDiv);
           }
-
-          const chipsDiv = document.createElement('div');
-          chipsDiv.className = 'msg-suggestions';
-          chipsDiv.style.cssText = 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;';
-
-          chips.forEach(c => {
-            const btn = document.createElement('button');
-            btn.textContent = c.label;
-            btn.style.cssText = 'background:#f0f4f8;border:1px solid #dbeafe;color:#475569;padding:6px 12px;border-radius:20px;font-size:12px;cursor:pointer;transition:all 0.2s;font-weight:500;display:flex;align-items:center;gap:4px;';
-            btn.onmouseover = () => { btn.style.background = '#e0e7ff'; btn.style.color = '#334155'; btn.style.transform = 'translateY(-1px)'; };
-            btn.onmouseout = () => { btn.style.background = '#f0f4f8'; btn.style.color = '#475569'; btn.style.transform = 'translateY(0)'; };
-            btn.onclick = () => window.AgiloChat.hiddenAsk(c.label, c.prompt);
-            chipsDiv.appendChild(btn);
-          });
-
-          msgDiv.appendChild(chipsDiv);
         }
-
       } else {
         bubbleDiv.textContent = m.text;
         bubbleDiv.style.whiteSpace = 'pre-wrap';
@@ -665,29 +675,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (jobId === ACTIVE_JOB) setBusy(false);
   }
 
-  // ✅ PAR CETTE VERSION AMÉLIORÉE
-  // ✅ PAR CETTE VERSION AMÉLIORÉE
+  // ✅ PAR CETTE VERSION AMÉLIORÉE (DYNAMIC THINKING V2)
   function updateThinking(jobId, runId, cycle) {
-    // Steps de réflexion rotatifs
-    const steps = [
-      '🔍 Analyse du transcript...',
-      '🧠 Structuration des idées...',
-      '✍️ Rédaction en cours...',
-      '✨ Finalisation...'
-    ];
-    const currentStep = steps[Math.floor(cycle / 15) % steps.length]; // Change tous les ~15 cycles (~2-3s)
+    let status = 'Assistant réfléchit';
+    const steps = ['🔍 Analyse du transcript...', '🧠 Structuration des idées...', '✍️ Rédaction en cours...'];
+    // Change toutes les 3 sec (cycle ~ 1s/call ?) - ajuster selon fréquence d'appel
+    if (cycle < 6) status = steps[0];
+    else if (cycle < 15) status = steps[1];
+    else status = steps[2];
 
     const thinkingHtml = `
-    <div class="thinking-indicator" style="display:flex;align-items:center;gap:10px;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;width:fit-content;">
-      <div class="thinking-spinner">
-        <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <style>.spinner_hzlK{animation:spinner_vc4H .8s linear infinite;transform-origin:center}.spinner_koGT{animation:spinner_vc4H .8s linear infinite .1s;transform-origin:center}.spinner_YF1u{animation:spinner_vc4H .8s linear infinite .2s;transform-origin:center}@keyframes spinner_vc4H{0%{stroke-opacity:1;stroke-dasharray:0 150;stroke-dashoffset:0}47.5%{stroke-dasharray:42 150;stroke-dashoffset:-16}95%,100%{stroke-dasharray:42 150;stroke-dashoffset:-59}}</style>
-          <g fill="none" stroke="#64748b" stroke-linecap="round" stroke-width="3">
-            <circle class="spinner_hzlK" cx="12" cy="12" r="9.5" />
-          </g>
-        </svg>
+    <div class="thinking-indicator">
+      <span>${status}</span>
+      <div class="thinking-dots">
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
+        <div class="thinking-dot"></div>
       </div>
-      <span style="font-size:13px;color:#64748b;font-weight:500;font-family:system-ui;">${currentStep}</span>
     </div>
   `;
     replaceMsgById(jobId, runId, thinkingHtml);
@@ -881,39 +885,6 @@ document.addEventListener('DOMContentLoaded', () => {
         linkedInSys.join('\n'),
         `### TRANSCRIPT SOURCE :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}`,
         `### DEMANDE UTILISATEUR :\n${question}`
-      ].join('\n\n');
-    }
-
-    // --- SPECIALIZED PROMPT: INFOGRAPHIC ---
-    if (/infographie|visuel|schéma/i.test(question)) {
-      const userName = (document.querySelector('#ms-first-name')?.textContent || '').trim();
-
-      const infoSys = [
-        `Vous êtes un Directeur Artistique expert en Information Design.`,
-        `Votre mission : Créer le brief textuel pour une infographie percutante basée sur ce transcript.`,
-        ``,
-        `### FORMAT DE SORTIE (Strict) :`,
-        `TITRE : [Titre court et accrocheur (Max 6 mots)]`,
-        ``,
-        `POINTS CLÉS & VISUELS SUGGÉRÉS :`,
-        `1. [Titre Section 1]`,
-        `   - Donnée/Idée : [Résumé court]`,
-        `   - Visuel suggéré : [Icône/Graphique] (ex: 📈 Graphique en courbe, 👥 Icône groupe)`,
-        ``,
-        `2. [Titre Section 2]`,
-        `   - Donnée/Idée : [Résumé court]`,
-        `   - Visuel suggéré : [Icône/Graphique]`,
-        ``,
-        `... (Max 4-5 sections)`,
-        ``,
-        `💡 CITATION À METTRE EN AVANT : "[Citation courte et forte du transcript]"`,
-        ``,
-        `🎨 STYLE SUGGÉRÉ : Minimaliste, Corporate, [Couleur dominante suggérée]`
-      ];
-      return [
-        infoSys.join('\n'),
-        `### TRANSCRIPT :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}`,
-        `### DEMANDE :\n${question}`
       ].join('\n\n');
     }
 
@@ -1166,10 +1137,6 @@ document.addEventListener('DOMContentLoaded', () => {
       let prompt = String(hiddenPrompt || '').trim();
       if (/linkedin/i.test(String(label || ''))) {
         prompt = buildPrompt('Post LinkedIn');
-      } else if (/email|mail/i.test(String(label || ''))) {
-        prompt = buildPrompt('Email suivi');
-      } else if (/infographie/i.test(String(label || ''))) {
-        prompt = buildPrompt('Infographie');
       }
       if (!prompt) throw new Error('prompt vide');
 
@@ -1269,3 +1236,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   log('ready. API_BASE=', API_BASE, 'jobId=', ACTIVE_JOB);
 });
+
