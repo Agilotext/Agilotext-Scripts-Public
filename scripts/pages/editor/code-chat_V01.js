@@ -566,7 +566,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     chatView.scrollTop = chatView.scrollHeight;
   }
-
   function addMessage(role, text) {
     MESSAGES.push({ role, text: String(text || '').trim(), t: new Date().toISOString() });
     saveHistory(); render();
@@ -800,7 +799,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- SPECIALIZED PROMPT: LINKEDIN STRATEGY ---
-    if (/linkedin|post/i.test(question) && (question.toLowerCase().includes('post') || question.toLowerCase().includes('linkedin'))) {
+    const qLower = String(question || '').toLowerCase();
+    const isLinkedIn = /\blinkedin\b/.test(qLower) || /post\s+linkedin|linkedin\s+post/.test(qLower);
+    if (isLinkedIn) {
       const userName = (document.querySelector('#ms-first-name')?.textContent || 'Professionnel').trim();
       const userJob = (document.querySelector('#ms-persona')?.textContent || 'Expert').trim();
       const userUseCase = (document.querySelector('#ms-use_case')?.textContent || 'Général').trim();
@@ -830,7 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return [
         linkedInSys.join('\n'),
-        `### TRANSCRIPT SOURCE :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}`,
+        turns.length ? `### CONTEXTE (conversation) :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}` : '',
         `### DEMANDE UTILISATEUR :\n${question}`
       ].join('\n\n');
     }
@@ -842,35 +843,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const emailSys = [
         `Vous êtes un Assistant Exécutif de haut niveau.`,
-        `Votre mission : Rédiger un email de compte-rendu pour ${userName}.`,
+        `Votre mission : Rédiger un email de suivi concis et professionnel pour ${userName}.`,
         ``,
         `### RÈGLES DE RÉDACTION (STRICTES) :`,
-        `- **RÉPONSE DIRECTE UNIQUEMENT** : Commencez directement par "Objet :".`,
-        `- **TON** : Strictement professionnel, courtois, direct.`,
-        `- **INTERDIT** : Zéro emoji. Pas de markdown gras inutile.`,
-        `- **STRUCTURE** :`,
-        `  Objet : [Clair et actionnable]`,
+        `- Commencez directement par "Objet :".`,
+        `- Zéro emoji.`,
+        `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
+        `- Utilisez des lignes simples et, si besoin, préfixez les points avec "→ ".`,
+        `- Email court et actionnable.`,
         ``,
-        `  [Salutation pro],`,
+        `Structure attendue :`,
+        `Objet : ...`,
         ``,
-        `  [Contexte rapide et factuel de la réunion]`,
+        `Bonjour [Prénom/équipe],`,
         ``,
-        `  Points clés :`,
-        `  - [Décision / Info 1]`,
-        `  - [Décision / Info 2]`,
+        `[Contexte rapide en 1–2 lignes]`,
         ``,
-        `  Prochaines étapes :`,
-        `  - [Action 1]`,
-        `  - [Action 2]`,
+        `Décisions / points clés :`,
+        `→ ...`,
+        `→ ...`,
         ``,
-        `  [Formule de politesse],`,
+        `Prochaines étapes :`,
+        `→ ...`,
+        `→ ...`,
         ``,
-        `  ${userName}`
+        `Cordialement,`,
+        `${userName}`
       ];
 
       return [
         emailSys.join('\n'),
-        `### TRANSCRIPT SOURCE :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}`,
+        turns.length ? `### CONTEXTE (conversation) :\n${turns.map(t => t.replace(/^(User|Assistant|Utilisateur):/, '')).join('\n')}` : '',
         `### DEMANDE UTILISATEUR :\n${question}`
       ].join('\n\n');
     }
@@ -1061,8 +1064,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== ENVOI (PROMPT CACHÉ POUR INSIGHTS) ================== */
   async function handleHiddenAsk(label, hiddenPrompt) {
     // Ouvre l'onglet Conversation automatiquement
-    // Ouvre l'onglet Conversation automatiquement (via embed script, removed here to avoid conflict)
-    // try { openConversation(); } catch { }
+    try { openConversation(); } catch { }
     const jobId = ACTIVE_JOB;
     if (SENDING.has(jobId)) return;       // anti double déclenchement
     SENDING.add(jobId);
@@ -1083,7 +1085,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       let prompt = String(hiddenPrompt || '').trim();
-      // Prompt logic was here but simplified for stability
+      const lbl = String(label || '').toLowerCase();
+      if (lbl.includes('linkedin')) prompt = buildPrompt('Post LinkedIn');
+      else if (lbl.includes('email') || lbl.includes('mail')) prompt = buildPrompt('Email suivi');
       if (!prompt) throw new Error('prompt vide');
 
       const txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
@@ -1098,7 +1102,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // openConversation removed for stability revert
+  /* ================== NAV CHAT (ouvrir panneau) ================== */
+  function openConversation() {
+    const tab = document.querySelector('#tab-chat,[data-tab="chat"][role="tab"],button[aria-controls="pane-chat"]');
+    const pane = byId('pane-chat');
+    if (tab) {
+      tab.removeAttribute('disabled');
+      if (tab.getAttribute('aria-selected') !== 'true') {
+        tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    }
+    setTimeout(() => {
+      if (pane && (pane.hasAttribute('hidden') || !pane.classList.contains('is-active'))) {
+        document.querySelectorAll('[role="tab"]').forEach(t => {
+          const isChat = t === tab || t.getAttribute('aria-controls') === 'pane-chat' || t.dataset.tab === 'chat';
+          t.setAttribute('aria-selected', isChat ? 'true' : 'false');
+          t.tabIndex = isChat ? 0 : -1;
+        });
+        document.querySelectorAll('.edtr-pane, .ag-panel').forEach(p => {
+          if (p.id === 'pane-chat') { p.classList.add('is-active'); p.removeAttribute('hidden'); }
+          else { p.classList.remove('is-active'); p.setAttribute('hidden', ''); }
+        });
+      }
+      try { byId('chatPrompt')?.focus({ preventScroll: true }); } catch { }
+    }, 0);
+  }
 
 
 
@@ -1129,7 +1157,7 @@ document.addEventListener('DOMContentLoaded', () => {
   window.AgiloChat = {
     ask: () => handleAsk(),
     hiddenAsk: (label, prompt) => handleHiddenAsk(label, prompt), // ← pour Insights
-    // openConversation legacy
+    openConversation,
 
     creds: () => resolveAuth(),
     getJobId: () => (ACTIVE_JOB || getJobId()),
