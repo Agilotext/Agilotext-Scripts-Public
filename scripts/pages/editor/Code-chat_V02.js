@@ -760,6 +760,50 @@ document.addEventListener('DOMContentLoaded', () => {
     return { ...merged, sections };
   }
 
+  /* ================== LINKEDIN POST-PROCESS ================== */
+  const BOLD_RE = /[\u{1D400}-\u{1D7FF}]/u;
+  function toUnicodeBold(s) {
+    const out = [];
+    for (const ch of String(s || '')) {
+      const code = ch.codePointAt(0);
+      if (code >= 0x41 && code <= 0x5A) out.push(String.fromCodePoint(0x1D400 + (code - 0x41)));
+      else if (code >= 0x61 && code <= 0x7A) out.push(String.fromCodePoint(0x1D41A + (code - 0x61)));
+      else if (code >= 0x30 && code <= 0x39) out.push(String.fromCodePoint(0x1D7CE + (code - 0x30)));
+      else out.push(ch);
+    }
+    return out.join('');
+  }
+  function isLinkedInRequest(s) {
+    const q = String(s || '').toLowerCase();
+    return /\blinkedin\b/.test(q) || /post\s+linkedin|linkedin\s+post/.test(q);
+  }
+  function postProcessLinkedIn(text) {
+    if (!text) return text;
+    let t = String(text);
+    // Remove markdown bold/italics
+    t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+    // Normalize bullets to arrows
+    t = t.replace(/^\s*[-*•▪]\s+/gm, '→ ');
+    // Ensure arrows are on their own lines
+    t = t.replace(/\s*→\s*/g, '\n→ ');
+    // Add blank line before each arrow line
+    t = t.replace(/\n(→[^\n]+)/g, '\n\n$1');
+    // Collapse more than 2 newlines
+    t = t.replace(/\n{3,}/g, '\n\n');
+
+    // Ensure first non-empty line is Unicode bold
+    const lines = t.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].trim()) {
+        if (!BOLD_RE.test(lines[i])) lines[i] = toUnicodeBold(lines[i]);
+        // Add a blank line after hook
+        if (lines[i + 1] && lines[i + 1].trim()) lines.splice(i + 1, 0, '');
+        break;
+      }
+    }
+    return lines.join('\n');
+  }
+
   function styleToBullets(style, lang) {
     const L = (fr, en) => lang === 'en' ? en : fr;
     const toneLabel = {
@@ -812,7 +856,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ``,
         `### RÈGLES DE FORMATAGE (CRITIQUES) :`,
         `1. **RÉPONSE DIRECTE UNIQUEMENT** : Commencez directement par l'accroche. Aucun texte d'introduction.`,
-        `2. **HOOK EN GRAS UNICODE UNIQUEMENT** : La 1ère ligne doit être en gras Unicode (ex: "𝐔𝐧 𝐞𝐱𝐞𝐦𝐩𝐥𝐞..."). Interdiction de **markdown**. Aucun autre gras ailleurs.`,
+        `2. **HOOK EN GRAS UNICODE UNIQUEMENT** : La 1ère ligne doit être en gras Unicode (ex: "𝐔𝐧 𝐞𝐱𝐞𝐦𝐩𝐥𝐞..."). Interdiction de markdown. Aucun autre gras ailleurs.`,
         `3. **AUCUN MARKDOWN** : Pas de titres (#), pas d'italique, pas de listes, pas de puces, pas de numérotation.`,
         `4. **POINTS CLÉS AVEC FLÈCHES** : Un point = une ligne qui commence par "→ ". Jamais d'icône. Laisser une ligne vide entre chaque point.`,
         `5. **FORMAT "EN ESCALIER"** : 3 à 5 paragraphes très courts, une idée par ligne. Toujours une ligne vide entre paragraphes.`,
@@ -826,7 +870,9 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Rôle : ${userJob}`,
         `- Cas d'usage : ${userUseCase}`,
         ``,
-        `Identifiez l'angle le plus pertinent à partir du transcript.`
+        `Identifiez l'angle le plus pertinent à partir du transcript.`,
+        `N'inventez aucun nom de marque/entreprise/personne ; n'utilisez que ce qui est dans le transcript.`,
+        `Adaptez le ton à la persona "${userJob}" et au cas d'usage "${userUseCase}".`
       ];
 
       return [
@@ -1048,7 +1094,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       const prompt = buildPrompt(q);
-      const txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
+      let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
+      if (isLinkedInRequest(q)) txt = postProcessLinkedIn(txt);
       replaceMsgById(jobId, runId, txt || '(réponse vide)');
       window.AgiloQuota?.afterChatSuccess?.();
     } catch (e) {
@@ -1086,11 +1133,13 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       let prompt = String(hiddenPrompt || '').trim();
       const lbl = String(label || '').toLowerCase();
-      if (lbl.includes('linkedin')) prompt = buildPrompt('Post LinkedIn');
+      const isLi = lbl.includes('linkedin');
+      if (isLi) prompt = buildPrompt('Post LinkedIn');
       else if (lbl.includes('email') || lbl.includes('mail')) prompt = buildPrompt('Email suivi');
       if (!prompt) throw new Error('prompt vide');
 
-      const txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
+      let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
+      if (isLi) txt = postProcessLinkedIn(txt);
       replaceMsgById(jobId, runId, txt || '(réponse vide)');
       toast('Insight prêt', 'success');
     } catch (e) {
