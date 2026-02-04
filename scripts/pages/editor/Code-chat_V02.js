@@ -66,6 +66,12 @@ document.addEventListener('DOMContentLoaded', () => {
       return `\uE000CODE${i}\uE001`;
     });
 
+    // Échapper le HTML brut (hors inline code) pour éviter l'injection
+    md = md
+      .split(/(`[^`]*`)/g)
+      .map((seg, i) => (i % 2 ? seg : seg.replace(/</g, '&lt;').replace(/>/g, '&gt;')))
+      .join('');
+
     // Inlines
     const inline = s => String(s)
       .replace(/\*\*\*([^\*]+?)\*\*\*/g, '<strong><em>$1</em></strong>')  // ***bold+ital***
@@ -485,56 +491,76 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function saveHistory() { try { localStorage.setItem(LSKEY(), JSON.stringify(MESSAGES)); } catch { } }
 
-  function render() {
-    if (!chatView) return;
-    chatView.innerHTML = '';
-    MESSAGES.forEach((m, idx) => {
-      const msgDiv = document.createElement('div');
-      msgDiv.className = m.role === 'user' ? 'msg msg--user' : (m.role === 'assistant' ? 'msg msg--ai' : 'msg msg--sys');
-      msgDiv.lang = 'fr';
+  const isNearBottom = (el, threshold = 80) => {
+    if (!el) return true;
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) < threshold;
+  };
+  const lastAssistantIndexOf = (msgs) => {
+    for (let i = (msgs?.length || 0) - 1; i >= 0; i--) {
+      if (msgs[i]?.role === 'assistant') return i;
+    }
+    return -1;
+  };
 
-      const metaDiv = document.createElement('div');
-      metaDiv.className = 'msg-meta';
-      const roleName = m.role === 'user' ? 'Vous' : (m.role === 'assistant' ? 'Assistant' : 'Info');
-      metaDiv.textContent = `${roleName} • ${nowHHMM()}`;
+  function buildMessageNode(m, idx, lastAssistantIndex) {
+    const msgDiv = document.createElement('div');
+    msgDiv.className = m.role === 'user' ? 'msg msg--user' : (m.role === 'assistant' ? 'msg msg--ai' : 'msg msg--sys');
+    msgDiv.lang = 'fr';
+    if (m.id) msgDiv.dataset.msgId = m.id;
 
-      const bubbleDiv = document.createElement('div');
-      bubbleDiv.className = 'msg-bubble';
+    const metaDiv = document.createElement('div');
+    metaDiv.className = 'msg-meta';
+    const roleName = m.role === 'user' ? 'Vous' : (m.role === 'assistant' ? 'Assistant' : 'Info');
+    metaDiv.textContent = `${roleName} • ${nowHHMM()}`;
 
-      if (m.role === 'assistant') {
+    const bubbleDiv = document.createElement('div');
+    bubbleDiv.className = 'msg-bubble';
+
+    if (m.role === 'assistant') {
+      const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
+      const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(m.text) ? 'plain' : 'md'));
+
+      if (renderMode === 'plain') {
+        bubbleDiv.textContent = m.text;
+        bubbleDiv.style.whiteSpace = 'pre-wrap';
+        bubbleDiv.style.lineHeight = '1.6';
+      } else if (renderMode === 'html') {
+        bubbleDiv.innerHTML = m.text;
+      } else {
         bubbleDiv.innerHTML = mdToHtml(m.text);
         bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
-        if (m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit')) {
-          // C'est un message "thinking" - ne pas ajouter les boutons d'action
-          bubbleDiv.innerHTML = m.text; // Garder le HTML tel quel
-        } else if (!m.text.includes('réfléchit') && !m.text.includes('⚠️') && m.text.length > 10) {
-          const actionsDiv = document.createElement('div');
-          actionsDiv.className = 'msg-actions';
-          actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
+      }
 
-          const copyBtn = document.createElement('button');
-          copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
-          copyBtn.className = 'msg-action-btn msg-action-copy';
-          copyBtn.onclick = async () => {
-            const success = await copyToClipboard(m.text);
-            if (success) {
-              copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copié !';
-              copyBtn.style.background = '#10b981';
-              copyBtn.style.color = '#fff';
-              copyBtn.style.borderColor = '#10b981';
-              setTimeout(() => {
-                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
-                copyBtn.style.background = '#fff';
-                copyBtn.style.color = '#525252';
-                copyBtn.style.borderColor = 'rgba(0,0,0,0.15)';
-              }, 2000);
-              toast('Copié dans le presse-papier', 'success');
-            } else {
-              toast('Échec de la copie', 'error');
-            }
-          };
-          actionsDiv.appendChild(copyBtn);
+      if (!isThinking && !m.text.includes('réfléchit') && !m.text.includes('⚠️') && m.text.length > 10) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'msg-actions';
+        actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
 
+        const copyBtn = document.createElement('button');
+        copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
+        copyBtn.className = 'msg-action-btn msg-action-copy';
+        copyBtn.onclick = async () => {
+          const success = await copyToClipboard(m.text);
+          if (success) {
+            copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copié !';
+            copyBtn.style.background = '#10b981';
+            copyBtn.style.color = '#fff';
+            copyBtn.style.borderColor = '#10b981';
+            setTimeout(() => {
+              copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
+              copyBtn.style.background = '#fff';
+              copyBtn.style.color = '#525252';
+              copyBtn.style.borderColor = 'rgba(0,0,0,0.15)';
+            }, 2000);
+            toast('Copié dans le presse-papier', 'success');
+          } else {
+            toast('Échec de la copie', 'error');
+          }
+        };
+        actionsDiv.appendChild(copyBtn);
+
+        const allowExport = idx === lastAssistantIndex;
+        if (allowExport) {
           const sep = document.createElement('div');
           sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
           actionsDiv.appendChild(sep);
@@ -552,19 +578,34 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             actionsDiv.appendChild(btn);
           });
-
-          bubbleDiv.appendChild(actionsDiv);
         }
-      } else {
-        bubbleDiv.textContent = m.text;
-        bubbleDiv.style.whiteSpace = 'pre-wrap';
-      }
 
-      msgDiv.appendChild(metaDiv);
-      msgDiv.appendChild(bubbleDiv);
-      chatView.appendChild(msgDiv);
+        bubbleDiv.appendChild(actionsDiv);
+      }
+    } else {
+      bubbleDiv.textContent = m.text;
+      bubbleDiv.style.whiteSpace = 'pre-wrap';
+    }
+
+    msgDiv.appendChild(metaDiv);
+    msgDiv.appendChild(bubbleDiv);
+    return msgDiv;
+  }
+
+  function render() {
+    if (!chatView) return;
+    const stickToBottom = isNearBottom(chatView);
+    const prevScrollTop = chatView.scrollTop;
+    const lastAssistantIndex = lastAssistantIndexOf(MESSAGES);
+    chatView.innerHTML = '';
+    MESSAGES.forEach((m, idx) => {
+      chatView.appendChild(buildMessageNode(m, idx, lastAssistantIndex));
     });
-    chatView.scrollTop = chatView.scrollHeight;
+    if (stickToBottom) {
+      chatView.scrollTop = chatView.scrollHeight;
+    } else {
+      chatView.scrollTop = prevScrollTop;
+    }
   }
   function addMessage(role, text) {
     MESSAGES.push({ role, text: String(text || '').trim(), t: new Date().toISOString() });
@@ -605,12 +646,22 @@ document.addEventListener('DOMContentLoaded', () => {
     renderIfCurrent(jobId);
     return msg;
   }
-  function replaceMsgById(jobId, id, newText) {
+  function replaceMsgById(jobId, id, newText, patch = null) {
     const msgs = getMsgs(jobId);
     const i = msgs.findIndex(m => m.id === id);
     if (i !== -1) {
       msgs[i].text = newText;
+      if (patch && typeof patch === 'object') Object.assign(msgs[i], patch);
       saveMsgs(jobId, msgs);
+      if (jobId === ACTIVE_JOB && chatView) {
+        const existing = chatView.querySelector(`[data-msg-id="${id}"]`);
+        if (existing) {
+          const lastAssistantIndex = lastAssistantIndexOf(msgs);
+          const freshNode = buildMessageNode(msgs[i], i, lastAssistantIndex);
+          existing.replaceWith(freshNode);
+          return;
+        }
+      }
       renderIfCurrent(jobId);
     }
   }
@@ -641,7 +692,7 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     </div>
   `;
-    replaceMsgById(jobId, runId, thinkingHtml);
+    replaceMsgById(jobId, runId, thinkingHtml, { render: 'html' });
   }
 
 
@@ -829,10 +880,22 @@ document.addEventListener('DOMContentLoaded', () => {
     let t = String(text).replace(/\r\n/g, '\n');
     // Remove markdown bold/italics
     t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+    // Ensure "Objet:" is on its own line and separated from "Bonjour"
+    t = t.replace(/^(Objet\s*:[^\n]*)(\s+Bonjour)/i, '$1\n\nBonjour');
+    // If "Objet:" appears later in the text, pull it to the top
+    const objInline = t.match(/Objet\s*:[^\n]*/i);
+    if (objInline && !/^\s*Objet\s*:/i.test(t)) {
+      t = t.replace(objInline[0], '').trim();
+      t = `${objInline[0]}\n\n${t}`;
+    }
     // Normalize bullets to arrows
     t = t.replace(/^\s*[-*•▪]\s+/gm, '→ ');
     // Ensure arrows are on their own lines
     t = t.replace(/\s*→\s*/g, '\n→ ');
+    // Add blank line before each arrow line
+    t = t.replace(/\n(→[^\n]+)/g, '\n\n$1');
+    // Force blank lines between key sections
+    t = t.replace(/\b(Bonjour[^,\n]*,)/i, '$1\n');
     // Ensure sections are separated
     t = t.replace(/\b(Décisions\s*\/\s*points clés\s*:)/i, '\n\n$1');
     t = t.replace(/\b(Prochaines étapes\s*:)/i, '\n\n$1');
@@ -845,7 +908,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const obj = lines.splice(objIdx, 1)[0];
       lines.unshift(obj, '');
     }
-    return lines.join('\n').trim();
+    t = lines.join('\n').trim();
+    // Ensure a blank line after the subject
+    t = t.replace(/^(Objet\s*:[^\n]*)(\n(?!\n))/i, '$1\n\n');
+
+    // Ensure "Commentaire interne (non envoyé)" block exists and is separated
+    const commentLine = 'Commentaire interne (non envoyé) :';
+    const defaultComment = `${commentLine} Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions.`;
+    if (!/Commentaire interne\s*\(non envoyé\)\s*:/i.test(t)) {
+      t = `${t}\n\n---\n${defaultComment}`;
+    } else {
+      t = t.replace(/\n*\s*Commentaire interne\s*\(non envoyé\)\s*:/i, '\n\n---\n' + commentLine);
+    }
+
+    return t.trim();
+  }
+
+  function isPlainLike(text) {
+    const t = String(text || '');
+    const first = (t.trim().split('\n')[0] || '').trim();
+    return /^Objet\s*:/i.test(t) || /Pourquoi ce post\s*:/i.test(t) || (BOLD_RE.test(first) && !/[#*_]{1,}/.test(first));
   }
 
   function styleToBullets(style, lang) {
@@ -950,7 +1032,9 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Zéro emoji.`,
         `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
         `- Utilisez des lignes simples et, si besoin, préfixez les points avec "→ " (un point par ligne, ligne vide entre les points).`,
+        `- Insérez une ligne vide entre chaque section.`,
         `- Email court, crédible, actionnable.`,
+        `- L'email doit être une suite logique directe de la discussion (pas générique).`,
         `- N'inventez aucun nom de marque/entreprise/personne ; utilisez uniquement ce qui est dans le transcript.`,
         `- N'évoquez jamais Agilotext, BauerWebPro, ou tout autre produit/marque si ce n'est pas explicitement cité dans le transcript.`,
         ``,
@@ -970,7 +1054,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `→ ...`,
         ``,
         `Cordialement,`,
-        `${userName}`
+        `${userName}`,
+        ``,
+        `---`,
+        `Commentaire interne (non envoyé) : Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions.`
       ];
 
       return [
@@ -1151,9 +1238,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const prompt = buildPrompt(q);
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
-      if (isLinkedInRequest(q)) txt = postProcessLinkedIn(txt);
-      else if (isEmailRequest(q)) txt = postProcessEmail(txt);
-      replaceMsgById(jobId, runId, txt || '(réponse vide)');
+      const isLi = isLinkedInRequest(q);
+      const isMail = isEmailRequest(q);
+      if (isLi) txt = postProcessLinkedIn(txt);
+      else if (isMail) txt = postProcessEmail(txt);
+      const renderMode = (isLi || isMail) ? 'plain' : 'md';
+      replaceMsgById(jobId, runId, txt || '(réponse vide)', { render: renderMode });
       window.AgiloQuota?.afterChatSuccess?.();
     } catch (e) {
       err('flow failed', e);
@@ -1196,9 +1286,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!prompt) throw new Error('prompt vide');
 
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
+      const isMail = (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel'));
       if (isLi) txt = postProcessLinkedIn(txt);
-      else if (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel')) txt = postProcessEmail(txt);
-      replaceMsgById(jobId, runId, txt || '(réponse vide)');
+      else if (isMail) txt = postProcessEmail(txt);
+      const renderMode = (isLi || isMail) ? 'plain' : 'md';
+      replaceMsgById(jobId, runId, txt || '(réponse vide)', { render: renderMode });
       toast('Insight prêt', 'success');
     } catch (e) {
       err('hiddenAsk failed', e);
