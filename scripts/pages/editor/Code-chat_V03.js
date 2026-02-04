@@ -891,8 +891,18 @@ document.addEventListener('DOMContentLoaded', () => {
       t = t.replace(objInline[0], '').trim();
       t = `${objInline[0]}\n\n${t}`;
     }
-    // Normalize bullets to arrows
-    t = t.replace(/^\s*[-*•▪]\s+/gm, '→ ');
+    // Normalize bullets (avoid too many arrows in emails)
+    if (/prochaines\s+étapes\s*:/i.test(t)) {
+      const parts = t.split(/(Prochaines\s+étapes\s*:)/i);
+      const head = parts[0] || '';
+      const label = parts[1] || '';
+      const tail = parts.slice(2).join('') || '';
+      const headClean = head.replace(/^\s*[-*•▪]\s+/gm, ''); // no arrows before
+      const tailArrows = tail.replace(/^\s*[-*•▪]\s+/gm, '→ '); // arrows only for next steps
+      t = headClean + label + tailArrows;
+    } else {
+      t = t.replace(/^\s*[-*•▪]\s+/gm, ''); // remove bullets entirely
+    }
     // Ensure arrows are on their own lines
     t = t.replace(/\s*→\s*/g, '\n→ ');
     // Add blank line before each arrow line
@@ -1034,7 +1044,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Ne commencez jamais par "J'espère que vous allez bien" ni formules équivalentes.`,
         `- Zéro emoji.`,
         `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
-        `- Utilisez des lignes simples et, si besoin, préfixez les points avec "→ " (un point par ligne, ligne vide entre les points).`,
+        `- Utilisez des lignes simples. Évitez les flèches dans les "Décisions / points clés" (écrivez des phrases courtes, une par ligne).`,
+        `- Utilisez des flèches uniquement pour "Prochaines étapes" (max 2 lignes).`,
         `- Insérez une ligne vide entre chaque section.`,
         `- Email court, crédible, actionnable.`,
         `- L'email doit être une suite logique directe de la discussion (pas générique).`,
@@ -1049,8 +1060,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `[Contexte rapide en 1–2 lignes basé sur le transcript]`,
         ``,
         `Décisions / points clés :`,
-        `→ ...`,
-        `→ ...`,
+        `[Phrase courte ligne 1]`,
+        `[Phrase courte ligne 2]`,
         ``,
         `Prochaines étapes :`,
         `→ ...`,
