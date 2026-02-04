@@ -920,22 +920,10 @@ document.addEventListener('DOMContentLoaded', () => {
       t = t.replace(objInline[0], '').trim();
       t = `${objInline[0]}\n\n${t}`;
     }
-    // Normalize bullets (avoid too many arrows in emails)
-    if (/prochaines\s+étapes\s*:/i.test(t)) {
-      const parts = t.split(/(Prochaines\s+étapes\s*:)/i);
-      const head = parts[0] || '';
-      const label = parts[1] || '';
-      const tail = parts.slice(2).join('') || '';
-      const headClean = head.replace(/^\s*[-*•▪]\s+/gm, ''); // no arrows before
-      const tailArrows = tail.replace(/^\s*[-*•▪]\s+/gm, '→ '); // arrows only for next steps
-      t = headClean + label + tailArrows;
-    } else {
-      t = t.replace(/^\s*[-*•▪]\s+/gm, ''); // remove bullets entirely
-    }
-    // Ensure arrows are on their own lines
-    t = t.replace(/\s*→\s*/g, '\n→ ');
-    // Add blank line before each arrow line
-    t = t.replace(/\n(→[^\n]+)/g, '\n\n$1');
+    // Remove bullets/arrows entirely (emails should read like natural sentences)
+    t = t.replace(/^\s*[-*•▪]\s+/gm, '');
+    // Remove common arrow bullets (→ ➜ ➔ ➤ ➡ ▶ ► ▸ ▹ »)
+    t = t.replace(/\s*[→➜➔➤➡▶►▸▹»]\s*/g, '\n');
     // Force blank lines between key sections
     t = t.replace(/\b(Bonjour[^,\n]*,)/i, '$1\n');
     // Ensure sections are separated
@@ -943,6 +931,22 @@ document.addEventListener('DOMContentLoaded', () => {
     t = t.replace(/\b(Prochaines étapes\s*:)/i, '\n\n$1');
     t = t.replace(/\b(Cordialement,)/i, '\n\n$1');
     t = t.replace(/\n{3,}/g, '\n\n');
+
+    // Add breathing room inside key sections (one item per paragraph)
+    const spaceSection = (label) => {
+      const re = new RegExp(`(${label}\\s*:)\\s*([\\s\\S]*?)(\\n\\n|\\n---\\n|\\nCordialement,|$)`, 'i');
+      t = t.replace(re, (m, head, body, tail) => {
+        const lines = String(body || '')
+          .split('\n')
+          .map(l => l.trim())
+          .filter(Boolean);
+        if (!lines.length) return m;
+        const spaced = lines.join('\n\n');
+        return `${head}\n\n${spaced}${tail || ''}`;
+      });
+    };
+    spaceSection('Décisions\\s*\\/\\s*points clés');
+    spaceSection('Prochaines étapes');
     // Ensure "Objet :" is first line
     const lines = t.split('\n').filter(l => l.trim() !== '');
     const objIdx = lines.findIndex(l => /^objet\s*:/i.test(l.trim()));
@@ -1072,8 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Ne commencez jamais par "J'espère que vous allez bien" ni formules équivalentes.`,
         `- Zéro emoji.`,
         `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
-        `- Utilisez des lignes simples. Évitez les flèches dans les "Décisions / points clés" (écrivez des phrases courtes, une par ligne).`,
-        `- Utilisez des flèches uniquement pour "Prochaines étapes" (max 2 lignes).`,
+        `- Utilisez des lignes simples, sans flèches ni puces.`,
         `- Insérez une ligne vide entre chaque section.`,
         `- Email court, crédible, actionnable.`,
         `- L'email doit être une suite logique directe de la discussion (pas générique).`,
@@ -1092,8 +1095,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `[Phrase courte ligne 2]`,
         ``,
         `Prochaines étapes :`,
-        `→ ...`,
-        `→ ...`,
+        `[Phrase d'action 1]`,
+        `[Phrase d'action 2]`,
         ``,
         `Cordialement,`,
         `${userName}`,
