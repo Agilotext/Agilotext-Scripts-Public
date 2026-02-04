@@ -777,11 +777,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = String(s || '').toLowerCase();
     return /\blinkedin\b/.test(q) || /post\s+linkedin|linkedin\s+post/.test(q);
   }
+  function isEmailRequest(s) {
+    const q = String(s || '').toLowerCase();
+    return /\bemail\b/.test(q) || /\bmail\b/.test(q) || /\bcourriel\b/.test(q);
+  }
   function postProcessLinkedIn(text) {
     if (!text) return text;
-    let t = String(text);
+    let t = String(text).replace(/\r\n/g, '\n');
     // Remove markdown bold/italics
     t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+    // Remove obvious preamble / labels
+    t = t.replace(/^(?:\s*(voici|voilà|post\s+linkedin|linkedin\s+post|titre|accroche|hook)[^\n]*\n)+/i, '');
+
+    // Extract "Pourquoi ce post" to re-append at the end
+    let why = '';
+    t = t.replace(/\n*Pourquoi ce post\s*:\s*([^\n]*)([\s\S]*)/i, (m, p1, rest) => {
+      why = `Pourquoi ce post : ${String(p1 || '').trim()}`;
+      return rest || '';
+    });
+
     // Normalize bullets to arrows
     t = t.replace(/^\s*[-*•▪]\s+/gm, '→ ');
     // Ensure arrows are on their own lines
@@ -801,7 +815,37 @@ document.addEventListener('DOMContentLoaded', () => {
         break;
       }
     }
-    return lines.join('\n');
+    t = lines.join('\n').trim();
+
+    // Ensure "Pourquoi ce post" is last and separated
+    if (why) {
+      t = t.replace(/\n{2,}$/g, '');
+      t = `${t}\n\n${why}`;
+    }
+    return t.trim();
+  }
+  function postProcessEmail(text) {
+    if (!text) return text;
+    let t = String(text).replace(/\r\n/g, '\n');
+    // Remove markdown bold/italics
+    t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
+    // Normalize bullets to arrows
+    t = t.replace(/^\s*[-*•▪]\s+/gm, '→ ');
+    // Ensure arrows are on their own lines
+    t = t.replace(/\s*→\s*/g, '\n→ ');
+    // Ensure sections are separated
+    t = t.replace(/\b(Décisions\s*\/\s*points clés\s*:)/i, '\n\n$1');
+    t = t.replace(/\b(Prochaines étapes\s*:)/i, '\n\n$1');
+    t = t.replace(/\b(Cordialement,)/i, '\n\n$1');
+    t = t.replace(/\n{3,}/g, '\n\n');
+    // Ensure "Objet :" is first line
+    const lines = t.split('\n').filter(l => l.trim() !== '');
+    const objIdx = lines.findIndex(l => /^objet\s*:/i.test(l.trim()));
+    if (objIdx > 0) {
+      const obj = lines.splice(objIdx, 1)[0];
+      lines.unshift(obj, '');
+    }
+    return lines.join('\n').trim();
   }
 
   function styleToBullets(style, lang) {
@@ -851,27 +895,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const userUseCase = (document.querySelector('#ms-use_case')?.textContent || 'Général').trim();
 
       const linkedInSys = [
-        `Vous êtes un stratège de contenu numérique expert.`,
+        `Vous êtes un stratège de contenu LinkedIn expert.`,
         `Votre mission : Rédiger un post LinkedIn court et prêt à publier pour ${userName} (${userJob}).`,
+        `Langue : utilisez la langue du transcript ; si elle est indéterminable, utilisez la langue de la demande.`,
         ``,
         `### RÈGLES DE FORMATAGE (CRITIQUES) :`,
         `1. **RÉPONSE DIRECTE UNIQUEMENT** : Commencez directement par l'accroche. Aucun texte d'introduction.`,
-        `2. **HOOK EN GRAS UNICODE UNIQUEMENT** : La 1ère ligne doit être en gras Unicode (ex: "𝐔𝐧 𝐞𝐱𝐞𝐦𝐩𝐥𝐞..."). Interdiction de markdown. Aucun autre gras ailleurs.`,
+        `2. **HOOK EN GRAS UNICODE UNIQUEMENT** : La 1ère ligne doit être en gras Unicode (ex: "𝐄̂𝐭𝐫𝐞 𝐩𝐞𝐫𝐟𝐨𝐫𝐦𝐚𝐧𝐭"). Interdiction de markdown. Aucun autre gras ailleurs.`,
         `3. **AUCUN MARKDOWN** : Pas de titres (#), pas d'italique, pas de listes, pas de puces, pas de numérotation.`,
-        `4. **POINTS CLÉS AVEC FLÈCHES** : Un point = une ligne qui commence par "→ ". Jamais d'icône. Laisser une ligne vide entre chaque point.`,
+        `4. **POINTS CLÉS AVEC FLÈCHES** : Un point = UNE LIGNE qui commence par "→ ". Jamais d'icône. Toujours une ligne vide entre chaque flèche.`,
         `5. **FORMAT "EN ESCALIER"** : 3 à 5 paragraphes très courts, une idée par ligne. Toujours une ligne vide entre paragraphes.`,
         `6. **LONGUEUR COURTE** : Max ~900 caractères.`,
         `7. **EMOJIS** : Aucun emoji.`,
         `8. **TON** : Conversationnel, authentique, pro.`,
         `9. **SORTIE** : Donnez uniquement le post final, puis une seule ligne courte : "Pourquoi ce post : ..."`,
         ``,
-        `### CONTEXTE UTILISATEUR :`,
+        `### CONTEXTE UTILISATEUR (Memberstack) :`,
         `- Nom : ${userName}`,
-        `- Rôle : ${userJob}`,
+        `- Persona : ${userJob}`,
         `- Cas d'usage : ${userUseCase}`,
         ``,
         `Identifiez l'angle le plus pertinent à partir du transcript.`,
         `N'inventez aucun nom de marque/entreprise/personne ; n'utilisez que ce qui est dans le transcript.`,
+        `N'évoquez jamais Agilotext, BauerWebPro, ou tout autre produit/marque si ce n'est pas explicitement cité dans le transcript.`,
         `Adaptez le ton à la persona "${userJob}" et au cas d'usage "${userUseCase}".`
       ];
 
@@ -885,25 +931,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- SPECIALIZED PROMPT: EXECUTIVE EMAIL AGENT ---
     if (/email|mail|courriel/i.test(question)) {
       const userName = (document.querySelector('#ms-first-name')?.textContent || 'Professionnel').trim();
-      const userJob = (document.querySelector('#ms-persona')?.textContent || '').trim();
+      const userJob = (document.querySelector('#ms-persona')?.textContent || 'Professionnel').trim();
+      const userUseCase = (document.querySelector('#ms-use_case')?.textContent || 'Général').trim();
 
       const emailSys = [
-        `Vous êtes un Assistant Exécutif de haut niveau.`,
-        `Votre mission : Rédiger un email de suivi concis et professionnel pour ${userName}.`,
+        `Vous êtes un expert de la relation client et de la vente consultative, chargé de rédiger des emails de suivi clairs, fiables et orientés action.`,
+        `Votre mission : produire un email de suivi concis et professionnel pour ${userName}.`,
+        `Langue : utilisez la langue du transcript ; si elle est indéterminable, utilisez la langue de la demande.`,
+        ``,
+        `### CONTEXTE UTILISATEUR (Memberstack) :`,
+        `- Nom : ${userName}`,
+        `- Persona : ${userJob}`,
+        `- Cas d'usage : ${userUseCase}`,
         ``,
         `### RÈGLES DE RÉDACTION (STRICTES) :`,
         `- Commencez directement par "Objet :".`,
+        `- Ne commencez jamais par "J'espère que vous allez bien" ni formules équivalentes.`,
         `- Zéro emoji.`,
         `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
-        `- Utilisez des lignes simples et, si besoin, préfixez les points avec "→ " (un point par ligne).`,
-        `- Email court et actionnable.`,
+        `- Utilisez des lignes simples et, si besoin, préfixez les points avec "→ " (un point par ligne, ligne vide entre les points).`,
+        `- Email court, crédible, actionnable.`,
+        `- N'inventez aucun nom de marque/entreprise/personne ; utilisez uniquement ce qui est dans le transcript.`,
+        `- N'évoquez jamais Agilotext, BauerWebPro, ou tout autre produit/marque si ce n'est pas explicitement cité dans le transcript.`,
         ``,
-        `Structure attendue :`,
-        `Objet : ...`,
+        `### STRUCTURE ATTENDUE (obligatoire) :`,
+        `Objet : [sujet clair et précis]`,
         ``,
         `Bonjour [Prénom/équipe],`,
         ``,
-        `[Contexte rapide en 1–2 lignes]`,
+        `[Contexte rapide en 1–2 lignes basé sur le transcript]`,
         ``,
         `Décisions / points clés :`,
         `→ ...`,
@@ -1096,6 +1152,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const prompt = buildPrompt(q);
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
       if (isLinkedInRequest(q)) txt = postProcessLinkedIn(txt);
+      else if (isEmailRequest(q)) txt = postProcessEmail(txt);
       replaceMsgById(jobId, runId, txt || '(réponse vide)');
       window.AgiloQuota?.afterChatSuccess?.();
     } catch (e) {
@@ -1140,6 +1197,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
       if (isLi) txt = postProcessLinkedIn(txt);
+      else if (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel')) txt = postProcessEmail(txt);
       replaceMsgById(jobId, runId, txt || '(réponse vide)');
       toast('Insight prêt', 'success');
     } catch (e) {
