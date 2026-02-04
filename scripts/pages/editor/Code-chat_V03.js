@@ -518,20 +518,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
-      const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(m.text) ? 'plain' : 'md'));
+      // Re-apply email formatting on display if needed (legacy messages or older prompts)
+      const looksLikeEmail = /^Objet\s*:/i.test(String(m.text || '').trim());
+      const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
+      const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (renderMode === 'plain') {
-        bubbleDiv.textContent = m.text;
+        bubbleDiv.textContent = displayText;
         bubbleDiv.style.whiteSpace = 'pre-wrap';
         bubbleDiv.style.lineHeight = '1.6';
       } else if (renderMode === 'html') {
-        bubbleDiv.innerHTML = m.text;
+        bubbleDiv.innerHTML = displayText;
       } else {
-        bubbleDiv.innerHTML = mdToHtml(m.text);
+        bubbleDiv.innerHTML = mdToHtml(displayText);
         bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
       }
 
-      if (!isThinking && !m.text.includes('réfléchit') && !m.text.includes('⚠️') && m.text.length > 10) {
+      if (!isThinking && !displayText.includes('réfléchit') && !displayText.includes('⚠️') && displayText.length > 10) {
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'msg-actions';
         actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
