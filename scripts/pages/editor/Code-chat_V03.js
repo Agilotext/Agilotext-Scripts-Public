@@ -835,6 +835,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = String(s || '').toLowerCase();
     return /\bemail\b/.test(q) || /\bmail\b/.test(q) || /\bcourriel\b/.test(q);
   }
+  function isExplicitLinkedIn(s) {
+    const q = String(s || '').trim().toLowerCase();
+    return /^(post\s+linkedin|linkedin\s+post|linkedin)\b/.test(q) || /\b(r[eé]dige|g[eé]n[eé]re|cr[eé]e)\b.*\bpost\s+linkedin\b/.test(q);
+  }
+  function isExplicitEmail(s) {
+    const q = String(s || '').trim().toLowerCase();
+    return /^(email|mail|courriel)\b/.test(q) || /\b(r[eé]dige|g[eé]n[eé]re|cr[eé]e)\b.*\b(email|mail|courriel)\b/.test(q);
+  }
+  function looksLikeEmailThread(s) {
+    const q = String(s || '');
+    const hasHeaders = /(^|\n)\s*(de|from|à|to|objet|subject|envoy[eé]|sent)\s*:/i.test(q);
+    const hasGreeting = /(^|\n)\s*(bonjour|bonsoir|hello|hi)\b/i.test(q);
+    const hasSignature = /(^|\n)\s*(cordialement|bien\s+à\s+vous|sinc[eè]res?\s+salutations|best\s+regards)\b/i.test(q);
+    return (q.length > 200 && (hasHeaders || hasGreeting || hasSignature));
+  }
+  const LAST_INTENT_KEY = 'agilo:last_intent';
+  function getLastIntent() {
+    return (window.__agiloLastIntent || sessionStorage.getItem(LAST_INTENT_KEY) || '').trim();
+  }
+  function setLastIntent(v) {
+    window.__agiloLastIntent = v || '';
+    try { sessionStorage.setItem(LAST_INTENT_KEY, v || ''); } catch { }
+  }
+  function resolveIntent(question, hint) {
+    if (hint === 'linkedin' || hint === 'email') return hint;
+    if (isExplicitEmail(question)) return 'email';
+    if (isExplicitLinkedIn(question)) return 'linkedin';
+    return null;
+  }
   function postProcessLinkedIn(text) {
     if (!text) return text;
     let t = String(text).replace(/\r\n/g, '\n');
@@ -965,7 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ================== PROMPT (question libre) ================== */
-  function buildPrompt(question) {
+  function buildPrompt(question, intentHint = null) {
     const lang = detectLang(question);
     const turns = [];
     for (let i = MESSAGES.length - 1; i >= 0 && turns.length < MAX_HISTORY_TURNS * 2; i--) {
@@ -982,9 +1011,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- SPECIALIZED PROMPT: LINKEDIN STRATEGY ---
-    const qLower = String(question || '').toLowerCase();
-    const isLinkedIn = /\blinkedin\b/.test(qLower) || /post\s+linkedin|linkedin\s+post/.test(qLower);
-    if (isLinkedIn) {
+    const intent = resolveIntent(question, intentHint);
+    if (intent === 'linkedin') {
       const userName = (document.querySelector('#ms-first-name')?.textContent || 'Professionnel').trim();
       const userJob = (document.querySelector('#ms-persona')?.textContent || 'Expert').trim();
       const userUseCase = (document.querySelector('#ms-use_case')?.textContent || 'Général').trim();
@@ -1024,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- SPECIALIZED PROMPT: EXECUTIVE EMAIL AGENT ---
-    if (/email|mail|courriel/i.test(question)) {
+    if (intent === 'email') {
       const userName = (document.querySelector('#ms-first-name')?.textContent || 'Professionnel').trim();
       const userJob = (document.querySelector('#ms-persona')?.textContent || 'Professionnel').trim();
       const userUseCase = (document.querySelector('#ms-use_case')?.textContent || 'Général').trim();
@@ -1250,13 +1278,25 @@ document.addEventListener('DOMContentLoaded', () => {
     input.value = '';
 
     try {
-      const prompt = buildPrompt(q);
+      const lastIntent = getLastIntent();
+      let intentHint = null;
+      // If last intent was email and user is providing context, keep email mode
+      if (lastIntent === 'email' && !isExplicitLinkedIn(q)) {
+        if (/^oui\b|voici\b|ci[-\s]?dessous\b|voilà\b/i.test(q) || looksLikeEmailThread(q)) {
+          intentHint = 'email';
+        }
+      }
+      // If user explicitly asks for LinkedIn, override
+      if (isExplicitLinkedIn(q)) intentHint = 'linkedin';
+      if (isExplicitEmail(q)) intentHint = 'email';
+
+      const prompt = buildPrompt(q, intentHint);
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
-      const isLi = isLinkedInRequest(q);
-      const isMail = isEmailRequest(q);
-      if (isLi) txt = postProcessLinkedIn(txt);
-      else if (isMail) txt = postProcessEmail(txt);
-      const renderMode = (isLi || isMail) ? 'plain' : 'md';
+      const intentUsed = resolveIntent(q, intentHint);
+      if (intentUsed === 'linkedin') txt = postProcessLinkedIn(txt);
+      else if (intentUsed === 'email') txt = postProcessEmail(txt);
+      const renderMode = (intentUsed === 'linkedin' || intentUsed === 'email') ? 'plain' : 'md';
+      if (intentUsed) setLastIntent(intentUsed);
       replaceMsgById(jobId, runId, txt || '(réponse vide)', { render: renderMode });
       window.AgiloQuota?.afterChatSuccess?.();
     } catch (e) {
@@ -1295,12 +1335,12 @@ document.addEventListener('DOMContentLoaded', () => {
       let prompt = String(hiddenPrompt || '').trim();
       const lbl = String(label || '').toLowerCase();
       const isLi = lbl.includes('linkedin');
-      if (isLi) prompt = buildPrompt('Post LinkedIn');
-      else if (lbl.includes('email') || lbl.includes('mail')) prompt = buildPrompt('Email suivi');
+      const isMail = (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel'));
+      if (isLi) { prompt = buildPrompt('Post LinkedIn', 'linkedin'); setLastIntent('linkedin'); }
+      else if (isMail) { prompt = buildPrompt('Email suivi', 'email'); setLastIntent('email'); }
       if (!prompt) throw new Error('prompt vide');
 
       let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3)));
-      const isMail = (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel'));
       if (isLi) txt = postProcessLinkedIn(txt);
       else if (isMail) txt = postProcessEmail(txt);
       const renderMode = (isLi || isMail) ? 'plain' : 'md';
