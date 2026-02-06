@@ -1,7 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   const DBG = !!window.AGILO_DEBUG;
 
-  const MAX_RECORDING_MS = 2 * 60 * 60 * 1000; // Pro: 2 heures
+  const MAX_RECORDING_MS = null;
   const MIN_BLOB_BYTES   = 2048;
 
   const MIC_CONSTRAINTS_BASE = {
