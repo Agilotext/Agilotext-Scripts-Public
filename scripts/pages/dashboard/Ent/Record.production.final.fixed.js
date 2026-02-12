@@ -182,56 +182,51 @@
   const MAX_RECORDING_MS = null;
   const MIN_BLOB_BYTES = 2048;
 
+  // ============================================
+  // CONFIGURATION "DIARIZATION-FIRST"
+  // Objectif : Maximiser la séparation des locuteurs pour la diarization
+  // - Pas de ducking (préserve les chevauchements)
+  // - Compression très légère (préserve les différences entre voix)
+  // - AGC modéré (évite le pompage qui lisse les voix)
+  // ============================================
   const MIC_CONSTRAINTS_BASE = {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: false, // Désactivé car on a un AGC custom (évite double AGC / pompage)
+    echoCancellation: false,  // Désactivé pour préserver les caractéristiques brutes de chaque voix
+    noiseSuppression: false,   // Désactivé pour préserver les différences entre locuteurs
+    autoGainControl: false,   // Désactivé car on a un AGC custom (évite double AGC / pompage)
     channelCount: 1,
     sampleRate: 48000
   };
 
-  // ============================================
-  // CONFIGURATION OPTIMALE POUR DIARIZATION
-  // Objectif : capturer toutes les voix équitablement pour maximiser la diarization
-  // ============================================
-  const MIX_PREGAIN_DB = 2.5; // Gain global modéré pour préserver la dynamique
+  const MIX_PREGAIN_DB = 0.0;  // Pas de gain global pour préserver la dynamique naturelle
 
-  const MIC_BASE_GAIN = 2.4;  // Gain micro élevé pour votre voix (optimisé pour diarization)
-  const SYS_BASE_GAIN = 1.05; // Gain système légèrement au-dessus de 1.0 pour équilibrer avec le micro
+  const MIC_BASE_GAIN = 2.0;   // Gain micro équilibré
+  const SYS_BASE_GAIN = 1.0;   // Gain système à l'unité pour équilibre parfait
 
   const AGC_ENABLED = true;
-  const AGC_TARGET = 0.26;    // Cible RMS optimale pour équilibre micro/système
-  const AGC_SMOOTH = 0.022;   // Réactif mais doux pour éviter les variations brusques
-  const AGC_MIN_GAIN = 0.75;  // Permet de baisser si trop fort
-  const AGC_MAX_GAIN = 6.0;   // Amplification max élevée pour voix faible (diarization)
+  const AGC_TARGET = 0.20;     // Cible RMS plus basse pour préserver la dynamique
+  const AGC_SMOOTH = 0.01;     // Très doux pour éviter les variations brusques
+  const AGC_MIN_GAIN = 0.8;    // Permet de baisser si trop fort
+  const AGC_MAX_GAIN = 3.0;    // Amplification max modérée (évite le pompage qui nuit à la séparation)
 
   const MIC_COMP = {
-    threshold: -22,   // Compression douce pour préserver les différences entre locuteurs
-    knee: 16,         // Transition très douce
-    ratio: 2.0,       // Compression légère pour préserver la dynamique (critique pour diarization)
-    attack: 0.005,    // Attack modéré
-    release: 0.20     // Release long pour naturel et transitions douces
+    threshold: -16,   // Compression très légère pour préserver les différences entre locuteurs
+    knee: 18,         // Transition très douce
+    ratio: 1.4,       // Compression minimale (critique pour diarization : préserve les différences)
+    attack: 0.01,     // Attack modéré
+    release: 0.25     // Release long pour naturel et transitions douces
   };
 
   const MIX_LIMITER = {
-    threshold: -2.5,  // Limite douce pour éviter la distorsion sans écraser la dynamique
-    knee: 8,
-    ratio: 5,
-    attack: 0.003,
-    release: 0.12     // Release modéré pour transitions naturelles
+    threshold: -1.0,  // Limite douce pour éviter la distorsion sans écraser la dynamique
+    knee: 2,
+    ratio: 2,         // Ratio faible pour préserver la dynamique
+    attack: 0.005,
+    release: 0.08     // Release rapide pour transitions naturelles
   };
 
-  // Ducking système TRÈS LÉGER : baisse légèrement le système quand vous parlez
-  // IMPORTANT : Pour la diarization multi-participants, on veut entendre TOUTES les voix équitablement
-  // Le ducking est activé mais très léger (85%) pour ne pas masquer les autres participants
-  const DUCKING_ENABLED = true;
-  const DUCK_TRIGGER_RMS = 0.04; // Seuil légèrement plus élevé pour éviter les déclenchements intempestifs
-  const DUCK_SYS_FACTOR = 0.85;  // Baisse seulement à 85% (au lieu de 60%) pour préserver les autres voix
-  const DUCK_ATTACK = 0.10;      // Attack doux pour transitions naturelles
-  const DUCK_RELEASE = 0.04;     // Release rapide pour ne pas masquer les transitions entre locuteurs
-  
-  // NOTE : Si vous trouvez que le ducking masque encore les autres voix, 
-  // vous pouvez désactiver en mettant DUCKING_ENABLED = false
+  // Ducking DÉSACTIVÉ : pour la diarization, on veut capturer TOUTES les voix simultanément
+  // Le ducking pénalise les chevauchements (quand tu parles, les autres baissent)
+  const DUCKING_ENABLED = false;
 
   /* --------- DOM --------- */
   const startButton = document.querySelector('.startrecording');
@@ -494,13 +489,8 @@
           micGainNode.gain.value = g + (desired - g) * AGC_SMOOTH;
         }
 
-        // Ducking système : baisse le son système quand vous parlez (pour optimiser la diarization)
-        if (sysGainNode && DUCKING_ENABLED) {
-          const speaking = rms >= DUCK_TRIGGER_RMS;
-          const targetSys = speaking ? SYS_BASE_GAIN * DUCK_SYS_FACTOR : SYS_BASE_GAIN;
-          const alpha = speaking ? DUCK_ATTACK : DUCK_RELEASE;
-          sysGainNode.gain.value = sysGainNode.gain.value + (targetSys - sysGainNode.gain.value) * alpha;
-        }
+        // Ducking DÉSACTIVÉ pour la diarization : on veut capturer toutes les voix simultanément
+        // (Le ducking pénalise les chevauchements et nuit à la séparation des locuteurs)
       } catch (e) {
         warn('Erreur AGC:', e);
       }
