@@ -1,197 +1,7 @@
 document.addEventListener('DOMContentLoaded', function () {
   const DBG = !!window.AGILO_DEBUG;
-  const BACKUP_META_KEY = 'agilo:record:backup-meta-v1';
-  const HARD_MAX_RECORDING_MS = 4 * 60 * 60 * 1000; // hard cap sécurité (4h)
-  const CHUNK_TIMESLICE_MS = 1000; // réduit la pression CPU/IDB vs 250ms
-  const MAX_BACKUP_CHUNKS = 14400; // ~4h à 1 chunk/s
 
-  // --- MODULES FIABILITÉ (INJECTÉS V2) ---
-  const WakeLockManager = {
-    lock: null,
-    async request() {
-      if ('wakeLock' in navigator) {
-        try {
-          this.lock = await navigator.wakeLock.request('screen');
-          if (DBG) console.log('[WakeLock] Acquired');
-        } catch (e) { if (DBG) console.warn('[WakeLock] Error:', e); }
-      }
-    },
-    async release() {
-      if (this.lock) {
-        try { await this.lock.release(); } catch (e) { }
-        this.lock = null;
-      }
-    }
-  };
-
-  const BackupManager = {
-    db: null,
-    DB_NAME: 'AgilotextRecDB',
-    STORE_NAME: 'chunks',
-    MAX_ITEMS: MAX_BACKUP_CHUNKS,
-    _saveCount: 0,
-    async open() {
-      if (this.db) return this.db;
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(this.DB_NAME, 1);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => { this.db = req.result; resolve(this.db); };
-        req.onupgradeneeded = (e) => {
-          if (!e.target.result.objectStoreNames.contains(this.STORE_NAME)) {
-            e.target.result.createObjectStore(this.STORE_NAME, { autoIncrement: true });
-          }
-        };
-      });
-    },
-    getMeta() {
-      try {
-        const raw = localStorage.getItem(BACKUP_META_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    },
-    setMeta(meta) {
-      try {
-        localStorage.setItem(BACKUP_META_KEY, JSON.stringify(meta || {}));
-      } catch (e) {
-        if (DBG) console.warn('[Backup] setMeta failed:', e);
-      }
-    },
-    clearMeta() {
-      try { localStorage.removeItem(BACKUP_META_KEY); } catch { }
-    },
-    async saveChunk(blob, sessionId) {
-      if (blob.size === 0) return;
-      try {
-        await this.open();
-        this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).add({
-          timestamp: Date.now(),
-          sessionId: sessionId || null,
-          mimeType: blob.type || '',
-          size: blob.size,
-          blob: blob
-        });
-        this._saveCount += 1;
-        if (this._saveCount % 30 === 0) {
-          this.prune().catch((e) => { if (DBG) console.warn('[Backup] Prune failed:', e); });
-        }
-      } catch (e) { if (DBG) console.warn('[Backup] Save failed:', e); }
-    },
-    async getAllChunks(sessionId = null) {
-      await this.open();
-      return new Promise((resolve, reject) => {
-        const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).getAll();
-        req.onsuccess = () => {
-          const rows = Array.isArray(req.result) ? req.result : [];
-          const filtered = sessionId ? rows.filter(r => r.sessionId === sessionId) : rows;
-          filtered.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          resolve(filtered.map(r => r.blob));
-        };
-        req.onerror = () => reject(req.error);
-      });
-    },
-    async count() {
-      try {
-        await this.open();
-        return new Promise(resolve => {
-          const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).count();
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => resolve(0);
-        });
-      } catch { return 0; }
-    },
-    async prune(maxItems = this.MAX_ITEMS) {
-      await this.open();
-      const total = await this.count();
-      if (!Number.isFinite(total) || total <= maxItems) return;
-      const toDelete = total - maxItems;
-      return new Promise((resolve, reject) => {
-        const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-        const store = tx.objectStore(this.STORE_NAME);
-        let deleted = 0;
-        const cursorReq = store.openCursor();
-        cursorReq.onerror = () => reject(cursorReq.error);
-        cursorReq.onsuccess = () => {
-          const cursor = cursorReq.result;
-          if (!cursor || deleted >= toDelete) return;
-          cursor.delete();
-          deleted += 1;
-          cursor.continue();
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    },
-    async clear(sessionId = null) {
-      try {
-        await this.open();
-        if (!sessionId) {
-          await new Promise((resolve, reject) => {
-            const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-            const req = tx.objectStore(this.STORE_NAME).clear();
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
-          });
-          this.clearMeta();
-        } else {
-          await new Promise((resolve, reject) => {
-            const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-            const store = tx.objectStore(this.STORE_NAME);
-            const cursorReq = store.openCursor();
-            cursorReq.onerror = () => reject(cursorReq.error);
-            cursorReq.onsuccess = () => {
-              const cursor = cursorReq.result;
-              if (!cursor) return;
-              const value = cursor.value;
-              if (value && value.sessionId === sessionId) cursor.delete();
-              cursor.continue();
-            };
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-          });
-          const meta = this.getMeta();
-          if (meta && meta.sessionId === sessionId) this.clearMeta();
-        }
-        this._saveCount = 0;
-      } catch (e) {
-        if (DBG) console.warn('[Backup] Clear failed:', e);
-      }
-    }
-  };
-
-  const Reliability = {
-    heartbeatInterval: null, watchdogInterval: null, lastChunkTime: 0, lastTick: 0,
-    start(mediaRecorder) {
-      this.lastTick = Date.now();
-      this.lastChunkTime = Date.now();
-      this.heartbeatInterval = setInterval(() => {
-        const now = Date.now();
-        if (now - this.lastTick > 5000) { // Gap > 5s (Veille)
-          console.warn('[Reliability] System suspended for', now - this.lastTick, 'ms');
-          WakeLockManager.request(); // Re-acquire lock
-          if (mediaRecorder && mediaRecorder.state === 'recording') {
-            try { mediaRecorder.requestData(); } catch (e) { }
-          }
-        }
-        this.lastTick = now;
-      }, 1000);
-      this.watchdogInterval = setInterval(() => {
-        if (mediaRecorder && mediaRecorder.state === 'recording' && (Date.now() - this.lastChunkTime > 4000)) {
-          console.warn('[Reliability] Watchdog: No data for 4s. Forcing requestData.');
-          try { mediaRecorder.requestData(); } catch (e) { }
-        }
-      }, 2000);
-    },
-    notifyChunk() { this.lastChunkTime = Date.now(); },
-    stop() { clearInterval(this.heartbeatInterval); clearInterval(this.watchdogInterval); }
-  };
-  // --- FIN MODULES FIABILITÉ ---
-
-  const cfgRecordingMs = Number(window.AGILO_MAX_RECORDING_MS);
-  const MAX_RECORDING_MS = Number.isFinite(cfgRecordingMs) && cfgRecordingMs > 0
-    ? cfgRecordingMs
-    : HARD_MAX_RECORDING_MS;
+  const MAX_RECORDING_MS = null;
   const MIN_BLOB_BYTES = 2048;
 
   const MIC_CONSTRAINTS_BASE = {
@@ -268,6 +78,30 @@ document.addEventListener('DOMContentLoaded', function () {
   let clipActive = false;
   let clipStartTs = 0;
 
+  // Détection de silence prolongé
+  let silenceStartTime = null;
+  const SILENCE_THRESHOLD = 0.02; // RMS minimum pour considérer comme "son" (2%)
+  const SILENCE_WARNING_MS = 2 * 60 * 1000; // 2 minutes avant avertissement
+  const SILENCE_AUTO_STOP_MS = 15 * 60 * 1000; // 15 minutes avant arrêt automatique
+  let silenceWarningShown = false;
+  let silenceAutoStopWarned = false;
+  let silenceStopTriggered = false; // Verrou pour éviter les déclenchements multiples
+
+  // Exposer les variables de silence sur window pour le debug
+  window.AGILO_SILENCE_DEBUG = {
+    getState: () => ({
+      silenceStartTime,
+      SILENCE_THRESHOLD,
+      SILENCE_WARNING_MS,
+      SILENCE_AUTO_STOP_MS,
+      silenceWarningShown,
+      silenceAutoStopWarned,
+      lastMeterLevel,
+      isRecording: mediaRecorder && mediaRecorder.state === 'recording',
+      silenceDuration: silenceStartTime ? performance.now() - silenceStartTime : 0
+    })
+  };
+
   // Exposer les stats audio pour debug
   window.AGILO_AUDIO_DEBUG = {
     getStats: () => ({
@@ -275,8 +109,15 @@ document.addEventListener('DOMContentLoaded', function () {
       agcEnabled: AGC_ENABLED,
       mimeType: mediaRecorder?.mimeType,
       audioContextState: audioContext?.state,
-      chunks: audioChunks.length
-    })
+      chunks: audioChunks.length,
+      backupSessionId: backupSessionId,
+      suspensionDetected: suspensionDetected,
+      totalSuspensionMs: totalSuspensionMs,
+      wakeLockActive: !!wakeLockSentinel
+    }),
+    recoverBackup: null,  // Set dynamically by checkForRecovery
+    clearBackup: null,    // Set dynamically by checkForRecovery
+    backupInfo: null      // Set dynamically by checkForRecovery
   };
 
   let micSourceNode = null;
@@ -296,30 +137,43 @@ document.addEventListener('DOMContentLoaded', function () {
   let lastMicDeviceId = null;
   let screenVideoTrack = null; // Pour pouvoir retirer le listener si besoin
   let onScreenEnded = null; // Handler nommé pour pouvoir le retirer
-  let currentBackupSessionId = null;
-  let pendingShareMode = false;
-  let initiateInProgress = false;
 
+  let alertedNoSystemAudio = false;
   let stopInProgress = false; // Flag pour éviter les doubles clics "Stop"
+
+  // [NEW] Wake Lock
+  let wakeLockSentinel = null;
+
+  // [NEW] Heartbeat / détection veille
+  let heartbeatInterval = null;
+  let lastHeartbeatTs = 0;
+  const HEARTBEAT_INTERVAL_MS = 2000;
+  const HEARTBEAT_GAP_THRESHOLD_MS = 5000; // >5s = suspension probable
+
+  // [NEW] Chunk watchdog
+  let lastChunkTs = 0;
+  let chunkWatchdogInterval = null;
+  let activeTimeslice = 250;
+  const CHUNK_WATCHDOG_MULTIPLIER = 3;
+
+  // [NEW] IndexedDB backup
+  const IDB_NAME = 'agilo_recording_backup';
+  const IDB_VERSION = 1;
+  const IDB_STORE = 'chunks';
+  let backupSessionId = null;
+
+  // [NEW] Suspension recovery
+  let suspensionDetected = false;
+  let totalSuspensionMs = 0;
+
+  // [NEW] Tab title
+  const originalDocTitle = document.title;
 
   const log = (...a) => { if (DBG) console.log('[rec]', ...a); };
   const warn = (...a) => { if (DBG) console.warn('[rec]', ...a); };
   const err = (...a) => { console.error('[rec]', ...a); };
 
   const dbToGain = (db) => Math.pow(10, db / 20);
-
-  function startThroughWebflow(shareScreen) {
-    pendingShareMode = !!shareScreen;
-    if (startButton) {
-      try {
-        startButton.click(); // conserve les interactions Webflow liées à .startrecording
-        return;
-      } catch (e) {
-        warn('startButton.click() failed, fallback direct:', e);
-      }
-    }
-    initiateRecording(pendingShareMode);
-  }
 
   /* =========================
      DÉTECTION NAVIGATEUR / MOBILE
@@ -330,6 +184,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function isIOS() {
     return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  }
+
+  function isSafari() {
+    return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
   }
 
   function isFirefox() {
@@ -432,6 +290,10 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(() => hint.remove(), 8000);
   }
 
+  /* =========================
+     Gestion erreurs (comme ancien script)
+     ========================= */
+
   /* ---------------- VU-mètre ---------------- */
   function startLevelMeter() {
     if (!audioContext || !levelFill || !meterAnalyser || !meterData) return;
@@ -451,6 +313,9 @@ document.addEventListener('DOMContentLoaded', function () {
           sum += v * v;
         }
         const rms = Math.sqrt(sum / meterData.length);
+
+        // Détection de silence prolongé
+        checkSilence(rms);
 
         const BOOST = 4;
         const rawLevel = Math.min(1, rms * BOOST);
@@ -492,6 +357,493 @@ document.addEventListener('DOMContentLoaded', function () {
     meterAnalyser = null;
     meterData = null;
     lastMeterLevel = 0;
+    // Réinitialiser la détection de silence
+    silenceStartTime = null;
+    silenceWarningShown = false;
+    silenceAutoStopWarned = false;
+  }
+
+  /* ---------------- Forcer l'attention de l'utilisateur ---------------- */
+  let titleBlinkInterval = null;
+  const originalTitle = document.title;
+
+  function forcePageFocus(message) {
+    // Changer le titre de l'onglet pour attirer l'attention
+    if (titleBlinkInterval) clearInterval(titleBlinkInterval);
+
+    let blinkCount = 0;
+    const maxBlinks = 20; // Clignoter pendant 10 secondes (20 * 500ms)
+
+    titleBlinkInterval = setInterval(() => {
+      if (blinkCount >= maxBlinks) {
+        clearInterval(titleBlinkInterval);
+        titleBlinkInterval = null;
+        document.title = originalTitle;
+        return;
+      }
+      document.title = blinkCount % 2 === 0 ? '⚠️ ATTENTION - ' + message : originalTitle;
+      blinkCount++;
+    }, 500);
+
+    // Essayer de forcer le focus de la fenêtre
+    try {
+      window.focus();
+      if (document.hasFocus && !document.hasFocus()) {
+        window.focus();
+      }
+    } catch (e) {
+      warn('Impossible de forcer le focus:', e);
+    }
+
+    // Utiliser l'API Notification si disponible et autorisée
+    if ('Notification' in window) {
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification('⚠️ Attention - Enregistrement', {
+            body: message,
+            icon: '/favicon.ico',
+            tag: 'silence-warning',
+            requireInteraction: true
+          });
+        } catch (e) {
+          warn('Erreur Notification:', e);
+        }
+      } else if (Notification.permission === 'default') {
+        // Demander la permission (mais seulement une fois)
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            try {
+              new Notification('⚠️ Attention - Enregistrement', {
+                body: message,
+                icon: '/favicon.ico',
+                tag: 'silence-warning',
+                requireInteraction: true
+              });
+            } catch (e) {
+              warn('Erreur Notification:', e);
+            }
+          }
+        });
+      }
+    }
+  }
+
+  function stopTitleBlink() {
+    if (titleBlinkInterval) {
+      clearInterval(titleBlinkInterval);
+      titleBlinkInterval = null;
+      document.title = originalTitle;
+    }
+  }
+
+  /* ================ [NEW] WAKE LOCK ================ */
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) { warn('Wake Lock API non supportée'); return; }
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      log('Wake Lock acquis');
+      wakeLockSentinel.addEventListener('release', () => {
+        log('Wake Lock relâché');
+      });
+    } catch (e) {
+      warn('Wake Lock refusé:', e);
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLockSentinel) {
+      try { await wakeLockSentinel.release(); } catch (e) { warn('Erreur release Wake Lock:', e); }
+      wakeLockSentinel = null;
+    }
+  }
+
+  /* ================ [NEW] HEARTBEAT / DÉTECTION VEILLE ================ */
+  function startHeartbeat() {
+    lastHeartbeatTs = Date.now();
+    suspensionDetected = false;
+    totalSuspensionMs = 0;
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+    heartbeatInterval = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastHeartbeatTs;
+
+      if (gap > HEARTBEAT_GAP_THRESHOLD_MS) {
+        warn('⚠️ Suspension détectée: gap de', gap, 'ms (' + Math.round(gap / 1000) + 's)');
+        suspensionDetected = true;
+        totalSuspensionMs += gap - HEARTBEAT_INTERVAL_MS;
+        handleSuspendRecovery(gap);
+      }
+
+      lastHeartbeatTs = now;
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null; }
+  }
+
+  function handleSuspendRecovery(gapMs) {
+    const gapSec = Math.round(gapMs / 1000);
+    const gapMin = Math.floor(gapSec / 60);
+    const gapSecRem = gapSec % 60;
+
+    // Tenter de reprendre AudioContext
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().then(() => {
+        log('AudioContext repris après suspension');
+      }).catch(e => {
+        warn('Échec resume AudioContext après suspension:', e);
+      });
+    }
+
+    // Tenter de flush les données pendantes
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      try { mediaRecorder.requestData(); } catch (e) {
+        warn('Erreur requestData après suspension:', e);
+      }
+    }
+
+    // Si MediaRecorder est devenu inactive = l'enregistrement est mort
+    if (mediaRecorder && mediaRecorder.state === 'inactive') {
+      err('MediaRecorder devenu inactive après suspension !');
+      forcePageFocus('Enregistrement interrompu par la veille');
+      alert('⚠️ L\'enregistrement a été interrompu par la mise en veille de votre ordinateur.\n\nLes données enregistrées avant la mise en veille ont été sauvegardées localement.\n\nDurée de la coupure : ' + (gapMin > 0 ? gapMin + ' min ' : '') + gapSecRem + ' s');
+      return;
+    }
+
+    // Ré-acquérir le Wake Lock (il est perdu pendant la veille)
+    requestWakeLock();
+
+    // Avertir l'utilisateur si coupure significative (> 30s)
+    const timeStr = gapMin > 0 ? gapMin + ' min ' + gapSecRem + ' s' : gapSec + ' s';
+    if (gapMs > 30000) {
+      forcePageFocus('Veille détectée - ' + timeStr);
+      alert('⚠️ Votre ordinateur s\'est mis en veille pendant ' + timeStr + '.\n\nL\'enregistrement a pu être affecté. Les données avant la coupure sont sauvegardées.\n\n💡 Pour éviter ce problème :\n- Gardez votre ordinateur branché\n- Ne fermez pas l\'écran\n- Vérifiez les réglages d\'économie d\'énergie');
+    }
+  }
+
+  /* ================ [NEW] CHUNK WATCHDOG ================ */
+  function startChunkWatchdog(timesliceMs) {
+    lastChunkTs = Date.now();
+    if (chunkWatchdogInterval) clearInterval(chunkWatchdogInterval);
+
+    const threshold = timesliceMs * CHUNK_WATCHDOG_MULTIPLIER;
+
+    chunkWatchdogInterval = setInterval(() => {
+      if (!mediaRecorder || mediaRecorder.state !== 'recording') return;
+
+      const elapsed = Date.now() - lastChunkTs;
+      if (elapsed > threshold) {
+        warn('Chunk watchdog: aucun chunk depuis', elapsed, 'ms (seuil:', threshold, 'ms)');
+        try {
+          mediaRecorder.requestData();
+          log('requestData() forcé par watchdog');
+        } catch (e) {
+          warn('Erreur requestData watchdog:', e);
+        }
+      }
+    }, timesliceMs * 2);
+  }
+
+  function stopChunkWatchdog() {
+    if (chunkWatchdogInterval) { clearInterval(chunkWatchdogInterval); chunkWatchdogInterval = null; }
+  }
+
+  /* ================ [NEW] INDEXEDDB BACKUP ================ */
+  function openBackupDB() {
+    return new Promise((resolve, reject) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => { warn('IndexedDB open error:', req.error); reject(req.error); };
+      } catch (e) {
+        warn('IndexedDB non disponible:', e);
+        reject(e);
+      }
+    });
+  }
+
+  async function saveChunkToBackup(blob) {
+    if (!backupSessionId) return;
+    try {
+      const db = await openBackupDB();
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).add({
+        sessionId: backupSessionId,
+        blob: blob,
+        timestamp: Date.now()
+      });
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    } catch (e) {
+      warn('Erreur sauvegarde chunk IndexedDB:', e);
+    }
+  }
+
+  async function startBackupSession() {
+    backupSessionId = 'rec_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    try {
+      const db = await openBackupDB();
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).add({
+        sessionId: backupSessionId,
+        type: 'session_start',
+        startTime: Date.now(),
+        blob: null
+      });
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+      log('Backup session démarrée:', backupSessionId);
+    } catch (e) {
+      warn('Erreur démarrage backup session:', e);
+      backupSessionId = null;
+    }
+  }
+
+  async function clearBackupSession() {
+    if (!backupSessionId) return;
+    try {
+      const db = await openBackupDB();
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      const store = tx.objectStore(IDB_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => {
+        const records = req.result;
+        records.forEach(r => {
+          if (r.sessionId === backupSessionId) store.delete(r.id);
+        });
+      };
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+      log('Backup session nettoyée:', backupSessionId);
+      backupSessionId = null;
+    } catch (e) {
+      warn('Erreur nettoyage backup session:', e);
+      backupSessionId = null;
+    }
+  }
+
+  async function recoverBackupSession() {
+    try {
+      const db = await openBackupDB();
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).getAll();
+
+      return new Promise((resolve, reject) => {
+        req.onsuccess = () => {
+          const records = req.result;
+          db.close();
+          if (!records || records.length === 0) { resolve(null); return; }
+
+          // Grouper par sessionId
+          const sessions = {};
+          records.forEach(r => {
+            if (!sessions[r.sessionId]) sessions[r.sessionId] = [];
+            sessions[r.sessionId].push(r);
+          });
+
+          // Trouver la session la plus récente avec des chunks
+          let bestSession = null;
+          let bestTime = 0;
+          for (const sid in sessions) {
+            const chunks = sessions[sid].filter(r => r.blob && r.blob.size > 0);
+            const meta = sessions[sid].find(r => r.type === 'session_start');
+            if (chunks.length > 0 && meta && meta.startTime > bestTime) {
+              bestSession = { sessionId: sid, chunks, meta, allRecords: sessions[sid] };
+              bestTime = meta.startTime;
+            }
+          }
+          resolve(bestSession);
+        };
+        req.onerror = () => { db.close(); reject(req.error); };
+      });
+    } catch (e) {
+      warn('Erreur lecture backup:', e);
+      return null;
+    }
+  }
+
+  async function exportBackupAsBlob(session) {
+    if (!session || !session.chunks || session.chunks.length === 0) return null;
+    const sorted = session.chunks.sort((a, b) => a.timestamp - b.timestamp);
+    const blobs = sorted.map(c => c.blob);
+    return new Blob(blobs, { type: blobs[0].type || 'audio/webm' });
+  }
+
+  async function clearAllBackups() {
+    try {
+      const db = await openBackupDB();
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).clear();
+      await new Promise((resolve, reject) => {
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+      log('Tous les backups nettoyés');
+    } catch (e) {
+      warn('Erreur nettoyage backups:', e);
+    }
+  }
+
+  /* ================ [NEW] RECOVERY CHECK ================ */
+  async function checkForRecovery() {
+    try {
+      const session = await recoverBackupSession();
+      if (!session) return;
+
+      const chunkCount = session.chunks.length;
+      const totalSize = session.chunks.reduce((acc, c) => acc + (c.blob ? c.blob.size : 0), 0);
+      const startTime = new Date(session.meta.startTime);
+      const sizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+
+      log('Session de recovery détectée:', chunkCount, 'chunks,', sizeMB, 'MB');
+
+      // Exposer les helpers de recovery
+      window.AGILO_AUDIO_DEBUG.recoverBackup = async () => {
+        const blob = await exportBackupAsBlob(session);
+        if (!blob) { console.warn('Aucun blob à récupérer'); return null; }
+        downloadRecording(blob, 'Agilotext_RECOVERY_' + startTime.toISOString().slice(0, 10) + '.webm');
+        return blob;
+      };
+      window.AGILO_AUDIO_DEBUG.clearBackup = () => clearAllBackups();
+      window.AGILO_AUDIO_DEBUG.backupInfo = { sessionId: session.sessionId, chunks: chunkCount, sizeMB, startTime: startTime.toISOString() };
+
+      // Afficher la bannière de recovery si assez de données
+      if (chunkCount >= 2 && totalSize > MIN_BLOB_BYTES) {
+        const recDiv = document.createElement('div');
+        recDiv.id = 'agilo-recovery-banner';
+        Object.assign(recDiv.style, {
+          position: 'fixed', top: '0', left: '0', right: '0',
+          background: 'linear-gradient(135deg, #ff6b00, #e65100)',
+          color: '#fff', padding: '12px 16px', zIndex: '999999',
+          fontSize: '14px', fontFamily: 'system-ui, sans-serif',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          boxShadow: '0 2px 8px rgba(0,0,0,.3)'
+        });
+        recDiv.innerHTML =
+          '<span>\u26a0\ufe0f Un enregistrement pr\u00e9c\u00e9dent a \u00e9t\u00e9 retrouv\u00e9 (' + sizeMB + ' MB, ' + chunkCount + ' fragments). </span>' +
+          '<span>' +
+          '<button id="agilo-recovery-download" style="background:#fff;color:#e65100;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-weight:bold;margin-right:8px;">\ud83d\udce5 T\u00e9l\u00e9charger</button>' +
+          '<button id="agilo-recovery-dismiss" style="background:transparent;color:#fff;border:1px solid #fff;padding:6px 14px;border-radius:4px;cursor:pointer;">Ignorer</button>' +
+          '</span>';
+        document.body.appendChild(recDiv);
+
+        document.getElementById('agilo-recovery-download').onclick = async () => {
+          const blob = await exportBackupAsBlob(session);
+          if (blob) downloadRecording(blob, 'Agilotext_RECOVERY_' + startTime.toISOString().slice(0, 10) + '.webm');
+          recDiv.remove();
+          await clearAllBackups();
+        };
+        document.getElementById('agilo-recovery-dismiss').onclick = async () => {
+          recDiv.remove();
+          await clearAllBackups();
+        };
+      }
+    } catch (e) {
+      warn('Erreur checkForRecovery:', e);
+    }
+  }
+
+  /* ---------------- Détection de silence prolongé ---------------- */
+  function checkSilence(rms) {
+    // Verrou : ne pas déclencher plusieurs fois l'arrêt
+    if (silenceStopTriggered) return;
+
+    // Ne pas détecter le silence si l'enregistrement n'est pas en cours
+    if (!mediaRecorder || mediaRecorder.state !== 'recording') {
+      // Réinitialiser si on n'est plus en enregistrement
+      if (silenceStartTime !== null) {
+        silenceStartTime = null;
+        silenceWarningShown = false;
+        silenceAutoStopWarned = false;
+      }
+      return;
+    }
+
+    if (rms < SILENCE_THRESHOLD) {
+      // Silence détecté
+      if (silenceStartTime === null) {
+        silenceStartTime = performance.now();
+      } else {
+        const silenceDuration = performance.now() - silenceStartTime;
+
+        // Avertissement après 2 minutes de silence
+        if (silenceDuration > SILENCE_WARNING_MS && !silenceWarningShown) {
+          silenceWarningShown = true;
+          const minutes = Math.floor(silenceDuration / 60000);
+          const message = `Aucun son détecté depuis ${minutes} minute(s).\n\nSi le silence continue pendant 15 minutes au total, l'enregistrement sera automatiquement arrêté pour éviter un fichier vide.`;
+
+          // Forcer l'attention
+          forcePageFocus('Silence détecté - Vérifiez votre micro');
+
+          alert(`⚠️ Attention : ${message}`);
+        }
+
+        // Avertissement avant arrêt automatique (après 4 minutes)
+        if (silenceDuration > (SILENCE_AUTO_STOP_MS - 60000) && !silenceAutoStopWarned) {
+          silenceAutoStopWarned = true;
+          const message = `Silence prolongé détecté.\n\nL'enregistrement sera arrêté automatiquement dans 1 minute si aucun son n'est détecté.`;
+
+          // Forcer l'attention
+          forcePageFocus('Arrêt imminent - Vérifiez votre micro');
+
+          alert(`⚠️ Attention : ${message}`);
+        }
+
+        // Arrêt automatique après 15 minutes de silence
+        if (silenceDuration > SILENCE_AUTO_STOP_MS && !silenceStopTriggered) {
+          // Verrou : éviter les déclenchements multiples
+          silenceStopTriggered = true;
+
+          warn('Arrêt automatique après 15 minutes de silence');
+
+          // Forcer l'attention avant l'arrêt
+          forcePageFocus('Enregistrement arrêté automatiquement');
+
+          alert('⏹️ Enregistrement arrêté automatiquement : aucun son détecté pendant 15 minutes.\n\nL\'enregistrement a été interrompu pour éviter un fichier vide.\n\nLe fichier sera sauvegardé et envoyé automatiquement.');
+
+          // Utiliser Promise pour éviter les races
+          Promise.resolve()
+            .then(() => {
+              if (mediaRecorder && mediaRecorder.state === 'recording') {
+                try { mediaRecorder.requestData(); } catch (e) {
+                  warn('Erreur requestData avant arrêt:', e);
+                }
+              }
+            })
+            .then(() => new Promise(r => setTimeout(r, 100)))
+            .then(() => stopRecordingAndSubmitForm());
+
+          return;
+        }
+      }
+    } else {
+      // Son détecté, réinitialiser le compteur
+      if (silenceStartTime !== null) {
+        silenceStartTime = null;
+        silenceWarningShown = false;
+        silenceAutoStopWarned = false;
+        // Arrêter le clignotement du titre si actif
+        stopTitleBlink();
+      }
+    }
   }
 
   /* ---------------- AGC micro ---------------- */
@@ -606,6 +958,7 @@ document.addEventListener('DOMContentLoaded', function () {
     sysGainNode.gain.value = SYS_BASE_GAIN;
 
     // Note: AudioContext.resume() doit être appelé dans un handler utilisateur (initiateRecording)
+    // On ne le fait pas ici car setupAudioContext() peut être appelé sans interaction utilisateur
   }
 
   function teardownAudioGraph() {
@@ -649,13 +1002,13 @@ document.addEventListener('DOMContentLoaded', function () {
     startAudioButton.onclick = function () {
       // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
-        startThroughWebflow(false);
+        initiateRecording(false);
       } else if (isChromeLike()) {
-        startThroughWebflow(false);
+        initiateRecording(false);
       } else if (startButton) {
         startButton.click();
       } else {
-        startThroughWebflow(false);
+        initiateRecording(false);
       }
     };
   }
@@ -664,19 +1017,19 @@ document.addEventListener('DOMContentLoaded', function () {
       // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
         if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
-          startThroughWebflow(false);
+          initiateRecording(false);
         }
       } else if (isFirefox()) {
         // Firefox : avertir que l'audio système ne sera pas capté
         if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
-          startThroughWebflow(true);
+          initiateRecording(true);
         }
       } else if (isChromeLike()) {
-        startThroughWebflow(true);
+        initiateRecording(true);
       } else if (startButton) {
         startButton.click();
       } else {
-        startThroughWebflow(true);
+        initiateRecording(true);
       }
     };
   }
@@ -734,188 +1087,182 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function initiateRecording(shareScreen) {
-    if (stopInProgress) return;
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
-    if (initiateInProgress) return;
-    initiateInProgress = true;
-    pendingShareMode = !!shareScreen;
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
 
-    try {
-      // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
-      if (audioContext && audioContext.state === 'suspended') {
-        try {
-          await audioContext.resume();
-        } catch (e) {
-          warn('AudioContext.resume() dans initiateRecording:', e);
-        }
-      }
-
-      // Vérifications de compatibilité
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
-        return;
-      }
-
-      if (!supportsMediaRecorder()) {
-        alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
-        return;
-      }
-
-      setupAudioContext();
-
-      // Vérifier que setupAudioContext() a réussi
-      if (!destination || !destination.stream) {
-        alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
-        stopStreamTracks(currentMicStream);
-        currentMicStream = null;
-        stopStreamTracks(currentScreenStream);
-        currentScreenStream = null;
-        teardownAudioGraph();
-        return;
-      }
-
-      // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
+    // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
+    if (audioContext && audioContext.state === 'suspended') {
       try {
-        if (navigator.permissions && navigator.permissions.query) {
-          try {
-            const res = await navigator.permissions.query({ name: 'microphone' });
-            if (res.state !== 'granted') {
-              // On continue quand même, l'erreur sera gérée par getUserMedia
-            }
-          } catch (e) {
-            // Permissions API non supportée ou erreur, on continue
-            warn('Permissions API non disponible:', e);
-          }
-        }
-      } catch { }
-
-      // Micro
-      try {
-        currentMicStream = await getMicStreamWithFallback();
-        attachMicTrackListeners(currentMicStream);
+        await audioContext.resume();
       } catch (e) {
-        err('getUserMedia audio:', e);
+        warn('AudioContext.resume() dans initiateRecording:', e);
+      }
+    }
+
+    // Vérifications de compatibilité
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
+      return;
+    }
+
+    if (!supportsMediaRecorder()) {
+      alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
+      return;
+    }
+
+    // Pas besoin d'initialiser quoi que ce soit, on utilise juste errorMessage existant
+
+    setupAudioContext();
+
+    // Vérifier que setupAudioContext() a réussi
+    if (!destination || !destination.stream) {
+      alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
+      stopStreamTracks(currentMicStream);
+      currentMicStream = null;
+      stopStreamTracks(currentScreenStream);
+      currentScreenStream = null;
+      teardownAudioGraph();
+      return;
+    }
+
+    // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const res = await navigator.permissions.query({ name: 'microphone' });
+          if (res.state !== 'granted') {
+            // On continue quand même, l'erreur sera gérée par getUserMedia
+          }
+        } catch (e) {
+          // Permissions API non supportée ou erreur, on continue
+          warn('Permissions API non disponible:', e);
+        }
+      }
+    } catch { }
+
+    // Micro
+    try {
+      currentMicStream = await getMicStreamWithFallback();
+      attachMicTrackListeners(currentMicStream);
+    } catch (e) {
+      err('getUserMedia audio:', e);
+      stopButton && (stopButton.style.display = 'none');
+      pauseButton && (pauseButton.style.display = 'none');
+      if (errorMessage) errorMessage.style.display = 'block';
+
+      let errorMsg = 'Erreur lors de l\'accès au microphone: ';
+      if (e.name === 'NotAllowedError') {
+        errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
+      } else if (e.name === 'NotFoundError') {
+        errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
+      } else {
+        errorMsg += e.message || e;
+      }
+
+      alert(errorMsg);
+      teardownAudioGraph();
+      return;
+    }
+
+    // Onglet/écran (seulement si demandé ET disponible)
+    if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
+      isSharingScreen = true;
+      try {
+        currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
+        // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
+        screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
+
+        currentScreenStream.addEventListener?.('addtrack', (e) => {
+          if (e.track && e.track.kind === 'audio') {
+            warn('Nouvelle piste audio écran ajoutée -> rebind');
+            bindSystemToGraph(currentScreenStream);
+          }
+        });
+
+      } catch (e) {
+        err('getDisplayMedia:', e);
+        // Afficher l'erreur comme dans l'ancien script : div error + popup
         if (errorMessage) errorMessage.style.display = 'block';
         if (stopButton) stopButton.style.display = 'none';
         if (pauseButton) pauseButton.style.display = 'none';
 
-        let errorMsg = 'Erreur lors de l\'accès au microphone: ';
+        // Différencier les types d'erreurs
+        let errorMsg;
         if (e.name === 'NotAllowedError') {
-          errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
+          errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
         } else if (e.name === 'NotFoundError') {
-          errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
+          errorMsg = 'Aucune source de partage trouvée.';
+        } else if (e.name === 'AbortError') {
+          errorMsg = 'Partage d\'écran annulé.';
         } else {
-          errorMsg += e.message || e;
+          errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
         }
         alert(errorMsg);
+
+        isSharingScreen = false;
+        currentScreenStream = null;
+        screenVideoTrack = null;
+        // Nettoyer les ressources
+        stopStreamTracks(currentMicStream);
+        currentMicStream = null;
         teardownAudioGraph();
-        return;
+        return; // NE PAS démarrer l'enregistrement
       }
+    } else if (shareScreen && !supportsDisplayMedia()) {
+      // getDisplayMedia non disponible, on continue avec micro seul
+      warn('getDisplayMedia non disponible, enregistrement micro seul');
+    }
 
-      // Onglet/écran (seulement si demandé ET disponible)
-      if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
-        isSharingScreen = true;
-        try {
-          currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-          // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
-          // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
-          screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
-
-          currentScreenStream.addEventListener?.('addtrack', (e) => {
-            if (e.track && e.track.kind === 'audio') {
-              warn('Nouvelle piste audio écran ajoutée -> rebind');
-              bindSystemToGraph(currentScreenStream);
-            }
-          });
-
-        } catch (e) {
-          err('getDisplayMedia:', e);
-          // Afficher l'erreur comme dans l'ancien script : div error + popup
+    // Vérifier l'audio système AVANT de démarrer l'enregistrement
+    if (shareScreen && currentScreenStream) {
+      const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
+      if (!hasSystemAudio) {
+        // Firefox ne supporte pas l'audio système via getDisplayMedia
+        // On fait un fallback : continuer en micro seul avec un message explicite
+        if (isFirefox()) {
+          warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
+          alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
+          // On continue avec micro seul (pas de currentScreenStream)
+          // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
+          stopStreamTracks(currentScreenStream);
+          currentScreenStream = null;
+          screenVideoTrack = null;
+          isSharingScreen = false;
+        } else {
+          // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
+          err('Pas d\'audio système détecté, enregistrement annulé');
           if (errorMessage) errorMessage.style.display = 'block';
           if (stopButton) stopButton.style.display = 'none';
           if (pauseButton) pauseButton.style.display = 'none';
-
-          // Différencier les types d'erreurs
-          let errorMsg;
-          if (e.name === 'NotAllowedError') {
-            errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
-          } else if (e.name === 'NotFoundError') {
-            errorMsg = 'Aucune source de partage trouvée.';
-          } else if (e.name === 'AbortError') {
-            errorMsg = 'Partage d\'écran annulé.';
-          } else {
-            errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
-          }
-          alert(errorMsg);
-
-          isSharingScreen = false;
+          alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
+          // Afficher l'aide pour Chrome/Edge
+          showTabAudioHintOnce();
+          // Nettoyer les ressources (pas de listener attaché donc pas de problème)
+          stopStreamTracks(currentMicStream);
+          stopStreamTracks(currentScreenStream);
+          currentMicStream = null;
           currentScreenStream = null;
           screenVideoTrack = null;
-          // Nettoyer les ressources
-          stopStreamTracks(currentMicStream);
-          currentMicStream = null;
           teardownAudioGraph();
           return; // NE PAS démarrer l'enregistrement
         }
-      } else if (shareScreen && !supportsDisplayMedia()) {
-        // getDisplayMedia non disponible, on continue avec micro seul
-        warn('getDisplayMedia non disponible, enregistrement micro seul');
-      }
-
-      // Vérifier l'audio système AVANT de démarrer l'enregistrement
-      if (shareScreen && currentScreenStream) {
-        const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
-        if (!hasSystemAudio) {
-          // Firefox ne supporte pas l'audio système via getDisplayMedia
-          // On fait un fallback : continuer en micro seul avec un message explicite
-          if (isFirefox()) {
-            warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
-            alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
-            // On continue avec micro seul (pas de currentScreenStream)
-            // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
-            stopStreamTracks(currentScreenStream);
-            currentScreenStream = null;
-            screenVideoTrack = null;
-            isSharingScreen = false;
-          } else {
-            // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
-            err('Pas d\'audio système détecté, enregistrement annulé');
-            if (errorMessage) errorMessage.style.display = 'block';
-            if (stopButton) stopButton.style.display = 'none';
-            if (pauseButton) pauseButton.style.display = 'none';
-            alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
-            // Afficher l'aide pour Chrome/Edge
-            showTabAudioHintOnce();
-            // Nettoyer les ressources
-            stopStreamTracks(currentMicStream);
-            stopStreamTracks(currentScreenStream);
-            currentMicStream = null;
-            currentScreenStream = null;
-            screenVideoTrack = null;
-            isSharingScreen = false;
-            teardownAudioGraph();
-            return; // NE PAS démarrer l'enregistrement
-          }
-        } else {
-          // On garde le stream, donc on peut maintenant attacher le listener ended
-          // Utiliser une fonction nommée pour pouvoir la retirer si besoin
-          if (screenVideoTrack) {
-            onScreenEnded = () => stopRecordingAndSubmitForm();
-            screenVideoTrack.addEventListener('ended', onScreenEnded);
-          }
+      } else {
+        // BUG FIX #1 : On garde le stream, donc on peut maintenant attacher le listener ended
+        // Utiliser une fonction nommée pour pouvoir la retirer si besoin
+        if (screenVideoTrack) {
+          onScreenEnded = () => stopRecordingAndSubmitForm();
+          screenVideoTrack.addEventListener('ended', onScreenEnded);
         }
       }
-
-      bindMicToGraph(currentMicStream);
-      if (currentScreenStream) bindSystemToGraph(currentScreenStream);
-
-      if (meterAnalyser && meterData) startLevelMeter();
-      startMicAutoGain();
-
-      startRecording(destination.stream);
-    } finally {
-      initiateInProgress = false;
     }
+
+    bindMicToGraph(currentMicStream);
+    if (currentScreenStream) bindSystemToGraph(currentScreenStream);
+
+    if (meterAnalyser && meterData) startLevelMeter();
+    startMicAutoGain();
+
+    startRecording(destination.stream);
   }
 
   function bindMicToGraph(micStream) {
@@ -952,6 +1299,8 @@ document.addEventListener('DOMContentLoaded', function () {
       warn('bindSystemToGraph appelé sans audio système');
       return;
     }
+
+    alertedNoSystemAudio = false;
 
     try {
       sysSourceNode = audioContext.createMediaStreamSource(screenStream);
@@ -995,14 +1344,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'audio/webm';
   }
 
-  function mimeTypeToExt(mimeType) {
-    if (!mimeType) return 'webm';
-    if (mimeType.includes('mp4')) return 'mp4';
-    if (mimeType.includes('ogg')) return 'ogg';
-    if (mimeType.includes('webm')) return 'webm';
-    return 'webm';
-  }
-
   function startRecording(stream) {
     // Réactiver AudioContext si suspendu (souvent nécessaire sur mobile/iOS)
     if (audioContext && audioContext.state === 'suspended') {
@@ -1016,6 +1357,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Sur Firefox, certaines options peuvent causer des problèmes
     if (isFirefox()) {
+      // Firefox peut avoir des problèmes avec certains codecs
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         options = {}; // Laisser Firefox choisir
       }
@@ -1042,21 +1384,18 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    currentBackupSessionId = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    BackupManager.setMeta({
-      sessionId: currentBackupSessionId,
-      mimeType: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : mimeType,
-      startedAt: Date.now(),
-      pendingUpload: false
-    });
+    // Réinitialiser la détection de silence pour le nouvel enregistrement
+    silenceStopTriggered = false;
+    silenceStartTime = null;
+    silenceWarningShown = false;
+    silenceAutoStopWarned = false;
 
     audioChunks = [];
     mediaRecorder.ondataavailable = (ev) => {
       if (ev.data && ev.data.size > 0) {
         audioChunks.push(ev.data);
-        // [INJECTED V2]
-        Reliability.notifyChunk();
-        BackupManager.saveChunk(ev.data, currentBackupSessionId);
+        lastChunkTs = Date.now(); // [NEW] Watchdog timestamp
+        saveChunkToBackup(ev.data); // [NEW] IndexedDB backup
       }
     };
 
@@ -1074,11 +1413,8 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     mediaRecorder.onstop = function () {
+      // BUG FIX #3 : Réinitialiser le flag stopInProgress
       stopInProgress = false;
-
-      // [INJECTED V2]
-      WakeLockManager.release();
-      Reliability.stop();
 
       setTimeout(() => {
         const finalMime = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : mimeType;
@@ -1088,19 +1424,16 @@ document.addEventListener('DOMContentLoaded', function () {
           warn('Audio trop petit ou vide');
           audioChunks = [];
           alert("L'enregistrement est trop court ou vide. Réessayez.");
-          // Cleanup même en cas de return early
+          // BUG FIX Bonus : Cleanup même en cas de return early
           stopStreamTracks(currentMicStream);
           currentMicStream = null;
           stopStreamTracks(currentScreenStream);
           currentScreenStream = null;
           teardownAudioGraph();
-          mediaRecorder = null;
-          BackupManager.clear(currentBackupSessionId || null);
-          currentBackupSessionId = null;
           return;
         }
 
-        const ext = mimeTypeToExt(finalMime);
+        const ext = (finalMime.split(';')[0].split('/')[1] || 'webm');
         const now = new Date();
         const pad = n => n.toString().padStart(2, '0');
         const datePart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -1120,18 +1453,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (hiddenName) hiddenName.value = audioFileName;
 
         const fileInput = form && form.querySelector('input[type="file"]');
+        // BUG FIX #1 : Utiliser const au lieu de let pour éviter double déclaration
         const pondInstance = window.FilePond && fileInput ? (() => {
           try { return FilePond.find(fileInput); } catch (e) { warn('FilePond.find:', e); return null; }
         })() : null;
 
         const doSubmit = () => {
           if (!form) return;
-          const prevMeta = BackupManager.getMeta() || {};
-          BackupManager.setMeta({
-            ...prevMeta,
-            pendingUpload: true,
-            lastSubmitAt: Date.now()
-          });
           if (typeof form.requestSubmit === 'function') form.requestSubmit();
           else if (submitButton) submitButton.click();
         };
@@ -1145,6 +1473,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const submitWhenAdded = () => {
           if (submitted) return;
 
+          // Option A : si FilePond existe, vérifier FilePond OU input natif (pas les deux)
           const ready =
             (pondInstance && pondInstance.getFiles && pondInstance.getFiles().length > 0 &&
               pondInstance.getFiles()[0].file && pondInstance.getFiles()[0].file.size > 0) ||
@@ -1157,6 +1486,7 @@ document.addEventListener('DOMContentLoaded', function () {
               submitTimeoutId = setTimeout(submitWhenAdded, SUBMIT_RETRY_DELAY);
             } else {
               warn('Fichier non prêt après 30s — clic manuel possible.');
+              // BUG FIX #2 : Cleanup listener avec try/catch pour éviter memory leak
               try {
                 if (!submitted && pondInstance && pondInstance.off) {
                   pondInstance.off('addfile', submitWhenAdded);
@@ -1170,6 +1500,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
           submitted = true;
           if (submitTimeoutId) clearTimeout(submitTimeoutId);
+          // BUG FIX #2 : Cleanup listener avec try/catch
           try {
             if (pondInstance && pondInstance.off) {
               pondInstance.off('addfile', submitWhenAdded);
@@ -1185,28 +1516,36 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         };
 
+        // Utiliser FilePond.addFile si disponible (plus robuste)
         const audioFile = new File([audioBlob], audioFileName, { type: finalMime });
 
         if (pondInstance && pondInstance.addFile) {
+          // Option C : utiliser directement le then de addFile pour déclencher submitWhenAdded
           pondInstance.addFile(audioFile)
             .then(() => {
+              // Le fichier est ajouté, déclencher la soumission
               submitWhenAdded();
             })
             .catch((e) => {
               warn('Erreur FilePond.addFile, fallback sur simulateFileInput:', e);
+              // Fallback : remplir aussi l'input natif
               if (fileInput) {
                 simulateFileInput(fileInput, audioFile);
               }
+              // Attendre un peu puis vérifier
               setTimeout(submitWhenAdded, 100);
             });
         } else {
+          // Fallback : utiliser simulateFileInput
           if (fileInput) {
             simulateFileInput(fileInput, audioFile);
           }
+          // Utiliser 'once' si disponible, sinon 'on' avec cleanup après timeout
           if (pondInstance && pondInstance.once) {
             pondInstance.once('addfile', submitWhenAdded);
           } else if (pondInstance && pondInstance.on) {
             pondInstance.on('addfile', submitWhenAdded);
+            // BUG FIX #2 : Cleanup après MAX_SUBMIT_WAIT_MS avec try/catch
             setTimeout(() => {
               try {
                 if (!submitted && pondInstance && pondInstance.off) {
@@ -1217,6 +1556,7 @@ document.addEventListener('DOMContentLoaded', function () {
               }
             }, MAX_SUBMIT_WAIT_MS + 1000);
           } else {
+            // Pas de FilePond, vérifier directement
             setTimeout(submitWhenAdded, 100);
           }
         }
@@ -1234,9 +1574,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 50);
 
         audioChunks = [];
+        clearBackupSession(); // [NEW] Backup réussie → nettoyer IndexedDB
         setTimeout(() => downloadRecording(audioBlob, audioFileName), 1000);
 
-        // Stopper les streams et fermer AudioContext APRÈS avoir construit le blob
+        // BUG FIX #1 : Stopper les streams et fermer AudioContext APRÈS avoir construit le blob
+        // (ne pas le faire dans stopRecordingAndSubmitForm pour éviter blob vide)
+        // Retirer le listener ended du screen stream si présent
         if (screenVideoTrack && onScreenEnded) {
           try {
             screenVideoTrack.removeEventListener('ended', onScreenEnded);
@@ -1251,18 +1594,18 @@ document.addEventListener('DOMContentLoaded', function () {
         stopStreamTracks(currentScreenStream);
         currentScreenStream = null;
         teardownAudioGraph();
-        mediaRecorder = null;
-
       }, 50);
     };
 
     // Timeslice pour flush régulier (important pour Firefox)
-    const timeslice = CHUNK_TIMESLICE_MS;
+    const timeslice = isFirefox() ? 1000 : 250;
+    activeTimeslice = timeslice; // [NEW]
     try {
       mediaRecorder.start(timeslice);
     } catch (e) {
       try {
         mediaRecorder.start();
+        activeTimeslice = 5000; // [NEW] Pas de timeslice → estimation
       } catch (e2) {
         err('Impossible de démarrer MediaRecorder:', e2);
         alert('Erreur lors du démarrage de l\'enregistrement. Veuillez réessayer.');
@@ -1277,13 +1620,10 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    // [INJECTED V2]
-    WakeLockManager.request();
-    Reliability.start(mediaRecorder);
-
     toggleAnimation(true);
     if (startButton) startButton.disabled = true;
     if (stopButton) { stopButton.disabled = false; stopButton.style.display = 'flex'; }
+    // Le test de pause sera fait au clic plutôt qu'au démarrage pour éviter les artefacts
     if (pauseButton) {
       pauseButton.disabled = false;
       pauseButton.style.display = 'flex';
@@ -1296,6 +1636,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (Number.isFinite(MAX_RECORDING_MS)) autoStopTimeout = setTimeout(stopRecordingAndSubmitForm, MAX_RECORDING_MS);
     else autoStopTimeout = null;
+
+    // [NEW] Démarrer les protections anti-perte
+    startHeartbeat();
+    startChunkWatchdog(activeTimeslice);
+    requestWakeLock();
+    startBackupSession();
+    document.title = '⏺ ' + originalDocTitle; // [NEW] Titre onglet
   }
 
   if (pauseButton) {
@@ -1306,6 +1653,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (mediaRecorder.state === 'paused') {
           mediaRecorder.resume();
           if (pauseButtonText) pauseButtonText.innerText = 'Pause';
+          // Sécuriser : clear avant de recréer pour éviter les doublons
           clearInterval(recordingInterval);
           recordingInterval = setInterval(updateRecordingTime, 1000);
         } else if (mediaRecorder.state === 'recording') {
@@ -1317,19 +1665,27 @@ document.addEventListener('DOMContentLoaded', function () {
       } catch (e) {
         warn('Erreur pause/resume:', e);
         alert('La pause n\'est pas supportée sur ce navigateur.');
+        // Cacher le bouton pause si non supporté
         if (pauseButton) pauseButton.style.display = 'none';
       }
     };
   }
 
   function stopRecordingAndSubmitForm() {
+    // BUG FIX #3 : Éviter les doubles clics "Stop"
     if (stopInProgress) return;
     stopInProgress = true;
 
-    // [INJECTED V2]
-    Reliability.stop();
-    WakeLockManager.release();
+    // [NEW] Arrêter les protections anti-perte
+    stopHeartbeat();
+    stopChunkWatchdog();
+    releaseWakeLock();
+    document.title = originalDocTitle; // [NEW] Restaurer titre onglet
 
+    // Arrêter le clignotement du titre
+    stopTitleBlink();
+
+    // Retirer le listener ended du screen stream si présent
     if (screenVideoTrack && onScreenEnded) {
       try {
         screenVideoTrack.removeEventListener('ended', onScreenEnded);
@@ -1340,8 +1696,11 @@ document.addEventListener('DOMContentLoaded', function () {
       onScreenEnded = null;
     }
 
+    // Vérifier si on peut stopper le recorder (si oui, onstop se déclenchera et fera le cleanup)
     const canStopRecorder = mediaRecorder && mediaRecorder.state !== 'inactive';
 
+    // S'assurer que toutes les données sont récupérées avant d'arrêter
+    // BUG FIX #2 : Aussi en paused
     try {
       if (mediaRecorder && (mediaRecorder.state === 'recording' || mediaRecorder.state === 'paused')) {
         mediaRecorder.requestData();
@@ -1350,13 +1709,16 @@ document.addEventListener('DOMContentLoaded', function () {
       warn('Erreur requestData dans stopRecordingAndSubmitForm:', e);
     }
 
+    // Petit délai pour laisser requestData finir avant de stopper
     const stopMediaRecorder = () => {
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         try {
           mediaRecorder.stop();
         } catch (e) {
           warn('Erreur lors de l\'arrêt du MediaRecorder:', e);
+          // BUG FIX #2 : stop() a échoué => onstop ne se déclenchera pas => débloquer et cleanup
           stopInProgress = false;
+          // Retirer le listener ended du screen stream si présent
           if (screenVideoTrack && onScreenEnded) {
             try {
               screenVideoTrack.removeEventListener('ended', onScreenEnded);
@@ -1366,23 +1728,28 @@ document.addEventListener('DOMContentLoaded', function () {
             screenVideoTrack = null;
             onScreenEnded = null;
           }
+          // Cleanup immédiat pour éviter les fuites
           stopStreamTracks(currentMicStream);
           currentMicStream = null;
           stopStreamTracks(currentScreenStream);
           currentScreenStream = null;
           teardownAudioGraph();
-          mediaRecorder = null;
         }
       }
     };
 
+    // Si on peut stopper le recorder, onstop se déclenchera et fera le cleanup
     if (canStopRecorder) {
+      // Si on est déjà en train d'arrêter (depuis checkSilence), on attend un peu
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         setTimeout(stopMediaRecorder, 150);
       } else {
         stopMediaRecorder();
       }
     } else {
+      // BUG FIX #2 : Pas de onstop possible => cleanup immédiat
+      // (mediaRecorder null ou déjà inactive)
+      // Retirer le listener ended du screen stream si présent
       if (screenVideoTrack && onScreenEnded) {
         try {
           screenVideoTrack.removeEventListener('ended', onScreenEnded);
@@ -1397,8 +1764,6 @@ document.addEventListener('DOMContentLoaded', function () {
       stopStreamTracks(currentScreenStream);
       currentScreenStream = null;
       teardownAudioGraph();
-      mediaRecorder = null;
-      stopInProgress = false;
     }
 
     clearInterval(recordingInterval);
@@ -1416,22 +1781,23 @@ document.addEventListener('DOMContentLoaded', function () {
     warned5min = warned1min = false;
     isSharingScreen = false;
 
+    // Réinitialiser la détection de silence (mais PAS silenceStopTriggered ici)
+    // silenceStopTriggered sera réinitialisé dans startRecording() pour le prochain enregistrement
+    silenceStartTime = null;
+    silenceWarningShown = false;
+    silenceAutoStopWarned = false;
+    // NOTE: silenceStopTriggered reste true jusqu'au prochain startRecording()
+    // pour éviter les redéclenchements pendant les ~150ms avant mediaRecorder.stop()
+
+    // BUG FIX #1 : Ne PAS stopper les streams ici si canStopRecorder (c'est fait dans onstop)
+    // Les streams seront stoppés dans mediaRecorder.onstop après la construction du blob
+    // OU immédiatement si canStopRecorder === false (déjà fait plus haut)
+
+    // Cacher le message d'erreur
     if (errorMessage) errorMessage.style.display = 'none';
   }
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
-
-  function flushRecorderForLifecycle(reason) {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-    try { mediaRecorder.requestData(); } catch (e) { warn('requestData lifecycle:', reason, e); }
-    const prevMeta = BackupManager.getMeta() || {};
-    BackupManager.setMeta({
-      ...prevMeta,
-      pendingUpload: true,
-      lifecycleExit: reason,
-      lastLifecycleFlushAt: Date.now()
-    });
-  }
 
   window.addEventListener('beforeunload', function (event) {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -1443,30 +1809,56 @@ document.addEventListener('DOMContentLoaded', function () {
 
   window.addEventListener('unload', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      flushRecorderForLifecycle('unload');
+      try { mediaRecorder.requestData(); } catch (e) { }
+      stopRecordingAndSubmitForm();
     }
   });
 
   window.addEventListener('pagehide', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      flushRecorderForLifecycle('pagehide');
+      try { mediaRecorder.requestData(); } catch (e) { }
+      stopRecordingAndSubmitForm();
     }
   });
 
-  // Sur mobile/iOS, gérer la visibilité de la page
+  // [ENHANCED] Gestion visibilité page + Wake Lock re-acquisition
   document.addEventListener('visibilitychange', function () {
     if (document.hidden && mediaRecorder && mediaRecorder.state === 'recording') {
       warn('Page en arrière-plan pendant l\'enregistrement');
-      flushRecorderForLifecycle('hidden');
     }
-    if (!document.hidden && mediaRecorder && mediaRecorder.state === 'recording') {
-      WakeLockManager.request();
+    // [NEW] Ré-acquérir le Wake Lock quand la page redevient visible
+    if (document.visibilityState === 'visible' && mediaRecorder && mediaRecorder.state !== 'inactive') {
+      requestWakeLock();
     }
   });
 
+  // [NEW] Écouter freeze/resume pour détecter les transitions OS
+  if ('onfreeze' in document) {
+    document.addEventListener('freeze', () => {
+      warn('Page freeze détecté');
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        try { mediaRecorder.requestData(); } catch (e) { }
+      }
+    });
+  }
+  if ('onresume' in document) {
+    document.addEventListener('resume', () => {
+      log('Page resume détecté');
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        requestWakeLock();
+        if (audioContext && audioContext.state === 'suspended') {
+          audioContext.resume().catch(e => warn('Resume AudioContext failed:', e));
+        }
+      }
+    });
+  }
+
+
+  // Gérer le bouton "Recommencer" existant dans le HTML (#New-button_error)
   const newErrorButton = document.getElementById('New-button_error');
   if (newErrorButton) {
     newErrorButton.addEventListener('click', function () {
+      // Cacher l'erreur et relancer l'enregistrement avec partage écran
       if (errorMessage) errorMessage.style.display = 'none';
       if (startSharingButton) {
         startSharingButton.click();
@@ -1478,7 +1870,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (startButton) {
     startButton.addEventListener('click', function () {
-      initiateRecording(!!pendingShareMode);
+      initiateRecording(false);
     });
   }
 
@@ -1491,37 +1883,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   } catch { }
 
-  document.addEventListener('newJobIdAvailable', async function () {
-    try {
-      const meta = BackupManager.getMeta() || {};
-      if (!meta.pendingUpload) return;
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
-      await BackupManager.clear(meta.sessionId || null);
-      currentBackupSessionId = null;
-      log('Backup local effacé après ACK backend.');
-    } catch (e) {
-      warn('Impossible d\'effacer le backup après ACK backend:', e);
-    }
-  });
-
-  // [INJECTED V2] Recovery Check
-  (async function () {
-    const meta = BackupManager.getMeta() || {};
-    const count = await BackupManager.count();
-    if (count > 0) {
-      if (confirm("⚠️ Une session précédente a été interrompue (" + count + " fragments).\nVoulez-vous la récupérer ?")) {
-        const blobs = await BackupManager.getAllChunks(meta.sessionId || null);
-        if (!blobs.length) return;
-        const fallbackMime = (meta && meta.mimeType) ? String(meta.mimeType) : '';
-        const firstBlobMime = blobs[0] && blobs[0].type ? String(blobs[0].type) : '';
-        const recoveryMime = fallbackMime || firstBlobMime || 'audio/webm';
-        const recoveryExt = mimeTypeToExt(recoveryMime);
-        downloadRecording(
-          new Blob(blobs, { type: recoveryMime }),
-          'RECOVERY_' + Date.now() + '.' + recoveryExt
-        );
-        if (confirm("Effacer la sauvegarde ?")) BackupManager.clear(meta.sessionId || null);
-      }
-    }
-  })();
+  // [NEW] Vérifier s'il y a un enregistrement à récupérer
+  checkForRecovery();
 });

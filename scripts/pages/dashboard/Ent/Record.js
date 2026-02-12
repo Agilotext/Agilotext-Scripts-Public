@@ -1,9 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
   const DBG = !!window.AGILO_DEBUG;
-  const BACKUP_META_KEY = 'agilo:record:backup-meta-v1';
-  const HARD_MAX_RECORDING_MS = 4 * 60 * 60 * 1000; // hard cap sécurité (4h)
-  const CHUNK_TIMESLICE_MS = 1000; // réduit la pression CPU/IDB vs 250ms
-  const MAX_BACKUP_CHUNKS = 14400; // ~4h à 1 chunk/s
 
   // --- MODULES FIABILITÉ (INJECTÉS V2) ---
   const WakeLockManager = {
@@ -25,11 +21,7 @@ document.addEventListener('DOMContentLoaded', function () {
   };
 
   const BackupManager = {
-    db: null,
-    DB_NAME: 'AgilotextRecDB',
-    STORE_NAME: 'chunks',
-    MAX_ITEMS: MAX_BACKUP_CHUNKS,
-    _saveCount: 0,
+    db: null, DB_NAME: 'AgilotextRecDB', STORE_NAME: 'chunks',
     async open() {
       if (this.db) return this.db;
       return new Promise((resolve, reject) => {
@@ -43,51 +35,20 @@ document.addEventListener('DOMContentLoaded', function () {
         };
       });
     },
-    getMeta() {
-      try {
-        const raw = localStorage.getItem(BACKUP_META_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    },
-    setMeta(meta) {
-      try {
-        localStorage.setItem(BACKUP_META_KEY, JSON.stringify(meta || {}));
-      } catch (e) {
-        if (DBG) console.warn('[Backup] setMeta failed:', e);
-      }
-    },
-    clearMeta() {
-      try { localStorage.removeItem(BACKUP_META_KEY); } catch { }
-    },
-    async saveChunk(blob, sessionId) {
+    async saveChunk(blob) {
       if (blob.size === 0) return;
       try {
         await this.open();
         this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).add({
-          timestamp: Date.now(),
-          sessionId: sessionId || null,
-          mimeType: blob.type || '',
-          size: blob.size,
-          blob: blob
+          timestamp: Date.now(), blob: blob
         });
-        this._saveCount += 1;
-        if (this._saveCount % 30 === 0) {
-          this.prune().catch((e) => { if (DBG) console.warn('[Backup] Prune failed:', e); });
-        }
       } catch (e) { if (DBG) console.warn('[Backup] Save failed:', e); }
     },
-    async getAllChunks(sessionId = null) {
+    async getAllChunks() {
       await this.open();
       return new Promise((resolve, reject) => {
         const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).getAll();
-        req.onsuccess = () => {
-          const rows = Array.isArray(req.result) ? req.result : [];
-          const filtered = sessionId ? rows.filter(r => r.sessionId === sessionId) : rows;
-          filtered.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          resolve(filtered.map(r => r.blob));
-        };
+        req.onsuccess = () => resolve(req.result.map(r => r.blob));
         req.onerror = () => reject(req.error);
       });
     },
@@ -101,62 +62,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
       } catch { return 0; }
     },
-    async prune(maxItems = this.MAX_ITEMS) {
-      await this.open();
-      const total = await this.count();
-      if (!Number.isFinite(total) || total <= maxItems) return;
-      const toDelete = total - maxItems;
-      return new Promise((resolve, reject) => {
-        const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-        const store = tx.objectStore(this.STORE_NAME);
-        let deleted = 0;
-        const cursorReq = store.openCursor();
-        cursorReq.onerror = () => reject(cursorReq.error);
-        cursorReq.onsuccess = () => {
-          const cursor = cursorReq.result;
-          if (!cursor || deleted >= toDelete) return;
-          cursor.delete();
-          deleted += 1;
-          cursor.continue();
-        };
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    },
-    async clear(sessionId = null) {
-      try {
-        await this.open();
-        if (!sessionId) {
-          await new Promise((resolve, reject) => {
-            const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-            const req = tx.objectStore(this.STORE_NAME).clear();
-            req.onsuccess = () => resolve();
-            req.onerror = () => reject(req.error);
-          });
-          this.clearMeta();
-        } else {
-          await new Promise((resolve, reject) => {
-            const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
-            const store = tx.objectStore(this.STORE_NAME);
-            const cursorReq = store.openCursor();
-            cursorReq.onerror = () => reject(cursorReq.error);
-            cursorReq.onsuccess = () => {
-              const cursor = cursorReq.result;
-              if (!cursor) return;
-              const value = cursor.value;
-              if (value && value.sessionId === sessionId) cursor.delete();
-              cursor.continue();
-            };
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => reject(tx.error);
-          });
-          const meta = this.getMeta();
-          if (meta && meta.sessionId === sessionId) this.clearMeta();
-        }
-        this._saveCount = 0;
-      } catch (e) {
-        if (DBG) console.warn('[Backup] Clear failed:', e);
-      }
+    async clear() {
+      if (!this.db) return;
+      this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).clear();
     }
   };
 
@@ -188,10 +96,7 @@ document.addEventListener('DOMContentLoaded', function () {
   };
   // --- FIN MODULES FIABILITÉ ---
 
-  const cfgRecordingMs = Number(window.AGILO_MAX_RECORDING_MS);
-  const MAX_RECORDING_MS = Number.isFinite(cfgRecordingMs) && cfgRecordingMs > 0
-    ? cfgRecordingMs
-    : HARD_MAX_RECORDING_MS;
+  const MAX_RECORDING_MS = null;
   const MIN_BLOB_BYTES = 2048;
 
   const MIC_CONSTRAINTS_BASE = {
@@ -296,9 +201,6 @@ document.addEventListener('DOMContentLoaded', function () {
   let lastMicDeviceId = null;
   let screenVideoTrack = null; // Pour pouvoir retirer le listener si besoin
   let onScreenEnded = null; // Handler nommé pour pouvoir le retirer
-  let currentBackupSessionId = null;
-  let pendingShareMode = false;
-  let initiateInProgress = false;
 
   let stopInProgress = false; // Flag pour éviter les doubles clics "Stop"
 
@@ -307,19 +209,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const err = (...a) => { console.error('[rec]', ...a); };
 
   const dbToGain = (db) => Math.pow(10, db / 20);
-
-  function startThroughWebflow(shareScreen) {
-    pendingShareMode = !!shareScreen;
-    if (startButton) {
-      try {
-        startButton.click(); // conserve les interactions Webflow liées à .startrecording
-        return;
-      } catch (e) {
-        warn('startButton.click() failed, fallback direct:', e);
-      }
-    }
-    initiateRecording(pendingShareMode);
-  }
 
   /* =========================
      DÉTECTION NAVIGATEUR / MOBILE
@@ -649,13 +538,13 @@ document.addEventListener('DOMContentLoaded', function () {
     startAudioButton.onclick = function () {
       // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
-        startThroughWebflow(false);
+        initiateRecording(false);
       } else if (isChromeLike()) {
-        startThroughWebflow(false);
+        initiateRecording(false);
       } else if (startButton) {
         startButton.click();
       } else {
-        startThroughWebflow(false);
+        initiateRecording(false);
       }
     };
   }
@@ -664,19 +553,19 @@ document.addEventListener('DOMContentLoaded', function () {
       // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
         if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
-          startThroughWebflow(false);
+          initiateRecording(false);
         }
       } else if (isFirefox()) {
         // Firefox : avertir que l'audio système ne sera pas capté
         if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
-          startThroughWebflow(true);
+          initiateRecording(true);
         }
       } else if (isChromeLike()) {
-        startThroughWebflow(true);
+        initiateRecording(true);
       } else if (startButton) {
         startButton.click();
       } else {
-        startThroughWebflow(true);
+        initiateRecording(true);
       }
     };
   }
@@ -734,188 +623,181 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   async function initiateRecording(shareScreen) {
-    if (stopInProgress) return;
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
-    if (initiateInProgress) return;
-    initiateInProgress = true;
-    pendingShareMode = !!shareScreen;
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
 
-    try {
-      // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
-      if (audioContext && audioContext.state === 'suspended') {
-        try {
-          await audioContext.resume();
-        } catch (e) {
-          warn('AudioContext.resume() dans initiateRecording:', e);
-        }
-      }
-
-      // Vérifications de compatibilité
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
-        return;
-      }
-
-      if (!supportsMediaRecorder()) {
-        alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
-        return;
-      }
-
-      setupAudioContext();
-
-      // Vérifier que setupAudioContext() a réussi
-      if (!destination || !destination.stream) {
-        alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
-        stopStreamTracks(currentMicStream);
-        currentMicStream = null;
-        stopStreamTracks(currentScreenStream);
-        currentScreenStream = null;
-        teardownAudioGraph();
-        return;
-      }
-
-      // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
+    // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
+    if (audioContext && audioContext.state === 'suspended') {
       try {
-        if (navigator.permissions && navigator.permissions.query) {
-          try {
-            const res = await navigator.permissions.query({ name: 'microphone' });
-            if (res.state !== 'granted') {
-              // On continue quand même, l'erreur sera gérée par getUserMedia
-            }
-          } catch (e) {
-            // Permissions API non supportée ou erreur, on continue
-            warn('Permissions API non disponible:', e);
-          }
-        }
-      } catch { }
-
-      // Micro
-      try {
-        currentMicStream = await getMicStreamWithFallback();
-        attachMicTrackListeners(currentMicStream);
+        await audioContext.resume();
       } catch (e) {
-        err('getUserMedia audio:', e);
+        warn('AudioContext.resume() dans initiateRecording:', e);
+      }
+    }
+
+    // Vérifications de compatibilité
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
+      return;
+    }
+
+    if (!supportsMediaRecorder()) {
+      alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
+      return;
+    }
+
+    setupAudioContext();
+
+    // Vérifier que setupAudioContext() a réussi
+    if (!destination || !destination.stream) {
+      alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
+      stopStreamTracks(currentMicStream);
+      currentMicStream = null;
+      stopStreamTracks(currentScreenStream);
+      currentScreenStream = null;
+      teardownAudioGraph();
+      return;
+    }
+
+    // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          const res = await navigator.permissions.query({ name: 'microphone' });
+          if (res.state !== 'granted') {
+            // On continue quand même, l'erreur sera gérée par getUserMedia
+          }
+        } catch (e) {
+          // Permissions API non supportée ou erreur, on continue
+          warn('Permissions API non disponible:', e);
+        }
+      }
+    } catch { }
+
+    // Micro
+    try {
+      currentMicStream = await getMicStreamWithFallback();
+      attachMicTrackListeners(currentMicStream);
+    } catch (e) {
+      err('getUserMedia audio:', e);
+      stopButton && (stopButton.style.display = 'none');
+      pauseButton && (pauseButton.style.display = 'none');
+      if (errorMessage) errorMessage.style.display = 'block';
+
+      let errorMsg = 'Erreur lors de l\'accès au microphone: ';
+      if (e.name === 'NotAllowedError') {
+        errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
+      } else if (e.name === 'NotFoundError') {
+        errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
+      } else {
+        errorMsg += e.message || e;
+      }
+
+      alert(errorMsg);
+      teardownAudioGraph();
+      return;
+    }
+
+    // Onglet/écran (seulement si demandé ET disponible)
+    if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
+      isSharingScreen = true;
+      try {
+        currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
+        // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
+        screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
+
+        currentScreenStream.addEventListener?.('addtrack', (e) => {
+          if (e.track && e.track.kind === 'audio') {
+            warn('Nouvelle piste audio écran ajoutée -> rebind');
+            bindSystemToGraph(currentScreenStream);
+          }
+        });
+
+      } catch (e) {
+        err('getDisplayMedia:', e);
+        // Afficher l'erreur comme dans l'ancien script : div error + popup
         if (errorMessage) errorMessage.style.display = 'block';
         if (stopButton) stopButton.style.display = 'none';
         if (pauseButton) pauseButton.style.display = 'none';
 
-        let errorMsg = 'Erreur lors de l\'accès au microphone: ';
+        // Différencier les types d'erreurs
+        let errorMsg;
         if (e.name === 'NotAllowedError') {
-          errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
+          errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
         } else if (e.name === 'NotFoundError') {
-          errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
+          errorMsg = 'Aucune source de partage trouvée.';
+        } else if (e.name === 'AbortError') {
+          errorMsg = 'Partage d\'écran annulé.';
         } else {
-          errorMsg += e.message || e;
+          errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
         }
         alert(errorMsg);
+
+        isSharingScreen = false;
+        currentScreenStream = null;
+        screenVideoTrack = null;
+        // Nettoyer les ressources
+        stopStreamTracks(currentMicStream);
+        currentMicStream = null;
         teardownAudioGraph();
-        return;
+        return; // NE PAS démarrer l'enregistrement
       }
+    } else if (shareScreen && !supportsDisplayMedia()) {
+      // getDisplayMedia non disponible, on continue avec micro seul
+      warn('getDisplayMedia non disponible, enregistrement micro seul');
+    }
 
-      // Onglet/écran (seulement si demandé ET disponible)
-      if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
-        isSharingScreen = true;
-        try {
-          currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-          // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
-          // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
-          screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
-
-          currentScreenStream.addEventListener?.('addtrack', (e) => {
-            if (e.track && e.track.kind === 'audio') {
-              warn('Nouvelle piste audio écran ajoutée -> rebind');
-              bindSystemToGraph(currentScreenStream);
-            }
-          });
-
-        } catch (e) {
-          err('getDisplayMedia:', e);
-          // Afficher l'erreur comme dans l'ancien script : div error + popup
+    // Vérifier l'audio système AVANT de démarrer l'enregistrement
+    if (shareScreen && currentScreenStream) {
+      const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
+      if (!hasSystemAudio) {
+        // Firefox ne supporte pas l'audio système via getDisplayMedia
+        // On fait un fallback : continuer en micro seul avec un message explicite
+        if (isFirefox()) {
+          warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
+          alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
+          // On continue avec micro seul (pas de currentScreenStream)
+          // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
+          stopStreamTracks(currentScreenStream);
+          currentScreenStream = null;
+          screenVideoTrack = null;
+          isSharingScreen = false;
+        } else {
+          // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
+          err('Pas d\'audio système détecté, enregistrement annulé');
           if (errorMessage) errorMessage.style.display = 'block';
           if (stopButton) stopButton.style.display = 'none';
           if (pauseButton) pauseButton.style.display = 'none';
-
-          // Différencier les types d'erreurs
-          let errorMsg;
-          if (e.name === 'NotAllowedError') {
-            errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
-          } else if (e.name === 'NotFoundError') {
-            errorMsg = 'Aucune source de partage trouvée.';
-          } else if (e.name === 'AbortError') {
-            errorMsg = 'Partage d\'écran annulé.';
-          } else {
-            errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
-          }
-          alert(errorMsg);
-
-          isSharingScreen = false;
-          currentScreenStream = null;
-          screenVideoTrack = null;
+          alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
+          // Afficher l'aide pour Chrome/Edge
+          showTabAudioHintOnce();
           // Nettoyer les ressources
           stopStreamTracks(currentMicStream);
+          stopStreamTracks(currentScreenStream);
           currentMicStream = null;
+          currentScreenStream = null;
+          screenVideoTrack = null;
+          isSharingScreen = false;
           teardownAudioGraph();
           return; // NE PAS démarrer l'enregistrement
         }
-      } else if (shareScreen && !supportsDisplayMedia()) {
-        // getDisplayMedia non disponible, on continue avec micro seul
-        warn('getDisplayMedia non disponible, enregistrement micro seul');
-      }
-
-      // Vérifier l'audio système AVANT de démarrer l'enregistrement
-      if (shareScreen && currentScreenStream) {
-        const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
-        if (!hasSystemAudio) {
-          // Firefox ne supporte pas l'audio système via getDisplayMedia
-          // On fait un fallback : continuer en micro seul avec un message explicite
-          if (isFirefox()) {
-            warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
-            alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
-            // On continue avec micro seul (pas de currentScreenStream)
-            // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
-            stopStreamTracks(currentScreenStream);
-            currentScreenStream = null;
-            screenVideoTrack = null;
-            isSharingScreen = false;
-          } else {
-            // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
-            err('Pas d\'audio système détecté, enregistrement annulé');
-            if (errorMessage) errorMessage.style.display = 'block';
-            if (stopButton) stopButton.style.display = 'none';
-            if (pauseButton) pauseButton.style.display = 'none';
-            alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
-            // Afficher l'aide pour Chrome/Edge
-            showTabAudioHintOnce();
-            // Nettoyer les ressources
-            stopStreamTracks(currentMicStream);
-            stopStreamTracks(currentScreenStream);
-            currentMicStream = null;
-            currentScreenStream = null;
-            screenVideoTrack = null;
-            isSharingScreen = false;
-            teardownAudioGraph();
-            return; // NE PAS démarrer l'enregistrement
-          }
-        } else {
-          // On garde le stream, donc on peut maintenant attacher le listener ended
-          // Utiliser une fonction nommée pour pouvoir la retirer si besoin
-          if (screenVideoTrack) {
-            onScreenEnded = () => stopRecordingAndSubmitForm();
-            screenVideoTrack.addEventListener('ended', onScreenEnded);
-          }
+      } else {
+        // On garde le stream, donc on peut maintenant attacher le listener ended
+        // Utiliser une fonction nommée pour pouvoir la retirer si besoin
+        if (screenVideoTrack) {
+          onScreenEnded = () => stopRecordingAndSubmitForm();
+          screenVideoTrack.addEventListener('ended', onScreenEnded);
         }
       }
-
-      bindMicToGraph(currentMicStream);
-      if (currentScreenStream) bindSystemToGraph(currentScreenStream);
-
-      if (meterAnalyser && meterData) startLevelMeter();
-      startMicAutoGain();
-
-      startRecording(destination.stream);
-    } finally {
-      initiateInProgress = false;
     }
+
+    bindMicToGraph(currentMicStream);
+    if (currentScreenStream) bindSystemToGraph(currentScreenStream);
+
+    if (meterAnalyser && meterData) startLevelMeter();
+    startMicAutoGain();
+
+    startRecording(destination.stream);
   }
 
   function bindMicToGraph(micStream) {
@@ -995,14 +877,6 @@ document.addEventListener('DOMContentLoaded', function () {
     return 'audio/webm';
   }
 
-  function mimeTypeToExt(mimeType) {
-    if (!mimeType) return 'webm';
-    if (mimeType.includes('mp4')) return 'mp4';
-    if (mimeType.includes('ogg')) return 'ogg';
-    if (mimeType.includes('webm')) return 'webm';
-    return 'webm';
-  }
-
   function startRecording(stream) {
     // Réactiver AudioContext si suspendu (souvent nécessaire sur mobile/iOS)
     if (audioContext && audioContext.state === 'suspended') {
@@ -1042,21 +916,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
-    currentBackupSessionId = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-    BackupManager.setMeta({
-      sessionId: currentBackupSessionId,
-      mimeType: (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : mimeType,
-      startedAt: Date.now(),
-      pendingUpload: false
-    });
-
     audioChunks = [];
     mediaRecorder.ondataavailable = (ev) => {
       if (ev.data && ev.data.size > 0) {
         audioChunks.push(ev.data);
         // [INJECTED V2]
         Reliability.notifyChunk();
-        BackupManager.saveChunk(ev.data, currentBackupSessionId);
+        BackupManager.saveChunk(ev.data);
       }
     };
 
@@ -1095,12 +961,10 @@ document.addEventListener('DOMContentLoaded', function () {
           currentScreenStream = null;
           teardownAudioGraph();
           mediaRecorder = null;
-          BackupManager.clear(currentBackupSessionId || null);
-          currentBackupSessionId = null;
           return;
         }
 
-        const ext = mimeTypeToExt(finalMime);
+        const ext = (finalMime.split(';')[0].split('/')[1] || 'webm');
         const now = new Date();
         const pad = n => n.toString().padStart(2, '0');
         const datePart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -1126,12 +990,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const doSubmit = () => {
           if (!form) return;
-          const prevMeta = BackupManager.getMeta() || {};
-          BackupManager.setMeta({
-            ...prevMeta,
-            pendingUpload: true,
-            lastSubmitAt: Date.now()
-          });
           if (typeof form.requestSubmit === 'function') form.requestSubmit();
           else if (submitButton) submitButton.click();
         };
@@ -1253,11 +1111,13 @@ document.addEventListener('DOMContentLoaded', function () {
         teardownAudioGraph();
         mediaRecorder = null;
 
+        // [INJECTED V2]
+        BackupManager.clear();
       }, 50);
     };
 
     // Timeslice pour flush régulier (important pour Firefox)
-    const timeslice = CHUNK_TIMESLICE_MS;
+    const timeslice = isFirefox() ? 1000 : 250;
     try {
       mediaRecorder.start(timeslice);
     } catch (e) {
@@ -1421,18 +1281,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
-  function flushRecorderForLifecycle(reason) {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') return;
-    try { mediaRecorder.requestData(); } catch (e) { warn('requestData lifecycle:', reason, e); }
-    const prevMeta = BackupManager.getMeta() || {};
-    BackupManager.setMeta({
-      ...prevMeta,
-      pendingUpload: true,
-      lifecycleExit: reason,
-      lastLifecycleFlushAt: Date.now()
-    });
-  }
-
   window.addEventListener('beforeunload', function (event) {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       try { mediaRecorder.requestData(); } catch (e) { }
@@ -1443,13 +1291,15 @@ document.addEventListener('DOMContentLoaded', function () {
 
   window.addEventListener('unload', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      flushRecorderForLifecycle('unload');
+      try { mediaRecorder.requestData(); } catch (e) { }
+      stopRecordingAndSubmitForm();
     }
   });
 
   window.addEventListener('pagehide', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      flushRecorderForLifecycle('pagehide');
+      try { mediaRecorder.requestData(); } catch (e) { }
+      stopRecordingAndSubmitForm();
     }
   });
 
@@ -1457,10 +1307,6 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('visibilitychange', function () {
     if (document.hidden && mediaRecorder && mediaRecorder.state === 'recording') {
       warn('Page en arrière-plan pendant l\'enregistrement');
-      flushRecorderForLifecycle('hidden');
-    }
-    if (!document.hidden && mediaRecorder && mediaRecorder.state === 'recording') {
-      WakeLockManager.request();
     }
   });
 
@@ -1478,7 +1324,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (startButton) {
     startButton.addEventListener('click', function () {
-      initiateRecording(!!pendingShareMode);
+      initiateRecording(false);
     });
   }
 
@@ -1491,37 +1337,16 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   } catch { }
 
-  document.addEventListener('newJobIdAvailable', async function () {
-    try {
-      const meta = BackupManager.getMeta() || {};
-      if (!meta.pendingUpload) return;
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
-      await BackupManager.clear(meta.sessionId || null);
-      currentBackupSessionId = null;
-      log('Backup local effacé après ACK backend.');
-    } catch (e) {
-      warn('Impossible d\'effacer le backup après ACK backend:', e);
-    }
-  });
-
   // [INJECTED V2] Recovery Check
   (async function () {
-    const meta = BackupManager.getMeta() || {};
     const count = await BackupManager.count();
     if (count > 0) {
       if (confirm("⚠️ Une session précédente a été interrompue (" + count + " fragments).\nVoulez-vous la récupérer ?")) {
-        const blobs = await BackupManager.getAllChunks(meta.sessionId || null);
-        if (!blobs.length) return;
-        const fallbackMime = (meta && meta.mimeType) ? String(meta.mimeType) : '';
-        const firstBlobMime = blobs[0] && blobs[0].type ? String(blobs[0].type) : '';
-        const recoveryMime = fallbackMime || firstBlobMime || 'audio/webm';
-        const recoveryExt = mimeTypeToExt(recoveryMime);
-        downloadRecording(
-          new Blob(blobs, { type: recoveryMime }),
-          'RECOVERY_' + Date.now() + '.' + recoveryExt
-        );
-        if (confirm("Effacer la sauvegarde ?")) BackupManager.clear(meta.sessionId || null);
+        const blobs = await BackupManager.getAllChunks();
+        downloadRecording(new Blob(blobs, { type: 'audio/webm' }), 'RECOVERY_' + Date.now() + '.webm');
+        if (confirm("Effacer la sauvegarde ?")) BackupManager.clear();
       }
     }
   })();
 });
+
