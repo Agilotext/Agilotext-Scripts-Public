@@ -202,7 +202,7 @@
   const MIX_PREGAIN_DB = 0.0;  // Pas de gain global pour préserver la dynamique naturelle
 
   const MIC_BASE_GAIN = 2.0;   // Gain micro équilibré
-  const SYS_BASE_GAIN = 1.0;   // Gain système à l'unité pour équilibre parfait
+  const SYS_BASE_GAIN = 1.8;   // Gain système augmenté pour garantir une bonne capture pour l'IA (mieux trop fort que pas assez)
 
   const AGC_ENABLED = true;
   const AGC_TARGET = 0.20;     // Cible RMS plus basse pour préserver la dynamique
