@@ -297,6 +297,8 @@ document.addEventListener('DOMContentLoaded', function () {
   let screenVideoTrack = null; // Pour pouvoir retirer le listener si besoin
   let onScreenEnded = null; // Handler nommé pour pouvoir le retirer
   let currentBackupSessionId = null;
+  let pendingShareMode = false;
+  let initiateInProgress = false;
 
   let stopInProgress = false; // Flag pour éviter les doubles clics "Stop"
 
@@ -305,6 +307,19 @@ document.addEventListener('DOMContentLoaded', function () {
   const err = (...a) => { console.error('[rec]', ...a); };
 
   const dbToGain = (db) => Math.pow(10, db / 20);
+
+  function startThroughWebflow(shareScreen) {
+    pendingShareMode = !!shareScreen;
+    if (startButton) {
+      try {
+        startButton.click(); // conserve les interactions Webflow liées à .startrecording
+        return;
+      } catch (e) {
+        warn('startButton.click() failed, fallback direct:', e);
+      }
+    }
+    initiateRecording(pendingShareMode);
+  }
 
   /* =========================
      DÉTECTION NAVIGATEUR / MOBILE
@@ -634,13 +649,13 @@ document.addEventListener('DOMContentLoaded', function () {
     startAudioButton.onclick = function () {
       // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
-        initiateRecording(false);
+        startThroughWebflow(false);
       } else if (isChromeLike()) {
-        initiateRecording(false);
+        startThroughWebflow(false);
       } else if (startButton) {
         startButton.click();
       } else {
-        initiateRecording(false);
+        startThroughWebflow(false);
       }
     };
   }
@@ -649,19 +664,19 @@ document.addEventListener('DOMContentLoaded', function () {
       // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
         if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
-          initiateRecording(false);
+          startThroughWebflow(false);
         }
       } else if (isFirefox()) {
         // Firefox : avertir que l'audio système ne sera pas capté
         if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
-          initiateRecording(true);
+          startThroughWebflow(true);
         }
       } else if (isChromeLike()) {
-        initiateRecording(true);
+        startThroughWebflow(true);
       } else if (startButton) {
         startButton.click();
       } else {
-        initiateRecording(true);
+        startThroughWebflow(true);
       }
     };
   }
@@ -721,180 +736,186 @@ document.addEventListener('DOMContentLoaded', function () {
   async function initiateRecording(shareScreen) {
     if (stopInProgress) return;
     if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
+    if (initiateInProgress) return;
+    initiateInProgress = true;
+    pendingShareMode = !!shareScreen;
 
-    // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
-    if (audioContext && audioContext.state === 'suspended') {
-      try {
-        await audioContext.resume();
-      } catch (e) {
-        warn('AudioContext.resume() dans initiateRecording:', e);
-      }
-    }
-
-    // Vérifications de compatibilité
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
-      return;
-    }
-
-    if (!supportsMediaRecorder()) {
-      alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
-      return;
-    }
-
-    setupAudioContext();
-
-    // Vérifier que setupAudioContext() a réussi
-    if (!destination || !destination.stream) {
-      alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
-      stopStreamTracks(currentMicStream);
-      currentMicStream = null;
-      stopStreamTracks(currentScreenStream);
-      currentScreenStream = null;
-      teardownAudioGraph();
-      return;
-    }
-
-    // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
     try {
-      if (navigator.permissions && navigator.permissions.query) {
+      // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
+      if (audioContext && audioContext.state === 'suspended') {
         try {
-          const res = await navigator.permissions.query({ name: 'microphone' });
-          if (res.state !== 'granted') {
-            // On continue quand même, l'erreur sera gérée par getUserMedia
-          }
+          await audioContext.resume();
         } catch (e) {
-          // Permissions API non supportée ou erreur, on continue
-          warn('Permissions API non disponible:', e);
+          warn('AudioContext.resume() dans initiateRecording:', e);
         }
       }
-    } catch { }
 
-    // Micro
-    try {
-      currentMicStream = await getMicStreamWithFallback();
-      attachMicTrackListeners(currentMicStream);
-    } catch (e) {
-      err('getUserMedia audio:', e);
-      stopButton && (stopButton.style.display = 'none');
-      pauseButton && (pauseButton.style.display = 'none');
-      if (errorMessage) errorMessage.style.display = 'block';
-
-      let errorMsg = 'Erreur lors de l\'accès au microphone: ';
-      if (e.name === 'NotAllowedError') {
-        errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
-      } else if (e.name === 'NotFoundError') {
-        errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
-      } else {
-        errorMsg += e.message || e;
+      // Vérifications de compatibilité
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Votre navigateur ne supporte pas l\'enregistrement audio. Veuillez utiliser un navigateur récent (Chrome, Firefox, Safari, Edge).');
+        return;
       }
 
-      alert(errorMsg);
-      teardownAudioGraph();
-      return;
-    }
+      if (!supportsMediaRecorder()) {
+        alert('Votre navigateur ne supporte pas MediaRecorder. Veuillez utiliser un navigateur récent.');
+        return;
+      }
 
-    // Onglet/écran (seulement si demandé ET disponible)
-    if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
-      isSharingScreen = true;
+      setupAudioContext();
+
+      // Vérifier que setupAudioContext() a réussi
+      if (!destination || !destination.stream) {
+        alert("Votre navigateur ne supporte pas le mixage audio (WebAudio). Essayez Chrome/Edge.");
+        stopStreamTracks(currentMicStream);
+        currentMicStream = null;
+        stopStreamTracks(currentScreenStream);
+        currentScreenStream = null;
+        teardownAudioGraph();
+        return;
+      }
+
+      // Vérification des permissions (avec fallback pour navigateurs sans Permissions API)
       try {
-        currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
-        // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
-        screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
-
-        currentScreenStream.addEventListener?.('addtrack', (e) => {
-          if (e.track && e.track.kind === 'audio') {
-            warn('Nouvelle piste audio écran ajoutée -> rebind');
-            bindSystemToGraph(currentScreenStream);
+        if (navigator.permissions && navigator.permissions.query) {
+          try {
+            const res = await navigator.permissions.query({ name: 'microphone' });
+            if (res.state !== 'granted') {
+              // On continue quand même, l'erreur sera gérée par getUserMedia
+            }
+          } catch (e) {
+            // Permissions API non supportée ou erreur, on continue
+            warn('Permissions API non disponible:', e);
           }
-        });
+        }
+      } catch { }
 
+      // Micro
+      try {
+        currentMicStream = await getMicStreamWithFallback();
+        attachMicTrackListeners(currentMicStream);
       } catch (e) {
-        err('getDisplayMedia:', e);
-        // Afficher l'erreur comme dans l'ancien script : div error + popup
+        err('getUserMedia audio:', e);
         if (errorMessage) errorMessage.style.display = 'block';
         if (stopButton) stopButton.style.display = 'none';
         if (pauseButton) pauseButton.style.display = 'none';
 
-        // Différencier les types d'erreurs
-        let errorMsg;
+        let errorMsg = 'Erreur lors de l\'accès au microphone: ';
         if (e.name === 'NotAllowedError') {
-          errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
+          errorMsg += 'Permission refusée. Veuillez autoriser l\'accès au microphone dans les paramètres de votre navigateur.';
         } else if (e.name === 'NotFoundError') {
-          errorMsg = 'Aucune source de partage trouvée.';
-        } else if (e.name === 'AbortError') {
-          errorMsg = 'Partage d\'écran annulé.';
+          errorMsg += 'Aucun microphone trouvé. Vérifiez que votre microphone est connecté.';
         } else {
-          errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
+          errorMsg += e.message || e;
         }
         alert(errorMsg);
-
-        isSharingScreen = false;
-        currentScreenStream = null;
-        screenVideoTrack = null;
-        // Nettoyer les ressources
-        stopStreamTracks(currentMicStream);
-        currentMicStream = null;
         teardownAudioGraph();
-        return; // NE PAS démarrer l'enregistrement
+        return;
       }
-    } else if (shareScreen && !supportsDisplayMedia()) {
-      // getDisplayMedia non disponible, on continue avec micro seul
-      warn('getDisplayMedia non disponible, enregistrement micro seul');
-    }
 
-    // Vérifier l'audio système AVANT de démarrer l'enregistrement
-    if (shareScreen && currentScreenStream) {
-      const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
-      if (!hasSystemAudio) {
-        // Firefox ne supporte pas l'audio système via getDisplayMedia
-        // On fait un fallback : continuer en micro seul avec un message explicite
-        if (isFirefox()) {
-          warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
-          alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
-          // On continue avec micro seul (pas de currentScreenStream)
-          // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
-          stopStreamTracks(currentScreenStream);
-          currentScreenStream = null;
-          screenVideoTrack = null;
-          isSharingScreen = false;
-        } else {
-          // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
-          err('Pas d\'audio système détecté, enregistrement annulé');
+      // Onglet/écran (seulement si demandé ET disponible)
+      if (shareScreen && !isSharingScreen && supportsDisplayMedia()) {
+        isSharingScreen = true;
+        try {
+          currentScreenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+          // Stocker la piste vidéo mais NE PAS attacher le listener tout de suite
+          // (on l'attachera seulement si on garde vraiment le stream après le check hasSystemAudio)
+          screenVideoTrack = currentScreenStream.getVideoTracks && currentScreenStream.getVideoTracks()[0] || null;
+
+          currentScreenStream.addEventListener?.('addtrack', (e) => {
+            if (e.track && e.track.kind === 'audio') {
+              warn('Nouvelle piste audio écran ajoutée -> rebind');
+              bindSystemToGraph(currentScreenStream);
+            }
+          });
+
+        } catch (e) {
+          err('getDisplayMedia:', e);
+          // Afficher l'erreur comme dans l'ancien script : div error + popup
           if (errorMessage) errorMessage.style.display = 'block';
           if (stopButton) stopButton.style.display = 'none';
           if (pauseButton) pauseButton.style.display = 'none';
-          alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
-          // Afficher l'aide pour Chrome/Edge
-          showTabAudioHintOnce();
-          // Nettoyer les ressources
-          stopStreamTracks(currentMicStream);
-          stopStreamTracks(currentScreenStream);
-          currentMicStream = null;
+
+          // Différencier les types d'erreurs
+          let errorMsg;
+          if (e.name === 'NotAllowedError') {
+            errorMsg = 'Permission de partage d\'écran refusée.\n\nPour capter l\'audio d\'un onglet, partage un "Onglet Chrome" et coche "Partager l\'audio".';
+          } else if (e.name === 'NotFoundError') {
+            errorMsg = 'Aucune source de partage trouvée.';
+          } else if (e.name === 'AbortError') {
+            errorMsg = 'Partage d\'écran annulé.';
+          } else {
+            errorMsg = 'Erreur de partage d\'écran : ' + (e.message || e.name || 'Erreur inconnue');
+          }
+          alert(errorMsg);
+
+          isSharingScreen = false;
           currentScreenStream = null;
           screenVideoTrack = null;
-          isSharingScreen = false;
+          // Nettoyer les ressources
+          stopStreamTracks(currentMicStream);
+          currentMicStream = null;
           teardownAudioGraph();
           return; // NE PAS démarrer l'enregistrement
         }
-      } else {
-        // On garde le stream, donc on peut maintenant attacher le listener ended
-        // Utiliser une fonction nommée pour pouvoir la retirer si besoin
-        if (screenVideoTrack) {
-          onScreenEnded = () => stopRecordingAndSubmitForm();
-          screenVideoTrack.addEventListener('ended', onScreenEnded);
+      } else if (shareScreen && !supportsDisplayMedia()) {
+        // getDisplayMedia non disponible, on continue avec micro seul
+        warn('getDisplayMedia non disponible, enregistrement micro seul');
+      }
+
+      // Vérifier l'audio système AVANT de démarrer l'enregistrement
+      if (shareScreen && currentScreenStream) {
+        const hasSystemAudio = !!(currentScreenStream.getAudioTracks && currentScreenStream.getAudioTracks().length > 0);
+        if (!hasSystemAudio) {
+          // Firefox ne supporte pas l'audio système via getDisplayMedia
+          // On fait un fallback : continuer en micro seul avec un message explicite
+          if (isFirefox()) {
+            warn('Firefox : pas d\'audio système détecté, enregistrement micro seul');
+            alert('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement continuera avec votre micro uniquement.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.');
+            // On continue avec micro seul (pas de currentScreenStream)
+            // IMPORTANT : libérer la capture écran (on n'a pas encore attaché le listener ended, donc c'est safe)
+            stopStreamTracks(currentScreenStream);
+            currentScreenStream = null;
+            screenVideoTrack = null;
+            isSharingScreen = false;
+          } else {
+            // Sur Chrome/Edge : bloquer si pas d'audio système (c'est possible, donc on doit l'exiger)
+            err('Pas d\'audio système détecté, enregistrement annulé');
+            if (errorMessage) errorMessage.style.display = 'block';
+            if (stopButton) stopButton.style.display = 'none';
+            if (pauseButton) pauseButton.style.display = 'none';
+            alert('Astuce : sélectionnez "Onglet Chrome" et cochez "Partager l\'audio de l\'onglet" pour capter la voix de l\'autre.');
+            // Afficher l'aide pour Chrome/Edge
+            showTabAudioHintOnce();
+            // Nettoyer les ressources
+            stopStreamTracks(currentMicStream);
+            stopStreamTracks(currentScreenStream);
+            currentMicStream = null;
+            currentScreenStream = null;
+            screenVideoTrack = null;
+            isSharingScreen = false;
+            teardownAudioGraph();
+            return; // NE PAS démarrer l'enregistrement
+          }
+        } else {
+          // On garde le stream, donc on peut maintenant attacher le listener ended
+          // Utiliser une fonction nommée pour pouvoir la retirer si besoin
+          if (screenVideoTrack) {
+            onScreenEnded = () => stopRecordingAndSubmitForm();
+            screenVideoTrack.addEventListener('ended', onScreenEnded);
+          }
         }
       }
+
+      bindMicToGraph(currentMicStream);
+      if (currentScreenStream) bindSystemToGraph(currentScreenStream);
+
+      if (meterAnalyser && meterData) startLevelMeter();
+      startMicAutoGain();
+
+      startRecording(destination.stream);
+    } finally {
+      initiateInProgress = false;
     }
-
-    bindMicToGraph(currentMicStream);
-    if (currentScreenStream) bindSystemToGraph(currentScreenStream);
-
-    if (meterAnalyser && meterData) startLevelMeter();
-    startMicAutoGain();
-
-    startRecording(destination.stream);
   }
 
   function bindMicToGraph(micStream) {
@@ -1457,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   if (startButton) {
     startButton.addEventListener('click', function () {
-      initiateRecording(false);
+      initiateRecording(!!pendingShareMode);
     });
   }
 
