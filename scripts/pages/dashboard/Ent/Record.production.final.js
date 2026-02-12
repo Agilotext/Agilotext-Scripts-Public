@@ -1,8 +1,12 @@
-document.addEventListener('DOMContentLoaded', function () {
+// Log IMMÉDIAT pour vérifier que le script se charge (avant DOMContentLoaded)
+console.log('[Record Script] 🚀 Script chargé - Version production finale');
+
+// Fonction principale
+function initRecordScript() {
   const DBG = !!window.AGILO_DEBUG;
   
-  // Log de démarrage pour vérifier que le script se charge
-  console.log('[Record Script] 🚀 Script démarré - Version production finale');
+  // Log de démarrage
+  console.log('[Record Script] 🚀 Initialisation du script d\'enregistrement');
 
   // --- MODULES FIABILITÉ (INJECTÉS V2) ---
   const WakeLockManager = {
@@ -806,7 +810,8 @@ document.addEventListener('DOMContentLoaded', function () {
     track.addEventListener('unmute', () => warn('Piste micro unmute'));
   }
 
-  async function initiateRecording(shareScreen) {
+  // Exposer initiateRecording globalement pour la délégation d'événements
+  window.initiateRecording = async function initiateRecording(shareScreen) {
     console.log('[Record Script] 🎬 initiateRecording appelé, shareScreen:', shareScreen);
     if (mediaRecorder && mediaRecorder.state === 'recording') {
       console.warn('[Record Script] ⚠️ Enregistrement déjà en cours, ignoré');
@@ -1542,4 +1547,61 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
   })();
-});
+}
+
+// Fonction wrapper pour initialiser le script
+function initRecordScriptWrapper() {
+  try {
+    initRecordScript();
+  } catch (e) {
+    console.error('[Record Script] ❌ Erreur lors de l\'initialisation:', e);
+  }
+}
+
+// Attendre que le DOM soit prêt (même si déjà chargé)
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initRecordScriptWrapper);
+} else {
+  // DOM déjà chargé, lancer immédiatement avec un petit délai pour laisser les autres scripts se charger
+  setTimeout(initRecordScriptWrapper, 100);
+}
+
+// Délégation d'événements globale pour capturer les clics même si les boutons sont créés après
+document.addEventListener('click', function(e) {
+  const target = e.target;
+  const btn = target.closest('#recording_audio, #recording_sharing, .startrecording, [id*="recording"], [class*="recording"]');
+  
+  if (btn) {
+    console.log('[Record Script] 🎯 Clic détecté sur:', btn.id || btn.className || 'bouton inconnu');
+    
+    // Vérifier quel bouton a été cliqué
+    if (btn.id === 'recording_audio' || btn.classList.contains('recording_audio')) {
+      console.log('[Record Script] 🎤 Bouton audio détecté');
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof initiateRecording === 'function') {
+        initiateRecording(false);
+      } else {
+        console.error('[Record Script] ❌ initiateRecording non disponible');
+      }
+    } else if (btn.id === 'recording_sharing' || btn.classList.contains('recording_sharing')) {
+      console.log('[Record Script] 🎥 Bouton sharing détecté');
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof initiateRecording === 'function') {
+        initiateRecording(true);
+      } else {
+        console.error('[Record Script] ❌ initiateRecording non disponible');
+      }
+    } else if (btn.classList.contains('startrecording')) {
+      console.log('[Record Script] 🎬 Bouton start détecté');
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof initiateRecording === 'function') {
+        initiateRecording(false);
+      } else {
+        console.error('[Record Script] ❌ initiateRecording non disponible');
+      }
+    }
+  }
+}, true); // Utiliser capture phase pour intercepter avant les autres handlers
