@@ -183,15 +183,17 @@
   const MIN_BLOB_BYTES = 2048;
 
   // ============================================
-  // CONFIGURATION "DIARIZATION-FIRST"
+  // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
   // Objectif : Maximiser la séparation des locuteurs pour la diarization
   // - Pas de ducking (préserve les chevauchements)
   // - Compression très légère (préserve les différences entre voix)
   // - AGC modéré (évite le pompage qui lisse les voix)
+  // - EchoCancellation activé (évite la réverbération système dans le micro)
+  // - NoiseSuppression désactivé (préserve les caractéristiques des voix)
   // ============================================
   const MIC_CONSTRAINTS_BASE = {
-    echoCancellation: false,  // Désactivé pour préserver les caractéristiques brutes de chaque voix
-    noiseSuppression: false,   // Désactivé pour préserver les différences entre locuteurs
+    echoCancellation: true,   // ACTIVÉ : évite la réverbération du son système dans le micro (critique pour Google Meet)
+    noiseSuppression: false,   // Désactivé pour préserver les différences entre locuteurs et caractéristiques des voix
     autoGainControl: false,   // Désactivé car on a un AGC custom (évite double AGC / pompage)
     channelCount: 1,
     sampleRate: 48000
