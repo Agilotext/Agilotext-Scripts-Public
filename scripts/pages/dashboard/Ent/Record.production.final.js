@@ -1,12 +1,5 @@
-// Log IMMÉDIAT pour vérifier que le script se charge (avant DOMContentLoaded)
-console.log('[Record Script] 🚀 Script chargé - Version production finale');
-
-// Fonction principale
-function initRecordScript() {
+document.addEventListener('DOMContentLoaded', function () {
   const DBG = !!window.AGILO_DEBUG;
-  
-  // Log de démarrage
-  console.log('[Record Script] 🚀 Initialisation du script d\'enregistrement');
 
   // --- MODULES FIABILITÉ (INJECTÉS V2) ---
   const WakeLockManager = {
@@ -156,108 +149,6 @@ function initRecordScript() {
   const startAudioButton = document.getElementById('recording_audio');
   const errorMessage = document.getElementById('error-message_recording');
   const levelFill = document.getElementById('audioLevelFill');
-
-  // DEBUG: Vérifier que les éléments sont trouvés
-  console.log('[Record Script] 🔍 Vérification des éléments DOM:');
-  console.log('  - startButton (.startrecording):', startButton ? '✅' : '❌');
-  console.log('  - startAudioButton (#recording_audio):', startAudioButton ? '✅' : '❌');
-  console.log('  - startSharingButton (#recording_sharing):', startSharingButton ? '✅' : '❌');
-  console.log('  - recordingDiv (#recordingDiv):', recordingDiv ? '✅' : '❌');
-  console.log('  - recordingAnimation (#Recording_animation):', recordingAnimation ? '✅' : '❌');
-  console.log('  - stopButton (#stopRecording):', stopButton ? '✅' : '❌');
-  console.log('  - pauseButton (#pauseRecording):', pauseButton ? '✅' : '❌');
-  
-  // DEBUG: Chercher tous les boutons qui contiennent "record" ou "enregistrement"
-  const allButtons = document.querySelectorAll('button, [role="button"], a[href="#"], .w-button');
-  const recordButtons = Array.from(allButtons).filter(btn => {
-    const text = (btn.textContent || btn.innerText || '').toLowerCase();
-    const id = (btn.id || '').toLowerCase();
-    const className = (btn.className || '').toLowerCase();
-    return text.includes('record') || text.includes('enregistrer') || 
-           id.includes('record') || className.includes('record');
-  });
-  console.log('[Record Script] 🔍 Boutons trouvés contenant "record/enregistrer":', recordButtons.length);
-  recordButtons.forEach((btn, idx) => {
-    console.log(`  [${idx}] ID: ${btn.id || 'N/A'}, Classes: ${btn.className || 'N/A'}, Text: ${(btn.textContent || '').substring(0, 50)}`);
-  });
-
-  // Fonction pour réessayer de trouver les éléments si ils sont chargés dynamiquement
-  function retryFindElements(maxRetries = 5, delay = 500) {
-    let retries = 0;
-    const checkElements = () => {
-      retries++;
-      const audioBtn = document.getElementById('recording_audio');
-      const sharingBtn = document.getElementById('recording_sharing');
-      const startBtn = document.querySelector('.startrecording');
-      
-      if ((audioBtn || sharingBtn || startBtn) && retries < maxRetries) {
-        console.log(`[Record Script] 🔄 Tentative ${retries}/${maxRetries} - Éléments trouvés, réinitialisation...`);
-        
-        // Réattacher les listeners si les boutons sont maintenant disponibles
-        if (audioBtn && !audioBtn.hasAttribute('data-listener-attached')) {
-          console.log('[Record Script] ✅ Réattachement listener sur startAudioButton');
-          audioBtn.setAttribute('data-listener-attached', 'true');
-          audioBtn.onclick = function () {
-            console.log('[Record Script] 🎤 Clic sur startAudioButton (retry)');
-            if (isMobileDevice() || !supportsDisplayMedia()) {
-              initiateRecording(false);
-            } else if (isChromeLike()) {
-              initiateRecording(false);
-            } else if (startBtn) {
-              startBtn.click();
-            } else {
-              initiateRecording(false);
-            }
-          };
-        }
-        
-        if (sharingBtn && !sharingBtn.hasAttribute('data-listener-attached')) {
-          console.log('[Record Script] ✅ Réattachement listener sur startSharingButton');
-          sharingBtn.setAttribute('data-listener-attached', 'true');
-          sharingBtn.onclick = function () {
-            console.log('[Record Script] 🎥 Clic sur startSharingButton (retry)');
-            if (isMobileDevice() || !supportsDisplayMedia()) {
-              if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
-                initiateRecording(false);
-              }
-            } else if (isFirefox()) {
-              if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
-                initiateRecording(true);
-              }
-            } else if (isChromeLike()) {
-              initiateRecording(true);
-            } else if (startBtn) {
-              startBtn.click();
-            } else {
-              initiateRecording(true);
-            }
-          };
-        }
-        
-        if (startBtn && !startBtn.hasAttribute('data-listener-attached')) {
-          console.log('[Record Script] ✅ Réattachement listener sur startButton');
-          startBtn.setAttribute('data-listener-attached', 'true');
-          startBtn.addEventListener('click', function () {
-            console.log('[Record Script] 🎬 Clic sur startButton (retry)');
-            initiateRecording(false);
-          });
-        }
-      } else if (retries < maxRetries) {
-        setTimeout(checkElements, delay);
-      } else {
-        console.warn('[Record Script] ⚠️ Éléments non trouvés après', maxRetries, 'tentatives');
-      }
-    };
-    
-    // Ne lancer le retry que si les éléments ne sont pas trouvés initialement
-    if (!startAudioButton && !startSharingButton && !startButton) {
-      console.log('[Record Script] 🔄 Aucun bouton trouvé, démarrage du retry...');
-      setTimeout(checkElements, delay);
-    }
-  }
-  
-  // Lancer le retry si nécessaire
-  retryFindElements();
 
   /* --------- État --------- */
   let mediaRecorder;
@@ -712,10 +603,7 @@ function initRecordScript() {
 
   /* ---------------- Start buttons ---------------- */
   if (startAudioButton) {
-    console.log('[Record Script] ✅ Attachement listener sur startAudioButton');
-    startAudioButton.setAttribute('data-listener-attached', 'true');
     startAudioButton.onclick = function () {
-      console.log('[Record Script] 🎤 Clic sur startAudioButton');
       // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
         initiateRecording(false);
@@ -727,15 +615,9 @@ function initRecordScript() {
         initiateRecording(false);
       }
     };
-  } else {
-    console.warn('[Record Script] ⚠️ startAudioButton (#recording_audio) non trouvé !');
   }
-  
   if (startSharingButton) {
-    console.log('[Record Script] ✅ Attachement listener sur startSharingButton');
-    startSharingButton.setAttribute('data-listener-attached', 'true');
     startSharingButton.onclick = function () {
-      console.log('[Record Script] 🎥 Clic sur startSharingButton');
       // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
       if (isMobileDevice() || !supportsDisplayMedia()) {
         if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
@@ -754,8 +636,6 @@ function initRecordScript() {
         initiateRecording(true);
       }
     };
-  } else {
-    console.warn('[Record Script] ⚠️ startSharingButton (#recording_sharing) non trouvé !');
   }
 
   function effectiveMicConstraints() {
@@ -810,13 +690,8 @@ function initRecordScript() {
     track.addEventListener('unmute', () => warn('Piste micro unmute'));
   }
 
-  // Exposer initiateRecording globalement pour la délégation d'événements
-  window.initiateRecording = async function initiateRecording(shareScreen) {
-    console.log('[Record Script] 🎬 initiateRecording appelé, shareScreen:', shareScreen);
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      console.warn('[Record Script] ⚠️ Enregistrement déjà en cours, ignoré');
-      return;
-    }
+  async function initiateRecording(shareScreen) {
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
 
     // AJOUT : Réactiver AudioContext dans le contexte utilisateur (iOS)
     if (audioContext && audioContext.state === 'suspended') {
@@ -1517,14 +1392,9 @@ function initRecordScript() {
   }
 
   if (startButton) {
-    console.log('[Record Script] ✅ Attachement listener sur startButton (.startrecording)');
-    startButton.setAttribute('data-listener-attached', 'true');
     startButton.addEventListener('click', function () {
-      console.log('[Record Script] 🎬 Clic sur startButton');
       initiateRecording(false);
     });
-  } else {
-    console.warn('[Record Script] ⚠️ startButton (.startrecording) non trouvé !');
   }
 
   try {
@@ -1547,61 +1417,4 @@ function initRecordScript() {
       }
     }
   })();
-}
-
-// Fonction wrapper pour initialiser le script
-function initRecordScriptWrapper() {
-  try {
-    initRecordScript();
-  } catch (e) {
-    console.error('[Record Script] ❌ Erreur lors de l\'initialisation:', e);
-  }
-}
-
-// Attendre que le DOM soit prêt (même si déjà chargé)
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initRecordScriptWrapper);
-} else {
-  // DOM déjà chargé, lancer immédiatement avec un petit délai pour laisser les autres scripts se charger
-  setTimeout(initRecordScriptWrapper, 100);
-}
-
-// Délégation d'événements globale pour capturer les clics même si les boutons sont créés après
-document.addEventListener('click', function(e) {
-  const target = e.target;
-  const btn = target.closest('#recording_audio, #recording_sharing, .startrecording, [id*="recording"], [class*="recording"]');
-  
-  if (btn) {
-    console.log('[Record Script] 🎯 Clic détecté sur:', btn.id || btn.className || 'bouton inconnu');
-    
-    // Vérifier quel bouton a été cliqué
-    if (btn.id === 'recording_audio' || btn.classList.contains('recording_audio')) {
-      console.log('[Record Script] 🎤 Bouton audio détecté');
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof initiateRecording === 'function') {
-        initiateRecording(false);
-      } else {
-        console.error('[Record Script] ❌ initiateRecording non disponible');
-      }
-    } else if (btn.id === 'recording_sharing' || btn.classList.contains('recording_sharing')) {
-      console.log('[Record Script] 🎥 Bouton sharing détecté');
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof initiateRecording === 'function') {
-        initiateRecording(true);
-      } else {
-        console.error('[Record Script] ❌ initiateRecording non disponible');
-      }
-    } else if (btn.classList.contains('startrecording')) {
-      console.log('[Record Script] 🎬 Bouton start détecté');
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof initiateRecording === 'function') {
-        initiateRecording(false);
-      } else {
-        console.error('[Record Script] ❌ initiateRecording non disponible');
-      }
-    }
-  }
-}, true); // Utiliser capture phase pour intercepter avant les autres handlers
+});
