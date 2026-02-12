@@ -610,65 +610,130 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /* ---------------- Start buttons ---------------- */
-  // #region agent log
-  fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:605',message:'Tentative attachement listeners',data:{startAudioButton:!!startAudioButton,startSharingButton:!!startSharingButton,startButton:!!startButton},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-  // #endregion
-  
-  if (startAudioButton) {
+  // Fonction pour attacher les listeners aux boutons
+  function attachButtonListeners() {
+    const audioBtn = document.getElementById('recording_audio');
+    const sharingBtn = document.getElementById('recording_sharing');
+    const startBtn = document.querySelector('.startrecording');
+    
     // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:610',message:'Listener attaché sur startAudioButton',data:{id:startAudioButton.id,className:startAudioButton.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:607',message:'attachButtonListeners appelé',data:{audioBtn:!!audioBtn,sharingBtn:!!sharingBtn,startBtn:!!startBtn},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    startAudioButton.onclick = function () {
+    
+    if (audioBtn && !audioBtn.hasAttribute('data-listener-attached')) {
       // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:612',message:'CLIC DÉTECTÉ sur startAudioButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:612',message:'Attachement listener sur startAudioButton',data:{id:audioBtn.id,className:audioBtn.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
-      // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
-      if (isMobileDevice() || !supportsDisplayMedia()) {
-        initiateRecording(false);
-      } else if (isChromeLike()) {
-        initiateRecording(false);
-      } else if (startButton) {
-        startButton.click();
-      } else {
-        initiateRecording(false);
-      }
-    };
-  } else {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:625',message:'startAudioButton NON TROUVÉ',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-  }
-  if (startSharingButton) {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:628',message:'Listener attaché sur startSharingButton',data:{id:startSharingButton.id,className:startSharingButton.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    startSharingButton.onclick = function () {
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:630',message:'CLIC DÉTECTÉ sur startSharingButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
-      // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
-      if (isMobileDevice() || !supportsDisplayMedia()) {
-        if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
+      audioBtn.setAttribute('data-listener-attached', 'true');
+      audioBtn.onclick = function () {
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:616',message:'CLIC DÉTECTÉ sur startAudioButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        // Sur mobile ou navigateurs sans getDisplayMedia, on permet quand même l'enregistrement micro seul
+        if (isMobileDevice() || !supportsDisplayMedia()) {
+          initiateRecording(false);
+        } else if (isChromeLike()) {
+          initiateRecording(false);
+        } else if (startBtn) {
+          startBtn.click();
+        } else {
           initiateRecording(false);
         }
-      } else if (isFirefox()) {
-        // Firefox : avertir que l'audio système ne sera pas capté
-        if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
+      };
+    }
+    
+    if (sharingBtn && !sharingBtn.hasAttribute('data-listener-attached')) {
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:630',message:'Attachement listener sur startSharingButton',data:{id:sharingBtn.id,className:sharingBtn.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      sharingBtn.setAttribute('data-listener-attached', 'true');
+      sharingBtn.onclick = function () {
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:634',message:'CLIC DÉTECTÉ sur startSharingButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        // Sur mobile, getDisplayMedia n'est pas disponible, on fait un fallback micro seul
+        if (isMobileDevice() || !supportsDisplayMedia()) {
+          if (confirm('Le partage d\'écran n\'est pas disponible sur cet appareil. Voulez-vous enregistrer uniquement le micro ?')) {
+            initiateRecording(false);
+          }
+        } else if (isFirefox()) {
+          // Firefox : avertir que l'audio système ne sera pas capté
+          if (confirm('⚠️ Firefox ne supporte pas la capture de l\'audio système/onglet.\n\nL\'enregistrement utilisera uniquement votre micro.\n\nPour capter la voix de l\'autre personne, utilisez Chrome ou Edge.\n\nContinuer quand même ?')) {
+            initiateRecording(true);
+          }
+        } else if (isChromeLike()) {
+          initiateRecording(true);
+        } else if (startBtn) {
+          startBtn.click();
+        } else {
           initiateRecording(true);
         }
-      } else if (isChromeLike()) {
-        initiateRecording(true);
-      } else if (startButton) {
-        startButton.click();
-      } else {
-        initiateRecording(true);
-      }
-    };
-  } else {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:642',message:'startSharingButton NON TROUVÉ',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+      };
+    }
+    
+    if (startBtn && !startBtn.hasAttribute('data-listener-attached')) {
+      startBtn.setAttribute('data-listener-attached', 'true');
+      startBtn.addEventListener('click', function () {
+        initiateRecording(false);
+      });
+    }
   }
+  
+  // Essayer d'attacher immédiatement
+  attachButtonListeners();
+  
+  // Si les boutons ne sont pas trouvés, utiliser MutationObserver pour les détecter quand ils apparaissent
+  if (!startAudioButton && !startSharingButton) {
+    // #region agent log
+    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:660',message:'Boutons non trouvés, démarrage MutationObserver',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    const observer = new MutationObserver(function(mutations) {
+      const audioBtn = document.getElementById('recording_audio');
+      const sharingBtn = document.getElementById('recording_sharing');
+      if (audioBtn || sharingBtn) {
+        // #region agent log
+        fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:666',message:'Boutons détectés par MutationObserver',data:{audioBtn:!!audioBtn,sharingBtn:!!sharingBtn},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        attachButtonListeners();
+        // Si les deux boutons sont trouvés, arrêter l'observation
+        if (audioBtn && sharingBtn) {
+          observer.disconnect();
+        }
+      }
+    });
+    
+    // Observer les changements dans le DOM
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+    
+    // Timeout de sécurité : arrêter après 10 secondes
+    setTimeout(() => {
+      observer.disconnect();
+      // Dernière tentative
+      attachButtonListeners();
+    }, 10000);
+  }
+  
+  // Retry avec setTimeout comme fallback
+  let retryCount = 0;
+  const maxRetries = 10;
+  const retryInterval = setInterval(() => {
+    retryCount++;
+    const audioBtn = document.getElementById('recording_audio');
+    const sharingBtn = document.getElementById('recording_sharing');
+    
+    if ((audioBtn && !audioBtn.hasAttribute('data-listener-attached')) || 
+        (sharingBtn && !sharingBtn.hasAttribute('data-listener-attached'))) {
+      attachButtonListeners();
+    }
+    
+    if (retryCount >= maxRetries) {
+      clearInterval(retryInterval);
+    }
+  }, 500);
 
   function effectiveMicConstraints() {
     const c = { audio: {} };
@@ -1426,11 +1491,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  if (startButton) {
-    startButton.addEventListener('click', function () {
-      initiateRecording(false);
-    });
-  }
+  // startButton est géré dans attachButtonListeners maintenant
 
   try {
     navigator.mediaDevices?.addEventListener?.('devicechange', () => {
