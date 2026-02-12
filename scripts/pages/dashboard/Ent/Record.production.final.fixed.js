@@ -202,10 +202,10 @@
   const MIX_PREGAIN_DB = 0.0;  // Pas de gain global pour préserver la dynamique naturelle
 
   const MIC_BASE_GAIN = 2.0;   // Gain micro équilibré
-  const SYS_BASE_GAIN = 1.8;   // Gain système augmenté pour garantir une bonne capture pour l'IA (mieux trop fort que pas assez)
+  const SYS_BASE_GAIN = 2.0;   // Gain système équilibré avec micro pour meilleure capture pour l'IA
 
   const AGC_ENABLED = true;
-  const AGC_TARGET = 0.20;     // Cible RMS plus basse pour préserver la dynamique
+  const AGC_TARGET = 0.23;     // Cible RMS optimisée pour meilleure capture tout en préservant la dynamique
   const AGC_SMOOTH = 0.01;     // Très doux pour éviter les variations brusques
   const AGC_MIN_GAIN = 0.8;    // Permet de baisser si trop fort
   const AGC_MAX_GAIN = 3.0;    // Amplification max modérée (évite le pompage qui nuit à la séparation)
@@ -219,7 +219,7 @@
   };
 
   const MIX_LIMITER = {
-    threshold: -1.0,  // Limite douce pour éviter la distorsion sans écraser la dynamique
+    threshold: -2.0,  // Limite avec plus de marge pour éviter la distorsion sans écraser la dynamique
     knee: 2,
     ratio: 2,         // Ratio faible pour préserver la dynamique
     attack: 0.005,
