@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', function () {
   const DBG = !!window.AGILO_DEBUG;
   
+  // Log immédiat pour vérifier que le script se charge
+  console.log('[Record Script] 🚀 Script chargé - DOMContentLoaded déclenché');
+  
   // #region agent log
   fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:2',message:'DOMContentLoaded déclenché',data:{readyState:document.readyState},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
@@ -616,16 +619,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const sharingBtn = document.getElementById('recording_sharing');
     const startBtn = document.querySelector('.startrecording');
     
+    console.log('[Record Script] 🔍 attachButtonListeners appelé - audioBtn:', !!audioBtn, 'sharingBtn:', !!sharingBtn, 'startBtn:', !!startBtn);
+    
     // #region agent log
     fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:607',message:'attachButtonListeners appelé',data:{audioBtn:!!audioBtn,sharingBtn:!!sharingBtn,startBtn:!!startBtn},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     
     if (audioBtn && !audioBtn.hasAttribute('data-listener-attached')) {
+      console.log('[Record Script] ✅ Attachement listener sur startAudioButton');
       // #region agent log
       fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:612',message:'Attachement listener sur startAudioButton',data:{id:audioBtn.id,className:audioBtn.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       audioBtn.setAttribute('data-listener-attached', 'true');
       audioBtn.onclick = function () {
+        console.log('[Record Script] 🎤 CLIC sur startAudioButton !');
         // #region agent log
         fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:616',message:'CLIC DÉTECTÉ sur startAudioButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
@@ -643,11 +650,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     if (sharingBtn && !sharingBtn.hasAttribute('data-listener-attached')) {
+      console.log('[Record Script] ✅ Attachement listener sur startSharingButton');
       // #region agent log
       fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:630',message:'Attachement listener sur startSharingButton',data:{id:sharingBtn.id,className:sharingBtn.className},timestamp:Date.now(),runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       sharingBtn.setAttribute('data-listener-attached', 'true');
       sharingBtn.onclick = function () {
+        console.log('[Record Script] 🎥 CLIC sur startSharingButton !');
         // #region agent log
         fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:634',message:'CLIC DÉTECTÉ sur startSharingButton',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
@@ -680,24 +689,29 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   
   // Essayer d'attacher immédiatement
+  console.log('[Record Script] 🔄 Première tentative d\'attachement des listeners');
   attachButtonListeners();
   
-  // Si les boutons ne sont pas trouvés, utiliser MutationObserver pour les détecter quand ils apparaissent
-  if (!startAudioButton && !startSharingButton) {
-    // #region agent log
-    fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:660',message:'Boutons non trouvés, démarrage MutationObserver',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
+  // Toujours démarrer le MutationObserver car les boutons peuvent être créés après
+  console.log('[Record Script] 👀 Démarrage MutationObserver pour détecter les boutons');
+  // #region agent log
+  fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:660',message:'Démarrage MutationObserver',data:{},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
     
     const observer = new MutationObserver(function(mutations) {
       const audioBtn = document.getElementById('recording_audio');
       const sharingBtn = document.getElementById('recording_sharing');
       if (audioBtn || sharingBtn) {
+        console.log('[Record Script] 🎯 MutationObserver: Boutons détectés ! audioBtn:', !!audioBtn, 'sharingBtn:', !!sharingBtn);
         // #region agent log
         fetch('http://127.0.0.1:7245/ingest/552290f7-1aa0-460e-943d-ed0206f41ae0',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Record.production.final.js:666',message:'Boutons détectés par MutationObserver',data:{audioBtn:!!audioBtn,sharingBtn:!!sharingBtn},timestamp:Date.now(),runId:'run1',hypothesisId:'A'})}).catch(()=>{});
         // #endregion
         attachButtonListeners();
-        // Si les deux boutons sont trouvés, arrêter l'observation
-        if (audioBtn && sharingBtn) {
+        // Si les deux boutons sont trouvés ET ont leurs listeners attachés, arrêter l'observation
+        if (audioBtn && sharingBtn && 
+            audioBtn.hasAttribute('data-listener-attached') && 
+            sharingBtn.hasAttribute('data-listener-attached')) {
+          console.log('[Record Script] ✅ Tous les listeners attachés, arrêt du MutationObserver');
           observer.disconnect();
         }
       }
@@ -718,12 +732,17 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   
   // Retry avec setTimeout comme fallback
+  console.log('[Record Script] 🔄 Démarrage retry interval (toutes les 500ms)');
   let retryCount = 0;
-  const maxRetries = 10;
+  const maxRetries = 20; // 10 secondes au total
   const retryInterval = setInterval(() => {
     retryCount++;
     const audioBtn = document.getElementById('recording_audio');
     const sharingBtn = document.getElementById('recording_sharing');
+    
+    if (retryCount % 4 === 0) { // Log toutes les 2 secondes
+      console.log(`[Record Script] 🔄 Retry ${retryCount}/${maxRetries} - audioBtn:`, !!audioBtn, 'sharingBtn:', !!sharingBtn);
+    }
     
     if ((audioBtn && !audioBtn.hasAttribute('data-listener-attached')) || 
         (sharingBtn && !sharingBtn.hasAttribute('data-listener-attached'))) {
@@ -731,6 +750,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     if (retryCount >= maxRetries) {
+      console.log('[Record Script] ⏹️ Arrêt du retry après', maxRetries, 'tentatives');
       clearInterval(retryInterval);
     }
   }, 500);
