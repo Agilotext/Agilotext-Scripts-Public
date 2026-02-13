@@ -218,10 +218,13 @@
   };
   // --- FIN MODULES FIABILITÉ ---
 
-  const MAX_RECORDING_MS = 30 * 60 * 1000; // 30 minutes (limitation Free)
+  const MAX_RECORDING_MS = (typeof window.AGILO_RECORD_MAX_MS === 'number' && Number.isFinite(window.AGILO_RECORD_MAX_MS))
+    ? window.AGILO_RECORD_MAX_MS
+    : (30 * 60 * 1000); // Free : 30 min par défaut
   const MIN_BLOB_BYTES = 2048;
   const RECORD_VERSION = '2026-02-13-r1';
   const ONSTOP_TIMEOUT_MS = 6000;
+  const UPLOAD_CONFIRMED_FALLBACK_MS = 90000;
 
   // ============================================
   // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
@@ -343,6 +346,8 @@
   let stopInProgress = false;
   let uploadConfirmed = false;
   let onstopTimeoutId = null;
+  let recordAbortedByTimeout = false;
+  let uploadConfirmedFallbackTimerId = null;
   let micRestartInFlight = false;
   let restartMicAttempts = 0;
   let devicechangeDebounceTimer = null;
@@ -977,6 +982,7 @@
   async function restartMic() {
     if (micRestartInFlight) return;
     if (restartMicAttempts >= MAX_RESTART_MIC_ATTEMPTS) {
+      logEvent('mic_recovery_failed', { attempts: restartMicAttempts });
       NotificationManager.show(
         "Micro perdu après " + MAX_RESTART_MIC_ATTEMPTS + " tentatives. Relancez l'enregistrement.",
         'error', 0, 'Micro indisponible',
@@ -995,6 +1001,7 @@
       log('Micro rétabli.');
     } catch (e) {
       err('Échec de réacquisition du micro:', e);
+      logEvent('mic_recovery_failed', { attempts: restartMicAttempts, error: (e && e.name) || 'Unknown' });
       NotificationManager.show(
         "Le micro a été perdu (casque déconnecté). Merci de re-sélectionner un micro puis relancer l'enregistrement si besoin.",
         'error', 0, null,
@@ -1022,6 +1029,8 @@
 
   function startRecording(stream) {
     uploadConfirmed = false;
+    recordAbortedByTimeout = false;
+    if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     restartMicAttempts = 0;
     silentWarnShown = false;
     clipWarnShown = false;
@@ -1085,6 +1094,10 @@
     };
 
     mediaRecorder.onstop = function () {
+      if (recordAbortedByTimeout) {
+        recordAbortedByTimeout = false;
+        return;
+      }
       if (onstopTimeoutId) { clearTimeout(onstopTimeoutId); onstopTimeoutId = null; }
       stopInProgress = false;
       WakeLockManager.release();
@@ -1255,6 +1268,16 @@
         teardownAudioGraph();
         mediaRecorder = null;
         if (uploadConfirmed) BackupManager.clear();
+        else {
+          if (uploadConfirmedFallbackTimerId) clearTimeout(uploadConfirmedFallbackTimerId);
+          uploadConfirmedFallbackTimerId = setTimeout(function () {
+            uploadConfirmedFallbackTimerId = null;
+            if (uploadConfirmed) return;
+            uploadConfirmed = true;
+            BackupManager.clear();
+            logEvent('upload_confirmed_fallback', {});
+          }, UPLOAD_CONFIRMED_FALLBACK_MS);
+        }
       }, 50);
     };
 
@@ -1379,6 +1402,7 @@
     if (canStopRecorder) {
       onstopTimeoutId = setTimeout(function forceCleanupAfterStopTimeout() {
         onstopTimeoutId = null;
+        recordAbortedByTimeout = true;
         if (!stopInProgress) return;
         try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.requestData(); } catch (e) { }
         stopStreamTracks(currentMicStream);
@@ -1447,9 +1471,14 @@
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
   document.addEventListener('agilo-upload-confirmed', function () {
+    if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     uploadConfirmed = true;
     BackupManager.clear();
     logEvent('upload_success', {});
+  });
+
+  document.addEventListener('agilo-upload-failed', function (e) {
+    logEvent('upload_fail', e.detail || {});
   });
 
   window.addEventListener('beforeunload', function (event) {

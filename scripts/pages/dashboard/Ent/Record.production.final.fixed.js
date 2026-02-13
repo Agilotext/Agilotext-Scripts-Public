@@ -218,10 +218,14 @@
   };
   // --- FIN MODULES FIABILITÉ ---
 
-  const MAX_RECORDING_MS = null; // Ent : illimité (Free 30min, Pro 2h)
+  // Limite durée : config runtime window.AGILO_RECORD_MAX_MS (ms) prioritaire, sinon défaut par plan (Ent illimité, Free 30min, Pro 2h)
+  const MAX_RECORDING_MS = (typeof window.AGILO_RECORD_MAX_MS === 'number' && Number.isFinite(window.AGILO_RECORD_MAX_MS))
+    ? window.AGILO_RECORD_MAX_MS
+    : null; // Ent : illimité
   const MIN_BLOB_BYTES = 2048;
   const RECORD_VERSION = '2026-02-13-r1';
   const ONSTOP_TIMEOUT_MS = 6000; // P0: secours si onstop ne se déclenche pas
+  const UPLOAD_CONFIRMED_FALLBACK_MS = 90000; // fallback: clear backup si pas d'agilo-upload-confirmed sous 90s
 
   // ============================================
   // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
@@ -347,6 +351,8 @@
   let stopInProgress = false;
   let uploadConfirmed = false;
   let onstopTimeoutId = null;
+  let recordAbortedByTimeout = false;  // ignore onstop tardif après forceCleanupAfterStopTimeout
+  let uploadConfirmedFallbackTimerId = null; // fallback clear backup si agilo-upload-confirmed jamais reçu
   let micRestartInFlight = false;       // P1: évite tempêtes de restart
   let restartMicAttempts = 0;          // P1: limite retries
   let devicechangeDebounceTimer = null; // P1: debounce devicechange
@@ -980,6 +986,7 @@
   async function restartMic() {
     if (micRestartInFlight) return;
     if (restartMicAttempts >= MAX_RESTART_MIC_ATTEMPTS) {
+      logEvent('mic_recovery_failed', { attempts: restartMicAttempts });
       NotificationManager.show(
         "Micro perdu après " + MAX_RESTART_MIC_ATTEMPTS + " tentatives. Relancez l'enregistrement.",
         'error', 0, 'Micro indisponible',
@@ -998,6 +1005,7 @@
       log('Micro rétabli.');
     } catch (e) {
       err('Échec de réacquisition du micro:', e);
+      logEvent('mic_recovery_failed', { attempts: restartMicAttempts, error: (e && e.name) || 'Unknown' });
       NotificationManager.show(
         "Le micro a été perdu (casque déconnecté). Merci de re-sélectionner un micro puis relancer l'enregistrement si besoin.",
         'error', 0, null,
@@ -1025,6 +1033,8 @@
 
   function startRecording(stream) {
     uploadConfirmed = false;
+    recordAbortedByTimeout = false;
+    if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     restartMicAttempts = 0;
     silentWarnShown = false;
     clipWarnShown = false;
@@ -1088,6 +1098,10 @@
     };
 
     mediaRecorder.onstop = function () {
+      if (recordAbortedByTimeout) {
+        recordAbortedByTimeout = false;
+        return; // cleanup déjà fait par forceCleanupAfterStopTimeout, ignorer onstop tardif
+      }
       if (onstopTimeoutId) { clearTimeout(onstopTimeoutId); onstopTimeoutId = null; }
       stopInProgress = false;
       WakeLockManager.release();
@@ -1259,8 +1273,18 @@
         teardownAudioGraph();
         mediaRecorder = null;
 
-        // P0: clear backup uniquement après ACK backend (dispatch 'agilo-upload-confirmed' quand status OK + jobId)
+        // P0: clear backup après ACK backend (agilo-upload-confirmed). Fallback: si pas reçu sous 90s, clear quand même.
         if (uploadConfirmed) BackupManager.clear();
+        else {
+          if (uploadConfirmedFallbackTimerId) clearTimeout(uploadConfirmedFallbackTimerId);
+          uploadConfirmedFallbackTimerId = setTimeout(function () {
+            uploadConfirmedFallbackTimerId = null;
+            if (uploadConfirmed) return;
+            uploadConfirmed = true;
+            BackupManager.clear();
+            logEvent('upload_confirmed_fallback', {});
+          }, UPLOAD_CONFIRMED_FALLBACK_MS);
+        }
       }, 50);
     };
 
@@ -1385,6 +1409,7 @@
     if (canStopRecorder) {
       onstopTimeoutId = setTimeout(function forceCleanupAfterStopTimeout() {
         onstopTimeoutId = null;
+        recordAbortedByTimeout = true; // onstop tardif sera ignoré
         if (!stopInProgress) return;
         try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.requestData(); } catch (e) { }
         stopStreamTracks(currentMicStream);
@@ -1452,10 +1477,17 @@
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
+  // Backend doit émettre agilo-upload-confirmed dans TOUS les chemins succès upload (ex: après sendMultipleAudio status OK + jobIdList).
   document.addEventListener('agilo-upload-confirmed', function () {
+    if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     uploadConfirmed = true;
     BackupManager.clear();
     logEvent('upload_success', {});
+  });
+
+  // Télémétrie échec upload : document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { reason: '...' } }));
+  document.addEventListener('agilo-upload-failed', function (e) {
+    logEvent('upload_fail', e.detail || {});
   });
 
   window.addEventListener('beforeunload', function (event) {
