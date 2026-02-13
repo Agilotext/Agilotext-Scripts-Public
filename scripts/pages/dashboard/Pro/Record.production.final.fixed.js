@@ -354,6 +354,7 @@
 
   let stopInProgress = false;
   let uploadConfirmed = false;
+  let recordSessionId = null;
   let onstopTimeoutId = null;
   let recordAbortedByTimeout = false;
   let uploadConfirmedFallbackTimerId = null;
@@ -1037,6 +1038,7 @@
 
   function startRecording(stream) {
     uploadConfirmed = false;
+    recordSessionId = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     recordAbortedByTimeout = false;
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     restartMicAttempts = 0;
@@ -1147,6 +1149,15 @@
           form.appendChild(hiddenName);
         }
         if (hiddenName) hiddenName.value = audioFileName;
+
+        let hiddenSessionId = form && form.querySelector('input[name="agilo_record_session_id"]');
+        if (form && !hiddenSessionId) {
+          hiddenSessionId = document.createElement('input');
+          hiddenSessionId.type = 'hidden';
+          hiddenSessionId.name = 'agilo_record_session_id';
+          form.appendChild(hiddenSessionId);
+        }
+        if (hiddenSessionId) hiddenSessionId.value = recordSessionId || '';
 
         const fileInput = form && form.querySelector('input[type="file"]');
         const pondInstance = window.FilePond && fileInput ? (() => {
@@ -1477,7 +1488,9 @@
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
-  document.addEventListener('agilo-upload-confirmed', function () {
+  document.addEventListener('agilo-upload-confirmed', function (e) {
+    var detail = (e && e.detail) || {};
+    if (detail.sessionId !== undefined && detail.sessionId !== recordSessionId) return;
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     uploadConfirmed = true;
     BackupManager.clear();

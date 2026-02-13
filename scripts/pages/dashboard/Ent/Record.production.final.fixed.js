@@ -360,9 +360,10 @@
 
   let stopInProgress = false;
   let uploadConfirmed = false;
+  let recordSessionId = null; // évite clear backup cross-feature (agilo-upload-confirmed avec detail.sessionId)
   let onstopTimeoutId = null;
-  let recordAbortedByTimeout = false;  // ignore onstop tardif après forceCleanupAfterStopTimeout
-  let uploadConfirmedFallbackTimerId = null; // fallback clear backup si agilo-upload-confirmed jamais reçu
+  let recordAbortedByTimeout = false;
+  let uploadConfirmedFallbackTimerId = null;
   let micRestartInFlight = false;       // P1: évite tempêtes de restart
   let restartMicAttempts = 0;          // P1: limite retries
   let devicechangeDebounceTimer = null; // P1: debounce devicechange
@@ -1043,6 +1044,7 @@
 
   function startRecording(stream) {
     uploadConfirmed = false;
+    recordSessionId = Date.now() + '_' + Math.random().toString(36).slice(2, 9);
     recordAbortedByTimeout = false;
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     restartMicAttempts = 0;
@@ -1154,6 +1156,15 @@
           form.appendChild(hiddenName);
         }
         if (hiddenName) hiddenName.value = audioFileName;
+
+        let hiddenSessionId = form && form.querySelector('input[name="agilo_record_session_id"]');
+        if (form && !hiddenSessionId) {
+          hiddenSessionId = document.createElement('input');
+          hiddenSessionId.type = 'hidden';
+          hiddenSessionId.name = 'agilo_record_session_id';
+          form.appendChild(hiddenSessionId);
+        }
+        if (hiddenSessionId) hiddenSessionId.value = recordSessionId || '';
 
         const fileInput = form && form.querySelector('input[type="file"]');
         const pondInstance = window.FilePond && fileInput ? (() => {
@@ -1486,8 +1497,10 @@
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
-  // Backend doit émettre agilo-upload-confirmed dans TOUS les chemins succès upload (ex: après sendMultipleAudio status OK + jobIdList).
-  document.addEventListener('agilo-upload-confirmed', function () {
+  // Backend doit émettre agilo-upload-confirmed avec detail.sessionId (id de la session record) pour éviter clear cross-feature.
+  document.addEventListener('agilo-upload-confirmed', function (e) {
+    var detail = (e && e.detail) || {};
+    if (detail.sessionId !== undefined && detail.sessionId !== recordSessionId) return; // autre session / autre feature
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     uploadConfirmed = true;
     BackupManager.clear();
