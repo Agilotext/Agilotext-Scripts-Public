@@ -118,12 +118,14 @@
         };
       });
     },
-    async saveChunk(blob) {
+    async saveChunk(blob, mimeType) {
       if (blob.size === 0) return;
       try {
         await this.open();
+        const count = await this.count();
+        if (count >= MAX_BACKUP_CHUNKS) return;
         this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).add({
-          timestamp: Date.now(), blob: blob
+          timestamp: Date.now(), blob: blob, mimeType: mimeType || null
         });
       } catch (e) { if (DBG) console.warn('[Backup] Save failed:', e); }
     },
@@ -131,7 +133,12 @@
       await this.open();
       return new Promise((resolve, reject) => {
         const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).getAll();
-        req.onsuccess = () => resolve(req.result.map(r => r.blob));
+        req.onsuccess = () => {
+          const result = req.result;
+          const blobs = result.map(r => r.blob);
+          const mimeType = (result.map(r => r.mimeType).find(Boolean)) || 'audio/webm';
+          resolve({ blobs, mimeType });
+        };
         req.onerror = () => reject(req.error);
       });
     },
@@ -181,6 +188,8 @@
 
   const MAX_RECORDING_MS = 2 * 60 * 60 * 1000; // 2 heures (limitation Pro)
   const MIN_BLOB_BYTES = 2048;
+  const RECORD_VERSION = '2026-02-13-r1';
+  const MAX_BACKUP_CHUNKS = 50000;
 
   // ============================================
   // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
@@ -202,13 +211,13 @@
   const MIX_PREGAIN_DB = 0.0;  // Pas de gain global pour préserver la dynamique naturelle
 
   const MIC_BASE_GAIN = 2.0;   // Gain micro équilibré
-  const SYS_BASE_GAIN = 2.0;   // Gain système équilibré avec micro pour meilleure capture pour l'IA
+  const SYS_BASE_GAIN = 1.2;   // Diarization: pas trop haut pour ne pas masquer la voix locale (P0)
 
   const AGC_ENABLED = true;
-  const AGC_TARGET = 0.23;     // Cible RMS optimisée pour meilleure capture tout en préservant la dynamique
+  const AGC_TARGET = 0.24;     // Légère hausse pour voix locale (max 0.25)
   const AGC_SMOOTH = 0.01;     // Très doux pour éviter les variations brusques
   const AGC_MIN_GAIN = 0.8;    // Permet de baisser si trop fort
-  const AGC_MAX_GAIN = 3.0;    // Amplification max modérée (évite le pompage qui nuit à la séparation)
+  const AGC_MAX_GAIN = 3.2;    // Légère hausse pour voix faible (max 3.5)
 
   const MIC_COMP = {
     threshold: -16,   // Compression très légère pour préserver les différences entre locuteurs
@@ -226,9 +235,9 @@
     release: 0.08     // Release rapide pour transitions naturelles
   };
 
-  // Ducking DÉSACTIVÉ : pour la diarization, on veut capturer TOUTES les voix simultanément
-  // Le ducking pénalise les chevauchements (quand tu parles, les autres baissent)
   const DUCKING_ENABLED = false;
+  console.log('[Record Script] Version', RECORD_VERSION);
+  window.__AGILO_RECORD_VERSION__ = RECORD_VERSION;
 
   /* --------- DOM --------- */
   const startButton = document.querySelector('.startrecording');
@@ -299,8 +308,8 @@
   let onScreenEnded = null;
 
   let stopInProgress = false;
-
   const log = (...a) => { if (DBG) console.log('[rec]', ...a); };
+  const logEvent = (name, data) => { console.log('[Record]', name, data != null ? data : ''); };
   const warn = (...a) => { if (DBG) console.warn('[rec]', ...a); };
   const err = (...a) => { console.error('[rec]', ...a); };
 
@@ -926,6 +935,7 @@
     }
 
     const mimeType = getSupportedMimeType();
+    logEvent('record_start', { mime: mimeType, shareScreen: isSharingScreen });
     let options = { mimeType };
     if (isFirefox()) {
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -956,14 +966,14 @@
     mediaRecorder.ondataavailable = (ev) => {
       if (ev.data && ev.data.size > 0) {
         audioChunks.push(ev.data);
-        // [INJECTED V2]
         Reliability.notifyChunk();
-        BackupManager.saveChunk(ev.data);
+        BackupManager.saveChunk(ev.data, mediaRecorder?.mimeType || mimeType);
       }
     };
 
     mediaRecorder.onerror = (event) => {
       err('MediaRecorder error:', event.error);
+      logEvent('onerror', { name: (event.error && event.error.name) || 'Unknown' });
       const name = (event.error && event.error.name) || 'Unknown';
       const map = {
         NotSupportedError: "Format audio non supporté sur ce navigateur.",
@@ -977,13 +987,12 @@
 
     mediaRecorder.onstop = function () {
       stopInProgress = false;
-
-      // [INJECTED V2]
       WakeLockManager.release();
       Reliability.stop();
+      const finalMime = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : mimeType;
+      logEvent('record_stop', { mime: finalMime, durationSec: elapsedTimeInSeconds, chunks: audioChunks.length, size: audioChunks.reduce((s, c) => s + (c.size || 0), 0) });
 
       setTimeout(() => {
-        const finalMime = (mediaRecorder && mediaRecorder.mimeType) ? mediaRecorder.mimeType : mimeType;
         const audioBlob = new Blob(audioChunks, { type: finalMime });
 
         if (!audioBlob || audioBlob.size < MIN_BLOB_BYTES) {
@@ -1144,8 +1153,6 @@
         currentScreenStream = null;
         teardownAudioGraph();
         mediaRecorder = null;
-
-        // [INJECTED V2]
         BackupManager.clear();
       }, 50);
     };
@@ -1324,14 +1331,12 @@
   window.addEventListener('unload', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       try { mediaRecorder.requestData(); } catch (e) { }
-      stopRecordingAndSubmitForm();
     }
   });
 
   window.addEventListener('pagehide', function () {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       try { mediaRecorder.requestData(); } catch (e) { }
-      stopRecordingAndSubmitForm();
     }
   });
 
@@ -1368,22 +1373,24 @@
     });
   } catch { }
 
-  // [INJECTED V3] Recovery Check - URGENT NON-BLOQUANT
   (async function () {
     const count = await BackupManager.count();
     if (count > 0) {
+      logEvent('recovery_available', { count });
       NotificationManager.show(
         "⚠️ CRITICAL: Une session précédente a été interrompue brutalement (" + count + " fragments).",
         "critical",
-        0, // Persistant
+        0,
         "Récupération d'Urgence",
         [
           {
             label: "📥 RÉCUPÉRER L'AUDIO",
             primary: true,
             onClick: async (toast) => {
-              const blobs = await BackupManager.getAllChunks();
-              downloadRecording(new Blob(blobs, { type: 'audio/webm' }), 'RECOVERY_' + Date.now() + '.webm');
+              const { blobs, mimeType } = await BackupManager.getAllChunks();
+              const recoveredMime = mimeType || 'audio/webm';
+              const ext = (recoveredMime.split(';')[0].split('/')[1]) || 'webm';
+              downloadRecording(new Blob(blobs, { type: recoveredMime }), 'RECOVERY_' + Date.now() + '.' + ext);
               // Après téléchargement, on propose d'effacer (non-intrusif)
               toast.remove();
               NotificationManager.show(
