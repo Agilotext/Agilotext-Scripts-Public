@@ -24,8 +24,10 @@
       });
       document.body.appendChild(this.container);
 
-      // Inject CSS
+      // Inject CSS (P2: garde pour éviter double injection)
+      if (document.getElementById('agilo-record-styles')) return;
       const style = document.createElement('style');
+      style.id = 'agilo-record-styles';
       style.innerHTML = `
         .agilo-toast {
           background: #fff; color: #333; padding: 12px 16px; border-radius: 8px;
@@ -52,28 +54,32 @@
       const toast = document.createElement('div');
       toast.className = 'agilo-toast ' + type;
 
-      let html = '<div class="agilo-toast-content">';
-      if (title) html += '<span class="agilo-toast-title">' + title + '</span>';
-      html += '<span>' + msg + '</span>';
+      const content = document.createElement('div');
+      content.className = 'agilo-toast-content';
+      if (title) {
+        const titleEl = document.createElement('span');
+        titleEl.className = 'agilo-toast-title';
+        titleEl.textContent = title;
+        content.appendChild(titleEl);
+      }
+      const msgEl = document.createElement('span');
+      msgEl.textContent = msg;
+      content.appendChild(msgEl);
 
       if (actions.length > 0) {
-        html += '<div class="agilo-toast-actions">';
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'agilo-toast-actions';
         actions.forEach((act, idx) => {
-          html += '<button id="btn-' + idx + '" class="agilo-btn ' + (act.primary ? 'agilo-btn-primary' : 'agilo-btn-secondary') + '">' + act.label + '</button>';
+          const btn = document.createElement('button');
+          btn.className = 'agilo-btn ' + (act.primary ? 'agilo-btn-primary' : 'agilo-btn-secondary');
+          btn.textContent = act.label;
+          btn.onclick = () => { act.onClick(toast); };
+          actionsDiv.appendChild(btn);
         });
-        html += '</div>';
+        content.appendChild(actionsDiv);
       }
-      html += '</div>';
-
-      toast.innerHTML = html;
+      toast.appendChild(content);
       this.container.appendChild(toast);
-
-      if (actions.length > 0) {
-        actions.forEach((act, idx) => {
-          const btn = toast.querySelector('#btn-' + idx);
-          if (btn) btn.onclick = () => { act.onClick(toast); };
-        });
-      }
 
       if (duration > 0) {
         setTimeout(() => {
@@ -103,8 +109,12 @@
     }
   };
 
+  const MAX_BACKUP_CHUNKS = 50000;
+  const MAX_BACKUP_BYTES = 1024 * 1024 * 1024; // P1: 1 Go cap IndexedDB
+
   const BackupManager = {
     db: null, DB_NAME: 'AgilotextRecDB', STORE_NAME: 'chunks',
+    _totalBytes: null,
     async open() {
       if (this.db) return this.db;
       return new Promise((resolve, reject) => {
@@ -123,10 +133,30 @@
       try {
         await this.open();
         const count = await this.count();
-        if (count >= MAX_BACKUP_CHUNKS) return;
+        if (count >= MAX_BACKUP_CHUNKS) {
+          if (DBG) console.warn('[Backup] Cap chunks atteint', MAX_BACKUP_CHUNKS);
+          return;
+        }
+        if (this._totalBytes === null) {
+          const all = await new Promise((res, rej) => {
+            const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).getAll();
+            req.onsuccess = () => res(req.result);
+            req.onerror = () => rej(req.error);
+          });
+          this._totalBytes = all.reduce((s, r) => s + (r.blob ? r.blob.size : 0), 0);
+        }
+        if (this._totalBytes >= MAX_BACKUP_BYTES) {
+          if (DBG) console.warn('[Backup] Cap bytes atteint', MAX_BACKUP_BYTES);
+          if (!backupCapWarned) {
+            backupCapWarned = true;
+            NotificationManager.show('Limite de sauvegarde locale atteinte (1 Go). Les nouveaux fragments ne sont plus sauvegardés.', 'warning', 8000);
+          }
+          return;
+        }
         this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).add({
           timestamp: Date.now(), blob: blob, mimeType: mimeType || null
         });
+        this._totalBytes += blob.size;
       } catch (e) { if (DBG) console.warn('[Backup] Save failed:', e); }
     },
     async getAllChunks() {
@@ -135,6 +165,7 @@
         const req = this.db.transaction([this.STORE_NAME], 'readonly').objectStore(this.STORE_NAME).getAll();
         req.onsuccess = () => {
           const result = req.result;
+          result.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
           const blobs = result.map(r => r.blob);
           const mimeType = (result.map(r => r.mimeType).find(Boolean)) || 'audio/webm';
           resolve({ blobs, mimeType });
@@ -155,6 +186,7 @@
     async clear() {
       if (!this.db) return;
       this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).clear();
+      this._totalBytes = 0;
     }
   };
 
@@ -189,7 +221,7 @@
   const MAX_RECORDING_MS = 2 * 60 * 60 * 1000; // 2 heures (limitation Pro)
   const MIN_BLOB_BYTES = 2048;
   const RECORD_VERSION = '2026-02-13-r1';
-  const MAX_BACKUP_CHUNKS = 50000;
+  const ONSTOP_TIMEOUT_MS = 6000;
 
   // ============================================
   // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
@@ -197,11 +229,12 @@
   // - Pas de ducking (préserve les chevauchements)
   // - Compression très légère (préserve les différences entre voix)
   // - AGC modéré (évite le pompage qui lisse les voix)
-  // - EchoCancellation activé (évite la réverbération système dans le micro)
+  // - EchoCancellation activé (sauf preset Casque)
   // - NoiseSuppression désactivé (préserve les caractéristiques des voix)
   // ============================================
+  const useEchoCancellation = window.AGILO_RECORD_PRESET !== 'casque'; // P2: casque = false, haut-parleur = true
   const MIC_CONSTRAINTS_BASE = {
-    echoCancellation: true,   // ACTIVÉ : évite la réverbération du son système dans le micro (critique pour Google Meet)
+    echoCancellation: useEchoCancellation,
     noiseSuppression: false,   // Désactivé pour préserver les différences entre locuteurs et caractéristiques des voix
     autoGainControl: false,   // Désactivé car on a un AGC custom (évite double AGC / pompage)
     channelCount: 1,
@@ -308,6 +341,28 @@
   let onScreenEnded = null;
 
   let stopInProgress = false;
+  let uploadConfirmed = false;
+  let onstopTimeoutId = null;
+  let micRestartInFlight = false;
+  let restartMicAttempts = 0;
+  let devicechangeDebounceTimer = null;
+  let muteWarnTimer = null;
+  let silentSince = null;
+  let silentWarnShown = false;
+  let clipWarnShown = false;
+  let backgroundWarnTimeout = null;
+  let backgroundRequestDataInterval = null;
+  let backupCapWarned = false;
+
+  const MAX_RESTART_MIC_ATTEMPTS = 3;
+  const DEVICECHANGE_DEBOUNCE_MS = 700;
+  const SILENT_RMS_THRESHOLD = 0.012;
+  const SILENT_WARN_AFTER_MS = 8000;
+  const MUTE_WARN_AFTER_MS = 5000;
+  const CLIP_WARN_AFTER_MS = 2000;
+  const BACKGROUND_WARN_AFTER_MS = 25000;
+  const BACKGROUND_REQUEST_DATA_MS = 4000;
+
   const log = (...a) => { if (DBG) console.log('[rec]', ...a); };
   const logEvent = (name, data) => { console.log('[Record]', name, data != null ? data : ''); };
   const warn = (...a) => { if (DBG) console.warn('[rec]', ...a); };
@@ -448,6 +503,10 @@
         if (level > 0.95) {
           if (!clipActive) { clipActive = true; clipStartTs = now; }
           if (now - clipStartTs > 150) levelFill.style.outline = '2px solid rgba(255,0,0,.75)';
+          if (now - clipStartTs > CLIP_WARN_AFTER_MS && !clipWarnShown) {
+            clipWarnShown = true;
+            NotificationManager.show('Clipping prolongé — baissez le volume système ou le micro.', 'warning', 6000);
+          }
         } else {
           clipActive = false;
           levelFill.style.outline = '';
@@ -496,12 +555,18 @@
         // AGC micro
         const g = micGainNode.gain.value;
         if (rms > 0.001) {
+          silentSince = null;
           const desired = Math.min(AGC_MAX_GAIN, Math.max(AGC_MIN_GAIN, MIC_BASE_GAIN * (AGC_TARGET / rms)));
           micGainNode.gain.value = g + (desired - g) * AGC_SMOOTH;
+        } else {
+          if (silentSince === null) silentSince = Date.now();
+          if (!silentWarnShown && (Date.now() - silentSince > SILENT_WARN_AFTER_MS)) {
+            silentWarnShown = true;
+            NotificationManager.show('Micro silencieux depuis longtemps — vérifiez le micro.', 'warning', 8000);
+          }
         }
 
-        // Ducking DÉSACTIVÉ pour la diarization : on veut capturer toutes les voix simultanément
-        // (Le ducking pénalise les chevauchements et nuit à la séparation des locuteurs)
+        // Ducking DÉSACTIVÉ
       } catch (e) {
         warn('Erreur AGC:', e);
       }
@@ -662,7 +727,7 @@
   function effectiveMicConstraints() {
     const c = { audio: {} };
     if (isMobileDevice() || isIOS()) {
-      c.audio = { echoCancellation: true };
+      c.audio = { echoCancellation: useEchoCancellation };
     } else {
       Object.assign(c.audio, MIC_CONSTRAINTS_BASE);
     }
@@ -702,12 +767,22 @@
       if (mediaRecorder && mediaRecorder.state === 'recording') restartMic();
     });
 
-    track.addEventListener('mute', () => warn('Piste micro mute'));
-    track.addEventListener('unmute', () => warn('Piste micro unmute'));
+    track.addEventListener('mute', () => {
+      warn('Piste micro mute');
+      if (muteWarnTimer) clearTimeout(muteWarnTimer);
+      muteWarnTimer = setTimeout(() => {
+        muteWarnTimer = null;
+        NotificationManager.show('Micro en sourdine depuis longtemps.', 'warning', 8000);
+      }, MUTE_WARN_AFTER_MS);
+    });
+    track.addEventListener('unmute', () => {
+      if (muteWarnTimer) { clearTimeout(muteWarnTimer); muteWarnTimer = null; }
+      warn('Piste micro unmute');
+    });
   }
 
   async function initiateRecording(shareScreen) {
-    if (mediaRecorder && mediaRecorder.state === 'recording') return;
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
 
     if (audioContext && audioContext.state === 'suspended') {
       try {
@@ -899,6 +974,17 @@
   }
 
   async function restartMic() {
+    if (micRestartInFlight) return;
+    if (restartMicAttempts >= MAX_RESTART_MIC_ATTEMPTS) {
+      NotificationManager.show(
+        "Micro perdu après " + MAX_RESTART_MIC_ATTEMPTS + " tentatives. Relancez l'enregistrement.",
+        'error', 0, 'Micro indisponible',
+        [{ label: 'Relancer l\'enregistrement', primary: true, onClick: (t) => { t.remove(); if (startSharingButton) startSharingButton.click(); else initiateRecording(true); } }]
+      );
+      return;
+    }
+    micRestartInFlight = true;
+    restartMicAttempts++;
     try {
       const newMic = await getMicStreamWithFallback();
       stopStreamTracks(currentMicStream);
@@ -908,7 +994,13 @@
       log('Micro rétabli.');
     } catch (e) {
       err('Échec de réacquisition du micro:', e);
-      NotificationManager.show("Le micro a été perdu (casque déconnecté). Merci de re-sélectionner un micro puis relancer l'enregistrement si besoin.", 'error', 0);
+      NotificationManager.show(
+        "Le micro a été perdu (casque déconnecté). Merci de re-sélectionner un micro puis relancer l'enregistrement si besoin.",
+        'error', 0, null,
+        [{ label: 'Relancer', primary: true, onClick: (t) => { t.remove(); if (startSharingButton) startSharingButton.click(); else initiateRecording(true); } }]
+      );
+    } finally {
+      micRestartInFlight = false;
     }
   }
 
@@ -928,6 +1020,12 @@
   }
 
   function startRecording(stream) {
+    uploadConfirmed = false;
+    restartMicAttempts = 0;
+    silentWarnShown = false;
+    clipWarnShown = false;
+    silentSince = null;
+    backupCapWarned = false;
     if (audioContext && audioContext.state === 'suspended') {
       audioContext.resume().catch(e => {
         warn('Impossible de réactiver AudioContext:', e);
@@ -986,6 +1084,7 @@
     };
 
     mediaRecorder.onstop = function () {
+      if (onstopTimeoutId) { clearTimeout(onstopTimeoutId); onstopTimeoutId = null; }
       stopInProgress = false;
       WakeLockManager.release();
       Reliability.stop();
@@ -1034,6 +1133,7 @@
 
         const doSubmit = () => {
           if (!form) return;
+          logEvent('upload_start', { size: audioBlob.size, mime: finalMime });
           if (typeof form.requestSubmit === 'function') form.requestSubmit();
           else if (submitButton) submitButton.click();
         };
@@ -1153,7 +1253,7 @@
         currentScreenStream = null;
         teardownAudioGraph();
         mediaRecorder = null;
-        BackupManager.clear();
+        if (uploadConfirmed) BackupManager.clear();
       }, 50);
     };
 
@@ -1276,6 +1376,31 @@
     };
 
     if (canStopRecorder) {
+      onstopTimeoutId = setTimeout(function forceCleanupAfterStopTimeout() {
+        onstopTimeoutId = null;
+        if (!stopInProgress) return;
+        try { if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.requestData(); } catch (e) { }
+        stopStreamTracks(currentMicStream);
+        currentMicStream = null;
+        stopStreamTracks(currentScreenStream);
+        currentScreenStream = null;
+        teardownAudioGraph();
+        mediaRecorder = null;
+        stopInProgress = false;
+        clearInterval(recordingInterval);
+        clearTimeout(autoStopTimeout);
+        toggleAnimation(false);
+        if (startButton) startButton.disabled = false;
+        if (stopButton) { stopButton.disabled = true; stopButton.style.display = 'none'; }
+        if (pauseButton) { pauseButton.disabled = true; pauseButton.style.display = 'none'; }
+        if (newButton) newButton.style.display = 'flex';
+        if (recordingDiv) recordingDiv.style.display = 'none';
+        if (recordingTimeDisplay) recordingTimeDisplay.innerText = '00:00';
+        warned5min = warned1min = false;
+        isSharingScreen = false;
+        if (errorMessage) errorMessage.style.display = 'none';
+        logEvent('onstop_timeout', {});
+      }, ONSTOP_TIMEOUT_MS);
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         setTimeout(stopMediaRecorder, 150);
       } else {
@@ -1320,6 +1445,12 @@
 
   if (stopButton) stopButton.onclick = stopRecordingAndSubmitForm;
 
+  document.addEventListener('agilo-upload-confirmed', function () {
+    uploadConfirmed = true;
+    BackupManager.clear();
+    logEvent('upload_success', {});
+  });
+
   window.addEventListener('beforeunload', function (event) {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       try { mediaRecorder.requestData(); } catch (e) { }
@@ -1343,6 +1474,20 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden && mediaRecorder && mediaRecorder.state === 'recording') {
       warn('Page en arrière-plan pendant l\'enregistrement');
+      if (backgroundWarnTimeout) clearTimeout(backgroundWarnTimeout);
+      backgroundWarnTimeout = setTimeout(() => {
+        backgroundWarnTimeout = null;
+        NotificationManager.show('L\'enregistrement continue en arrière-plan. Revenez sur l\'onglet pour éviter les coupures.', 'warning', 8000);
+      }, BACKGROUND_WARN_AFTER_MS);
+      if (backgroundRequestDataInterval) clearInterval(backgroundRequestDataInterval);
+      backgroundRequestDataInterval = setInterval(() => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          try { mediaRecorder.requestData(); } catch (e) { }
+        }
+      }, BACKGROUND_REQUEST_DATA_MS);
+    } else {
+      if (backgroundWarnTimeout) { clearTimeout(backgroundWarnTimeout); backgroundWarnTimeout = null; }
+      if (backgroundRequestDataInterval) { clearInterval(backgroundRequestDataInterval); backgroundRequestDataInterval = null; }
     }
   });
 
@@ -1366,10 +1511,13 @@
 
   try {
     navigator.mediaDevices?.addEventListener?.('devicechange', () => {
-      if (mediaRecorder && mediaRecorder.state === 'recording') {
+      if (devicechangeDebounceTimer) clearTimeout(devicechangeDebounceTimer);
+      devicechangeDebounceTimer = setTimeout(() => {
+        devicechangeDebounceTimer = null;
+        if (micRestartInFlight || !mediaRecorder || mediaRecorder.state !== 'recording') return;
         warn('devicechange détecté -> tentative de recovery micro');
         restartMic();
-      }
+      }, DEVICECHANGE_DEBOUNCE_MS);
     });
   } catch { }
 
