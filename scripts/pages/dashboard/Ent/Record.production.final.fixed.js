@@ -7,6 +7,16 @@
     window.__AGILO_RECORD_BOOTED__ = true;
     console.log('[Record Script] 🚀 Initialisation démarrée');
 
+    // P0: Mixed Content — forcer https sur les forms en page https
+    try {
+      if (typeof document !== 'undefined' && document.querySelectorAll && window.location.protocol === 'https:') {
+        document.querySelectorAll('form[action^="http://"]').forEach(function (f) {
+          var a = f.getAttribute('action');
+          if (a) f.setAttribute('action', a.replace(/^http:/i, 'https:'));
+        });
+      }
+    } catch (e) { }
+
     const DBG = !!window.AGILO_DEBUG;
 
   // --- MODULES FIABILITÉ (INJECTÉS V2 & V3) ---
@@ -225,7 +235,7 @@
   const MIN_BLOB_BYTES = 2048;
   const RECORD_VERSION = '2026-02-13-r1';
   const ONSTOP_TIMEOUT_MS = 6000; // P0: secours si onstop ne se déclenche pas
-  const UPLOAD_CONFIRMED_FALLBACK_MS = 90000; // fallback: clear backup si pas d'agilo-upload-confirmed sous 90s
+  const UPLOAD_CONFIRMED_FALLBACK_MS = 90000; // fallback: alerte seulement, pas de clear (évite perte recovery si upload lent/échoué)
 
   // ============================================
   // CONFIGURATION "DIARIZATION-FIRST" OPTIMISÉE
@@ -564,7 +574,7 @@
 
         // AGC micro
         const g = micGainNode.gain.value;
-        if (rms > 0.001) {
+        if (rms > SILENT_RMS_THRESHOLD) {
           silentSince = null;
           const desired = Math.min(AGC_MAX_GAIN, Math.max(AGC_MIN_GAIN, MIC_BASE_GAIN * (AGC_TARGET / rms)));
           micGainNode.gain.value = g + (desired - g) * AGC_SMOOTH;
@@ -737,7 +747,7 @@
   function effectiveMicConstraints() {
     const c = { audio: {} };
     if (isMobileDevice() || isIOS()) {
-      c.audio = { echoCancellation: true };
+      c.audio = { echoCancellation: useEchoCancellation };
     } else {
       Object.assign(c.audio, MIC_CONSTRAINTS_BASE);
     }
@@ -1273,16 +1283,15 @@
         teardownAudioGraph();
         mediaRecorder = null;
 
-        // P0: clear backup après ACK backend (agilo-upload-confirmed). Fallback: si pas reçu sous 90s, clear quand même.
+        // P0: clear backup uniquement après ACK backend (agilo-upload-confirmed). Fallback = alerte seulement, pas de clear.
         if (uploadConfirmed) BackupManager.clear();
         else {
           if (uploadConfirmedFallbackTimerId) clearTimeout(uploadConfirmedFallbackTimerId);
           uploadConfirmedFallbackTimerId = setTimeout(function () {
             uploadConfirmedFallbackTimerId = null;
             if (uploadConfirmed) return;
-            uploadConfirmed = true;
-            BackupManager.clear();
             logEvent('upload_confirmed_fallback', {});
+            NotificationManager.show('La confirmation serveur n\'a pas été reçue. La sauvegarde locale est conservée.', 'warning', 10000);
           }, UPLOAD_CONFIRMED_FALLBACK_MS);
         }
       }, 50);
@@ -1485,8 +1494,8 @@
     logEvent('upload_success', {});
   });
 
-  // Télémétrie échec upload : document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { reason: '...' } }));
   document.addEventListener('agilo-upload-failed', function (e) {
+    if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     logEvent('upload_fail', e.detail || {});
   });
 
