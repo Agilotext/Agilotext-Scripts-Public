@@ -191,7 +191,7 @@
   };
   // --- FIN MODULES FIABILITÉ ---
 
-  const MAX_RECORDING_MS = 3 * 60 * 60 * 1000; // 3h max (P1 cap Ent)
+  const MAX_RECORDING_MS = null; // Ent : illimité (Free 30min, Pro 2h)
   const MIN_BLOB_BYTES = 2048;
   const RECORD_VERSION = '2026-02-13-r1';
 
