@@ -16,6 +16,7 @@ upload-to-github.js
 # Fichiers HTML de test
 *.html
 !README.html
+!CNOEC_Agiloshield_Docs/anonymisation/*.html
 
 # Fichiers JavaScript de test/développement
 *_TEST*.js
