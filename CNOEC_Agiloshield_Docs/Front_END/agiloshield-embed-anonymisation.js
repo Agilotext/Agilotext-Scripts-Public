@@ -44,13 +44,19 @@
   const DEBOUNCE_TEXT_MS = 1000;
   const MIN_TEXT_LENGTH_FOR_API = 10;
   let debounceTextTimer = null;
-  let lastProcessedText = null;
+  let textProcessQueued = false;
+  let textRequestSerial = 0;
+  let lastProcessedCacheKey = null;
   let lastProcessedResult = null;
   let lastProcessedHasTags = false;
   let lastProcessedHtml = null;
+  let lastProcessedStats = null;
+  let lastProcessedCounts = null;
   const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'OTHER'];
   const PLACEHOLDER_RE = /\[([A-Z0-9_]{2,12})\]/g;
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
+  const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+  const storage = createSafeStorage();
 
   const ui = {
     form: document.getElementById('agfForm'),
@@ -130,6 +136,64 @@
     return (bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 2) + ' ' + units[idx];
   };
 
+  function createSafeStorage() {
+    const mem = {};
+    try {
+      const probeKey = '__agilo_probe__';
+      window.localStorage.setItem(probeKey, '1');
+      window.localStorage.removeItem(probeKey);
+      return {
+        get: (k) => window.localStorage.getItem(k),
+        set: (k, v) => window.localStorage.setItem(k, v),
+        remove: (k) => window.localStorage.removeItem(k)
+      };
+    } catch (e) {
+      return {
+        get: (k) => Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null,
+        set: (k, v) => { mem[k] = String(v); },
+        remove: (k) => { delete mem[k]; }
+      };
+    }
+  }
+
+  function toSortedJson(value) {
+    if (Array.isArray(value)) return JSON.stringify(value.slice().sort());
+    if (value && typeof value === 'object') {
+      const keys = Object.keys(value).sort();
+      const ordered = {};
+      keys.forEach((k) => { ordered[k] = value[k]; });
+      return JSON.stringify(ordered);
+    }
+    return JSON.stringify(value);
+  }
+
+  function currentTextConfigKey(text) {
+    return [
+      (text || '').trim(),
+      state.mode,
+      toSortedJson(selectedVisualEntities()),
+      toSortedJson(selectedEntities()),
+      (state.includeTerms || []).join('|'),
+      (state.excludeTerms || []).join('|'),
+      toSortedJson(state.pseudoConfig || {})
+    ].join('::');
+  }
+
+  function resetTextCache() {
+    lastProcessedCacheKey = null;
+    lastProcessedResult = null;
+    lastProcessedHasTags = false;
+    lastProcessedHtml = null;
+    lastProcessedStats = null;
+    lastProcessedCounts = null;
+  }
+
+  function refreshTextIfNeeded() {
+    const value = (ui.textInput && ui.textInput.value || '').trim();
+    if (!value || value.length < MIN_TEXT_LENGTH_FOR_API) return;
+    scheduleDebouncedText();
+  }
+
   function setStatus(kind, message) {
     if (!message) {
       ui.status.classList.remove('is-visible');
@@ -152,23 +216,57 @@
   }
 
   let lastFocusBeforeModal = null;
+  let activeModal = null;
+  let previousBodyOverflow = '';
+
+  function focusableNodes(el) {
+    return Array.from(el.querySelectorAll(FOCUSABLE_SELECTOR))
+      .filter((n) => !n.hasAttribute('disabled') && n.getAttribute('aria-hidden') !== 'true');
+  }
+
   function openModal(el) {
     if (!el) return;
     lastFocusBeforeModal = document.activeElement;
+    activeModal = el;
+    previousBodyOverflow = document.body.style.overflow || '';
+    document.body.style.overflow = 'hidden';
     el.classList.add('is-open');
     el.setAttribute('aria-hidden', 'false');
-    const closeBtn = el.querySelector('.agf-close');
-    if (closeBtn) setTimeout(() => closeBtn.focus(), 0);
+    const focusables = focusableNodes(el);
+    const initial = el.querySelector('.agf-close') || focusables[0];
+    if (initial) setTimeout(() => initial.focus(), 0);
   }
   function closeModal(el) {
     if (!el) return;
     el.classList.remove('is-open');
     el.setAttribute('aria-hidden', 'true');
+    if (activeModal === el) activeModal = null;
+    if (!activeModal) document.body.style.overflow = previousBodyOverflow;
     if (lastFocusBeforeModal && typeof lastFocusBeforeModal.focus === 'function') {
       setTimeout(() => lastFocusBeforeModal.focus(), 0);
     }
   }
   function closeAllModals() { Object.keys(ui.modals).forEach((k) => closeModal(ui.modals[k])); }
+
+  function trapModalFocus(e) {
+    if (!activeModal || e.key !== 'Tab') return;
+    const nodes = focusableNodes(activeModal);
+    if (!nodes.length) {
+      e.preventDefault();
+      return;
+    }
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   function revokeResultUrl() {
     if (state.resultUrl) {
@@ -250,10 +348,12 @@
     ui.tabs.forEach((btn) => {
       const isActive = btn.getAttribute('data-tab') === tab;
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
     Object.keys(ui.panels).forEach((key) => {
       const active = key === tab;
       ui.panels[key].setAttribute('aria-hidden', active ? 'false' : 'true');
+      ui.panels[key].hidden = !active;
     });
   }
 
@@ -355,6 +455,8 @@
         syncHiddenTermFields();
         renderTermList(kind);
         renderInclusionSummary();
+        resetTextCache();
+        refreshTextIfNeeded();
       });
       row.appendChild(txt);
       row.appendChild(rm);
@@ -421,7 +523,8 @@
     if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Paramétrer';
     const anonRadio = (ui.modeRadios || []).find((r) => r.value === 'anonymiser');
     if (anonRadio) anonRadio.checked = !pseudoActive;
-    try { localStorage.setItem(STORAGE_MODE, state.mode); } catch (e) {}
+    storage.set(STORAGE_MODE, state.mode);
+    resetTextCache();
     renderPseudoSummary();
   }
 
@@ -436,7 +539,7 @@
 
   function loadPreferences() {
     let entities = DEFAULT_ENTITIES;
-    const raw = localStorage.getItem(STORAGE_TYPES);
+    const raw = storage.get(STORAGE_TYPES);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
@@ -463,15 +566,15 @@
       chk.checked = entities.includes(chk.getAttribute('data-entity'));
     });
 
-    state.includeTerms = parseStoredTerms(localStorage.getItem(STORAGE_INC));
-    state.excludeTerms = parseStoredTerms(localStorage.getItem(STORAGE_EXC));
+    state.includeTerms = parseStoredTerms(storage.get(STORAGE_INC));
+    state.excludeTerms = parseStoredTerms(storage.get(STORAGE_EXC));
     syncHiddenTermFields();
     renderTermList('include');
     renderTermList('exclude');
     renderInclusionSummary();
 
     try {
-      const pseudoRaw = localStorage.getItem(STORAGE_PSEUDO);
+      const pseudoRaw = storage.get(STORAGE_PSEUDO);
       if (pseudoRaw) {
         const parsed = JSON.parse(pseudoRaw);
         if (parsed && typeof parsed === 'object') state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG, ...parsed };
@@ -479,7 +582,7 @@
     } catch (e) {}
     applyPseudoToUi(state.pseudoConfig);
     renderPseudoSummary();
-    const storedMode = localStorage.getItem(STORAGE_MODE);
+    const storedMode = storage.get(STORAGE_MODE);
     setMode(storedMode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser');
 
     renderTypeCount();
@@ -519,7 +622,7 @@
       const n = fromQuery.toLowerCase();
       if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) return n === 'business' ? 'ent' : n;
     }
-    const stored = localStorage.getItem('agilo:edition');
+    const stored = storage.get('agilo:edition');
     if (stored && ['free', 'pro', 'ent', 'anonymisation'].includes(stored)) return stored;
     if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) return 'ent';
     if (window.location.pathname.includes('/pro/')) return 'pro';
@@ -680,18 +783,44 @@
 
   async function processText() {
     const value = (ui.textInput.value || '').trim();
-    if (!value) { setTextOutput('Ajoutez un texte à traiter.', false); ui.textOutput.classList.remove('agf-text-output--loading'); return; }
-    if (value.length < MIN_TEXT_LENGTH_FOR_API) { setTextOutput('Saisissez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer le traitement.', false); ui.textOutput.classList.remove('agf-text-output--loading'); return; }
-    if (lastProcessedText === value && lastProcessedResult !== null) {
-      setTextOutput(lastProcessedResult, lastProcessedHasTags, lastProcessedHtml);
+    const cacheKey = currentTextConfigKey(value);
+    if (!value) {
+      resetTextCache();
+      setTextOutput('Ajoutez un texte à traiter.', false, null, null, 0);
       ui.textOutput.classList.remove('agf-text-output--loading');
+      ui.textOutput.setAttribute('aria-busy', 'false');
+      return;
+    }
+    if (value.length < MIN_TEXT_LENGTH_FOR_API) {
+      resetTextCache();
+      setTextOutput('Saisissez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer le traitement.', false, null, null, 0);
+      ui.textOutput.classList.remove('agf-text-output--loading');
+      ui.textOutput.setAttribute('aria-busy', 'false');
+      return;
+    }
+    if (state.textProcessing) {
+      textProcessQueued = true;
+      return;
+    }
+    if (lastProcessedCacheKey === cacheKey && lastProcessedResult !== null) {
+      setTextOutput(lastProcessedResult, lastProcessedHasTags, lastProcessedHtml, lastProcessedStats, lastProcessedCounts);
+      ui.textOutput.classList.remove('agf-text-output--loading');
+      ui.textOutput.setAttribute('aria-busy', 'false');
       return;
     }
     state.textProcessing = true;
+    const requestSerial = ++textRequestSerial;
     ui.textOutput.textContent = 'Traitement en cours...';
     ui.textOutput.classList.add('agf-text-output--loading');
+    ui.textOutput.setAttribute('aria-busy', 'true');
 
-    try { await ensureAuth(); } catch (e) { setTextOutput(e.message || 'Authentification indisponible.', false); state.textProcessing = false; ui.textOutput.classList.remove('agf-text-output--loading'); return; }
+    try { await ensureAuth(); } catch (e) {
+      setTextOutput(e.message || 'Authentification indisponible.', false, null, null, 0);
+      state.textProcessing = false;
+      ui.textOutput.classList.remove('agf-text-output--loading');
+      ui.textOutput.setAttribute('aria-busy', 'false');
+      return;
+    }
 
     const payload = new FormData();
     payload.append('username', state.email);
@@ -734,31 +863,39 @@
         throw new Error(msg);
       }
       const out = applyStructuredResponse(raw);
-      lastProcessedText = value;
+      if (requestSerial !== textRequestSerial) return;
+      lastProcessedCacheKey = cacheKey;
       lastProcessedResult = out.plain;
       lastProcessedHasTags = out.useTags;
       lastProcessedHtml = out.html || null;
-      setTextOutput(out.plain, out.useTags, lastProcessedHtml);
+      lastProcessedStats = out.stats || null;
+      lastProcessedCounts = typeof out.total === 'number' ? out.total : null;
+      setTextOutput(out.plain, out.useTags, lastProcessedHtml, out.stats, out.total);
     } catch (err) {
-      if (err && err.name === 'AbortError') setTextOutput('Délai dépassé. Réessayez avec un texte plus court.', false);
-      else setTextOutput((err && err.message) ? err.message : 'Erreur inattendue.', false);
+      if (requestSerial !== textRequestSerial) return;
+      if (err && err.name === 'AbortError') setTextOutput('Délai dépassé. Réessayez avec un texte plus court.', false, null, null, 0);
+      else setTextOutput((err && err.message) ? err.message : 'Erreur inattendue.', false, null, null, 0);
     } finally {
       state.textProcessing = false;
       ui.textOutput.classList.remove('agf-text-output--loading');
+      ui.textOutput.setAttribute('aria-busy', 'false');
+      if (textProcessQueued) {
+        textProcessQueued = false;
+        processText();
+      }
     }
   }
 
-  function setTextOutput(plain, useTags, html) {
+  function setTextOutput(plain, useTags, html, stats, total) {
     if (useTags && html) ui.textOutput.innerHTML = html;
     else ui.textOutput.textContent = plain || 'Le texte traité apparaîtra ici';
-    renderOutputStats(plain || '');
+    renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
   }
 
   function scheduleDebouncedText() {
     if (debounceTextTimer) clearTimeout(debounceTextTimer);
     debounceTextTimer = setTimeout(() => {
       debounceTextTimer = null;
-      if (state.textProcessing) return;
       processText();
     }, DEBOUNCE_TEXT_MS);
   }
@@ -790,15 +927,22 @@
     return counts;
   }
 
-  function renderOutputStats(processedText) {
+  function renderOutputStats(processedText, explicitStats, explicitTotal) {
     if (!ui.outputSummary || !ui.outputEntities) return;
 
-    const stats = extractEntityStats(processedText);
-    const entries = Object.entries(stats).sort((a, b) => {
+    const stats = explicitStats && typeof explicitStats === 'object'
+      ? explicitStats
+      : extractEntityStats(processedText);
+    const entries = Object.entries(stats)
+      .map((entry) => [entry[0], Number(entry[1] || 0)])
+      .filter((entry) => entry[1] > 0)
+      .sort((a, b) => {
       if (b[1] !== a[1]) return b[1] - a[1];
       return a[0].localeCompare(b[0]);
-    });
-    const total = entries.reduce((sum, item) => sum + item[1], 0);
+      });
+    const total = typeof explicitTotal === 'number'
+      ? explicitTotal
+      : entries.reduce((sum, item) => sum + item[1], 0);
 
     ui.outputEntities.textContent = '';
     if (total === 0) {
@@ -820,12 +964,27 @@
 
   function applyStructuredResponse(raw) {
     let plain = (raw && raw.trim()) ? raw : 'Aucun contenu retourné.';
+    let stats = null;
+    let total = null;
     try {
       const data = JSON.parse(raw);
       if (data && typeof data.processedText === 'string') plain = data.processedText;
+      if (data && data.audit && data.audit.entityCounts && typeof data.audit.entityCounts === 'object') {
+        stats = data.audit.entityCounts;
+      } else if (data && Array.isArray(data.entities)) {
+        stats = {};
+        data.entities.forEach((entity) => {
+          const code = entity && entity.type;
+          if (!code || typeof code !== 'string') return;
+          stats[code] = (stats[code] || 0) + 1;
+        });
+      }
+      if (stats) {
+        total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
+      }
     } catch (e) {}
     const built = buildOutputWithTags(plain);
-    return { plain, useTags: built.useTags, html: built.html };
+    return { plain, useTags: built.useTags, html: built.html, stats, total };
   }
 
   function applyEditionLocks() {
@@ -833,11 +992,34 @@
     ui.openInclusion.classList.remove('is-locked');
   }
 
+  function shouldCallApiMeta() {
+    if (!ui.apiMeta) return false;
+    const footer = ui.apiMeta.closest('.agf-api-footer');
+    if (!footer) return false;
+    const styles = window.getComputedStyle(footer);
+    return styles.display !== 'none' && styles.visibility !== 'hidden';
+  }
+
   function bindEvents() {
     ui.form.addEventListener('submit', submitFiles);
     ui.reset.addEventListener('click', resetFiles);
 
-    ui.tabs.forEach((tab) => tab.addEventListener('click', () => setActiveTab(tab.getAttribute('data-tab'))));
+    ui.tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => setActiveTab(tab.getAttribute('data-tab')));
+      tab.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        let nextIndex = index;
+        if (e.key === 'ArrowRight') nextIndex = (index + 1) % ui.tabs.length;
+        if (e.key === 'ArrowLeft') nextIndex = (index - 1 + ui.tabs.length) % ui.tabs.length;
+        if (e.key === 'Home') nextIndex = 0;
+        if (e.key === 'End') nextIndex = ui.tabs.length - 1;
+        const nextTab = ui.tabs[nextIndex];
+        if (!nextTab) return;
+        setActiveTab(nextTab.getAttribute('data-tab'));
+        nextTab.focus();
+      });
+    });
 
     ui.dropzone.addEventListener('click', () => ui.input.click());
     ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.input.click(); } });
@@ -848,10 +1030,23 @@
 
     ui.textInput.addEventListener('input', scheduleDebouncedText);
     ui.textInput.addEventListener('keyup', scheduleDebouncedText);
-    ui.textClear.addEventListener('click', () => { ui.textInput.value = ''; setTextOutput('Le texte traité apparaîtra ici', false); lastProcessedText = null; lastProcessedResult = null; lastProcessedHasTags = false; lastProcessedHtml = null; if (debounceTextTimer) { clearTimeout(debounceTextTimer); debounceTextTimer = null; } });
+    ui.textClear.addEventListener('click', () => {
+      textRequestSerial += 1;
+      textProcessQueued = false;
+      ui.textInput.value = '';
+      resetTextCache();
+      setTextOutput('Le texte traité apparaîtra ici', false, null, null, 0);
+      if (debounceTextTimer) {
+        clearTimeout(debounceTextTimer);
+        debounceTextTimer = null;
+      }
+    });
     if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le texte traité apparaîtra ici') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }); } });
 
-    ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => { setMode(radio.value); }));
+    ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
+      setMode(radio.value);
+      refreshTextIfNeeded();
+    }));
 
     ui.pseudoMode.addEventListener('click', () => openModal(ui.modals.pseudo));
     ui.pseudoSaved.addEventListener('click', () => openModal(ui.modals.pseudo));
@@ -867,23 +1062,31 @@
       Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
         chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
       });
+      resetTextCache();
       renderTypeCount();
+      refreshTextIfNeeded();
     });
 
     if (ui.detectAllTypes) ui.detectAllTypes.addEventListener('click', () => {
       Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => { chk.checked = true; });
+      resetTextCache();
       renderTypeCount();
+      refreshTextIfNeeded();
     });
 
     if (ui.ignoreAllTypes) ui.ignoreAllTypes.addEventListener('click', () => {
       Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => { chk.checked = false; });
+      resetTextCache();
       renderTypeCount();
+      refreshTextIfNeeded();
     });
 
     ui.saveTypes.addEventListener('click', () => {
-      localStorage.setItem(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+      storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+      resetTextCache();
       renderTypeCount();
       closeModal(ui.modals.types);
+      refreshTextIfNeeded();
     });
 
     if (ui.pseudoDefaults) ui.pseudoDefaults.addEventListener('click', () => {
@@ -894,16 +1097,20 @@
 
     if (ui.savePseudo) ui.savePseudo.addEventListener('click', () => {
       state.pseudoConfig = readPseudoFromUi();
-      localStorage.setItem(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
+      storage.set(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
+      resetTextCache();
       setMode('pseudonymiser');
       setStatus('success', 'Politique de pseudonymisation enregistrée.');
       closeModal(ui.modals.pseudo);
+      refreshTextIfNeeded();
     });
 
     if (ui.includeAdd) ui.includeAdd.addEventListener('click', () => {
       if (addTerm('include', ui.includeInput ? ui.includeInput.value : '')) {
         if (ui.includeInput) ui.includeInput.value = '';
         if (ui.includeInput) ui.includeInput.focus();
+        resetTextCache();
+        refreshTextIfNeeded();
       }
     });
 
@@ -911,20 +1118,30 @@
       if (addTerm('exclude', ui.excludeInput ? ui.excludeInput.value : '')) {
         if (ui.excludeInput) ui.excludeInput.value = '';
         if (ui.excludeInput) ui.excludeInput.focus();
+        resetTextCache();
+        refreshTextIfNeeded();
       }
     });
 
     if (ui.includeInput) ui.includeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (addTerm('include', ui.includeInput.value)) ui.includeInput.value = '';
+        if (addTerm('include', ui.includeInput.value)) {
+          ui.includeInput.value = '';
+          resetTextCache();
+          refreshTextIfNeeded();
+        }
       }
     });
 
     if (ui.excludeInput) ui.excludeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        if (addTerm('exclude', ui.excludeInput.value)) ui.excludeInput.value = '';
+        if (addTerm('exclude', ui.excludeInput.value)) {
+          ui.excludeInput.value = '';
+          resetTextCache();
+          refreshTextIfNeeded();
+        }
       }
     });
 
@@ -935,6 +1152,8 @@
       renderTermList('include');
       renderTermList('exclude');
       renderInclusionSummary();
+      resetTextCache();
+      refreshTextIfNeeded();
     });
 
     ui.saveInclusion.addEventListener('click', () => {
@@ -947,10 +1166,12 @@
         ui.excludeInput.value = '';
       }
       syncHiddenTermFields();
-      localStorage.setItem(STORAGE_INC, (ui.includeTerms && ui.includeTerms.value) || '');
-      localStorage.setItem(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
+      storage.set(STORAGE_INC, (ui.includeTerms && ui.includeTerms.value) || '');
+      storage.set(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
+      resetTextCache();
       setStatus('success', "Listes d'inclusion/exclusion enregistrées.");
       closeModal(ui.modals.inclusion);
+      refreshTextIfNeeded();
     });
 
     if (ui.manualAuthToggle && ui.manualAuth && ui.manualAuthFields) {
@@ -962,14 +1183,32 @@
       });
     }
 
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllModals(); });
+    document.addEventListener('keydown', (e) => {
+      trapModalFocus(e);
+      if (e.key === 'Escape') closeAllModals();
+    });
 
     Object.keys(ui.modals).forEach((key) => {
       const overlay = ui.modals[key];
+      if (!overlay) return;
       overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
     });
 
-    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => chk.addEventListener('change', renderTypeCount));
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      chk.addEventListener('change', () => {
+        renderTypeCount();
+        resetTextCache();
+        refreshTextIfNeeded();
+      });
+    });
+
+    [ui.manualUsername, ui.manualToken, ui.manualEdition].forEach((field) => {
+      if (!field) return;
+      field.addEventListener('change', () => {
+        state.token = '';
+        resetTextCache();
+      });
+    });
   }
 
   async function init() {
@@ -980,7 +1219,7 @@
       const n = editionFromUrl.toLowerCase();
       if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = n === 'business' ? 'ent' : n;
     }
-    localStorage.setItem('agilo:edition', state.edition);
+    storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
     state.email = await getUserEmail();
@@ -992,8 +1231,10 @@
     applyEditionLocks();
     renderFileList();
     updateActions();
-    runSessionMaintenance();
-    loadApiVersion();
+    if (shouldCallApiMeta()) {
+      runSessionMaintenance();
+      loadApiVersion();
+    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
