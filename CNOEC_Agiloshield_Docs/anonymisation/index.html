@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Anonymisation - Agiloshield</title>
+</head>
+<body>
+<!--
+  Agiloshield Embed Futures Complete - Design 10+/10 (minimaliste, toutes features)
+  APIs: getToken, anonOfficeText, anonText, cleanupOldJobs, getVersion
+-->
+<style>
+  :root {
+    --agilo-primary: var(--color--blue, #174a96);
+    --agilo-primary-soft: color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent);
+    --agilo-text: var(--color--gris_foncé, #020202);
+    --agilo-text-secondary: var(--color--gris, #525252);
+    --agilo-surface: var(--color--white, #ffffff);
+    --agilo-surface-2: var(--color--blanc_gris, #f8f9fa);
+    --agilo-border: rgba(52, 58, 64, 0.12);
+    --agilo-success: var(--color--vert, #1c661a);
+    --agilo-error: var(--color--rouge, #a82633);
+
+    --space-1: 8px;
+    --space-2: 16px;
+    --space-3: 24px;
+    --space-4: 32px;
+    --radius: 16px;
+    --ring: color-mix(in srgb, var(--agilo-primary) 28%, transparent);
+    --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.06);
+  }
+
+  form[ms-code-anonymisation="form"] {
+    max-width: 1160px;
+    margin: 0 auto;
+    width: 100%;
+    color: var(--agilo-text);
+    font-family: "Inter", "SF Pro Text", "Segoe UI", sans-serif;
+    box-sizing: border-box;
+  }
+  form[ms-code-anonymisation="form"] *,
+  form[ms-code-anonymisation="form"] *::before,
+  form[ms-code-anonymisation="form"] *::after {
+    box-sizing: border-box;
+  }
+  form[ms-code-anonymisation="form"] h1,
+  form[ms-code-anonymisation="form"] h2,
+  form[ms-code-anonymisation="form"] h3,
+  form[ms-code-anonymisation="form"] h4,
+  form[ms-code-anonymisation="form"] h5,
+  form[ms-code-anonymisation="form"] p { margin: 0; }
+
+  .agf-shell {
+    background: var(--agilo-surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .agf-head {
+    display: grid;
+    gap: var(--space-1);
+    padding: 0;
+  }
+  .agf-head h2 { font-size: 1.35rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
+  .agf-head p { color: var(--agilo-text-secondary); font-size: 0.9375rem; }
+
+  .agf-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-1);
+  }
+  .agf-tab {
+    border: 1px solid var(--agilo-border);
+    border-radius: 12px;
+    background: var(--agilo-surface-2);
+    color: var(--agilo-text-secondary);
+    padding: var(--space-2);
+    text-align: left;
+    cursor: pointer;
+    display: grid;
+    gap: var(--space-1);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .agf-tab strong { font-size: 1rem; font-weight: 600; color: var(--agilo-text); }
+  .agf-tab span { font-size: 0.8125rem; color: var(--agilo-text-secondary); }
+  .agf-tab[aria-selected="true"] {
+    background: var(--agilo-surface);
+    border-color: var(--agilo-primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
+  }
+
+  .agf-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: var(--space-2);
+  }
+
+  .agf-main,
+  .agf-side {
+    border-radius: var(--radius);
+    background: var(--agilo-surface-2);
+    padding: var(--space-3);
+  }
+  .agf-main { min-height: 560px; }
+  .agf-side { display: grid; gap: var(--space-3); align-content: start; }
+
+  .agf-panel { display: none; gap: var(--space-2); }
+  .agf-panel[aria-hidden="false"] { display: grid; }
+
+  .agf-section-title { font-size: 1rem; font-weight: 600; margin-bottom: var(--space-1); }
+
+  .agf-dropzone {
+    border: 1.5px dashed var(--agilo-border);
+    border-radius: 12px;
+    background: var(--agilo-surface-2);
+    padding: var(--space-3) var(--space-2);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    outline: none;
+  }
+  .agf-dropzone:hover,
+  .agf-dropzone:focus-visible,
+  .agf-dropzone.is-dragover {
+    border-color: var(--agilo-primary);
+    box-shadow: 0 0 0 4px var(--ring);
+  }
+  .agf-dropzone h4 { font-size: 1rem; font-weight: 600; }
+  .agf-dropzone p { margin-top: var(--space-1); font-size: 0.8125rem; color: var(--agilo-text-secondary); }
+  .agf-dropzone .agf-formats-explicit { margin-top: var(--space-1); font-size: 0.75rem; color: var(--agilo-text-secondary); opacity: 0.9; }
+  #agfApiLink { color: var(--agilo-text-secondary); text-decoration: none; font-size: 0.75rem; }
+  #agfApiLink:hover { text-decoration: underline; color: var(--agilo-accent); }
+
+  #agfFileInput { display: none; }
+
+  .agf-list {
+    border: 1px solid var(--agilo-border);
+    border-radius: 12px;
+    background: var(--agilo-surface);
+    min-height: 220px;
+    padding: var(--space-2);
+    display: grid;
+    gap: var(--space-1);
+    align-content: start;
+  }
+  .agf-empty { margin: auto; text-align: center; color: var(--agilo-text-secondary); font-size: 0.875rem; }
+
+  .agf-file {
+    border: 1px solid var(--agilo-border);
+    border-radius: 10px;
+    background: var(--agilo-surface);
+    padding: var(--space-1) var(--space-2);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .agf-file-name { font-size: 0.9375rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .agf-file-meta { margin-top: 2px; color: var(--agilo-text-secondary); font-size: 0.8125rem; }
+  .agf-remove {
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--agilo-text-secondary);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  .agf-remove:hover { color: var(--agilo-error); }
+
+  .agf-row,
+  .agf-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+
+  .agf-textbox {
+    border: 1px solid var(--agilo-border);
+    border-radius: 12px;
+    background: var(--agilo-surface);
+    padding: var(--space-2);
+    display: grid;
+    gap: var(--space-1);
+    min-height: 340px;
+  }
+  .agf-textbox label { font-size: 0.875rem; font-weight: 600; }
+  .agf-textarea {
+    width: 100%; min-height: 280px; border: 1px solid var(--agilo-border); border-radius: 10px;
+    padding: var(--space-2); font-size: 0.9375rem; line-height: 1.5; resize: vertical; background: var(--agilo-surface);
+    color: var(--agilo-text);
+  }
+  .agf-text-placeholder {
+    min-height: 280px; border: 1px solid var(--agilo-border); border-radius: 10px; background: var(--agilo-surface);
+    display: grid; place-items: center; text-align: center; color: var(--agilo-text-secondary); font-size: 0.875rem; padding: var(--space-2);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .agf-text-placeholder.agf-text-output--loading { opacity: 0.85; }
+  .agf-entity-chips { display: none; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+  .agf-entity-chips.is-visible { display: flex; }
+  .agf-entity-chip { font-size: 0.6875rem; padding: 2px 8px; border-radius: 999px; background: var(--agilo-primary-soft); color: var(--agilo-primary); border: 1px solid transparent; }
+
+  .agf-lock-block {
+    border: 1.5px dashed var(--agilo-border);
+    border-radius: 12px;
+    background: var(--agilo-surface-2);
+    min-height: 380px;
+    display: grid;
+    place-items: center;
+    gap: var(--space-2);
+    text-align: center;
+    padding: var(--space-3);
+  }
+  .agf-lock-icon { width: 64px; height: 64px; color: var(--agilo-primary); }
+  .agf-lock-title { font-size: 1rem; font-weight: 600; }
+  .agf-lock-text { color: var(--agilo-text-secondary); font-size: 0.875rem; max-width: 480px; }
+
+  .agf-status {
+    display: none; align-items: center; gap: var(--space-1); border-radius: 10px;
+    padding: var(--space-2); font-size: 0.9375rem;
+  }
+  .agf-status.is-visible { display: inline-flex; }
+  .agf-status[data-kind="loading"] { color: var(--agilo-primary); background: var(--agilo-primary-soft); }
+  .agf-status[data-kind="success"] { color: var(--agilo-success); background: color-mix(in srgb, var(--agilo-success) 10%, transparent); }
+  .agf-status[data-kind="error"] { color: var(--agilo-error); background: color-mix(in srgb, var(--agilo-error) 10%, transparent); }
+  .agf-spinner { width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: agf-spin .7s linear infinite; }
+  @keyframes agf-spin { to { transform: rotate(360deg); } }
+
+  .agf-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+  .agf-btn-primary,
+  .agf-btn-secondary,
+  .agf-btn-link { min-height: 44px; border-radius: 10px; font-size: 0.9375rem; font-weight: 600; padding: 0 24px; cursor: pointer; }
+  .agf-btn-primary { border: none; background: var(--agilo-primary); color: var(--agilo-surface); }
+  .agf-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--agilo-primary) 90%, black); }
+  .agf-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+  .agf-btn-secondary { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 2px; }
+  .agf-btn-secondary:hover { color: var(--agilo-primary); }
+  .agf-btn-link { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 2px; }
+  .agf-btn-link:hover { color: var(--agilo-primary); }
+
+  .agf-download { display: none; color: var(--agilo-primary); text-decoration: underline; text-underline-offset: 2px; font-size: 0.9375rem; font-weight: 500; padding: 0; }
+  .agf-download.is-visible { display: inline-flex; }
+
+  .agf-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--agilo-text-secondary); }
+  .agf-group { display: grid; gap: var(--space-1); }
+  .agf-radio-line,
+  .agf-item-btn {
+    border: 1px solid var(--agilo-border);
+    border-radius: 10px;
+    background: var(--agilo-surface);
+    min-height: 44px;
+    padding: var(--space-1) var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.875rem;
+  }
+  .agf-radio-line input[type="radio"] { accent-color: var(--agilo-primary); }
+  .agf-item-btn { width: 100%; justify-content: space-between; cursor: pointer; color: var(--agilo-text); }
+  .agf-item-btn.is-locked { color: var(--agilo-text-secondary); }
+  .agf-chip {
+    font-size: 0.6875rem; border: 1px solid var(--agilo-border); border-radius: 999px;
+    padding: 2px 8px; color: var(--agilo-text-secondary); background: var(--agilo-surface-2);
+  }
+
+  .agf-small { font-size: 0.8125rem; color: var(--agilo-text-secondary); }
+
+  .agf-modal-overlay {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.35); z-index: 9999; padding: var(--space-2);
+  }
+  .agf-modal-overlay.is-open { display: flex; }
+  .agf-modal {
+    width: min(560px, 100%); max-height: min(85vh, 680px); overflow: auto;
+    background: var(--agilo-surface); border-radius: var(--radius);
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.15);
+    padding: var(--space-3); display: grid; gap: var(--space-2);
+  }
+  .agf-modal-head { display: flex; justify-content: space-between; align-items: start; gap: var(--space-2); }
+  .agf-modal-title { font-size: 1.25rem; font-weight: 600; line-height: 1.25; }
+  .agf-modal-subtitle { margin-top: var(--space-1); font-size: 0.875rem; color: var(--agilo-text-secondary); }
+  .agf-close { border: none; background: transparent; font-size: 1.5rem; line-height: 1; color: var(--agilo-text-secondary); cursor: pointer; padding: 0; border-radius: 6px; }
+  .agf-close:hover { color: var(--agilo-text); }
+  .agf-close:focus-visible { outline: 2px solid var(--agilo-primary); outline-offset: 2px; }
+
+  .agf-type-grid { display: grid; gap: var(--space-2); }
+  .agf-type-card { border: 1px solid var(--agilo-border); border-radius: 10px; padding: var(--space-2); display: grid; gap: var(--space-1); }
+  .agf-type-card h5 { font-size: 0.8125rem; text-transform: uppercase; letter-spacing: .04em; color: var(--agilo-text-secondary); }
+  .agf-checkboxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+  .agf-checkboxes label { border: 1px solid var(--agilo-border); border-radius: 8px; padding: var(--space-1) var(--space-2); font-size: 0.875rem; display: flex; gap: var(--space-1); align-items: center; background: var(--agilo-surface); cursor: pointer; }
+
+  .agf-modal-actions { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+  .agf-textbox--compact { min-height: auto; }
+  .agf-textarea--modal { min-height: 200px; }
+  .agf-modal--narrow { width: min(400px, 100%); }
+  .agf-actions--end { justify-content: flex-end; }
+  .agf-chip-lock { display: none; }
+  .agf-item-btn.is-locked .agf-chip-lock { display: inline; }
+  .agf-item-btn.is-locked .agf-chip:not(.agf-chip-lock) { display: none; }
+
+  .agf-manual-auth { display: grid; gap: var(--space-1); }
+  .agf-manual-auth.is-collapsed .agf-manual-auth-fields { display: none; }
+  .agf-manual-auth-toggle { border: none; background: none; color: var(--agilo-primary); font-size: 0.8125rem; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 2px; }
+  .agf-manual-auth-toggle:hover { color: var(--agilo-text); }
+  .agf-manual-auth-fields { display: grid; gap: var(--space-1); }
+  .agf-manual-auth label { font-size: 0.75rem; color: var(--agilo-text-secondary); display: block; margin-bottom: 2px; }
+  .agf-manual-auth input { width: 100%; padding: 6px 8px; font-size: 0.8125rem; border: 1px solid var(--agilo-border); border-radius: 6px; }
+  .agf-manual-auth select { width: 100%; padding: 6px 8px; font-size: 0.8125rem; border: 1px solid var(--agilo-border); border-radius: 6px; background: var(--agilo-surface); }
+
+  @media (max-width: 980px) {
+    .agf-grid { grid-template-columns: 1fr; }
+    .agf-side { order: -1; }
+  }
+  @media (max-width: 760px) {
+    .agf-tabs,
+    .agf-row,
+    .agf-cols,
+    .agf-checkboxes { grid-template-columns: 1fr; }
+    .agf-actions { flex-direction: column; align-items: stretch; }
+    .agf-btn-primary,
+    .agf-download { width: 100%; justify-content: center; text-align: center; }
+  }
+</style>
+
+<form id="agfForm" ms-code-anonymisation="form" novalidate>
+  <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
+
+  <section class="agf-shell" aria-label="Anonymisation avancée">
+    <header class="agf-head">
+      <h2>Anonymisation documentaire</h2>
+      <p>Flux unifié pour fichiers, texte et restauration avec gouvernance de sécurité.</p>
+    </header>
+
+    <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
+      <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" aria-controls="agfPanel-file" data-tab="file">
+        <strong>Traitement de fichier</strong>
+        <span>PDF, Image, CSV, FEC, etc.</span>
+      </button>
+      <button id="agfTab-text" class="agf-tab" type="button" role="tab" aria-selected="false" aria-controls="agfPanel-text" data-tab="text">
+        <strong>Traitement de texte</strong>
+        <span>Email, Markdown, etc.</span>
+      </button>
+      <button id="agfTab-restore" class="agf-tab" type="button" role="tab" aria-selected="false" aria-controls="agfPanel-restore" data-tab="restore">
+        <strong>Restauration</strong>
+        <span>Restaurez les données pseudonymisées</span>
+      </button>
+    </div>
+
+    <div class="agf-grid">
+      <div class="agf-main">
+        <section id="agfPanel-file" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-file" aria-hidden="false">
+          <h3 class="agf-section-title">Sélectionnez les fichiers</h3>
+          <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
+            <h4>Cliquez ou glissez-déposez des fichiers</h4>
+            <p>PDF, Word, Excel, images et autres formats courants (10 Mo max / fichier).</p>
+            <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx), Excel (xls, xlsx), TXT.</p>
+          </div>
+          <input id="agfFileInput" type="file" name="fileUpload[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,.png,.jpg,.jpeg,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json,image/png,image/jpeg">
+
+          <h3 class="agf-section-title">Fichiers à anonymiser</h3>
+          <div id="agfFileList" class="agf-list" role="list"></div>
+
+          <div id="agfStatus" class="agf-status" role="status" aria-live="polite"></div>
+
+          <div class="agf-actions">
+            <button id="agfSubmit" type="submit" class="agf-btn-primary" disabled>Anonymiser les fichiers</button>
+            <button id="agfReset" type="button" class="agf-btn-secondary">Effacer</button>
+            <a id="agfDownload" href="#" class="agf-download" download>Télécharger le résultat</a>
+          </div>
+        </section>
+
+        <section id="agfPanel-text" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-text" aria-hidden="true">
+          <div class="agf-row">
+            <div class="agf-textbox">
+              <label for="agfInputText">Saisissez le texte</label>
+              <textarea id="agfInputText" class="agf-textarea" placeholder="Tapez ou collez votre texte ici..."></textarea>
+            </div>
+            <div class="agf-textbox">
+              <label>Texte traité</label>
+              <div id="agfOutputText" class="agf-text-placeholder" role="region" aria-live="polite">Le texte traité apparaîtra ici</div>
+              <div id="agfOutputEntities" class="agf-entity-chips" aria-label="Types d’entités détectés"></div>
+            </div>
+          </div>
+          <div class="agf-actions">
+            <button id="agfTextProcess" type="button" class="agf-btn-primary">Anonymiser le texte</button>
+            <button id="agfTextClear" type="button" class="agf-btn-link">Effacer le texte</button>
+          </div>
+          <p class="agf-small">Traitement via API texte Agilotext en mode synchrone.</p>
+        </section>
+
+        <section id="agfPanel-restore" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-restore" aria-hidden="true">
+          <div class="agf-lock-block" id="agfRestoreLocked">
+            <svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
+              <path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6"/>
+              <circle cx="12" cy="16" r="1.2" fill="currentColor"/>
+            </svg>
+            <p class="agf-lock-title">Restauration des pseudonymes</p>
+            <p class="agf-lock-text">Cette fonctionnalité est disponible pour les utilisateurs abonnés avec gouvernance de mapping active.</p>
+            <button id="agfUpgradeRestore" type="button" class="agf-btn-primary">Découvrir nos offres</button>
+          </div>
+        </section>
+      </div>
+
+      <aside class="agf-side" aria-label="Paramètres">
+        <div class="agf-group agf-manual-auth is-collapsed" id="agfManualAuth">
+          <p class="agf-label">Connexion API</p>
+          <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false" aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
+          <div class="agf-manual-auth-fields" id="agfManualAuthFields" aria-hidden="true">
+            <label for="agfManualUsername">Username (email)</label>
+            <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com" autocomplete="username">
+            <label for="agfManualToken">Token</label>
+            <input type="text" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off">
+            <label for="agfManualEdition">Edition</label>
+            <select id="agfManualEdition" name="agfManualEdition">
+              <option value="free">free</option>
+              <option value="pro">pro</option>
+              <option value="ent">ent</option>
+              <option value="anonymisation">anonymisation</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Mode de traitement</p>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked> Anonymiser</label>
+          <button id="agfPseudoMode" type="button" class="agf-item-btn is-locked"><span>Pseudonymiser</span><span class="agf-chip">Verrouillé</span></button>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Paramètres</p>
+          <button id="agfOpenTypes" type="button" class="agf-item-btn"><span>Types de données</span><span class="agf-chip" id="agfTypesCount">7</span><span class="agf-chip agf-chip-lock">Verrouillé</span></button>
+          <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span class="agf-chip">Avancé</span><span class="agf-chip agf-chip-lock">Verrouillé</span></button>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Enregistré</p>
+          <button id="agfPseudoSaved" type="button" class="agf-item-btn is-locked"><span>Pseudonymes</span><span class="agf-chip">Verrouillé</span></button>
+        </div>
+
+        <p id="agfApiMeta" class="agf-small">API: vérification...</p>
+        <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank" rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
+      </aside>
+    </div>
+  </section>
+</form>
+
+<div id="agfModalTypesWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalTypesTitle" aria-hidden="true">
+  <div class="agf-modal">
+    <div class="agf-modal-head">
+      <div>
+        <h3 id="agfModalTypesTitle" class="agf-modal-title">Sélectionnez les types de données</h3>
+        <p class="agf-modal-subtitle">Ces préférences seront utilisées dans les prochains traitements.</p>
+      </div>
+      <button id="agfModalTypesClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
+    </div>
+
+    <div class="agf-type-grid" id="agfTypeGrid">
+      <section class="agf-type-card">
+        <h5>Données personnelles</h5>
+        <div class="agf-checkboxes">
+          <label><input type="checkbox" data-entity="person_name" checked> Nom</label>
+          <label><input type="checkbox" data-entity="email" checked> Email</label>
+          <label><input type="checkbox" data-entity="phone" checked> Téléphone</label>
+          <label><input type="checkbox" data-entity="birth" checked> Date naissance</label>
+          <label><input type="checkbox" data-entity="role"> Fonction</label>
+          <label><input type="checkbox" data-entity="address"> Adresse</label>
+        </div>
+      </section>
+      <section class="agf-type-card">
+        <h5>Données entreprise</h5>
+        <div class="agf-checkboxes">
+          <label><input type="checkbox" data-entity="company" checked> Entreprise</label>
+          <label><input type="checkbox" data-entity="siren" checked> SIREN/SIRET</label>
+          <label><input type="checkbox" data-entity="accounting" checked> Comptabilité</label>
+          <label><input type="checkbox" data-entity="product"> Produit</label>
+          <label><input type="checkbox" data-entity="contract"> Contrat</label>
+          <label><input type="checkbox" data-entity="bank"> Banque</label>
+        </div>
+      </section>
+    </div>
+
+    <div class="agf-modal-actions">
+      <button id="agfDefaultsTypes" type="button" class="agf-btn-secondary">Paramètres par défaut</button>
+      <button id="agfSaveTypes" type="button" class="agf-btn-primary">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="agfModalInclusionWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalIncTitle" aria-hidden="true">
+  <div class="agf-modal">
+    <div class="agf-modal-head">
+      <div>
+        <h3 id="agfModalIncTitle" class="agf-modal-title">Inclusion / Exclusion</h3>
+        <p class="agf-modal-subtitle">Définissez les termes toujours anonymisés ou toujours ignorés.</p>
+      </div>
+      <button id="agfModalIncClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
+    </div>
+
+    <div class="agf-cols">
+      <div class="agf-textbox agf-textbox--compact">
+        <label for="agfIncludeTerms">Liste d'inclusion</label>
+        <textarea id="agfIncludeTerms" class="agf-textarea agf-textarea--modal" placeholder="Un terme par ligne"></textarea>
+      </div>
+      <div class="agf-textbox agf-textbox--compact">
+        <label for="agfExcludeTerms">Liste d'exclusion</label>
+        <textarea id="agfExcludeTerms" class="agf-textarea agf-textarea--modal" placeholder="Un terme par ligne"></textarea>
+      </div>
+    </div>
+
+    <div class="agf-modal-actions">
+      <span class="agf-small">Ces listes seront persistées localement pour cet utilisateur.</span>
+      <button id="agfSaveInclusion" type="button" class="agf-btn-primary">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="agfModalLockedWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalLockedTitle" aria-hidden="true">
+  <div class="agf-modal agf-modal--narrow">
+    <div class="agf-modal-head">
+      <div>
+        <h3 id="agfModalLockedTitle" class="agf-modal-title">Fonction premium</h3>
+        <p class="agf-modal-subtitle">Cette fonctionnalité est réservée aux plans Pro/Entreprise.</p>
+      </div>
+      <button id="agfModalLockedClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
+    </div>
+    <div class="agf-actions agf-actions--end">
+      <button id="agfModalLockedOk" type="button" class="agf-btn-primary">Compris</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const API_BASE = 'https://api.agilotext.com/api/v1';
+  const TOKEN_ENDPOINT = API_BASE + '/getToken';
+  const ANON_ENDPOINT = API_BASE + '/anonOfficeText';
+  const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
+  const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
+  const VERSION_ENDPOINT = API_BASE + '/getVersion';
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec', 'png', 'jpg', 'jpeg'];
+  const REQUEST_TIMEOUT = 180000;
+
+  const STORAGE_TYPES = 'agilo:futures:types:v1';
+  const STORAGE_INC = 'agilo:futures:include:v1';
+  const STORAGE_EXC = 'agilo:futures:exclude:v1';
+
+  const state = { activeTab: 'file', files: [], edition: 'free', mode: 'anonymiser', email: null, token: '', processing: false, resultUrl: null, resultFilename: 'document_anonymise', textProcessing: false };
+  const DEBOUNCE_TEXT_MS = 300;
+  let debounceTextTimer = null;
+  let lastProcessedText = null;
+  let lastProcessedResult = null;
+
+  const ui = {
+    form: document.getElementById('agfForm'),
+    tabs: Array.from(document.querySelectorAll('.agf-tab')),
+    panels: { file: document.getElementById('agfPanel-file'), text: document.getElementById('agfPanel-text'), restore: document.getElementById('agfPanel-restore') },
+    dropzone: document.getElementById('agfDropzone'),
+    input: document.getElementById('agfFileInput'),
+    fileList: document.getElementById('agfFileList'),
+    submit: document.getElementById('agfSubmit'),
+    reset: document.getElementById('agfReset'),
+    download: document.getElementById('agfDownload'),
+    status: document.getElementById('agfStatus'),
+    textInput: document.getElementById('agfInputText'),
+    textOutput: document.getElementById('agfOutputText'),
+    textProcess: document.getElementById('agfTextProcess'),
+    textClear: document.getElementById('agfTextClear'),
+    modeRadios: Array.from(document.querySelectorAll('input[name="agfMode"]')),
+    pseudoMode: document.getElementById('agfPseudoMode'),
+    pseudoSaved: document.getElementById('agfPseudoSaved'),
+    openTypes: document.getElementById('agfOpenTypes'),
+    openInclusion: document.getElementById('agfOpenInclusion'),
+    typesCount: document.getElementById('agfTypesCount'),
+    upgradeRestore: document.getElementById('agfUpgradeRestore'),
+    apiMeta: document.getElementById('agfApiMeta'),
+    modals: { types: document.getElementById('agfModalTypesWrap'), inclusion: document.getElementById('agfModalInclusionWrap'), locked: document.getElementById('agfModalLockedWrap') },
+    modalTypesClose: document.getElementById('agfModalTypesClose'),
+    modalIncClose: document.getElementById('agfModalIncClose'),
+    modalLockedClose: document.getElementById('agfModalLockedClose'),
+    modalLockedOk: document.getElementById('agfModalLockedOk'),
+    defaultsTypes: document.getElementById('agfDefaultsTypes'),
+    saveTypes: document.getElementById('agfSaveTypes'),
+    saveInclusion: document.getElementById('agfSaveInclusion'),
+    includeTerms: document.getElementById('agfIncludeTerms'),
+    excludeTerms: document.getElementById('agfExcludeTerms'),
+    manualAuth: document.getElementById('agfManualAuth'),
+    manualAuthToggle: document.getElementById('agfManualAuthToggle'),
+    manualAuthFields: document.getElementById('agfManualAuthFields'),
+    manualUsername: document.getElementById('agfManualUsername'),
+    manualToken: document.getElementById('agfManualToken'),
+    manualEdition: document.getElementById('agfManualEdition'),
+    outputEntities: document.getElementById('agfOutputEntities')
+  };
+
+  const DEFAULT_ENTITIES = ['person_name', 'email', 'phone', 'birth', 'company', 'siren', 'accounting'];
+  const isPremiumEdition = () => ['pro', 'ent', 'anonymisation'].includes((state.edition || '').toLowerCase());
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const formatSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return (bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 2) + ' ' + units[idx];
+  };
+
+  function setStatus(kind, message) {
+    if (!message) {
+      ui.status.classList.remove('is-visible');
+      ui.status.removeAttribute('data-kind');
+      ui.status.textContent = '';
+      return;
+    }
+    ui.status.classList.add('is-visible');
+    ui.status.setAttribute('data-kind', kind);
+    ui.status.textContent = '';
+    if (kind === 'loading') {
+      const spinner = document.createElement('span');
+      spinner.className = 'agf-spinner';
+      spinner.setAttribute('aria-hidden', 'true');
+      ui.status.appendChild(spinner);
+    }
+    const txt = document.createElement('span');
+    txt.textContent = message;
+    ui.status.appendChild(txt);
+  }
+
+  let lastFocusBeforeModal = null;
+  function openModal(el) {
+    if (!el) return;
+    lastFocusBeforeModal = document.activeElement;
+    el.classList.add('is-open');
+    el.setAttribute('aria-hidden', 'false');
+    const closeBtn = el.querySelector('.agf-close');
+    if (closeBtn) setTimeout(() => closeBtn.focus(), 0);
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.remove('is-open');
+    el.setAttribute('aria-hidden', 'true');
+    if (lastFocusBeforeModal && typeof lastFocusBeforeModal.focus === 'function') {
+      setTimeout(() => lastFocusBeforeModal.focus(), 0);
+    }
+  }
+  function closeAllModals() { Object.keys(ui.modals).forEach((k) => closeModal(ui.modals[k])); }
+
+  function revokeResultUrl() {
+    if (state.resultUrl) {
+      URL.revokeObjectURL(state.resultUrl);
+      state.resultUrl = null;
+    }
+  }
+
+  function updateActions() { ui.submit.disabled = state.processing || state.files.length === 0; }
+
+  function renderFileList() {
+    ui.fileList.textContent = '';
+    if (state.files.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'agf-empty';
+      empty.textContent = 'Les fichiers sélectionnés apparaîtront ici';
+      ui.fileList.appendChild(empty);
+      updateActions();
+      return;
+    }
+    state.files.forEach((item) => {
+      const row = document.createElement('div');
+      row.className = 'agf-file';
+      row.setAttribute('role', 'listitem');
+
+      const left = document.createElement('div');
+      const name = document.createElement('p');
+      name.className = 'agf-file-name';
+      name.title = item.fileName;
+      name.textContent = item.fileName;
+      const meta = document.createElement('p');
+      meta.className = 'agf-file-meta';
+      meta.textContent = formatSize(item.size);
+      left.appendChild(name);
+      left.appendChild(meta);
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'agf-remove';
+      btn.textContent = 'Retirer';
+      btn.addEventListener('click', function () {
+        if (state.processing) return;
+        state.files = state.files.filter((f) => f.id !== item.id);
+        renderFileList();
+      });
+
+      row.appendChild(left);
+      row.appendChild(btn);
+      ui.fileList.appendChild(row);
+    });
+    updateActions();
+  }
+
+  function validateFile(file) {
+    if (!file || file.size > MAX_FILE_SIZE) return false;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    return SUPPORTED_EXT.includes(ext);
+  }
+
+  function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    const rejected = [];
+    files.forEach((file) => {
+      if (!validateFile(file)) { rejected.push(file.name); return; }
+      state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
+    });
+    if (rejected.length > 0) {
+      const short = rejected.slice(0, 2).join(', ');
+      const more = rejected.length > 2 ? ' +' + (rejected.length - 2) + ' autre(s)' : '';
+      setStatus('error', 'Format non supporté ou fichier > 10 Mo : ' + short + more + '.');
+    } else {
+      setStatus('', '');
+    }
+    renderFileList();
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    ui.tabs.forEach((btn) => {
+      const isActive = btn.getAttribute('data-tab') === tab;
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    Object.keys(ui.panels).forEach((key) => {
+      const active = key === tab;
+      ui.panels[key].setAttribute('aria-hidden', active ? 'false' : 'true');
+    });
+  }
+
+  function selectedEntities() {
+    return Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]'))
+      .filter((c) => c.checked)
+      .map((c) => c.getAttribute('data-entity'));
+  }
+  function renderTypeCount() { ui.typesCount.textContent = String(selectedEntities().length); }
+
+  function loadPreferences() {
+    let entities = DEFAULT_ENTITIES;
+    const raw = localStorage.getItem(STORAGE_TYPES);
+    if (raw) {
+      try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) entities = parsed; } catch (e) {}
+    }
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      chk.checked = entities.includes(chk.getAttribute('data-entity'));
+    });
+    ui.includeTerms.value = localStorage.getItem(STORAGE_INC) || '';
+    ui.excludeTerms.value = localStorage.getItem(STORAGE_EXC) || '';
+    renderTypeCount();
+  }
+
+  async function waitForMemberstack(maxWait, interval) {
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      if (window.$memberstackDom && typeof window.$memberstackDom.getCurrentMember === 'function') return true;
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+    return false;
+  }
+
+  async function detectEdition() {
+    const ms = window.$memberstackDom;
+    if (ms && typeof ms.getCurrentMember === 'function') {
+      try {
+        const result = await ms.getCurrentMember({ cache: 'reload' });
+        const member = result && result.data;
+        if (member) {
+          const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
+          const plans = member.planConnections || [];
+          const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
+          const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
+          if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) return 'ent';
+          if (hasPlan('pln_business')) return 'ent';
+          if (hasPlan('pln_pro')) return 'pro';
+          if (hasPlan('pln_free')) return 'free';
+          if (hasPlan('pln_anonymisation')) return 'anonymisation';
+        }
+      } catch (e) { console.warn('detectEdition error', e); }
+    }
+
+    const fromQuery = new URLSearchParams(window.location.search).get('edition');
+    if (fromQuery) {
+      const n = fromQuery.toLowerCase();
+      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) return n === 'business' ? 'ent' : n;
+    }
+    const stored = localStorage.getItem('agilo:edition');
+    if (stored && ['free', 'pro', 'ent', 'anonymisation'].includes(stored)) return stored;
+    if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) return 'ent';
+    if (window.location.pathname.includes('/pro/')) return 'pro';
+    return 'free';
+  }
+
+  async function getUserEmail() {
+    const ms = window.$memberstackDom;
+    if (ms && typeof ms.getCurrentMember === 'function') {
+      try {
+        const result = await ms.getCurrentMember({ cache: 'reload' });
+        const member = result && result.data;
+        if (member && member.email) return member.email;
+      } catch (e) { console.warn('getUserEmail error', e); }
+    }
+    return document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
+  }
+
+  async function fetchWithTimeout(url, options, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal, cache: 'no-store' });
+    } finally { clearTimeout(timer); }
+  }
+
+  async function getToken(email, edition, retry) {
+    const current = typeof retry === 'number' ? retry : 0;
+    const maxRetry = 3;
+    try {
+      const url = TOKEN_ENDPOINT + '?username=' + encodeURIComponent(email) + '&edition=' + encodeURIComponent(edition);
+      const response = await fetchWithTimeout(url, { method: 'GET' }, 20000);
+      const data = await response.json();
+      if (data && data.status === 'OK' && data.token) { state.token = data.token; return data.token; }
+      throw new Error((data && (data.userErrorMessage || data.errorMessage)) || 'Token invalide');
+    } catch (err) {
+      if (current < maxRetry) {
+        await new Promise((resolve) => setTimeout(resolve, 800 * (current + 1)));
+        return getToken(email, edition, current + 1);
+      }
+      throw err;
+    }
+  }
+
+  function getManualAuth() {
+    const username = (ui.manualUsername && ui.manualUsername.value || '').trim();
+    const token = (ui.manualToken && ui.manualToken.value || '').trim();
+    const edition = (ui.manualEdition && ui.manualEdition.value || '').trim();
+    if (username && token && edition) return { username, token, edition };
+    return null;
+  }
+
+  async function ensureAuth() {
+    const manual = getManualAuth();
+    if (manual) {
+      state.email = manual.username;
+      state.token = manual.token;
+      state.edition = manual.edition;
+      return;
+    }
+    state.email = await getUserEmail();
+    if (!state.email) throw new Error('Email utilisateur introuvable.');
+    if (!state.token) await getToken(state.email, state.edition, 0);
+  }
+
+  async function runSessionMaintenance() {
+    if (!state.email || !state.token) return;
+    const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(state.edition || 'free');
+    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) {}
+  }
+
+  async function loadApiVersion() {
+    try {
+      const response = await fetchWithTimeout(VERSION_ENDPOINT, { method: 'GET' }, 10000);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
+    } catch (e) {}
+  }
+
+  function parseFilename(contentDisposition) {
+    const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+    if (!match || !match[1]) return 'document_anonymise';
+    return match[1].replace(/^['"]|['"]$/g, '').trim();
+  }
+
+  async function submitFiles(event) {
+    event.preventDefault();
+    if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
+
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Authentification indisponible.'); return; }
+
+    state.processing = true;
+    updateActions();
+    revokeResultUrl();
+    ui.download.href = '#';
+    ui.download.removeAttribute('download');
+    ui.download.classList.remove('is-visible');
+    setStatus('loading', 'Traitement en cours...');
+
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', state.edition);
+    const entities = selectedEntities();
+    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
+    const inc = (ui.includeTerms && ui.includeTerms.value || '').trim();
+    if (inc) formData.append('includeTerms', inc);
+    const exc = (ui.excludeTerms && ui.excludeTerms.value || '').trim();
+    if (exc) formData.append('excludeTerms', exc);
+    state.files.forEach((item) => formData.append('fileUpload[]', item.file, item.fileName));
+
+    try {
+      const response = await fetchWithTimeout(ANON_ENDPOINT, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
+      if (!response.ok) {
+        const raw = await response.text();
+        let msg = 'Erreur de traitement. Vérifiez puis réessayez.';
+        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage; }
+        catch (e) { if (raw && raw.length < 220) msg = raw; }
+        throw new Error(msg);
+      }
+      const contentDisposition = response.headers.get('Content-Disposition') || '';
+      const blob = await response.blob();
+      state.resultUrl = URL.createObjectURL(blob);
+      state.resultFilename = parseFilename(contentDisposition);
+      ui.download.href = state.resultUrl;
+      ui.download.setAttribute('download', state.resultFilename);
+      ui.download.classList.add('is-visible');
+      setStatus('success', 'Traitement terminé. Téléchargez le résultat.');
+    } catch (err) {
+      if (err && err.name === 'AbortError') setStatus('error', 'Délai dépassé. Réessayez avec un lot plus petit.');
+      else setStatus('error', (err && err.message) ? err.message : 'Erreur inattendue.');
+    } finally {
+      state.processing = false;
+      updateActions();
+    }
+  }
+
+  function resetFiles() {
+    if (state.processing) return;
+    state.files = [];
+    revokeResultUrl();
+    ui.download.href = '#';
+    ui.download.removeAttribute('download');
+    ui.download.classList.remove('is-visible');
+    setStatus('', '');
+    renderFileList();
+  }
+
+  async function processText() {
+    const value = (ui.textInput.value || '').trim();
+    if (!value) { ui.textOutput.textContent = 'Ajoutez un texte à traiter.'; ui.textOutput.classList.remove('agf-text-output--loading'); return; }
+    if (lastProcessedText === value && lastProcessedResult !== null) {
+      ui.textOutput.textContent = lastProcessedResult;
+      ui.textOutput.classList.remove('agf-text-output--loading');
+      return;
+    }
+    state.textProcessing = true;
+    ui.textOutput.textContent = 'Traitement en cours...';
+    ui.textOutput.classList.add('agf-text-output--loading');
+    if (ui.outputEntities) { ui.outputEntities.classList.remove('is-visible'); ui.outputEntities.textContent = ''; }
+    if (ui.textProcess) ui.textProcess.disabled = true;
+
+    try { await ensureAuth(); } catch (e) { ui.textOutput.textContent = e.message || 'Authentification indisponible.'; state.textProcessing = false; if (ui.textProcess) ui.textProcess.disabled = false; ui.textOutput.classList.remove('agf-text-output--loading'); return; }
+
+    const payload = new FormData();
+    payload.append('username', state.email);
+    payload.append('token', state.token);
+    payload.append('edition', state.edition);
+    payload.append('forceTextFormat', 'true');
+    const entities = selectedEntities();
+    if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
+    const inc = (ui.includeTerms && ui.includeTerms.value || '').trim();
+    if (inc) payload.append('includeTerms', inc);
+    const exc = (ui.excludeTerms && ui.excludeTerms.value || '').trim();
+    if (exc) payload.append('excludeTerms', exc);
+    payload.append('fileUpload1', new Blob([value], { type: 'text/plain;charset=utf-8' }), 'input.txt');
+
+    try {
+      const response = await fetchWithTimeout(ANON_TEXT_ENDPOINT, { method: 'POST', body: payload }, REQUEST_TIMEOUT);
+      if (!response.ok) {
+        const raw = await response.text();
+        let msg = 'Erreur de traitement du texte.';
+        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage; }
+        catch (err) { if (raw && raw.length < 220) msg = raw; }
+        throw new Error(msg);
+      }
+      const blob = await response.blob();
+      const raw = await blob.text();
+      const result = applyStructuredResponse(raw, value);
+      lastProcessedText = value;
+      lastProcessedResult = result;
+      ui.textOutput.textContent = result;
+    } catch (err) {
+      if (err && err.name === 'AbortError') ui.textOutput.textContent = 'Délai dépassé. Réessayez avec un texte plus court.';
+      else ui.textOutput.textContent = (err && err.message) ? err.message : 'Erreur inattendue.';
+    } finally {
+      state.textProcessing = false;
+      if (ui.textProcess) ui.textProcess.disabled = false;
+      ui.textOutput.classList.remove('agf-text-output--loading');
+    }
+  }
+
+  function scheduleDebouncedText() {
+    if (debounceTextTimer) clearTimeout(debounceTextTimer);
+    debounceTextTimer = setTimeout(() => {
+      debounceTextTimer = null;
+      if (state.textProcessing) return;
+      processText();
+    }, DEBOUNCE_TEXT_MS);
+  }
+
+  /**
+   * Target API structured response: { processedText: string, entities?: [{ start, end, type, replacement }] }.
+   * When API returns this format, we display processedText and optionally entity chips by type.
+   */
+  function renderEntityChips(entities) {
+    if (!ui.outputEntities || !Array.isArray(entities) || entities.length === 0) {
+      if (ui.outputEntities) { ui.outputEntities.classList.remove('is-visible'); ui.outputEntities.textContent = ''; }
+      return;
+    }
+    const types = {};
+    entities.forEach((e) => { const t = e.type || 'OTHER'; types[t] = (types[t] || 0) + 1; });
+    ui.outputEntities.textContent = '';
+    Object.keys(types).sort().forEach((type) => {
+      const span = document.createElement('span');
+      span.className = 'agf-entity-chip';
+      span.textContent = type + (types[type] > 1 ? ' (' + types[type] + ')' : '');
+      ui.outputEntities.appendChild(span);
+    });
+    ui.outputEntities.classList.add('is-visible');
+  }
+
+  function applyStructuredResponse(raw, value) {
+    let result = (raw && raw.trim()) ? raw : 'Aucun contenu retourné.';
+    try {
+      const data = JSON.parse(raw);
+      if (data && typeof data.processedText === 'string') {
+        result = data.processedText;
+        if (data.entities && Array.isArray(data.entities)) renderEntityChips(data.entities);
+        else renderEntityChips([]);
+      } else renderEntityChips([]);
+    } catch (e) {
+      renderEntityChips([]);
+    }
+    return result;
+  }
+
+  function applyEditionLocks() {
+    if (!isPremiumEdition()) {
+      ui.openTypes.classList.add('is-locked');
+      ui.openInclusion.classList.add('is-locked');
+    }
+  }
+
+  function bindEvents() {
+    ui.form.addEventListener('submit', submitFiles);
+    ui.reset.addEventListener('click', resetFiles);
+
+    ui.tabs.forEach((tab) => tab.addEventListener('click', () => setActiveTab(tab.getAttribute('data-tab'))));
+
+    ui.dropzone.addEventListener('click', () => ui.input.click());
+    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.input.click(); } });
+    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); ui.dropzone.classList.add('is-dragover'); });
+    ['dragleave', 'dragend'].forEach((evt) => ui.dropzone.addEventListener(evt, () => ui.dropzone.classList.remove('is-dragover')));
+    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+    ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
+
+    ui.textProcess.addEventListener('click', processText);
+    ui.textInput.addEventListener('input', scheduleDebouncedText);
+    ui.textInput.addEventListener('keyup', scheduleDebouncedText);
+    ui.textClear.addEventListener('click', () => { ui.textInput.value = ''; ui.textOutput.textContent = 'Le texte traité apparaîtra ici'; lastProcessedText = null; lastProcessedResult = null; if (ui.outputEntities) { ui.outputEntities.classList.remove('is-visible'); ui.outputEntities.textContent = ''; } if (debounceTextTimer) { clearTimeout(debounceTextTimer); debounceTextTimer = null; } });
+
+    ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => { state.mode = radio.value; }));
+
+    ui.pseudoMode.addEventListener('click', () => openModal(ui.modals.locked));
+    ui.pseudoSaved.addEventListener('click', () => openModal(ui.modals.locked));
+    ui.openTypes.addEventListener('click', () => { if (!isPremiumEdition()) { openModal(ui.modals.locked); return; } openModal(ui.modals.types); });
+    ui.openInclusion.addEventListener('click', () => { if (!isPremiumEdition()) { openModal(ui.modals.locked); return; } openModal(ui.modals.inclusion); });
+    ui.upgradeRestore.addEventListener('click', () => openModal(ui.modals.locked));
+
+    ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
+    ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
+    ui.modalLockedClose.addEventListener('click', () => closeModal(ui.modals.locked));
+    ui.modalLockedOk.addEventListener('click', () => closeModal(ui.modals.locked));
+
+    ui.defaultsTypes.addEventListener('click', () => {
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
+      });
+      renderTypeCount();
+    });
+
+    ui.saveTypes.addEventListener('click', () => {
+      localStorage.setItem(STORAGE_TYPES, JSON.stringify(selectedEntities()));
+      renderTypeCount();
+      closeModal(ui.modals.types);
+    });
+
+    ui.saveInclusion.addEventListener('click', () => {
+      localStorage.setItem(STORAGE_INC, ui.includeTerms.value || '');
+      localStorage.setItem(STORAGE_EXC, ui.excludeTerms.value || '');
+      closeModal(ui.modals.inclusion);
+    });
+
+    if (ui.manualAuthToggle && ui.manualAuth && ui.manualAuthFields) {
+      ui.manualAuthToggle.addEventListener('click', () => {
+        const collapsed = ui.manualAuth.classList.toggle('is-collapsed');
+        ui.manualAuthFields.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        ui.manualAuthToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        ui.manualAuthToggle.textContent = collapsed ? 'Utiliser des identifiants manuels' : 'Masquer les identifiants manuels';
+      });
+    }
+
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllModals(); });
+
+    Object.keys(ui.modals).forEach((key) => {
+      const overlay = ui.modals[key];
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
+    });
+
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => chk.addEventListener('change', renderTypeCount));
+  }
+
+  async function init() {
+    await waitForMemberstack(10000, 200);
+    state.edition = await detectEdition();
+    const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
+    if (editionFromUrl) {
+      const n = editionFromUrl.toLowerCase();
+      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = n === 'business' ? 'ent' : n;
+    }
+    localStorage.setItem('agilo:edition', state.edition);
+    if (ui.manualEdition) ui.manualEdition.value = state.edition;
+
+    state.email = await getUserEmail();
+    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => {});
+
+    bindEvents();
+    setActiveTab('file');
+    loadPreferences();
+    applyEditionLocks();
+    renderFileList();
+    updateActions();
+    runSessionMaintenance();
+    loadApiVersion();
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>
