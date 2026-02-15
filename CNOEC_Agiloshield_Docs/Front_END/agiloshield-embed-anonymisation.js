@@ -1,5 +1,6 @@
 (function () {
   'use strict';
+  // UTF-8; textes FR avec accents
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
