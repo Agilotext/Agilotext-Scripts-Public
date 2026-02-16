@@ -106,6 +106,8 @@
       inclusion: document.getElementById('agfModalInclusionWrap')
     },
     modalTypesClose: document.getElementById('agfModalTypesClose'),
+    modalTypesBetaOverlay: document.getElementById('agfModalTypesBetaOverlay'),
+    modalTypesBetaClose: document.getElementById('agfModalTypesBetaClose'),
     modalPseudoClose: document.getElementById('agfModalPseudoClose'),
     modalIncClose: document.getElementById('agfModalIncClose'),
     defaultsTypes: document.getElementById('agfDefaultsTypes'),
@@ -245,6 +247,7 @@
     document.body.style.overflow = 'hidden';
     el.classList.add('is-open');
     el.setAttribute('aria-hidden', 'false');
+    if (el === ui.modals.types && ui.modalTypesBetaOverlay) ui.modalTypesBetaOverlay.classList.remove('is-dismissed');
     const focusables = focusableNodes(el);
     const initial = el.querySelector('.agf-close') || focusables[0];
     if (initial) setTimeout(() => initial.focus(), 0);
@@ -956,20 +959,36 @@
   }
 
   function buildAndDownloadZip(items, blobs) {
+    if (typeof window.JSZip === 'undefined') {
+      setStatus('error', 'Bibliothèque ZIP non chargée. Réessayez.');
+      return;
+    }
     const zip = new window.JSZip();
     items.forEach((item, i) => { zip.file(item.resultFilename || ('file_' + (i + 1)), blobs[i]); });
     zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(zipBlob);
       a.download = 'documents_anonymises.zip';
-      a.click();
-      URL.revokeObjectURL(a.href);
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      setTimeout(() => {
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        setStatus('', '');
+      }, 0);
+    }).catch((err) => {
+      setStatus('error', 'Impossible de créer le fichier ZIP. Réessayez.');
     });
   }
 
   function downloadAllAsZip() {
     const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl);
-    if (blobsToZip.length < 2) return;
+    if (blobsToZip.length < 2) {
+      setStatus('error', 'Au moins 2 fichiers traités sont nécessaires pour télécharger le ZIP.');
+      return;
+    }
+    setStatus('loading', 'Préparation du ZIP…');
     Promise.all(blobsToZip.map((item) => fetch(item.resultUrl).then((r) => r.blob()))).then((blobs) => {
       if (typeof window.JSZip !== 'undefined') {
         buildAndDownloadZip(blobsToZip, blobs);
@@ -978,7 +997,12 @@
       const script = document.createElement('script');
       script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
       script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); };
+      script.onerror = () => {
+        setStatus('error', 'Impossible de charger l\'outil ZIP. Vérifiez votre connexion et réessayez.');
+      };
       document.head.appendChild(script);
+    }).catch((err) => {
+      setStatus('error', 'Impossible de préparer le ZIP. Les fichiers ont peut-être été réinitialisés — réessayez après avoir anonymisé à nouveau.');
     });
   }
 
@@ -1259,6 +1283,9 @@
     ui.upgradeRestore.addEventListener('click', () => openModal(ui.modals.pseudo));
 
     ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
+    if (ui.modalTypesBetaClose && ui.modalTypesBetaOverlay) {
+      ui.modalTypesBetaClose.addEventListener('click', () => ui.modalTypesBetaOverlay.classList.add('is-dismissed'));
+    }
     if (ui.modalPseudoClose) ui.modalPseudoClose.addEventListener('click', () => closeModal(ui.modals.pseudo));
     ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
 
