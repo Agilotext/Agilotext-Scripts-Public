@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   // UTF-8; textes FR avec accents
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.0';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.1';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -40,7 +40,7 @@
     token: '',
     processing: false,
     resultUrl: null,
-    resultFilename: 'document_anonymise',
+    resultFilename: 'document_anonymisé',
     textProcessing: false,
     includeTerms: [],
     excludeTerms: [],
@@ -57,8 +57,57 @@
   let lastProcessedHtml = null;
   let lastProcessedStats = null;
   let lastProcessedCounts = null;
-  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI'];
-  const PLACEHOLDER_RE = /\[([A-Z0-9_]{2,12})\]/g;
+  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
+  const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  const TAG_ALIAS = {
+    PR: 'PR',
+    PERSON: 'PR',
+    PERSON_NAME: 'PR',
+    PER: 'PR',
+    NAME: 'PR',
+    MAIL: 'MAIL',
+    EMAIL: 'MAIL',
+    E_MAIL: 'MAIL',
+    PHON: 'PHON',
+    PHONE: 'PHON',
+    TEL: 'PHON',
+    TELEPHONE: 'PHON',
+    MOBILE: 'PHON',
+    ADR: 'ADR',
+    ADDRESS: 'ADR',
+    STREET_ADDRESS: 'ADR',
+    POST: 'POST',
+    POSTAL: 'POST',
+    POSTCODE: 'POST',
+    POSTAL_CODE: 'POST',
+    ZIP: 'POST',
+    ZIP_CODE: 'POST',
+    LOC: 'LOC',
+    LOCATION: 'LOC',
+    LOCALISATION: 'LOC',
+    CITY: 'LOC',
+    REGION: 'LOC',
+    ORG: 'ORG',
+    ORGANIZATION: 'ORG',
+    ORGANISATION: 'ORG',
+    COMPANY: 'ORG',
+    CIE: 'ORG',
+    CID: 'SIREN',
+    SIREN: 'SIREN',
+    SIRET: 'SIRET',
+    TVA: 'TVA',
+    VAT: 'TVA',
+    IBAN: 'IBAN',
+    BIC: 'BIC',
+    SWIFT: 'BIC',
+    FRNIR: 'FRNIR',
+    NIR: 'FRNIR',
+    DT: 'DT',
+    DATE: 'DT',
+    DATETIME: 'DT',
+    TIME: 'DT',
+    OTHER: 'OTHER'
+  };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
   const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
@@ -311,6 +360,7 @@
     const doneCount = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl).length;
     if (ui.downloadZip) {
       ui.downloadZip.hidden = doneCount < 2;
+      ui.downloadZip.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
     }
   }
 
@@ -362,9 +412,10 @@
     ui.processedList.textContent = '';
     state.processedItems.forEach((item) => {
       const card = document.createElement('div');
-      card.className = 'agf-processed-card';
+      card.className = 'agf-processed-card agf-processed-card--' + item.status;
       card.setAttribute('role', 'listitem');
       card.setAttribute('data-id', item.id);
+      card.setAttribute('data-status', item.status);
 
       const original = document.createElement('div');
       original.className = 'agf-processed-original';
@@ -384,7 +435,7 @@
       } else if (item.status === 'processing') {
         result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
       } else if (item.status === 'error') {
-        result.innerHTML = '<div class="agf-file-icon" style="color:var(--agilo-error)"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
+        result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
       } else {
         const name = (item.resultFilename || item.fileName) + '';
         result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
@@ -410,6 +461,11 @@
         result.appendChild(actions);
       }
       card.appendChild(result);
+      if (item.justDone) {
+        card.classList.add('agf-processed-card--just-done');
+        item.justDone = false;
+        setTimeout(function () { card.classList.remove('agf-processed-card--just-done'); }, 2200);
+      }
       ui.processedList.appendChild(card);
     });
     updateActions();
@@ -829,11 +885,13 @@
     if (fallbackFileName) {
       const base = fallbackFileName.replace(/\.[^.]+$/, '').trim();
       const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.bin'])[0];
-      return (base || 'document') + '_anonymise' + ext;
+      const suffix = '_anonymized';
+      if (/_\s*anonymis(?:e|é|ed)?\s*$/i.test(base)) return base + ext;
+      return (base || 'document') + suffix + ext;
     }
     const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
     if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
-    return 'document_anonymise';
+    return 'document_anonymized';
   }
 
   function buildFormDataForOneFile(file, fileName) {
@@ -885,6 +943,7 @@
       item.resultFilename = parseFilename(contentDisposition, item.fileName);
       item.resultSize = blob.size;
       item.status = 'done';
+      item.justDone = true;
     } catch (err) {
       item.status = 'error';
       item.errorMessage = err && err.name === 'AbortError' ? 'Délai dépassé.' : (err && err.message) ? err.message : 'Échec';
@@ -973,7 +1032,7 @@
     zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(zipBlob);
-      a.download = 'documents_anonymises.zip';
+      a.download = 'documents_anonymisés.zip';
       a.click();
       URL.revokeObjectURL(a.href);
     });
@@ -1126,12 +1185,27 @@
     return div.innerHTML;
   }
 
+  function normalizeEntityCode(code) {
+    const raw = (code || '').toString().trim();
+    if (!raw) return '';
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    if (!clean) return '';
+    if (TAG_ALIAS[clean]) return TAG_ALIAS[clean];
+    if (ENTITY_TYPES_TAG.includes(clean)) return clean;
+    return 'OTHER';
+  }
+
   function buildOutputWithTags(processedText) {
     if (!processedText) return { plain: processedText || '', useTags: false };
     const escaped = escapeHtml(processedText);
-    const re = new RegExp('\\[(' + ENTITY_TYPES_TAG.join('|') + ')\\]', 'g');
-    const html = escaped.replace(re, (_, type) => '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>');
-    if (html === escaped) return { plain: processedText, useTags: false };
+    let replaced = false;
+    const html = escaped.replace(/\[([A-Za-z0-9_]{2,32})\]/g, (_, rawType) => {
+      replaced = true;
+      const type = normalizeEntityCode(rawType);
+      if (!type) return '[' + rawType + ']';
+      return '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>';
+    });
+    if (!replaced || html === escaped) return { plain: processedText, useTags: false };
     return { plain: processedText, useTags: true, html };
   }
 
@@ -1140,7 +1214,8 @@
     if (!processedText) return counts;
     let match;
     while ((match = PLACEHOLDER_RE.exec(processedText)) !== null) {
-      const code = match[1];
+      const code = normalizeEntityCode(match[1]);
+      if (!code) continue;
       counts[code] = (counts[code] || 0) + 1;
     }
     PLACEHOLDER_RE.lastIndex = 0;
@@ -1154,7 +1229,7 @@
       ? explicitStats
       : extractEntityStats(processedText);
     const entries = Object.entries(stats)
-      .map((entry) => [entry[0], Number(entry[1] || 0)])
+      .map((entry) => [entry[0], Math.max(0, Math.floor(Number(entry[1] || 0)))])
       .filter((entry) => entry[1] > 0)
       .sort((a, b) => {
       if (b[1] !== a[1]) return b[1] - a[1];
@@ -1176,7 +1251,7 @@
 
     entries.forEach((entry) => {
       const chip = document.createElement('span');
-      chip.className = 'agf-output-entity-chip';
+      chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
       chip.textContent = entry[0] + ': ' + entry[1];
       ui.outputEntities.appendChild(chip);
     });
@@ -1190,12 +1265,18 @@
       const data = JSON.parse(raw);
       if (data && typeof data.processedText === 'string') plain = data.processedText;
       if (data && data.audit && data.audit.entityCounts && typeof data.audit.entityCounts === 'object') {
-        stats = data.audit.entityCounts;
+        stats = {};
+        Object.entries(data.audit.entityCounts).forEach((entry) => {
+          const code = normalizeEntityCode(entry[0]);
+          if (!code) return;
+          const count = Math.max(0, Math.floor(Number(entry[1] || 0)));
+          stats[code] = (stats[code] || 0) + count;
+        });
       } else if (data && Array.isArray(data.entities)) {
         stats = {};
         data.entities.forEach((entity) => {
-          const code = entity && entity.type;
-          if (!code || typeof code !== 'string') return;
+          const code = normalizeEntityCode(entity && entity.type);
+          if (!code) return;
           stats[code] = (stats[code] || 0) + 1;
         });
       }
