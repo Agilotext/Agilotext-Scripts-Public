@@ -205,8 +205,9 @@
   .agf-remove:hover { color: var(--agilo-error); }
 
   .agf-processed-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
-  .agf-section-title-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: 0.25rem; }
+  .agf-section-title-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: 0.25rem; flex-wrap: wrap; }
   .agf-section-title-row .agf-section-title { margin-bottom: 0; }
+  .agf-section-title-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
   .agf-processed-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 28rem; overflow-y: auto; }
   .agf-processed-card {
     display: flex; align-items: center; gap: var(--space-2);
@@ -854,12 +855,12 @@
           <div class="agf-processed-wrap" id="agfProcessedWrap" hidden>
             <div class="agf-section-title-row">
               <h3 class="agf-section-title">Fichier(s) traité(s)</h3>
-              <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer les fichiers"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer</button>
+              <div class="agf-section-title-actions">
+                <button id="agfDownloadZip" type="button" class="agf-btn-primary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
+                <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer les fichiers"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer</button>
+              </div>
             </div>
             <div id="agfProcessedList" class="agf-processed-list" role="list"></div>
-            <div class="agf-actions agf-actions--processed" id="agfActionsProcessed">
-              <button id="agfDownloadZip" type="button" class="agf-btn-primary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
-            </div>
           </div>
 
           <div id="agfStatus" class="agf-status" role="status" aria-live="polite"></div>
