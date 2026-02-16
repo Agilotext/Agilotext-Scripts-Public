@@ -346,21 +346,23 @@
         URL.revokeObjectURL(item.resultUrl);
         item.resultUrl = null;
       }
+      item.resultBlob = null;
     });
   }
 
   function updateActions() {
-    const hasPending = state.files.length > 0 && state.processedItems.length === 0;
+    const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
     if (ui.submit) ui.submit.disabled = state.processing || !hasPending;
-    if (ui.actionsSubmit) ui.actionsSubmit.hidden = hasProcessed;
+    if (ui.actionsSubmit) ui.actionsSubmit.hidden = !hasPending;
     if (ui.processedWrap) ui.processedWrap.hidden = !hasProcessed;
-    if (ui.fileList) ui.fileList.hidden = hasProcessed;
-    if (ui.titleFileList) ui.titleFileList.hidden = hasProcessed;
-    const doneCount = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl).length;
+    if (ui.fileList) ui.fileList.hidden = !hasPending;
+    if (ui.titleFileList) ui.titleFileList.hidden = !hasPending;
+    const doneCount = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl)).length;
     if (ui.downloadZip) {
       ui.downloadZip.hidden = doneCount < 2;
       ui.downloadZip.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
+      ui.downloadZip.disabled = state.processing || doneCount < 2;
     }
   }
 
@@ -441,15 +443,6 @@
         result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
         const actions = document.createElement('div');
         actions.className = 'agf-processed-actions';
-        const openBtn = document.createElement('a');
-        openBtn.href = item.resultUrl || '#';
-        openBtn.target = '_blank';
-        openBtn.rel = 'noopener noreferrer';
-        openBtn.className = 'agf-btn-icon';
-        openBtn.title = 'Ouvrir dans un nouvel onglet';
-        openBtn.setAttribute('aria-label', 'Ouvrir ' + name);
-        openBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/><path d="m21 3-9 9"/><path d="M15 3h6v6"/></svg>';
-        actions.appendChild(openBtn);
         const dl = document.createElement('a');
         dl.href = item.resultUrl || '#';
         dl.setAttribute('download', item.resultFilename || name);
@@ -885,13 +878,13 @@
     if (fallbackFileName) {
       const base = fallbackFileName.replace(/\.[^.]+$/, '').trim();
       const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.bin'])[0];
-      const suffix = '_anonymized';
+      const suffix = '_anonymisé';
       if (/_\s*anonymis(?:e|é|ed)?\s*$/i.test(base)) return base + ext;
       return (base || 'document') + suffix + ext;
     }
     const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
     if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
-    return 'document_anonymized';
+    return 'document_anonymisé';
   }
 
   function buildFormDataForOneFile(file, fileName) {
@@ -939,6 +932,7 @@
       }
       const contentDisposition = response.headers.get('Content-Disposition') || '';
       const blob = await response.blob();
+      item.resultBlob = blob;
       item.resultUrl = URL.createObjectURL(blob);
       item.resultFilename = parseFilename(contentDisposition, item.fileName);
       item.resultSize = blob.size;
@@ -971,6 +965,7 @@
       file: f.file,
       status: 'pending',
       resultUrl: null,
+      resultBlob: null,
       resultFilename: null,
       resultSize: null,
       errorMessage: null
@@ -1034,15 +1029,22 @@
       a.href = URL.createObjectURL(zipBlob);
       a.download = 'documents_anonymisés.zip';
       a.click();
-      URL.revokeObjectURL(a.href);
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
     });
   }
 
   function downloadAllAsZip() {
-    const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl);
+    const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl));
     if (blobsToZip.length < 2) return;
     setStatus('loading', 'Préparation du zip…');
-    Promise.all(blobsToZip.map((item) => fetch(item.resultUrl).then((r) => r.blob()))).then((blobs) => {
+    Promise.all(blobsToZip.map((item) => {
+      if (item.resultBlob) return Promise.resolve(item.resultBlob);
+      if (!item.resultUrl) return Promise.reject(new Error('missing-result-url'));
+      return fetch(item.resultUrl).then((r) => {
+        if (!r.ok) throw new Error('zip-fetch-failed');
+        return r.blob();
+      });
+    })).then((blobs) => {
       function runZip() {
         if (typeof window.JSZip !== 'undefined') {
           buildAndDownloadZip(blobsToZip, blobs);
@@ -1185,6 +1187,7 @@
     return div.innerHTML;
   }
 
+  /** Map backend tag names to UI codes for display/CSS only. Does NOT change backend classification. */
   function normalizeEntityCode(code) {
     const raw = (code || '').toString().trim();
     if (!raw) return '';
@@ -1195,6 +1198,7 @@
     return 'OTHER';
   }
 
+  /** Render backend placeholders [XXX] as colored spans. No client-side anonymization: we only map tag names (e.g. PERSON→PR, LOCATION→LOC) for display. */
   function buildOutputWithTags(processedText) {
     if (!processedText) return { plain: processedText || '', useTags: false };
     const escaped = escapeHtml(processedText);
