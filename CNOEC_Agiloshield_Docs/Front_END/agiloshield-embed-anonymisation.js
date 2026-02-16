@@ -9,9 +9,10 @@
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
-  const MAX_FILE_SIZE = 1 * 1024 * 1024;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const MAX_FILES = 12;
-  const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec', 'png', 'jpg', 'jpeg'];
+  const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
+  const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
   const REQUEST_TIMEOUT = 180000;
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
@@ -32,6 +33,7 @@
   const state = {
     activeTab: 'file',
     files: [],
+    processedItems: [],
     edition: 'free',
     mode: 'anonymiser',
     email: null,
@@ -69,6 +71,12 @@
     dropzone: document.getElementById('agfDropzone'),
     input: document.getElementById('agfFileInput'),
     fileList: document.getElementById('agfFileList'),
+    titleFileList: document.getElementById('agfTitleFileList'),
+    processedWrap: document.getElementById('agfProcessedWrap'),
+    processedList: document.getElementById('agfProcessedList'),
+    clearProcessed: document.getElementById('agfClearProcessed'),
+    downloadZip: document.getElementById('agfDownloadZip'),
+    actionsSubmit: document.getElementById('agfActionsSubmit'),
     submit: document.getElementById('agfSubmit'),
     reset: document.getElementById('agfReset'),
     download: document.getElementById('agfDownload'),
@@ -280,7 +288,28 @@
     }
   }
 
-  function updateActions() { ui.submit.disabled = state.processing || state.files.length === 0; }
+  function revokeAllProcessedUrls() {
+    state.processedItems.forEach((item) => {
+      if (item.resultUrl) {
+        URL.revokeObjectURL(item.resultUrl);
+        item.resultUrl = null;
+      }
+    });
+  }
+
+  function updateActions() {
+    const hasPending = state.files.length > 0 && state.processedItems.length === 0;
+    const hasProcessed = state.processedItems.length > 0;
+    if (ui.submit) ui.submit.disabled = state.processing || !hasPending;
+    if (ui.actionsSubmit) ui.actionsSubmit.hidden = hasProcessed;
+    if (ui.processedWrap) ui.processedWrap.hidden = !hasProcessed;
+    if (ui.fileList) ui.fileList.hidden = hasProcessed;
+    if (ui.titleFileList) ui.titleFileList.hidden = hasProcessed;
+    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
+    if (ui.downloadZip) {
+      ui.downloadZip.hidden = doneCount < 2;
+    }
+  }
 
   function renderFileList() {
     ui.fileList.textContent = '';
@@ -325,15 +354,74 @@
     updateActions();
   }
 
+  function renderProcessedList() {
+    if (!ui.processedList) return;
+    ui.processedList.textContent = '';
+    state.processedItems.forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'agf-processed-card';
+      card.setAttribute('role', 'listitem');
+      card.setAttribute('data-id', item.id);
+
+      const original = document.createElement('div');
+      original.className = 'agf-processed-original';
+      original.innerHTML = '<div class="agf-file-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(item.fileName) + '">' + escapeHtml(item.fileName) + '</p><p class="agf-file-meta">' + formatSize(item.size) + '</p></div>';
+      card.appendChild(original);
+
+      const arrow = document.createElement('div');
+      arrow.className = 'agf-processed-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+      card.appendChild(arrow);
+
+      const result = document.createElement('div');
+      result.className = 'agf-processed-result';
+      if (item.status === 'pending') {
+        result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">—</p></div>';
+      } else if (item.status === 'processing') {
+        result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
+      } else if (item.status === 'error') {
+        result.innerHTML = '<div class="agf-file-icon" style="color:var(--agilo-error)"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
+      } else {
+        const name = (item.resultFilename || item.fileName) + '';
+        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
+        const actions = document.createElement('div');
+        actions.className = 'agf-processed-actions';
+        const dl = document.createElement('a');
+        dl.href = item.resultUrl || '#';
+        dl.setAttribute('download', item.resultFilename || '');
+        dl.className = 'agf-btn-icon';
+        dl.title = 'Télécharger';
+        dl.setAttribute('aria-label', 'Télécharger ' + name);
+        dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+        actions.appendChild(dl);
+        result.appendChild(actions);
+      }
+      card.appendChild(result);
+      ui.processedList.appendChild(card);
+    });
+    updateActions();
+  }
+
   function validateFile(file) {
     if (!file || file.size > MAX_FILE_SIZE) return false;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     return SUPPORTED_EXT.includes(ext);
   }
 
+  function getRejectReason(file) {
+    if (!file) return 'format';
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (IMAGE_EXT.includes(ext)) return 'image';
+    if (file.size > MAX_FILE_SIZE) return 'size';
+    if (!SUPPORTED_EXT.includes(ext)) return 'format';
+    return null;
+  }
+
   function addFiles(fileList) {
     const files = Array.from(fileList || []);
-    const rejected = [];
+    const rejectedImages = [];
+    const rejectedOther = [];
     const maxToAdd = MAX_FILES - state.files.length;
     if (maxToAdd <= 0) {
       setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
@@ -342,15 +430,19 @@
     }
     const toAdd = files.slice(0, maxToAdd);
     toAdd.forEach((file) => {
-      if (!validateFile(file)) { rejected.push(file.name); return; }
-      state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
+      const reason = getRejectReason(file);
+      if (reason === 'image') rejectedImages.push(file.name);
+      else if (reason) rejectedOther.push(file.name);
+      else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
       setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
-    } else if (rejected.length > 0) {
-      const short = rejected.slice(0, 2).join(', ');
-      const more = rejected.length > 2 ? ' +' + (rejected.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non accepté ou fichier > 1 Mo : ' + short + more + '.');
+    } else if (rejectedImages.length > 0) {
+      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge. Ce sera disponible prochainement.');
+    } else if (rejectedOther.length > 0) {
+      const short = rejectedOther.slice(0, 2).join(', ');
+      const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
+      setStatus('error', 'Format non accepté ou fichier > 10 Mo : ' + short + more + '.');
     } else {
       setStatus('', '');
     }
@@ -732,24 +824,12 @@
     return 'document_anonymise';
   }
 
-  async function submitFiles(event) {
-    event.preventDefault();
-    if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
-
-    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
-
-    state.processing = true;
-    updateActions();
-    revokeResultUrl();
-    ui.download.href = '#';
-    ui.download.removeAttribute('download');
-    ui.download.classList.remove('is-visible');
-    setStatus('loading', 'Traitement en cours… Les gros fichiers peuvent prendre un moment.');
-
+  function buildFormDataForOneFile(file, fileName) {
     const formData = new FormData();
     formData.append('username', state.email);
     formData.append('token', state.token);
     formData.append('edition', state.edition);
+    formData.append('fileUpload[]', file, fileName);
     const entities = selectedEntities();
     if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
     const inc = (state.includeTerms || []).join('\n').trim();
@@ -765,51 +845,141 @@
       formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
       formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
     }
-    state.files.forEach((item) => formData.append('fileUpload[]', item.file, item.fileName));
+    return formData;
+  }
 
+  async function processOneFile(item) {
+    item.status = 'processing';
+    renderProcessedList();
     try {
+      const formData = buildFormDataForOneFile(item.file, item.fileName);
       const response = await fetchWithTimeout(ANON_ENDPOINT, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
       if (!response.ok) {
         const raw = await response.text();
-        let msg = 'Erreur de traitement. Vérifiez puis réessayez.';
+        let msg = 'Erreur de traitement.';
         try {
           const json = JSON.parse(raw);
           const code = json && (json.errorCode || json.error_code);
-          if (code === 'error_invalid_office_extension') msg = 'Format non accepté. Utilisez un fichier texte, CSV ou Office.';
-          else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux. Réduisez la taille ou le nombre de fichiers.';
-          else if (code === 'error_too_many_files') msg = 'Trop de fichiers (maximum 12).';
+          if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
+          else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
+          else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
           else if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage;
-        } catch (e) { if (raw && raw.length < 220) msg = raw; }
+        } catch (e) { if (raw && raw.length < 180) msg = raw; }
         throw new Error(msg);
       }
       const contentDisposition = response.headers.get('Content-Disposition') || '';
       const blob = await response.blob();
-      state.resultUrl = URL.createObjectURL(blob);
-      const singleFileName = state.files.length === 1 ? state.files[0].fileName : null;
-      state.resultFilename = parseFilename(contentDisposition, singleFileName);
-      ui.download.href = state.resultUrl;
-      ui.download.setAttribute('download', state.resultFilename);
-      ui.download.classList.add('is-visible');
-      setStatus('success', 'C\'est prêt. Téléchargez votre document anonymisé.');
+      item.resultUrl = URL.createObjectURL(blob);
+      item.resultFilename = parseFilename(contentDisposition, item.fileName);
+      item.resultSize = blob.size;
+      item.status = 'done';
     } catch (err) {
-      if (err && err.name === 'AbortError') setStatus('error', 'Le traitement a pris trop de temps. Réduisez le nombre ou la taille des fichiers.');
-      else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) setStatus('error', 'Erreur réseau. Vérifiez votre connexion et réessayez.');
-      else setStatus('error', (err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.');
-    } finally {
-      state.processing = false;
-      updateActions();
+      item.status = 'error';
+      item.errorMessage = err && err.name === 'AbortError' ? 'Délai dépassé.' : (err && err.message) ? err.message : 'Échec';
     }
+    renderProcessedList();
+  }
+
+  async function submitFiles(event) {
+    event.preventDefault();
+    if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
+
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
+
+    state.processing = true;
+    revokeResultUrl();
+    revokeAllProcessedUrls();
+    ui.download.href = '#';
+    ui.download.removeAttribute('download');
+    ui.download.classList.remove('is-visible');
+
+    state.processedItems = state.files.map((f) => ({
+      id: f.id,
+      fileName: f.fileName,
+      size: f.size,
+      file: f.file,
+      status: 'pending',
+      resultUrl: null,
+      resultFilename: null,
+      resultSize: null,
+      errorMessage: null
+    }));
+    state.files = [];
+    renderFileList();
+    updateActions();
+    setStatus('loading', 'Traitement en cours (un fichier après l\'autre)…');
+
+    for (let i = 0; i < state.processedItems.length; i++) {
+      await processOneFile(state.processedItems[i]);
+      const done = state.processedItems.filter((p) => p.status === 'done').length;
+      const err = state.processedItems.filter((p) => p.status === 'error').length;
+      if (i < state.processedItems.length - 1) {
+        setStatus('loading', 'Traitement en cours… ' + done + ' prêt(s)' + (err ? ', ' + err + ' en erreur' : '') + '.');
+      }
+    }
+
+    state.processing = false;
+    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
+    const errCount = state.processedItems.filter((p) => p.status === 'error').length;
+    if (errCount === state.processedItems.length) {
+      setStatus('error', 'Aucun fichier n\'a pu être traité.');
+    } else if (errCount > 0) {
+      setStatus('success', 'C\'est prêt. ' + doneCount + ' fichier(s) téléchargeable(s). ' + errCount + ' en erreur.');
+    } else {
+      setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
+    }
+    updateActions();
   }
 
   function resetFiles() {
     if (state.processing) return;
     state.files = [];
+    state.processedItems = [];
     revokeResultUrl();
+    revokeAllProcessedUrls();
     ui.download.href = '#';
     ui.download.removeAttribute('download');
     ui.download.classList.remove('is-visible');
     setStatus('', '');
     renderFileList();
+    renderProcessedList();
+    updateActions();
+  }
+
+  function clearProcessedOnly() {
+    if (state.processing) return;
+    state.processedItems = [];
+    revokeAllProcessedUrls();
+    setStatus('', '');
+    renderProcessedList();
+    updateActions();
+  }
+
+  function buildAndDownloadZip(items, blobs) {
+    const zip = new window.JSZip();
+    items.forEach((item, i) => { zip.file(item.resultFilename || ('file_' + (i + 1)), blobs[i]); });
+    zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = 'documents_anonymises.zip';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  }
+
+  function downloadAllAsZip() {
+    const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl);
+    if (blobsToZip.length < 2) return;
+    Promise.all(blobsToZip.map((item) => fetch(item.resultUrl).then((r) => r.blob()))).then((blobs) => {
+      if (typeof window.JSZip !== 'undefined') {
+        buildAndDownloadZip(blobsToZip, blobs);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); };
+      document.head.appendChild(script);
+    });
   }
 
   async function processText() {
@@ -1035,6 +1205,8 @@
   function bindEvents() {
     ui.form.addEventListener('submit', submitFiles);
     ui.reset.addEventListener('click', resetFiles);
+    if (ui.clearProcessed) ui.clearProcessed.addEventListener('click', clearProcessedOnly);
+    if (ui.downloadZip) ui.downloadZip.addEventListener('click', downloadAllAsZip);
 
     ui.tabs.forEach((tab, index) => {
       tab.addEventListener('click', () => setActiveTab(tab.getAttribute('data-tab')));
