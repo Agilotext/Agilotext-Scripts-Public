@@ -55,9 +55,10 @@
   let lastProcessedHtml = null;
   let lastProcessedStats = null;
   let lastProcessedCounts = null;
-  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'OTHER'];
+  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI'];
   const PLACEHOLDER_RE = /\[([A-Z0-9_]{2,12})\]/g;
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
+  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
 
@@ -130,7 +131,7 @@
     manualEdition: document.getElementById('agfManualEdition')
   };
 
-  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'BANK', 'CARD', 'REF', 'CLAUSE', 'DT'];
+  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
@@ -372,7 +373,7 @@
 
   function selectedVisualEntities() {
     return Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]'))
-      .filter((c) => c.checked)
+      .filter((c) => !c.disabled && c.checked)
       .map((c) => c.getAttribute('data-entity'));
   }
 
@@ -571,12 +572,16 @@
             contract: 'REF',
             bank: 'BANK'
           };
-          entities = parsed.map((item) => legacyMap[item] || item);
+          const mapped = parsed.map((item) => legacyMap[item] || item);
+          entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
+          if (entities.length === 0) entities = DEFAULT_ENTITIES;
         }
       } catch (e) {}
     }
+    const availableSet = new Set(TYPES_AVAILABLE);
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
-      chk.checked = entities.includes(chk.getAttribute('data-entity'));
+      const code = chk.getAttribute('data-entity');
+      chk.checked = !chk.disabled && availableSet.has(code) && entities.includes(code);
     });
 
     state.includeTerms = parseStoredTerms(storage.get(STORAGE_INC));
@@ -1087,6 +1092,7 @@
 
     ui.defaultsTypes.addEventListener('click', () => {
       Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (chk.disabled) return;
         chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
       });
       resetTextCache();
@@ -1095,14 +1101,18 @@
     });
 
     if (ui.detectAllTypes) ui.detectAllTypes.addEventListener('click', () => {
-      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => { chk.checked = true; });
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (!chk.disabled) chk.checked = true;
+      });
       resetTextCache();
       renderTypeCount();
       refreshTextIfNeeded();
     });
 
     if (ui.ignoreAllTypes) ui.ignoreAllTypes.addEventListener('click', () => {
-      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => { chk.checked = false; });
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (!chk.disabled) chk.checked = false;
+      });
       resetTextCache();
       renderTypeCount();
       refreshTextIfNeeded();
