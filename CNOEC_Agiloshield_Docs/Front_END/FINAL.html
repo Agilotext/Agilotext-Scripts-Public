@@ -262,7 +262,27 @@
   }
   .agf-processed-actions .agf-btn-icon:hover { background: color-mix(in srgb, var(--agilo-primary) 15%, transparent); color: var(--agilo-primary); }
   .agf-processed-actions .agf-btn-icon:disabled { opacity: 0.5; cursor: not-allowed; color: var(--agilo-text-secondary); }
-  .agf-download-zip { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; color: #fff; }
+  .agf-download-zip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0 0.875rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border: 1px solid var(--agilo-border);
+    background: var(--agilo-surface);
+    color: var(--agilo-primary);
+  }
+  .agf-download-zip:hover {
+    background: color-mix(in srgb, var(--agilo-primary) 8%, var(--agilo-surface));
+    border-color: color-mix(in srgb, var(--agilo-primary) 30%, transparent);
+  }
+  .agf-download-zip:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
   .agf-download-zip .agf-icon-download {
     display: inline-block; width: 1.125rem; height: 1.125rem; vertical-align: -0.2rem;
     background-color: currentColor;
@@ -324,6 +344,7 @@
     border: 1px solid var(--agilo-border);
     background: var(--agilo-surface);
     padding: var(--space-2); overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+    text-align: left;
   }
   .agf-text-output {
     font-size: 0.875rem; line-height: 1.6; color: var(--agilo-text); white-space: pre-wrap; word-break: break-word;
@@ -333,6 +354,7 @@
     padding: 0;
     min-height: 14rem;
     flex: 1;
+    text-align: left;
   }
   .agf-text-output.agf-text-output--loading { opacity: 0.85; }
   .agf-output-stats {
@@ -417,6 +439,7 @@
   .agf-status[data-kind="loading"] { color: var(--agilo-primary); background: var(--agilo-primary-soft); }
   .agf-status[data-kind="success"] { color: var(--agilo-success); background: color-mix(in srgb, var(--agilo-success) 10%, transparent); }
   .agf-status[data-kind="error"] { color: var(--agilo-error); background: color-mix(in srgb, var(--agilo-error) 10%, transparent); }
+  .agf-status[data-kind="info"] { color: var(--agilo-primary); background: color-mix(in srgb, var(--agilo-primary) 9%, var(--agilo-surface)); }
   .agf-spinner { width: 1rem; height: 1rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: agf-spin .7s linear infinite; }
   @keyframes agf-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) {
@@ -436,6 +459,13 @@
   .agf-btn-primary:disabled { background: var(--agilo-text-secondary); color: #fff !important; opacity: 1; cursor: not-allowed; }
   form[ms-code-anonymisation="form"] button.agf-btn-primary,
   form[ms-code-anonymisation="form"] button.agf-btn-primary:disabled { color: #fff !important; }
+  .agf-btn-secondary:disabled,
+  .agf-btn-link:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    color: var(--agilo-text-secondary);
+    text-decoration: none;
+  }
   .agf-btn-primary:focus-visible,
   .agf-btn-secondary:focus-visible,
   .agf-btn-link:focus-visible {
@@ -474,7 +504,16 @@
     outline: none;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
   }
+  .agf-item-btn.is-preview {
+    background: color-mix(in srgb, var(--agilo-primary) 7%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--agilo-primary) 24%, transparent);
+  }
   .agf-item-btn.is-active { background: color-mix(in srgb, var(--agilo-primary) 10%, transparent); }
+  .agf-item-btn.is-preview .agf-chip {
+    color: var(--agilo-primary);
+    border-color: color-mix(in srgb, var(--agilo-primary) 28%, transparent);
+    background: color-mix(in srgb, var(--agilo-primary) 10%, var(--agilo-surface));
+  }
   .agf-chip {
     font-size: 0.6875rem; border: 1px solid var(--agilo-border); border-radius: 999px;
     padding: 0.125rem 0.5rem; color: var(--agilo-text-secondary); background: var(--agilo-surface-2);
@@ -517,6 +556,22 @@
   .agf-modal-head { display: flex; justify-content: center; align-items: start; gap: 0.875rem; position: relative; padding-right: 2.75rem; }
   .agf-modal-title { font-size: 1.375rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; text-align: center; flex: 1; }
   .agf-modal-subtitle { margin-top: 0.375rem; font-size: 0.875rem; line-height: 1.45; color: var(--agilo-text-secondary); max-width: 72ch; text-align: center; margin-left: auto; margin-right: auto; }
+  .agf-modal-preview-note {
+    margin-top: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, transparent);
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--agilo-primary) 7%, var(--agilo-surface));
+    color: var(--agilo-text);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+  }
+  .agf-modal-preview-note strong { color: var(--agilo-primary); font-weight: 600; }
+  .agf-modal.is-readonly .agf-readonly-disabled {
+    opacity: 0.62;
+    pointer-events: none;
+    user-select: none;
+  }
   .agf-close {
     border: 1px solid transparent;
     background: transparent;
@@ -877,7 +932,7 @@
             <div class="agf-section-title-row">
               <h3 class="agf-section-title">Fichier(s) traité(s)</h3>
               <div class="agf-section-title-actions">
-                <button id="agfDownloadZip" type="button" class="agf-btn-primary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
+                <button id="agfDownloadZip" type="button" class="agf-btn-secondary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
                 <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer les fichiers"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer</button>
               </div>
             </div>
@@ -958,7 +1013,8 @@
         <div class="agf-group">
           <p class="agf-label">Mode de traitement</p>
           <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked> Anonymiser</label>
-          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip" id="agfPseudoBadge">Paramétrer</span></button>
+          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip" id="agfPseudoBadge">Bientôt</span></button>
+          <p id="agfPseudoAvailabilityHint" class="agf-small">Aperçu disponible. Activation backend en cours.</p>
         </div>
 
         <div class="agf-group">
@@ -968,11 +1024,12 @@
             <span class="agf-chip-count" id="agfTypesCount">9</span>
           </button>
           <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
+          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour l’instant.</p>
         </div>
 
         <div class="agf-group">
           <p class="agf-label">Enregistré</p>
-          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span class="agf-chip">Gérer</span></button>
+          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
           <p id="agfPseudoSummary" class="agf-small">Pseudo: configuration standard</p>
           <p id="agfSavedTypesInfo" class="agf-small">Types actifs: 0</p>
           <p id="agfLastMaskInfo" class="agf-small">Champs anonymisés (texte): 0</p>
@@ -1107,8 +1164,11 @@
       </div>
       <button id="agfModalPseudoClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
+    <div id="agfPseudoPreviewNote" class="agf-modal-preview-note" role="note">
+      <strong>Mode aperçu:</strong> cette politique est consultable dès maintenant pour cadrer vos besoins. L’enregistrement et l’application seront activés lors du branchement backend.
+    </div>
 
-    <div class="agf-pseudo-grid">
+    <div id="agfPseudoReadonlyZone" class="agf-pseudo-grid agf-readonly-disabled">
       <section class="agf-pseudo-card">
         <p class="agf-pseudo-title">Stratégie de remplacement</p>
         <p class="agf-pseudo-desc">Détermine le format des valeurs pseudonymisées dans les résultats et exports.</p>
@@ -1181,8 +1241,11 @@
       </div>
       <button id="agfModalIncClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
+    <div id="agfInclusionPreviewNote" class="agf-modal-preview-note" role="note">
+      <strong>Mode aperçu:</strong> les listes actuelles restent visibles pour revue métier. Les modifications et l’application backend sont en cours d’activation.
+    </div>
 
-    <div class="agf-inc-grid">
+    <div id="agfInclusionReadonlyZone" class="agf-inc-grid agf-readonly-disabled">
       <section class="agf-inc-card agf-inc-card--include">
         <h4>Liste d'inclusion</h4>
         <p>Ces termes sont toujours détectés et anonymisés, même hors des types sélectionnés.</p>

@@ -51,8 +51,23 @@
   let lastProcessedResult = null;
   let lastProcessedHasTags = false;
   let lastProcessedHtml = null;
-  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'OTHER'];
-  const PLACEHOLDER_RE = /\[([A-Z0-9_]{2,12})\]/g;
+  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
+  const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  const TAG_ALIAS = {
+    PR: 'PR', PERSON: 'PR', PERSON_NAME: 'PR', PER: 'PR', NAME: 'PR',
+    MAIL: 'MAIL', EMAIL: 'MAIL', E_MAIL: 'MAIL',
+    PHON: 'PHON', PHONE: 'PHON', TEL: 'PHON', TELEPHONE: 'PHON', MOBILE: 'PHON',
+    ADR: 'ADR', ADDRESS: 'ADR', STREET_ADDRESS: 'ADR',
+    POST: 'POST', POSTAL: 'POST', POSTCODE: 'POST', POSTAL_CODE: 'POST', ZIP: 'POST', ZIP_CODE: 'POST',
+    LOC: 'LOC', LOCATION: 'LOC', LOCALISATION: 'LOC', CITY: 'LOC', REGION: 'LOC',
+    ORG: 'ORG', ORGANIZATION: 'ORG', ORGANISATION: 'ORG', COMPANY: 'ORG', CIE: 'ORG',
+    CID: 'SIREN', SIREN: 'SIREN', SIRET: 'SIRET',
+    TVA: 'TVA', VAT: 'TVA',
+    IBAN: 'IBAN', BIC: 'BIC', SWIFT: 'BIC',
+    FRNIR: 'FRNIR', NIR: 'FRNIR',
+    DT: 'DT', DATE: 'DT', DATETIME: 'DT', TIME: 'DT',
+    OTHER: 'OTHER'
+  };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
 
   const ui = {
@@ -741,7 +756,7 @@
       lastProcessedResult = out.plain;
       lastProcessedHasTags = out.useTags;
       lastProcessedHtml = out.html || null;
-      setTextOutput(out.plain, out.useTags, lastProcessedHtml);
+      setTextOutput(out.plain, out.useTags, lastProcessedHtml, out.stats, out.total);
     } catch (err) {
       if (err && err.name === 'AbortError') setTextOutput('Délai dépassé. Réessayez avec un texte plus court.', false);
       else setTextOutput((err && err.message) ? err.message : 'Erreur inattendue.', false);
@@ -751,10 +766,10 @@
     }
   }
 
-  function setTextOutput(plain, useTags, html) {
+  function setTextOutput(plain, useTags, html, stats, total) {
     if (useTags && html) ui.textOutput.innerHTML = html;
     else ui.textOutput.textContent = plain || 'Le texte traité apparaîtra ici';
-    renderOutputStats(plain || '');
+    renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
   }
 
   function scheduleDebouncedText() {
@@ -772,12 +787,25 @@
     return div.innerHTML;
   }
 
+  function normalizeEntityCode(code) {
+    const raw = (code || '').toString().trim();
+    if (!raw) return '';
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    if (!clean) return '';
+    return TAG_ALIAS[clean] || clean;
+  }
+
   function buildOutputWithTags(processedText) {
     if (!processedText) return { plain: processedText || '', useTags: false };
     const escaped = escapeHtml(processedText);
-    const re = new RegExp('\\[(' + ENTITY_TYPES_TAG.join('|') + ')\\]', 'g');
-    const html = escaped.replace(re, (_, type) => '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>');
-    if (html === escaped) return { plain: processedText, useTags: false };
+    let replaced = false;
+    const html = escaped.replace(/\[([A-Za-z0-9_]{2,32})\]/g, (_, rawType) => {
+      replaced = true;
+      const type = normalizeEntityCode(rawType);
+      if (!type) return '[' + rawType + ']';
+      return '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>';
+    });
+    if (!replaced || html === escaped) return { plain: processedText, useTags: false };
     return { plain: processedText, useTags: true, html };
   }
 
@@ -786,22 +814,30 @@
     if (!processedText) return counts;
     let match;
     while ((match = PLACEHOLDER_RE.exec(processedText)) !== null) {
-      const code = match[1];
+      const code = normalizeEntityCode(match[1]);
+      if (!code) continue;
       counts[code] = (counts[code] || 0) + 1;
     }
     PLACEHOLDER_RE.lastIndex = 0;
     return counts;
   }
 
-  function renderOutputStats(processedText) {
+  function renderOutputStats(processedText, explicitStats, explicitTotal) {
     if (!ui.outputSummary || !ui.outputEntities) return;
 
-    const stats = extractEntityStats(processedText);
-    const entries = Object.entries(stats).sort((a, b) => {
+    const stats = explicitStats && typeof explicitStats === 'object'
+      ? explicitStats
+      : extractEntityStats(processedText);
+    const entries = Object.entries(stats)
+      .map((entry) => [entry[0], Number(entry[1] || 0)])
+      .filter((entry) => entry[1] > 0)
+      .sort((a, b) => {
       if (b[1] !== a[1]) return b[1] - a[1];
       return a[0].localeCompare(b[0]);
     });
-    const total = entries.reduce((sum, item) => sum + item[1], 0);
+    const total = typeof explicitTotal === 'number'
+      ? explicitTotal
+      : entries.reduce((sum, item) => sum + item[1], 0);
 
     ui.outputEntities.textContent = '';
     if (total === 0) {
@@ -815,7 +851,7 @@
 
     entries.forEach((entry) => {
       const chip = document.createElement('span');
-      chip.className = 'agf-output-entity-chip';
+      chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
       chip.textContent = entry[0] + ': ' + entry[1];
       ui.outputEntities.appendChild(chip);
     });
@@ -823,12 +859,30 @@
 
   function applyStructuredResponse(raw) {
     let plain = (raw && raw.trim()) ? raw : 'Aucun contenu retourné.';
+    let stats = null;
+    let total = null;
     try {
       const data = JSON.parse(raw);
       if (data && typeof data.processedText === 'string') plain = data.processedText;
+      if (data && data.audit && data.audit.entityCounts && typeof data.audit.entityCounts === 'object') {
+        stats = {};
+        Object.entries(data.audit.entityCounts).forEach((entry) => {
+          const code = normalizeEntityCode(entry[0]);
+          if (!code) return;
+          stats[code] = (stats[code] || 0) + Number(entry[1] || 0);
+        });
+      } else if (data && Array.isArray(data.entities)) {
+        stats = {};
+        data.entities.forEach((entity) => {
+          const code = normalizeEntityCode(entity && entity.type);
+          if (!code) return;
+          stats[code] = (stats[code] || 0) + 1;
+        });
+      }
+      if (stats) total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
     } catch (e) {}
     const built = buildOutputWithTags(plain);
-    return { plain, useTags: built.useTags, html: built.html };
+    return { plain, useTags: built.useTags, html: built.html, stats, total };
   }
 
   function applyEditionLocks() {

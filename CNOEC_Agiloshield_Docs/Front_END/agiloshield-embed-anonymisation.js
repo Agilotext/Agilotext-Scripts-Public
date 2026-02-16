@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   // UTF-8; textes FR avec accents
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -14,6 +14,12 @@
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
   const REQUEST_TIMEOUT = 180000;
+  const query = new URLSearchParams(window.location.search);
+  const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
+  const FEATURE_AVAILABILITY = Object.freeze({
+    pseudo: runtimeFeatureFlags.pseudo === true || query.get('featurePseudo') === '1',
+    inclusion: runtimeFeatureFlags.inclusion === true || query.get('featureInclusion') === '1'
+  });
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
   const STORAGE_INC = 'agilo:futures:include:v1';
@@ -140,6 +146,9 @@
     lastMaskInfo: document.getElementById('agfLastMaskInfo'),
     pseudoSummary: document.getElementById('agfPseudoSummary'),
     pseudoBadge: document.getElementById('agfPseudoBadge'),
+    pseudoSavedBadge: document.getElementById('agfPseudoSavedBadge'),
+    pseudoAvailabilityHint: document.getElementById('agfPseudoAvailabilityHint'),
+    inclusionAvailabilityHint: document.getElementById('agfInclusionAvailabilityHint'),
     modeRadios: Array.from(document.querySelectorAll('input[name="agfMode"]')),
     pseudoMode: document.getElementById('agfPseudoMode'),
     pseudoSaved: document.getElementById('agfPseudoSaved'),
@@ -170,9 +179,13 @@
     pseudoRestoreWindow: document.getElementById('agfPseudoRestoreWindow'),
     pseudoDeterministic: document.getElementById('agfPseudoDeterministic'),
     pseudoPreserveFormat: document.getElementById('agfPseudoPreserveFormat'),
+    pseudoReadonlyZone: document.getElementById('agfPseudoReadonlyZone'),
+    pseudoPreviewNote: document.getElementById('agfPseudoPreviewNote'),
     saveTypes: document.getElementById('agfSaveTypes'),
     saveInclusion: document.getElementById('agfSaveInclusion'),
     inclusionDefaults: document.getElementById('agfInclusionDefaults'),
+    inclusionReadonlyZone: document.getElementById('agfInclusionReadonlyZone'),
+    inclusionPreviewNote: document.getElementById('agfInclusionPreviewNote'),
     incSummary: document.getElementById('agfIncSummary'),
     includeTerms: document.getElementById('agfIncludeTerms'),
     excludeTerms: document.getElementById('agfExcludeTerms'),
@@ -231,14 +244,17 @@
   }
 
   function currentTextConfigKey(text) {
+    const inclusionTerms = isFeatureEnabled('inclusion') ? (state.includeTerms || []) : [];
+    const exclusionTerms = isFeatureEnabled('inclusion') ? (state.excludeTerms || []) : [];
+    const pseudoCfg = isFeatureEnabled('pseudo') ? (state.pseudoConfig || {}) : {};
     return [
       (text || '').trim(),
       state.mode,
       toSortedJson(selectedVisualEntities()),
       toSortedJson(selectedEntities()),
-      (state.includeTerms || []).join('|'),
-      (state.excludeTerms || []).join('|'),
-      toSortedJson(state.pseudoConfig || {})
+      inclusionTerms.join('|'),
+      exclusionTerms.join('|'),
+      toSortedJson(pseudoCfg)
     ].join('::');
   }
 
@@ -277,6 +293,22 @@
     const txt = document.createElement('span');
     txt.textContent = message;
     ui.status.appendChild(txt);
+  }
+
+  function isFeatureEnabled(featureName) {
+    return !!FEATURE_AVAILABILITY[featureName];
+  }
+
+  function setReadonlyControls(root, readonly) {
+    if (!root) return;
+    const controls = root.querySelectorAll('input, select, textarea, button');
+    controls.forEach((node) => {
+      if (!Object.prototype.hasOwnProperty.call(node.dataset, 'agfInitiallyDisabled')) {
+        node.dataset.agfInitiallyDisabled = node.disabled ? '1' : '0';
+      }
+      const initiallyDisabled = node.dataset.agfInitiallyDisabled === '1';
+      node.disabled = readonly || initiallyDisabled;
+    });
   }
 
   let lastFocusBeforeModal = null;
@@ -594,6 +626,7 @@
   function renderTermList(kind) {
     const list = kind === 'include' ? state.includeTerms : state.excludeTerms;
     const wrap = kind === 'include' ? ui.includeList : ui.excludeList;
+    const canEdit = isFeatureEnabled('inclusion');
     if (!wrap) return;
 
     wrap.textContent = '';
@@ -616,15 +649,18 @@
       rm.type = 'button';
       rm.className = 'agf-term-remove';
       rm.textContent = 'Retirer';
-      rm.addEventListener('click', () => {
-        if (kind === 'include') state.includeTerms.splice(idx, 1);
-        else state.excludeTerms.splice(idx, 1);
-        syncHiddenTermFields();
-        renderTermList(kind);
-        renderInclusionSummary();
-        resetTextCache();
-        refreshTextIfNeeded();
-      });
+      rm.disabled = !canEdit;
+      if (canEdit) {
+        rm.addEventListener('click', () => {
+          if (kind === 'include') state.includeTerms.splice(idx, 1);
+          else state.excludeTerms.splice(idx, 1);
+          syncHiddenTermFields();
+          renderTermList(kind);
+          renderInclusionSummary();
+          resetTextCache();
+          refreshTextIfNeeded();
+        });
+      }
       row.appendChild(txt);
       row.appendChild(rm);
       wrap.appendChild(row);
@@ -634,7 +670,8 @@
   function renderInclusionSummary() {
     const i = state.includeTerms.length;
     const e = state.excludeTerms.length;
-    if (ui.incSummary) ui.incSummary.textContent = 'Inclusion: ' + i + ' · Exclusion: ' + e;
+    const previewSuffix = isFeatureEnabled('inclusion') ? '' : ' · aperçu non appliqué';
+    if (ui.incSummary) ui.incSummary.textContent = 'Inclusion: ' + i + ' · Exclusion: ' + e + previewSuffix;
     if (ui.inclusionChip) ui.inclusionChip.textContent = i + ' / ' + e;
   }
 
@@ -683,11 +720,22 @@
     return 'Placeholders';
   }
 
-  function setMode(mode) {
-    state.mode = mode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser';
+  function setMode(mode, options) {
+    const opts = options || {};
+    const wantsPseudo = mode === 'pseudonymiser';
+    const pseudoEnabled = isFeatureEnabled('pseudo');
+    if (wantsPseudo && !pseudoEnabled) {
+      state.mode = 'anonymiser';
+      if (!opts.silent) setStatus('info', 'Pseudonymisation en mode aperçu pour le moment. Activation backend en cours.');
+    } else {
+      state.mode = wantsPseudo ? 'pseudonymiser' : 'anonymiser';
+    }
     const pseudoActive = state.mode === 'pseudonymiser';
     if (ui.pseudoMode) ui.pseudoMode.classList.toggle('is-active', pseudoActive);
-    if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Paramétrer';
+    if (ui.pseudoBadge) {
+      if (!pseudoEnabled) ui.pseudoBadge.textContent = 'Bientôt';
+      else ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Paramétrer';
+    }
     const anonRadio = (ui.modeRadios || []).find((r) => r.value === 'anonymiser');
     if (anonRadio) anonRadio.checked = !pseudoActive;
     storage.set(STORAGE_MODE, state.mode);
@@ -698,6 +746,10 @@
   function renderPseudoSummary() {
     const cfg = state.pseudoConfig || DEFAULT_PSEUDO_CONFIG;
     if (ui.pseudoSummary) {
+      if (!isFeatureEnabled('pseudo')) {
+        ui.pseudoSummary.textContent = 'Pseudo: aperçu disponible · activation backend en cours';
+        return;
+      }
       const modeTxt = state.mode === 'pseudonymiser' ? 'actif' : 'configuré';
       ui.pseudoSummary.textContent =
         'Pseudo ' + modeTxt + ': ' + strategyLabel(cfg.strategy) + ' · clé ' + (cfg.keyMode || 'server') + ' · fenêtre ' + (cfg.restoreWindow || '30d');
@@ -754,7 +806,7 @@
     applyPseudoToUi(state.pseudoConfig);
     renderPseudoSummary();
     const storedMode = storage.get(STORAGE_MODE);
-    setMode(storedMode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser');
+    setMode(storedMode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser', { silent: true });
 
     renderTypeCount();
   }
@@ -895,11 +947,13 @@
     formData.append('fileUpload[]', file, fileName);
     const entities = selectedEntities();
     if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
-    const inc = (state.includeTerms || []).join('\n').trim();
-    if (inc) formData.append('includeTerms', inc);
-    const exc = (state.excludeTerms || []).join('\n').trim();
-    if (exc) formData.append('excludeTerms', exc);
-    if (state.mode === 'pseudonymiser' && state.pseudoConfig) {
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) formData.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) formData.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
       formData.append('processingMode', 'pseudonymiser');
       formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
       formData.append('pseudoScope', state.pseudoConfig.scope || '');
@@ -1109,11 +1163,13 @@
     payload.append('forceTextFormat', 'true');
     const entities = selectedEntities();
     if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
-    const inc = (state.includeTerms || []).join('\n').trim();
-    if (inc) payload.append('includeTerms', inc);
-    const exc = (state.excludeTerms || []).join('\n').trim();
-    if (exc) payload.append('excludeTerms', exc);
-    if (state.mode === 'pseudonymiser' && state.pseudoConfig) {
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) payload.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) payload.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
       payload.append('processingMode', 'pseudonymiser');
       payload.append('pseudoStrategy', state.pseudoConfig.strategy || '');
       payload.append('pseudoScope', state.pseudoConfig.scope || '');
@@ -1297,6 +1353,54 @@
     ui.openInclusion.classList.remove('is-locked');
   }
 
+  function applyFeatureAvailability() {
+    const pseudoEnabled = isFeatureEnabled('pseudo');
+    const inclusionEnabled = isFeatureEnabled('inclusion');
+
+    if (ui.pseudoMode) ui.pseudoMode.classList.toggle('is-preview', !pseudoEnabled);
+    if (ui.pseudoSaved) ui.pseudoSaved.classList.toggle('is-preview', !pseudoEnabled);
+    if (ui.openInclusion) ui.openInclusion.classList.toggle('is-preview', !inclusionEnabled);
+
+    if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoEnabled ? 'Paramétrer' : 'Bientôt';
+    if (ui.pseudoSavedBadge) ui.pseudoSavedBadge.textContent = pseudoEnabled ? 'Gérer' : 'Aperçu';
+    if (ui.pseudoAvailabilityHint) ui.pseudoAvailabilityHint.hidden = pseudoEnabled;
+    if (ui.inclusionAvailabilityHint) ui.inclusionAvailabilityHint.hidden = inclusionEnabled;
+    if (ui.pseudoPreviewNote) ui.pseudoPreviewNote.hidden = pseudoEnabled;
+    if (ui.inclusionPreviewNote) ui.inclusionPreviewNote.hidden = inclusionEnabled;
+
+    if (!pseudoEnabled && state.mode === 'pseudonymiser') {
+      setMode('anonymiser', { silent: true });
+    }
+
+    if (ui.modals.pseudo) {
+      const pseudoModal = ui.modals.pseudo.querySelector('.agf-modal');
+      if (pseudoModal) pseudoModal.classList.toggle('is-readonly', !pseudoEnabled);
+    }
+    if (ui.modals.inclusion) {
+      const inclusionModal = ui.modals.inclusion.querySelector('.agf-modal');
+      if (inclusionModal) inclusionModal.classList.toggle('is-readonly', !inclusionEnabled);
+    }
+
+    setReadonlyControls(ui.pseudoReadonlyZone, !pseudoEnabled);
+    setReadonlyControls(ui.inclusionReadonlyZone, !inclusionEnabled);
+
+    if (ui.pseudoDefaults) ui.pseudoDefaults.disabled = !pseudoEnabled;
+    if (ui.savePseudo) {
+      ui.savePseudo.disabled = !pseudoEnabled;
+      ui.savePseudo.textContent = pseudoEnabled ? 'Enregistrer la politique' : 'Activation backend en attente';
+    }
+
+    if (ui.includeInput) ui.includeInput.disabled = !inclusionEnabled;
+    if (ui.excludeInput) ui.excludeInput.disabled = !inclusionEnabled;
+    if (ui.includeAdd) ui.includeAdd.disabled = !inclusionEnabled;
+    if (ui.excludeAdd) ui.excludeAdd.disabled = !inclusionEnabled;
+    if (ui.inclusionDefaults) ui.inclusionDefaults.disabled = !inclusionEnabled;
+    if (ui.saveInclusion) {
+      ui.saveInclusion.disabled = !inclusionEnabled;
+      ui.saveInclusion.textContent = inclusionEnabled ? 'Enregistrer les listes' : 'Activation backend en attente';
+    }
+  }
+
   function shouldCallApiMeta() {
     if (!ui.apiMeta) return false;
     const footer = ui.apiMeta.closest('.agf-api-footer');
@@ -1355,11 +1459,23 @@
       refreshTextIfNeeded();
     }));
 
-    ui.pseudoMode.addEventListener('click', () => openModal(ui.modals.pseudo));
-    ui.pseudoSaved.addEventListener('click', () => openModal(ui.modals.pseudo));
+    ui.pseudoMode.addEventListener('click', () => {
+      openModal(ui.modals.pseudo);
+      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymisation en aperçu: activation backend en cours.');
+    });
+    ui.pseudoSaved.addEventListener('click', () => {
+      openModal(ui.modals.pseudo);
+      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymes en aperçu: gestion active dès branchement backend.');
+    });
     ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
-    ui.openInclusion.addEventListener('click', () => openModal(ui.modals.inclusion));
-    ui.upgradeRestore.addEventListener('click', () => openModal(ui.modals.pseudo));
+    ui.openInclusion.addEventListener('click', () => {
+      openModal(ui.modals.inclusion);
+      if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion en aperçu: activation backend en cours.');
+    });
+    ui.upgradeRestore.addEventListener('click', () => {
+      openModal(ui.modals.pseudo);
+      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Restauration et pseudonymisation seront activées ensemble côté backend.');
+    });
 
     ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
     if (ui.modalTypesBetaClose && ui.modalTypesBetaOverlay) {
@@ -1405,12 +1521,20 @@
     });
 
     if (ui.pseudoDefaults) ui.pseudoDefaults.addEventListener('click', () => {
+      if (!isFeatureEnabled('pseudo')) {
+        setStatus('info', 'Paramètres de pseudonymisation visibles en aperçu uniquement pour l’instant.');
+        return;
+      }
       state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG };
       applyPseudoToUi(state.pseudoConfig);
       renderPseudoSummary();
     });
 
     if (ui.savePseudo) ui.savePseudo.addEventListener('click', () => {
+      if (!isFeatureEnabled('pseudo')) {
+        setStatus('info', 'Pseudonymisation non activée côté backend. Configuration conservée en aperçu.');
+        return;
+      }
       state.pseudoConfig = readPseudoFromUi();
       storage.set(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
       resetTextCache();
@@ -1421,6 +1545,10 @@
     });
 
     if (ui.includeAdd) ui.includeAdd.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        return;
+      }
       if (addTerm('include', ui.includeInput ? ui.includeInput.value : '')) {
         if (ui.includeInput) ui.includeInput.value = '';
         if (ui.includeInput) ui.includeInput.focus();
@@ -1430,6 +1558,10 @@
     });
 
     if (ui.excludeAdd) ui.excludeAdd.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        return;
+      }
       if (addTerm('exclude', ui.excludeInput ? ui.excludeInput.value : '')) {
         if (ui.excludeInput) ui.excludeInput.value = '';
         if (ui.excludeInput) ui.excludeInput.focus();
@@ -1441,6 +1573,10 @@
     if (ui.includeInput) ui.includeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (!isFeatureEnabled('inclusion')) {
+          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          return;
+        }
         if (addTerm('include', ui.includeInput.value)) {
           ui.includeInput.value = '';
           resetTextCache();
@@ -1452,6 +1588,10 @@
     if (ui.excludeInput) ui.excludeInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (!isFeatureEnabled('inclusion')) {
+          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          return;
+        }
         if (addTerm('exclude', ui.excludeInput.value)) {
           ui.excludeInput.value = '';
           resetTextCache();
@@ -1461,6 +1601,10 @@
     });
 
     if (ui.inclusionDefaults) ui.inclusionDefaults.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Listes en aperçu: le reset sera disponible à l’activation backend.');
+        return;
+      }
       state.includeTerms = [];
       state.excludeTerms = [];
       syncHiddenTermFields();
@@ -1472,6 +1616,10 @@
     });
 
     ui.saveInclusion.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion non activée côté backend. Aperçu conservé.');
+        return;
+      }
       if (ui.includeInput && ui.includeInput.value) {
         addTerm('include', ui.includeInput.value);
         ui.includeInput.value = '';
@@ -1548,6 +1696,7 @@
     setActiveTab('file');
     loadPreferences();
     applyEditionLocks();
+    applyFeatureAvailability();
     renderFileList();
     updateActions();
     if (shouldCallApiMeta()) {

@@ -47,8 +47,23 @@
   let lastProcessedResult = null;
   let lastProcessedHasTags = false;
   let lastProcessedHtml = null;
-  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'OTHER'];
-  const PLACEHOLDER_RE = /\[([A-Z0-9_]{2,12})\]/g;
+  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'CIE', 'CID', 'ACT', 'PROD', 'ADR', 'POST', 'LOC', 'GEO', 'CARD', 'BANK', 'MT', 'IBAN', 'ORG', 'URL', 'IP', 'REF', 'FILE', 'CLAUSE', 'DT', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
+  const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  const TAG_ALIAS = {
+    PR: 'PR', PERSON: 'PR', PERSON_NAME: 'PR', PER: 'PR', NAME: 'PR',
+    MAIL: 'MAIL', EMAIL: 'MAIL', E_MAIL: 'MAIL',
+    PHON: 'PHON', PHONE: 'PHON', TEL: 'PHON', TELEPHONE: 'PHON', MOBILE: 'PHON',
+    ADR: 'ADR', ADDRESS: 'ADR', STREET_ADDRESS: 'ADR',
+    POST: 'POST', POSTAL: 'POST', POSTCODE: 'POST', POSTAL_CODE: 'POST', ZIP: 'POST', ZIP_CODE: 'POST',
+    LOC: 'LOC', LOCATION: 'LOC', LOCALISATION: 'LOC', CITY: 'LOC', REGION: 'LOC',
+    ORG: 'ORG', ORGANIZATION: 'ORG', ORGANISATION: 'ORG', COMPANY: 'ORG', CIE: 'ORG',
+    CID: 'SIREN', SIREN: 'SIREN', SIRET: 'SIRET',
+    TVA: 'TVA', VAT: 'TVA',
+    IBAN: 'IBAN', BIC: 'BIC', SWIFT: 'BIC',
+    FRNIR: 'FRNIR', NIR: 'FRNIR',
+    DT: 'DT', DATE: 'DT', DATETIME: 'DT', TIME: 'DT',
+    OTHER: 'OTHER'
+  };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
 
   const ui = {
@@ -760,12 +775,25 @@
     return div.innerHTML;
   }
 
+  function normalizeEntityCode(code) {
+    const raw = (code || '').toString().trim();
+    if (!raw) return '';
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    if (!clean) return '';
+    return TAG_ALIAS[clean] || clean;
+  }
+
   function buildOutputWithTags(processedText) {
     if (!processedText) return { plain: processedText || '', useTags: false };
     const escaped = escapeHtml(processedText);
-    const re = new RegExp('\\[(' + ENTITY_TYPES_TAG.join('|') + ')\\]', 'g');
-    const html = escaped.replace(re, (_, type) => '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>');
-    if (html === escaped) return { plain: processedText, useTags: false };
+    let replaced = false;
+    const html = escaped.replace(/\[([A-Za-z0-9_]{2,32})\]/g, (_, rawType) => {
+      replaced = true;
+      const type = normalizeEntityCode(rawType);
+      if (!type) return '[' + rawType + ']';
+      return '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>';
+    });
+    if (!replaced || html === escaped) return { plain: processedText, useTags: false };
     return { plain: processedText, useTags: true, html };
   }
 
@@ -774,7 +802,8 @@
     if (!processedText) return counts;
     let match;
     while ((match = PLACEHOLDER_RE.exec(processedText)) !== null) {
-      const code = match[1];
+      const code = normalizeEntityCode(match[1]);
+      if (!code) continue;
       counts[code] = (counts[code] || 0) + 1;
     }
     PLACEHOLDER_RE.lastIndex = 0;
@@ -803,7 +832,7 @@
 
     entries.forEach((entry) => {
       const chip = document.createElement('span');
-      chip.className = 'agf-output-entity-chip';
+      chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
       chip.textContent = entry[0] + ': ' + entry[1];
       ui.outputEntities.appendChild(chip);
     });
