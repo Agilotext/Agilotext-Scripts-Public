@@ -1472,10 +1472,12 @@
       openModal(ui.modals.inclusion);
       if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion en aperçu: activation backend en cours.');
     });
-    ui.upgradeRestore.addEventListener('click', () => {
-      openModal(ui.modals.pseudo);
-      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Restauration et pseudonymisation seront activées ensemble côté backend.');
-    });
+    if (ui.upgradeRestore) {
+      ui.upgradeRestore.addEventListener('click', () => {
+        openModal(ui.modals.pseudo);
+        if (!isFeatureEnabled('pseudo')) setStatus('info', 'Restauration et pseudonymisation seront activées ensemble côté backend.');
+      });
+    }
 
     ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
     if (ui.modalTypesBetaClose && ui.modalTypesBetaOverlay) {
