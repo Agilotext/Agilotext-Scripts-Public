@@ -1,6 +1,7 @@
 (function () {
   'use strict';
   // UTF-8; textes FR avec accents
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -8,7 +9,8 @@
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
-  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const MAX_FILE_SIZE = 1 * 1024 * 1024;
+  const MAX_FILES = 12;
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec', 'png', 'jpg', 'jpeg'];
   const REQUEST_TIMEOUT = 180000;
 
@@ -196,6 +198,7 @@
   }
 
   function setStatus(kind, message) {
+    if (!ui.status) return;
     if (!message) {
       ui.status.classList.remove('is-visible');
       ui.status.removeAttribute('data-kind');
@@ -283,7 +286,7 @@
     if (state.files.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'agf-empty';
-      empty.textContent = 'Les fichiers sélectionnés apparaîtront ici';
+      empty.textContent = 'Aucun fichier pour l\'instant. Glissez-déposez ou cliquez au-dessus pour en ajouter.';
       ui.fileList.appendChild(empty);
       updateActions();
       return;
@@ -330,14 +333,23 @@
   function addFiles(fileList) {
     const files = Array.from(fileList || []);
     const rejected = [];
-    files.forEach((file) => {
+    const maxToAdd = MAX_FILES - state.files.length;
+    if (maxToAdd <= 0) {
+      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
+      renderFileList();
+      return;
+    }
+    const toAdd = files.slice(0, maxToAdd);
+    toAdd.forEach((file) => {
       if (!validateFile(file)) { rejected.push(file.name); return; }
       state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
-    if (rejected.length > 0) {
+    if (files.length > maxToAdd) {
+      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
+    } else if (rejected.length > 0) {
       const short = rejected.slice(0, 2).join(', ');
       const more = rejected.length > 2 ? ' +' + (rejected.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non supporté ou fichier > 10 Mo : ' + short + more + '.');
+      setStatus('error', 'Format non accepté ou fichier > 1 Mo : ' + short + more + '.');
     } else {
       setStatus('', '');
     }
@@ -379,7 +391,7 @@
     const total = selectedVisualEntities().length;
     const apiReady = selectedEntities().length;
     ui.typesCount.textContent = String(total);
-    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = 'Types actifs: ' + total + ' (API actifs: ' + apiReady + ')';
+    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) (dont ' + apiReady + ' envoyés à l\'API).';
 
     Array.from(document.querySelectorAll('#agfTypeGrid .agf-type-card')).forEach((card) => {
       const selectedInGroup = card.querySelectorAll('input[type="checkbox"][data-entity]:checked').length;
@@ -435,8 +447,8 @@
       const empty = document.createElement('p');
       empty.className = 'agf-term-empty';
       empty.textContent = kind === 'include'
-        ? 'Aucun terme inclus pour le moment.'
-        : 'Aucun terme exclu pour le moment.';
+        ? 'Pas encore de terme à inclure.'
+        : 'Pas encore de terme à exclure.';
       wrap.appendChild(empty);
       return;
     }
@@ -704,17 +716,22 @@
     } catch (e) {}
   }
 
-  function parseFilename(contentDisposition) {
+  function parseFilename(contentDisposition, fallbackFileName) {
     const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
-    if (!match || !match[1]) return 'document_anonymise';
-    return match[1].replace(/^['"]|['"]$/g, '').trim();
+    if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
+    if (fallbackFileName) {
+      const base = fallbackFileName.replace(/\.[^.]+$/, '');
+      const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.docx'])[0];
+      return (base || 'document') + '_anonymise' + ext;
+    }
+    return 'document_anonymise';
   }
 
   async function submitFiles(event) {
     event.preventDefault();
     if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
 
-    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Authentification indisponible.'); return; }
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
 
     state.processing = true;
     updateActions();
@@ -722,7 +739,7 @@
     ui.download.href = '#';
     ui.download.removeAttribute('download');
     ui.download.classList.remove('is-visible');
-    setStatus('loading', 'Traitement en cours...');
+    setStatus('loading', 'Traitement en cours… Les gros fichiers peuvent prendre un moment.');
 
     const formData = new FormData();
     formData.append('username', state.email);
@@ -750,21 +767,29 @@
       if (!response.ok) {
         const raw = await response.text();
         let msg = 'Erreur de traitement. Vérifiez puis réessayez.';
-        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage; }
-        catch (e) { if (raw && raw.length < 220) msg = raw; }
+        try {
+          const json = JSON.parse(raw);
+          const code = json && (json.errorCode || json.error_code);
+          if (code === 'error_invalid_office_extension') msg = 'Format non accepté. Utilisez un fichier texte, CSV ou Office.';
+          else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux. Réduisez la taille ou le nombre de fichiers.';
+          else if (code === 'error_too_many_files') msg = 'Trop de fichiers (maximum 12).';
+          else if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage;
+        } catch (e) { if (raw && raw.length < 220) msg = raw; }
         throw new Error(msg);
       }
       const contentDisposition = response.headers.get('Content-Disposition') || '';
       const blob = await response.blob();
       state.resultUrl = URL.createObjectURL(blob);
-      state.resultFilename = parseFilename(contentDisposition);
+      const singleFileName = state.files.length === 1 ? state.files[0].fileName : null;
+      state.resultFilename = parseFilename(contentDisposition, singleFileName);
       ui.download.href = state.resultUrl;
       ui.download.setAttribute('download', state.resultFilename);
       ui.download.classList.add('is-visible');
-      setStatus('success', 'Traitement terminé. Téléchargez le résultat.');
+      setStatus('success', 'C\'est prêt. Téléchargez votre document anonymisé.');
     } catch (err) {
-      if (err && err.name === 'AbortError') setStatus('error', 'Délai dépassé. Réessayez avec un lot plus petit.');
-      else setStatus('error', (err && err.message) ? err.message : 'Erreur inattendue.');
+      if (err && err.name === 'AbortError') setStatus('error', 'Le traitement a pris trop de temps. Réduisez le nombre ou la taille des fichiers.');
+      else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) setStatus('error', 'Erreur réseau. Vérifiez votre connexion et réessayez.');
+      else setStatus('error', (err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.');
     } finally {
       state.processing = false;
       updateActions();
@@ -787,14 +812,14 @@
     const cacheKey = currentTextConfigKey(value);
     if (!value) {
       resetTextCache();
-      setTextOutput('Ajoutez un texte à traiter.', false, null, null, 0);
+      setTextOutput('Collez ou tapez un texte ci-dessus pour l\'anonymiser.', false, null, null, 0);
       ui.textOutput.classList.remove('agf-text-output--loading');
       ui.textOutput.setAttribute('aria-busy', 'false');
       return;
     }
     if (value.length < MIN_TEXT_LENGTH_FOR_API) {
       resetTextCache();
-      setTextOutput('Saisissez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer le traitement.', false, null, null, 0);
+      setTextOutput('Entrez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer l\'anonymisation.', false, null, null, 0);
       ui.textOutput.classList.remove('agf-text-output--loading');
       ui.textOutput.setAttribute('aria-busy', 'false');
       return;
@@ -811,12 +836,12 @@
     }
     state.textProcessing = true;
     const requestSerial = ++textRequestSerial;
-    ui.textOutput.textContent = 'Traitement en cours...';
+    ui.textOutput.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
     ui.textOutput.classList.add('agf-text-output--loading');
     ui.textOutput.setAttribute('aria-busy', 'true');
 
     try { await ensureAuth(); } catch (e) {
-      setTextOutput(e.message || 'Authentification indisponible.', false, null, null, 0);
+      setTextOutput(e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.', false, null, null, 0);
       state.textProcessing = false;
       ui.textOutput.classList.remove('agf-text-output--loading');
       ui.textOutput.setAttribute('aria-busy', 'false');
@@ -874,8 +899,9 @@
       setTextOutput(out.plain, out.useTags, lastProcessedHtml, out.stats, out.total);
     } catch (err) {
       if (requestSerial !== textRequestSerial) return;
-      if (err && err.name === 'AbortError') setTextOutput('Délai dépassé. Réessayez avec un texte plus court.', false, null, null, 0);
-      else setTextOutput((err && err.message) ? err.message : 'Erreur inattendue.', false, null, null, 0);
+      if (err && err.name === 'AbortError') setTextOutput('Texte trop long ou serveur occupé. Réessayez avec un texte plus court.', false, null, null, 0);
+      else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
+      else setTextOutput((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.', false, null, null, 0);
     } finally {
       state.textProcessing = false;
       ui.textOutput.classList.remove('agf-text-output--loading');
@@ -889,7 +915,7 @@
 
   function setTextOutput(plain, useTags, html, stats, total) {
     if (useTags && html) ui.textOutput.innerHTML = html;
-    else ui.textOutput.textContent = plain || 'Le texte traité apparaîtra ici';
+    else ui.textOutput.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
     renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
   }
 
@@ -947,12 +973,12 @@
 
     ui.outputEntities.textContent = '';
     if (total === 0) {
-      ui.outputSummary.textContent = 'Aucun champ anonymisé détecté.';
+      ui.outputSummary.textContent = 'Aucune donnée personnelle détectée pour l\'instant.';
       if (ui.lastMaskInfo) ui.lastMaskInfo.textContent = 'Champs anonymisés (texte): 0';
       return;
     }
 
-    ui.outputSummary.textContent = total + ' champ(s) anonymisé(s) détecté(s) sur le dernier traitement texte.';
+    ui.outputSummary.textContent = total + ' donnée(s) personnelle(s) détectée(s) sur le dernier traitement.';
     if (ui.lastMaskInfo) ui.lastMaskInfo.textContent = 'Champs anonymisés (texte): ' + total;
 
     entries.forEach((entry) => {
@@ -964,7 +990,7 @@
   }
 
   function applyStructuredResponse(raw) {
-    let plain = (raw && raw.trim()) ? raw : 'Aucun contenu retourné.';
+    let plain = (raw && raw.trim()) ? raw : 'Le serveur n\'a renvoyé aucun résultat. Réessayez.';
     let stats = null;
     let total = null;
     try {
@@ -1036,13 +1062,13 @@
       textProcessQueued = false;
       ui.textInput.value = '';
       resetTextCache();
-      setTextOutput('Le texte traité apparaîtra ici', false, null, null, 0);
+      setTextOutput('Le résultat s\'affichera ici après anonymisation.', false, null, null, 0);
       if (debounceTextTimer) {
         clearTimeout(debounceTextTimer);
         debounceTextTimer = null;
       }
     });
-    if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le texte traité apparaîtra ici') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }); } });
+    if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
 
     ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
       setMode(radio.value);
@@ -1101,7 +1127,7 @@
       storage.set(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
       resetTextCache();
       setMode('pseudonymiser');
-      setStatus('success', 'Politique de pseudonymisation enregistrée.');
+      setStatus('success', 'Paramètres enregistrés.');
       closeModal(ui.modals.pseudo);
       refreshTextIfNeeded();
     });
@@ -1170,7 +1196,7 @@
       storage.set(STORAGE_INC, (ui.includeTerms && ui.includeTerms.value) || '');
       storage.set(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
       resetTextCache();
-      setStatus('success', "Listes d'inclusion/exclusion enregistrées.");
+      setStatus('success', 'Listes enregistrées.');
       closeModal(ui.modals.inclusion);
       refreshTextIfNeeded();
     });
@@ -1213,6 +1239,10 @@
   }
 
   async function init() {
+    if (window.__agiloEmbedAnonymisationMounted) return;
+    if (!ui.form || !ui.submit || !ui.dropzone) return;
+    window.__agiloEmbedAnonymisationMounted = true;
+
     await waitForMemberstack(10000, 200);
     state.edition = await detectEdition();
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
@@ -1238,6 +1268,7 @@
     }
   }
 
+  if (window.__agiloEmbedAnonymisationMounted) return;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
