@@ -308,7 +308,7 @@
     if (ui.processedWrap) ui.processedWrap.hidden = !hasProcessed;
     if (ui.fileList) ui.fileList.hidden = hasProcessed;
     if (ui.titleFileList) ui.titleFileList.hidden = hasProcessed;
-    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
+    const doneCount = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl).length;
     if (ui.downloadZip) {
       ui.downloadZip.hidden = doneCount < 2;
     }
@@ -390,9 +390,18 @@
         result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
         const actions = document.createElement('div');
         actions.className = 'agf-processed-actions';
+        const openBtn = document.createElement('a');
+        openBtn.href = item.resultUrl || '#';
+        openBtn.target = '_blank';
+        openBtn.rel = 'noopener noreferrer';
+        openBtn.className = 'agf-btn-icon';
+        openBtn.title = 'Ouvrir dans un nouvel onglet';
+        openBtn.setAttribute('aria-label', 'Ouvrir ' + name);
+        openBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/><path d="m21 3-9 9"/><path d="M15 3h6v6"/></svg>';
+        actions.appendChild(openBtn);
         const dl = document.createElement('a');
         dl.href = item.resultUrl || '#';
-        dl.setAttribute('download', item.resultFilename || '');
+        dl.setAttribute('download', item.resultFilename || name);
         dl.className = 'agf-btn-icon';
         dl.title = 'Télécharger';
         dl.setAttribute('aria-label', 'Télécharger ' + name);
@@ -817,13 +826,13 @@
   }
 
   function parseFilename(contentDisposition, fallbackFileName) {
-    const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
-    if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
     if (fallbackFileName) {
-      const base = fallbackFileName.replace(/\.[^.]+$/, '');
-      const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.docx'])[0];
+      const base = fallbackFileName.replace(/\.[^.]+$/, '').trim();
+      const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.bin'])[0];
       return (base || 'document') + '_anonymise' + ext;
     }
+    const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+    if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
     return 'document_anonymise';
   }
 
@@ -959,51 +968,36 @@
   }
 
   function buildAndDownloadZip(items, blobs) {
-    if (typeof window.JSZip === 'undefined') {
-      setStatus('error', 'Bibliothèque ZIP non chargée. Réessayez.');
-      return;
-    }
     const zip = new window.JSZip();
     items.forEach((item, i) => { zip.file(item.resultFilename || ('file_' + (i + 1)), blobs[i]); });
     zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(zipBlob);
       a.download = 'documents_anonymises.zip';
-      a.style.display = 'none';
-      document.body.appendChild(a);
-      setTimeout(() => {
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(a.href);
-        setStatus('', '');
-      }, 0);
-    }).catch((err) => {
-      setStatus('error', 'Impossible de créer le fichier ZIP. Réessayez.');
+      a.click();
+      URL.revokeObjectURL(a.href);
     });
   }
 
   function downloadAllAsZip() {
     const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && p.resultUrl);
-    if (blobsToZip.length < 2) {
-      setStatus('error', 'Au moins 2 fichiers traités sont nécessaires pour télécharger le ZIP.');
-      return;
-    }
-    setStatus('loading', 'Préparation du ZIP…');
+    if (blobsToZip.length < 2) return;
+    setStatus('loading', 'Préparation du zip…');
     Promise.all(blobsToZip.map((item) => fetch(item.resultUrl).then((r) => r.blob()))).then((blobs) => {
-      if (typeof window.JSZip !== 'undefined') {
-        buildAndDownloadZip(blobsToZip, blobs);
-        return;
+      function runZip() {
+        if (typeof window.JSZip !== 'undefined') {
+          buildAndDownloadZip(blobsToZip, blobs);
+          setStatus('success', 'Téléchargement du zip lancé.');
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé.'); };
+        script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); };
+        document.head.appendChild(script);
       }
-      const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-      script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); };
-      script.onerror = () => {
-        setStatus('error', 'Impossible de charger l\'outil ZIP. Vérifiez votre connexion et réessayez.');
-      };
-      document.head.appendChild(script);
-    }).catch((err) => {
-      setStatus('error', 'Impossible de préparer le ZIP. Les fichiers ont peut-être été réinitialisés — réessayez après avoir anonymisé à nouveau.');
-    });
+      runZip();
+    }).catch(() => { setStatus('error', 'Impossible de créer le fichier zip. Réessayez.'); });
   }
 
   async function processText() {
