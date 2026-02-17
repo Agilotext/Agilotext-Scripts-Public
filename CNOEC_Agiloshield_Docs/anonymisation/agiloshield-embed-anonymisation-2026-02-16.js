@@ -13,7 +13,7 @@
   const MAX_FILES = 12;
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
-  const REQUEST_TIMEOUT = 180000;
+  const REQUEST_TIMEOUT = 7200000; // 2 h (FEC 40+ min)
   const query = new URLSearchParams(window.location.search);
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
@@ -104,18 +104,27 @@
     TVA: 'TVA',
     VAT: 'TVA',
     IBAN: 'IBAN',
+    RIB: 'IBAN',
+    RIB_KEY: 'IBAN',
     BIC: 'BIC',
     SWIFT: 'BIC',
     FRNIR: 'FRNIR',
     NIR: 'FRNIR',
+    NSS: 'FRNIR',
     DT: 'DT',
     DATE: 'DT',
     DATETIME: 'DT',
     TIME: 'DT',
+    BIRTH_DATE: 'DT',
+    BIRTH_PLACE: 'LOC',
+    URL: 'URL',
+    URSSAF_ID: 'SIREN',
+    FISCAL_ID: 'SIREN',
+    APE: 'SIREN',
     OTHER: 'OTHER'
   };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
-  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
+  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
 
@@ -203,7 +212,7 @@
     manualEdition: document.getElementById('agfManualEdition')
   };
 
-  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
+  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
@@ -268,31 +277,37 @@
   }
 
   function refreshTextIfNeeded() {
-    const value = (ui.textInput && ui.textInput.value || '').trim();
+    let value = '';
+    document.querySelectorAll('#agfInputText').forEach(el => {
+      const v = (el.value || '').trim();
+      if (v) value = v;
+    });
     if (!value || value.length < MIN_TEXT_LENGTH_FOR_API) return;
     scheduleDebouncedText();
   }
 
   function setStatus(kind, message) {
-    if (!ui.status) return;
-    if (!message) {
-      ui.status.classList.remove('is-visible');
-      ui.status.removeAttribute('data-kind');
-      ui.status.textContent = '';
-      return;
-    }
-    ui.status.classList.add('is-visible');
-    ui.status.setAttribute('data-kind', kind);
-    ui.status.textContent = '';
-    if (kind === 'loading') {
-      const spinner = document.createElement('span');
-      spinner.className = 'agf-spinner';
-      spinner.setAttribute('aria-hidden', 'true');
-      ui.status.appendChild(spinner);
-    }
-    const txt = document.createElement('span');
-    txt.textContent = message;
-    ui.status.appendChild(txt);
+    const statuses = document.querySelectorAll('#agfStatus');
+    statuses.forEach((statusEl) => {
+      if (!message) {
+        statusEl.classList.remove('is-visible');
+        statusEl.removeAttribute('data-kind');
+        statusEl.textContent = '';
+        return;
+      }
+      statusEl.classList.add('is-visible');
+      statusEl.setAttribute('data-kind', kind);
+      statusEl.textContent = '';
+      if (kind === 'loading') {
+        const spinner = document.createElement('span');
+        spinner.className = 'agf-spinner';
+        spinner.setAttribute('aria-hidden', 'true');
+        statusEl.appendChild(spinner);
+      }
+      const txt = document.createElement('span');
+      txt.textContent = message;
+      statusEl.appendChild(txt);
+    });
   }
 
   function isFeatureEnabled(featureName) {
@@ -385,114 +400,130 @@
   function updateActions() {
     const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
-    if (ui.submit) ui.submit.disabled = state.processing || !hasPending;
-    if (ui.actionsSubmit) ui.actionsSubmit.hidden = !hasPending;
-    if (ui.processedWrap) ui.processedWrap.hidden = !hasProcessed;
-    if (ui.fileList) ui.fileList.hidden = !hasPending;
-    if (ui.titleFileList) ui.titleFileList.hidden = !hasPending;
+
+    document.querySelectorAll('#agfSubmit').forEach(el => { el.disabled = state.processing || !hasPending; });
+    document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
+    document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed; });
+    document.querySelectorAll('#agfFileList').forEach(el => { el.hidden = !hasPending; });
+    document.querySelectorAll('#agfTitleFileList').forEach(el => { el.hidden = !hasPending; });
+
     const doneCount = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl)).length;
-    if (ui.downloadZip) {
-      ui.downloadZip.hidden = doneCount < 2;
-      ui.downloadZip.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
-      ui.downloadZip.disabled = state.processing || doneCount < 2;
-    }
+    document.querySelectorAll('#agfDownloadZip').forEach(el => {
+      el.hidden = doneCount < 2;
+      el.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
+      el.disabled = state.processing || doneCount < 2;
+    });
+  }
+
+  function createFileRow(item) {
+    const row = document.createElement('div');
+    row.className = 'agf-file';
+    row.setAttribute('role', 'listitem');
+
+    const left = document.createElement('div');
+    const name = document.createElement('p');
+    name.className = 'agf-file-name';
+    name.title = item.fileName;
+    name.textContent = item.fileName;
+    const meta = document.createElement('p');
+    meta.className = 'agf-file-meta';
+    meta.textContent = formatSize(item.size);
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'agf-remove';
+    btn.textContent = 'Retirer';
+    btn.addEventListener('click', function () {
+      if (state.processing) return;
+      state.files = state.files.filter((f) => f.id !== item.id);
+      renderFileList();
+    });
+
+    row.appendChild(left);
+    row.appendChild(btn);
+    return row;
   }
 
   function renderFileList() {
-    ui.fileList.textContent = '';
-    if (state.files.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'agf-empty';
-      empty.textContent = 'Aucun fichier pour l\'instant. Glissez-déposez ou cliquez au-dessus pour en ajouter.';
-      ui.fileList.appendChild(empty);
-      updateActions();
-      return;
-    }
-    state.files.forEach((item) => {
-      const row = document.createElement('div');
-      row.className = 'agf-file';
-      row.setAttribute('role', 'listitem');
-
-      const left = document.createElement('div');
-      const name = document.createElement('p');
-      name.className = 'agf-file-name';
-      name.title = item.fileName;
-      name.textContent = item.fileName;
-      const meta = document.createElement('p');
-      meta.className = 'agf-file-meta';
-      meta.textContent = formatSize(item.size);
-      left.appendChild(name);
-      left.appendChild(meta);
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'agf-remove';
-      btn.textContent = 'Retirer';
-      btn.addEventListener('click', function () {
-        if (state.processing) return;
-        state.files = state.files.filter((f) => f.id !== item.id);
-        renderFileList();
-      });
-
-      row.appendChild(left);
-      row.appendChild(btn);
-      ui.fileList.appendChild(row);
+    const lists = document.querySelectorAll('#agfFileList');
+    lists.forEach((list) => {
+      list.textContent = '';
+      if (state.files.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'agf-empty';
+        empty.textContent = 'Aucun fichier pour l\'instant. Glissez-déposez ou cliquez au-dessus pour en ajouter.';
+        list.appendChild(empty);
+      } else {
+        state.files.forEach((item) => {
+          list.appendChild(createFileRow(item));
+        });
+      }
     });
     updateActions();
   }
 
+
+  function createProcessedCard(item) {
+    const card = document.createElement('div');
+    card.className = 'agf-processed-card agf-processed-card--' + item.status;
+    card.setAttribute('role', 'listitem');
+    card.setAttribute('data-id', item.id);
+    card.setAttribute('data-status', item.status);
+
+    const original = document.createElement('div');
+    original.className = 'agf-processed-original';
+    original.innerHTML = '<div class="agf-file-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(item.fileName) + '">' + escapeHtml(item.fileName) + '</p><p class="agf-file-meta">' + formatSize(item.size) + '</p></div>';
+    card.appendChild(original);
+
+    const arrow = document.createElement('div');
+    arrow.className = 'agf-processed-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+    card.appendChild(arrow);
+
+    const result = document.createElement('div');
+    result.className = 'agf-processed-result';
+    if (item.status === 'pending') {
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">—</p></div>';
+    } else if (item.status === 'processing') {
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
+    } else if (item.status === 'error') {
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
+    } else {
+      const name = (item.resultFilename || item.fileName) + '';
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
+      const actions = document.createElement('div');
+      actions.className = 'agf-processed-actions';
+      const dl = document.createElement('a');
+      dl.href = item.resultUrl || '#';
+      dl.setAttribute('download', item.resultFilename || name);
+      dl.className = 'agf-btn-icon';
+      dl.title = 'Télécharger';
+      dl.setAttribute('aria-label', 'Télécharger ' + name);
+      dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+      actions.appendChild(dl);
+      result.appendChild(actions);
+    }
+    card.appendChild(result);
+    if (item.justDone) {
+      card.classList.add('agf-processed-card--just-done');
+      setTimeout(function () { card.classList.remove('agf-processed-card--just-done'); }, 2200);
+    }
+    return card;
+  }
+
   function renderProcessedList() {
-    if (!ui.processedList) return;
-    ui.processedList.textContent = '';
-    state.processedItems.forEach((item) => {
-      const card = document.createElement('div');
-      card.className = 'agf-processed-card agf-processed-card--' + item.status;
-      card.setAttribute('role', 'listitem');
-      card.setAttribute('data-id', item.id);
-      card.setAttribute('data-status', item.status);
-
-      const original = document.createElement('div');
-      original.className = 'agf-processed-original';
-      original.innerHTML = '<div class="agf-file-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(item.fileName) + '">' + escapeHtml(item.fileName) + '</p><p class="agf-file-meta">' + formatSize(item.size) + '</p></div>';
-      card.appendChild(original);
-
-      const arrow = document.createElement('div');
-      arrow.className = 'agf-processed-arrow';
-      arrow.setAttribute('aria-hidden', 'true');
-      arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
-      card.appendChild(arrow);
-
-      const result = document.createElement('div');
-      result.className = 'agf-processed-result';
-      if (item.status === 'pending') {
-        result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">—</p></div>';
-      } else if (item.status === 'processing') {
-        result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
-      } else if (item.status === 'error') {
-        result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
-      } else {
-        const name = (item.resultFilename || item.fileName) + '';
-        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
-        const actions = document.createElement('div');
-        actions.className = 'agf-processed-actions';
-        const dl = document.createElement('a');
-        dl.href = item.resultUrl || '#';
-        dl.setAttribute('download', item.resultFilename || name);
-        dl.className = 'agf-btn-icon';
-        dl.title = 'Télécharger';
-        dl.setAttribute('aria-label', 'Télécharger ' + name);
-        dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
-        actions.appendChild(dl);
-        result.appendChild(actions);
-      }
-      card.appendChild(result);
-      if (item.justDone) {
-        card.classList.add('agf-processed-card--just-done');
-        item.justDone = false;
-        setTimeout(function () { card.classList.remove('agf-processed-card--just-done'); }, 2200);
-      }
-      ui.processedList.appendChild(card);
+    const lists = document.querySelectorAll('#agfProcessedList');
+    lists.forEach((list) => {
+      list.textContent = '';
+      state.processedItems.forEach((item) => {
+        list.appendChild(createProcessedCard(item));
+      });
     });
+    // Clear justDone flag after rendering all lists
+    state.processedItems.forEach((item) => { item.justDone = false; });
     updateActions();
   }
 
@@ -606,7 +637,7 @@
       try {
         const arr = JSON.parse(t);
         if (Array.isArray(arr)) terms = arr.map((x) => normalizeTerm(x)).filter(Boolean);
-      } catch (e) {}
+      } catch (e) { }
     }
     if (!terms.length) terms = t.split(/\r?\n/).map((x) => normalizeTerm(x)).filter(Boolean);
     const seen = new Set();
@@ -781,12 +812,23 @@
           entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
           if (entities.length === 0) entities = DEFAULT_ENTITIES;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     const availableSet = new Set(TYPES_AVAILABLE);
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
       const code = chk.getAttribute('data-entity');
-      chk.checked = !chk.disabled && availableSet.has(code) && entities.includes(code);
+      const isAvailable = availableSet.has(code);
+      // Dynamically enable/disable based on TYPES_AVAILABLE (overrides HTML disabled attr)
+      chk.disabled = !isAvailable;
+      const label = chk.closest('.agf-entity-option');
+      if (label) {
+        if (isAvailable) {
+          label.classList.remove('agf-entity-option--unavailable');
+        } else {
+          label.classList.add('agf-entity-option--unavailable');
+        }
+      }
+      chk.checked = isAvailable && entities.includes(code);
     });
 
     state.includeTerms = parseStoredTerms(storage.get(STORAGE_INC));
@@ -802,7 +844,7 @@
         const parsed = JSON.parse(pseudoRaw);
         if (parsed && typeof parsed === 'object') state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG, ...parsed };
       }
-    } catch (e) {}
+    } catch (e) { }
     applyPseudoToUi(state.pseudoConfig);
     renderPseudoSummary();
     const storedMode = storage.get(STORAGE_MODE);
@@ -914,7 +956,7 @@
   async function runSessionMaintenance() {
     if (!state.email || !state.token) return;
     const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(state.edition || 'free');
-    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) {}
+    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
   }
 
   async function loadApiVersion() {
@@ -923,7 +965,7 @@
       if (!response.ok) return;
       const data = await response.json();
       if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function parseFilename(contentDisposition, fallbackFileName) {
@@ -1116,20 +1158,29 @@
   }
 
   async function processText() {
-    const value = (ui.textInput.value || '').trim();
+    let value = '';
+    document.querySelectorAll('#agfInputText').forEach(el => {
+      const v = (el.value || '').trim();
+      if (v) value = v;
+    });
     const cacheKey = currentTextConfigKey(value);
+
     if (!value) {
       resetTextCache();
       setTextOutput('Collez ou tapez un texte ci-dessus pour l\'anonymiser.', false, null, null, 0);
-      ui.textOutput.classList.remove('agf-text-output--loading');
-      ui.textOutput.setAttribute('aria-busy', 'false');
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
       return;
     }
     if (value.length < MIN_TEXT_LENGTH_FOR_API) {
       resetTextCache();
       setTextOutput('Entrez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer l\'anonymisation.', false, null, null, 0);
-      ui.textOutput.classList.remove('agf-text-output--loading');
-      ui.textOutput.setAttribute('aria-busy', 'false');
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
       return;
     }
     if (state.textProcessing) {
@@ -1138,21 +1189,27 @@
     }
     if (lastProcessedCacheKey === cacheKey && lastProcessedResult !== null) {
       setTextOutput(lastProcessedResult, lastProcessedHasTags, lastProcessedHtml, lastProcessedStats, lastProcessedCounts);
-      ui.textOutput.classList.remove('agf-text-output--loading');
-      ui.textOutput.setAttribute('aria-busy', 'false');
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
       return;
     }
     state.textProcessing = true;
     const requestSerial = ++textRequestSerial;
-    ui.textOutput.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
-    ui.textOutput.classList.add('agf-text-output--loading');
-    ui.textOutput.setAttribute('aria-busy', 'true');
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      el.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
+      el.classList.add('agf-text-output--loading');
+      el.setAttribute('aria-busy', 'true');
+    });
 
     try { await ensureAuth(); } catch (e) {
       setTextOutput(e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.', false, null, null, 0);
       state.textProcessing = false;
-      ui.textOutput.classList.remove('agf-text-output--loading');
-      ui.textOutput.setAttribute('aria-busy', 'false');
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
       return;
     }
 
@@ -1214,8 +1271,10 @@
       else setTextOutput((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.', false, null, null, 0);
     } finally {
       state.textProcessing = false;
-      ui.textOutput.classList.remove('agf-text-output--loading');
-      ui.textOutput.setAttribute('aria-busy', 'false');
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
       if (textProcessQueued) {
         textProcessQueued = false;
         processText();
@@ -1224,8 +1283,10 @@
   }
 
   function setTextOutput(plain, useTags, html, stats, total) {
-    if (useTags && html) ui.textOutput.innerHTML = html;
-    else ui.textOutput.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      if (useTags && html) el.innerHTML = html;
+      else el.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
+    });
     renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
   }
 
@@ -1292,28 +1353,30 @@
       .map((entry) => [entry[0], Math.max(0, Math.floor(Number(entry[1] || 0)))])
       .filter((entry) => entry[1] > 0)
       .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
       });
     const total = typeof explicitTotal === 'number'
       ? explicitTotal
       : entries.reduce((sum, item) => sum + item[1], 0);
 
-    ui.outputEntities.textContent = '';
+    document.querySelectorAll('#agfOutputEntities').forEach(el => { el.textContent = ''; });
     if (total === 0) {
-      ui.outputSummary.textContent = 'Aucune donnée personnelle détectée pour l\'instant.';
-      if (ui.lastMaskInfo) ui.lastMaskInfo.textContent = 'Champs anonymisés (texte): 0';
+      document.querySelectorAll('#agfOutputSummary').forEach(el => { el.textContent = 'Aucune donnée personnelle détectée pour l\'instant.'; });
+      document.querySelectorAll('#agfLastMaskInfo').forEach(el => { el.textContent = 'Champs anonymisés (texte): 0'; });
       return;
     }
 
-    ui.outputSummary.textContent = total + ' donnée(s) personnelle(s) détectée(s) sur le dernier traitement.';
-    if (ui.lastMaskInfo) ui.lastMaskInfo.textContent = 'Champs anonymisés (texte): ' + total;
+    document.querySelectorAll('#agfOutputSummary').forEach(el => { el.textContent = total + ' donnée(s) personnelle(s) détectée(s) sur le dernier traitement.'; });
+    document.querySelectorAll('#agfLastMaskInfo').forEach(el => { el.textContent = 'Champs anonymisés (texte): ' + total; });
 
-    entries.forEach((entry) => {
-      const chip = document.createElement('span');
-      chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
-      chip.textContent = entry[0] + ': ' + entry[1];
-      ui.outputEntities.appendChild(chip);
+    document.querySelectorAll('#agfOutputEntities').forEach(container => {
+      entries.forEach((entry) => {
+        const chip = document.createElement('span');
+        chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
+        chip.textContent = entry[0] + ': ' + entry[1];
+        container.appendChild(chip);
+      });
     });
   }
 
@@ -1343,7 +1406,7 @@
       if (stats) {
         total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
       }
-    } catch (e) {}
+    } catch (e) { }
     const built = buildOutputWithTags(plain);
     return { plain, useTags: built.useTags, html: built.html, stats, total };
   }
@@ -1692,7 +1755,7 @@
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
     state.email = await getUserEmail();
-    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => {});
+    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => { });
 
     bindEvents();
     setActiveTab('file');
