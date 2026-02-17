@@ -13,8 +13,7 @@
   const MAX_FILES = 12;
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
-  // Pas de timeout court : gros fichiers (9 Mo+) = 40+ min côté backend. Idéalement : job_id + polling + barre de progression.
-  const REQUEST_TIMEOUT = 7200000; // 2 h max pour ne pas couper les traitements longs
+  const REQUEST_TIMEOUT = 7200000; // 2 h (FEC 40+ min)
   const query = new URLSearchParams(window.location.search);
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
@@ -473,7 +472,7 @@
         result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
       } else {
         const name = (item.resultFilename || item.fileName) + '';
-        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
+        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
         const actions = document.createElement('div');
         actions.className = 'agf-processed-actions';
         const dl = document.createElement('a');
