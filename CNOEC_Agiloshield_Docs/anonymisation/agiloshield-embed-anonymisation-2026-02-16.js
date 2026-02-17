@@ -65,6 +65,7 @@
   let lastProcessedCounts = null;
   const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
   const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  /** Backend (Nicolas/spacy-anon) placeholders → code affiché dans l’UI. Tous les tags backend doivent avoir une entrée pour éviter OTHER. */
   const TAG_ALIAS = {
     PR: 'PR',
     PERSON: 'PR',
@@ -91,6 +92,7 @@
     LOC: 'LOC',
     LOCATION: 'LOC',
     LOCALISATION: 'LOC',
+    GPE: 'LOC',
     CITY: 'LOC',
     REGION: 'LOC',
     ORG: 'ORG',
@@ -124,6 +126,7 @@
     OTHER: 'OTHER'
   };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
+  /** Types proposés dans la grille (doivent correspondre à des data-entity présents dans #agfTypeGrid). POST/URL activés dynamiquement même si disabled dans le HTML. */
   const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
@@ -490,7 +493,7 @@
     } else if (item.status === 'processing') {
       result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
     } else if (item.status === 'error') {
-      result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(sanitizeApiErrorMessage(item.errorMessage || 'Échec')) + '</p></div>';
     } else {
       const name = (item.resultFilename || item.fileName) + '';
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
@@ -903,7 +906,9 @@
         if (member && member.email) return member.email;
       } catch (e) { console.warn('getUserEmail error', e); }
     }
-    return document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
+    const fromPage = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
+    if (fromPage) return fromPage;
+    return (typeof storage !== 'undefined' && storage.get('agilo:username')) || null;
   }
 
   async function fetchWithTimeout(url, options, timeoutMs) {
@@ -922,7 +927,7 @@
       const response = await fetchWithTimeout(url, { method: 'GET' }, 20000);
       const data = await response.json();
       if (data && data.status === 'OK' && data.token) { state.token = data.token; return data.token; }
-      throw new Error((data && (data.userErrorMessage || data.errorMessage)) || 'Token invalide');
+      throw new Error(sanitizeApiErrorMessage((data && (data.userErrorMessage || data.errorMessage)) || 'Token invalide'));
     } catch (err) {
       if (current < maxRetry) {
         await new Promise((resolve) => setTimeout(resolve, 800 * (current + 1)));
@@ -948,8 +953,11 @@
       state.edition = manual.edition;
       return;
     }
-    state.email = await getUserEmail();
-    if (!state.email) throw new Error('Email utilisateur introuvable.');
+    if (!state.email) state.email = await getUserEmail();
+    if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
+    if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
+    if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
+    if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
     if (!state.token) await getToken(state.email, state.edition, 0);
   }
 
@@ -966,6 +974,15 @@
       const data = await response.json();
       if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
     } catch (e) { }
+  }
+
+  /** Ne jamais afficher un message d'erreur API qui pourrait contenir un token/mot de passe. */
+  function sanitizeApiErrorMessage(msg) {
+    if (!msg || typeof msg !== 'string') return 'Erreur de traitement.';
+    const m = msg.trim();
+    if (m.indexOf('error_invalid_token') !== -1) return 'Erreur d\'authentification. Reconnectez-vous ou vérifiez votre accès.';
+    if (m.indexOf('error_internal') !== -1) return 'Erreur serveur. Réessayez plus tard.';
+    return m;
   }
 
   function parseFilename(contentDisposition, fallbackFileName) {
@@ -1022,12 +1039,26 @@
           if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
           else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
           else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
-          else if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage;
-        } catch (e) { if (raw && raw.length < 180) msg = raw; }
+          else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+        } catch (e) { if (raw && raw.length < 180) msg = sanitizeApiErrorMessage(raw); }
         throw new Error(msg);
       }
-      const contentDisposition = response.headers.get('Content-Disposition') || '';
+      const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
       const blob = await response.blob();
+      if (contentType.indexOf('application/json') !== -1) {
+        const raw = await blob.text();
+        try {
+          const json = JSON.parse(raw);
+          if (json && (json.status === 'KO' || json.status === 'ko')) {
+            const msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
+            throw new Error(msg);
+          }
+        } catch (e) {
+          if (e instanceof SyntaxError) { /* pas du JSON attendu */ }
+          else throw e;
+        }
+      }
+      const contentDisposition = response.headers.get('Content-Disposition') || '';
       item.resultBlob = blob;
       item.resultUrl = URL.createObjectURL(blob);
       item.resultFilename = parseFilename(contentDisposition, item.fileName);
@@ -1036,7 +1067,7 @@
       item.justDone = true;
     } catch (err) {
       item.status = 'error';
-      item.errorMessage = err && err.name === 'AbortError' ? 'Délai dépassé.' : (err && err.message) ? err.message : 'Échec';
+      item.errorMessage = err && err.name === 'AbortError' ? 'Délai dépassé.' : sanitizeApiErrorMessage((err && err.message) ? err.message : 'Échec');
     }
     renderProcessedList();
   }
@@ -1242,8 +1273,8 @@
       if (!response.ok) {
         const raw = await response.text();
         let msg = 'Erreur de traitement du texte.';
-        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = json.userErrorMessage || json.errorMessage; }
-        catch (err) { if (raw && raw.length < 220) msg = raw; }
+        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage); }
+        catch (err) { if (raw && raw.length < 220) msg = sanitizeApiErrorMessage(raw); }
         throw new Error(msg);
       }
       const blob = await response.blob();
@@ -1252,7 +1283,7 @@
       let json;
       try { json = JSON.parse(raw); } catch (_) { json = null; }
       if (json && json.status === 'KO') {
-        const msg = json.userErrorMessage || json.errorMessage || 'Erreur de traitement.';
+        const msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
         throw new Error(msg);
       }
       const out = applyStructuredResponse(raw);
@@ -1268,7 +1299,7 @@
       if (requestSerial !== textRequestSerial) return;
       if (err && err.name === 'AbortError') setTextOutput('Texte trop long ou serveur occupé. Réessayez avec un texte plus court.', false, null, null, 0);
       else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
-      else setTextOutput((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.', false, null, null, 0);
+      else setTextOutput(sanitizeApiErrorMessage((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.'), false, null, null, 0);
     } finally {
       state.textProcessing = false;
       document.querySelectorAll('#agfOutputText').forEach(el => {
@@ -1739,10 +1770,19 @@
     });
   }
 
+  function applyTokenFromEvent(detail) {
+    if (!detail || !detail.token) return;
+    state.token = detail.token;
+    if (detail.email) state.email = detail.email;
+    if (detail.edition) state.edition = detail.edition;
+  }
+
   async function init() {
     if (window.__agiloEmbedAnonymisationMounted) return;
     if (!ui.form || !ui.submit || !ui.dropzone) return;
     window.__agiloEmbedAnonymisationMounted = true;
+
+    window.addEventListener('agilo:token', (e) => { applyTokenFromEvent(e && e.detail); });
 
     await waitForMemberstack(10000, 200);
     state.edition = await detectEdition();
@@ -1754,8 +1794,15 @@
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
-    state.email = await getUserEmail();
-    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => { });
+    if (window.globalToken && storage.get('agilo:username')) {
+      state.token = window.globalToken;
+      state.email = storage.get('agilo:username');
+      const cachedEdition = storage.get('agilo:edition');
+      if (cachedEdition) state.edition = cachedEdition;
+    } else {
+      state.email = await getUserEmail();
+      if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => { });
+    }
 
     bindEvents();
     setActiveTab('file');
