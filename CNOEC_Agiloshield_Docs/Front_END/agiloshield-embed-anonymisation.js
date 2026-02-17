@@ -13,7 +13,8 @@
   const MAX_FILES = 12;
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
-  const REQUEST_TIMEOUT = 180000;
+  // Pas de timeout court : gros fichiers (9 Mo+) = 40+ min côté backend. Idéalement : job_id + polling + barre de progression.
+  const REQUEST_TIMEOUT = 7200000; // 2 h max pour ne pas couper les traitements longs
   const query = new URLSearchParams(window.location.search);
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
@@ -472,7 +473,7 @@
         result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(item.errorMessage || 'Échec') + '</p></div>';
       } else {
         const name = (item.resultFilename || item.fileName) + '';
-        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done">A</div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
+        result.innerHTML = '<div class="agf-file-icon agf-file-icon--done"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="m9 15 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
         const actions = document.createElement('div');
         actions.className = 'agf-processed-actions';
         const dl = document.createElement('a');
@@ -606,7 +607,7 @@
       try {
         const arr = JSON.parse(t);
         if (Array.isArray(arr)) terms = arr.map((x) => normalizeTerm(x)).filter(Boolean);
-      } catch (e) {}
+      } catch (e) { }
     }
     if (!terms.length) terms = t.split(/\r?\n/).map((x) => normalizeTerm(x)).filter(Boolean);
     const seen = new Set();
@@ -781,7 +782,7 @@
           entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
           if (entities.length === 0) entities = DEFAULT_ENTITIES;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     const availableSet = new Set(TYPES_AVAILABLE);
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
@@ -802,7 +803,7 @@
         const parsed = JSON.parse(pseudoRaw);
         if (parsed && typeof parsed === 'object') state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG, ...parsed };
       }
-    } catch (e) {}
+    } catch (e) { }
     applyPseudoToUi(state.pseudoConfig);
     renderPseudoSummary();
     const storedMode = storage.get(STORAGE_MODE);
@@ -914,7 +915,7 @@
   async function runSessionMaintenance() {
     if (!state.email || !state.token) return;
     const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(state.edition || 'free');
-    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) {}
+    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
   }
 
   async function loadApiVersion() {
@@ -923,7 +924,7 @@
       if (!response.ok) return;
       const data = await response.json();
       if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   function parseFilename(contentDisposition, fallbackFileName) {
@@ -1292,8 +1293,8 @@
       .map((entry) => [entry[0], Math.max(0, Math.floor(Number(entry[1] || 0)))])
       .filter((entry) => entry[1] > 0)
       .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
       });
     const total = typeof explicitTotal === 'number'
       ? explicitTotal
@@ -1343,7 +1344,7 @@
       if (stats) {
         total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
       }
-    } catch (e) {}
+    } catch (e) { }
     const built = buildOutputWithTags(plain);
     return { plain, useTags: built.useTags, html: built.html, stats, total };
   }
@@ -1692,7 +1693,7 @@
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
     state.email = await getUserEmail();
-    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => {});
+    if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => { });
 
     bindEvents();
     setActiveTab('file');

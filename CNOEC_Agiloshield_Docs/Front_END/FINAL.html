@@ -1,8 +1,15 @@
 <!-- Intégration : la page qui inclut ce fragment doit déclarer <meta charset="utf-8"> pour l'affichage des accents. -->
 <style>
   /* Éviter qu'un overlay (extension type Plasmo, etc.) bloque les clics */
-  plasmo-csui, #plasmo-inspector, [id^="plasmo-"] { pointer-events: none !important; }
-  plasmo-csui * { pointer-events: none !important; }
+  plasmo-csui,
+  #plasmo-inspector,
+  [id^="plasmo-"] {
+    pointer-events: none !important;
+  }
+
+  plasmo-csui * {
+    pointer-events: none !important;
+  }
 </style>
 <style>
   /* Unités en rem : 1rem = taille de police racine (scale avec zoom utilisateur et page hôte) */
@@ -18,11 +25,16 @@
     --agilo-error: var(--color--rouge, #a82633);
     --agilo-warning: var(--color--orange, #fd7e14);
 
-    --space-1: 0.5rem;   /* 8px */
-    --space-2: 1rem;     /* 16px */
-    --space-3: 1.5rem;   /* 24px */
-    --space-4: 2rem;     /* 32px */
-    --radius: 1rem;      /* 16px */
+    --space-1: 0.5rem;
+    /* 8px */
+    --space-2: 1rem;
+    /* 16px */
+    --space-3: 1.5rem;
+    /* 24px */
+    --space-4: 2rem;
+    /* 32px */
+    --radius: 1rem;
+    /* 16px */
     --ring: color-mix(in srgb, var(--agilo-primary) 28%, transparent);
     --shadow-soft: 0 0.5rem 1.75rem rgba(23, 74, 150, 0.1);
   }
@@ -38,17 +50,22 @@
     text-size-adjust: 100%;
     box-sizing: border-box;
   }
+
   form[ms-code-anonymisation="form"] *,
   form[ms-code-anonymisation="form"] *::before,
   form[ms-code-anonymisation="form"] *::after {
     box-sizing: border-box;
   }
+
   form[ms-code-anonymisation="form"] h1,
   form[ms-code-anonymisation="form"] h2,
   form[ms-code-anonymisation="form"] h3,
   form[ms-code-anonymisation="form"] h4,
   form[ms-code-anonymisation="form"] h5,
-  form[ms-code-anonymisation="form"] p { margin: 0; }
+  form[ms-code-anonymisation="form"] p {
+    margin: 0;
+  }
+
   form[ms-code-anonymisation="form"] h1,
   form[ms-code-anonymisation="form"] h2,
   form[ms-code-anonymisation="form"] h3,
@@ -61,6 +78,7 @@
     padding: 0;
     box-shadow: none;
   }
+
   form[ms-code-anonymisation="form"] button,
   form[ms-code-anonymisation="form"] input,
   form[ms-code-anonymisation="form"] textarea,
@@ -71,10 +89,12 @@
 
   .agf-shell {
     background: transparent;
-    padding: var(--space-4);
-    padding-inline: clamp(var(--space-2), 3vw, var(--space-4));
+    padding: var(--space-2);
+    padding-inline: clamp(var(--space-1), 2vw, var(--space-2));
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-1);
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .agf-head {
@@ -82,14 +102,25 @@
     gap: var(--space-1);
     padding: 0;
   }
-  .agf-head h2 { font-size: 1.35rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; }
-  .agf-head p { color: var(--agilo-text-secondary); font-size: 0.9375rem; }
+
+  .agf-head h2 {
+    font-size: 1.35rem;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .agf-head p {
+    color: var(--agilo-text-secondary);
+    font-size: 0.9375rem;
+  }
 
   .agf-tabs {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-1);
   }
+
   .agf-tab {
     border: none;
     border-radius: 0.625rem;
@@ -104,27 +135,60 @@
     align-items: start;
     transition: background 150ms ease;
   }
-  .agf-tab .agf-tab-content { display: grid; gap: 0.125rem; min-width: 0; }
+
+  .agf-tab .agf-tab-content {
+    display: grid;
+    gap: 0.125rem;
+    min-width: 0;
+  }
+
   .agf-tab .agf-tab-icon {
     width: 1.75rem;
     height: 1.75rem;
     flex-shrink: 0;
     color: inherit;
   }
-  .agf-tab .agf-tab-icon svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-linecap: round; stroke-linejoin: round; }
-  .agf-tab strong { font-size: 1rem; font-weight: 600; color: var(--agilo-text); display: block; }
-  .agf-tab span { font-size: 0.8125rem; color: var(--agilo-text-secondary); }
+
+  .agf-tab .agf-tab-icon svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .agf-tab strong {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--agilo-text);
+    display: block;
+  }
+
+  .agf-tab span {
+    font-size: 0.8125rem;
+    color: var(--agilo-text-secondary);
+  }
+
   .agf-tab[aria-selected="true"] {
     background: color-mix(in srgb, var(--agilo-primary) 10%, transparent);
     color: var(--agilo-text);
   }
-  .agf-tab[aria-selected="true"] .agf-tab-icon { color: var(--agilo-primary); }
-  .agf-tab[aria-selected="true"] strong { color: var(--agilo-primary); }
+
+  .agf-tab[aria-selected="true"] .agf-tab-icon {
+    color: var(--agilo-primary);
+  }
+
+  .agf-tab[aria-selected="true"] strong {
+    color: var(--agilo-primary);
+  }
 
   .agf-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 17.5rem;
     gap: var(--space-2);
+    min-width: 0;
+    /* évite débordement horizontal */
   }
 
   .agf-main,
@@ -133,13 +197,35 @@
     background: color-mix(in srgb, var(--agilo-text) 4%, transparent);
     padding: var(--space-3);
   }
-  .agf-main { min-height: 35rem; }
-  .agf-side { display: grid; gap: var(--space-3); align-content: start; }
 
-  .agf-panel { display: none; gap: var(--space-2); }
-  .agf-panel[aria-hidden="false"] { display: grid; }
+  .agf-main {
+    min-height: 0;
+    min-width: 0;
+    overflow: auto;
+  }
 
-  .agf-section-title { font-size: 1rem; font-weight: 600; margin-bottom: var(--space-1); }
+  .agf-side {
+    display: grid;
+    gap: var(--space-3);
+    align-content: start;
+    min-width: 0;
+  }
+
+  .agf-panel {
+    display: none;
+    gap: var(--space-2);
+    min-width: 0;
+  }
+
+  .agf-panel[aria-hidden="false"] {
+    display: grid;
+  }
+
+  .agf-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--space-1);
+  }
 
   .agf-dropzone {
     border: 1px dashed var(--agilo-border);
@@ -151,22 +237,52 @@
     transition: border-color 150ms ease, background 150ms ease;
     outline: none;
   }
+
   .agf-dropzone:hover,
   .agf-dropzone:focus-visible,
   .agf-dropzone.is-dragover {
     border-color: var(--agilo-primary);
     background: color-mix(in srgb, var(--agilo-primary) 6%, transparent);
   }
-  .agf-dropzone h4 { font-size: 1rem; font-weight: 600; }
-  .agf-dropzone p { margin-top: var(--space-1); font-size: 0.8125rem; color: var(--agilo-text-secondary); }
-  .agf-dropzone .agf-formats-explicit { margin-top: var(--space-1); font-size: 0.75rem; color: var(--agilo-text-secondary); opacity: 0.9; }
-  #agfApiLink { color: var(--agilo-text-secondary); text-decoration: none; font-size: 0.75rem; }
-  #agfApiLink:hover { text-decoration: underline; color: var(--agilo-primary); }
+
+  .agf-dropzone h4 {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .agf-dropzone p {
+    margin-top: var(--space-1);
+    font-size: 0.8125rem;
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-dropzone .agf-formats-explicit {
+    margin-top: var(--space-1);
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+    opacity: 0.9;
+  }
+
+  #agfApiLink {
+    color: var(--agilo-text-secondary);
+    text-decoration: none;
+    font-size: 0.75rem;
+  }
+
+  #agfApiLink:hover {
+    text-decoration: underline;
+    color: var(--agilo-primary);
+  }
+
   /* Masquer Connexion API manuelle et footer API/version (embed public) */
   .agf-manual-auth,
-  .agf-api-footer { display: none !important; }
+  .agf-api-footer {
+    display: none !important;
+  }
 
-  #agfFileInput { display: none; }
+  #agfFileInput {
+    display: none;
+  }
 
   .agf-list {
     border: none;
@@ -178,7 +294,13 @@
     gap: var(--space-1);
     align-content: start;
   }
-  .agf-empty { margin: auto; text-align: center; color: var(--agilo-text-secondary); font-size: 0.875rem; }
+
+  .agf-empty {
+    margin: auto;
+    text-align: center;
+    color: var(--agilo-text-secondary);
+    font-size: 0.875rem;
+  }
 
   .agf-file {
     border: none;
@@ -190,8 +312,21 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .agf-file-name { font-size: 0.9375rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .agf-file-meta { margin-top: 0.125rem; color: var(--agilo-text-secondary); font-size: 0.8125rem; }
+
+  .agf-file-name {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .agf-file-meta {
+    margin-top: 0.125rem;
+    color: var(--agilo-text-secondary);
+    font-size: 0.8125rem;
+  }
+
   .agf-remove {
     border: none;
     border-radius: 0.5rem;
@@ -202,66 +337,214 @@
     padding: 0.375rem 0.75rem;
     cursor: pointer;
   }
-  .agf-remove:hover { color: var(--agilo-error); }
 
-  .agf-processed-wrap { display: flex; flex-direction: column; gap: var(--space-2); }
-  .agf-section-title-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin-bottom: 0.25rem; flex-wrap: wrap; }
-  .agf-section-title-row .agf-section-title { margin-bottom: 0; }
-  .agf-section-title-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-  .agf-processed-list { display: flex; flex-direction: column; gap: 1.25rem; max-height: 28rem; overflow-y: auto; }
+  .agf-remove:hover {
+    color: var(--agilo-error);
+  }
+
+  .agf-processed-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .agf-section-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: 0.25rem;
+    flex-wrap: wrap;
+  }
+
+  .agf-section-title-row .agf-section-title {
+    margin-bottom: 0;
+  }
+
+  .agf-section-title-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+
+  .agf-processed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 22rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .agf-processed-card {
-    display: flex; align-items: center; gap: 1rem;
-    padding: 1rem 1.25rem; border-radius: 0.75rem; border: 1px solid var(--agilo-border);
-    background: var(--agilo-surface); min-height: 4.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.625rem;
+    border: 1px solid var(--agilo-border);
+    background: var(--agilo-surface);
+    min-height: 2.75rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     transition: box-shadow 0.25s ease, border-color 0.2s ease;
   }
-  .agf-processed-card--pending .agf-processed-result { opacity: 0.92; }
-  .agf-processed-card--processing { border-left: 2px solid color-mix(in srgb, var(--agilo-primary) 40%, transparent); }
-  .agf-processed-card--done { border-color: color-mix(in srgb, var(--agilo-border) 90%, var(--agilo-surface)); }
-  .agf-processed-card--error { border-left: 2px solid color-mix(in srgb, var(--agilo-error) 35%, transparent); }
-  .agf-processed-result .agf-file-icon.agf-file-icon--error { color: color-mix(in srgb, var(--agilo-error) 70%, var(--agilo-text-secondary)); }
-  .agf-processed-card--error .agf-processed-result .agf-file-name { color: var(--agilo-error); }
-  .agf-processed-card--error .agf-processed-result .agf-file-meta { color: var(--agilo-text-secondary); }
+
+  .agf-processed-card--pending .agf-processed-result {
+    opacity: 0.92;
+  }
+
+  .agf-processed-card--processing {
+    border-left: 2px solid color-mix(in srgb, var(--agilo-primary) 40%, transparent);
+  }
+
+  .agf-processed-card--done {
+    border-color: color-mix(in srgb, var(--agilo-border) 90%, var(--agilo-surface));
+  }
+
+  .agf-processed-card--error {
+    border-left: 2px solid color-mix(in srgb, var(--agilo-error) 35%, transparent);
+  }
+
+  .agf-processed-result .agf-file-icon.agf-file-icon--error {
+    color: color-mix(in srgb, var(--agilo-error) 70%, var(--agilo-text-secondary));
+  }
+
+  .agf-processed-card--error .agf-processed-result .agf-file-name {
+    color: var(--agilo-error);
+  }
+
+  .agf-processed-card--error .agf-processed-result .agf-file-meta {
+    color: var(--agilo-text-secondary);
+  }
+
   .agf-processed-card--just-done {
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--agilo-success) 20%, transparent), 0 2px 8px color-mix(in srgb, var(--agilo-success) 8%, transparent);
     transition: box-shadow 0.4s ease;
   }
-  .agf-processed-original, .agf-processed-result {
-    display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1;
+
+  .agf-processed-original,
+  .agf-processed-result {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    flex: 1;
   }
-  .agf-processed-original .agf-file-icon, .agf-processed-result .agf-file-icon {
-    width: 2.5rem; height: 2.5rem; border-radius: 0.5rem;
+
+  .agf-processed-original .agf-file-icon,
+  .agf-processed-result .agf-file-icon {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.375rem;
     background: color-mix(in srgb, var(--agilo-primary) 12%, transparent);
-    color: var(--agilo-primary); flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
+    color: var(--agilo-primary);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
   }
+
   .agf-processed-result .agf-file-icon.agf-file-icon--done {
     background: color-mix(in srgb, var(--agilo-success) 14%, transparent);
     color: var(--agilo-success);
   }
-  .agf-processed-original .agf-file-info, .agf-processed-result .agf-file-info { min-width: 0; }
-  .agf-processed-original .agf-file-name, .agf-processed-result .agf-file-name {
-    font-size: 0.875rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+
+  .agf-processed-original .agf-file-info,
+  .agf-processed-result .agf-file-info {
+    min-width: 0;
   }
-  .agf-processed-original .agf-file-meta, .agf-processed-result .agf-file-meta { font-size: 0.75rem; color: var(--agilo-text-secondary); font-weight: 500; }
+
+  .agf-processed-original .agf-file-name,
+  .agf-processed-result .agf-file-name {
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .agf-processed-original .agf-file-meta,
+  .agf-processed-result .agf-file-meta {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+    font-weight: 500;
+  }
+
   .agf-processed-arrow {
-    flex-shrink: 0; color: var(--agilo-border);
-    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: var(--agilo-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  .agf-processed-arrow svg { width: 1.25rem; height: 1.25rem; }
-  .agf-processed-progress { width: 100%; height: 4px; border-radius: 999px; background: var(--agilo-border); overflow: hidden; }
-  .agf-processed-progress-bar { height: 100%; background: var(--agilo-primary); border-radius: 999px; animation: agf-progress-pulse 1.2s ease-in-out infinite; }
-  @keyframes agf-progress-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
-  .agf-processed-actions { display: flex; gap: 0.375rem; flex-shrink: 0; align-items: center; }
+
+  .agf-processed-arrow svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .agf-processed-progress {
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--agilo-border);
+    overflow: hidden;
+  }
+
+  .agf-processed-progress-bar {
+    height: 100%;
+    background: var(--agilo-primary);
+    border-radius: 999px;
+    animation: agf-progress-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes agf-progress-pulse {
+
+    0%,
+    100% {
+      opacity: 0.7;
+    }
+
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .agf-processed-actions {
+    display: flex;
+    gap: 0.375rem;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
   .agf-processed-actions .agf-btn-icon {
-    width: 2.25rem; height: 2.25rem; border: none; border-radius: 0.5rem;
-    background: var(--agilo-surface-2); color: var(--agilo-primary);
-    cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: var(--agilo-surface-2);
+    color: var(--agilo-primary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: background 150ms ease, color 150ms ease;
   }
-  .agf-processed-actions .agf-btn-icon:hover { background: color-mix(in srgb, var(--agilo-primary) 15%, transparent); color: var(--agilo-primary); }
-  .agf-processed-actions .agf-btn-icon:disabled { opacity: 0.5; cursor: not-allowed; color: var(--agilo-text-secondary); }
+
+  .agf-processed-actions .agf-btn-icon:hover {
+    background: color-mix(in srgb, var(--agilo-primary) 15%, transparent);
+    color: var(--agilo-primary);
+  }
+
+  .agf-processed-actions .agf-btn-icon:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    color: var(--agilo-text-secondary);
+  }
+
   .agf-download-zip {
     display: inline-flex;
     align-items: center;
@@ -275,16 +558,22 @@
     background: var(--agilo-surface);
     color: var(--agilo-primary);
   }
+
   .agf-download-zip:hover {
     background: color-mix(in srgb, var(--agilo-primary) 8%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-primary) 30%, transparent);
   }
+
   .agf-download-zip:disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
+
   .agf-download-zip .agf-icon-download {
-    display: inline-block; width: 1.125rem; height: 1.125rem; vertical-align: -0.2rem;
+    display: inline-block;
+    width: 1.125rem;
+    height: 1.125rem;
+    vertical-align: -0.2rem;
     background-color: currentColor;
     mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2'%3E%3Cpath d='M12 15V3'/%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'/%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E") no-repeat center;
     mask-size: contain;
@@ -293,7 +582,12 @@
   }
 
   .agf-row,
-  .agf-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .agf-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    min-width: 0;
+  }
 
   .agf-textbox {
     border: none;
@@ -303,51 +597,149 @@
     display: grid;
     gap: var(--space-1);
     min-height: 21.25rem;
+    min-width: 0;
+    /* colonnes texte qui peuvent rétrécir */
   }
-  .agf-textbox label { font-size: 0.875rem; font-weight: 600; }
+
+  .agf-textbox label {
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
   .agf-textarea {
-    width: 100%; min-height: 17.5rem; border: 1px solid var(--agilo-border); border-radius: 0.625rem;
-    padding: var(--space-2); font-size: 0.9375rem; line-height: 1.5; resize: vertical; background: var(--agilo-surface);
+    width: 100%;
+    min-width: 0;
+    min-height: 17.5rem;
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.625rem;
+    padding: var(--space-2);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    resize: vertical;
+    background: var(--agilo-surface);
     color: var(--agilo-text);
+    box-sizing: border-box;
   }
-  .agf-row--text { min-height: 28rem; }
-  .agf-textbox--flex { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; }
-  .agf-textbox-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); }
-  .agf-textbox-body { flex: 1; overflow: hidden; display: flex; min-height: 0; }
-  .agf-textbox-body .agf-textarea { min-height: 20rem; flex: 1; }
-  .agf-textbox-label { font-size: 0.875rem; font-weight: 600; margin-bottom: var(--space-1); }
-  .agf-btn-link--small { font-size: 0.75rem; padding: 0; min-height: auto; }
-  .agf-icon-trash, .agf-icon-copy { display: inline-block; width: 0.875rem; height: 0.875rem; vertical-align: -0.125rem; margin-right: 0.25rem; }
-  .agf-icon-trash { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6'/%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E") no-repeat center; }
-  .agf-icon-copy { background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") no-repeat center; }
-  .agf-output-header {
-    display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+
+  .agf-row--text {
+    min-height: 28rem;
+  }
+
+  .agf-textbox--flex {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .agf-textbox-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .agf-textbox-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .agf-textbox-body .agf-textarea {
+    min-height: 20rem;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .agf-textbox-label {
+    font-size: 0.875rem;
+    font-weight: 600;
     margin-bottom: var(--space-1);
   }
-  .agf-output-header .agf-textbox-label { margin-bottom: 0; }
+
+  .agf-btn-link--small {
+    font-size: 0.75rem;
+    padding: 0;
+    min-height: auto;
+  }
+
+  .agf-icon-trash,
+  .agf-icon-copy {
+    display: inline-block;
+    width: 0.875rem;
+    height: 0.875rem;
+    vertical-align: -0.125rem;
+    margin-right: 0.25rem;
+  }
+
+  .agf-icon-trash {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Cpath d='M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6'/%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'/%3E%3C/svg%3E") no-repeat center;
+  }
+
+  .agf-icon-copy {
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'%3E%3Crect width='14' height='14' x='8' y='8' rx='2' ry='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E") no-repeat center;
+  }
+
+  .agf-output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    margin-bottom: var(--space-1);
+  }
+
+  .agf-output-header .agf-textbox-label {
+    margin-bottom: 0;
+  }
+
   .agf-output-copy {
-    min-height: 2.25rem; padding: 0 0.75rem; font-size: 0.8125rem; font-weight: 500;
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
     border-radius: 0.5rem;
     border: 1px solid var(--agilo-border);
     background: var(--agilo-surface);
     color: var(--agilo-text-secondary);
-    cursor: pointer; display: inline-flex; align-items: center; gap: 0.375rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
     transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
   }
+
   .agf-output-copy:hover {
     background: color-mix(in srgb, var(--agilo-text) 8%, transparent);
     color: var(--agilo-text);
     border-color: color-mix(in srgb, var(--agilo-text) 24%, transparent);
   }
+
   .agf-output-wrap {
-    flex: 1; min-height: 22rem; border-radius: 0.75rem;
+    flex: 1;
+    min-height: 22rem;
+    min-width: 0;
+    border-radius: 0.75rem;
     border: 1px solid var(--agilo-border);
     background: var(--agilo-surface);
-    padding: var(--space-2); overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+    padding: var(--space-2);
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
     text-align: left;
   }
+
   .agf-text-output {
-    font-size: 0.875rem; line-height: 1.6; color: var(--agilo-text); white-space: pre-wrap; word-break: break-word;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--agilo-text);
+    white-space: pre-wrap;
+    word-break: break-word;
     background: transparent;
     border: none;
     border-radius: 0;
@@ -356,15 +748,30 @@
     flex: 1;
     text-align: left;
   }
-  .agf-text-output.agf-text-output--loading { opacity: 0.85; }
+
+  .agf-text-output.agf-text-output--loading {
+    opacity: 0.85;
+  }
+
   .agf-output-stats {
-    margin-top: 0; padding-top: var(--space-2);
+    margin-top: 0;
+    padding-top: var(--space-2);
     border-top: 1px solid var(--agilo-border);
     display: grid;
     gap: 0.5rem;
   }
-  .agf-output-summary { font-size: 0.75rem; color: var(--agilo-text-secondary); }
-  .agf-output-entities { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+
+  .agf-output-summary {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-output-entities {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+  }
+
   .agf-output-entity-chip {
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--agilo-primary) 28%, transparent);
@@ -374,6 +781,7 @@
     line-height: 1;
     padding: 0.3125rem 0.5rem;
   }
+
   .agf-tag {
     border-radius: 0.3125rem;
     padding: 0.125rem 0.375rem;
@@ -383,25 +791,30 @@
     background: color-mix(in srgb, var(--agilo-primary) 10%, var(--agilo-surface));
     color: var(--agilo-text);
   }
+
   .agf-tag-PR,
   .agf-tag-MAIL {
     background: color-mix(in srgb, var(--agilo-warning) 14%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-warning) 38%, transparent);
   }
+
   .agf-tag-ADR,
   .agf-tag-LOC {
     background: color-mix(in srgb, var(--agilo-primary) 14%, var(--agilo-surface));
   }
+
   .agf-tag-ORG,
   .agf-tag-CIE {
     background: color-mix(in srgb, var(--agilo-primary) 10%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-primary) 34%, transparent);
   }
+
   .agf-tag-POST,
   .agf-tag-PHON {
     background: color-mix(in srgb, var(--agilo-success) 12%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-success) 36%, transparent);
   }
+
   .agf-tag-SIREN,
   .agf-tag-SIRET,
   .agf-tag-IBAN,
@@ -411,6 +824,7 @@
     background: color-mix(in srgb, var(--agilo-error) 10%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-error) 34%, transparent);
   }
+
   .agf-tag-OTHER {
     background: color-mix(in srgb, var(--agilo-text) 6%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-text) 22%, transparent);
@@ -427,38 +841,142 @@
     text-align: center;
     padding: var(--space-3);
   }
-  .agf-lock-icon { width: 4rem; height: 4rem; color: var(--agilo-primary); }
-  .agf-lock-title { font-size: 1rem; font-weight: 600; }
-  .agf-lock-text { color: var(--agilo-text-secondary); font-size: 0.875rem; max-width: 30rem; }
+
+  .agf-lock-icon {
+    width: 4rem;
+    height: 4rem;
+    color: var(--agilo-primary);
+  }
+
+  .agf-lock-title {
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .agf-lock-text {
+    color: var(--agilo-text-secondary);
+    font-size: 0.875rem;
+    max-width: 30rem;
+  }
 
   .agf-status {
-    display: none; align-items: center; gap: var(--space-1); border-radius: 0.5rem;
-    padding: 0.75rem 1rem; font-size: 0.875rem; font-weight: 500;
-  }
-  .agf-status.is-visible { display: inline-flex; }
-  .agf-status[data-kind="loading"] { color: var(--agilo-primary); background: var(--agilo-primary-soft); }
-  .agf-status[data-kind="success"] { color: var(--agilo-success); background: color-mix(in srgb, var(--agilo-success) 10%, transparent); }
-  .agf-status[data-kind="error"] { color: var(--agilo-error); background: color-mix(in srgb, var(--agilo-error) 10%, transparent); }
-  .agf-status[data-kind="info"] { color: var(--agilo-primary); background: color-mix(in srgb, var(--agilo-primary) 9%, var(--agilo-surface)); }
-  .agf-spinner { width: 1rem; height: 1rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: agf-spin .7s linear infinite; }
-  @keyframes agf-spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) {
-    .agf-spinner { animation-duration: 1.5s; }
-    .agf-tab, .agf-dropzone, .agf-btn-primary, .agf-btn-secondary, .agf-output-copy,
-    .agf-entity-option, .agf-option-line, .agf-item-btn, .agf-processed-card { transition: none; }
-    .agf-processed-card--just-done { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+    display: none;
+    align-items: center;
+    gap: var(--space-1);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
   }
 
-  .agf-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
-  .agf-actions--processed { justify-content: flex-start; align-items: center; }
+  .agf-status.is-visible {
+    display: inline-flex;
+  }
+
+  .agf-status[data-kind="loading"] {
+    color: var(--agilo-primary);
+    background: var(--agilo-primary-soft);
+  }
+
+  .agf-status[data-kind="success"] {
+    color: var(--agilo-success);
+    background: color-mix(in srgb, var(--agilo-success) 10%, transparent);
+  }
+
+  .agf-status[data-kind="error"] {
+    color: var(--agilo-error);
+    background: color-mix(in srgb, var(--agilo-error) 10%, transparent);
+  }
+
+  .agf-status[data-kind="info"] {
+    color: var(--agilo-primary);
+    background: color-mix(in srgb, var(--agilo-primary) 9%, var(--agilo-surface));
+  }
+
+  .agf-spinner {
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: agf-spin .7s linear infinite;
+  }
+
+  @keyframes agf-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .agf-spinner {
+      animation-duration: 1.5s;
+    }
+
+    .agf-tab,
+    .agf-dropzone,
+    .agf-btn-primary,
+    .agf-btn-secondary,
+    .agf-output-copy,
+    .agf-entity-option,
+    .agf-option-line,
+    .agf-item-btn,
+    .agf-processed-card {
+      transition: none;
+    }
+
+    .agf-processed-card--just-done {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  .agf-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .agf-actions--processed {
+    justify-content: flex-start;
+    align-items: center;
+  }
+
   .agf-btn-primary,
   .agf-btn-secondary,
-  .agf-btn-link { min-height: 2.75rem; border-radius: 0.625rem; font-size: 0.9375rem; font-weight: 600; padding: 0 1.5rem; cursor: pointer; transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
-  .agf-btn-primary { border: none; background: var(--agilo-primary); color: #fff !important; }
-  .agf-btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--agilo-primary) 90%, var(--agilo-text-secondary)); color: #fff !important; }
-  .agf-btn-primary:disabled { background: var(--agilo-text-secondary); color: #fff !important; opacity: 1; cursor: not-allowed; }
+  .agf-btn-link {
+    min-height: 2.75rem;
+    border-radius: 0.625rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    padding: 0 1.5rem;
+    cursor: pointer;
+    transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .agf-btn-primary {
+    border: none;
+    background: var(--agilo-primary);
+    color: #fff !important;
+  }
+
+  .agf-btn-primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--agilo-primary) 90%, var(--agilo-text-secondary));
+    color: #fff !important;
+  }
+
+  .agf-btn-primary:disabled {
+    background: var(--agilo-text-secondary);
+    color: #fff !important;
+    opacity: 1;
+    cursor: not-allowed;
+  }
+
   form[ms-code-anonymisation="form"] button.agf-btn-primary,
-  form[ms-code-anonymisation="form"] button.agf-btn-primary:disabled { color: #fff !important; }
+  form[ms-code-anonymisation="form"] button.agf-btn-primary:disabled {
+    color: #fff !important;
+  }
+
   .agf-btn-secondary:disabled,
   .agf-btn-link:disabled {
     opacity: 0.45;
@@ -466,22 +984,64 @@
     color: var(--agilo-text-secondary);
     text-decoration: none;
   }
+
   .agf-btn-primary:focus-visible,
   .agf-btn-secondary:focus-visible,
   .agf-btn-link:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 28%, transparent);
   }
-  .agf-btn-secondary { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 0.125rem; }
-  .agf-btn-secondary:hover { color: var(--agilo-primary); }
-  .agf-btn-link { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 0.125rem; }
-  .agf-btn-link:hover { color: var(--agilo-primary); }
 
-  .agf-download { display: none; color: var(--agilo-primary); text-decoration: underline; text-underline-offset: 0.125rem; font-size: 0.9375rem; font-weight: 500; padding: 0; }
-  .agf-download.is-visible { display: inline-flex; }
+  .agf-btn-secondary {
+    border: none;
+    background: transparent;
+    color: var(--agilo-text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 0.125rem;
+  }
 
-  .agf-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--agilo-text-secondary); }
-  .agf-group { display: grid; gap: var(--space-1); }
+  .agf-btn-secondary:hover {
+    color: var(--agilo-primary);
+  }
+
+  .agf-btn-link {
+    border: none;
+    background: transparent;
+    color: var(--agilo-text-secondary);
+    text-decoration: underline;
+    text-underline-offset: 0.125rem;
+  }
+
+  .agf-btn-link:hover {
+    color: var(--agilo-primary);
+  }
+
+  .agf-download {
+    display: none;
+    color: var(--agilo-primary);
+    text-decoration: underline;
+    text-underline-offset: 0.125rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    padding: 0;
+  }
+
+  .agf-download.is-visible {
+    display: inline-flex;
+  }
+
+  .agf-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-group {
+    display: grid;
+    gap: var(--space-1);
+  }
+
   .agf-radio-line,
   .agf-item-btn {
     border: none;
@@ -494,31 +1054,60 @@
     gap: var(--space-1);
     font-size: 0.875rem;
   }
-  .agf-radio-line input[type="radio"] { accent-color: var(--agilo-primary); }
+
+  .agf-radio-line input[type="radio"] {
+    accent-color: var(--agilo-primary);
+  }
+
   .agf-radio-line:focus-within {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
   }
-  .agf-item-btn { width: 100%; justify-content: space-between; cursor: pointer; color: var(--agilo-text); }
-  .agf-item-btn:hover { background: color-mix(in srgb, var(--agilo-text) 10%, transparent); }
+
+  .agf-item-btn {
+    width: 100%;
+    justify-content: space-between;
+    cursor: pointer;
+    color: var(--agilo-text);
+  }
+
+  .agf-item-btn:hover {
+    background: color-mix(in srgb, var(--agilo-text) 10%, transparent);
+  }
+
   .agf-item-btn:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
   }
+
   .agf-item-btn.is-preview {
     background: color-mix(in srgb, var(--agilo-primary) 7%, transparent);
     border: 1px dashed color-mix(in srgb, var(--agilo-primary) 24%, transparent);
   }
-  .agf-item-btn.is-active { background: color-mix(in srgb, var(--agilo-primary) 10%, transparent); }
+
+  .agf-item-btn.is-active {
+    background: color-mix(in srgb, var(--agilo-primary) 10%, transparent);
+  }
+
   .agf-item-btn.is-preview .agf-chip {
     color: var(--agilo-primary);
     border-color: color-mix(in srgb, var(--agilo-primary) 28%, transparent);
     background: color-mix(in srgb, var(--agilo-primary) 10%, var(--agilo-surface));
   }
+
   .agf-chip {
-    font-size: 0.6875rem; border: 1px solid var(--agilo-border); border-radius: 999px;
-    padding: 0.125rem 0.5rem; color: var(--agilo-text-secondary); background: var(--agilo-surface-2);
+    font-size: 0.6875rem;
+    border: 1px solid var(--agilo-border);
+    border-radius: 999px;
+    padding: 0.125rem 0.5rem;
+    color: var(--agilo-text-secondary);
+    background: var(--agilo-surface-2);
   }
-  .agf-item-btn--count { position: relative; padding-right: 3rem; }
+
+  .agf-item-btn--count {
+    position: relative;
+    padding-right: 3rem;
+  }
+
   .agf-chip-count {
     position: absolute;
     top: -0.5rem;
@@ -536,26 +1125,73 @@
     border: 2px solid var(--agilo-surface);
   }
 
-  .agf-small { font-size: 0.8125rem; color: var(--agilo-text-secondary); }
+  .agf-small {
+    font-size: 0.8125rem;
+    color: var(--agilo-text-secondary);
+  }
 
   .agf-modal-overlay {
-    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-    background: rgba(23, 74, 150, 0.2); z-index: 9999; padding: var(--space-2);
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(23, 74, 150, 0.2);
+    z-index: 9999;
+    padding: var(--space-2);
     backdrop-filter: blur(0.125rem);
   }
-  .agf-modal-overlay.is-open { display: flex; }
+
+  .agf-modal-overlay.is-open {
+    display: flex;
+  }
+
   .agf-modal {
-    width: min(35rem, 100%); max-height: min(85vh, 42.5rem); overflow: auto;
-    background: var(--agilo-surface); border-radius: var(--radius);
+    width: min(35rem, 100%);
+    max-height: min(85vh, 42.5rem);
+    overflow: auto;
+    background: var(--agilo-surface);
+    border-radius: var(--radius);
     box-shadow: 0 1.375rem 3rem rgba(23, 74, 150, 0.2);
     padding: clamp(1.25rem, 3vw, 1.875rem);
     display: grid;
     gap: 1.125rem;
   }
-  #agfModalTypesWrap .agf-modal { width: min(61.25rem, 100%); max-height: min(88vh, 47.5rem); }
-  .agf-modal-head { display: flex; justify-content: center; align-items: start; gap: 0.875rem; position: relative; padding-right: 2.75rem; }
-  .agf-modal-title { font-size: 1.375rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; text-align: center; flex: 1; }
-  .agf-modal-subtitle { margin-top: 0.375rem; font-size: 0.875rem; line-height: 1.45; color: var(--agilo-text-secondary); max-width: 72ch; text-align: center; margin-left: auto; margin-right: auto; }
+
+  #agfModalTypesWrap .agf-modal {
+    width: min(61.25rem, 100%);
+    max-height: min(88vh, 47.5rem);
+  }
+
+  .agf-modal-head {
+    display: flex;
+    justify-content: center;
+    align-items: start;
+    gap: 0.875rem;
+    position: relative;
+    padding-right: 2.75rem;
+  }
+
+  .agf-modal-title {
+    font-size: 1.375rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    text-align: center;
+    flex: 1;
+  }
+
+  .agf-modal-subtitle {
+    margin-top: 0.375rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--agilo-text-secondary);
+    max-width: 72ch;
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   .agf-modal-preview-note {
     margin-top: 0.75rem;
     border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, transparent);
@@ -566,12 +1202,18 @@
     font-size: 0.8125rem;
     line-height: 1.45;
   }
-  .agf-modal-preview-note strong { color: var(--agilo-primary); font-weight: 600; }
+
+  .agf-modal-preview-note strong {
+    color: var(--agilo-primary);
+    font-weight: 600;
+  }
+
   .agf-modal.is-readonly .agf-readonly-disabled {
     opacity: 0.62;
     pointer-events: none;
     user-select: none;
   }
+
   .agf-close {
     border: 1px solid transparent;
     background: transparent;
@@ -583,15 +1225,31 @@
     border-radius: 0.5rem;
     transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
   }
-  .agf-close { position: absolute; top: 0; right: 0; }
-  .agf-close:hover { color: var(--agilo-text); }
+
+  .agf-close {
+    position: absolute;
+    top: 0;
+    right: 0;
+  }
+
+  .agf-close:hover {
+    color: var(--agilo-text);
+  }
+
   .agf-close:focus-visible {
     outline: none;
     border-color: color-mix(in srgb, var(--agilo-primary) 38%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
   }
 
-  .agf-type-grid { display: grid; gap: 0.875rem; max-height: min(50vh, 28rem); overflow-y: auto; padding-right: 0.25rem; }
+  .agf-type-grid {
+    display: grid;
+    gap: 0.875rem;
+    max-height: min(50vh, 28rem);
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+
   .agf-type-card {
     border: 1px solid var(--agilo-border);
     border-radius: 0.875rem;
@@ -600,18 +1258,21 @@
     gap: 0.75rem;
     background: var(--agilo-surface);
   }
+
   .agf-type-card-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--space-1);
   }
+
   .agf-type-card h5 {
     font-size: 0.8125rem;
     text-transform: uppercase;
     letter-spacing: .04em;
     color: var(--agilo-text-secondary);
   }
+
   .agf-type-card-count {
     border-radius: 999px;
     font-size: 0.6875rem;
@@ -620,7 +1281,13 @@
     color: var(--agilo-text-secondary);
     background: var(--agilo-surface-2);
   }
-  .agf-checkboxes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+
+  .agf-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
   .agf-entity-option {
     border: 1px solid var(--agilo-border);
     border-radius: 0.625rem;
@@ -634,16 +1301,26 @@
     cursor: pointer;
     transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
   }
-  .agf-entity-option:hover { border-color: color-mix(in srgb, var(--agilo-primary) 30%, transparent); }
+
+  .agf-entity-option:hover {
+    border-color: color-mix(in srgb, var(--agilo-primary) 30%, transparent);
+  }
+
   .agf-entity-option:focus-within {
     border-color: color-mix(in srgb, var(--agilo-primary) 40%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 16%, transparent);
   }
-  .agf-entity-option input { accent-color: var(--agilo-primary); margin: 0; }
-  .agf-entity-option input:checked + .agf-entity-code {
+
+  .agf-entity-option input {
+    accent-color: var(--agilo-primary);
+    margin: 0;
+  }
+
+  .agf-entity-option input:checked+.agf-entity-code {
     background: color-mix(in srgb, var(--agilo-primary) 16%, var(--agilo-surface));
     border-color: color-mix(in srgb, var(--agilo-primary) 42%, transparent);
   }
+
   .agf-entity-code {
     display: inline-flex;
     align-items: center;
@@ -658,42 +1335,100 @@
     padding: 0.25rem 0.5rem;
     min-width: 2.375rem;
   }
-  .agf-entity-name { color: var(--agilo-text); }
-  .agf-entity-option.is-future .agf-entity-name { color: var(--agilo-text-secondary); }
-  .agf-entity-option.is-future .agf-entity-code { border-style: dashed; }
-  .agf-entity-option--unavailable { opacity: 0.6; cursor: not-allowed; }
-  .agf-entity-option--unavailable .agf-entity-name,
-  .agf-entity-option--unavailable .agf-entity-code { color: var(--agilo-text-secondary); }
-  .agf-entity-option--unavailable input:disabled { cursor: not-allowed; }
-  .agf-modal-types-beta-overlay {
-    position: absolute; inset: 0; z-index: 1;
-    background: linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(248,249,250,0.9) 100%);
-    display: flex; align-items: center; justify-content: center;
+
+  .agf-entity-name {
+    color: var(--agilo-text);
+  }
+
+  .agf-entity-option.is-future .agf-entity-name {
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-entity-option.is-future .agf-entity-code {
+    border-style: dashed;
+  }
+
+  .agf-entity-option--unavailable {
+    opacity: 0.6;
     cursor: not-allowed;
   }
-  .agf-modal-types-beta-overlay.is-dismissed { display: none; }
-  .agf-modal-types-beta-box {
-    pointer-events: auto; cursor: default;
-    position: relative;
-    background: var(--agilo-surface); padding: 1.25rem 1.5rem; border-radius: 0.75rem;
-    border: 1px solid var(--agilo-border); box-shadow: var(--shadow-soft);
-    max-width: 26ch; text-align: center;
+
+  .agf-entity-option--unavailable .agf-entity-name,
+  .agf-entity-option--unavailable .agf-entity-code {
+    color: var(--agilo-text-secondary);
   }
+
+  .agf-entity-option--unavailable input:disabled {
+    cursor: not-allowed;
+  }
+
+  .agf-modal-types-beta-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.94) 0%, rgba(248, 249, 250, 0.9) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: not-allowed;
+  }
+
+  .agf-modal-types-beta-overlay.is-dismissed {
+    display: none;
+  }
+
+  .agf-modal-types-beta-box {
+    pointer-events: auto;
+    cursor: default;
+    position: relative;
+    background: var(--agilo-surface);
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--agilo-border);
+    box-shadow: var(--shadow-soft);
+    max-width: 26ch;
+    text-align: center;
+  }
+
   .agf-modal-types-beta-msg {
-    font-size: 0.8125rem; color: var(--agilo-text-secondary); line-height: 1.45;
+    font-size: 0.8125rem;
+    color: var(--agilo-text-secondary);
+    line-height: 1.45;
     margin: 0;
   }
+
   .agf-modal-types-beta-close {
-    position: absolute; top: 0.5rem; right: 0.5rem;
-    width: 1.5rem; height: 1.5rem; border: none; border-radius: 0.375rem;
-    background: transparent; color: var(--agilo-text-secondary);
-    font-size: 1.125rem; line-height: 1; cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: var(--agilo-text-secondary);
+    font-size: 1.125rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: color 150ms ease, background 150ms ease;
   }
-  .agf-modal-types-beta-close:hover { color: var(--agilo-text); background: var(--agilo-surface-2); }
-  .agf-modal-types-beta-close:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--agilo-primary); }
-  #agfModalTypesWrap .agf-modal { position: relative; }
+
+  .agf-modal-types-beta-close:hover {
+    color: var(--agilo-text);
+    background: var(--agilo-surface-2);
+  }
+
+  .agf-modal-types-beta-close:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--agilo-primary);
+  }
+
+  #agfModalTypesWrap .agf-modal {
+    position: relative;
+  }
 
   .agf-modal-actions {
     display: flex;
@@ -704,11 +1439,30 @@
     border-top: 1px solid color-mix(in srgb, var(--agilo-border) 80%, transparent);
     padding-top: 0.875rem;
   }
-  .agf-textbox--compact { min-height: auto; }
-  .agf-textarea--modal { min-height: 12.5rem; }
-  .agf-actions--end { justify-content: flex-end; }
-  .agf-modal--wide { width: min(56.25rem, 100%); max-height: min(88vh, 47.5rem); }
-  .agf-pseudo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.125rem; }
+
+  .agf-textbox--compact {
+    min-height: auto;
+  }
+
+  .agf-textarea--modal {
+    min-height: 12.5rem;
+  }
+
+  .agf-actions--end {
+    justify-content: flex-end;
+  }
+
+  .agf-modal--wide {
+    width: min(56.25rem, 100%);
+    max-height: min(88vh, 47.5rem);
+  }
+
+  .agf-pseudo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.125rem;
+  }
+
   .agf-pseudo-card {
     border: 1px solid var(--agilo-border);
     border-radius: 0.875rem;
@@ -717,8 +1471,18 @@
     display: grid;
     gap: 0.75rem;
   }
-  .agf-pseudo-title { font-size: 0.875rem; font-weight: 600; color: var(--agilo-text); }
-  .agf-pseudo-desc { font-size: 0.75rem; color: var(--agilo-text-secondary); }
+
+  .agf-pseudo-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--agilo-text);
+  }
+
+  .agf-pseudo-desc {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+  }
+
   .agf-option-line {
     border: 1px solid var(--agilo-border);
     border-radius: 0.625rem;
@@ -730,19 +1494,37 @@
     background: var(--agilo-surface);
     transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
   }
-  .agf-option-line:hover { border-color: color-mix(in srgb, var(--agilo-primary) 28%, transparent); }
+
+  .agf-option-line:hover {
+    border-color: color-mix(in srgb, var(--agilo-primary) 28%, transparent);
+  }
+
   .agf-option-line:focus-within {
     border-color: color-mix(in srgb, var(--agilo-primary) 38%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 16%, transparent);
   }
+
   .agf-option-line input[type="radio"],
-  .agf-option-line input[type="checkbox"] { accent-color: var(--agilo-primary); }
-  .agf-option-line label { font-size: 0.8125rem; font-weight: 500; cursor: pointer; }
+  .agf-option-line input[type="checkbox"] {
+    accent-color: var(--agilo-primary);
+  }
+
+  .agf-option-line label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
   .agf-select-line {
     display: grid;
     gap: 0.25rem;
   }
-  .agf-select-line label { font-size: 0.75rem; color: var(--agilo-text-secondary); }
+
+  .agf-select-line label {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+  }
+
   .agf-select-line select {
     min-height: 2.375rem;
     border: 1px solid var(--agilo-border);
@@ -752,12 +1534,19 @@
     padding: 0 0.625rem;
     transition: border-color 160ms ease, box-shadow 160ms ease;
   }
+
   .agf-select-line select:focus-visible {
     outline: none;
     border-color: color-mix(in srgb, var(--agilo-primary) 38%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 16%, transparent);
   }
-  .agf-inc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.125rem; }
+
+  .agf-inc-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.125rem;
+  }
+
   .agf-inc-card {
     border: 1px solid var(--agilo-border);
     border-radius: 0.875rem;
@@ -766,11 +1555,31 @@
     display: grid;
     gap: 0.75rem;
   }
-  .agf-inc-card h4 { font-size: 0.9375rem; font-weight: 600; }
-  .agf-inc-card p { font-size: 0.75rem; color: var(--agilo-text-secondary); }
-  .agf-inc-card--include h4 { color: color-mix(in srgb, var(--agilo-success) 80%, var(--agilo-text)); }
-  .agf-inc-card--exclude h4 { color: color-mix(in srgb, var(--agilo-error) 80%, var(--agilo-text)); }
-  .agf-inc-add { display: flex; gap: 0.5rem; align-items: center; }
+
+  .agf-inc-card h4 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+  }
+
+  .agf-inc-card p {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-inc-card--include h4 {
+    color: color-mix(in srgb, var(--agilo-success) 80%, var(--agilo-text));
+  }
+
+  .agf-inc-card--exclude h4 {
+    color: color-mix(in srgb, var(--agilo-error) 80%, var(--agilo-text));
+  }
+
+  .agf-inc-add {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
   .agf-inc-add input {
     flex: 1;
     min-height: 2.25rem;
@@ -782,11 +1591,13 @@
     font-size: 0.8125rem;
     transition: border-color 160ms ease, box-shadow 160ms ease;
   }
+
   .agf-inc-add input:focus-visible {
     outline: none;
     border-color: color-mix(in srgb, var(--agilo-primary) 40%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 16%, transparent);
   }
+
   .agf-inc-add button {
     min-height: 2.25rem;
     border-radius: 0.5rem;
@@ -799,12 +1610,18 @@
     cursor: pointer;
     transition: border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
   }
-  .agf-inc-add button:hover { border-color: color-mix(in srgb, var(--agilo-primary) 45%, transparent); color: var(--agilo-primary); }
+
+  .agf-inc-add button:hover {
+    border-color: color-mix(in srgb, var(--agilo-primary) 45%, transparent);
+    color: var(--agilo-primary);
+  }
+
   .agf-inc-add button:focus-visible {
     outline: none;
     border-color: color-mix(in srgb, var(--agilo-primary) 40%, transparent);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 16%, transparent);
   }
+
   .agf-term-list {
     border: 1px solid var(--agilo-border);
     border-radius: 0.625rem;
@@ -817,7 +1634,14 @@
     gap: 0.375rem;
     align-content: start;
   }
-  .agf-term-empty { font-size: 0.75rem; color: var(--agilo-text-secondary); text-align: center; padding: 0.625rem 0; }
+
+  .agf-term-empty {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+    text-align: center;
+    padding: 0.625rem 0;
+  }
+
   .agf-term-item {
     border: 1px solid var(--agilo-border);
     border-radius: 0.5rem;
@@ -828,7 +1652,13 @@
     justify-content: space-between;
     gap: 0.5rem;
   }
-  .agf-term-item span { font-size: 0.8125rem; color: var(--agilo-text); word-break: break-word; }
+
+  .agf-term-item span {
+    font-size: 0.8125rem;
+    color: var(--agilo-text);
+    word-break: break-word;
+  }
+
   .agf-term-remove {
     border: none;
     background: transparent;
@@ -837,41 +1667,125 @@
     cursor: pointer;
     padding: 0;
   }
-  .agf-term-remove:hover { color: var(--agilo-error); }
+
+  .agf-term-remove:hover {
+    color: var(--agilo-error);
+  }
+
   .agf-term-remove:focus-visible {
     outline: none;
     color: var(--agilo-error);
     text-decoration: underline;
     text-underline-offset: 0.125rem;
   }
-  .agf-hidden-field { display: none; }
 
-  .agf-manual-auth { display: grid; gap: var(--space-1); }
-  .agf-manual-auth.is-collapsed .agf-manual-auth-fields { display: none; }
-  .agf-manual-auth-toggle { border: none; background: none; color: var(--agilo-primary); font-size: 0.8125rem; cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 0.125rem; }
-  .agf-manual-auth-toggle:hover { color: var(--agilo-text); }
-  .agf-manual-auth-fields { display: grid; gap: var(--space-1); }
-  .agf-manual-auth label { font-size: 0.75rem; color: var(--agilo-text-secondary); display: block; margin-bottom: 0.125rem; }
-  .agf-manual-auth input { width: 100%; padding: 0.375rem 0.5rem; font-size: 0.8125rem; border: 1px solid var(--agilo-border); border-radius: 0.375rem; }
-  .agf-manual-auth select { width: 100%; padding: 0.375rem 0.5rem; font-size: 0.8125rem; border: 1px solid var(--agilo-border); border-radius: 0.375rem; background: var(--agilo-surface); }
+  .agf-hidden-field {
+    display: none;
+  }
+
+  .agf-manual-auth {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .agf-manual-auth.is-collapsed .agf-manual-auth-fields {
+    display: none;
+  }
+
+  .agf-manual-auth-toggle {
+    border: none;
+    background: none;
+    color: var(--agilo-primary);
+    font-size: 0.8125rem;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 0.125rem;
+  }
+
+  .agf-manual-auth-toggle:hover {
+    color: var(--agilo-text);
+  }
+
+  .agf-manual-auth-fields {
+    display: grid;
+    gap: var(--space-1);
+  }
+
+  .agf-manual-auth label {
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+    display: block;
+    margin-bottom: 0.125rem;
+  }
+
+  .agf-manual-auth input {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.375rem;
+  }
+
+  .agf-manual-auth select {
+    width: 100%;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem;
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.375rem;
+    background: var(--agilo-surface);
+  }
 
   @media (max-width: 61.25rem) {
-    .agf-grid { grid-template-columns: 1fr; }
-    .agf-side { order: -1; }
+    .agf-grid {
+      grid-template-columns: 1fr;
+      min-width: 0;
+    }
+
+    .agf-side {
+      order: -1;
+    }
   }
+
   @media (max-width: 47.5rem) {
+
     .agf-tabs,
     .agf-row,
     .agf-cols,
     .agf-checkboxes,
     .agf-pseudo-grid,
-    .agf-inc-grid { grid-template-columns: 1fr; }
-    .agf-actions { flex-direction: column; align-items: stretch; }
+    .agf-inc-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .agf-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
     .agf-btn-primary,
-    .agf-download { width: 100%; justify-content: center; text-align: center; }
-    .agf-shell { padding-inline: var(--space-2); }
-    .agf-tab { padding: var(--space-1) var(--space-2); }
-    .agf-main { min-height: 20rem; }
+    .agf-download {
+      width: 100%;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .agf-shell {
+      padding-inline: var(--space-2);
+    }
+
+    .agf-tab {
+      padding: var(--space-1) var(--space-2);
+    }
+
+    .agf-main {
+      min-height: 20rem;
+    }
+  }
+
+  /* Éviter tout débordement horizontal sur le formulaire */
+  form[ms-code-anonymisation="form"] {
+    overflow-x: hidden;
   }
 </style>
 
@@ -885,27 +1799,43 @@
     </header>
 
     <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
-      <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="agfPanel-file" data-tab="file">
+      <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" tabindex="0"
+        aria-controls="agfPanel-file" data-tab="file">
         <span class="agf-tab-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg>
+          <svg viewBox="0 0 24 24" stroke-width="1.8">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
+            <path d="M14 2v6h6" />
+            <path d="M8 13h8" />
+            <path d="M8 17h8" />
+          </svg>
         </span>
         <span class="agf-tab-content">
           <strong>Traitement de fichier</strong>
           <span>PDF, Image, CSV, FEC, etc.</span>
         </span>
       </button>
-      <button id="agfTab-text" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="agfPanel-text" data-tab="text">
+      <button id="agfTab-text" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="agfPanel-text" data-tab="text">
         <span class="agf-tab-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M4 6h16"/><path d="M4 10h16"/><path d="M4 14h10"/><path d="M4 18h6"/></svg>
+          <svg viewBox="0 0 24 24" stroke-width="1.8">
+            <path d="M4 6h16" />
+            <path d="M4 10h16" />
+            <path d="M4 14h10" />
+            <path d="M4 18h6" />
+          </svg>
         </span>
         <span class="agf-tab-content">
           <strong>Traitement de texte</strong>
           <span>Email, Markdown, etc.</span>
         </span>
       </button>
-      <button id="agfTab-restore" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="agfPanel-restore" data-tab="restore">
+      <button id="agfTab-restore" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1"
+        aria-controls="agfPanel-restore" data-tab="restore">
         <span class="agf-tab-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+          <svg viewBox="0 0 24 24" stroke-width="1.8">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
         </span>
         <span class="agf-tab-content">
           <strong>Restauration</strong>
@@ -921,9 +1851,11 @@
           <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
             <h4>Cliquez ou glissez-déposez des fichiers</h4>
             <p>PDF, Word, Excel et autres formats courants (10 Mo / fichier — 12 fichiers maximum).</p>
-            <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx), Excel (xls, xlsx), TXT.</p>
+            <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx),
+              Excel (xls, xlsx), TXT.</p>
           </div>
-          <input id="agfFileInput" type="file" name="fileUpload[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
+          <input id="agfFileInput" type="file" name="fileUpload[]" multiple
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
 
           <h3 class="agf-section-title agf-section-title--pending" id="agfTitleFileList">Fichiers à anonymiser</h3>
           <div id="agfFileList" class="agf-list" role="list"></div>
@@ -932,8 +1864,11 @@
             <div class="agf-section-title-row">
               <h3 class="agf-section-title">Fichier(s) traité(s)</h3>
               <div class="agf-section-title-actions">
-                <button id="agfDownloadZip" type="button" class="agf-btn-secondary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
-                <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer les fichiers"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer</button>
+                <button id="agfDownloadZip" type="button" class="agf-btn-secondary agf-download-zip" hidden><span
+                    class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
+                <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small"
+                  aria-label="Effacer les fichiers"><span class="agf-icon-trash"
+                    aria-hidden="true"></span>Effacer</button>
               </div>
             </div>
             <div id="agfProcessedList" class="agf-processed-list" role="list"></div>
@@ -948,26 +1883,33 @@
           </div>
         </section>
 
-        <section id="agfPanel-text" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-text" aria-hidden="true" hidden>
+        <section id="agfPanel-text" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-text" aria-hidden="true"
+          hidden>
           <div class="agf-row agf-row--text">
             <div class="agf-textbox agf-textbox--flex">
               <div class="agf-textbox-head">
                 <label for="agfInputText">Saisissez le texte</label>
-                <button id="agfTextClear" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer le texte"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer le texte</button>
+                <button id="agfTextClear" type="button" class="agf-btn-link agf-btn-link--small"
+                  aria-label="Effacer le texte"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer le
+                  texte</button>
               </div>
               <div class="agf-textbox-body">
-                <textarea id="agfInputText" class="agf-textarea" placeholder="Collez ici le texte à anonymiser (e-mail, note, etc.)"></textarea>
+                <textarea id="agfInputText" class="agf-textarea"
+                  placeholder="Collez ici le texte à anonymiser (e-mail, note, etc.)"></textarea>
               </div>
             </div>
             <div class="agf-textbox agf-textbox--flex">
               <div class="agf-output-header">
                 <label class="agf-textbox-label">Texte traité</label>
-                <button id="agfTextCopy" type="button" class="agf-output-copy" aria-label="Copier le texte traité"><span class="agf-icon-copy" aria-hidden="true"></span>Copier</button>
+                <button id="agfTextCopy" type="button" class="agf-output-copy" aria-label="Copier le texte traité"><span
+                    class="agf-icon-copy" aria-hidden="true"></span>Copier</button>
               </div>
               <div class="agf-output-wrap" id="agfOutputWrap">
-                <div id="agfOutputText" class="agf-text-output" role="region" aria-live="polite" aria-busy="false">Le résultat s'affichera ici après anonymisation.</div>
+                <div id="agfOutputText" class="agf-text-output" role="region" aria-live="polite" aria-busy="false">Le
+                  résultat s'affichera ici après anonymisation.</div>
                 <div id="agfOutputStats" class="agf-output-stats" aria-live="polite">
-                  <p id="agfOutputSummary" class="agf-output-summary">Aucune donnée personnelle détectée pour l'instant.</p>
+                  <p id="agfOutputSummary" class="agf-output-summary">Aucune donnée personnelle détectée pour l'instant.
+                  </p>
                   <div id="agfOutputEntities" class="agf-output-entities"></div>
                 </div>
               </div>
@@ -977,15 +1919,18 @@
         </section>
 
 
-        <section id="agfPanel-restore" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-restore" aria-hidden="true" hidden>
+        <section id="agfPanel-restore" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-restore"
+          aria-hidden="true" hidden>
           <div class="agf-lock-block" id="agfRestoreLocked">
-            <svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
-              <path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6"/>
-              <circle cx="12" cy="16" r="1.2" fill="currentColor"/>
+            <svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true">
+              <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.6" />
+              <path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6" />
+              <circle cx="12" cy="16" r="1.2" fill="currentColor" />
             </svg>
             <p class="agf-lock-title">Restauration des pseudonymes</p>
-            <p class="agf-lock-text">Module de restauration prêt côté interface. L'activation backend sera branchée dès validation du mapping sécurisé.</p>
+            <p class="agf-lock-text">Module de restauration prêt côté interface. L'activation backend sera branchée dès
+              validation du mapping sécurisé.</p>
           </div>
         </section>
       </div>
@@ -993,12 +1938,15 @@
       <aside class="agf-side" aria-label="Paramètres">
         <div class="agf-group agf-manual-auth is-collapsed" id="agfManualAuth">
           <p class="agf-label">Connexion API</p>
-          <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false" aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
+          <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false"
+            aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
           <div class="agf-manual-auth-fields" id="agfManualAuthFields" aria-hidden="true">
             <label for="agfManualUsername">Username (email)</label>
-            <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com" autocomplete="username">
+            <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com"
+              autocomplete="username">
             <label for="agfManualToken">Token</label>
-            <input type="password" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off" spellcheck="false">
+            <input type="password" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off"
+              spellcheck="false">
             <label for="agfManualEdition">Edition</label>
             <select id="agfManualEdition" name="agfManualEdition">
               <option value="free">free</option>
@@ -1011,8 +1959,10 @@
 
         <div class="agf-group">
           <p class="agf-label">Mode de traitement</p>
-          <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked> Anonymiser</label>
-          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip" id="agfPseudoBadge">Bientôt</span></button>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked>
+            Anonymiser</label>
+          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip"
+              id="agfPseudoBadge">Bientôt</span></button>
           <p id="agfPseudoAvailabilityHint" class="agf-small">Aperçu disponible. Activation backend en cours.</p>
         </div>
 
@@ -1022,13 +1972,16 @@
             <span>Types de données</span>
             <span class="agf-chip-count" id="agfTypesCount">9</span>
           </button>
-          <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
-          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour l’instant.</p>
+          <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span
+              id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
+          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour
+            l’instant.</p>
         </div>
 
         <div class="agf-group">
           <p class="agf-label">Enregistré</p>
-          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
+          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span
+              id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
           <p id="agfPseudoSummary" class="agf-small">Pseudo: configuration standard</p>
           <p id="agfSavedTypesInfo" class="agf-small">Types actifs: 0</p>
           <p id="agfLastMaskInfo" class="agf-small">Champs anonymisés (texte): 0</p>
@@ -1036,14 +1989,16 @@
 
         <div class="agf-api-footer" aria-hidden="true">
           <p id="agfApiMeta" class="agf-small">API: vérification...</p>
-          <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank" rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
+          <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank"
+              rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
         </div>
       </aside>
     </div>
   </section>
 </form>
 
-<div id="agfModalTypesWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalTypesTitle" aria-hidden="true">
+<div id="agfModalTypesWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
+  aria-labelledby="agfModalTypesTitle" aria-hidden="true">
   <div class="agf-modal">
     <div class="agf-modal-head">
       <div>
@@ -1055,8 +2010,10 @@
 
     <div class="agf-modal-types-beta-overlay" id="agfModalTypesBetaOverlay" aria-label="Message version bêta">
       <div class="agf-modal-types-beta-box">
-        <button type="button" class="agf-modal-types-beta-close" id="agfModalTypesBetaClose" aria-label="Fermer">&times;</button>
-        <p class="agf-modal-types-beta-msg">Version bêta — En cours d'optimisation. Seuls les types cochés ci-dessous sont actifs pour le moment.</p>
+        <button type="button" class="agf-modal-types-beta-close" id="agfModalTypesBetaClose"
+          aria-label="Fermer">&times;</button>
+        <p class="agf-modal-types-beta-msg">Version bêta — En cours d'optimisation. Seuls les types cochés ci-dessous
+          sont actifs pour le moment.</p>
       </div>
     </div>
 
@@ -1067,12 +2024,20 @@
           <span class="agf-type-card-count" id="agfGroupCount-person">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option"><input type="checkbox" data-entity="PR" data-api="person_name" checked><span class="agf-entity-code">PR</span><span class="agf-entity-name">Nom de personne</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="MAIL" data-api="email" checked><span class="agf-entity-code">MAIL</span><span class="agf-entity-name">Adresse email</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="PHON" data-api="phone" checked><span class="agf-entity-code">PHON</span><span class="agf-entity-name">Téléphone</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="AGE" data-api="birth" disabled><span class="agf-entity-code">AGE</span><span class="agf-entity-name">Âge / naissance</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="TR" data-api="role" disabled><span class="agf-entity-code">TR</span><span class="agf-entity-name">Titre / profession</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="DT" data-api="" checked><span class="agf-entity-code">DT</span><span class="agf-entity-name">Date et heure</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PR" data-api="person_name" checked><span
+              class="agf-entity-code">PR</span><span class="agf-entity-name">Nom de personne</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="MAIL" data-api="email" checked><span
+              class="agf-entity-code">MAIL</span><span class="agf-entity-name">Adresse email</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PHON" data-api="phone" checked><span
+              class="agf-entity-code">PHON</span><span class="agf-entity-name">Téléphone</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="AGE"
+              data-api="birth" disabled><span class="agf-entity-code">AGE</span><span class="agf-entity-name">Âge /
+              naissance</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="TR"
+              data-api="role" disabled><span class="agf-entity-code">TR</span><span class="agf-entity-name">Titre /
+              profession</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="DT" data-api="" checked><span
+              class="agf-entity-code">DT</span><span class="agf-entity-name">Date et heure</span></label>
         </div>
       </section>
 
@@ -1082,12 +2047,22 @@
           <span class="agf-type-card-count" id="agfGroupCount-company">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CIE" data-api="company" disabled><span class="agf-entity-code">CIE</span><span class="agf-entity-name">Nom d'entreprise</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="CID" data-api="siren" checked><span class="agf-entity-code">CID</span><span class="agf-entity-name">SIREN / identifiant</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ACT" data-api="accounting" disabled><span class="agf-entity-code">ACT</span><span class="agf-entity-name">Entrée comptable</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="PROD" data-api="product" disabled><span class="agf-entity-code">PROD</span><span class="agf-entity-name">Produit / service</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="ORG" data-api="company" checked><span class="agf-entity-code">ORG</span><span class="agf-entity-name">Organisation</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FILE" data-api="" disabled><span class="agf-entity-code">FILE</span><span class="agf-entity-name">Nom de dossier</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CIE"
+              data-api="company" disabled><span class="agf-entity-code">CIE</span><span class="agf-entity-name">Nom
+              d'entreprise</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="CID" data-api="siren" checked><span
+              class="agf-entity-code">CID</span><span class="agf-entity-name">SIREN / identifiant</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ACT"
+              data-api="accounting" disabled><span class="agf-entity-code">ACT</span><span
+              class="agf-entity-name">Entrée comptable</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="PROD"
+              data-api="product" disabled><span class="agf-entity-code">PROD</span><span class="agf-entity-name">Produit
+              / service</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="ORG" data-api="company" checked><span
+              class="agf-entity-code">ORG</span><span class="agf-entity-name">Organisation</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FILE"
+              data-api="" disabled><span class="agf-entity-code">FILE</span><span class="agf-entity-name">Nom de
+              dossier</span></label>
         </div>
       </section>
 
@@ -1097,10 +2072,17 @@
           <span class="agf-type-card-count" id="agfGroupCount-location">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ADR" data-api="address" disabled><span class="agf-entity-code">ADR</span><span class="agf-entity-name">Adresse</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="POST" data-api="address" disabled><span class="agf-entity-code">POST</span><span class="agf-entity-name">Code postal</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="LOC" data-api="address" checked><span class="agf-entity-code">LOC</span><span class="agf-entity-name">Ville / région</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="GEO" data-api="" disabled><span class="agf-entity-code">GEO</span><span class="agf-entity-name">Géolocalisation</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ADR"
+              data-api="address" disabled><span class="agf-entity-code">ADR</span><span
+              class="agf-entity-name">Adresse</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="POST"
+              data-api="address" disabled><span class="agf-entity-code">POST</span><span class="agf-entity-name">Code
+              postal</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="LOC" data-api="address" checked><span
+              class="agf-entity-code">LOC</span><span class="agf-entity-name">Ville / région</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="GEO"
+              data-api="" disabled><span class="agf-entity-code">GEO</span><span
+              class="agf-entity-name">Géolocalisation</span></label>
         </div>
       </section>
 
@@ -1110,11 +2092,20 @@
           <span class="agf-type-card-count" id="agfGroupCount-finance">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="BANK" data-api="bank" disabled><span class="agf-entity-code">BANK</span><span class="agf-entity-name">Compte bancaire</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CARD" data-api="bank" disabled><span class="agf-entity-code">CARD</span><span class="agf-entity-name">Carte bancaire</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="REF" data-api="contract" disabled><span class="agf-entity-code">REF</span><span class="agf-entity-name">Numéro de référence</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="MT" data-api="" disabled><span class="agf-entity-code">MT</span><span class="agf-entity-name">Montant</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="IBAN" data-api="bank" checked><span class="agf-entity-code">IBAN</span><span class="agf-entity-name">IBAN</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="BANK"
+              data-api="bank" disabled><span class="agf-entity-code">BANK</span><span class="agf-entity-name">Compte
+              bancaire</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CARD"
+              data-api="bank" disabled><span class="agf-entity-code">CARD</span><span class="agf-entity-name">Carte
+              bancaire</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="REF"
+              data-api="contract" disabled><span class="agf-entity-code">REF</span><span class="agf-entity-name">Numéro
+              de référence</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="MT"
+              data-api="" disabled><span class="agf-entity-code">MT</span><span
+              class="agf-entity-name">Montant</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="IBAN" data-api="bank" checked><span
+              class="agf-entity-code">IBAN</span><span class="agf-entity-name">IBAN</span></label>
         </div>
       </section>
 
@@ -1124,9 +2115,15 @@
           <span class="agf-type-card-count" id="agfGroupCount-misc">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="URL" data-api="" disabled><span class="agf-entity-code">URL</span><span class="agf-entity-name">URL</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="IP" data-api="" disabled><span class="agf-entity-code">IP</span><span class="agf-entity-name">Adresse IP</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CLAUSE" data-api="contract" disabled><span class="agf-entity-code">CLAUSE</span><span class="agf-entity-name">Clause sensible</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="URL"
+              data-api="" disabled><span class="agf-entity-code">URL</span><span
+              class="agf-entity-name">URL</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="IP"
+              data-api="" disabled><span class="agf-entity-code">IP</span><span class="agf-entity-name">Adresse
+              IP</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CLAUSE"
+              data-api="contract" disabled><span class="agf-entity-code">CLAUSE</span><span
+              class="agf-entity-name">Clause sensible</span></label>
         </div>
       </section>
 
@@ -1136,9 +2133,14 @@
           <span class="agf-type-card-count" id="agfGroupCount-france">0</span>
         </div>
         <div class="agf-checkboxes">
-          <label class="agf-entity-option"><input type="checkbox" data-entity="FRNIR" data-api="" checked><span class="agf-entity-code">FRNIR</span><span class="agf-entity-name">NIR</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRPASS" data-api="" disabled><span class="agf-entity-code">FRPASS</span><span class="agf-entity-name">Passeport</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRCNI" data-api="" disabled><span class="agf-entity-code">FRCNI</span><span class="agf-entity-name">Carte d'identité</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="FRNIR" data-api="" checked><span
+              class="agf-entity-code">FRNIR</span><span class="agf-entity-name">NIR</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRPASS"
+              data-api="" disabled><span class="agf-entity-code">FRPASS</span><span
+              class="agf-entity-name">Passeport</span></label>
+          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRCNI"
+              data-api="" disabled><span class="agf-entity-code">FRCNI</span><span class="agf-entity-name">Carte
+              d'identité</span></label>
         </div>
       </section>
     </div>
@@ -1154,17 +2156,20 @@
   </div>
 </div>
 
-<div id="agfModalPseudoWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalPseudoTitle" aria-hidden="true">
+<div id="agfModalPseudoWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
+  aria-labelledby="agfModalPseudoTitle" aria-hidden="true">
   <div class="agf-modal agf-modal--wide">
     <div class="agf-modal-head">
       <div>
         <h3 id="agfModalPseudoTitle" class="agf-modal-title">Paramètres de pseudonymisation</h3>
-        <p class="agf-modal-subtitle">Choisissez le format des pseudonymes dans les résultats et exports. Aucune donnée ni clé n'est stockée côté serveur.</p>
+        <p class="agf-modal-subtitle">Choisissez le format des pseudonymes dans les résultats et exports. Aucune donnée
+          ni clé n'est stockée côté serveur.</p>
       </div>
       <button id="agfModalPseudoClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
     <div id="agfPseudoPreviewNote" class="agf-modal-preview-note" role="note">
-      <strong>Mode aperçu:</strong> les options sont consultables pour cadrer vos besoins. L’enregistrement et l’application seront activés lors du branchement backend.
+      <strong>Mode aperçu:</strong> les options sont consultables pour cadrer vos besoins. L’enregistrement et
+      l’application seront activés lors du branchement backend.
     </div>
 
     <div id="agfPseudoReadonlyZone" class="agf-pseudo-grid agf-readonly-disabled">
@@ -1209,17 +2214,20 @@
   </div>
 </div>
 
-<div id="agfModalInclusionWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalIncTitle" aria-hidden="true">
+<div id="agfModalInclusionWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
+  aria-labelledby="agfModalIncTitle" aria-hidden="true">
   <div class="agf-modal agf-modal--wide">
     <div class="agf-modal-head">
       <div>
         <h3 id="agfModalIncTitle" class="agf-modal-title">Inclusion / Exclusion</h3>
-        <p class="agf-modal-subtitle">Gérez les listes d'inclusion et d'exclusion pour réduire les faux positifs et faux négatifs. La comparaison ignore la casse et les accents.</p>
+        <p class="agf-modal-subtitle">Gérez les listes d'inclusion et d'exclusion pour réduire les faux positifs et faux
+          négatifs. La comparaison ignore la casse et les accents.</p>
       </div>
       <button id="agfModalIncClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
     <div id="agfInclusionPreviewNote" class="agf-modal-preview-note" role="note">
-      <strong>Mode aperçu:</strong> les listes actuelles restent visibles pour revue métier. Les modifications et l’application backend sont en cours d’activation.
+      <strong>Mode aperçu:</strong> les listes actuelles restent visibles pour revue métier. Les modifications et
+      l’application backend sont en cours d’activation.
     </div>
 
     <div id="agfInclusionReadonlyZone" class="agf-inc-grid agf-readonly-disabled">
@@ -1235,7 +2243,8 @@
 
       <section class="agf-inc-card agf-inc-card--exclude">
         <h4>Liste d'exclusion</h4>
-        <p>Ces termes sont systématiquement ignorés lors de l'anonymisation, même s'ils correspondent aux types sélectionnés.</p>
+        <p>Ces termes sont systématiquement ignorés lors de l'anonymisation, même s'ils correspondent aux types
+          sélectionnés.</p>
         <div class="agf-inc-add">
           <input id="agfExcludeInput" type="text" placeholder="Ajouter un terme à exclure...">
           <button id="agfExcludeAdd" type="button">Ajouter</button>
