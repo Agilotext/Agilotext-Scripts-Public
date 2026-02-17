@@ -125,6 +125,7 @@
   const BackupManager = {
     db: null, DB_NAME: 'AgilotextRecDB', STORE_NAME: 'chunks',
     _totalBytes: null,
+    _lastSavePromise: null,
     async open() {
       if (this.db) return this.db;
       return new Promise((resolve, reject) => {
@@ -163,8 +164,13 @@
           }
           return;
         }
-        this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).add({
-          timestamp: Date.now(), blob: blob, mimeType: mimeType || null
+        this._lastSavePromise = new Promise((resolve, reject) => {
+          const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.objectStore(this.STORE_NAME).add({
+            timestamp: Date.now(), blob: blob, mimeType: mimeType || null
+          });
         });
         this._totalBytes += blob.size;
       } catch (e) { if (DBG) console.warn('[Backup] Save failed:', e); }
@@ -194,9 +200,24 @@
       } catch { return 0; }
     },
     async clear() {
-      if (!this.db) return;
-      this.db.transaction([this.STORE_NAME], 'readwrite').objectStore(this.STORE_NAME).clear();
-      this._totalBytes = 0;
+      try {
+        await this.open();
+      } catch (e) {
+        if (DBG) console.warn('[Backup] clear() open failed', e);
+        return;
+      }
+      await (this._lastSavePromise || Promise.resolve());
+      return new Promise((resolve, reject) => {
+        const tx = this.db.transaction([this.STORE_NAME], 'readwrite');
+        tx.objectStore(this.STORE_NAME).clear();
+        tx.oncomplete = () => {
+          this._totalBytes = 0;
+          this._lastSavePromise = null;
+          resolve();
+        };
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
     }
   };
 
@@ -378,7 +399,7 @@
   const MAX_RESTART_MIC_ATTEMPTS = 3;
   const DEVICECHANGE_DEBOUNCE_MS = 700;
   const SILENT_RMS_THRESHOLD = 0.006;  // plus bas pour éviter faux positifs (micros peu sensibles)
-  const SILENT_WARN_AFTER_MS = 15 * 60 * 1000;  // 15 min : alerte seulement si micro vraiment muet tout du long
+  const SILENT_WARN_AFTER_MS = 15 * 60 * 1000;  // 15 min : alerte seulement si micro vraiment muet tout du long (pertinent)
   const MUTE_WARN_AFTER_MS = 5000;
   const CLIP_WARN_AFTER_MS = 2000;
   const BACKGROUND_WARN_AFTER_MS = 25000;
@@ -581,6 +602,7 @@
           micGainNode.gain.value = g + (desired - g) * AGC_SMOOTH;
         } else {
           if (silentSince === null) silentSince = Date.now();
+          // Ne pas alerter en partage écran/onglet : l'utilisateur peut écouter sans parler longtemps
           if (!silentWarnShown && !isSharingScreen && (Date.now() - silentSince > SILENT_WARN_AFTER_MS)) {
             silentWarnShown = true;
             NotificationManager.show('Micro silencieux depuis longtemps — vérifiez le micro.', 'warning', 8000);
@@ -1295,8 +1317,9 @@
         mediaRecorder = null;
 
         // P0: clear backup uniquement après ACK backend (agilo-upload-confirmed). Fallback = alerte seulement, pas de clear.
-        if (uploadConfirmed) BackupManager.clear();
-        else {
+        if (uploadConfirmed) {
+          BackupManager.clear().catch(function (err) { console.warn('[Record] BackupManager.clear() failed', err); });
+        } else {
           if (uploadConfirmedFallbackTimerId) clearTimeout(uploadConfirmedFallbackTimerId);
           uploadConfirmedFallbackTimerId = setTimeout(function () {
             uploadConfirmedFallbackTimerId = null;
@@ -1500,11 +1523,13 @@
   // Backend doit émettre agilo-upload-confirmed avec detail.sessionId (id de la session record) pour éviter clear cross-feature.
   document.addEventListener('agilo-upload-confirmed', function (e) {
     var detail = (e && e.detail) || {};
-    if (detail.sessionId !== undefined && detail.sessionId !== recordSessionId) return; // autre session / autre feature
+    if (detail.sessionId !== undefined && detail.sessionId !== recordSessionId) {
+      if (DBG) console.log('[Record] agilo-upload-confirmed ignoré (sessionId différent)', { received: detail.sessionId, current: recordSessionId });
+      return;
+    }
     if (uploadConfirmedFallbackTimerId) { clearTimeout(uploadConfirmedFallbackTimerId); uploadConfirmedFallbackTimerId = null; }
     uploadConfirmed = true;
-    BackupManager.clear();
-    logEvent('upload_success', {});
+    BackupManager.clear().then(function () { logEvent('upload_success', {}); }).catch(function (err) { console.warn('[Record] BackupManager.clear() failed', err); });
   });
 
   document.addEventListener('agilo-upload-failed', function (e) {
@@ -1610,7 +1635,7 @@
                 0,
                 "Nettoyage",
                 [
-                  { label: "Oui, effacer", primary: false, onClick: (t) => { BackupManager.clear(); t.remove(); } },
+                  { label: "Oui, effacer", primary: false, onClick: (t) => { BackupManager.clear().then(() => t.remove()).catch(err => console.warn('[Record] BackupManager.clear() failed', err)); } },
                   { label: "Garder pour plus tard", primary: false, onClick: (t) => t.remove() }
                 ]
               );
@@ -1621,8 +1646,7 @@
             primary: false,
             onClick: (toast) => {
               if (confirm("Voulez-vous vraiment supprimer définitivement cette sauvegarde ?")) {
-                BackupManager.clear();
-                toast.remove();
+                BackupManager.clear().then(() => toast.remove()).catch(err => console.warn('[Record] BackupManager.clear() failed', err));
               }
             }
           }

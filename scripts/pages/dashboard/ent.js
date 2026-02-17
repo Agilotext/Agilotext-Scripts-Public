@@ -722,11 +722,15 @@ document.addEventListener('DOMContentLoaded', () => {
           const jobId=data.jobIdList[0];
           localStorage.setItem('currentJobId',jobId);
           document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
+          var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
+          var recordSessionId = sessionInput ? sessionInput.value : undefined;
+          document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
           successDiv.style.display='flex';
           loadingAnimDiv.style.display='block';
           checkTranscriptStatus(jobId,email);
           scrollToEl(loadingAnimDiv,-80);
         } else {
+          document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: data.errorMessage || '' } }));
           const err=data.errorMessage||'';
           if(err==='error_too_much_traffic')                               showError('tooMuchTraffic');
           else if(err.includes('error_duration_is_too_long_for_summary'))  showError('summaryLimit');
@@ -748,6 +752,7 @@ document.addEventListener('DOMContentLoaded', () => {
           message: err.message,
           stack: err.stack
         });
+        document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: err && err.message || '' } }));
         showError(err.type||'default');
       })
       .finally(()=>{
