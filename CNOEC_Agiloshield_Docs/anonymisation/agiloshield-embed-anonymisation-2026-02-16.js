@@ -1505,7 +1505,7 @@
 
   function bindEvents() {
     ui.form.addEventListener('submit', submitFiles);
-    ui.reset.addEventListener('click', resetFiles);
+    if (ui.reset) ui.reset.addEventListener('click', resetFiles);
     if (ui.clearProcessed) ui.clearProcessed.addEventListener('click', clearProcessedOnly);
     if (ui.downloadZip) ui.downloadZip.addEventListener('click', downloadAllAsZip);
 
