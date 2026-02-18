@@ -220,17 +220,17 @@
 }
 
 .agilo-email-block-body {
-  padding: .75rem 1rem;
+  padding: 1rem 1.1rem;
   font-size: .9rem;
   color: var(--agilo-text, var(--color--gris_foncé, #020202));
   word-break: break-word;
-  line-height: 1.6;
+  line-height: 1.7;
   max-height: 50vh;
   overflow-y: auto;
 }
 
 .agilo-email-block-body .agilo-email-p {
-  margin: 0 0 .9em;
+  margin: 0 0 1.35em;
 }
 
 .agilo-email-block-body .agilo-email-p:last-child {

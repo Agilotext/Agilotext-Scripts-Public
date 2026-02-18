@@ -640,6 +640,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // Retirer la ligne "Objet : ..." du corps (déjà affichée en tête)
         emailBodyText = emailBodyText.replace(/^\s*Objet\s*:\s*[^\n]+(\n|$)/i, '$1').trim();
 
+        // Forcer de vrais sauts de paragraphe : double \n avant formules et sections (même si le modèle n'en met qu'un)
+        emailBodyText = emailBodyText
+          .replace(/\n(Bonjour\s+[\w\s]+,)/gi, '\n\n$1')
+          .replace(/\n(Prochaines étapes\s*:)/gi, '\n\n$1')
+          .replace(/\n(Cordialement,)/gi, '\n\n$1')
+          .replace(/\n(Décisions\s*\/\s*points clés\s*:)/gi, '\n\n$1')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
         const paragraphs = String(emailBodyText).split(/\n\n+/).filter(Boolean);
@@ -1295,7 +1304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Zéro emoji.`,
         `- Aucun markdown (pas de titres, pas de gras, pas de listes).`,
         `- Utilisez des lignes simples, sans flèches ni puces.`,
-        `- Insérez une ligne vide entre chaque section.`,
+        `- Format paragraphes : séparez chaque paragraphe ou section par une ligne vide (deux retours à la ligne). Ex. après "Bonjour X,", avant "Prochaines étapes :", avant "Cordialement,".`,
         `- Email court, crédible, actionnable.`,
         `- L'email doit être une suite logique directe de la discussion (pas générique).`,
         `- N'inventez aucun nom de marque/entreprise/personne ; utilisez uniquement ce qui est dans le transcript.`,
