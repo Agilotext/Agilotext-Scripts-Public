@@ -539,8 +539,14 @@
   }
   .agf-btn-secondary { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 0.125rem; }
   .agf-btn-secondary:hover { color: var(--agilo-primary); }
-  .agf-btn-link { border: none; background: transparent; color: var(--agilo-text-secondary); text-decoration: underline; text-underline-offset: 0.125rem; }
+  .agf-btn-link {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    border: none; background: transparent; color: var(--agilo-text-secondary);
+    text-decoration: underline; text-underline-offset: 0.125rem;
+    white-space: nowrap;
+  }
   .agf-btn-link:hover { color: var(--agilo-primary); }
+  .agf-btn-link .agf-icon-trash, .agf-btn-link .agf-icon-copy { margin-right: 0; flex-shrink: 0; }
 
   .agf-download { display: none; color: var(--agilo-primary); text-decoration: underline; text-underline-offset: 0.125rem; font-size: 0.9375rem; font-weight: 500; padding: 0; }
   .agf-download.is-visible { display: inline-flex; }
@@ -1034,7 +1040,7 @@
           <h3 class="agf-section-title">Sélectionnez les fichiers</h3>
           <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
             <h4>Cliquez ou glissez-déposez des fichiers</h4>
-            <p>PDF, Word, Excel et autres formats courants (10 Mo / fichier — 12 fichiers maximum).</p>
+            <p>PDF, Word, Excel et autres formats courants (250 Mo / fichier — 12 fichiers maximum).</p>
             <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx), Excel (xls, xlsx), TXT.</p>
           </div>
           <input id="agfFileInput" type="file" name="fileUpload[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
