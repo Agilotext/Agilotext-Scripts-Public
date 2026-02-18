@@ -521,7 +521,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
-      const looksLikeEmail = /^Objet\s*:/i.test(String(m.text || '').trim());
+      const raw = String(m.text || '').trim();
+      const looksLikeEmail = /(^|\n)\s*#*\s*Objet\s*:/im.test(raw) || /^Objet\s*:/i.test(raw) || /\bObjet\s*:\s*\S/.test(raw.slice(0, 400));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -544,16 +545,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
-        copyBtn.className = 'msg-action-btn agilo-email-btn-copy';
-        copyBtn.setAttribute('aria-label', 'Copier');
-        copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
+        copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
+        copyBtn.setAttribute('aria-label', 'Copier le corps du mail');
+        copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
         copyBtn.onclick = async () => {
-          const success = await copyToClipboard(m.text);
+          const toCopy = parsed.body || m.text;
+          const success = await copyToClipboard(toCopy);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
-            copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
-            toast('Copié dans le presse-papier', 'success');
-            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
+            copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+            toast('Corps du mail copié', 'success');
+            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
           } else toast('Échec de la copie', 'error');
         };
         tools.appendChild(copyBtn);
@@ -562,9 +564,9 @@ document.addEventListener('DOMContentLoaded', () => {
         gmailBtn.href = gmailUrl;
         gmailBtn.target = '_blank';
         gmailBtn.rel = 'noopener noreferrer';
-        gmailBtn.className = 'msg-action-btn agilo-email-btn-gmail';
-        gmailBtn.setAttribute('aria-label', 'Ouvrir dans Gmail');
-        gmailBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L2.455 5.457v3.272L12 13.091l9.545-4.364V5.457L20.073 3.493C21.691 2.279 24 3.434 24 5.457z"/></svg><span>Ouvrir dans Gmail</span>';
+        gmailBtn.className = 'agilo-email-btn agilo-email-btn-gmail';
+        gmailBtn.setAttribute('aria-label', 'Ouvrir l’email dans Gmail (ou ton client mail)');
+        gmailBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L2.455 5.457v3.272L12 13.091l9.545-4.364V5.457L20.073 3.493C21.691 2.279 24 3.434 24 5.457z"/></svg>';
         tools.appendChild(gmailBtn);
 
         header.appendChild(tools);
@@ -1067,7 +1069,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return /^Objet\s*:/i.test(t) || /Pourquoi ce post\s*:/i.test(t) || (BOLD_RE.test(first) && !/[#*_]{1,}/.test(first));
   }
 
-  /** Extrait sujet + corps (sans pied de page) pour mailto / Gmail */
+  /** Extrait sujet + corps (sans pied de page) pour mailto / Gmail. Accepte "Objet :", "## Objet :", etc. */
   function parseEmailForCompose(text) {
     const raw = String(text || '').replace(/\r\n/g, '\n').trim();
     const split = raw.split(/\n\s*---\s*\n/);
@@ -1075,9 +1077,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lines = emailPart.split('\n');
     let subject = '';
     const bodyLines = [];
+    const objRegex = /^\s*#*\s*Objet\s*:\s*/i;
     for (const line of lines) {
-      if (/^Objet\s*:/i.test(line.trim())) {
-        subject = line.replace(/^Objet\s*:\s*/i, '').trim();
+      const trimmed = line.trim();
+      if (objRegex.test(trimmed)) {
+        subject = trimmed.replace(objRegex, '').trim();
       } else {
         bodyLines.push(line);
       }

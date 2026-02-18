@@ -87,42 +87,48 @@
 .agilo-email-block-tools {
   display: flex;
   align-items: center;
-  gap: .35rem;
+  gap: .15rem;
 }
 
-.agilo-email-btn-copy,
-.agilo-email-btn-gmail {
+/* Boutons icon-only style ChatGPT (Copy + Open in app) */
+.agilo-email-btn {
   display: inline-flex;
   align-items: center;
-  gap: .35rem;
-  padding: .35rem .5rem;
-  border-radius: .45rem;
-  font: 600 .75rem/1 system-ui, -apple-system, Segoe UI, Roboto;
-  text-decoration: none;
-  color: var(--agilo-text, var(--color--gris_foncé, #020202));
-  background: var(--agilo-surface-2, #f8f9fa);
-  border: 1px solid var(--agilo-border, #343a4040);
+  justify-content: center;
+  gap: .25rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: .375rem;
+  background: transparent;
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
   cursor: pointer;
-  transition: background .15s, color .15s, border-color .15s;
+  text-decoration: none;
+  transition: color .15s, background .15s;
 }
 
-.agilo-email-btn-gmail:hover {
-  background: color-mix(in srgb, var(--agilo-primary, #174a96) 12%, var(--agilo-surface-2, #f8f9fa));
-  color: var(--agilo-primary, #174a96);
-  border-color: var(--agilo-primary, #174a96);
+.agilo-email-btn:hover {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, transparent);
 }
 
-.agilo-email-btn-copy:hover,
-.agilo-email-btn-copy:focus-visible,
-.agilo-email-btn-gmail:focus-visible {
+.agilo-email-btn:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--agilo-primary) 60%, transparent);
   outline-offset: 2px;
 }
 
+.agilo-email-btn .agilo-email-icon {
+  flex-shrink: 0;
+}
+
+.agilo-email-btn-gmail:hover {
+  color: var(--agilo-primary, #174a96);
+}
+
 .agilo-email-btn-copy.agilo-email-btn-copied {
-  background: #10b981;
-  color: #fff;
-  border-color: #10b981;
+  color: #10b981;
+  background: color-mix(in srgb, #10b981 12%, transparent);
 }
 
 .agilo-email-block-subject {
