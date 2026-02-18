@@ -9,7 +9,7 @@
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
-  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  const MAX_FILE_SIZE = 250 * 1024 * 1024;
   const MAX_FILES = 12;
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
@@ -569,7 +569,7 @@
     } else if (rejectedOther.length > 0) {
       const short = rejectedOther.slice(0, 2).join(', ');
       const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non accepté ou fichier > 10 Mo : ' + short + more + '.');
+      setStatus('error', 'Format non accepté ou fichier > 250 Mo : ' + short + more + '.');
     } else {
       setStatus('', '');
     }
