@@ -521,72 +521,134 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
-      // Re-apply email formatting on display if needed (legacy messages or older prompts)
       const looksLikeEmail = /^Objet\s*:/i.test(String(m.text || '').trim());
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
-      if (renderMode === 'plain') {
-        bubbleDiv.textContent = displayText;
-        bubbleDiv.style.whiteSpace = 'pre-wrap';
-        bubbleDiv.style.lineHeight = '1.6';
-      } else if (renderMode === 'html') {
-        bubbleDiv.innerHTML = displayText;
-      } else {
-        bubbleDiv.innerHTML = mdToHtml(displayText);
-        bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
-      }
+      if (looksLikeEmail && !isThinking && displayText.length > 10) {
+        const parsed = parseEmailForCompose(m.text);
+        const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
 
-      if (!isThinking && !displayText.includes('réfléchit') && !displayText.includes('⚠️') && displayText.length > 10) {
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'msg-actions';
-        actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
+        const block = document.createElement('div');
+        block.className = 'agilo-email-block';
+
+        const header = document.createElement('div');
+        header.className = 'agilo-email-block-header';
+        const label = document.createElement('span');
+        label.className = 'agilo-email-block-label';
+        label.textContent = 'Email';
+        header.appendChild(label);
+
+        const tools = document.createElement('div');
+        tools.className = 'agilo-email-block-tools';
 
         const copyBtn = document.createElement('button');
-        copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
-        copyBtn.className = 'msg-action-btn msg-action-copy';
+        copyBtn.type = 'button';
+        copyBtn.className = 'msg-action-btn agilo-email-btn-copy';
+        copyBtn.setAttribute('aria-label', 'Copier');
+        copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
         copyBtn.onclick = async () => {
           const success = await copyToClipboard(m.text);
           if (success) {
-            copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copié !';
-            copyBtn.style.background = '#10b981';
-            copyBtn.style.color = '#fff';
-            copyBtn.style.borderColor = '#10b981';
-            setTimeout(() => {
-              copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
-              copyBtn.style.background = '#fff';
-              copyBtn.style.color = '#525252';
-              copyBtn.style.borderColor = 'rgba(0,0,0,0.15)';
-            }, 2000);
+            copyBtn.classList.add('agilo-email-btn-copied');
+            copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
             toast('Copié dans le presse-papier', 'success');
-          } else {
-            toast('Échec de la copie', 'error');
-          }
+            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
+          } else toast('Échec de la copie', 'error');
         };
-        actionsDiv.appendChild(copyBtn);
+        tools.appendChild(copyBtn);
 
-        const allowExport = idx === lastAssistantIndex;
-        if (allowExport) {
-          const sep = document.createElement('div');
-          sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
-          actionsDiv.appendChild(sep);
+        const gmailBtn = document.createElement('a');
+        gmailBtn.href = gmailUrl;
+        gmailBtn.target = '_blank';
+        gmailBtn.rel = 'noopener noreferrer';
+        gmailBtn.className = 'msg-action-btn agilo-email-btn-gmail';
+        gmailBtn.setAttribute('aria-label', 'Ouvrir dans Gmail');
+        gmailBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L2.455 5.457v3.272L12 13.091l9.545-4.364V5.457L20.073 3.493C21.691 2.279 24 3.434 24 5.457z"/></svg><span>Ouvrir dans Gmail</span>';
+        tools.appendChild(gmailBtn);
 
-          ['txt', 'docx', 'pdf', 'rtf'].forEach(fmt => {
-            const btn = document.createElement('button');
-            btn.textContent = fmt.toUpperCase();
-            btn.className = 'msg-action-btn';
-            btn.onclick = async () => {
-              const originalText = btn.textContent;
-              btn.disabled = true; btn.textContent = '...'; btn.style.opacity = '0.5';
-              try { await exportMessage(idx, fmt); toast(`Téléchargé en ${fmt.toUpperCase()}`, 'success'); }
-              catch (e) { toast(`Échec export ${fmt}`, 'error'); err('export failed', e); }
-              finally { btn.disabled = false; btn.textContent = originalText; btn.style.opacity = '1'; }
-            };
-            actionsDiv.appendChild(btn);
-          });
+        header.appendChild(tools);
+        block.appendChild(header);
+
+        if (parsed.subject) {
+          const subjLine = document.createElement('div');
+          subjLine.className = 'agilo-email-block-subject';
+          subjLine.innerHTML = '<span class="agilo-email-block-subject-label">Objet</span> ' + String(parsed.subject).replace(/</g, '&lt;');
+          block.appendChild(subjLine);
         }
 
-        bubbleDiv.appendChild(actionsDiv);
+        const bodyWrap = document.createElement('div');
+        bodyWrap.className = 'agilo-email-block-body';
+        bodyWrap.style.whiteSpace = 'pre-wrap';
+        bodyWrap.style.lineHeight = '1.6';
+        bodyWrap.textContent = displayText;
+        block.appendChild(bodyWrap);
+
+        bubbleDiv.classList.add('msg-bubble--email');
+        bubbleDiv.appendChild(block);
+      } else {
+        if (renderMode === 'plain') {
+          bubbleDiv.textContent = displayText;
+          bubbleDiv.style.whiteSpace = 'pre-wrap';
+          bubbleDiv.style.lineHeight = '1.6';
+        } else if (renderMode === 'html') {
+          bubbleDiv.innerHTML = displayText;
+        } else {
+          bubbleDiv.innerHTML = mdToHtml(displayText);
+          bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
+        }
+
+        if (!isThinking && !displayText.includes('réfléchit') && !displayText.includes('⚠️') && displayText.length > 10) {
+          const actionsDiv = document.createElement('div');
+          actionsDiv.className = 'msg-actions';
+          actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
+
+          const copyBtn = document.createElement('button');
+          copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
+          copyBtn.className = 'msg-action-btn msg-action-copy';
+          copyBtn.onclick = async () => {
+            const success = await copyToClipboard(m.text);
+            if (success) {
+              copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copié !';
+              copyBtn.style.background = '#10b981';
+              copyBtn.style.color = '#fff';
+              copyBtn.style.borderColor = '#10b981';
+              setTimeout(() => {
+                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
+                copyBtn.style.background = '#fff';
+                copyBtn.style.color = '#525252';
+                copyBtn.style.borderColor = 'rgba(0,0,0,0.15)';
+              }, 2000);
+              toast('Copié dans le presse-papier', 'success');
+            } else {
+              toast('Échec de la copie', 'error');
+            }
+          };
+          actionsDiv.appendChild(copyBtn);
+
+          const allowExport = idx === lastAssistantIndex;
+          if (allowExport) {
+            const sep = document.createElement('div');
+            sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
+            actionsDiv.appendChild(sep);
+
+            ['txt', 'docx', 'pdf', 'rtf'].forEach(fmt => {
+              const btn = document.createElement('button');
+              btn.textContent = fmt.toUpperCase();
+              btn.className = 'msg-action-btn';
+              btn.onclick = async () => {
+                const originalText = btn.textContent;
+                btn.disabled = true; btn.textContent = '...'; btn.style.opacity = '0.5';
+                try { await exportMessage(idx, fmt); toast(`Téléchargé en ${fmt.toUpperCase()}`, 'success'); }
+                catch (e) { toast(`Échec export ${fmt}`, 'error'); err('export failed', e); }
+                finally { btn.disabled = false; btn.textContent = originalText; btn.style.opacity = '1'; }
+              };
+              actionsDiv.appendChild(btn);
+            });
+          }
+
+          bubbleDiv.appendChild(actionsDiv);
+        }
       }
     } else {
       bubbleDiv.textContent = m.text;
@@ -989,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Ensure "Commentaire interne (non envoyé)" block exists and is separated
     const commentLine = 'Commentaire interne (non envoyé) :';
-    const defaultComment = `${commentLine} Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : collez le contenu de vos derniers échanges dans le chat (onglet Conversation) ou déposez un fichier contenant l'historique, puis redemandez un email de suivi.`;
+    const defaultComment = `${commentLine} Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.`;
     if (!/Commentaire interne\s*\(non envoyé\)\s*:/i.test(t)) {
       t = `${t}\n\n---\n${defaultComment}`;
     } else {
@@ -1003,6 +1065,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = String(text || '');
     const first = (t.trim().split('\n')[0] || '').trim();
     return /^Objet\s*:/i.test(t) || /Pourquoi ce post\s*:/i.test(t) || (BOLD_RE.test(first) && !/[#*_]{1,}/.test(first));
+  }
+
+  /** Extrait sujet + corps (sans pied de page) pour mailto / Gmail */
+  function parseEmailForCompose(text) {
+    const raw = String(text || '').replace(/\r\n/g, '\n').trim();
+    const split = raw.split(/\n\s*---\s*\n/);
+    const emailPart = (split[0] || raw).trim();
+    const lines = emailPart.split('\n');
+    let subject = '';
+    const bodyLines = [];
+    for (const line of lines) {
+      if (/^Objet\s*:/i.test(line.trim())) {
+        subject = line.replace(/^Objet\s*:\s*/i, '').trim();
+      } else {
+        bodyLines.push(line);
+      }
+    }
+    const body = bodyLines.join('\n').trim();
+    return { subject, body };
   }
 
   function styleToBullets(style, lang) {
@@ -1104,8 +1185,12 @@ document.addEventListener('DOMContentLoaded', () => {
         ``,
         `### CONTEXTE UTILISATEUR (Memberstack) :`,
         `- Nom : ${ctx.fullName}`,
+        `- Prénom canonique (profil) : ${ctx.firstName}`,
         `- Persona : ${ctx.userJob}`,
         `- Cas d'usage : ${ctx.userUseCase}`,
+        ``,
+        `### PRÉNOM DANS L'EMAIL (OBLIGATOIRE) :`,
+        `Le transcript peut contenir une variante ou une faute d'orthographe du prénom (ex. "Florent" pour "Florian"). Dans tout l'email (formule d'appel "Bonjour [prénom],", signature, etc.), utilisez toujours le prénom canonique du profil ci-dessus, jamais la variante du transcript.`,
         ``,
         `### RÈGLES DE RÉDACTION (STRICTES) :`,
         `- Commencez directement par "Objet :".`,
@@ -1138,7 +1223,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `${ctx.fullName}`,
         ``,
         `---`,
-        `Commentaire interne (non envoyé) : Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : coller le contenu des échanges dans le chat (onglet Conversation) ou déposer un fichier contenant l'historique, puis redemander un email de suivi.`
+        `Commentaire interne (non envoyé) : Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.`
       ];
 
       return [
