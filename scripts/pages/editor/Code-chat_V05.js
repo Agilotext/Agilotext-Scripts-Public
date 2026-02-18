@@ -3,6 +3,7 @@
 // contexte utilisateur unifié (getUserContextForPrompt + timeout getMember + sanitization), thinking LinkedIn aussi en flux chat, email avec nom complet.
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Correspond à: code-chat dans Webflow
+window.__agiloChatVersion = 'V05-email-block';
 
 document.addEventListener('DOMContentLoaded', () => {
   /* ================== DEBUG ================== */
