@@ -201,8 +201,8 @@
 }
 
 .agilo-email-btn-copy.agilo-email-btn-copied {
-  color: #10b981;
-  background: color-mix(in srgb, #10b981 12%, transparent);
+  color: var(--agilo-text, #020202);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, transparent);
   transform: scale(1.05);
 }
 
@@ -223,10 +223,23 @@
   padding: .75rem 1rem;
   font-size: .9rem;
   color: var(--agilo-text, var(--color--gris_foncé, #020202));
-  white-space: pre-wrap;
   word-break: break-word;
+  line-height: 1.6;
   max-height: 50vh;
   overflow-y: auto;
+}
+
+.agilo-email-block-body .agilo-email-p {
+  margin: 0 0 .9em;
+}
+
+.agilo-email-block-body .agilo-email-p:last-child {
+  margin-bottom: 0;
+}
+
+.agilo-email-block-body .agilo-email-p-first {
+  font-weight: 600;
+  color: var(--agilo-text, #020202);
 }
 
 /* Bloc "Ci-dessous" (commentaire interne) */
@@ -313,6 +326,9 @@
   appearance:none;
   cursor:pointer;
   user-select:none;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
   border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
   background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
   color: var(--agilo-text, var(--color--gris_foncé, #020202));
@@ -334,6 +350,12 @@
   outline-offset: 2px;
 }
 .msg-action-btn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+.msg-action-copy-copied {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, var(--agilo-surface-2, #f8f9fa)) !important;
+  color: var(--agilo-text, #020202) !important;
+  border-color: var(--agilo-border, rgba(0,0,0,.15)) !important;
+}
 
 /* Titres manquants (tu n'as que h1–h3 aujourd'hui) */
 .msg-bubble h4,.msg-bubble h5,.msg-bubble h6{
