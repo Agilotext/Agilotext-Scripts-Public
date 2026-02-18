@@ -637,6 +637,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
         let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
 
+        // Retirer la ligne "Objet : ..." du corps (déjà affichée en tête)
+        emailBodyText = emailBodyText.replace(/^\s*Objet\s*:\s*[^\n]+(\n|$)/i, '$1').trim();
+
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
         const paragraphs = String(emailBodyText).split(/\n\n+/).filter(Boolean);
@@ -651,12 +654,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         block.appendChild(bodyWrap);
 
-        if (commentBodyText) {
-          const commentWrap = document.createElement('div');
-          commentWrap.className = 'agilo-email-internal-comment';
-          commentWrap.innerHTML = '<div class="agilo-email-ci-dessous"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Ci-dessous</span></div><div class="agilo-email-internal-comment-text">' + String(commentBodyText).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
-          block.appendChild(commentWrap);
-        }
+        // Toujours afficher l'encadré Ci-dessous (texte par défaut si le modèle n'a pas inclus le commentaire)
+        const defaultCommentText = 'Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j\'adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.';
+        const textToShow = commentBodyText || defaultCommentText;
+        const commentWrap = document.createElement('div');
+        commentWrap.className = 'agilo-email-internal-comment';
+        commentWrap.innerHTML = '<div class="agilo-email-ci-dessous"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Ci-dessous</span></div><div class="agilo-email-internal-comment-text">' + String(textToShow).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+        block.appendChild(commentWrap);
 
         bubbleDiv.classList.add('msg-bubble--email');
         bubbleDiv.appendChild(block);
@@ -844,8 +848,25 @@ document.addEventListener('DOMContentLoaded', () => {
   async function exportMessage(msgIndex, format) {
     const f = String(format || '').toLowerCase();
 
-    if (f === 'pdf') { // rendu propre local
-      const md = (MESSAGES[msgIndex]?.text || '').trim();
+    if (f === 'pdf') { // rendu propre local : toujours partir du stockage à jour, fallback DOM si thinking
+      const msgs = getMsgs(ACTIVE_JOB);
+      const msg = msgs[msgIndex];
+      let md = (msg?.text || '').trim();
+      const isThinkingPlaceholder = !md || md === LINKEDIN_THINKING_MSG || md === 'Assistant réfléchit...' || /thinking-indicator|Assistant réfléchit/i.test(md);
+      if (isThinkingPlaceholder && chatView) {
+        const dataId = msg?.id;
+        const node = dataId ? chatView.querySelector(`[data-msg-id="${dataId}"]`) : null;
+        let bubble = node ? node.querySelector('.msg-bubble') : null;
+        if (!bubble) {
+          const aiList = chatView.querySelectorAll('.msg--ai');
+          const lastAi = aiList[aiList.length - 1];
+          bubble = lastAi ? lastAi.querySelector('.msg-bubble') : null;
+        }
+        if (bubble) {
+          const fromDom = (bubble.innerText || bubble.textContent || '').trim();
+          if (fromDom && fromDom.length > 10) md = fromDom;
+        }
+      }
       const title = `Transcript ${ACTIVE_JOB || getJobId() || ''}`;
       const fname = `transcript_${ACTIVE_JOB || 'unknown'}_${Date.now()}.pdf`;
       exportLocalPDF(md, fname, title);
