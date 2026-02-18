@@ -937,27 +937,7 @@
     }
   }
 
-  var BAD_MANUAL_TOKEN = 'admin124*$';
-  function getManualAuth() {
-    const username = (ui.manualUsername && ui.manualUsername.value || '').trim();
-    const token = (ui.manualToken && ui.manualToken.value || '').trim();
-    const edition = (ui.manualEdition && ui.manualEdition.value || '').trim();
-    if (!username || !token || !edition) return null;
-    if (token === BAD_MANUAL_TOKEN || token.indexOf('admin124') !== -1) {
-      if (ui.manualToken) ui.manualToken.value = '';
-      return null;
-    }
-    return { username, token, edition };
-  }
-
   async function ensureAuth() {
-    const manual = getManualAuth();
-    if (manual) {
-      state.email = manual.username;
-      state.token = manual.token;
-      state.edition = manual.edition;
-      return;
-    }
     if (!state.email) state.email = await getUserEmail();
     if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
     if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
@@ -1806,7 +1786,7 @@
       if (cachedEdition) state.edition = cachedEdition;
     } else {
       state.email = await getUserEmail();
-      if (state.email && !getManualAuth()) await getToken(state.email, state.edition, 0).catch(() => { });
+      if (state.email && !state.token) await getToken(state.email, state.edition, 0).catch(() => { });
     }
 
     bindEvents();
