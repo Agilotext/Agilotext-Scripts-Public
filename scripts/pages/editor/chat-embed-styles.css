@@ -128,42 +128,27 @@
   display: inline-flex;
 }
 
-.agilo-email-btn-open .agilo-email-icon {
+.agilo-email-btn-open .agilo-email-icon,
+.agilo-email-btn-open .agilo-email-send-icon {
   color: var(--agilo-dim, #6b7280);
 }
 
 .agilo-email-btn-open:hover .agilo-email-icon,
-.agilo-email-btn-open:hover .agilo-email-chevron {
+.agilo-email-btn-open:hover .agilo-email-send-icon {
   color: var(--agilo-text, #020202);
-}
-
-.agilo-email-open-icons {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.agilo-email-chevron {
-  flex-shrink: 0;
-  transition: transform .2s ease;
-  opacity: .85;
-}
-
-.agilo-email-open-wrap [aria-expanded="true"] .agilo-email-chevron {
-  transform: rotate(180deg);
 }
 
 .agilo-email-dropdown {
   position: absolute;
   top: 100%;
   right: 0;
-  margin-top: 2px;
-  min-width: 200px;
-  padding: 4px;
+  margin-top: 4px;
+  min-width: 180px;
+  padding: 6px;
   border-radius: 8px;
   background: var(--agilo-surface, var(--color--white, #fff));
   border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
-  box-shadow: 0 4px 12px rgba(0,0,0,.12), 0 2px 6px rgba(0,0,0,.08);
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
   z-index: 100;
   list-style: none;
 }
@@ -177,12 +162,12 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: none;
   border-radius: 6px;
   background: transparent;
   color: var(--agilo-text, var(--color--gris_foncé, #020202));
-  font: 500 .875rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
+  font: 500 .8125rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
   text-decoration: none;
   cursor: pointer;
   transition: background .12s;
@@ -203,14 +188,17 @@
   flex-shrink: 0;
 }
 
-.agilo-email-dropdown-icon svg {
+.agilo-email-dropdown-icon svg,
+.agilo-email-dropdown-icon img {
   width: 20px;
   height: 20px;
+  display: block;
+  object-fit: contain;
 }
 
-.agilo-email-dropdown-item[href*="gmail"] .agilo-email-dropdown-icon { color: #ea4335; }
-.agilo-email-dropdown-item[href*="outlook"] .agilo-email-dropdown-icon { color: #0078d4; }
-.agilo-email-dropdown-item:not([href*="gmail"]):not([href*="outlook"]) .agilo-email-dropdown-icon { color: var(--agilo-dim, #6b7280); }
+.agilo-email-dropdown-icon .agilo-email-logo-default {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
 
 .agilo-email-btn-copy.agilo-email-btn-copied {
   color: #10b981;
