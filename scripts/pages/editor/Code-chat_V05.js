@@ -532,6 +532,8 @@ document.addEventListener('DOMContentLoaded', () => {
         log('buildMessageNode email branch', idx, m.id || '');
         const parsed = parseEmailForCompose(m.text);
         const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
+        const outlookUrl = 'https://outlook.office.com/mail/deeplink/compose?subject=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
+        const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
 
         const block = document.createElement('div');
         block.className = 'agilo-email-block';
@@ -549,28 +551,67 @@ document.addEventListener('DOMContentLoaded', () => {
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
-        copyBtn.setAttribute('aria-label', 'Copier le corps du mail');
-        copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
+        copyBtn.setAttribute('aria-label', 'Copier');
+        copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
         copyBtn.onclick = async () => {
           const toCopy = parsed.body || m.text;
           const success = await copyToClipboard(toCopy);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
-            copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+            copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
             toast('Corps du mail copié', 'success');
-            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
+            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
           } else toast('Échec de la copie', 'error');
         };
         tools.appendChild(copyBtn);
 
-        const gmailBtn = document.createElement('a');
-        gmailBtn.href = gmailUrl;
-        gmailBtn.target = '_blank';
-        gmailBtn.rel = 'noopener noreferrer';
-        gmailBtn.className = 'agilo-email-btn agilo-email-btn-gmail';
-        gmailBtn.setAttribute('aria-label', 'Ouvrir l’email dans Gmail (ou ton client mail)');
-        gmailBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon"><path fill="currentColor" d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L2.455 5.457v3.272L12 13.091l9.545-4.364V5.457L20.073 3.493C21.691 2.279 24 3.434 24 5.457z"/></svg>';
-        tools.appendChild(gmailBtn);
+        const openWrap = document.createElement('div');
+        openWrap.className = 'agilo-email-open-wrap';
+        const openTrigger = document.createElement('button');
+        openTrigger.type = 'button';
+        openTrigger.className = 'agilo-email-btn agilo-email-btn-open';
+        openTrigger.setAttribute('aria-label', 'Ouvrir l’email dans une app');
+        openTrigger.setAttribute('aria-haspopup', 'menu');
+        openTrigger.setAttribute('aria-expanded', 'false');
+        openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon text-token-text-tertiary"><path fill="currentColor" d="M1.5 4.5h21v15H1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill="currentColor" d="M1.5 4.5l10.5 9 10.5-9"/></svg>';
+        const dropdown = document.createElement('div');
+        dropdown.className = 'agilo-email-dropdown';
+        dropdown.hidden = true;
+        dropdown.setAttribute('role', 'menu');
+        const menuItems = [
+          { id: 'gmail', label: 'Gmail', url: gmailUrl, icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73L12 16.64l-6.545-4.91v9.273H1.636A1.636 1.636 0 0 1 0 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L2.455 5.457v3.272L12 13.091l9.545-4.364V5.457L20.073 3.493C21.691 2.279 24 3.434 24 5.457z" fill="currentColor"/></svg>' },
+          { id: 'outlook', label: 'Outlook', url: outlookUrl, icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M7.88 12.04q0 .66-.24 1.2t-.66.93-.98.6-1.22.34H3.22V6.6H4.9q.72 0 1.22.33t.97.6.66.94.24 1.2zm-.72 0q0-.84-.5-1.4t-1.36-.56H4.22v3.9h1.08q.86 0 1.36-.55t.5-1.4zM12.32 8.4h-2.1v1.44h1.92v.96h-1.92v1.44h2.1v.96H8.76V7.44h3.56v.96zm5.28 2.16q.36 0 .6-.12t.36-.36.12-.6-.12-.6-.36-.36-.6-.12q-.36 0-.6.12t-.36.36-.12.6.12.6.36.36.6.12zm.96 1.92v.96h-3.6v-.96h3.6zm.24-3.6q.96 0 1.68.36t1.2.96.42 1.32q0 .6-.24 1.08t-.6.84-.84.6-.96.36l-.96-.48v-5.04h1.68zm-.48 1.44v2.16q.48.12.9-.06t.66-.54.24-.9-.24-.9-.66-.54-.9-.06z"/></svg>' },
+          { id: 'default', label: 'App mail par défaut', url: mailtoUrl, icon: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M1.5 4.5h21v15H1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill="currentColor" d="M1.5 4.5l10.5 9 10.5-9"/></svg>' }
+        ];
+        menuItems.forEach(function (item) {
+          const a = document.createElement('a');
+          a.href = item.url;
+          a.target = '_blank';
+          a.rel = 'noopener noreferrer';
+          a.className = 'agilo-email-dropdown-item';
+          a.setAttribute('role', 'menuitem');
+          a.innerHTML = '<span class="agilo-email-dropdown-icon">' + item.icon + '</span><span>' + item.label + '</span>';
+          a.onclick = function () { dropdown.hidden = true; openTrigger.setAttribute('aria-expanded', 'false'); };
+          dropdown.appendChild(a);
+        });
+        const closeDropdown = function () {
+          dropdown.hidden = true;
+          openTrigger.setAttribute('aria-expanded', 'false');
+          document.removeEventListener('click', closeDropdown);
+        };
+        openTrigger.onclick = function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          const open = dropdown.hidden;
+          dropdown.hidden = !open;
+          openTrigger.setAttribute('aria-expanded', String(!open));
+          if (!open) setTimeout(function () { document.addEventListener('click', closeDropdown); }, 0);
+          else document.removeEventListener('click', closeDropdown);
+        };
+        dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
+        openWrap.appendChild(openTrigger);
+        openWrap.appendChild(dropdown);
+        tools.appendChild(openWrap);
 
         header.appendChild(tools);
         block.appendChild(header);
