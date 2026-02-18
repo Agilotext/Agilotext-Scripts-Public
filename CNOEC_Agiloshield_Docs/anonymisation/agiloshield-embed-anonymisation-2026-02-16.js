@@ -937,12 +937,17 @@
     }
   }
 
+  var BAD_MANUAL_TOKEN = 'admin124*$';
   function getManualAuth() {
     const username = (ui.manualUsername && ui.manualUsername.value || '').trim();
     const token = (ui.manualToken && ui.manualToken.value || '').trim();
     const edition = (ui.manualEdition && ui.manualEdition.value || '').trim();
-    if (username && token && edition) return { username, token, edition };
-    return null;
+    if (!username || !token || !edition) return null;
+    if (token === BAD_MANUAL_TOKEN || token.indexOf('admin124') !== -1) {
+      if (ui.manualToken) ui.manualToken.value = '';
+      return null;
+    }
+    return { username, token, edition };
   }
 
   async function ensureAuth() {
