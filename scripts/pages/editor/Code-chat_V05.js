@@ -521,12 +521,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
-      const raw = String(m.text || '').trim();
-      const looksLikeEmail = /(^|\n)\s*#*\s*Objet\s*:/im.test(raw) || /^Objet\s*:/i.test(raw) || /\bObjet\s*:\s*\S/.test(raw.slice(0, 400));
+      const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
+      const looksLikeEmail = /Objet\s*:\s*\S/.test(raw.slice(0, 600));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
+        log('buildMessageNode email branch', idx, m.id || '');
         const parsed = parseEmailForCompose(m.text);
         const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
 
@@ -671,6 +672,7 @@ document.addEventListener('DOMContentLoaded', () => {
     MESSAGES.forEach((m, idx) => {
       chatView.appendChild(buildMessageNode(m, idx, lastAssistantIndex));
     });
+    chatView.setAttribute('data-agilo-chat', 'V05-email-block');
     if (stickToBottom) {
       chatView.scrollTop = chatView.scrollHeight;
     } else {
