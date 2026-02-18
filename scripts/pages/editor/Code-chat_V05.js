@@ -522,7 +522,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
-      const looksLikeEmail = /Objet\s*:\s*\S/.test(raw.slice(0, 600));
+      const head = raw.slice(0, 600);
+      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*\(non envoyé\)/i.test(raw));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -1517,6 +1518,16 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== WIRING ================== */
   loadHistory();
   render();
+
+  /* Si un autre script modifie #chatView après nous (ex. opentech), on reprend la main */
+  setTimeout(() => {
+    if (!chatView) return;
+    const hasEmailBlock = chatView.querySelector('.agilo-email-block');
+    const hasClassicBubbleWithObjet = chatView.querySelector('.msg-bubble:not(.msg-bubble--email)') && /Objet\s*:/i.test(chatView.textContent || '');
+    if (!hasEmailBlock && hasClassicBubbleWithObjet && MESSAGES.some(m => m.role === 'assistant' && /Objet\s*:\s*\S/i.test(String(m.text || '').slice(0, 600)))) {
+      render();
+    }
+  }, 200);
 
   btnAsk?.addEventListener('click', (e) => { e.preventDefault(); handleAsk(); });
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
