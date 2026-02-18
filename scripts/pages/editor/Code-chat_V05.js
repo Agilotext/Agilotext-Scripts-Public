@@ -524,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
       const head = raw.slice(0, 600);
-      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*\(non envoyé\)/i.test(raw));
+      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*:/i.test(raw));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -552,15 +552,17 @@ document.addEventListener('DOMContentLoaded', () => {
         copyBtn.type = 'button';
         copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
         copyBtn.setAttribute('aria-label', 'Copier');
-        copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>';
+        copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
+        const copyIconDefault = copyBtn.innerHTML;
+        const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
         copyBtn.onclick = async () => {
           const toCopy = parsed.body || m.text;
           const success = await copyToClipboard(toCopy);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
-            copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+            copyBtn.innerHTML = copyIconChecked;
             toast('Corps du mail copié', 'success');
-            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon-md"><path fill="currentColor" d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path fill="currentColor" d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg>'; }, 2000);
+            setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = copyIconDefault; }, 2000);
           } else toast('Échec de la copie', 'error');
         };
         tools.appendChild(copyBtn);
@@ -573,7 +575,7 @@ document.addEventListener('DOMContentLoaded', () => {
         openTrigger.setAttribute('aria-label', 'Ouvrir l’email dans une app');
         openTrigger.setAttribute('aria-haspopup', 'menu');
         openTrigger.setAttribute('aria-expanded', 'false');
-        openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" aria-hidden="true" class="agilo-email-icon icon text-token-text-tertiary"><path fill="currentColor" d="M1.5 4.5h21v15H1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill="currentColor" d="M1.5 4.5l10.5 9 10.5-9"/></svg>';
+        openTrigger.innerHTML = '<span class="agilo-email-open-icons"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" aria-hidden="true" class="agilo-email-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M1.5 4.5h21v15H1.5z" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill="currentColor" d="M1.5 4.5l10.5 9 10.5-9"/></svg><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" class="agilo-email-chevron"><path fill="currentColor" d="M12 15.5l-5-5 1.5-1.5L12 12.5l3.5-3.5 1.5 1.5-5 5z"/></svg></span>';
         const dropdown = document.createElement('div');
         dropdown.className = 'agilo-email-dropdown';
         dropdown.hidden = true;
@@ -623,12 +625,23 @@ document.addEventListener('DOMContentLoaded', () => {
           block.appendChild(subjLine);
         }
 
+        const bodyParts = String(displayText).split(/\n\nCommentaire interne\s*:\s*/i);
+        const emailBodyText = (bodyParts[0] || displayText).trim();
+        const commentBodyText = (bodyParts[1] || '').trim();
+
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
         bodyWrap.style.whiteSpace = 'pre-wrap';
         bodyWrap.style.lineHeight = '1.6';
-        bodyWrap.textContent = displayText;
+        bodyWrap.textContent = emailBodyText;
         block.appendChild(bodyWrap);
+
+        if (commentBodyText) {
+          const commentWrap = document.createElement('div');
+          commentWrap.className = 'agilo-email-internal-comment';
+          commentWrap.innerHTML = '<div class="agilo-email-ci-dessous"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Ci-dessous</span></div><div class="agilo-email-internal-comment-text">' + String(commentBodyText).replace(/</g, '&lt;').replace(/\n/g, '<br>') + '</div>';
+          block.appendChild(commentWrap);
+        }
 
         bubbleDiv.classList.add('msg-bubble--email');
         bubbleDiv.appendChild(block);
@@ -1097,12 +1110,12 @@ document.addEventListener('DOMContentLoaded', () => {
     t = t.replace(/^(Objet\s*:[^\n]*)(\n(?!\n))/i, '$1\n\n');
 
     // Ensure "Commentaire interne (non envoyé)" block exists and is separated
-    const commentLine = 'Commentaire interne (non envoyé) :';
-    const defaultComment = `${commentLine} Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.`;
-    if (!/Commentaire interne\s*\(non envoyé\)\s*:/i.test(t)) {
-      t = `${t}\n\n---\n${defaultComment}`;
+    const commentLabel = 'Commentaire interne :';
+    const defaultComment = commentLabel + ' Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.';
+    if (!/Commentaire interne\s*:\s*/i.test(t)) {
+      t = t + '\n\n' + defaultComment;
     } else {
-      t = t.replace(/\n*\s*Commentaire interne\s*\(non envoyé\)\s*:/i, '\n\n---\n' + commentLine);
+      t = t.replace(/\n\s*---\s*\n/g, '\n\n').replace(/\n*\s*Commentaire interne\s*\(non envoyé\)\s*:/gi, '\n\nCommentaire interne :').replace(/\n{3,}/g, '\n\n');
     }
 
     return t.trim();
@@ -1114,10 +1127,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return /^Objet\s*:/i.test(t) || /Pourquoi ce post\s*:/i.test(t) || (BOLD_RE.test(first) && !/[#*_]{1,}/.test(first));
   }
 
-  /** Extrait sujet + corps (sans pied de page) pour mailto / Gmail. Accepte "Objet :", "## Objet :", etc. */
+  /** Extrait sujet + corps (sans commentaire interne) pour mailto / Gmail. */
   function parseEmailForCompose(text) {
     const raw = String(text || '').replace(/\r\n/g, '\n').trim();
-    const split = raw.split(/\n\s*---\s*\n/);
+    const split = raw.split(/\n\s*---\s*\n|\n\nCommentaire interne\s*:\s*/i);
     const emailPart = (split[0] || raw).trim();
     const lines = emailPart.split('\n');
     let subject = '';
@@ -1271,8 +1284,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `Cordialement,`,
         `${ctx.fullName}`,
         ``,
-        `---`,
-        `Commentaire interne (non envoyé) : Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.`
+        `Commentaire interne : Si vous souhaitez un email qui suive la trame de vos échanges précédents, partagez-moi vos derniers emails : j’adapterai le ton, la logique et éviterai les répétitions. Comment faire : copiez-collez le texte de vos emails ou documents dans le chat (onglet Conversation), puis redemandez un email de suivi.`
       ];
 
       return [
