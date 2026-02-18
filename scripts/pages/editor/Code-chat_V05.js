@@ -524,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
       const head = raw.slice(0, 600);
-      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*:/i.test(raw));
+      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*(\(non envoyé\))?\s*:/i.test(raw));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -551,7 +551,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
-        copyBtn.setAttribute('aria-label', 'Copier');
+        copyBtn.setAttribute('aria-label', 'Copier le mail');
+        copyBtn.setAttribute('title', 'Copier le mail');
         copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
         const copyIconDefault = copyBtn.innerHTML;
         const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
@@ -572,7 +573,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const openTrigger = document.createElement('button');
         openTrigger.type = 'button';
         openTrigger.className = 'agilo-email-btn agilo-email-btn-open';
-        openTrigger.setAttribute('aria-label', 'Ouvrir l’email dans une app');
+        openTrigger.setAttribute('aria-label', 'Ouvrir dans Gmail, Outlook ou l’app mail');
+        openTrigger.setAttribute('title', 'Ouvrir dans Gmail, Outlook ou l’app mail');
         openTrigger.setAttribute('aria-haspopup', 'menu');
         openTrigger.setAttribute('aria-expanded', 'false');
         openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="agilo-email-icon agilo-email-send-icon"><path d="M10.3009 13.6949L20.102 3.89742M10.5795 14.1355L12.8019 18.5804C13.339 19.6545 13.6075 20.1916 13.9458 20.3356C14.2394 20.4606 14.575 20.4379 14.8492 20.2747C15.1651 20.0866 15.3591 19.5183 15.7472 18.3818L19.9463 6.08434C20.2845 5.09409 20.4535 4.59896 20.3378 4.27142C20.2371 3.98648 20.013 3.76234 19.7281 3.66167C19.4005 3.54595 18.9054 3.71502 17.9151 4.05315L5.61763 8.2523C4.48114 8.64037 3.91289 8.83441 3.72478 9.15032C3.56153 9.42447 3.53891 9.76007 3.66389 10.0536C3.80791 10.3919 4.34498 10.6605 5.41912 11.1975L9.86397 13.42C10.041 13.5085 10.1295 13.5527 10.2061 13.6118C10.2742 13.6643 10.3352 13.7253 10.3876 13.7933C10.4468 13.87 10.491 13.9585 10.5795 14.1355Z"/></svg>';
@@ -628,15 +630,25 @@ document.addEventListener('DOMContentLoaded', () => {
           block.appendChild(subjLine);
         }
 
-        const bodyParts = String(displayText).split(/\n\nCommentaire interne\s*:\s*/i);
-        const emailBodyText = (bodyParts[0] || displayText).trim();
-        const commentBodyText = (bodyParts[1] || '').trim();
+        // Séparer corps email et commentaire (accepter "---" ou "Commentaire interne :" / "Commentaire interne (non envoyé) :")
+        const rawBody = String(displayText).trim();
+        const splitRegex = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i;
+        const bodyParts = rawBody.split(splitRegex);
+        let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
+        let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
 
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
-        bodyWrap.style.whiteSpace = 'pre-wrap';
-        bodyWrap.style.lineHeight = '1.6';
-        bodyWrap.textContent = emailBodyText;
+        const paragraphs = String(emailBodyText).split(/\n\n+/).filter(Boolean);
+        if (paragraphs.length > 0) {
+          bodyWrap.innerHTML = paragraphs.map(function (p, i) {
+            const escaped = String(p).replace(/</g, '&lt;').replace(/\n/g, '<br>');
+            const cls = i === 0 && /^Objet\s*:/i.test(p.trim()) ? 'agilo-email-p agilo-email-p-first' : 'agilo-email-p';
+            return '<p class="' + cls + '">' + escaped + '</p>';
+          }).join('');
+        } else {
+          bodyWrap.textContent = emailBodyText;
+        }
         block.appendChild(bodyWrap);
 
         if (commentBodyText) {
@@ -666,20 +678,19 @@ document.addEventListener('DOMContentLoaded', () => {
           actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
 
           const copyBtn = document.createElement('button');
-          copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
           copyBtn.className = 'msg-action-btn msg-action-copy';
+          copyBtn.setAttribute('title', 'Copier');
+          copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"/></svg> Copier';
+          const copyBtnDefaultHtml = copyBtn.innerHTML;
+          const copyBtnCheckedHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copié';
           copyBtn.onclick = async () => {
             const success = await copyToClipboard(m.text);
             if (success) {
-              copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg> Copié !';
-              copyBtn.style.background = '#10b981';
-              copyBtn.style.color = '#fff';
-              copyBtn.style.borderColor = '#10b981';
+              copyBtn.classList.add('msg-action-copy-copied');
+              copyBtn.innerHTML = copyBtnCheckedHtml;
               setTimeout(() => {
-                copyBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1.5H3a2 2 0 0 0-2 2V14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3.5a2 2 0 0 0-2-2h-1v1h1a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3.5a1 1 0 0 1 1-1h1z"/><path d="M9.5 1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5h-3a.5.5 0 0 1-.5-.5v-1a.5.5 0 0 1 .5-.5zm-3-1A1.5 1.5 0 0 0 5 1.5v1A1.5 1.5 0 0 0 6.5 4h3A1.5 1.5 0 0 0 11 2.5v-1A1.5 1.5 0 0 0 9.5 0z"/></svg> Copier';
-                copyBtn.style.background = '#fff';
-                copyBtn.style.color = '#525252';
-                copyBtn.style.borderColor = 'rgba(0,0,0,0.15)';
+                copyBtn.classList.remove('msg-action-copy-copied');
+                copyBtn.innerHTML = copyBtnDefaultHtml;
               }, 2000);
               toast('Copié dans le presse-papier', 'success');
             } else {
