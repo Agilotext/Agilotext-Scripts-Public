@@ -518,6 +518,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: center;
   }
 
   .agf-hist-td-date {
@@ -634,10 +635,10 @@
   /* Section historique autonome — carte pleine largeur sous le panneau principal */
   .agf-hist-standalone {
     margin-top: var(--space-3);
-    border: 1px solid var(--agilo-border);
-    border-radius: 0.875rem;
-    background: var(--agilo-surface);
-    padding: var(--space-3);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: var(--space-3) 0;
     overflow: hidden;
   }
 
@@ -2401,6 +2402,65 @@
           </div>
         </section>
       </div>
+
+      <aside class="agf-side" aria-label="Paramètres">
+        <div class="agf-group agf-manual-auth is-collapsed" id="agfManualAuth">
+          <p class="agf-label">Connexion API</p>
+          <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false"
+            aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
+          <div class="agf-manual-auth-fields" id="agfManualAuthFields" aria-hidden="true">
+            <label for="agfManualUsername">Username (email)</label>
+            <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com"
+              autocomplete="username">
+            <label for="agfManualToken">Token</label>
+            <input type="password" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off"
+              spellcheck="false">
+            <label for="agfManualEdition">Edition</label>
+            <select id="agfManualEdition" name="agfManualEdition">
+              <option value="free">free</option>
+              <option value="pro">pro</option>
+              <option value="ent">ent</option>
+              <option value="anonymisation">anonymisation</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Mode de traitement</p>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked>
+            Anonymiser</label>
+          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip"
+              id="agfPseudoBadge">Bientôt</span></button>
+          <p id="agfPseudoAvailabilityHint" class="agf-small">Aperçu disponible. Activation backend en cours.</p>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Paramètres</p>
+          <button id="agfOpenTypes" type="button" class="agf-item-btn agf-item-btn--count">
+            <span>Types de données</span>
+            <span class="agf-chip-count" id="agfTypesCount">9</span>
+          </button>
+          <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span
+              id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
+          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour
+            l’instant.</p>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Enregistré</p>
+          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span
+              id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
+          <p id="agfPseudoSummary" class="agf-small">Pseudo: configuration standard</p>
+          <p id="agfSavedTypesInfo" class="agf-small">Types actifs: 0</p>
+          <p id="agfLastMaskInfo" class="agf-small">Champs anonymisés (texte): 0</p>
+        </div>
+
+        <div class="agf-api-footer" aria-hidden="true">
+          <p id="agfApiMeta" class="agf-small">API: vérification...</p>
+          <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank"
+              rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
+        </div>
+      </aside>
     </div>
 
     <section class="agf-hist-standalone" id="agfAnonJobsWrap" aria-label="Historique des documents anonymisés">
@@ -2420,66 +2480,6 @@
       <div id="agfAnonJobsList" class="agf-anon-jobs-list" role="region"
         aria-label="Historique des documents anonymisés"></div>
     </section>
-
-    <aside class="agf-side" aria-label="Paramètres">
-      <div class="agf-group agf-manual-auth is-collapsed" id="agfManualAuth">
-        <p class="agf-label">Connexion API</p>
-        <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false"
-          aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
-        <div class="agf-manual-auth-fields" id="agfManualAuthFields" aria-hidden="true">
-          <label for="agfManualUsername">Username (email)</label>
-          <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com"
-            autocomplete="username">
-          <label for="agfManualToken">Token</label>
-          <input type="password" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off"
-            spellcheck="false">
-          <label for="agfManualEdition">Edition</label>
-          <select id="agfManualEdition" name="agfManualEdition">
-            <option value="free">free</option>
-            <option value="pro">pro</option>
-            <option value="ent">ent</option>
-            <option value="anonymisation">anonymisation</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="agf-group">
-        <p class="agf-label">Mode de traitement</p>
-        <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked>
-          Anonymiser</label>
-        <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip"
-            id="agfPseudoBadge">Bientôt</span></button>
-        <p id="agfPseudoAvailabilityHint" class="agf-small">Aperçu disponible. Activation backend en cours.</p>
-      </div>
-
-      <div class="agf-group">
-        <p class="agf-label">Paramètres</p>
-        <button id="agfOpenTypes" type="button" class="agf-item-btn agf-item-btn--count">
-          <span>Types de données</span>
-          <span class="agf-chip-count" id="agfTypesCount">9</span>
-        </button>
-        <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span
-            id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
-        <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour
-          l’instant.</p>
-      </div>
-
-      <div class="agf-group">
-        <p class="agf-label">Enregistré</p>
-        <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span
-            id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
-        <p id="agfPseudoSummary" class="agf-small">Pseudo: configuration standard</p>
-        <p id="agfSavedTypesInfo" class="agf-small">Types actifs: 0</p>
-        <p id="agfLastMaskInfo" class="agf-small">Champs anonymisés (texte): 0</p>
-      </div>
-
-      <div class="agf-api-footer" aria-hidden="true">
-        <p id="agfApiMeta" class="agf-small">API: vérification...</p>
-        <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank"
-            rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
-      </div>
-    </aside>
-    </div>
   </section>
 </form>
 
