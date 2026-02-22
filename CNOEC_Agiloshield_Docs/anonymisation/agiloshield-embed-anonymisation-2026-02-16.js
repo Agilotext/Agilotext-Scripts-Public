@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.3';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -876,7 +876,10 @@
       var cols = ['N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', ''];
       cols.forEach(function (label, ci) {
         const th = document.createElement('th');
-        if (ci === 2) {
+        if (ci === 1) { // Fichier
+          th.textContent = label;
+          th.style.textAlign = 'center';
+        } else if (ci === 2) {
           // Sortable date column
           const btn = document.createElement('button');
           btn.type = 'button';
@@ -884,7 +887,7 @@
           btn.setAttribute('aria-label', 'Trier par date');
           btn.setAttribute('title', 'Trier par date');
           btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
-          btn.innerHTML = 'Date <svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" width="14" height="14" style="vertical-align:middle;margin-left:3px"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M9.01,14H2v2h7.01v3L13,15l-3.99-4V14z M14.99,13v-3H22V8h-7.01V5L11,9L14.99,13z" fill="currentColor"/></g></g></svg>';
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" width="14" height="14" style="vertical-align:middle;margin-right:4px"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M9.01,14H2v2h7.01v3L13,15l-3.99-4V14z M14.99,13v-3H22V8h-7.01V5L11,9L14.99,13z" fill="currentColor"/></g></g></svg> Date';
           btn.addEventListener('click', function () {
             _histSortDesc = !_histSortDesc;
             btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
