@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.0';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.3';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -59,6 +59,7 @@
     mode: 'anonymiser',
     email: null,
     token: '',
+    selectedJobIds: [],
     processing: false,
     resultUrl: null,
     resultFilename: 'document_anonymisé',
@@ -864,6 +865,23 @@
         return;
       }
 
+      const bulkBar = document.createElement('div');
+      bulkBar.id = 'agfBulkActionsBar';
+      bulkBar.className = 'agf-hist-bulk-bar';
+      bulkBar.innerHTML =
+        '<div class="agf-bulk-left"><span class="agf-bulk-count">0 sélectionné</span></div>' +
+        '<div class="agf-bulk-right">' +
+        '<button id="agfBulkDeselect" type="button" class="agf-btn-link agf-btn-link--small" style="margin-right:12px">Désélectionner tout</button>' +
+        '<button id="agfBulkDelete" type="button" class="agf-btn-link agf-btn-link--small agf-bulk-delete-btn">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right:4px"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        'Tout supprimer' +
+        '</button>' +
+        '</div>';
+      container.appendChild(bulkBar);
+      bulkBar.querySelector('#agfBulkDeselect').addEventListener('click', function () { toggleSelectAll(false); });
+      bulkBar.querySelector('#agfBulkDelete').addEventListener('click', handleBulkDelete);
+      updateBulkActionsUI();
+
       const wrap = document.createElement('div');
       wrap.className = 'agf-hist-table-wrap';
 
@@ -875,10 +893,18 @@
       // Header
       const thead = table.createTHead();
       const hrow = thead.insertRow();
-      var cols = ['N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', '', ''];
+      var cols = ['', 'N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', '', ''];
       cols.forEach(function (label, ci) {
         const th = document.createElement('th');
-        if (ci === 1) { // Fichier
+        if (ci === 0) { // Checkbox Select All
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'agf-hist-checkbox-all';
+          cb.title = 'Tout sélectionner';
+          cb.addEventListener('change', function () { toggleSelectAll(cb.checked); });
+          cb.checked = list.length > 0 && state.selectedJobIds.length === list.length;
+          th.appendChild(cb);
+        } else if (ci === 2) { // Fichier
           th.textContent = label;
         } else if (ci === 2) {
           // Sortable date column
@@ -907,6 +933,20 @@
       list.forEach(function (job, idx) {
         const tr = tbody.insertRow();
         tr.setAttribute('data-job-id', String(job.jobId));
+        if (state.selectedJobIds.includes(String(job.jobId))) tr.classList.add('is-selected');
+
+        // Checkbox
+        const tdCb = tr.insertCell();
+        tdCb.className = 'agf-hist-td-cb';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'agf-hist-checkbox-row';
+        cb.checked = state.selectedJobIds.includes(String(job.jobId));
+        cb.addEventListener('change', function () {
+          toggleJobSelection(job.jobId, cb.checked);
+          tr.classList.toggle('is-selected', cb.checked);
+        });
+        tdCb.appendChild(cb);
 
         // N°
         const tdNum = tr.insertCell();
@@ -968,6 +1008,7 @@
           dlBtn.addEventListener('click', async function () {
             dlBtn.disabled = true;
             try {
+              await ensureAuth();
               const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0);
               const name = parseFilename(contentDisposition, job.fileName || 'document_anonymise');
               const a = document.createElement('a');
@@ -996,7 +1037,10 @@
           if (!window.confirm('Voulez-vous vraiment supprimer ce document ?')) return;
           delBtn.disabled = true;
           try {
+            await ensureAuth();
             await fetchDeleteAnonJob(job.jobId);
+            // Clear from selection if it was there
+            state.selectedJobIds = state.selectedJobIds.filter(i => i !== String(job.jobId));
             // Refresh list
             await loadAnonJobsList();
             setStatus('success', 'Document supprimé avec succès.');
@@ -1751,6 +1795,72 @@
     }
 
     return true;
+  }
+
+  function toggleJobSelection(jobId, selected) {
+    const id = String(jobId);
+    if (selected) {
+      if (!state.selectedJobIds.includes(id)) state.selectedJobIds.push(id);
+    } else {
+      state.selectedJobIds = state.selectedJobIds.filter(i => i !== id);
+    }
+    updateBulkActionsUI();
+  }
+
+  function toggleSelectAll(selected) {
+    const rawList = state.anonJobsList || [];
+    if (selected) {
+      state.selectedJobIds = rawList.map(j => String(j.jobId));
+    } else {
+      state.selectedJobIds = [];
+    }
+    renderAnonJobsList(); // Re-render to update checkboxes
+  }
+
+  async function handleBulkDelete() {
+    const total = state.selectedJobIds.length;
+    if (total === 0) return;
+    if (!window.confirm(`Voulez-vous vraiment supprimer les ${total} documents sélectionnés ?`)) return;
+
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
+
+    const idsToDelete = [...state.selectedJobIds];
+    state.selectedJobIds = [];
+    setStatus('loading', `Suppression de ${total} document(s)...`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const jobId of idsToDelete) {
+      try {
+        setStatus('loading', `Suppression en cours : ${successCount + failCount + 1} / ${total}...`);
+        await fetchDeleteAnonJob(jobId);
+        successCount++;
+      } catch (err) {
+        console.error('Failed to delete job', jobId, err);
+        failCount++;
+      }
+    }
+
+    await loadAnonJobsList();
+    if (failCount === 0) {
+      setStatus('success', `${successCount} document(s) supprimé(s).`);
+    } else {
+      setStatus('error', `${successCount} supprimé(s), ${failCount} échec(s).`);
+    }
+  }
+
+  function updateBulkActionsUI() {
+    const bar = document.getElementById('agfBulkActionsBar');
+    if (!bar) return;
+    const count = state.selectedJobIds.length;
+    bar.classList.toggle('is-visible', count > 0);
+    const label = bar.querySelector('.agf-bulk-count');
+    if (label) label.textContent = count + ' sélectionné' + (count > 1 ? 's' : '');
+
+    // Highlight the wrap if selection active
+    const containers = document.querySelectorAll('#agfAnonJobsList');
+    containers.forEach(c => c.classList.toggle('is-selection-active', count > 0));
   }
 
   async function pollAllJobsUntilDone() {

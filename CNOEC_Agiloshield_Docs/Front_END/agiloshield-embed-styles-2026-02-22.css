@@ -603,6 +603,86 @@
     cursor: default;
   }
 
+  .agf-hist-td-dl,
+  .agf-hist-td-delete {
+    width: 2.5rem;
+    text-align: center;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Bulk Actions Bar */
+  .agf-hist-bulk-bar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: color-mix(in srgb, var(--agilo-primary) 8%, var(--agilo-surface));
+    border: 1px solid color-mix(in srgb, var(--agilo-primary) 15%, transparent);
+    border-radius: 0.75rem;
+    margin-bottom: 0.75rem;
+    animation: agf-fade-in 200ms ease;
+  }
+
+  .agf-hist-bulk-bar.is-visible {
+    display: flex;
+  }
+
+  .agf-bulk-count {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--agilo-primary);
+  }
+
+  .agf-bulk-delete-btn {
+    color: var(--agilo-error);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .agf-bulk-delete-btn:hover {
+    color: color-mix(in srgb, var(--agilo-error) 80%, black);
+    text-decoration: underline;
+  }
+
+  /* Checkboxes */
+  .agf-hist-checkbox-all,
+  .agf-hist-checkbox-row {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+    accent-color: var(--agilo-primary);
+  }
+
+  .agf-hist-td-cb {
+    width: 2.5rem;
+    text-align: center;
+  }
+
+  .agf-hist-table tr {
+    transition: background-color 150ms ease;
+  }
+
+  .agf-hist-table tr.is-selected {
+    background: color-mix(in srgb, var(--agilo-primary) 6%, var(--agilo-surface));
+  }
+
+  /* Accent on selected row */
+  .agf-hist-table tr.is-selected td.agf-hist-td-cb {
+    position: relative;
+    box-shadow: inset 3px 0 0 0 var(--agilo-primary);
+  }
+
+  /* Dim individual actions when bulk selection is active */
+  .agf-anon-jobs-list.is-selection-active .agf-hist-btn-dl,
+  .agf-anon-jobs-list.is-selection-active .agf-hist-btn-delete {
+    opacity: 0.3;
+    pointer-events: none;
+    filter: grayscale(1);
+  }
+
+  /* Keep actions visible for the row currently being interacted with (optional, but let's stick to dimming all for focus) */
+
   /* Bouton de tri colonne Date */
   .agf-hist-sort-btn {
     display: inline-flex;
