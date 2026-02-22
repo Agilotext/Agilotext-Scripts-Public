@@ -6,7 +6,7 @@
      3) Footer : script embed anonymisation (une seule inclusion).
      Lien recommandé (GitHub raw) :
      <script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js"></script>
-     Alternative CDN (recommandé pour Webflow) : <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js?v=1.2.2"></script>
+     Alternative CDN (recommandé pour Webflow, sans cache) : <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js?v=1.2.5"></script>
      Ne pas utiliser @b136a18 (ancienne version, limite 10 Mo).
      Optionnel – animation Lottie pendant le chargement : charger lottie-web avant le script embed, puis définir l’URL du JSON :
      <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous"></script>
@@ -253,6 +253,15 @@
     -webkit-overflow-scrolling: touch;
     padding-bottom: 0.2em;
   }
+  .agf-anon-jobs-wrap { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--agilo-border); }
+  .agf-section-title--small { font-size: 0.9375rem; font-weight: 600; margin-bottom: var(--space-1); }
+  .agf-anon-jobs-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 20rem; overflow-y: auto; min-width: 0; }
+  .agf-anon-job-row {
+    display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2);
+    border-radius: 0.5rem; border: 1px solid var(--agilo-border); background: var(--agilo-surface); min-width: 0;
+  }
+  .agf-anon-job-row .agf-file-name { flex: 1; min-width: 0; }
+  .agf-anon-job-row .agf-btn-icon { flex-shrink: 0; }
   .agf-processed-card {
     display: flex; align-items: center; gap: clamp(0.35rem, 1.5%, 0.75rem);
     padding: clamp(0.5rem, 2%, 0.85rem) clamp(0.6rem, 2.5%, 1rem);
@@ -1080,6 +1089,10 @@
               </div>
             </div>
             <div id="agfProcessedList" class="agf-processed-list" role="list"></div>
+            <div class="agf-anon-jobs-wrap" id="agfAnonJobsWrap">
+              <h4 class="agf-section-title agf-section-title--small">Vos documents anonymisés</h4>
+              <div id="agfAnonJobsList" class="agf-anon-jobs-list" role="list"></div>
+            </div>
           </div>
 
           <div id="agfStatus" class="agf-status" role="status" aria-live="polite"></div>
