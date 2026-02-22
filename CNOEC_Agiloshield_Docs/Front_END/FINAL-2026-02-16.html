@@ -476,7 +476,7 @@
 
   .agf-hist-table th {
     padding: 0.5rem 0.75rem;
-    text-align: left;
+    text-align: center;
     font-size: 0.6875rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -485,10 +485,6 @@
     white-space: nowrap;
     border-bottom: 1px solid var(--agilo-border);
     background: color-mix(in srgb, var(--agilo-text) 3%, transparent);
-  }
-
-  .agf-hist-table th:last-child {
-    text-align: right;
   }
 
   .agf-hist-table td {
@@ -526,6 +522,7 @@
     white-space: nowrap;
     width: 9.5rem;
     font-size: 0.75rem;
+    text-align: center;
   }
 
   .agf-hist-td-size {
@@ -533,15 +530,17 @@
     white-space: nowrap;
     width: 5rem;
     font-size: 0.75rem;
+    text-align: center;
   }
 
   .agf-hist-td-status {
     width: 6.5rem;
+    text-align: center;
   }
 
   .agf-hist-td-action {
     width: 2.75rem;
-    text-align: right;
+    text-align: center;
   }
 
   /* Badges de statut */
@@ -604,6 +603,8 @@
   .agf-hist-sort-btn {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    width: 100%;
     gap: 0.2rem;
     background: none;
     border: none;
