@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.9';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -11,6 +11,7 @@
   const ANON_JOBS_INFO = API_BASE + '/getAnonJobsInfo';
   const ANON_RECEIVE = API_BASE + '/receiveAnonText';
   const ANON_RECEIVE_ZIP = API_BASE + '/receiveAnonZip';
+  const ANON_DELETE = API_BASE + '/deleteAnonJob';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
@@ -874,7 +875,7 @@
       // Header
       const thead = table.createTHead();
       const hrow = thead.insertRow();
-      var cols = ['N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', ''];
+      var cols = ['N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', '', ''];
       cols.forEach(function (label, ci) {
         const th = document.createElement('th');
         if (ci === 1) { // Fichier
@@ -981,6 +982,30 @@
           });
           tdAction.appendChild(dlBtn);
         }
+
+        // Action: Delete
+        const tdDelete = tr.insertCell();
+        tdDelete.className = 'agf-hist-td-delete';
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'agf-hist-btn-delete';
+        delBtn.title = 'Supprimer ' + (job.fileName || 'ce document');
+        delBtn.setAttribute('aria-label', 'Supprimer ' + (job.fileName || 'ce document'));
+        delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+        delBtn.addEventListener('click', async function () {
+          if (!window.confirm('Voulez-vous vraiment supprimer ce document ?')) return;
+          delBtn.disabled = true;
+          try {
+            await fetchDeleteAnonJob(job.jobId);
+            // Refresh list
+            await loadAnonJobsList();
+            setStatus('success', 'Document supprimé avec succès.');
+          } catch (err) {
+            setStatus('error', (err && err.message) || 'Suppression impossible.');
+            delBtn.disabled = false;
+          }
+        });
+        tdDelete.appendChild(delBtn);
       });
 
       wrap.appendChild(table);
@@ -1695,6 +1720,37 @@
       }
       throw err;
     }
+  }
+
+  async function fetchDeleteAnonJob(jobId) {
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('edition', getEditionForApi());
+
+    const response = await fetchWithTimeout(ANON_DELETE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, STATUS_REQUEST_TIMEOUT);
+
+    const raw = await response.text();
+    const parsed = tryParseJson(raw);
+
+    if (!response.ok) {
+      let msg = 'Échec de la suppression.';
+      if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+        msg = sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage);
+      }
+      throw new Error(msg);
+    }
+
+    if (parsed.ok && parsed.data && (parsed.data.status === 'KO' || parsed.data.status === 'ko')) {
+      throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage || 'Erreur lors de la suppression.'));
+    }
+
+    return true;
   }
 
   async function pollAllJobsUntilDone() {

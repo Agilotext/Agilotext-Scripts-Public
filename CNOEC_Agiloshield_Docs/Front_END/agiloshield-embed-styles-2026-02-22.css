@@ -573,8 +573,34 @@
   }
 
   .agf-hist-btn-dl:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .agf-hist-btn-delete {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border-radius: 0.5rem;
+    border: 1px solid var(--agilo-border);
+    background: var(--agilo-surface);
+    color: var(--agilo-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .agf-hist-btn-delete:hover {
+    background: color-mix(in srgb, var(--agilo-error) 10%, var(--agilo-surface));
+    color: var(--agilo-error);
+    border-color: color-mix(in srgb, var(--agilo-error) 30%, transparent);
+  }
+
+  .agf-hist-btn-delete:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   /* Bouton de tri colonne Date */
