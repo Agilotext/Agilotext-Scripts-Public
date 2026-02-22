@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.5';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.6';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -994,11 +994,18 @@
 
   function refreshAnonJobsList() {
     const doneItems = state.processedItems.filter((p) => p.status === 'done' && p.jobId != null);
-    const existingIds = new Set((state.anonJobsList || []).map((j) => j.jobId));
+    const existingById = {};
+    (state.anonJobsList || []).forEach((j) => { existingById[j.jobId] = j; });
     let merged = state.anonJobsList ? state.anonJobsList.slice() : [];
     doneItems.forEach((item) => {
-      if (existingIds.has(item.jobId)) return;
-      existingIds.add(item.jobId);
+      const existing = existingById[item.jobId];
+      if (existing) {
+        // Patch missing metadata with real session data
+        if (!existing.dtCreation) existing.dtCreation = item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString();
+        if (!existing.fileLength) existing.fileLength = item.resultSize || (item.file ? item.file.size : null);
+        if (!existing.fileName) existing.fileName = item.resultFilename || item.fileName || null;
+        return;
+      }
       merged.push({
         jobId: item.jobId,
         anonStatus: 'READY',
