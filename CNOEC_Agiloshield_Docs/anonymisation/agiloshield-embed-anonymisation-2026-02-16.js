@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.3';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.5';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -878,7 +878,6 @@
         const th = document.createElement('th');
         if (ci === 1) { // Fichier
           th.textContent = label;
-          th.style.textAlign = 'center';
         } else if (ci === 2) {
           // Sortable date column
           const btn = document.createElement('button');
@@ -1004,7 +1003,8 @@
         jobId: item.jobId,
         anonStatus: 'READY',
         fileName: item.resultFilename || item.fileName || null,
-        dtCreation: null
+        fileLength: item.resultSize || (item.file ? item.file.size : null),
+        dtCreation: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
       });
     });
     merged.sort((a, b) => (b.jobId - a.jobId));
@@ -1726,6 +1726,7 @@
               item.status = 'done';
               item.progressValue = 100;
               item.justDone = true;
+              refreshAnonJobsList();
             } catch (err) {
               item.status = 'error';
               item.errorMessage = (err && err.message) || 'Échec du téléchargement.';
