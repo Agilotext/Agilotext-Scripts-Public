@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.6';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.8';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -66,6 +66,7 @@
     excludeTerms: [],
     pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG }
   };
+  window.__AGILO_EMBED_STATE__ = state; // Export pour debug console
   const DEBOUNCE_TEXT_MS = 1000;
   const MIN_TEXT_LENGTH_FOR_API = 10;
   let debounceTextTimer = null;
@@ -1000,18 +1001,25 @@
     doneItems.forEach((item) => {
       const existing = existingById[item.jobId];
       if (existing) {
-        // Patch missing metadata with real session data
-        if (!existing.dtCreation) existing.dtCreation = item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString();
+        // Patch missing metadata with real session data - USE FRENCH FORMAT to match parser!
+        if (!existing.dtCreation) {
+          const d = item.createdAt ? new Date(item.createdAt) : new Date();
+          const pad = n => String(n).padStart(2, '0');
+          existing.dtCreation = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
         if (!existing.fileLength) existing.fileLength = item.resultSize || (item.file ? item.file.size : null);
         if (!existing.fileName) existing.fileName = item.resultFilename || item.fileName || null;
         return;
       }
+      const d = item.createdAt ? new Date(item.createdAt) : new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const sessionDt = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
       merged.push({
         jobId: item.jobId,
         anonStatus: 'READY',
         fileName: item.resultFilename || item.fileName || null,
         fileLength: item.resultSize || (item.file ? item.file.size : null),
-        dtCreation: item.createdAt ? new Date(item.createdAt).toISOString() : new Date().toISOString()
+        dtCreation: sessionDt
       });
     });
     merged.sort((a, b) => (b.jobId - a.jobId));
@@ -1845,6 +1853,8 @@
 
     state.processing = false;
     finalizeFilesProcessingStatus();
+    // Refresh from API first, then local fallback
+    await loadAnonJobsList();
     refreshAnonJobsList();
   }
 
