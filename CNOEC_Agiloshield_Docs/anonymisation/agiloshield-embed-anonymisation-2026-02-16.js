@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.0';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.1';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -811,10 +811,31 @@
     }
   }
 
+  // Parse French date format "DD-MM-YYYY HH:MM:SS" or "DD/MM/YYYY HH:MM:SS" or ISO
+  function parseAnonDate(raw) {
+    if (!raw) return null;
+    var m = String(raw).match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})[\sT](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
+    }
+    var d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  var _histSortDesc = true; // true = plus récent en premier
+
   function renderAnonJobsList() {
     const containers = document.querySelectorAll('#agfAnonJobsList');
     if (!containers.length) return;
-    const list = state.anonJobsList || [];
+    const rawList = state.anonJobsList || [];
+
+    // Sort by dtCreation (fallback: jobId)
+    const list = rawList.slice().sort(function (a, b) {
+      var da = parseAnonDate(a.dtCreation), db = parseAnonDate(b.dtCreation);
+      var ta = da ? da.getTime() : (Number(a.jobId) || 0);
+      var tb = db ? db.getTime() : (Number(b.jobId) || 0);
+      return _histSortDesc ? (tb - ta) : (ta - tb);
+    });
 
     // Update count badge
     const countEl = document.getElementById('agfHistCount');
@@ -851,10 +872,28 @@
       // Header
       const thead = table.createTHead();
       const hrow = thead.insertRow();
-      [['N°', ''], ['Fichier', ''], ['Date', ''], ['Taille', ''], ['Statut', ''], ['', '']].forEach(function (col) {
+      var cols = ['N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', ''];
+      cols.forEach(function (label, ci) {
         const th = document.createElement('th');
-        th.textContent = col[0];
-        if (col[1]) th.className = col[1];
+        if (ci === 2) {
+          // Sortable date column
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'agf-hist-sort-btn';
+          btn.setAttribute('aria-label', 'Trier par date');
+          btn.setAttribute('title', 'Trier par date');
+          btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
+          btn.innerHTML = 'Date <svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" width="14" height="14" style="vertical-align:middle;margin-left:3px"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M9.01,14H2v2h7.01v3L13,15l-3.99-4V14z M14.99,13v-3H22V8h-7.01V5L11,9L14.99,13z" fill="currentColor"/></g></g></svg>';
+          btn.addEventListener('click', function () {
+            _histSortDesc = !_histSortDesc;
+            btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
+            renderAnonJobsList();
+          });
+          th.style.cursor = 'pointer';
+          th.appendChild(btn);
+        } else {
+          th.textContent = label;
+        }
         hrow.appendChild(th);
       });
 
@@ -878,21 +917,19 @@
         // Date
         const tdDate = tr.insertCell();
         tdDate.className = 'agf-hist-td-date';
-        if (job.dtCreation) {
-          try {
-            const d = new Date(job.dtCreation);
-            tdDate.textContent =
-              d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
-              ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-          } catch (e) { tdDate.textContent = '—'; }
+        var parsedDate = parseAnonDate(job.dtCreation);
+        if (parsedDate) {
+          tdDate.textContent =
+            parsedDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+            ' ' + parsedDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
         } else {
-          tdDate.textContent = '—';
+          tdDate.textContent = '\u2014';
         }
 
         // Taille
         const tdSize = tr.insertCell();
         tdSize.className = 'agf-hist-td-size';
-        tdSize.textContent = job.fileLength ? formatSize(Number(job.fileLength)) : '—';
+        tdSize.textContent = job.fileLength ? formatSize(Number(job.fileLength)) : '\u2014';
 
         // Statut
         const tdStatus = tr.insertCell();
@@ -900,13 +937,13 @@
         const badge = document.createElement('span');
         if (job.anonStatus === 'READY') {
           badge.className = 'agf-status-badge agf-status-badge--ready';
-          badge.textContent = '✓ Prêt';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0z" fill="none"/><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg> Pr\u00eat';
         } else if (job.anonStatus === 'ON_ERROR') {
           badge.className = 'agf-status-badge agf-status-badge--error';
-          badge.textContent = '⚠ Erreur';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/></svg> Erreur';
         } else {
           badge.className = 'agf-status-badge agf-status-badge--pending';
-          badge.textContent = '⏳ En cours';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> En cours';
         }
         tdStatus.appendChild(badge);
 
