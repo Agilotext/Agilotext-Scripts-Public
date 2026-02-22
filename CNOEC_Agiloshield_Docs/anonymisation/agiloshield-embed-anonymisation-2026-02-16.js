@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.0';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.3';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -16,6 +16,9 @@
   const POLL_INTERVAL_MS = 2500;
   const STATUS_REQUEST_TIMEOUT = 20000;
   const MAX_POLL_TIME_MS = 7200000; // 2 h max pour tout le polling (évite boucle infinie)
+  const INFLIGHT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+  const PROGRESS_START = 8;
+  const PROGRESS_MAX_BEFORE_READY = 92;
   const MAX_FILE_SIZE = 256 * 1024 * 1024; // 256 Mo (aligné backend anonAsyncOfficeText)
   const MAX_FILES = 12;
   // Backend: csv, doc(x), pdf(x), xls(x), txt, text. PDF/ppt peuvent être désactivés côté serveur.
@@ -34,6 +37,7 @@
   const STORAGE_EXC = 'agilo:futures:exclude:v1';
   const STORAGE_PSEUDO = 'agilo:futures:pseudo:v1';
   const STORAGE_MODE = 'agilo:futures:mode:v1';
+  const STORAGE_INFLIGHT = 'agilo:anon:inflight:v1';
 
   const DEFAULT_PSEUDO_CONFIG = {
     strategy: 'placeholders',
@@ -231,6 +235,62 @@
     const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
     return (bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 2) + ' ' + units[idx];
   };
+
+  function normalizeResponseText(raw) {
+    if (raw == null) return '';
+    return String(raw).replace(/^\uFEFF/, '').trim();
+  }
+
+  function tryParseJson(raw) {
+    const text = normalizeResponseText(raw);
+    if (!text) return { ok: false, reason: 'empty', text: '' };
+    try {
+      return { ok: true, data: JSON.parse(text), text };
+    } catch (e) { }
+
+    const firstObj = text.indexOf('{');
+    const lastObj = text.lastIndexOf('}');
+    if (firstObj !== -1 && lastObj > firstObj) {
+      const candidate = text.slice(firstObj, lastObj + 1).trim();
+      try {
+        return { ok: true, data: JSON.parse(candidate), text: candidate, rescued: true };
+      } catch (e) { }
+    }
+
+    const firstArr = text.indexOf('[');
+    const lastArr = text.lastIndexOf(']');
+    if (firstArr !== -1 && lastArr > firstArr) {
+      const candidate = text.slice(firstArr, lastArr + 1).trim();
+      try {
+        return { ok: true, data: JSON.parse(candidate), text: candidate, rescued: true };
+      } catch (e) { }
+    }
+
+    if (text.charAt(0) === '<') return { ok: false, reason: 'html', text };
+    return { ok: false, reason: 'invalid', text };
+  }
+
+  function buildInvalidJsonMessage(raw, shortMode) {
+    const parsed = tryParseJson(raw);
+    if (parsed.ok) return '';
+    if (shortMode) {
+      if (parsed.reason === 'empty') return 'Réponse serveur vide.';
+      if (parsed.reason === 'html') return 'Réponse serveur invalide (HTML reçu).';
+      return 'Réponse serveur invalide.';
+    }
+    if (parsed.reason === 'empty') return 'Réponse serveur invalide (body vide).';
+    if (parsed.reason === 'html') return 'Réponse serveur invalide (HTML reçu).';
+    const preview = parsed.text ? parsed.text.slice(0, 120) : '(vide)';
+    return 'Réponse serveur invalide (JSON attendu). Début reçu: ' + preview + ((parsed.text && parsed.text.length > 120) ? '…' : '');
+  }
+
+  function clampProgress(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return PROGRESS_START;
+    if (n < PROGRESS_START) return PROGRESS_START;
+    if (n > PROGRESS_MAX_BEFORE_READY) return PROGRESS_MAX_BEFORE_READY;
+    return Math.round(n);
+  }
 
   function createSafeStorage() {
     const mem = {};
@@ -433,6 +493,102 @@
     });
   }
 
+  function clearInFlightJobs() {
+    storage.remove(STORAGE_INFLIGHT);
+  }
+
+  function persistInFlightJobs() {
+    try {
+      const items = state.processedItems
+        .filter((item) => item && item.jobId != null && item.status !== 'done' && item.status !== 'error')
+        .map((item) => ({
+          id: item.id,
+          fileName: item.fileName,
+          size: item.size,
+          jobId: item.jobId,
+          status: item.status === 'processing' ? 'processing' : 'pending',
+          progressValue: clampProgress(item.progressValue || PROGRESS_START),
+          createdAt: item.createdAt || Date.now(),
+          pollStartedAt: item.pollStartedAt || Date.now()
+        }));
+      if (!items.length) {
+        clearInFlightJobs();
+        return;
+      }
+      storage.set(STORAGE_INFLIGHT, JSON.stringify({
+        savedAt: Date.now(),
+        email: state.email || '',
+        edition: state.edition || '',
+        items
+      }));
+    } catch (e) { }
+  }
+
+  function restoreInFlightJobs() {
+    const raw = storage.get(STORAGE_INFLIGHT);
+    if (!raw) return false;
+    const parsed = tryParseJson(raw);
+    if (!parsed.ok || !parsed.data || typeof parsed.data !== 'object') {
+      clearInFlightJobs();
+      return false;
+    }
+    const payload = parsed.data;
+    const savedAt = Number(payload.savedAt || 0);
+    if (!savedAt || (Date.now() - savedAt) > INFLIGHT_MAX_AGE_MS) {
+      clearInFlightJobs();
+      return false;
+    }
+    if (payload.email && state.email && payload.email !== state.email) return false;
+    if (!Array.isArray(payload.items) || !payload.items.length) {
+      clearInFlightJobs();
+      return false;
+    }
+
+    const restoredItems = payload.items
+      .filter((item) => item && item.jobId != null)
+      .map((item) => ({
+        id: item.id || uid(),
+        fileName: item.fileName || 'document',
+        size: Number(item.size || 0),
+        file: null,
+        status: item.status === 'processing' ? 'processing' : 'pending',
+        jobId: item.jobId,
+        resultUrl: null,
+        resultBlob: null,
+        resultFilename: null,
+        resultSize: null,
+        errorMessage: null,
+        progressValue: clampProgress(item.progressValue || PROGRESS_START),
+        createdAt: Number(item.createdAt || savedAt || Date.now()),
+        pollStartedAt: Number(item.pollStartedAt || savedAt || Date.now()),
+        justDone: false
+      }));
+    if (!restoredItems.length) {
+      clearInFlightJobs();
+      return false;
+    }
+
+    state.files = [];
+    state.processedItems = restoredItems;
+    state.processing = true;
+    renderFileList();
+    renderProcessedList();
+    setStatus('loading', 'Reprise des traitements en cours…');
+    return true;
+  }
+
+  function bumpItemProgress(item) {
+    if (!item || (item.status !== 'pending' && item.status !== 'processing')) return;
+    const now = Date.now();
+    if (!item.pollStartedAt) item.pollStartedAt = now;
+    const elapsedMs = Math.max(0, now - item.pollStartedAt);
+    const elapsedSec = elapsedMs / 1000;
+    const base = item.status === 'processing' ? 24 : 10;
+    const target = Math.min(PROGRESS_MAX_BEFORE_READY, base + (Math.log2(elapsedSec + 1) * 18));
+    const current = clampProgress(item.progressValue || PROGRESS_START);
+    item.progressValue = clampProgress(Math.max(current + 1, target));
+  }
+
   function updateActions() {
     const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
@@ -507,6 +663,7 @@
     card.setAttribute('role', 'listitem');
     card.setAttribute('data-id', item.id);
     card.setAttribute('data-status', item.status);
+    card.setAttribute('data-progress', String(clampProgress(item.progressValue || PROGRESS_START)));
 
     const original = document.createElement('div');
     original.className = 'agf-processed-original';
@@ -521,10 +678,11 @@
 
     const result = document.createElement('div');
     result.className = 'agf-processed-result';
+    const progressValue = clampProgress(item.progressValue || (item.status === 'processing' ? 36 : PROGRESS_START));
     if (item.status === 'pending') {
-      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">—</p></div>';
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">File de traitement</p></div>';
     } else if (item.status === 'processing') {
-      result.innerHTML = '<div class="agf-file-icon agf-file-icon--processing"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--processing"><div class="agf-card-lottie"></div></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:' + progressValue + '%"></div></div></div>';
     } else if (item.status === 'error') {
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(sanitizeApiErrorMessage(item.errorMessage || 'Échec')) + '</p></div>';
     } else {
@@ -550,6 +708,30 @@
     return card;
   }
 
+  function injectCardLottieFallback(container) {
+    if (!container || container.querySelector('svg')) return;
+    container.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg>';
+  }
+
+  function initCardLottieContainers() {
+    const lottieUrl = (typeof window.AGILO_LOADING_LOTTIE_URL === 'string' && window.AGILO_LOADING_LOTTIE_URL)
+      ? window.AGILO_LOADING_LOTTIE_URL
+      : 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json';
+    document.querySelectorAll('#agfProcessedList .agf-card-lottie').forEach((container) => {
+      if (container.dataset.agiloLottieDone) return;
+      container.dataset.agiloLottieDone = '1';
+      container.style.width = '24px';
+      container.style.height = '24px';
+      if (lottieUrl && typeof window.lottie !== 'undefined' && window.lottie.loadAnimation) {
+        try {
+          window.lottie.loadAnimation({ container: container, renderer: 'svg', loop: true, autoplay: true, path: lottieUrl });
+        } catch (e) { injectCardLottieFallback(container); }
+      } else {
+        injectCardLottieFallback(container);
+      }
+    });
+  }
+
   function renderProcessedList() {
     const lists = document.querySelectorAll('#agfProcessedList');
     lists.forEach((list) => {
@@ -558,7 +740,8 @@
         list.appendChild(createProcessedCard(item));
       });
     });
-    // Clear justDone flag after rendering all lists
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(initCardLottieContainers);
+    else setTimeout(initCardLottieContainers, 0);
     state.processedItems.forEach((item) => { item.justDone = false; });
     updateActions();
   }
@@ -1082,20 +1265,25 @@
     if (!response.ok) {
       const raw = await response.text();
       let msg = 'Erreur de traitement.';
-      try {
-        const json = JSON.parse(raw);
-        const code = json && (json.errorCode || json.error_code);
+      const parsed = tryParseJson(raw);
+      if (parsed.ok) {
+        const json = parsed.data;
+        const code = json && (json.errorCode || json.error_code || json.statusCode);
         if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
         else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
         else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
         else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
-      } catch (e) { if (raw && raw.length < 180) msg = sanitizeApiErrorMessage(raw); }
+      } else {
+        const text = normalizeResponseText(raw);
+        if (text && text.length < 180) msg = sanitizeApiErrorMessage(text);
+      }
       throw new Error(msg);
     }
     const raw = await response.text();
-    let data;
-    try { data = JSON.parse(raw); } catch (e) { throw new Error('Réponse serveur invalide.'); }
-    if (!data) throw new Error('Réponse serveur invalide.');
+    const parsed = tryParseJson(raw);
+    if (!parsed.ok) throw new Error(buildInvalidJsonMessage(raw, false));
+    const data = parsed.data;
+    if (!data || typeof data !== 'object') throw new Error('Réponse serveur invalide.');
     if (data.status === 'KO' || data.status === 'ko') {
       const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
       throw new Error(msg);
@@ -1104,9 +1292,20 @@
     let jobIds = [];
     if (Array.isArray(data.jobIdList)) jobIds = data.jobIdList;
     else if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
-    else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j.id != null ? j.id : j.jobId);
+    else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j && (j.id != null ? j.id : j.jobId));
     else if (typeof data.jobId === 'number') jobIds = items.map(() => data.jobId);
     else if (typeof data.jobId === 'string' && /^\d+$/.test(data.jobId)) jobIds = items.map(() => parseInt(data.jobId, 10));
+    jobIds = jobIds
+      .map((id) => {
+        if (typeof id === 'number' && Number.isFinite(id)) return id;
+        if (typeof id === 'string') {
+          const t = id.trim();
+          if (/^\d+$/.test(t)) return parseInt(t, 10);
+          if (t) return t;
+        }
+        return null;
+      })
+      .filter((id) => id != null);
     if (jobIds.length < items.length) throw new Error('Réponse serveur incomplète (jobIds).');
     return jobIds.slice(0, items.length);
   }
@@ -1119,8 +1318,9 @@
     form.append('edition', state.edition);
     const response = await fetchWithTimeout(ANON_STATUS, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
     const raw = await response.text();
-    let data;
-    try { data = JSON.parse(raw); } catch (e) { return { status: 'error', errorMessage: 'Réponse serveur invalide.' }; }
+    const parsed = tryParseJson(raw);
+    if (!parsed.ok) return { status: 'error', errorMessage: buildInvalidJsonMessage(raw, true) };
+    const data = parsed.data;
     if (!response.ok) {
       const msg = (data && (data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage) : 'Erreur de statut.';
       return { status: 'error', errorMessage: msg };
@@ -1157,21 +1357,27 @@
       if (!response.ok) {
         const raw = await response.text();
         let msg = 'Impossible de récupérer le fichier.';
-        try {
-          const json = JSON.parse(raw);
+        const parsed = tryParseJson(raw);
+        if (parsed.ok) {
+          const json = parsed.data;
           if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
-        } catch (e) { if (raw && raw.length < 120) msg = sanitizeApiErrorMessage(raw); }
+        } else {
+          const text = normalizeResponseText(raw);
+          if (text && text.length < 120) msg = sanitizeApiErrorMessage(text);
+        }
         throw new Error(msg);
       }
       const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
       const blob = await response.blob();
       if (contentType.indexOf('application/json') !== -1) {
         const text = await blob.text();
-        try {
-          const json = JSON.parse(text);
+        const parsed = tryParseJson(text);
+        if (parsed.ok) {
+          const json = parsed.data;
           if (json && (json.status === 'KO' || json.status === 'ko')) throw new Error(sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur.'));
-        } catch (e) { if (e.message) throw e; }
-        throw new Error('Réponse serveur inattendue.');
+          throw new Error('Réponse serveur inattendue.');
+        }
+        throw new Error(buildInvalidJsonMessage(text, true));
       }
       return { blob, contentDisposition: response.headers.get('Content-Disposition') || '' };
     } catch (err) {
@@ -1187,6 +1393,16 @@
   async function pollAllJobsUntilDone() {
     const items = state.processedItems;
     const total = items.length;
+    if (!total) return;
+    items.forEach((item) => {
+      const now = Date.now();
+      if (!item.createdAt) item.createdAt = now;
+      if (!item.pollStartedAt) item.pollStartedAt = now;
+      if (item.status !== 'done' && item.status !== 'error') {
+        item.progressValue = clampProgress(item.progressValue || PROGRESS_START);
+      }
+    });
+    persistInFlightJobs();
     const deadline = Date.now() + MAX_POLL_TIME_MS;
     let lastRender = 0;
     while (true) {
@@ -1198,16 +1414,20 @@
           }
         });
         renderProcessedList();
+        clearInFlightJobs();
         break;
       }
       const pending = items.filter((p) => p.jobId != null && p.status !== 'done' && p.status !== 'error');
       if (pending.length === 0) break;
+      pending.forEach((item) => bumpItemProgress(item));
       for (const item of pending) {
         try {
           const result = await fetchJobStatus(item.jobId);
           if (result.status === 'done') {
             item.status = 'processing';
+            item.progressValue = PROGRESS_MAX_BEFORE_READY;
             renderProcessedList();
+            persistInFlightJobs();
             try {
               const { blob, contentDisposition } = await receiveAnonFile(item.jobId, 0);
               item.resultBlob = blob;
@@ -1215,6 +1435,7 @@
               item.resultFilename = parseFilename(contentDisposition, item.fileName);
               item.resultSize = blob.size;
               item.status = 'done';
+              item.progressValue = 100;
               item.justDone = true;
             } catch (err) {
               item.status = 'error';
@@ -1225,6 +1446,7 @@
             item.errorMessage = result.errorMessage || 'Échec du traitement.';
           } else {
             item.status = result.status === 'processing' ? 'processing' : 'pending';
+            bumpItemProgress(item);
           }
         } catch (err) {
           item.status = 'error';
@@ -1233,6 +1455,7 @@
       }
       const doneCount = items.filter((p) => p.status === 'done').length;
       const errCount = items.filter((p) => p.status === 'error').length;
+      persistInFlightJobs();
       const now = Date.now();
       if (now - lastRender > 400) {
         renderProcessedList();
@@ -1243,6 +1466,23 @@
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
     renderProcessedList();
+    if (items.every((p) => p.status === 'done' || p.status === 'error')) clearInFlightJobs();
+    else persistInFlightJobs();
+  }
+
+  function finalizeFilesProcessingStatus() {
+    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
+    const errCount = state.processedItems.filter((p) => p.status === 'error').length;
+    if (state.processedItems.length === 0) {
+      setStatus('', '');
+    } else if (errCount === state.processedItems.length) {
+      setStatus('error', 'Aucun fichier n\'a pu être traité.');
+    } else if (errCount > 0) {
+      setStatus('success', 'C\'est prêt. ' + doneCount + ' fichier(s) téléchargeable(s). ' + errCount + ' en erreur.');
+    } else {
+      setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
+    }
+    updateActions();
   }
 
   async function submitFiles(event) {
@@ -1267,10 +1507,15 @@
       resultBlob: null,
       resultFilename: null,
       resultSize: null,
-      errorMessage: null
+      errorMessage: null,
+      progressValue: PROGRESS_START,
+      createdAt: Date.now(),
+      pollStartedAt: Date.now(),
+      justDone: false
     }));
     state.files = [];
     renderFileList();
+    renderProcessedList();
     updateActions();
     setStatus('loading', 'Envoi des fichiers…');
 
@@ -1278,29 +1523,31 @@
     try {
       jobIds = await uploadAsyncAndGetJobIds();
     } catch (err) {
+      state.processedItems.forEach((item) => {
+        item.status = 'error';
+        item.errorMessage = (err && err.message) || 'Erreur lors de l\'envoi.';
+      });
       state.processing = false;
       setStatus('error', (err && err.message) || 'Erreur lors de l\'envoi.');
+      renderProcessedList();
+      clearInFlightJobs();
       updateActions();
       return;
     }
-    state.processedItems.forEach((item, i) => { item.jobId = jobIds[i] != null ? jobIds[i] : null; });
-    state.processedItems.forEach((item) => { item.status = 'processing'; });
+    state.processedItems.forEach((item, i) => {
+      item.jobId = jobIds[i] != null ? jobIds[i] : null;
+      item.status = 'processing';
+      item.progressValue = Math.max(item.progressValue || PROGRESS_START, 16);
+      item.pollStartedAt = Date.now();
+    });
     renderProcessedList();
+    persistInFlightJobs();
     setStatus('loading', 'Vérification du statut…');
 
     await pollAllJobsUntilDone();
 
     state.processing = false;
-    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
-    const errCount = state.processedItems.filter((p) => p.status === 'error').length;
-    if (errCount === state.processedItems.length) {
-      setStatus('error', 'Aucun fichier n\'a pu être traité.');
-    } else if (errCount > 0) {
-      setStatus('success', 'C\'est prêt. ' + doneCount + ' fichier(s) téléchargeable(s). ' + errCount + ' en erreur.');
-    } else {
-      setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
-    }
-    updateActions();
+    finalizeFilesProcessingStatus();
   }
 
   function resetFiles() {
@@ -1309,6 +1556,7 @@
     state.processedItems = [];
     revokeResultUrl();
     revokeAllProcessedUrls();
+    clearInFlightJobs();
     if (ui.download) { ui.download.href = '#'; ui.download.removeAttribute('download'); ui.download.classList.remove('is-visible'); }
     setStatus('', '');
     renderFileList();
@@ -1320,6 +1568,7 @@
     if (state.processing) return;
     state.processedItems = [];
     revokeAllProcessedUrls();
+    clearInFlightJobs();
     setStatus('', '');
     renderProcessedList();
     updateActions();
@@ -1351,9 +1600,26 @@
       form.append('jobIdArray', JSON.stringify(jobIdsForZip));
       form.append('edition', state.edition);
       fetchWithTimeout(ANON_RECEIVE_ZIP, { method: 'POST', body: form }, REQUEST_TIMEOUT)
-        .then((response) => {
-          if (!response.ok) return response.text().then(() => { throw new Error('zip-api-failed'); });
-          return response.blob();
+        .then(async (response) => {
+          if (!response.ok) {
+            const raw = await response.text();
+            const parsed = tryParseJson(raw);
+            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
+            }
+            throw new Error('zip-api-failed');
+          }
+          const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+          const blob = await response.blob();
+          if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
+            const raw = await blob.text();
+            const parsed = tryParseJson(raw);
+            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
+            }
+            throw new Error('zip-api-failed');
+          }
+          return blob;
         })
         .then((zipBlob) => {
           const a = document.createElement('a');
@@ -1364,7 +1630,8 @@
           setStatus('success', 'Téléchargement du zip lancé.');
           reenableZipBtn();
         })
-        .catch(() => {
+        .catch((err) => {
+          if (err && err.message && err.message !== 'zip-api-failed') setStatus('info', sanitizeApiErrorMessage(err.message));
           setStatus('loading', 'Zip serveur indisponible, création locale en cours…');
           fallbackDownloadZipClient(doneItems, reenableZipBtn);
         });
@@ -1983,6 +2250,16 @@
         resetTextCache();
       });
     });
+
+    window.addEventListener('pagehide', () => {
+      if (state.processing) persistInFlightJobs();
+    });
+    window.addEventListener('beforeunload', () => {
+      if (state.processing) persistInFlightJobs();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && state.processing) persistInFlightJobs();
+    });
   }
 
   function applyTokenFromEvent(detail) {
@@ -1990,6 +2267,23 @@
     state.token = detail.token;
     if (detail.email) state.email = detail.email;
     if (detail.edition) state.edition = detail.edition;
+  }
+
+  async function resumeInFlightJobsIfAny() {
+    const restored = restoreInFlightJobs();
+    if (!restored) return;
+    try {
+      await ensureAuth();
+    } catch (err) {
+      state.processing = false;
+      clearInFlightJobs();
+      setStatus('error', (err && err.message) || 'Reprise impossible. Vérifiez votre connexion.');
+      updateActions();
+      return;
+    }
+    await pollAllJobsUntilDone();
+    state.processing = false;
+    finalizeFilesProcessingStatus();
   }
 
   async function init() {
@@ -2026,6 +2320,7 @@
     applyFeatureAvailability();
     renderFileList();
     updateActions();
+    await resumeInFlightJobsIfAny();
     if (shouldCallApiMeta()) {
       runSessionMaintenance();
       loadApiVersion();

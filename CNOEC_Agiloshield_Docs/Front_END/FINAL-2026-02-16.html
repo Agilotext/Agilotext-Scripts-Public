@@ -1,8 +1,12 @@
 <!-- Intégration : la page qui inclut ce fragment doit déclarer <meta charset="utf-8"> pour l'affichage des accents.
      Script embed : APIs Anon Async (anonAsyncOfficeText, getAnonStatus, receiveAnonText, receiveAnonZip). Limite 256 Mo/fichier.
+     Ordre de chargement recommandé (Webflow production) :
+     1) HEAD : token resolver (agilo token).
+     2) Avant l'embed : lottie-web (optionnel).
+     3) Footer : script embed anonymisation (une seule inclusion).
      Lien recommandé (GitHub raw) :
      <script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js"></script>
-     Alternative CDN : https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js
+     Alternative CDN (recommandé pour Webflow) : <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-2026-02-16.js?v=1.2.2"></script>
      Ne pas utiliser @b136a18 (ancienne version, limite 10 Mo).
      Optionnel – animation Lottie pendant le chargement : charger lottie-web avant le script embed, puis définir l’URL du JSON :
      <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous"></script>
@@ -314,7 +318,7 @@
   }
   .agf-processed-arrow svg { width: 1rem; height: 1rem; }
   .agf-processed-progress { width: 100%; height: 4px; border-radius: 999px; background: var(--agilo-border); overflow: hidden; }
-  .agf-processed-progress-bar { height: 100%; background: var(--agilo-primary); border-radius: 999px; animation: agf-progress-pulse 1.2s ease-in-out infinite; }
+  .agf-processed-progress-bar { height: 100%; background: var(--agilo-primary); border-radius: 999px; animation: agf-progress-pulse 1.2s ease-in-out infinite; transition: width 300ms ease; }
   @keyframes agf-progress-pulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
   .agf-processed-actions {
     display: flex; gap: 0.25rem; flex-shrink: 0; align-items: center;
@@ -516,8 +520,15 @@
   .agf-spinner { width: 1rem; height: 1rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: agf-spin .7s linear infinite; flex-shrink: 0; }
   .agf-status-lottie { width: 1.25rem; height: 1.25rem; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
   .agf-status-lottie svg { width: 100%; height: 100%; }
+  .agf-card-lottie,
+  .agf-card-lottie svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
   @keyframes agf-spin { to { transform: rotate(360deg); } }
   .agf-file-icon--processing svg { animation: agf-spin 1.2s linear infinite; }
+  .agf-file-icon--processing .agf-card-lottie svg { animation: none !important; }
   @media (prefers-reduced-motion: reduce) {
     .agf-spinner { animation-duration: 1.5s; }
     .agf-file-icon--processing svg { animation: none; }
