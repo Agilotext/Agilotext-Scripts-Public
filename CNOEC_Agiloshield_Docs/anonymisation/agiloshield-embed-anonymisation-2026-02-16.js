@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.8';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.9';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -915,8 +915,11 @@
         // Fichier
         const tdName = tr.insertCell();
         tdName.className = 'agf-hist-td-name';
-        tdName.title = job.fileName || ('Job #' + job.jobId);
-        tdName.textContent = job.fileName || ('Job #' + job.jobId);
+        const nameInner = document.createElement('div');
+        nameInner.className = 'agf-hist-name-inner';
+        nameInner.title = job.fileName || ('Job #' + job.jobId);
+        nameInner.textContent = job.fileName || ('Job #' + job.jobId);
+        tdName.appendChild(nameInner);
 
         // Date
         const tdDate = tr.insertCell();
