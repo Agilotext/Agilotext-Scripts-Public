@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.9';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.3.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -794,6 +794,7 @@
           jobId: Number(jobId) || jobId,
           anonStatus: anonStatus === 'READY' || anonStatus === 'PENDING' || anonStatus === 'ON_ERROR' ? anonStatus : null,
           fileName: j.originalFileName || j.fileName || j.filename || j.fileNameOrigin || null,
+          fileLength: j.fileLength || j.fileSize || null,
           dtCreation: j.dtCreation || j.creationDate || null
         });
       }
@@ -814,38 +815,113 @@
     const containers = document.querySelectorAll('#agfAnonJobsList');
     if (!containers.length) return;
     const list = state.anonJobsList || [];
-    containers.forEach((container) => {
+
+    // Update count badge
+    const countEl = document.getElementById('agfHistCount');
+    if (countEl) {
+      if (list.length) {
+        const readyCount = list.filter(function (j) { return j.anonStatus === 'READY'; }).length;
+        countEl.textContent = list.length + ' doc' + (list.length > 1 ? 's' : '') +
+          (readyCount ? ' · ' + readyCount + ' prêt' + (readyCount > 1 ? 's' : '') : '');
+        countEl.style.display = '';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
+
+    containers.forEach(function (container) {
       container.textContent = '';
       if (!list.length) {
         const empty = document.createElement('div');
         empty.className = 'agf-empty';
+        empty.style.padding = '1.25rem';
         empty.textContent = 'Aucun document pour l\'instant. Les fichiers que vous anonymisez apparaîtront ici.';
         container.appendChild(empty);
         return;
       }
-      list.forEach((job) => {
-        const row = document.createElement('div');
-        row.className = 'agf-anon-job-row';
-        row.setAttribute('role', 'listitem');
-        row.setAttribute('data-job-id', String(job.jobId));
-        const label = document.createElement('span');
-        label.className = 'agf-file-name';
-        label.textContent = job.fileName || ('Job #' + job.jobId);
-        label.title = label.textContent;
-        row.appendChild(label);
-        const statusText = document.createElement('span');
-        statusText.className = 'agf-file-meta';
-        statusText.textContent = job.anonStatus === 'READY' ? 'Prêt' : job.anonStatus === 'ON_ERROR' ? 'Erreur' : 'En cours';
-        row.appendChild(statusText);
+
+      const wrap = document.createElement('div');
+      wrap.className = 'agf-hist-table-wrap';
+
+      const table = document.createElement('table');
+      table.className = 'agf-hist-table';
+      table.setAttribute('role', 'table');
+      table.setAttribute('aria-label', 'Historique des documents anonymisés');
+
+      // Header
+      const thead = table.createTHead();
+      const hrow = thead.insertRow();
+      [['N°', ''], ['Fichier', ''], ['Date', ''], ['Taille', ''], ['Statut', ''], ['', '']].forEach(function (col) {
+        const th = document.createElement('th');
+        th.textContent = col[0];
+        if (col[1]) th.className = col[1];
+        hrow.appendChild(th);
+      });
+
+      // Body
+      const tbody = table.createTBody();
+      list.forEach(function (job, idx) {
+        const tr = tbody.insertRow();
+        tr.setAttribute('data-job-id', String(job.jobId));
+
+        // N°
+        const tdNum = tr.insertCell();
+        tdNum.className = 'agf-hist-td-num';
+        tdNum.textContent = String(idx + 1);
+
+        // Fichier
+        const tdName = tr.insertCell();
+        tdName.className = 'agf-hist-td-name';
+        tdName.title = job.fileName || ('Job #' + job.jobId);
+        tdName.textContent = job.fileName || ('Job #' + job.jobId);
+
+        // Date
+        const tdDate = tr.insertCell();
+        tdDate.className = 'agf-hist-td-date';
+        if (job.dtCreation) {
+          try {
+            const d = new Date(job.dtCreation);
+            tdDate.textContent =
+              d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+              ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+          } catch (e) { tdDate.textContent = '—'; }
+        } else {
+          tdDate.textContent = '—';
+        }
+
+        // Taille
+        const tdSize = tr.insertCell();
+        tdSize.className = 'agf-hist-td-size';
+        tdSize.textContent = job.fileLength ? formatSize(Number(job.fileLength)) : '—';
+
+        // Statut
+        const tdStatus = tr.insertCell();
+        tdStatus.className = 'agf-hist-td-status';
+        const badge = document.createElement('span');
         if (job.anonStatus === 'READY') {
-          const dl = document.createElement('button');
-          dl.type = 'button';
-          dl.className = 'agf-btn-icon';
-          dl.title = 'Télécharger';
-          dl.setAttribute('aria-label', 'Télécharger');
-          dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
-          dl.addEventListener('click', async () => {
-            dl.disabled = true;
+          badge.className = 'agf-status-badge agf-status-badge--ready';
+          badge.textContent = '✓ Prêt';
+        } else if (job.anonStatus === 'ON_ERROR') {
+          badge.className = 'agf-status-badge agf-status-badge--error';
+          badge.textContent = '⚠ Erreur';
+        } else {
+          badge.className = 'agf-status-badge agf-status-badge--pending';
+          badge.textContent = '⏳ En cours';
+        }
+        tdStatus.appendChild(badge);
+
+        // Action
+        const tdAction = tr.insertCell();
+        tdAction.className = 'agf-hist-td-action';
+        if (job.anonStatus === 'READY') {
+          const dlBtn = document.createElement('button');
+          dlBtn.type = 'button';
+          dlBtn.className = 'agf-hist-btn-dl';
+          dlBtn.title = 'Télécharger ' + (job.fileName || '');
+          dlBtn.setAttribute('aria-label', 'Télécharger ' + (job.fileName || ''));
+          dlBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+          dlBtn.addEventListener('click', async function () {
+            dlBtn.disabled = true;
             try {
               const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0);
               const name = parseFilename(contentDisposition, job.fileName || 'document_anonymise');
@@ -853,16 +929,18 @@
               a.href = URL.createObjectURL(blob);
               a.download = name;
               a.click();
-              setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+              setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
             } catch (err) {
               setStatus('error', (err && err.message) || 'Téléchargement impossible.');
             }
-            dl.disabled = false;
+            dlBtn.disabled = false;
           });
-          row.appendChild(dl);
+          tdAction.appendChild(dlBtn);
         }
-        container.appendChild(row);
       });
+
+      wrap.appendChild(table);
+      container.appendChild(wrap);
     });
     updateActions();
   }
