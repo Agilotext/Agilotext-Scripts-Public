@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.6';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.7';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -1460,12 +1460,16 @@
   }
 
   async function fetchJobStatus(jobId) {
-    const form = new FormData();
-    form.append('username', state.email);
-    form.append('token', state.token);
-    form.append('jobId', String(jobId));
-    form.append('edition', getEditionForApi());
-    const response = await fetchWithTimeout(ANON_STATUS, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('edition', getEditionForApi());
+    const response = await fetchWithTimeout(ANON_STATUS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, STATUS_REQUEST_TIMEOUT);
     const raw = await response.text();
     const parsed = tryParseJson(raw);
     if (!parsed.ok) return { status: 'error', errorMessage: buildInvalidJsonMessage(raw, true) };
@@ -1495,14 +1499,18 @@
 
   async function receiveAnonFile(jobId, retryCount) {
     const attempt = typeof retryCount === 'number' ? retryCount : 0;
-    const form = new FormData();
-    form.append('username', state.email);
-    form.append('token', state.token);
-    form.append('jobId', String(jobId));
-    form.append('fileType', 'ANON');
-    form.append('edition', getEditionForApi());
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('fileType', 'ANON');
+    body.set('edition', getEditionForApi());
     try {
-      const response = await fetchWithTimeout(ANON_RECEIVE, { method: 'POST', body: form }, REQUEST_TIMEOUT);
+      const response = await fetchWithTimeout(ANON_RECEIVE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }, REQUEST_TIMEOUT);
       if (!response.ok) {
         const raw = await response.text();
         let msg = 'Impossible de récupérer le fichier.';
