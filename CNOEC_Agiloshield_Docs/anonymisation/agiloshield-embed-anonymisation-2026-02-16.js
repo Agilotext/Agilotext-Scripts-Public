@@ -2,12 +2,13 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.3';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.5';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
   const ANON_ASYNC_UPLOAD = API_BASE + '/anonAsyncOfficeText';
   const ANON_STATUS = API_BASE + '/getAnonStatus';
+  const ANON_JOBS_INFO = API_BASE + '/getAnonJobsInfo';
   const ANON_RECEIVE = API_BASE + '/receiveAnonText';
   const ANON_RECEIVE_ZIP = API_BASE + '/receiveAnonZip';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
@@ -52,6 +53,7 @@
     activeTab: 'file',
     files: [],
     processedItems: [],
+    anonJobsList: [],
     edition: 'free',
     mode: 'anonymiser',
     email: null,
@@ -292,6 +294,20 @@
     return Math.round(n);
   }
 
+  function normalizeEdition(rawEdition) {
+    const n = String(rawEdition || '').trim().toLowerCase();
+    if (!n) return 'free';
+    if (n === 'business') return 'ent';
+    if (n === 'free' || n === 'pro' || n === 'ent' || n === 'anonymisation') return n;
+    return 'free';
+  }
+
+  function getEditionForApi() {
+    const normalized = normalizeEdition(state.edition);
+    if (state.edition !== normalized) state.edition = normalized;
+    return normalized;
+  }
+
   function createSafeStorage() {
     const mem = {};
     try {
@@ -518,7 +534,7 @@
       storage.set(STORAGE_INFLIGHT, JSON.stringify({
         savedAt: Date.now(),
         email: state.email || '',
-        edition: state.edition || '',
+        edition: getEditionForApi(),
         items
       }));
     } catch (e) { }
@@ -543,6 +559,7 @@
       clearInFlightJobs();
       return false;
     }
+    if (payload.edition) state.edition = normalizeEdition(payload.edition);
 
     const restoredItems = payload.items
       .filter((item) => item && item.jobId != null)
@@ -592,10 +609,12 @@
   function updateActions() {
     const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
+    const hasAnonJobs = Array.isArray(state.anonJobsList) && state.anonJobsList.length > 0;
 
     document.querySelectorAll('#agfSubmit').forEach(el => { el.disabled = state.processing || !hasPending; });
     document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
-    document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed; });
+    document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed && !hasAnonJobs; });
+    document.querySelectorAll('#agfAnonJobsWrap').forEach(el => { el.hidden = !hasAnonJobs; });
     document.querySelectorAll('#agfFileList').forEach(el => { el.hidden = !hasPending; });
     document.querySelectorAll('#agfTitleFileList').forEach(el => { el.hidden = !hasPending; });
 
@@ -744,6 +763,130 @@
     else setTimeout(initCardLottieContainers, 0);
     state.processedItems.forEach((item) => { item.justDone = false; });
     updateActions();
+  }
+
+  async function fetchAnonJobsInfo() {
+    if (!state.email || !state.token) return [];
+    const form = new FormData();
+    form.append('username', state.email);
+    form.append('token', state.token);
+    form.append('limit', '100');
+    form.append('offset', '0');
+    form.append('edition', getEditionForApi());
+    try {
+      const response = await fetchWithTimeout(ANON_JOBS_INFO, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
+      const raw = await response.text();
+      const text = normalizeResponseText(raw);
+      let data = null;
+      try { data = JSON.parse(text); } catch (e) { return []; }
+      if (!data || data.status === 'KO' || data.status === 'ko') return [];
+      const jobs = data.jobs || data.jobList || data.jobsInfoDtos || (Array.isArray(data.jobIdList) ? data.jobIdList.map((id) => ({ jobId: id })) : []);
+      const list = [];
+      for (const j of jobs) {
+        const jobId = j.jobId != null ? j.jobId : (j.id != null ? j.id : (typeof j === 'number' ? j : null));
+        if (jobId == null) continue;
+        const anonStatus = (j.anonStatus != null ? String(j.anonStatus) : '').toUpperCase() || null;
+        list.push({
+          jobId: Number(jobId) || jobId,
+          anonStatus: anonStatus === 'READY' || anonStatus === 'PENDING' || anonStatus === 'ON_ERROR' ? anonStatus : null,
+          fileName: j.originalFileName || j.fileName || j.fileNameOrigin || null,
+          dtCreation: j.dtCreation || j.creationDate || null
+        });
+      }
+      const needStatus = list.filter((item) => item.anonStatus == null);
+      const maxStatusChecks = 30;
+      for (let i = 0; i < Math.min(needStatus.length, maxStatusChecks); i++) {
+        const item = needStatus[i];
+        const res = await fetchJobStatus(item.jobId);
+        item.anonStatus = res.status === 'done' ? 'READY' : res.status === 'error' ? 'ON_ERROR' : 'PENDING';
+      }
+      return list.sort((a, b) => (b.jobId - a.jobId));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function renderAnonJobsList() {
+    const containers = document.querySelectorAll('#agfAnonJobsList');
+    if (!containers.length) return;
+    const list = state.anonJobsList || [];
+    containers.forEach((container) => {
+      container.textContent = '';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'agf-empty';
+        empty.textContent = 'Aucun document pour l\'instant. Les fichiers que vous anonymisez apparaîtront ici.';
+        container.appendChild(empty);
+        return;
+      }
+      list.forEach((job) => {
+        const row = document.createElement('div');
+        row.className = 'agf-anon-job-row';
+        row.setAttribute('role', 'listitem');
+        row.setAttribute('data-job-id', String(job.jobId));
+        const label = document.createElement('span');
+        label.className = 'agf-file-name';
+        label.textContent = job.fileName || ('Job #' + job.jobId);
+        label.title = label.textContent;
+        row.appendChild(label);
+        const statusText = document.createElement('span');
+        statusText.className = 'agf-file-meta';
+        statusText.textContent = job.anonStatus === 'READY' ? 'Prêt' : job.anonStatus === 'ON_ERROR' ? 'Erreur' : 'En cours';
+        row.appendChild(statusText);
+        if (job.anonStatus === 'READY') {
+          const dl = document.createElement('button');
+          dl.type = 'button';
+          dl.className = 'agf-btn-icon';
+          dl.title = 'Télécharger';
+          dl.setAttribute('aria-label', 'Télécharger');
+          dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+          dl.addEventListener('click', async () => {
+            dl.disabled = true;
+            try {
+              const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0);
+              const name = parseFilename(contentDisposition, job.fileName || 'document_anonymise');
+              const a = document.createElement('a');
+              a.href = URL.createObjectURL(blob);
+              a.download = name;
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Téléchargement impossible.');
+            }
+            dl.disabled = false;
+          });
+          row.appendChild(dl);
+        }
+        container.appendChild(row);
+      });
+    });
+    updateActions();
+  }
+
+  async function loadAnonJobsList() {
+    if (!state.email || !state.token) return;
+    const list = await fetchAnonJobsInfo();
+    state.anonJobsList = list;
+    renderAnonJobsList();
+  }
+
+  function refreshAnonJobsList() {
+    const doneItems = state.processedItems.filter((p) => p.status === 'done' && p.jobId != null);
+    const existingIds = new Set((state.anonJobsList || []).map((j) => j.jobId));
+    let merged = state.anonJobsList ? state.anonJobsList.slice() : [];
+    doneItems.forEach((item) => {
+      if (existingIds.has(item.jobId)) return;
+      existingIds.add(item.jobId);
+      merged.push({
+        jobId: item.jobId,
+        anonStatus: 'READY',
+        fileName: item.resultFilename || item.fileName || null,
+        dtCreation: null
+      });
+    });
+    merged.sort((a, b) => (b.jobId - a.jobId));
+    state.anonJobsList = merged;
+    renderAnonJobsList();
   }
 
   function validateFile(file) {
@@ -1161,12 +1304,12 @@
     if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
     if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
     if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
-    if (!state.token) await getToken(state.email, state.edition, 0);
+    if (!state.token) await getToken(state.email, getEditionForApi(), 0);
   }
 
   async function runSessionMaintenance() {
     if (!state.email || !state.token) return;
-    const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(state.edition || 'free');
+    const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(getEditionForApi());
     try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
   }
 
@@ -1208,7 +1351,7 @@
     const formData = new FormData();
     formData.append('username', state.email);
     formData.append('token', state.token);
-    formData.append('edition', state.edition);
+    formData.append('edition', getEditionForApi());
     formData.append('fileUpload[]', file, fileName);
     const entities = selectedEntities();
     if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
@@ -1234,7 +1377,7 @@
     const formData = new FormData();
     formData.append('username', state.email);
     formData.append('token', state.token);
-    formData.append('edition', state.edition);
+    formData.append('edition', getEditionForApi());
     // Backend anonAsyncOfficeText attend fileUpload1, fileUpload2, ... fileUploadN
     items.forEach((item, index) => { formData.append('fileUpload' + (index + 1), item.file, item.fileName); });
     const entities = selectedEntities();
@@ -1280,9 +1423,15 @@
       throw new Error(msg);
     }
     const raw = await response.text();
-    const parsed = tryParseJson(raw);
-    if (!parsed.ok) throw new Error(buildInvalidJsonMessage(raw, false));
-    const data = parsed.data;
+    const text = normalizeResponseText(raw);
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      const parsed = tryParseJson(raw);
+      if (parsed.ok) data = parsed.data;
+      else throw new Error(buildInvalidJsonMessage(raw, false));
+    }
     if (!data || typeof data !== 'object') throw new Error('Réponse serveur invalide.');
     if (data.status === 'KO' || data.status === 'ko') {
       const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
@@ -1315,7 +1464,7 @@
     form.append('username', state.email);
     form.append('token', state.token);
     form.append('jobId', String(jobId));
-    form.append('edition', state.edition);
+    form.append('edition', getEditionForApi());
     const response = await fetchWithTimeout(ANON_STATUS, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
     const raw = await response.text();
     const parsed = tryParseJson(raw);
@@ -1351,7 +1500,7 @@
     form.append('token', state.token);
     form.append('jobId', String(jobId));
     form.append('fileType', 'ANON');
-    form.append('edition', state.edition);
+    form.append('edition', getEditionForApi());
     try {
       const response = await fetchWithTimeout(ANON_RECEIVE, { method: 'POST', body: form }, REQUEST_TIMEOUT);
       if (!response.ok) {
@@ -1548,6 +1697,7 @@
 
     state.processing = false;
     finalizeFilesProcessingStatus();
+    refreshAnonJobsList();
   }
 
   function resetFiles() {
@@ -1598,7 +1748,7 @@
       form.append('username', state.email);
       form.append('token', state.token);
       form.append('jobIdArray', JSON.stringify(jobIdsForZip));
-      form.append('edition', state.edition);
+      form.append('edition', getEditionForApi());
       fetchWithTimeout(ANON_RECEIVE_ZIP, { method: 'POST', body: form }, REQUEST_TIMEOUT)
         .then(async (response) => {
           if (!response.ok) {
@@ -1727,7 +1877,7 @@
     const payload = new FormData();
     payload.append('username', state.email);
     payload.append('token', state.token);
-    payload.append('edition', state.edition);
+    payload.append('edition', getEditionForApi());
     payload.append('forceTextFormat', 'true');
     const entities = selectedEntities();
     if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
@@ -2266,7 +2416,7 @@
     if (!detail || !detail.token) return;
     state.token = detail.token;
     if (detail.email) state.email = detail.email;
-    if (detail.edition) state.edition = detail.edition;
+    if (detail.edition) state.edition = normalizeEdition(detail.edition);
   }
 
   async function resumeInFlightJobsIfAny() {
@@ -2294,12 +2444,13 @@
     window.addEventListener('agilo:token', (e) => { applyTokenFromEvent(e && e.detail); });
 
     await waitForMemberstack(10000, 200);
-    state.edition = await detectEdition();
+    state.edition = normalizeEdition(await detectEdition());
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
     if (editionFromUrl) {
       const n = editionFromUrl.toLowerCase();
-      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = n === 'business' ? 'ent' : n;
+      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = normalizeEdition(n);
     }
+    state.edition = getEditionForApi();
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
@@ -2307,10 +2458,10 @@
       state.token = window.globalToken;
       state.email = storage.get('agilo:username');
       const cachedEdition = storage.get('agilo:edition');
-      if (cachedEdition) state.edition = cachedEdition;
+      if (cachedEdition) state.edition = normalizeEdition(cachedEdition);
     } else {
       state.email = await getUserEmail();
-      if (state.email && !state.token) await getToken(state.email, state.edition, 0).catch(() => { });
+      if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
     }
 
     bindEvents();
@@ -2325,6 +2476,7 @@
       runSessionMaintenance();
       loadApiVersion();
     }
+    loadAnonJobsList().catch(function () {});
   }
 
   if (window.__agiloEmbedAnonymisationMounted) return;
