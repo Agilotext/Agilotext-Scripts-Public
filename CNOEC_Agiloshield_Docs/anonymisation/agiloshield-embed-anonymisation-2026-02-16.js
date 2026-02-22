@@ -1092,17 +1092,18 @@
       } catch (e) { if (raw && raw.length < 180) msg = sanitizeApiErrorMessage(raw); }
       throw new Error(msg);
     }
-    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
     const raw = await response.text();
-    if (contentType.indexOf('application/json') === -1) throw new Error('Réponse serveur invalide.');
     let data;
     try { data = JSON.parse(raw); } catch (e) { throw new Error('Réponse serveur invalide.'); }
-    if (data && (data.status === 'KO' || data.status === 'ko')) {
+    if (!data) throw new Error('Réponse serveur invalide.');
+    if (data.status === 'KO' || data.status === 'ko') {
       const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
       throw new Error(msg);
     }
+    // Backend Nicolas: anonAsyncOfficeText renvoie { "status": "OK", "jobIdList": [ id1, id2, ... ] } (1 ou N fichiers)
     let jobIds = [];
-    if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
+    if (Array.isArray(data.jobIdList)) jobIds = data.jobIdList;
+    else if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
     else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j.id != null ? j.id : j.jobId);
     else if (typeof data.jobId === 'number') jobIds = items.map(() => data.jobId);
     else if (typeof data.jobId === 'string' && /^\d+$/.test(data.jobId)) jobIds = items.map(() => parseInt(data.jobId, 10));
