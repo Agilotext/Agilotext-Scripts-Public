@@ -1,16 +1,24 @@
 (function () {
   'use strict';
   // UTF-8; textes FR avec accents
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.0.2';
+  // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
-  const ANON_ENDPOINT = API_BASE + '/anonOfficeText';
+  const ANON_ASYNC_UPLOAD = API_BASE + '/anonAsyncOfficeText';
+  const ANON_STATUS = API_BASE + '/getAnonStatus';
+  const ANON_RECEIVE = API_BASE + '/receiveAnonText';
+  const ANON_RECEIVE_ZIP = API_BASE + '/receiveAnonZip';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
-  const MAX_FILE_SIZE = 250 * 1024 * 1024;
+  const POLL_INTERVAL_MS = 2500;
+  const STATUS_REQUEST_TIMEOUT = 20000;
+  const MAX_POLL_TIME_MS = 7200000; // 2 h max pour tout le polling (évite boucle infinie)
+  const MAX_FILE_SIZE = 256 * 1024 * 1024; // 256 Mo (aligné backend anonAsyncOfficeText)
   const MAX_FILES = 12;
+  // Backend: csv, doc(x), pdf(x), xls(x), txt, text. PDF/ppt peuvent être désactivés côté serveur.
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
   const REQUEST_TIMEOUT = 7200000; // 2 h (FEC 40+ min)
@@ -296,16 +304,41 @@
         statusEl.classList.remove('is-visible');
         statusEl.removeAttribute('data-kind');
         statusEl.textContent = '';
+        statusEl.querySelectorAll('.agf-status-lottie').forEach((el) => { el.innerHTML = ''; });
         return;
       }
       statusEl.classList.add('is-visible');
       statusEl.setAttribute('data-kind', kind);
       statusEl.textContent = '';
       if (kind === 'loading') {
-        const spinner = document.createElement('span');
-        spinner.className = 'agf-spinner';
-        spinner.setAttribute('aria-hidden', 'true');
-        statusEl.appendChild(spinner);
+        const lottieUrl = (typeof window.AGILO_LOADING_LOTTIE_URL === 'string' && window.AGILO_LOADING_LOTTIE_URL)
+          ? window.AGILO_LOADING_LOTTIE_URL
+          : 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json';
+        if (lottieUrl && typeof window.lottie !== 'undefined' && window.lottie.loadAnimation) {
+          const lottieContainer = document.createElement('div');
+          lottieContainer.className = 'agf-status-lottie';
+          lottieContainer.setAttribute('aria-hidden', 'true');
+          statusEl.appendChild(lottieContainer);
+          try {
+            window.lottie.loadAnimation({
+              container: lottieContainer,
+              renderer: 'svg',
+              loop: true,
+              autoplay: true,
+              path: lottieUrl
+            });
+          } catch (e) {
+            const fallback = document.createElement('span');
+            fallback.className = 'agf-spinner';
+            fallback.setAttribute('aria-hidden', 'true');
+            lottieContainer.replaceWith(fallback);
+          }
+        } else {
+          const spinner = document.createElement('span');
+          spinner.className = 'agf-spinner';
+          spinner.setAttribute('aria-hidden', 'true');
+          statusEl.appendChild(spinner);
+        }
       }
       const txt = document.createElement('span');
       txt.textContent = message;
@@ -491,7 +524,7 @@
     if (item.status === 'pending') {
       result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">—</p></div>';
     } else if (item.status === 'processing') {
-      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--processing"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:70%"></div></div></div>';
     } else if (item.status === 'error') {
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(sanitizeApiErrorMessage(item.errorMessage || 'Échec')) + '</p></div>';
     } else {
@@ -569,7 +602,7 @@
     } else if (rejectedOther.length > 0) {
       const short = rejectedOther.slice(0, 2).join(', ');
       const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non accepté ou fichier > 250 Mo : ' + short + more + '.');
+      setStatus('error', 'Format non accepté ou fichier > 256 Mo : ' + short + more + '.');
     } else {
       setStatus('', '');
     }
@@ -584,9 +617,11 @@
       btn.setAttribute('tabindex', isActive ? '0' : '-1');
     });
     Object.keys(ui.panels).forEach((key) => {
+      const panel = ui.panels[key];
+      if (!panel) return;
       const active = key === tab;
-      ui.panels[key].setAttribute('aria-hidden', active ? 'false' : 'true');
-      ui.panels[key].hidden = !active;
+      panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+      panel.hidden = !active;
     });
   }
 
@@ -610,7 +645,7 @@
   function renderTypeCount() {
     const total = selectedVisualEntities().length;
     const apiReady = selectedEntities().length;
-    ui.typesCount.textContent = String(total);
+    if (ui.typesCount) ui.typesCount.textContent = String(total);
     if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) (dont ' + apiReady + ' envoyés à l\'API).';
 
     Array.from(document.querySelectorAll('#agfTypeGrid .agf-type-card')).forEach((card) => {
@@ -967,6 +1002,9 @@
     const m = msg.trim();
     if (m.indexOf('error_invalid_token') !== -1) return 'Erreur d\'authentification. Reconnectez-vous ou vérifiez votre accès.';
     if (m.indexOf('error_internal') !== -1) return 'Erreur serveur. Réessayez plus tard.';
+    if (m.indexOf('error_anon_not_ready') !== -1) return 'Fichier pas encore prêt. Réessayez dans quelques instants.';
+    if (m.indexOf('error_anon_file_not_exists') !== -1) return 'Fichier introuvable côté serveur.';
+    if (m.indexOf('error_anon_invalid_file_type') !== -1) return 'Type de fichier non accepté pour le téléchargement.';
     return m;
   }
 
@@ -1009,50 +1047,199 @@
     return formData;
   }
 
-  async function processOneFile(item) {
-    item.status = 'processing';
-    renderProcessedList();
+  function buildFormDataForAsyncUpload(items) {
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', state.edition);
+    // Backend anonAsyncOfficeText attend fileUpload1, fileUpload2, ... fileUploadN
+    items.forEach((item, index) => { formData.append('fileUpload' + (index + 1), item.file, item.fileName); });
+    const entities = selectedEntities();
+    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) formData.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) formData.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
+      formData.append('processingMode', 'pseudonymiser');
+      formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
+      formData.append('pseudoScope', state.pseudoConfig.scope || '');
+      formData.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
+      formData.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
+      formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
+      formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
+    }
+    return formData;
+  }
+
+  async function uploadAsyncAndGetJobIds() {
+    const items = state.processedItems;
+    if (!items.length) return [];
+    const formData = buildFormDataForAsyncUpload(items);
+    const response = await fetchWithTimeout(ANON_ASYNC_UPLOAD, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
+    if (!response.ok) {
+      const raw = await response.text();
+      let msg = 'Erreur de traitement.';
+      try {
+        const json = JSON.parse(raw);
+        const code = json && (json.errorCode || json.error_code);
+        if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
+        else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
+        else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
+        else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+      } catch (e) { if (raw && raw.length < 180) msg = sanitizeApiErrorMessage(raw); }
+      throw new Error(msg);
+    }
+    const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+    const raw = await response.text();
+    if (contentType.indexOf('application/json') === -1) throw new Error('Réponse serveur invalide.');
+    let data;
+    try { data = JSON.parse(raw); } catch (e) { throw new Error('Réponse serveur invalide.'); }
+    if (data && (data.status === 'KO' || data.status === 'ko')) {
+      const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
+      throw new Error(msg);
+    }
+    let jobIds = [];
+    if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
+    else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j.id != null ? j.id : j.jobId);
+    else if (typeof data.jobId === 'number') jobIds = items.map(() => data.jobId);
+    else if (typeof data.jobId === 'string' && /^\d+$/.test(data.jobId)) jobIds = items.map(() => parseInt(data.jobId, 10));
+    if (jobIds.length < items.length) throw new Error('Réponse serveur incomplète (jobIds).');
+    return jobIds.slice(0, items.length);
+  }
+
+  async function fetchJobStatus(jobId) {
+    const form = new FormData();
+    form.append('username', state.email);
+    form.append('token', state.token);
+    form.append('jobId', String(jobId));
+    form.append('edition', state.edition);
+    const response = await fetchWithTimeout(ANON_STATUS, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
+    const raw = await response.text();
+    let data;
+    try { data = JSON.parse(raw); } catch (e) { return { status: 'error', errorMessage: 'Réponse serveur invalide.' }; }
+    if (!response.ok) {
+      const msg = (data && (data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage) : 'Erreur de statut.';
+      return { status: 'error', errorMessage: msg };
+    }
+    if (data && (data.status === 'KO' || data.status === 'ko')) {
+      return { status: 'error', errorMessage: sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur.') };
+    }
+    // Backend getAnonStatus: anonStatus = PENDING | ON_ERROR | READY | UNKNOWN
+    const anonStatus = (data && data.anonStatus != null) ? String(data.anonStatus).toUpperCase() : '';
+    if (anonStatus === 'READY') return { status: 'done' };
+    if (anonStatus === 'ON_ERROR') {
+      const errMsg = (data && (data.javaException || data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.javaException || data.userErrorMessage || data.errorMessage) : 'Échec du traitement.';
+      return { status: 'error', errorMessage: errMsg };
+    }
+    if (anonStatus === 'PENDING' || anonStatus === 'UNKNOWN') return { status: 'pending' };
+    // Fallback si le backend renvoie un autre format (status/state/jobStatus)
+    const st = (data && (data.status || data.state || data.jobStatus || '')).toString().toLowerCase();
+    if (st === 'done' || st === 'completed' || st === 'success') return { status: 'done' };
+    if (st === 'error' || st === 'failed') return { status: 'error', errorMessage: sanitizeApiErrorMessage((data && (data.userErrorMessage || data.errorMessage)) || 'Échec du traitement.') };
+    if (st === 'processing' || st === 'running') return { status: 'processing' };
+    return { status: 'pending' };
+  }
+
+  async function receiveAnonFile(jobId, retryCount) {
+    const attempt = typeof retryCount === 'number' ? retryCount : 0;
+    const form = new FormData();
+    form.append('username', state.email);
+    form.append('token', state.token);
+    form.append('jobId', String(jobId));
+    form.append('fileType', 'ANON');
+    form.append('edition', state.edition);
     try {
-      const formData = buildFormDataForOneFile(item.file, item.fileName);
-      const response = await fetchWithTimeout(ANON_ENDPOINT, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
+      const response = await fetchWithTimeout(ANON_RECEIVE, { method: 'POST', body: form }, REQUEST_TIMEOUT);
       if (!response.ok) {
         const raw = await response.text();
-        let msg = 'Erreur de traitement.';
+        let msg = 'Impossible de récupérer le fichier.';
         try {
           const json = JSON.parse(raw);
-          const code = json && (json.errorCode || json.error_code);
-          if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
-          else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
-          else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
-          else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
-        } catch (e) { if (raw && raw.length < 180) msg = sanitizeApiErrorMessage(raw); }
+          if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+        } catch (e) { if (raw && raw.length < 120) msg = sanitizeApiErrorMessage(raw); }
         throw new Error(msg);
       }
       const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
       const blob = await response.blob();
       if (contentType.indexOf('application/json') !== -1) {
-        const raw = await blob.text();
+        const text = await blob.text();
         try {
-          const json = JSON.parse(raw);
-          if (json && (json.status === 'KO' || json.status === 'ko')) {
-            const msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
-            throw new Error(msg);
+          const json = JSON.parse(text);
+          if (json && (json.status === 'KO' || json.status === 'ko')) throw new Error(sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur.'));
+        } catch (e) { if (e.message) throw e; }
+        throw new Error('Réponse serveur inattendue.');
+      }
+      return { blob, contentDisposition: response.headers.get('Content-Disposition') || '' };
+    } catch (err) {
+      const isTransient = err.name === 'AbortError' || (err.message && (err.message.indexOf('réseau') !== -1 || err.message === 'Failed to fetch'));
+      if (isTransient && attempt < 1) {
+        await new Promise((r) => setTimeout(r, 2000));
+        return receiveAnonFile(jobId, attempt + 1);
+      }
+      throw err;
+    }
+  }
+
+  async function pollAllJobsUntilDone() {
+    const items = state.processedItems;
+    const total = items.length;
+    const deadline = Date.now() + MAX_POLL_TIME_MS;
+    let lastRender = 0;
+    while (true) {
+      if (Date.now() > deadline) {
+        items.forEach((p) => {
+          if (p.status !== 'done' && p.status !== 'error') {
+            p.status = 'error';
+            p.errorMessage = 'Délai maximal dépassé. Réessayez ou contactez le support.';
           }
-        } catch (e) {
-          if (e instanceof SyntaxError) { /* pas du JSON attendu */ }
-          else throw e;
+        });
+        renderProcessedList();
+        break;
+      }
+      const pending = items.filter((p) => p.jobId != null && p.status !== 'done' && p.status !== 'error');
+      if (pending.length === 0) break;
+      for (const item of pending) {
+        try {
+          const result = await fetchJobStatus(item.jobId);
+          if (result.status === 'done') {
+            item.status = 'processing';
+            renderProcessedList();
+            try {
+              const { blob, contentDisposition } = await receiveAnonFile(item.jobId, 0);
+              item.resultBlob = blob;
+              item.resultUrl = URL.createObjectURL(blob);
+              item.resultFilename = parseFilename(contentDisposition, item.fileName);
+              item.resultSize = blob.size;
+              item.status = 'done';
+              item.justDone = true;
+            } catch (err) {
+              item.status = 'error';
+              item.errorMessage = (err && err.message) || 'Échec du téléchargement.';
+            }
+          } else if (result.status === 'error') {
+            item.status = 'error';
+            item.errorMessage = result.errorMessage || 'Échec du traitement.';
+          } else {
+            item.status = result.status === 'processing' ? 'processing' : 'pending';
+          }
+        } catch (err) {
+          item.status = 'error';
+          item.errorMessage = (err && err.name === 'AbortError') ? 'Délai dépassé.' : sanitizeApiErrorMessage((err && err.message) || 'Erreur de vérification.');
         }
       }
-      const contentDisposition = response.headers.get('Content-Disposition') || '';
-      item.resultBlob = blob;
-      item.resultUrl = URL.createObjectURL(blob);
-      item.resultFilename = parseFilename(contentDisposition, item.fileName);
-      item.resultSize = blob.size;
-      item.status = 'done';
-      item.justDone = true;
-    } catch (err) {
-      item.status = 'error';
-      item.errorMessage = err && err.name === 'AbortError' ? 'Délai dépassé.' : sanitizeApiErrorMessage((err && err.message) ? err.message : 'Échec');
+      const doneCount = items.filter((p) => p.status === 'done').length;
+      const errCount = items.filter((p) => p.status === 'error').length;
+      const now = Date.now();
+      if (now - lastRender > 400) {
+        renderProcessedList();
+        setStatus('loading', 'Vérification du statut… ' + doneCount + '/' + total + ' fichier(s)' + (errCount ? ', ' + errCount + ' en erreur' : '') + '.');
+        lastRender = now;
+      }
+      if (items.every((p) => p.status === 'done' || p.status === 'error')) break;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
     }
     renderProcessedList();
   }
@@ -1066,9 +1253,7 @@
     state.processing = true;
     revokeResultUrl();
     revokeAllProcessedUrls();
-    ui.download.href = '#';
-    ui.download.removeAttribute('download');
-    ui.download.classList.remove('is-visible');
+    if (ui.download) { ui.download.href = '#'; ui.download.removeAttribute('download'); ui.download.classList.remove('is-visible'); }
 
     state.processedItems = state.files.map((f) => ({
       id: f.id,
@@ -1076,6 +1261,7 @@
       size: f.size,
       file: f.file,
       status: 'pending',
+      jobId: null,
       resultUrl: null,
       resultBlob: null,
       resultFilename: null,
@@ -1085,16 +1271,23 @@
     state.files = [];
     renderFileList();
     updateActions();
-    setStatus('loading', 'Traitement en cours (un fichier après l\'autre)…');
+    setStatus('loading', 'Envoi des fichiers…');
 
-    for (let i = 0; i < state.processedItems.length; i++) {
-      await processOneFile(state.processedItems[i]);
-      const done = state.processedItems.filter((p) => p.status === 'done').length;
-      const err = state.processedItems.filter((p) => p.status === 'error').length;
-      if (i < state.processedItems.length - 1) {
-        setStatus('loading', 'Traitement en cours… ' + done + ' prêt(s)' + (err ? ', ' + err + ' en erreur' : '') + '.');
-      }
+    let jobIds = [];
+    try {
+      jobIds = await uploadAsyncAndGetJobIds();
+    } catch (err) {
+      state.processing = false;
+      setStatus('error', (err && err.message) || 'Erreur lors de l\'envoi.');
+      updateActions();
+      return;
     }
+    state.processedItems.forEach((item, i) => { item.jobId = jobIds[i] != null ? jobIds[i] : null; });
+    state.processedItems.forEach((item) => { item.status = 'processing'; });
+    renderProcessedList();
+    setStatus('loading', 'Vérification du statut…');
+
+    await pollAllJobsUntilDone();
 
     state.processing = false;
     const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
@@ -1115,9 +1308,7 @@
     state.processedItems = [];
     revokeResultUrl();
     revokeAllProcessedUrls();
-    ui.download.href = '#';
-    ui.download.removeAttribute('download');
-    ui.download.classList.remove('is-visible');
+    if (ui.download) { ui.download.href = '#'; ui.download.removeAttribute('download'); ui.download.classList.remove('is-visible'); }
     setStatus('', '');
     renderFileList();
     renderProcessedList();
@@ -1146,9 +1337,44 @@
   }
 
   function downloadAllAsZip() {
-    const blobsToZip = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl));
-    if (blobsToZip.length < 2) return;
+    const doneItems = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl));
+    if (doneItems.length < 2) return;
+    document.querySelectorAll('#agfDownloadZip').forEach((el) => { el.disabled = true; });
     setStatus('loading', 'Préparation du zip…');
+    const jobIdsForZip = doneItems.map((p) => p.jobId).filter((id) => id != null);
+    const reenableZipBtn = () => { updateActions(); };
+    if (jobIdsForZip.length >= 2) {
+      const form = new FormData();
+      form.append('username', state.email);
+      form.append('token', state.token);
+      form.append('jobIdArray', JSON.stringify(jobIdsForZip));
+      form.append('edition', state.edition);
+      fetchWithTimeout(ANON_RECEIVE_ZIP, { method: 'POST', body: form }, REQUEST_TIMEOUT)
+        .then((response) => {
+          if (!response.ok) return response.text().then(() => { throw new Error('zip-api-failed'); });
+          return response.blob();
+        })
+        .then((zipBlob) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(zipBlob);
+          a.download = 'documents_anonymisés.zip';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+          setStatus('success', 'Téléchargement du zip lancé.');
+          reenableZipBtn();
+        })
+        .catch(() => {
+          setStatus('loading', 'Zip serveur indisponible, création locale en cours…');
+          fallbackDownloadZipClient(doneItems, reenableZipBtn);
+        });
+      return;
+    }
+    fallbackDownloadZipClient(doneItems, reenableZipBtn);
+  }
+
+  function fallbackDownloadZipClient(blobsToZip, onDone) {
+    setStatus('loading', 'Préparation du zip…');
+    const done = typeof onDone === 'function' ? onDone : () => updateActions();
     Promise.all(blobsToZip.map((item) => {
       if (item.resultBlob) return Promise.resolve(item.resultBlob);
       if (!item.resultUrl) return Promise.reject(new Error('missing-result-url'));
@@ -1161,16 +1387,17 @@
         if (typeof window.JSZip !== 'undefined') {
           buildAndDownloadZip(blobsToZip, blobs);
           setStatus('success', 'Téléchargement du zip lancé.');
+          done();
           return;
         }
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé.'); };
-        script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); };
+        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé.'); done(); };
+        script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); done(); };
         document.head.appendChild(script);
       }
       runZip();
-    }).catch(() => { setStatus('error', 'Impossible de créer le fichier zip. Réessayez.'); });
+    }).catch(() => { setStatus('error', 'Impossible de créer le fichier zip. Réessayez.'); done(); });
   }
 
   async function processText() {
@@ -1428,8 +1655,8 @@
   }
 
   function applyEditionLocks() {
-    ui.openTypes.classList.remove('is-locked');
-    ui.openInclusion.classList.remove('is-locked');
+    if (ui.openTypes) ui.openTypes.classList.remove('is-locked');
+    if (ui.openInclusion) ui.openInclusion.classList.remove('is-locked');
   }
 
   function applyFeatureAvailability() {
@@ -1518,12 +1745,14 @@
     ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
     ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
 
-    ui.textInput.addEventListener('input', scheduleDebouncedText);
-    ui.textInput.addEventListener('keyup', scheduleDebouncedText);
-    ui.textClear.addEventListener('click', () => {
+    if (ui.textInput) {
+      ui.textInput.addEventListener('input', scheduleDebouncedText);
+      ui.textInput.addEventListener('keyup', scheduleDebouncedText);
+    }
+    if (ui.textClear) ui.textClear.addEventListener('click', () => {
       textRequestSerial += 1;
       textProcessQueued = false;
-      ui.textInput.value = '';
+      if (ui.textInput) ui.textInput.value = '';
       resetTextCache();
       setTextOutput('Le résultat s\'affichera ici après anonymisation.', false, null, null, 0);
       if (debounceTextTimer) {
@@ -1533,21 +1762,21 @@
     });
     if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
 
-    ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
+    if (ui.modeRadios.length) ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
       setMode(radio.value);
       refreshTextIfNeeded();
     }));
 
-    ui.pseudoMode.addEventListener('click', () => {
+    if (ui.pseudoMode) ui.pseudoMode.addEventListener('click', () => {
       openModal(ui.modals.pseudo);
       if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymisation en aperçu: activation backend en cours.');
     });
-    ui.pseudoSaved.addEventListener('click', () => {
+    if (ui.pseudoSaved) ui.pseudoSaved.addEventListener('click', () => {
       openModal(ui.modals.pseudo);
       if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymes en aperçu: gestion active dès branchement backend.');
     });
-    ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
-    ui.openInclusion.addEventListener('click', () => {
+    if (ui.openTypes) ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
+    if (ui.openInclusion) ui.openInclusion.addEventListener('click', () => {
       openModal(ui.modals.inclusion);
       if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion en aperçu: activation backend en cours.');
     });
@@ -1558,14 +1787,14 @@
       });
     }
 
-    ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
+    if (ui.modalTypesClose) ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
     if (ui.modalTypesBetaClose && ui.modalTypesBetaOverlay) {
       ui.modalTypesBetaClose.addEventListener('click', () => ui.modalTypesBetaOverlay.classList.add('is-dismissed'));
     }
     if (ui.modalPseudoClose) ui.modalPseudoClose.addEventListener('click', () => closeModal(ui.modals.pseudo));
-    ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
+    if (ui.modalIncClose) ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
 
-    ui.defaultsTypes.addEventListener('click', () => {
+    if (ui.defaultsTypes) ui.defaultsTypes.addEventListener('click', () => {
       Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
         if (chk.disabled) return;
         chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
@@ -1593,7 +1822,7 @@
       refreshTextIfNeeded();
     });
 
-    ui.saveTypes.addEventListener('click', () => {
+    if (ui.saveTypes) ui.saveTypes.addEventListener('click', () => {
       storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
       resetTextCache();
       renderTypeCount();
@@ -1696,7 +1925,7 @@
       refreshTextIfNeeded();
     });
 
-    ui.saveInclusion.addEventListener('click', () => {
+    if (ui.saveInclusion) ui.saveInclusion.addEventListener('click', () => {
       if (!isFeatureEnabled('inclusion')) {
         setStatus('info', 'Inclusion / Exclusion non activée côté backend. Aperçu conservé.');
         return;
