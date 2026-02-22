@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.7';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.8';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -1425,14 +1425,23 @@
     const raw = await response.text();
     const text = normalizeResponseText(raw);
     let data = null;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      const parsed = tryParseJson(raw);
-      if (parsed.ok) data = parsed.data;
-      else throw new Error(buildInvalidJsonMessage(raw, false));
+    const parsed = tryParseJson(raw);
+    if (parsed.ok) {
+      data = parsed.data;
+    } else {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        const firstObj = text.indexOf('{');
+        const lastObj = text.lastIndexOf('}');
+        if (firstObj !== -1 && lastObj > firstObj) {
+          try {
+            data = JSON.parse(text.slice(firstObj, lastObj + 1));
+          } catch (e2) { }
+        }
+      }
     }
-    if (!data || typeof data !== 'object') throw new Error('Réponse serveur invalide.');
+    if (!data || typeof data !== 'object') throw new Error(buildInvalidJsonMessage(raw, true));
     if (data.status === 'KO' || data.status === 'ko') {
       const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
       throw new Error(msg);
