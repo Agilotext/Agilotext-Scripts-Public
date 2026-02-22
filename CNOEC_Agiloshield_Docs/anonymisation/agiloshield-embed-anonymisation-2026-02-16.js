@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.8';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.2.9';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -767,29 +767,33 @@
 
   async function fetchAnonJobsInfo() {
     if (!state.email || !state.token) return [];
-    const form = new FormData();
-    form.append('username', state.email);
-    form.append('token', state.token);
-    form.append('limit', '100');
-    form.append('offset', '0');
-    form.append('edition', getEditionForApi());
+    const params = new URLSearchParams();
+    params.append('username', state.email);
+    params.append('token', state.token);
+    params.append('limit', '100');
+    params.append('offset', '0');
+    params.append('edition', getEditionForApi());
     try {
-      const response = await fetchWithTimeout(ANON_JOBS_INFO, { method: 'POST', body: form }, STATUS_REQUEST_TIMEOUT);
+      const response = await fetchWithTimeout(ANON_JOBS_INFO, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      }, STATUS_REQUEST_TIMEOUT);
       const raw = await response.text();
       const text = normalizeResponseText(raw);
       let data = null;
       try { data = JSON.parse(text); } catch (e) { return []; }
       if (!data || data.status === 'KO' || data.status === 'ko') return [];
-      const jobs = data.jobs || data.jobList || data.jobsInfoDtos || (Array.isArray(data.jobIdList) ? data.jobIdList.map((id) => ({ jobId: id })) : []);
+      const jobs = data.jobs || data.jobList || data.jobsInfoDtos || data.jobsAnon2InfoDtos || (Array.isArray(data.jobIdList) ? data.jobIdList.map((id) => ({ jobId: id })) : []);
       const list = [];
       for (const j of jobs) {
-        const jobId = j.jobId != null ? j.jobId : (j.id != null ? j.id : (typeof j === 'number' ? j : null));
+        const jobId = j.jobId != null ? j.jobId : (j.jobid != null ? j.jobid : (j.id != null ? j.id : (typeof j === 'number' ? j : null)));
         if (jobId == null) continue;
         const anonStatus = (j.anonStatus != null ? String(j.anonStatus) : '').toUpperCase() || null;
         list.push({
           jobId: Number(jobId) || jobId,
           anonStatus: anonStatus === 'READY' || anonStatus === 'PENDING' || anonStatus === 'ON_ERROR' ? anonStatus : null,
-          fileName: j.originalFileName || j.fileName || j.fileNameOrigin || null,
+          fileName: j.originalFileName || j.fileName || j.filename || j.fileNameOrigin || null,
           dtCreation: j.dtCreation || j.creationDate || null
         });
       }
@@ -1761,12 +1765,16 @@
     const jobIdsForZip = doneItems.map((p) => p.jobId).filter((id) => id != null);
     const reenableZipBtn = () => { updateActions(); };
     if (jobIdsForZip.length >= 2) {
-      const form = new FormData();
-      form.append('username', state.email);
-      form.append('token', state.token);
-      form.append('jobIdArray', JSON.stringify(jobIdsForZip));
-      form.append('edition', getEditionForApi());
-      fetchWithTimeout(ANON_RECEIVE_ZIP, { method: 'POST', body: form }, REQUEST_TIMEOUT)
+      const zipParams = new URLSearchParams();
+      zipParams.append('username', state.email);
+      zipParams.append('token', state.token);
+      zipParams.append('jobIdArray', JSON.stringify(jobIdsForZip));
+      zipParams.append('edition', getEditionForApi());
+      fetchWithTimeout(ANON_RECEIVE_ZIP, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: zipParams.toString()
+      }, REQUEST_TIMEOUT)
         .then(async (response) => {
           if (!response.ok) {
             const raw = await response.text();
@@ -2458,7 +2466,10 @@
     if (!ui.form || !ui.submit || !ui.dropzone) return;
     window.__agiloEmbedAnonymisationMounted = true;
 
-    window.addEventListener('agilo:token', (e) => { applyTokenFromEvent(e && e.detail); });
+    window.addEventListener('agilo:token', (e) => {
+      applyTokenFromEvent(e && e.detail);
+      loadAnonJobsList().catch(function () { });
+    });
 
     await waitForMemberstack(10000, 200);
     state.edition = normalizeEdition(await detectEdition());
@@ -2493,7 +2504,7 @@
       runSessionMaintenance();
       loadApiVersion();
     }
-    loadAnonJobsList().catch(function () {});
+    loadAnonJobsList().catch(function () { });
   }
 
   if (window.__agiloEmbedAnonymisationMounted) return;
