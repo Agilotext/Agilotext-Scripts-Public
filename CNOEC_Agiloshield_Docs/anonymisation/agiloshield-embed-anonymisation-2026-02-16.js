@@ -2240,6 +2240,7 @@
     const requestSerial = ++textRequestSerial;
     document.querySelectorAll('#agfOutputText').forEach(el => {
       el.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
+      el.style.whiteSpace = 'normal';
       el.classList.add('agf-text-output--loading');
       el.setAttribute('aria-busy', 'true');
     });
@@ -2325,8 +2326,15 @@
 
   function setTextOutput(plain, useTags, html, stats, total) {
     document.querySelectorAll('#agfOutputText').forEach(el => {
-      if (useTags && html) el.innerHTML = html;
-      else el.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
+      if (useTags && html) {
+        el.innerHTML = html;
+        el.style.whiteSpace = 'pre-wrap';
+      } else {
+        el.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
+        // If it's a real result (from processText success), use pre-wrap.
+        // Otherwise (placeholder/error/loading), use normal to collapse white-space issues.
+        el.style.whiteSpace = (plain && plain.length > 50) ? 'pre-wrap' : 'normal';
+      }
     });
     renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
   }
