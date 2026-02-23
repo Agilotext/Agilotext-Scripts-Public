@@ -70,7 +70,6 @@
 
   async function getToken(email, edition) {
     if (!email) return;
-    if (window.globalToken) { ensureMemberEmailInput(email); return; }
     if (inflight) return;
     inflight = true;
     try {
@@ -111,9 +110,7 @@
     const email = await resolveEmail();
     if (!email) { console.warn('[agilo] Email utilisateur non trouvé'); return; }
 
-    const cached = localStorage.getItem(tokenKey(email, edition));
-    if (cached) { broadcast({ token: cached, email, edition }); return; }
-
+    // Toujours appeler getToken au chargement pour avoir un token frais (évite error_invalid_token avec un ancien token en cache).
     getToken(email, edition);
   });
 

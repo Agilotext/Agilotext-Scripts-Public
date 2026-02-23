@@ -1115,8 +1115,11 @@
   .agf-textbox-head {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--space-2);
+    margin-bottom: var(--space-1);
+    min-height: 2.25rem;
+    /* Match the 'Copier' button height to keep baseline even */
   }
 
   .agf-textbox-body {
@@ -1127,14 +1130,14 @@
   }
 
   .agf-textbox-body .agf-textarea {
-    min-height: 20rem;
+    min-height: 22.5rem;
     flex: 1;
   }
 
   .agf-textbox-label {
     font-size: 0.875rem;
     font-weight: 600;
-    margin-bottom: var(--space-1);
+    margin: 0;
   }
 
   .agf-btn-link--small {
@@ -1196,7 +1199,7 @@
 
   .agf-output-wrap {
     flex: 1;
-    min-height: 22rem;
+    min-height: 22.5rem;
     border-radius: 0.75rem;
     border: 1px solid var(--agilo-border);
     background: var(--agilo-surface);

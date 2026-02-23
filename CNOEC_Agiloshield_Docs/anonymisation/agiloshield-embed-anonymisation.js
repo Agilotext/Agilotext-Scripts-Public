@@ -91,6 +91,7 @@
     LOC: 'LOC',
     LOCATION: 'LOC',
     LOCALISATION: 'LOC',
+    GPE: 'LOC',
     CITY: 'LOC',
     REGION: 'LOC',
     ORG: 'ORG',
@@ -104,18 +105,27 @@
     TVA: 'TVA',
     VAT: 'TVA',
     IBAN: 'IBAN',
+    RIB: 'IBAN',
+    RIB_KEY: 'IBAN',
     BIC: 'BIC',
     SWIFT: 'BIC',
     FRNIR: 'FRNIR',
     NIR: 'FRNIR',
+    NSS: 'FRNIR',
     DT: 'DT',
     DATE: 'DT',
     DATETIME: 'DT',
     TIME: 'DT',
+    BIRTH_DATE: 'DT',
+    BIRTH_PLACE: 'LOC',
+    URL: 'URL',
+    URSSAF_ID: 'SIREN',
+    FISCAL_ID: 'SIREN',
+    APE: 'SIREN',
     OTHER: 'OTHER'
   };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
-  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
+  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
 
@@ -203,7 +213,7 @@
     manualEdition: document.getElementById('agfManualEdition')
   };
 
-  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR'];
+  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
