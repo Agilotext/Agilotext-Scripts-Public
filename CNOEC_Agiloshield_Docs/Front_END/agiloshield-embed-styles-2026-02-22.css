@@ -611,6 +611,56 @@
     padding-right: 0 !important;
   }
 
+  .agf-hist-name-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: inherit;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-align: left;
+    max-width: 100%;
+    transition: color 150ms ease;
+  }
+
+  .agf-hist-name-link:hover {
+    color: var(--agilo-primary);
+  }
+
+  .agf-hist-name-link:hover .agf-hist-name-txt {
+    text-decoration: underline;
+  }
+
+  .agf-hist-preview-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--agilo-text-secondary);
+    opacity: 0.45;
+    transition: opacity 150ms ease, color 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .agf-hist-name-link:hover .agf-hist-preview-icon {
+    opacity: 1;
+    color: var(--agilo-primary);
+  }
+
+  .agf-hist-name-txt {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .agf-hist-td-name {
+    max-width: 14rem;
+  }
+
   /* Bulk Actions Bar */
   .agf-hist-bulk-bar {
     display: none;
@@ -674,6 +724,7 @@
   }
 
   /* Dim individual actions when bulk selection is active */
+  .agf-anon-jobs-list.is-selection-active .agf-hist-name-link,
   .agf-anon-jobs-list.is-selection-active .agf-hist-btn-dl,
   .agf-anon-jobs-list.is-selection-active .agf-hist-btn-delete {
     opacity: 0.3;
