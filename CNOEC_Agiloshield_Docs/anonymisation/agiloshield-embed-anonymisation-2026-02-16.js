@@ -64,6 +64,7 @@
     resultUrl: null,
     resultFilename: 'document_anonymisé',
     textProcessing: false,
+    abortController: null,
     includeTerms: [],
     excludeTerms: [],
     pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG }
@@ -364,6 +365,8 @@
     lastProcessedHtml = null;
     lastProcessedStats = null;
     lastProcessedCounts = null;
+    state.abortController = null;
+    state.textProcessing = false;
   }
 
   function refreshTextIfNeeded() {
@@ -422,6 +425,54 @@
       const txt = document.createElement('span');
       txt.textContent = message;
       statusEl.appendChild(txt);
+
+      // 20/20 Kill Button: Add "Annuler" button if loading
+      if (kind === 'loading' && (state.processing || state.textProcessing)) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'agf-status-cancel-btn';
+        cancelBtn.title = 'Annuler le traitement en cours';
+        cancelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="6" width="12" height="12"/></svg><span>Annuler</span>';
+        cancelBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelActiveProcessing();
+        });
+        statusEl.appendChild(cancelBtn);
+      }
+    });
+  }
+
+  function cancelActiveProcessing() {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+    state.processing = false;
+    state.textProcessing = false;
+
+    // Visual feedback for cancellation
+    const msg = 'Traitement annulé par l\'utilisateur.';
+    setStatus('canceled', msg);
+
+    // Update individual item statuses to "canceled" (orange badge handled via CSS)
+    state.processedItems.forEach(item => {
+      if (item.status === 'pending' || item.status === 'processing') {
+        item.status = 'canceled';
+        item.errorMessage = 'Annulé';
+      }
+    });
+
+    renderProcessedList();
+    updateActions();
+    clearInFlightJobs();
+
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      el.classList.remove('agf-text-output--loading');
+      el.setAttribute('aria-busy', 'false');
+      if (el.textContent === 'Traitement en cours… Les gros fichiers peuvent prendre un moment.') {
+        el.textContent = 'Traitement annulé.';
+      }
     });
   }
 
@@ -707,6 +758,8 @@
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--processing"><div class="agf-card-lottie"></div></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:' + progressValue + '%"></div></div></div>';
     } else if (item.status === 'error') {
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(sanitizeApiErrorMessage(item.errorMessage || 'Échec')) + '</p></div>';
+    } else if (item.status === 'canceled') {
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Annulé</p><p class="agf-file-meta">Traitement interrompu</p></div>';
     } else {
       const name = (item.resultFilename || item.fileName) + '';
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
@@ -1009,6 +1062,9 @@
         } else if (job.anonStatus === 'ON_ERROR') {
           badge.className = 'agf-status-badge agf-status-badge--error';
           badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/></svg> Erreur';
+        } else if (job.anonStatus === 'CANCELED') {
+          badge.className = 'agf-status-badge agf-status-badge--canceled';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg> Annulé';
         } else {
           badge.className = 'agf-status-badge agf-status-badge--pending';
           badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> En cours';
@@ -1391,6 +1447,12 @@
     }
     const anonRadio = (ui.modeRadios || []).find((r) => r.value === 'anonymiser');
     if (anonRadio) anonRadio.checked = !pseudoActive;
+
+    // 20/20 Safety: Cancel if mode changes during processing
+    if (state.processing || state.textProcessing) {
+      cancelActiveProcessing();
+    }
+
     storage.set(STORAGE_MODE, state.mode);
     resetTextCache();
     renderPseudoSummary();
@@ -1531,10 +1593,17 @@
   }
 
   async function fetchWithTimeout(url, options, timeoutMs) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const internalController = new AbortController();
+    const signals = [];
+    if (state.abortController) signals.push(state.abortController.signal);
+    signals.push(internalController.signal);
+
+    // Dynamic signal merging or just use the global one if it exists
+    const signal = state.abortController ? state.abortController.signal : internalController.signal;
+
+    const timer = setTimeout(() => internalController.abort(), timeoutMs);
     try {
-      return await fetch(url, { ...options, signal: controller.signal, cache: 'no-store' });
+      return await fetch(url, { ...options, signal, cache: 'no-store' });
     } finally { clearTimeout(timer); }
   }
 
@@ -1881,6 +1950,7 @@
     let failCount = 0;
 
     for (const jobId of idsToDelete) {
+      if (state.abortController && state.abortController.signal.aborted) break;
       try {
         setStatus('loading', `Suppression en cours : ${successCount + failCount + 1} / ${total}...`);
         await fetchDeleteAnonJob(jobId);
@@ -1928,6 +1998,7 @@
     const deadline = Date.now() + MAX_POLL_TIME_MS;
     let lastRender = 0;
     while (true) {
+      if (state.abortController && state.abortController.signal.aborted) throw new Error('AbortError');
       if (Date.now() > deadline) {
         items.forEach((p) => {
           if (p.status !== 'done' && p.status !== 'error') {
@@ -2014,6 +2085,7 @@
 
     try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
 
+    state.abortController = new AbortController();
     state.processing = true;
     revokeResultUrl();
     revokeAllProcessedUrls();
@@ -2047,11 +2119,16 @@
       jobIds = await uploadAsyncAndGetJobIds();
     } catch (err) {
       state.processedItems.forEach((item) => {
-        item.status = 'error';
-        item.errorMessage = (err && err.message) || 'Erreur lors de l\'envoi.';
+        if (item.status === 'pending' || item.status === 'processing') {
+          const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
+          item.status = isAbort ? 'canceled' : 'error';
+          item.errorMessage = isAbort ? 'Annulé' : ((err && err.message) || 'Erreur lors de l\'envoi.');
+        }
       });
+      state.abortController = null;
       state.processing = false;
-      setStatus('error', (err && err.message) || 'Erreur lors de l\'envoi.');
+      const msg = err.name === 'AbortError' ? 'Traitement annulé.' : ((err && err.message) || 'Erreur lors de l\'envoi.');
+      setStatus(err.name === 'AbortError' ? 'canceled' : 'error', msg);
       renderProcessedList();
       clearInFlightJobs();
       updateActions();
@@ -2069,6 +2146,7 @@
 
     await pollAllJobsUntilDone();
 
+    state.abortController = null;
     state.processing = false;
     finalizeFilesProcessingStatus();
     // Refresh from API first, then local fallback
@@ -2077,7 +2155,9 @@
   }
 
   function resetFiles() {
-    if (state.processing) return;
+    if (state.processing) {
+      cancelActiveProcessing();
+    }
     state.files = [];
     state.processedItems = [];
     revokeResultUrl();
@@ -2255,6 +2335,8 @@
       return;
     }
 
+    state.abortController = new AbortController();
+
     const payload = new FormData();
     payload.append('username', state.email);
     payload.append('token', state.token);
@@ -2308,10 +2390,16 @@
       setTextOutput(out.plain, out.useTags, lastProcessedHtml, out.stats, out.total);
     } catch (err) {
       if (requestSerial !== textRequestSerial) return;
-      if (err && err.name === 'AbortError') setTextOutput('Texte trop long ou serveur occupé. Réessayez avec un texte plus court.', false, null, null, 0);
-      else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
-      else setTextOutput(sanitizeApiErrorMessage((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.'), false, null, null, 0);
+      const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
+      if (isAbort) {
+        setTextOutput('Traitement annulé.', false, null, null, 0);
+      } else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
+        setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
+      } else {
+        setTextOutput(sanitizeApiErrorMessage((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.'), false, null, null, 0);
+      }
     } finally {
+      state.abortController = null;
       state.textProcessing = false;
       document.querySelectorAll('#agfOutputText').forEach(el => {
         el.classList.remove('agf-text-output--loading');
