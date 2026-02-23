@@ -1126,6 +1126,37 @@
           });
           btnGroup.appendChild(dlBtn);
           tdAction.appendChild(btnGroup);
+        } else if (job.anonStatus !== 'ON_ERROR' && job.anonStatus !== 'CANCELED') {
+          // Action: Kill (Contextual for pending jobs)
+          const killBtn = document.createElement('button');
+          killBtn.type = 'button';
+          killBtn.className = 'agf-hist-btn-preview agf-hist-btn--kill';
+          killBtn.title = 'Interrompre ce traitement';
+          killBtn.setAttribute('aria-label', 'Annuler le traitement');
+          killBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+          killBtn.addEventListener('click', async function () {
+            if (!window.confirm('Voulez-vous interrompre et supprimer ce traitement ?')) return;
+            killBtn.disabled = true;
+            try {
+              await ensureAuth();
+              await fetchDeleteAnonJob(job.jobId);
+
+              // 20/20 Sync: If this job is being polled in the current session, cancel it locally too
+              const activeItem = state.processedItems.find(it => String(it.jobId) === String(job.jobId));
+              if (activeItem) {
+                activeItem.status = 'canceled';
+                activeItem.errorMessage = 'Annulé';
+                renderProcessedList();
+              }
+
+              await loadAnonJobsList();
+              setStatus('canceled', 'Traitement interrompu.');
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Action impossible.');
+            }
+            killBtn.disabled = false;
+          });
+          tdAction.appendChild(killBtn);
         }
 
         // Action: Delete
