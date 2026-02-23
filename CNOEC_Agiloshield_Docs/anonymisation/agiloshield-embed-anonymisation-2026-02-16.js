@@ -432,7 +432,7 @@
         cancelBtn.type = 'button';
         cancelBtn.className = 'agf-status-cancel-btn';
         cancelBtn.title = 'Annuler le traitement en cours';
-        cancelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="6" y="6" width="12" height="12"/></svg><span>Annuler</span>';
+        cancelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Annuler</span>';
         cancelBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
