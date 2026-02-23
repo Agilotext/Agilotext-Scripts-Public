@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.4';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.5';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -906,6 +906,8 @@
           th.appendChild(cb);
         } else if (ci === 2) { // Fichier
           th.textContent = label;
+          th.style.textAlign = 'left';
+          th.style.paddingLeft = '1.25rem';
         } else if (ci === 3) {
           // Sortable date column
           const btn = document.createElement('button');
@@ -1017,10 +1019,36 @@
         const tdAction = tr.insertCell();
         tdAction.className = 'agf-hist-td-action';
         if (job.anonStatus === 'READY') {
+          const btnGroup = document.createElement('div');
+          btnGroup.className = 'agf-hist-btn-group';
+
+          // Action: Preview Anonymized
+          const previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'agf-hist-btn-preview';
+          previewBtn.title = 'Aperçu du résultat (après)';
+          previewBtn.setAttribute('aria-label', 'Aperçu du résultat');
+          previewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>';
+          previewBtn.addEventListener('click', async function () {
+            previewBtn.disabled = true;
+            try {
+              await ensureAuth();
+              const { blob } = await receiveAnonFile(job.jobId, 0, 'ANON');
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Aperçu impossible.');
+            }
+            previewBtn.disabled = false;
+          });
+          btnGroup.appendChild(previewBtn);
+
+          // Action: Download
           const dlBtn = document.createElement('button');
           dlBtn.type = 'button';
           dlBtn.className = 'agf-hist-btn-dl';
-          dlBtn.title = 'Télécharger ' + (job.fileName || '');
+          dlBtn.title = 'Télécharger le résultat';
           dlBtn.setAttribute('aria-label', 'Télécharger ' + (job.fileName || ''));
           dlBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
           dlBtn.addEventListener('click', async function () {
@@ -1030,16 +1058,18 @@
               const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0);
               const name = parseFilename(contentDisposition, job.fileName || 'document_anonymise');
               const a = document.createElement('a');
-              a.href = URL.createObjectURL(blob);
+              const url = URL.createObjectURL(blob);
+              a.href = url;
               a.download = name;
               a.click();
-              setTimeout(function () { URL.revokeObjectURL(a.href); }, 30000);
+              setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
             } catch (err) {
               setStatus('error', (err && err.message) || 'Téléchargement impossible.');
             }
             dlBtn.disabled = false;
           });
-          tdAction.appendChild(dlBtn);
+          btnGroup.appendChild(dlBtn);
+          tdAction.appendChild(btnGroup);
         }
 
         // Action: Delete
