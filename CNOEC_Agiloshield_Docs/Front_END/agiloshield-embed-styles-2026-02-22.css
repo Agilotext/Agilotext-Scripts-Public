@@ -2478,3 +2478,9 @@
   .agf-processed-card--canceled .agf-file-name {
     color: var(--agilo-canceled);
   }
+
+  .agf-hist-btn--kill:hover {
+    background: color-mix(in srgb, var(--agilo-error) 10%, var(--agilo-surface)) !important;
+    color: var(--agilo-error) !important;
+    border-color: color-mix(in srgb, var(--agilo-error) 30%, transparent) !important;
+  }
