@@ -10,6 +10,7 @@
     --agilo-success: var(--color--vert, #1c661a);
     --agilo-error: var(--color--rouge, #a82633);
     --agilo-warning: var(--color--orange, #fd7e14);
+    --agilo-canceled: #f39c12;
 
     --space-1: 0.5rem;
     /* 8px */
@@ -2425,4 +2426,54 @@
     .agf-processed-arrow {
       align-self: center;
     }
+  }
+
+  /* 20/20 Kill Button & Status */
+  [data-kind="canceled"] {
+    background: color-mix(in srgb, var(--agilo-canceled) 12%, transparent) !important;
+    color: var(--agilo-canceled) !important;
+    border-color: color-mix(in srgb, var(--agilo-canceled) 25%, transparent) !important;
+  }
+
+  .agf-status-cancel-btn {
+    margin-left: auto;
+    background: var(--agilo-error);
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    transition: all 150ms ease;
+    box-shadow: 0 2px 4px rgba(168, 38, 51, 0.2);
+  }
+
+  .agf-status-cancel-btn:hover {
+    background: #c0392b;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(168, 38, 51, 0.3);
+  }
+
+  .agf-status-cancel-btn svg {
+    flex-shrink: 0;
+  }
+
+  /* Badge Annulé */
+  .agf-status-badge--canceled {
+    background: color-mix(in srgb, var(--agilo-canceled) 12%, transparent);
+    color: var(--agilo-canceled);
+    border-color: color-mix(in srgb, var(--agilo-canceled) 30%, transparent);
+  }
+
+  .agf-processed-card--canceled .agf-file-icon {
+    background: color-mix(in srgb, var(--agilo-canceled) 10%, transparent);
+    color: var(--agilo-canceled);
+  }
+
+  .agf-processed-card--canceled .agf-file-name {
+    color: var(--agilo-canceled);
   }
