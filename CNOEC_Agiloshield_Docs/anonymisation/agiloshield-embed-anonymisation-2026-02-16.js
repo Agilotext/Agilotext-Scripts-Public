@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.3';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.4';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -906,7 +906,7 @@
           th.appendChild(cb);
         } else if (ci === 2) { // Fichier
           th.textContent = label;
-        } else if (ci === 2) {
+        } else if (ci === 3) {
           // Sortable date column
           const btn = document.createElement('button');
           btn.type = 'button';
@@ -953,14 +953,32 @@
         tdNum.className = 'agf-hist-td-num';
         tdNum.textContent = String(idx + 1);
 
-        // Fichier
+        // Fichier (Preview Original)
         const tdName = tr.insertCell();
         tdName.className = 'agf-hist-td-name';
-        const nameInner = document.createElement('div');
-        nameInner.className = 'agf-hist-name-inner';
-        nameInner.title = job.fileName || ('Job #' + job.jobId);
-        nameInner.textContent = job.fileName || ('Job #' + job.jobId);
-        tdName.appendChild(nameInner);
+        const nameBtn = document.createElement('button');
+        nameBtn.type = 'button';
+        nameBtn.className = 'agf-hist-name-link';
+        const fileName = job.fileName || ('Job #' + job.jobId);
+        nameBtn.title = 'Voir l\'original : ' + fileName;
+        nameBtn.innerHTML = '<span class="agf-hist-preview-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg></span>' +
+          '<span class="agf-hist-name-txt">' + fileName + '</span>';
+
+        nameBtn.addEventListener('click', async function () {
+          nameBtn.disabled = true;
+          try {
+            await ensureAuth();
+            const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0, 'ORIGIN');
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            // Revoke after a while to avoid memory leak
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch (err) {
+            setStatus('error', (err && err.message) || 'Aperçu impossible.');
+          }
+          nameBtn.disabled = false;
+        });
+        tdName.appendChild(nameBtn);
 
         // Date
         const tdDate = tr.insertCell();
@@ -1716,13 +1734,14 @@
     return { status: 'pending' };
   }
 
-  async function receiveAnonFile(jobId, retryCount) {
+  async function receiveAnonFile(jobId, retryCount, fType) {
     const attempt = typeof retryCount === 'number' ? retryCount : 0;
+    const type = fType || 'ANON';
     const body = new URLSearchParams();
     body.set('username', state.email || '');
     body.set('token', state.token || '');
     body.set('jobId', String(jobId));
-    body.set('fileType', 'ANON');
+    body.set('fileType', type);
     body.set('edition', getEditionForApi());
     try {
       const response = await fetchWithTimeout(ANON_RECEIVE, {
