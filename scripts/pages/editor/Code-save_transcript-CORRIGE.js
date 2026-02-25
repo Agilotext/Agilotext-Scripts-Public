@@ -134,8 +134,8 @@
     const out = [];
     rows.forEach((seg,i)=>{
       const tBtn   = seg.querySelector('header .time,.time,[data-t]');
-      const stAttr = seg.dataset.start ?? seg.getAttribute('data-start') ?? (tBtn && (tBtn.dataset.t || tBtn.textContent)) || '0';
-      const enAttr = seg.dataset.end   ?? seg.getAttribute('data-end')   ?? '';
+      const stAttr = (seg.dataset.start ?? seg.getAttribute('data-start') ?? (tBtn && (tBtn.dataset.t || tBtn.textContent))) || '0';
+      const enAttr = (seg.dataset.end ?? seg.getAttribute('data-end')) ?? '';
       const startSec = toSec(stAttr);
       const endSec   = toSec(enAttr);
       const spk = (seg.dataset.speaker || (seg.querySelector('header .speaker,.speaker') || {}).textContent || '').trim();
