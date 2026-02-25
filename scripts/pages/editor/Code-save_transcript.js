@@ -81,6 +81,12 @@
       return { isReady: false, reason: 'transcriptEditor_not_found' };
     }
 
+    // 1b. Bloquer si un message d'erreur (.ag-alert) est affiché
+    if (transcriptEditor.querySelector('.ag-alert, .ag-alert--warn')) {
+      console.warn('[agilo:save:security] ❌ alerte affichée — sauvegarde bloquée');
+      return { isReady: false, reason: 'error_message_displayed' };
+    }
+
     // 2. Attendre un peu pour que le contenu se charge (si nécessaire)
     let attempts = 0;
     const maxAttempts = Math.ceil(TRANSCRIPT_LOAD_WAIT_MS / 200); // Vérifier toutes les 200ms
@@ -389,6 +395,7 @@
   function domSegments(root){
     const rows = $$('.ag-seg,[data-seg],.segment,.ag-segment', root);
     if (!rows.length){
+      if (root.querySelector('.ag-alert, .ag-alert--warn')) return [];
       const txt = normalize(root.innerText || root.textContent || '');
       if (!txt) return [];
       return [{ id:'s0', startSec:0, endSec:0, start:'00:00', end:'', speaker:'', text:txt, lang:document.documentElement.lang||'' }];

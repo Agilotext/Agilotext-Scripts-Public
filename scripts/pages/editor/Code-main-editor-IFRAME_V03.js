@@ -339,7 +339,8 @@
       ERROR_TRANSCRIPT_NOT_READY: "Le transcript n'est pas encore prêt.",
       ON_ERROR: "Le serveur a signalé une erreur.",
       ERROR_INVALID_TOKEN: "Session expirée ou invalide. Veuillez vous reconnecter.",
-      NETWORK_ERROR: "Problème réseau lors de la récupération des données.",
+      NETWORK_ERROR: "Problème réseau lors de la récupération des données. Veuillez réessayer.",
+      BODY_READ_ERROR: "Le chargement du document a été interrompu. Nouvelle tentative en cours…",
       HTTP_ERROR: `Réponse serveur inattendue (HTTP ${httpStatus || '???'})`,
       CANCELLED: "Chargement interrompu (changement de transcript).",
       UNKNOWN_ERROR: "Une erreur est survenue."
@@ -530,11 +531,21 @@
 
     let r, raw;
     try {
-      r = await fetchWithTimeout(url, { signal, timeout: 12000 });
+      const TIMEOUT_MS = (kind === 'transcript') ? 45000 : 20000;
+      r = await fetchWithTimeout(url, { signal, timeout: TIMEOUT_MS });
       raw = await r.text();
     } catch (e) {
-      if (e?.name === 'AbortError') return { ok: false, code: 'CANCELLED', httpStatus: 0, json: null, raw: '' };
-      return { ok: false, code: 'NETWORK_ERROR', httpStatus: 0, json: null, raw: '' };
+      const errDetail = `${e?.name}: ${e?.message}`;
+      console.error(`[agilo:fetch] ${kind} job=${jobId} retry=${retryCount}: ${errDetail}`);
+      if (e?.name === 'AbortError') {
+        return { ok: false, code: 'CANCELLED', httpStatus: 0, json: null, raw: '' };
+      }
+      if (retryCount < 2) {
+        netToast('Connexion instable, nouvelle tentative…');
+        await wait(2000 * Math.pow(2, retryCount));
+        return apiGetWithRetry(kind, jobId, auth, retryCount + 1, signal);
+      }
+      return { ok: false, code: 'NETWORK_ERROR', httpStatus: 0, json: null, raw: '', _debug: errDetail };
     }
 
     if (!r.ok) {
@@ -1571,6 +1582,11 @@
         } else {
           renderSegments(window._segments);
           attachAudioSync();
+        }
+
+        if (window._segments?.length) {
+          const ends = window._segments.filter(s => Number.isFinite(s.end)).map(s => s.end);
+          if (ends.length) window.__agiloExpectedDuration = Math.max(...ends);
         }
 
         if ((toolbar.srch?.value || '').trim()) highlight();

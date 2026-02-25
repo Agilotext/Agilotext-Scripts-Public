@@ -77,6 +77,10 @@
       log('transcriptEditor non trouvé');
       return { ready:false, reason:'no_root' };
     }
+    if (root.querySelector('.ag-alert, .ag-alert--warn')) {
+      log('alerte affichée dans l\'éditeur — sauvegarde bloquée');
+      return { ready:false, reason:'error_message_displayed' };
+    }
     const step = 200;
     const maxTries = Math.ceil(maxWaitMs / step);
     for (let i=0;i<maxTries;i++){
@@ -115,6 +119,7 @@
   function getSegmentsFromDom(root){
     const rows = $$('.ag-seg,[data-seg],.segment,.ag-segment', root);
     if (!rows.length){
+      if (root.querySelector('.ag-alert, .ag-alert--warn')) return [];
       const txt = (root.innerText || root.textContent || '').trim();
       if (!txt) return [];
       return [{
