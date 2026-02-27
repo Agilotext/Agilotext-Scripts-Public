@@ -1,6 +1,6 @@
-# Changelog 8.0.11
+# Changelog 8.0.12
 
-Date: 27/02/2026
+Date: 27/02/2026 (release 8.0.12, même contenu que 8.0.11)
 
 ## Objectif
 Conserver le comportement stable observé en 8.0.7, avec deux correctifs ciblés demandés par audit CNOEC.
