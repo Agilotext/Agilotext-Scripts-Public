@@ -177,6 +177,14 @@
     return true;
   }
 
+  function updateDropzoneTextForLimited() {
+    if (!ui.dropzone) return;
+    var paras = ui.dropzone.querySelectorAll('p');
+    if (paras[0]) paras[0].textContent = '3 documents gratuits par jour (10 pour Business) — tous formats, 10 Mo max / fichier.';
+    var p2 = ui.dropzone.querySelector('.agf-formats-explicit') || paras[1];
+    if (p2) p2.innerHTML = 'Formats pris en charge : CSV, Word, Excel, PowerPoint, TXT, PDF. Version illimitée (BETA) : <a href="mailto:contact@agilotext.com">contact@agilotext.com</a>';
+  }
+
   const ui = {
     form: document.getElementById('agfForm'),
     tabs: Array.from(document.querySelectorAll('.agf-tab')),
@@ -3017,6 +3025,7 @@
       if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
     }
 
+    updateDropzoneTextForLimited();
     bindEvents();
     setActiveTab('file');
     loadPreferences();
