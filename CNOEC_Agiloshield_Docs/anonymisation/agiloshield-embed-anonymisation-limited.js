@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.5-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.6-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -154,7 +154,8 @@
   const storage = createSafeStorage();
 
   function getEditionForQuota() {
-    const ed = (window.AGILO_EDITION || storage.get('agilo:edition') || state.edition || 'free').toLowerCase();
+    // Priorité: state.edition (Memberstack à l'init) > override manuel > cache > free
+    const ed = (state.edition || window.AGILO_EDITION || storage.get('agilo:edition') || 'free').toLowerCase();
     if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
     return 'free';
   }
@@ -164,7 +165,8 @@
     n = Math.max(1, typeof n === 'number' && !isNaN(n) ? n : 1);
     const edition = getEditionForQuota();
     const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
-    const raw = storage.get(STORAGE_USAGE);
+    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
+    const raw = storage.get(usageKey);
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     let data;
@@ -176,7 +178,7 @@
     if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
     if (data.count + n > limit) return false;
     data.count += n;
-    storage.set(STORAGE_USAGE, JSON.stringify(data));
+    storage.set(usageKey, JSON.stringify(data));
     return true;
   }
 
@@ -3050,8 +3052,7 @@
     if (window.globalToken && storage.get('agilo:username')) {
       state.token = window.globalToken;
       state.email = storage.get('agilo:username');
-      const cachedEdition = storage.get('agilo:edition');
-      if (cachedEdition) state.edition = normalizeEdition(cachedEdition);
+      // Ne pas écraser state.edition (déjà correct depuis detectEdition) avec un cache potentiellement obsolète
     } else {
       state.email = await getUserEmail();
       if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
