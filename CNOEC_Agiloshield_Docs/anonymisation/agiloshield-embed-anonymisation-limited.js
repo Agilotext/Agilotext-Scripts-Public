@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.6-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.7-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -160,6 +160,25 @@
     return 'free';
   }
 
+  /** Retourne { used, limit, remaining } sans consommer */
+  function getQuotaStatus() {
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
+    const raw = storage.get(usageKey);
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : { count: 0, resetAt: now + dayMs };
+    } catch (e) {
+      data = { count: 0, resetAt: now + dayMs };
+    }
+    if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
+    const used = data.count || 0;
+    return { used, limit, remaining: Math.max(0, limit - used) };
+  }
+
   /** @param {number} n Nombre de documents à consommer (1 par fichier, 1 pour le texte) */
   function checkAndConsumeQuota(n) {
     n = Math.max(1, typeof n === 'number' && !isNaN(n) ? n : 1);
@@ -184,10 +203,21 @@
 
   function updateDropzoneTextForLimited() {
     if (!ui.dropzone) return;
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const status = getQuotaStatus();
+    const used = status.used;
+    const remaining = status.remaining;
     var paras = ui.dropzone.querySelectorAll('p');
-    if (paras[0]) paras[0].textContent = '3 documents gratuits par jour (10 pour Business) — tous formats, 10 Mo max / fichier.';
+    if (paras[0]) paras[0].textContent = used + '/' + limit + ' documents utilisés aujourd\'hui — 10 Mo max / fichier.';
     var p2 = ui.dropzone.querySelector('.agf-formats-explicit') || paras[1];
-    if (p2) p2.innerHTML = 'Formats pris en charge : CSV, Word, Excel, PowerPoint, TXT, PDF. Version illimitée (BETA) : <a href="mailto:contact@agilotext.com">contact@agilotext.com</a>';
+    if (p2) p2.innerHTML = 'Formats : CSV, Word, Excel, PowerPoint, TXT, PDF. Limite atteinte ? <a href="mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)" class="agf-contact-link">contact@agilotext.com</a>';
+    const quotaReached = remaining <= 0;
+    ui.dropzone.classList.toggle('agf-dropzone--quota-reached', quotaReached);
+    ui.dropzone.setAttribute('aria-disabled', quotaReached ? 'true' : 'false');
+    ui.dropzone.style.pointerEvents = quotaReached ? 'none' : '';
+    ui.dropzone.style.opacity = quotaReached ? '0.7' : '1';
+    if (ui.input) ui.input.disabled = quotaReached;
   }
 
   const ui = {
@@ -1323,9 +1353,21 @@
     const files = Array.from(fileList || []);
     const rejectedImages = [];
     const rejectedOther = [];
-    const maxToAdd = MAX_FILES - state.files.length;
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const quotaStatus = getQuotaStatus();
+    const remaining = quotaStatus.remaining;
+    const canAddByQuota = Math.max(0, remaining - state.files.length);
+    if (remaining <= 0 || state.files.length >= limit) {
+      setQuotaExceededStatus();
+      updateDropzoneTextForLimited();
+      renderFileList();
+      return;
+    }
+    const maxToAdd = Math.min(limit - state.files.length, canAddByQuota, MAX_FILES - state.files.length);
     if (maxToAdd <= 0) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
+      setQuotaExceededStatus();
+      updateDropzoneTextForLimited();
       renderFileList();
       return;
     }
@@ -1337,9 +1379,9 @@
       else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
+      setStatus('error', 'Limite du jour atteinte (' + limit + ' docs). Vous avez ajouté ' + maxToAdd + ' fichier(s).');
     } else if (rejectedImages.length > 0) {
-      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge. Ce sera disponible prochainement.');
+      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge.');
     } else if (rejectedOther.length > 0) {
       const short = rejectedOther.slice(0, 2).join(', ');
       const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
@@ -1347,6 +1389,7 @@
     } else {
       setStatus('', '');
     }
+    updateDropzoneTextForLimited();
     renderFileList();
   }
 
@@ -2177,6 +2220,7 @@
     } else {
       setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
     }
+    updateDropzoneTextForLimited();
     updateActions();
   }
 
@@ -2748,11 +2792,11 @@
       });
     });
 
-    ui.dropzone.addEventListener('click', () => ui.input.click());
-    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.input.click(); } });
-    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); ui.dropzone.classList.add('is-dragover'); });
+    ui.dropzone.addEventListener('click', () => { if (getQuotaStatus().remaining > 0 && !ui.dropzone.classList.contains('agf-dropzone--quota-reached')) ui.input.click(); });
+    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (getQuotaStatus().remaining > 0) ui.input.click(); } });
+    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); if (getQuotaStatus().remaining > 0) ui.dropzone.classList.add('is-dragover'); });
     ['dragleave', 'dragend'].forEach((evt) => ui.dropzone.addEventListener(evt, () => ui.dropzone.classList.remove('is-dragover')));
-    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files && getQuotaStatus().remaining > 0) addFiles(e.dataTransfer.files); });
     ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
 
     if (ui.textInput) {
