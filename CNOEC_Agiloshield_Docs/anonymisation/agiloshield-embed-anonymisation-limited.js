@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.7-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.8-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -1344,7 +1344,7 @@
     if (!file) return 'format';
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (IMAGE_EXT.includes(ext)) return 'image';
-    if (file.size > MAX_FILE_SIZE) return 'size';
+    if (file.size > MAX_FILE_SIZE) return 'size'; // 10 Mo max par fichier
     if (!SUPPORTED_EXT.includes(ext)) return 'format';
     return null;
   }
@@ -1375,7 +1375,7 @@
     toAdd.forEach((file) => {
       const reason = getRejectReason(file);
       if (reason === 'image') rejectedImages.push(file.name);
-      else if (reason) rejectedOther.push(file.name);
+      else if (reason) rejectedOther.push({ name: file.name, reason });
       else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
@@ -1383,9 +1383,14 @@
     } else if (rejectedImages.length > 0) {
       setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge.');
     } else if (rejectedOther.length > 0) {
-      const short = rejectedOther.slice(0, 2).join(', ');
-      const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non accepté ou fichier > 10 Mo : ' + short + more + '.');
+      const hasSize = rejectedOther.some((r) => r.reason === 'size');
+      const hasFormat = rejectedOther.some((r) => r.reason === 'format');
+      let msg = 'Fichier(s) refusé(s) : ';
+      if (hasSize) msg += 'max 10 Mo par fichier. ';
+      if (hasFormat) msg += 'Formats acceptés : PDF, Word, Excel, PowerPoint, TXT, CSV, JSON, FEC. ';
+      const short = rejectedOther.slice(0, 2).map((r) => r.name).join(', ');
+      msg += short + (rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '') + '.';
+      setStatus('error', msg);
     } else {
       setStatus('', '');
     }
