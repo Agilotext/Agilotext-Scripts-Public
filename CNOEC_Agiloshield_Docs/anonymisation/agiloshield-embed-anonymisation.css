@@ -116,6 +116,9 @@
     border-color: var(--agilo-primary);
     box-shadow: 0 0 0 4px var(--ring);
   }
+  .agf-dropzone h4,
+  .agf-dropzone p { pointer-events: none; }
+  .agf-dropzone a { pointer-events: auto; }
   .agf-dropzone h4 { font-size: 1rem; font-weight: 600; }
   .agf-dropzone p { margin-top: var(--space-1); font-size: 0.8125rem; color: var(--agilo-text-secondary); }
   .agf-dropzone .agf-formats-explicit { margin-top: var(--space-1); font-size: 0.75rem; color: var(--agilo-text-secondary); opacity: 0.9; }
