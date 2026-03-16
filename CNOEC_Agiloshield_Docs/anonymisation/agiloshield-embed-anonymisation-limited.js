@@ -1,0 +1,3038 @@
+(function () {
+  'use strict';
+  // UTF-8; textes FR avec accents
+  // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.5-limited';
+
+  const API_BASE = 'https://api.agilotext.com/api/v1';
+  const TOKEN_ENDPOINT = API_BASE + '/getToken';
+  const ANON_ASYNC_UPLOAD = API_BASE + '/anonAsyncOfficeText';
+  const ANON_STATUS = API_BASE + '/getAnonStatus';
+  const ANON_JOBS_INFO = API_BASE + '/getAnonJobsInfo';
+  const ANON_RECEIVE = API_BASE + '/receiveAnonText';
+  const ANON_RECEIVE_ZIP = API_BASE + '/receiveAnonZip';
+  const ANON_DELETE = API_BASE + '/deleteAnonJob';
+  const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
+  const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
+  const VERSION_ENDPOINT = API_BASE + '/getVersion';
+  const POLL_INTERVAL_MS = 2500;
+  const STATUS_REQUEST_TIMEOUT = 20000;
+  const MAX_POLL_TIME_MS = 7200000; // 2 h max pour tout le polling (évite boucle infinie)
+  const INFLIGHT_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
+  const PROGRESS_START = 8;
+  const PROGRESS_MAX_BEFORE_READY = 92;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Mo (limite FREE / abonnements non illimité)
+  const MAX_FILES = 12;
+  const STORAGE_USAGE = 'agilo:anon:usage:v1';
+  const DAILY_LIMITS = { free: 3, business: 10 };
+  const QUOTA_EXCEEDED_MSG = 'Vous avez atteint la limite du jour (3 documents gratuits / 10 pour Business). Anonymisation illimitée (BETA) : accès sur demande. Contactez-nous : contact@agilotext.com';
+  // Backend: csv, doc(x), pdf(x), xls(x), txt, text. PDF/ppt peuvent être désactivés côté serveur.
+  const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
+  const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
+  const REQUEST_TIMEOUT = 7200000; // 2 h (FEC 40+ min)
+  const query = new URLSearchParams(window.location.search);
+  const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
+  const FEATURE_AVAILABILITY = Object.freeze({
+    pseudo: runtimeFeatureFlags.pseudo === true || query.get('featurePseudo') === '1',
+    inclusion: runtimeFeatureFlags.inclusion === true || query.get('featureInclusion') === '1'
+  });
+
+  const STORAGE_TYPES = 'agilo:futures:types:v1';
+  const STORAGE_INC = 'agilo:futures:include:v1';
+  const STORAGE_EXC = 'agilo:futures:exclude:v1';
+  const STORAGE_PSEUDO = 'agilo:futures:pseudo:v1';
+  const STORAGE_MODE = 'agilo:futures:mode:v1';
+  const STORAGE_INFLIGHT = 'agilo:anon:inflight:v1';
+
+  const DEFAULT_PSEUDO_CONFIG = {
+    strategy: 'placeholders',
+    scope: 'document',
+    keyMode: 'server',
+    restoreWindow: '30d',
+    deterministic: true,
+    preserveFormat: true
+  };
+
+  const state = {
+    activeTab: 'file',
+    files: [],
+    processedItems: [],
+    anonJobsList: [],
+    edition: 'free',
+    mode: 'anonymiser',
+    email: null,
+    token: '',
+    selectedJobIds: [],
+    processing: false,
+    resultUrl: null,
+    resultFilename: 'document_anonymisé',
+    textProcessing: false,
+    abortController: null,
+    includeTerms: [],
+    excludeTerms: [],
+    pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG }
+  };
+  window.__AGILO_EMBED_STATE__ = state; // Export pour debug console
+  const DEBOUNCE_TEXT_MS = 1000;
+  const MIN_TEXT_LENGTH_FOR_API = 10;
+  let debounceTextTimer = null;
+  let textProcessQueued = false;
+  let textRequestSerial = 0;
+  let lastProcessedCacheKey = null;
+  let lastProcessedResult = null;
+  let lastProcessedHasTags = false;
+  let lastProcessedHtml = null;
+  let lastProcessedStats = null;
+  let lastProcessedCounts = null;
+  const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
+  const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  /** Backend (Nicolas/spacy-anon) placeholders → code affiché dans l’UI. Tous les tags backend doivent avoir une entrée pour éviter OTHER. */
+  const TAG_ALIAS = {
+    PR: 'PR',
+    PERSON: 'PR',
+    PERSON_NAME: 'PR',
+    PER: 'PR',
+    NAME: 'PR',
+    MAIL: 'MAIL',
+    EMAIL: 'MAIL',
+    E_MAIL: 'MAIL',
+    PHON: 'PHON',
+    PHONE: 'PHON',
+    TEL: 'PHON',
+    TELEPHONE: 'PHON',
+    MOBILE: 'PHON',
+    ADR: 'ADR',
+    ADDRESS: 'ADR',
+    STREET_ADDRESS: 'ADR',
+    POST: 'POST',
+    POSTAL: 'POST',
+    POSTCODE: 'POST',
+    POSTAL_CODE: 'POST',
+    ZIP: 'POST',
+    ZIP_CODE: 'POST',
+    LOC: 'LOC',
+    LOCATION: 'LOC',
+    LOCALISATION: 'LOC',
+    GPE: 'LOC',
+    CITY: 'LOC',
+    REGION: 'LOC',
+    ORG: 'ORG',
+    ORGANIZATION: 'ORG',
+    ORGANISATION: 'ORG',
+    COMPANY: 'ORG',
+    CIE: 'ORG',
+    CID: 'SIREN',
+    SIREN: 'SIREN',
+    SIRET: 'SIRET',
+    TVA: 'TVA',
+    VAT: 'TVA',
+    IBAN: 'IBAN',
+    RIB: 'IBAN',
+    RIB_KEY: 'IBAN',
+    BIC: 'BIC',
+    SWIFT: 'BIC',
+    FRNIR: 'FRNIR',
+    NIR: 'FRNIR',
+    NSS: 'FRNIR',
+    DT: 'DT',
+    DATE: 'DT',
+    DATETIME: 'DT',
+    TIME: 'DT',
+    BIRTH_DATE: 'DT',
+    BIRTH_PLACE: 'LOC',
+    URL: 'URL',
+    URSSAF_ID: 'SIREN',
+    FISCAL_ID: 'SIREN',
+    APE: 'SIREN',
+    OTHER: 'OTHER'
+  };
+  const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
+  /** Types proposés dans la grille (doivent correspondre à des data-entity présents dans #agfTypeGrid). POST/URL activés dynamiquement même si disabled dans le HTML. */
+  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+  const storage = createSafeStorage();
+
+  function getEditionForQuota() {
+    const ed = (storage.get('agilo:edition') || state.edition || 'free').toLowerCase();
+    if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
+    return 'free';
+  }
+
+  function checkAndConsumeQuota() {
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const raw = storage.get(STORAGE_USAGE);
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : { count: 0, resetAt: now + dayMs };
+    } catch (e) {
+      data = { count: 0, resetAt: now + dayMs };
+    }
+    if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
+    if (data.count >= limit) return false;
+    data.count++;
+    storage.set(STORAGE_USAGE, JSON.stringify(data));
+    return true;
+  }
+
+  const ui = {
+    form: document.getElementById('agfForm'),
+    tabs: Array.from(document.querySelectorAll('.agf-tab')),
+    panels: { file: document.getElementById('agfPanel-file'), text: document.getElementById('agfPanel-text'), restore: document.getElementById('agfPanel-restore') },
+    dropzone: document.getElementById('agfDropzone'),
+    input: document.getElementById('agfFileInput'),
+    fileList: document.getElementById('agfFileList'),
+    titleFileList: document.getElementById('agfTitleFileList'),
+    processedWrap: document.getElementById('agfProcessedWrap'),
+    processedList: document.getElementById('agfProcessedList'),
+    clearProcessed: document.getElementById('agfClearProcessed'),
+    downloadZip: document.getElementById('agfDownloadZip'),
+    actionsSubmit: document.getElementById('agfActionsSubmit'),
+    submit: document.getElementById('agfSubmit'),
+    reset: document.getElementById('agfReset'),
+    download: document.getElementById('agfDownload'),
+    status: document.getElementById('agfStatus'),
+    textInput: document.getElementById('agfInputText'),
+    textOutput: document.getElementById('agfOutputText'),
+    textClear: document.getElementById('agfTextClear'),
+    textCopy: document.getElementById('agfTextCopy'),
+    outputSummary: document.getElementById('agfOutputSummary'),
+    outputEntities: document.getElementById('agfOutputEntities'),
+    savedTypesInfo: document.getElementById('agfSavedTypesInfo'),
+    lastMaskInfo: document.getElementById('agfLastMaskInfo'),
+    pseudoSummary: document.getElementById('agfPseudoSummary'),
+    pseudoBadge: document.getElementById('agfPseudoBadge'),
+    pseudoSavedBadge: document.getElementById('agfPseudoSavedBadge'),
+    pseudoAvailabilityHint: document.getElementById('agfPseudoAvailabilityHint'),
+    inclusionAvailabilityHint: document.getElementById('agfInclusionAvailabilityHint'),
+    modeRadios: Array.from(document.querySelectorAll('input[name="agfMode"]')),
+    pseudoMode: document.getElementById('agfPseudoMode'),
+    pseudoSaved: document.getElementById('agfPseudoSaved'),
+    openTypes: document.getElementById('agfOpenTypes'),
+    openInclusion: document.getElementById('agfOpenInclusion'),
+    inclusionChip: document.getElementById('agfInclusionChip'),
+    typesCount: document.getElementById('agfTypesCount'),
+    upgradeRestore: document.getElementById('agfUpgradeRestore'),
+    apiMeta: document.getElementById('agfApiMeta'),
+    modals: {
+      types: document.getElementById('agfModalTypesWrap'),
+      pseudo: document.getElementById('agfModalPseudoWrap'),
+      inclusion: document.getElementById('agfModalInclusionWrap')
+    },
+    modalTypesClose: document.getElementById('agfModalTypesClose'),
+    modalTypesBetaOverlay: document.getElementById('agfModalTypesBetaOverlay'),
+    modalTypesBetaClose: document.getElementById('agfModalTypesBetaClose'),
+    modalPseudoClose: document.getElementById('agfModalPseudoClose'),
+    modalIncClose: document.getElementById('agfModalIncClose'),
+    defaultsTypes: document.getElementById('agfDefaultsTypes'),
+    detectAllTypes: document.getElementById('agfDetectAllTypes'),
+    ignoreAllTypes: document.getElementById('agfIgnoreAllTypes'),
+    pseudoDefaults: document.getElementById('agfPseudoDefaults'),
+    savePseudo: document.getElementById('agfSavePseudo'),
+    pseudoStrategyRadios: Array.from(document.querySelectorAll('input[name="agfPseudoStrategy"]')),
+    pseudoScope: document.getElementById('agfPseudoScope'),
+    pseudoKeyMode: document.getElementById('agfPseudoKeyMode'),
+    pseudoRestoreWindow: document.getElementById('agfPseudoRestoreWindow'),
+    pseudoDeterministic: document.getElementById('agfPseudoDeterministic'),
+    pseudoPreserveFormat: document.getElementById('agfPseudoPreserveFormat'),
+    pseudoReadonlyZone: document.getElementById('agfPseudoReadonlyZone'),
+    pseudoPreviewNote: document.getElementById('agfPseudoPreviewNote'),
+    saveTypes: document.getElementById('agfSaveTypes'),
+    saveInclusion: document.getElementById('agfSaveInclusion'),
+    inclusionDefaults: document.getElementById('agfInclusionDefaults'),
+    inclusionReadonlyZone: document.getElementById('agfInclusionReadonlyZone'),
+    inclusionPreviewNote: document.getElementById('agfInclusionPreviewNote'),
+    incSummary: document.getElementById('agfIncSummary'),
+    includeTerms: document.getElementById('agfIncludeTerms'),
+    excludeTerms: document.getElementById('agfExcludeTerms'),
+    includeInput: document.getElementById('agfIncludeInput'),
+    excludeInput: document.getElementById('agfExcludeInput'),
+    includeAdd: document.getElementById('agfIncludeAdd'),
+    excludeAdd: document.getElementById('agfExcludeAdd'),
+    includeList: document.getElementById('agfIncludeList'),
+    excludeList: document.getElementById('agfExcludeList'),
+    manualAuth: document.getElementById('agfManualAuth'),
+    manualAuthToggle: document.getElementById('agfManualAuthToggle'),
+    manualAuthFields: document.getElementById('agfManualAuthFields'),
+    manualUsername: document.getElementById('agfManualUsername'),
+    manualToken: document.getElementById('agfManualToken'),
+    manualEdition: document.getElementById('agfManualEdition')
+  };
+
+  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const formatSize = (bytes) => {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return (bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 2) + ' ' + units[idx];
+  };
+
+  function normalizeResponseText(raw) {
+    if (raw == null) return '';
+    return String(raw).replace(/^\uFEFF/, '').trim();
+  }
+
+  function tryParseJson(raw) {
+    const text = normalizeResponseText(raw);
+    if (!text) return { ok: false, reason: 'empty', text: '' };
+    try {
+      return { ok: true, data: JSON.parse(text), text };
+    } catch (e) { }
+
+    const firstObj = text.indexOf('{');
+    const lastObj = text.lastIndexOf('}');
+    if (firstObj !== -1 && lastObj > firstObj) {
+      const candidate = text.slice(firstObj, lastObj + 1).trim();
+      try {
+        return { ok: true, data: JSON.parse(candidate), text: candidate, rescued: true };
+      } catch (e) { }
+    }
+
+    const firstArr = text.indexOf('[');
+    const lastArr = text.lastIndexOf(']');
+    if (firstArr !== -1 && lastArr > firstArr) {
+      const candidate = text.slice(firstArr, lastArr + 1).trim();
+      try {
+        return { ok: true, data: JSON.parse(candidate), text: candidate, rescued: true };
+      } catch (e) { }
+    }
+
+    if (text.charAt(0) === '<') return { ok: false, reason: 'html', text };
+    return { ok: false, reason: 'invalid', text };
+  }
+
+  function buildInvalidJsonMessage(raw, shortMode) {
+    const parsed = tryParseJson(raw);
+    if (parsed.ok) return '';
+    if (shortMode) {
+      if (parsed.reason === 'empty') return 'Réponse serveur vide.';
+      if (parsed.reason === 'html') return 'Réponse serveur invalide (HTML reçu).';
+      return 'Réponse serveur invalide.';
+    }
+    if (parsed.reason === 'empty') return 'Réponse serveur invalide (body vide).';
+    if (parsed.reason === 'html') return 'Réponse serveur invalide (HTML reçu).';
+    const preview = parsed.text ? parsed.text.slice(0, 120) : '(vide)';
+    return 'Réponse serveur invalide (JSON attendu). Début reçu: ' + preview + ((parsed.text && parsed.text.length > 120) ? '…' : '');
+  }
+
+  function clampProgress(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return PROGRESS_START;
+    if (n < PROGRESS_START) return PROGRESS_START;
+    if (n > PROGRESS_MAX_BEFORE_READY) return PROGRESS_MAX_BEFORE_READY;
+    return Math.round(n);
+  }
+
+  function normalizeEdition(rawEdition) {
+    const n = String(rawEdition || '').trim().toLowerCase();
+    if (!n) return 'free';
+    if (n === 'business') return 'ent';
+    if (n === 'free' || n === 'pro' || n === 'ent' || n === 'anonymisation') return n;
+    return 'free';
+  }
+
+  function getEditionForApi() {
+    const normalized = normalizeEdition(state.edition);
+    if (state.edition !== normalized) state.edition = normalized;
+    return normalized;
+  }
+
+  function createSafeStorage() {
+    const mem = {};
+    try {
+      const probeKey = '__agilo_probe__';
+      window.localStorage.setItem(probeKey, '1');
+      window.localStorage.removeItem(probeKey);
+      return {
+        get: (k) => window.localStorage.getItem(k),
+        set: (k, v) => window.localStorage.setItem(k, v),
+        remove: (k) => window.localStorage.removeItem(k)
+      };
+    } catch (e) {
+      return {
+        get: (k) => Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null,
+        set: (k, v) => { mem[k] = String(v); },
+        remove: (k) => { delete mem[k]; }
+      };
+    }
+  }
+
+  function toSortedJson(value) {
+    if (Array.isArray(value)) return JSON.stringify(value.slice().sort());
+    if (value && typeof value === 'object') {
+      const keys = Object.keys(value).sort();
+      const ordered = {};
+      keys.forEach((k) => { ordered[k] = value[k]; });
+      return JSON.stringify(ordered);
+    }
+    return JSON.stringify(value);
+  }
+
+  function currentTextConfigKey(text) {
+    const inclusionTerms = isFeatureEnabled('inclusion') ? (state.includeTerms || []) : [];
+    const exclusionTerms = isFeatureEnabled('inclusion') ? (state.excludeTerms || []) : [];
+    const pseudoCfg = isFeatureEnabled('pseudo') ? (state.pseudoConfig || {}) : {};
+    return [
+      (text || '').trim(),
+      state.mode,
+      toSortedJson(selectedVisualEntities()),
+      toSortedJson(selectedEntities()),
+      inclusionTerms.join('|'),
+      exclusionTerms.join('|'),
+      toSortedJson(pseudoCfg)
+    ].join('::');
+  }
+
+  function resetTextCache() {
+    lastProcessedCacheKey = null;
+    lastProcessedResult = null;
+    lastProcessedHasTags = false;
+    lastProcessedHtml = null;
+    lastProcessedStats = null;
+    lastProcessedCounts = null;
+    state.abortController = null;
+    state.textProcessing = false;
+  }
+
+  function refreshTextIfNeeded() {
+    let value = '';
+    document.querySelectorAll('#agfInputText').forEach(el => {
+      const v = (el.value || '').trim();
+      if (v) value = v;
+    });
+    if (!value || value.length < MIN_TEXT_LENGTH_FOR_API) return;
+    scheduleDebouncedText();
+  }
+
+  function setStatus(kind, message) {
+    const statuses = document.querySelectorAll('#agfStatus');
+    statuses.forEach((statusEl) => {
+      if (!message) {
+        statusEl.classList.remove('is-visible');
+        statusEl.removeAttribute('data-kind');
+        statusEl.textContent = '';
+        statusEl.querySelectorAll('.agf-status-lottie').forEach((el) => { el.innerHTML = ''; });
+        return;
+      }
+      statusEl.classList.add('is-visible');
+      statusEl.setAttribute('data-kind', kind);
+      statusEl.textContent = '';
+      if (kind === 'loading') {
+        const lottieUrl = (typeof window.AGILO_LOADING_LOTTIE_URL === 'string' && window.AGILO_LOADING_LOTTIE_URL)
+          ? window.AGILO_LOADING_LOTTIE_URL
+          : 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json';
+        if (lottieUrl && typeof window.lottie !== 'undefined' && window.lottie.loadAnimation) {
+          const lottieContainer = document.createElement('div');
+          lottieContainer.className = 'agf-status-lottie';
+          lottieContainer.setAttribute('aria-hidden', 'true');
+          statusEl.appendChild(lottieContainer);
+          try {
+            window.lottie.loadAnimation({
+              container: lottieContainer,
+              renderer: 'svg',
+              loop: true,
+              autoplay: true,
+              path: lottieUrl
+            });
+          } catch (e) {
+            const fallback = document.createElement('span');
+            fallback.className = 'agf-spinner';
+            fallback.setAttribute('aria-hidden', 'true');
+            lottieContainer.replaceWith(fallback);
+          }
+        } else {
+          const spinner = document.createElement('span');
+          spinner.className = 'agf-spinner';
+          spinner.setAttribute('aria-hidden', 'true');
+          statusEl.appendChild(spinner);
+        }
+      }
+      const txt = document.createElement('span');
+      txt.textContent = message;
+      statusEl.appendChild(txt);
+
+      // 20/20 Kill Button: Add "Annuler" button if loading
+      if (kind === 'loading' && (state.processing || state.textProcessing)) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'agf-status-cancel-btn';
+        cancelBtn.title = 'Annuler le traitement en cours';
+        cancelBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Annuler</span>';
+        cancelBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          cancelActiveProcessing();
+        });
+        statusEl.appendChild(cancelBtn);
+      }
+    });
+  }
+
+  function cancelActiveProcessing() {
+    if (state.abortController) {
+      state.abortController.abort();
+      state.abortController = null;
+    }
+    state.processing = false;
+    state.textProcessing = false;
+
+    // Visual feedback for cancellation
+    const msg = 'Traitement annulé par l\'utilisateur.';
+    setStatus('canceled', msg);
+
+    // Update individual item statuses to "canceled" (orange badge handled via CSS)
+    state.processedItems.forEach(item => {
+      if (item.status === 'pending' || item.status === 'processing') {
+        item.status = 'canceled';
+        item.errorMessage = 'Annulé';
+      }
+    });
+
+    renderProcessedList();
+    updateActions();
+    clearInFlightJobs();
+
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      el.classList.remove('agf-text-output--loading');
+      el.setAttribute('aria-busy', 'false');
+      if (el.textContent === 'Traitement en cours… Les gros fichiers peuvent prendre un moment.') {
+        el.textContent = 'Traitement annulé.';
+      }
+    });
+  }
+
+  function isFeatureEnabled(featureName) {
+    return !!FEATURE_AVAILABILITY[featureName];
+  }
+
+  function setReadonlyControls(root, readonly) {
+    if (!root) return;
+    const controls = root.querySelectorAll('input, select, textarea, button');
+    controls.forEach((node) => {
+      if (!Object.prototype.hasOwnProperty.call(node.dataset, 'agfInitiallyDisabled')) {
+        node.dataset.agfInitiallyDisabled = node.disabled ? '1' : '0';
+      }
+      const initiallyDisabled = node.dataset.agfInitiallyDisabled === '1';
+      node.disabled = readonly || initiallyDisabled;
+    });
+  }
+
+  let lastFocusBeforeModal = null;
+  let activeModal = null;
+  let previousBodyOverflow = '';
+
+  function focusableNodes(el) {
+    return Array.from(el.querySelectorAll(FOCUSABLE_SELECTOR))
+      .filter((n) => !n.hasAttribute('disabled') && n.getAttribute('aria-hidden') !== 'true');
+  }
+
+  function openModal(el) {
+    if (!el) return;
+    lastFocusBeforeModal = document.activeElement;
+    activeModal = el;
+    previousBodyOverflow = document.body.style.overflow || '';
+    document.body.style.overflow = 'hidden';
+    el.classList.add('is-open');
+    el.setAttribute('aria-hidden', 'false');
+    if (el === ui.modals.types && ui.modalTypesBetaOverlay) ui.modalTypesBetaOverlay.classList.remove('is-dismissed');
+    const focusables = focusableNodes(el);
+    const initial = el.querySelector('.agf-close') || focusables[0];
+    if (initial) setTimeout(() => initial.focus(), 0);
+  }
+  function closeModal(el) {
+    if (!el) return;
+    el.classList.remove('is-open');
+    el.setAttribute('aria-hidden', 'true');
+    if (activeModal === el) activeModal = null;
+    if (!activeModal) document.body.style.overflow = previousBodyOverflow;
+    if (lastFocusBeforeModal && typeof lastFocusBeforeModal.focus === 'function') {
+      setTimeout(() => lastFocusBeforeModal.focus(), 0);
+    }
+  }
+  function closeAllModals() { Object.keys(ui.modals).forEach((k) => closeModal(ui.modals[k])); }
+
+  function trapModalFocus(e) {
+    if (!activeModal || e.key !== 'Tab') return;
+    const nodes = focusableNodes(activeModal);
+    if (!nodes.length) {
+      e.preventDefault();
+      return;
+    }
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
+  function revokeResultUrl() {
+    if (state.resultUrl) {
+      URL.revokeObjectURL(state.resultUrl);
+      state.resultUrl = null;
+    }
+  }
+
+  function revokeAllProcessedUrls() {
+    state.processedItems.forEach((item) => {
+      if (item.resultUrl) {
+        URL.revokeObjectURL(item.resultUrl);
+        item.resultUrl = null;
+      }
+      item.resultBlob = null;
+    });
+  }
+
+  function clearInFlightJobs() {
+    storage.remove(STORAGE_INFLIGHT);
+  }
+
+  function persistInFlightJobs() {
+    try {
+      const items = state.processedItems
+        .filter((item) => item && item.jobId != null && item.status !== 'done' && item.status !== 'error')
+        .map((item) => ({
+          id: item.id,
+          fileName: item.fileName,
+          size: item.size,
+          jobId: item.jobId,
+          status: item.status === 'processing' ? 'processing' : 'pending',
+          progressValue: clampProgress(item.progressValue || PROGRESS_START),
+          createdAt: item.createdAt || Date.now(),
+          pollStartedAt: item.pollStartedAt || Date.now()
+        }));
+      if (!items.length) {
+        clearInFlightJobs();
+        return;
+      }
+      storage.set(STORAGE_INFLIGHT, JSON.stringify({
+        savedAt: Date.now(),
+        email: state.email || '',
+        edition: getEditionForApi(),
+        items
+      }));
+    } catch (e) { }
+  }
+
+  function restoreInFlightJobs() {
+    const raw = storage.get(STORAGE_INFLIGHT);
+    if (!raw) return false;
+    const parsed = tryParseJson(raw);
+    if (!parsed.ok || !parsed.data || typeof parsed.data !== 'object') {
+      clearInFlightJobs();
+      return false;
+    }
+    const payload = parsed.data;
+    const savedAt = Number(payload.savedAt || 0);
+    if (!savedAt || (Date.now() - savedAt) > INFLIGHT_MAX_AGE_MS) {
+      clearInFlightJobs();
+      return false;
+    }
+    if (payload.email && state.email && payload.email !== state.email) return false;
+    if (!Array.isArray(payload.items) || !payload.items.length) {
+      clearInFlightJobs();
+      return false;
+    }
+    if (payload.edition) state.edition = normalizeEdition(payload.edition);
+
+    const restoredItems = payload.items
+      .filter((item) => item && item.jobId != null)
+      .map((item) => ({
+        id: item.id || uid(),
+        fileName: item.fileName || 'document',
+        size: Number(item.size || 0),
+        file: null,
+        status: item.status === 'processing' ? 'processing' : 'pending',
+        jobId: item.jobId,
+        resultUrl: null,
+        resultBlob: null,
+        resultFilename: null,
+        resultSize: null,
+        errorMessage: null,
+        progressValue: clampProgress(item.progressValue || PROGRESS_START),
+        createdAt: Number(item.createdAt || savedAt || Date.now()),
+        pollStartedAt: Number(item.pollStartedAt || savedAt || Date.now()),
+        justDone: false
+      }));
+    if (!restoredItems.length) {
+      clearInFlightJobs();
+      return false;
+    }
+
+    state.files = [];
+    state.processedItems = restoredItems;
+    state.processing = true;
+    renderFileList();
+    renderProcessedList();
+    setStatus('loading', 'Reprise des traitements en cours…');
+    return true;
+  }
+
+  function bumpItemProgress(item) {
+    if (!item || (item.status !== 'pending' && item.status !== 'processing')) return;
+    const now = Date.now();
+    if (!item.pollStartedAt) item.pollStartedAt = now;
+    const elapsedMs = Math.max(0, now - item.pollStartedAt);
+    const elapsedSec = elapsedMs / 1000;
+    const base = item.status === 'processing' ? 24 : 10;
+    const target = Math.min(PROGRESS_MAX_BEFORE_READY, base + (Math.log2(elapsedSec + 1) * 18));
+    const current = clampProgress(item.progressValue || PROGRESS_START);
+    item.progressValue = clampProgress(Math.max(current + 1, target));
+  }
+
+  function updateActions() {
+    const hasPending = state.files.length > 0;
+    const hasProcessed = state.processedItems.length > 0;
+    const hasAnonJobs = Array.isArray(state.anonJobsList) && state.anonJobsList.length > 0;
+
+    document.querySelectorAll('#agfSubmit').forEach(el => { el.disabled = state.processing || !hasPending; });
+    document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
+    document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed && !hasAnonJobs; });
+    // agfAnonJobsWrap is always visible as a standalone section (renderAnonJobsList handles empty state)
+    document.querySelectorAll('#agfFileList').forEach(el => { el.hidden = !hasPending; });
+    document.querySelectorAll('#agfTitleFileList').forEach(el => { el.hidden = !hasPending; });
+
+    const doneCount = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl)).length;
+    document.querySelectorAll('#agfDownloadZip').forEach(el => {
+      el.hidden = doneCount < 2;
+      el.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
+      el.disabled = state.processing || doneCount < 2;
+    });
+  }
+
+  function createFileRow(item) {
+    const row = document.createElement('div');
+    row.className = 'agf-file';
+    row.setAttribute('role', 'listitem');
+
+    const left = document.createElement('div');
+    const name = document.createElement('p');
+    name.className = 'agf-file-name';
+    name.title = item.fileName;
+    name.textContent = item.fileName;
+    const meta = document.createElement('p');
+    meta.className = 'agf-file-meta';
+    meta.textContent = formatSize(item.size);
+    left.appendChild(name);
+    left.appendChild(meta);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'agf-remove';
+    btn.textContent = 'Retirer';
+    btn.addEventListener('click', function () {
+      if (state.processing) return;
+      state.files = state.files.filter((f) => f.id !== item.id);
+      renderFileList();
+    });
+
+    row.appendChild(left);
+    row.appendChild(btn);
+    return row;
+  }
+
+  function renderFileList() {
+    const lists = document.querySelectorAll('#agfFileList');
+    lists.forEach((list) => {
+      list.textContent = '';
+      if (state.files.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'agf-empty';
+        empty.textContent = 'Aucun fichier pour l\'instant. Glissez-déposez ou cliquez au-dessus pour en ajouter.';
+        list.appendChild(empty);
+      } else {
+        state.files.forEach((item) => {
+          list.appendChild(createFileRow(item));
+        });
+      }
+    });
+    updateActions();
+  }
+
+
+  function createProcessedCard(item) {
+    const card = document.createElement('div');
+    card.className = 'agf-processed-card agf-processed-card--' + item.status;
+    card.setAttribute('role', 'listitem');
+    card.setAttribute('data-id', item.id);
+    card.setAttribute('data-status', item.status);
+    card.setAttribute('data-progress', String(clampProgress(item.progressValue || PROGRESS_START)));
+
+    const original = document.createElement('div');
+    original.className = 'agf-processed-original';
+    original.innerHTML = '<div class="agf-file-icon" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h8"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(item.fileName) + '">' + escapeHtml(item.fileName) + '</p><p class="agf-file-meta">' + formatSize(item.size) + '</p></div>';
+    card.appendChild(original);
+
+    const arrow = document.createElement('div');
+    arrow.className = 'agf-processed-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
+    card.appendChild(arrow);
+
+    const result = document.createElement('div');
+    result.className = 'agf-processed-result';
+    const progressValue = clampProgress(item.progressValue || (item.status === 'processing' ? 36 : PROGRESS_START));
+    if (item.status === 'pending') {
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div class="agf-file-info"><p class="agf-file-name">En attente</p><p class="agf-file-meta">File de traitement</p></div>';
+    } else if (item.status === 'processing') {
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--processing"><div class="agf-card-lottie"></div></div><div class="agf-file-info" style="flex:1;min-width:0"><p class="agf-file-name">Traitement en cours…</p><div class="agf-processed-progress"><div class="agf-processed-progress-bar" style="width:' + progressValue + '%"></div></div></div>';
+    } else if (item.status === 'error') {
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--error"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Erreur</p><p class="agf-file-meta">' + escapeHtml(sanitizeApiErrorMessage(item.errorMessage || 'Échec')) + '</p></div>';
+    } else if (item.status === 'canceled') {
+      result.innerHTML = '<div class="agf-file-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12"/></svg></div><div class="agf-file-info"><p class="agf-file-name">Annulé</p><p class="agf-file-meta">Traitement interrompu</p></div>';
+    } else {
+      const name = (item.resultFilename || item.fileName) + '';
+      result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
+      const actions = document.createElement('div');
+      actions.className = 'agf-processed-actions';
+      const dl = document.createElement('a');
+      dl.href = item.resultUrl || '#';
+      dl.setAttribute('download', item.resultFilename || name);
+      dl.className = 'agf-btn-icon';
+      dl.title = 'Télécharger';
+      dl.setAttribute('aria-label', 'Télécharger ' + name);
+      dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+      actions.appendChild(dl);
+      result.appendChild(actions);
+    }
+    card.appendChild(result);
+    if (item.justDone) {
+      card.classList.add('agf-processed-card--just-done');
+      setTimeout(function () { card.classList.remove('agf-processed-card--just-done'); }, 2200);
+    }
+    return card;
+  }
+
+  function injectCardLottieFallback(container) {
+    if (!container || container.querySelector('svg')) return;
+    container.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg>';
+  }
+
+  function initCardLottieContainers() {
+    const lottieUrl = (typeof window.AGILO_LOADING_LOTTIE_URL === 'string' && window.AGILO_LOADING_LOTTIE_URL)
+      ? window.AGILO_LOADING_LOTTIE_URL
+      : 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json';
+    document.querySelectorAll('#agfProcessedList .agf-card-lottie').forEach((container) => {
+      if (container.dataset.agiloLottieDone) return;
+      container.dataset.agiloLottieDone = '1';
+      container.style.width = '24px';
+      container.style.height = '24px';
+      if (lottieUrl && typeof window.lottie !== 'undefined' && window.lottie.loadAnimation) {
+        try {
+          window.lottie.loadAnimation({ container: container, renderer: 'svg', loop: true, autoplay: true, path: lottieUrl });
+        } catch (e) { injectCardLottieFallback(container); }
+      } else {
+        injectCardLottieFallback(container);
+      }
+    });
+  }
+
+  function renderProcessedList() {
+    const lists = document.querySelectorAll('#agfProcessedList');
+    lists.forEach((list) => {
+      list.textContent = '';
+      state.processedItems.forEach((item) => {
+        list.appendChild(createProcessedCard(item));
+      });
+    });
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(initCardLottieContainers);
+    else setTimeout(initCardLottieContainers, 0);
+    state.processedItems.forEach((item) => { item.justDone = false; });
+    updateActions();
+  }
+
+  async function fetchAnonJobsInfo() {
+    if (!state.email || !state.token) return [];
+    const params = new URLSearchParams();
+    params.append('username', state.email);
+    params.append('token', state.token);
+    params.append('limit', '100');
+    params.append('offset', '0');
+    params.append('edition', getEditionForApi());
+    try {
+      const response = await fetchWithTimeout(ANON_JOBS_INFO, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      }, STATUS_REQUEST_TIMEOUT);
+      const raw = await response.text();
+      const text = normalizeResponseText(raw);
+      let data = null;
+      try { data = JSON.parse(text); } catch (e) { return []; }
+      if (!data || data.status === 'KO' || data.status === 'ko') return [];
+      const jobs = data.jobs || data.jobList || data.jobsInfoDtos || data.jobsAnon2InfoDtos || (Array.isArray(data.jobIdList) ? data.jobIdList.map((id) => ({ jobId: id })) : []);
+      const list = [];
+      for (const j of jobs) {
+        const jobId = j.jobId != null ? j.jobId : (j.jobid != null ? j.jobid : (j.id != null ? j.id : (typeof j === 'number' ? j : null)));
+        if (jobId == null) continue;
+        const anonStatus = (j.anonStatus != null ? String(j.anonStatus) : '').toUpperCase() || null;
+        list.push({
+          jobId: Number(jobId) || jobId,
+          anonStatus: anonStatus === 'READY' || anonStatus === 'PENDING' || anonStatus === 'ON_ERROR' ? anonStatus : null,
+          fileName: j.originalFileName || j.fileName || j.filename || j.fileNameOrigin || null,
+          fileLength: j.fileLength || j.fileSize || null,
+          dtCreation: j.dtCreation || j.creationDate || null
+        });
+      }
+      const needStatus = list.filter((item) => item.anonStatus == null);
+      const maxStatusChecks = 30;
+      for (let i = 0; i < Math.min(needStatus.length, maxStatusChecks); i++) {
+        const item = needStatus[i];
+        const res = await fetchJobStatus(item.jobId);
+        item.anonStatus = res.status === 'done' ? 'READY' : res.status === 'error' ? 'ON_ERROR' : 'PENDING';
+      }
+      return list.sort((a, b) => (b.jobId - a.jobId));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Parse French date format "DD-MM-YYYY HH:MM:SS" or "DD/MM/YYYY HH:MM:SS" or ISO
+  function parseAnonDate(raw) {
+    if (!raw) return null;
+    var m = String(raw).match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})[\sT](\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (m) {
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
+    }
+    var d = new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  var _histSortDesc = true; // true = plus récent en premier
+
+  function renderAnonJobsList() {
+    const containers = document.querySelectorAll('#agfAnonJobsList');
+    if (!containers.length) return;
+    const rawList = state.anonJobsList || [];
+
+    // Sort by dtCreation (fallback: jobId)
+    const list = rawList.slice().sort(function (a, b) {
+      var da = parseAnonDate(a.dtCreation), db = parseAnonDate(b.dtCreation);
+      var ta = da ? da.getTime() : (Number(a.jobId) || 0);
+      var tb = db ? db.getTime() : (Number(b.jobId) || 0);
+      return _histSortDesc ? (tb - ta) : (ta - tb);
+    });
+
+    // Update count badge
+    const countEl = document.getElementById('agfHistCount');
+    if (countEl) {
+      if (list.length) {
+        const readyCount = list.filter(function (j) { return j.anonStatus === 'READY'; }).length;
+        countEl.textContent = list.length + ' doc' + (list.length > 1 ? 's' : '') +
+          (readyCount ? ' · ' + readyCount + ' prêt' + (readyCount > 1 ? 's' : '') : '');
+        countEl.style.display = '';
+      } else {
+        countEl.style.display = 'none';
+      }
+    }
+
+    containers.forEach(function (container) {
+      container.textContent = '';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'agf-hist-empty';
+        empty.innerHTML =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="32" height="32"><path d="M0 0h24v24H0z" fill="none"/><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z" fill="currentColor"/></svg>' +
+          '<span>Aucun document pour l\'instant.<br>Vos fichiers anonymisés apparaîtront ici.</span>';
+        container.appendChild(empty);
+        return;
+      }
+
+      const bulkBar = document.createElement('div');
+      bulkBar.id = 'agfBulkActionsBar';
+      bulkBar.className = 'agf-hist-bulk-bar';
+      bulkBar.innerHTML =
+        '<div class="agf-bulk-left"><span class="agf-bulk-count">0 sélectionné</span></div>' +
+        '<div class="agf-bulk-right">' +
+        '<button id="agfBulkDeselect" type="button" class="agf-btn-link agf-btn-link--small" style="margin-right:12px">Désélectionner tout</button>' +
+        '<button id="agfBulkDelete" type="button" class="agf-btn-link agf-btn-link--small agf-bulk-delete-btn">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="margin-right:4px"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+        'Tout supprimer' +
+        '</button>' +
+        '</div>';
+      container.appendChild(bulkBar);
+      bulkBar.querySelector('#agfBulkDeselect').addEventListener('click', function () { toggleSelectAll(false); });
+      bulkBar.querySelector('#agfBulkDelete').addEventListener('click', handleBulkDelete);
+      updateBulkActionsUI();
+
+      const wrap = document.createElement('div');
+      wrap.className = 'agf-hist-table-wrap';
+
+      const table = document.createElement('table');
+      table.className = 'agf-hist-table';
+      table.setAttribute('role', 'table');
+      table.setAttribute('aria-label', 'Historique des documents anonymisés');
+
+      // Header
+      const thead = table.createTHead();
+      const hrow = thead.insertRow();
+      var cols = ['', 'N\u00b0', 'Fichier', 'Date', 'Taille', 'Statut', '', ''];
+      cols.forEach(function (label, ci) {
+        const th = document.createElement('th');
+        if (ci === 0) { // Checkbox Select All
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.className = 'agf-hist-checkbox-all';
+          cb.title = 'Tout sélectionner';
+          cb.addEventListener('change', function () { toggleSelectAll(cb.checked); });
+          cb.checked = list.length > 0 && state.selectedJobIds.length === list.length;
+          th.appendChild(cb);
+        } else if (ci === 2) { // Fichier
+          th.textContent = label;
+          th.style.textAlign = 'left';
+          th.style.paddingLeft = '1.25rem';
+        } else if (ci === 3) {
+          // Sortable date column
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'agf-hist-sort-btn';
+          btn.setAttribute('aria-label', 'Trier par date');
+          btn.setAttribute('title', 'Trier par date');
+          btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
+          btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" width="14" height="14" style="vertical-align:middle;margin-right:4px"><g><rect fill="none" height="24" width="24"/></g><g><g><path d="M9.01,14H2v2h7.01v3L13,15l-3.99-4V14z M14.99,13v-3H22V8h-7.01V5L11,9L14.99,13z" fill="currentColor"/></g></g></svg> Date';
+          btn.addEventListener('click', function () {
+            _histSortDesc = !_histSortDesc;
+            btn.setAttribute('data-dir', _histSortDesc ? 'desc' : 'asc');
+            renderAnonJobsList();
+          });
+          th.style.cursor = 'pointer';
+          th.appendChild(btn);
+        } else {
+          th.textContent = label;
+        }
+        hrow.appendChild(th);
+      });
+
+      // Body
+      const tbody = table.createTBody();
+      list.forEach(function (job, idx) {
+        const tr = tbody.insertRow();
+        tr.setAttribute('data-job-id', String(job.jobId));
+        if (state.selectedJobIds.includes(String(job.jobId))) tr.classList.add('is-selected');
+
+        // Checkbox
+        const tdCb = tr.insertCell();
+        tdCb.className = 'agf-hist-td-cb';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'agf-hist-checkbox-row';
+        cb.checked = state.selectedJobIds.includes(String(job.jobId));
+        cb.addEventListener('change', function () {
+          toggleJobSelection(job.jobId, cb.checked);
+          tr.classList.toggle('is-selected', cb.checked);
+        });
+        tdCb.appendChild(cb);
+
+        // N°
+        const tdNum = tr.insertCell();
+        tdNum.className = 'agf-hist-td-num';
+        tdNum.textContent = String(idx + 1);
+
+        // Fichier (Preview Original)
+        const tdName = tr.insertCell();
+        tdName.className = 'agf-hist-td-name';
+        const nameBtn = document.createElement('button');
+        nameBtn.type = 'button';
+        nameBtn.className = 'agf-hist-name-link';
+        const fileName = job.fileName || ('Job #' + job.jobId);
+        nameBtn.title = 'Voir l\'original : ' + fileName;
+        nameBtn.innerHTML = '<span class="agf-hist-preview-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg></span>' +
+          '<span class="agf-hist-name-txt">' + fileName + '</span>';
+
+        nameBtn.addEventListener('click', async function () {
+          nameBtn.disabled = true;
+          try {
+            await ensureAuth();
+            const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0, 'ORIGIN');
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+            // Revoke after a while to avoid memory leak
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          } catch (err) {
+            setStatus('error', (err && err.message) || 'Aperçu impossible.');
+          }
+          nameBtn.disabled = false;
+        });
+        tdName.appendChild(nameBtn);
+
+        // Date
+        const tdDate = tr.insertCell();
+        tdDate.className = 'agf-hist-td-date';
+        var parsedDate = parseAnonDate(job.dtCreation);
+        if (parsedDate) {
+          tdDate.textContent =
+            parsedDate.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+            ' ' + parsedDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+        } else {
+          tdDate.textContent = '\u2014';
+        }
+
+        // Taille
+        const tdSize = tr.insertCell();
+        tdSize.className = 'agf-hist-td-size';
+        tdSize.textContent = job.fileLength ? formatSize(Number(job.fileLength)) : '\u2014';
+
+        // Statut
+        const tdStatus = tr.insertCell();
+        tdStatus.className = 'agf-hist-td-status';
+        const badge = document.createElement('span');
+        if (job.anonStatus === 'READY') {
+          badge.className = 'agf-status-badge agf-status-badge--ready';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0z" fill="none"/><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" fill="currentColor"/></svg> Pr\u00eat';
+        } else if (job.anonStatus === 'ON_ERROR') {
+          badge.className = 'agf-status-badge agf-status-badge--error';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/></svg> Erreur';
+        } else if (job.anonStatus === 'CANCELED') {
+          badge.className = 'agf-status-badge agf-status-badge--canceled';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg> Annulé';
+        } else {
+          badge.className = 'agf-status-badge agf-status-badge--pending';
+          badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0z" fill="none"/><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> En cours';
+        }
+        tdStatus.appendChild(badge);
+
+        // Action
+        const tdAction = tr.insertCell();
+        tdAction.className = 'agf-hist-td-action';
+        if (job.anonStatus === 'READY') {
+          const btnGroup = document.createElement('div');
+          btnGroup.className = 'agf-hist-btn-group';
+
+          // Action: Preview Anonymized
+          const previewBtn = document.createElement('button');
+          previewBtn.type = 'button';
+          previewBtn.className = 'agf-hist-btn-preview';
+          previewBtn.title = 'Aperçu du résultat (après)';
+          previewBtn.setAttribute('aria-label', 'Aperçu du résultat');
+          previewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>';
+          previewBtn.addEventListener('click', async function () {
+            previewBtn.disabled = true;
+            try {
+              await ensureAuth();
+              const { blob } = await receiveAnonFile(job.jobId, 0, 'ANON');
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Aperçu impossible.');
+            }
+            previewBtn.disabled = false;
+          });
+          btnGroup.appendChild(previewBtn);
+
+          // Action: Download
+          const dlBtn = document.createElement('button');
+          dlBtn.type = 'button';
+          dlBtn.className = 'agf-hist-btn-dl';
+          dlBtn.title = 'Télécharger le résultat';
+          dlBtn.setAttribute('aria-label', 'Télécharger ' + (job.fileName || ''));
+          dlBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
+          dlBtn.addEventListener('click', async function () {
+            dlBtn.disabled = true;
+            try {
+              await ensureAuth();
+              const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0);
+              const name = parseFilename(contentDisposition, job.fileName || 'document_anonymise');
+              const a = document.createElement('a');
+              const url = URL.createObjectURL(blob);
+              a.href = url;
+              a.download = name;
+              a.click();
+              setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Téléchargement impossible.');
+            }
+            dlBtn.disabled = false;
+          });
+          btnGroup.appendChild(dlBtn);
+          tdAction.appendChild(btnGroup);
+        } else if (job.anonStatus !== 'ON_ERROR' && job.anonStatus !== 'CANCELED') {
+          // Action: Kill (Contextual for pending jobs)
+          const killBtn = document.createElement('button');
+          killBtn.type = 'button';
+          killBtn.className = 'agf-hist-btn-preview agf-hist-btn--kill';
+          killBtn.title = 'Interrompre ce traitement';
+          killBtn.setAttribute('aria-label', 'Annuler le traitement');
+          killBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+          killBtn.addEventListener('click', async function () {
+            if (!window.confirm('Voulez-vous interrompre et supprimer ce traitement ?')) return;
+            killBtn.disabled = true;
+            try {
+              await ensureAuth();
+              await fetchDeleteAnonJob(job.jobId);
+
+              // 20/20 Sync: If this job is being polled in the current session, cancel it locally too
+              const activeItem = state.processedItems.find(it => String(it.jobId) === String(job.jobId));
+              if (activeItem) {
+                activeItem.status = 'canceled';
+                activeItem.errorMessage = 'Annulé';
+                renderProcessedList();
+              }
+
+              await loadAnonJobsList();
+              setStatus('canceled', 'Traitement interrompu.');
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Action impossible.');
+            }
+            killBtn.disabled = false;
+          });
+          tdAction.appendChild(killBtn);
+        }
+
+        // Action: Delete
+        const tdDelete = tr.insertCell();
+        tdDelete.className = 'agf-hist-td-delete';
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'agf-hist-btn-delete';
+        delBtn.title = 'Supprimer ' + (job.fileName || 'ce document');
+        delBtn.setAttribute('aria-label', 'Supprimer ' + (job.fileName || 'ce document'));
+        delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+        delBtn.addEventListener('click', async function () {
+          if (!window.confirm('Voulez-vous vraiment supprimer ce document ?')) return;
+          delBtn.disabled = true;
+          try {
+            await ensureAuth();
+            await fetchDeleteAnonJob(job.jobId);
+            // Clear from selection if it was there
+            state.selectedJobIds = state.selectedJobIds.filter(i => i !== String(job.jobId));
+            // Refresh list
+            await loadAnonJobsList();
+            setStatus('success', 'Document supprimé avec succès.');
+          } catch (err) {
+            setStatus('error', (err && err.message) || 'Suppression impossible.');
+            delBtn.disabled = false;
+          }
+        });
+        tdDelete.appendChild(delBtn);
+      });
+
+      wrap.appendChild(table);
+      container.appendChild(wrap);
+    });
+    updateActions();
+  }
+
+  async function loadAnonJobsList() {
+    if (!state.email || !state.token) return;
+    const list = await fetchAnonJobsInfo();
+    state.anonJobsList = list;
+    renderAnonJobsList();
+  }
+
+  function refreshAnonJobsList() {
+    const doneItems = state.processedItems.filter((p) => p.status === 'done' && p.jobId != null);
+    const existingById = {};
+    (state.anonJobsList || []).forEach((j) => { existingById[j.jobId] = j; });
+    let merged = state.anonJobsList ? state.anonJobsList.slice() : [];
+    doneItems.forEach((item) => {
+      const existing = existingById[item.jobId];
+      if (existing) {
+        // Patch missing metadata with real session data - USE FRENCH FORMAT to match parser!
+        if (!existing.dtCreation) {
+          const d = item.createdAt ? new Date(item.createdAt) : new Date();
+          const pad = n => String(n).padStart(2, '0');
+          existing.dtCreation = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+        if (!existing.fileLength) existing.fileLength = item.resultSize || (item.file ? item.file.size : null);
+        if (!existing.fileName) existing.fileName = item.resultFilename || item.fileName || null;
+        return;
+      }
+      const d = item.createdAt ? new Date(item.createdAt) : new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const sessionDt = `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      merged.push({
+        jobId: item.jobId,
+        anonStatus: 'READY',
+        fileName: item.resultFilename || item.fileName || null,
+        fileLength: item.resultSize || (item.file ? item.file.size : null),
+        dtCreation: sessionDt
+      });
+    });
+    merged.sort((a, b) => (b.jobId - a.jobId));
+    state.anonJobsList = merged;
+    renderAnonJobsList();
+  }
+
+  function validateFile(file) {
+    if (!file || file.size > MAX_FILE_SIZE) return false;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    return SUPPORTED_EXT.includes(ext);
+  }
+
+  function getRejectReason(file) {
+    if (!file) return 'format';
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    if (IMAGE_EXT.includes(ext)) return 'image';
+    if (file.size > MAX_FILE_SIZE) return 'size';
+    if (!SUPPORTED_EXT.includes(ext)) return 'format';
+    return null;
+  }
+
+  function addFiles(fileList) {
+    const files = Array.from(fileList || []);
+    const rejectedImages = [];
+    const rejectedOther = [];
+    const maxToAdd = MAX_FILES - state.files.length;
+    if (maxToAdd <= 0) {
+      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
+      renderFileList();
+      return;
+    }
+    const toAdd = files.slice(0, maxToAdd);
+    toAdd.forEach((file) => {
+      const reason = getRejectReason(file);
+      if (reason === 'image') rejectedImages.push(file.name);
+      else if (reason) rejectedOther.push(file.name);
+      else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
+    });
+    if (files.length > maxToAdd) {
+      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
+    } else if (rejectedImages.length > 0) {
+      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge. Ce sera disponible prochainement.');
+    } else if (rejectedOther.length > 0) {
+      const short = rejectedOther.slice(0, 2).join(', ');
+      const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
+      setStatus('error', 'Format non accepté ou fichier > 10 Mo : ' + short + more + '.');
+    } else {
+      setStatus('', '');
+    }
+    renderFileList();
+  }
+
+  function setActiveTab(tab) {
+    state.activeTab = tab;
+    ui.tabs.forEach((btn) => {
+      const isActive = btn.getAttribute('data-tab') === tab;
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.setAttribute('tabindex', isActive ? '0' : '-1');
+    });
+    Object.keys(ui.panels).forEach((key) => {
+      const panel = ui.panels[key];
+      if (!panel) return;
+      const active = key === tab;
+      panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+      panel.hidden = !active;
+    });
+  }
+
+  function selectedVisualEntities() {
+    return Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]'))
+      .filter((c) => !c.disabled && c.checked)
+      .map((c) => c.getAttribute('data-entity'));
+  }
+
+  function selectedEntities() {
+    const values = [];
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((c) => {
+      if (!c.checked) return;
+      const apiValue = (c.getAttribute('data-api') || '').trim();
+      if (!apiValue || !API_READY_VALUES.includes(apiValue)) return;
+      if (!values.includes(apiValue)) values.push(apiValue);
+    });
+    return values;
+  }
+
+  function renderTypeCount() {
+    const total = selectedVisualEntities().length;
+    const apiReady = selectedEntities().length;
+    if (ui.typesCount) ui.typesCount.textContent = String(total);
+    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) (dont ' + apiReady + ' envoyés à l\'API).';
+
+    Array.from(document.querySelectorAll('#agfTypeGrid .agf-type-card')).forEach((card) => {
+      const selectedInGroup = card.querySelectorAll('input[type="checkbox"][data-entity]:checked').length;
+      const badge = card.querySelector('.agf-type-card-count');
+      if (badge) badge.textContent = String(selectedInGroup);
+    });
+  }
+
+  function normalizeTerm(raw) {
+    return (raw || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function normalizeTermKey(raw) {
+    return normalizeTerm(raw)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function parseStoredTerms(raw) {
+    if (!raw) return [];
+    const t = String(raw).trim();
+    if (!t) return [];
+    let terms = [];
+    if (t.charAt(0) === '[') {
+      try {
+        const arr = JSON.parse(t);
+        if (Array.isArray(arr)) terms = arr.map((x) => normalizeTerm(x)).filter(Boolean);
+      } catch (e) { }
+    }
+    if (!terms.length) terms = t.split(/\r?\n/).map((x) => normalizeTerm(x)).filter(Boolean);
+    const seen = new Set();
+    return terms.filter((item) => {
+      const key = normalizeTermKey(item);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function syncHiddenTermFields() {
+    if (ui.includeTerms) ui.includeTerms.value = state.includeTerms.join('\n');
+    if (ui.excludeTerms) ui.excludeTerms.value = state.excludeTerms.join('\n');
+  }
+
+  function renderTermList(kind) {
+    const list = kind === 'include' ? state.includeTerms : state.excludeTerms;
+    const wrap = kind === 'include' ? ui.includeList : ui.excludeList;
+    const canEdit = isFeatureEnabled('inclusion');
+    if (!wrap) return;
+
+    wrap.textContent = '';
+    if (!list.length) {
+      const empty = document.createElement('p');
+      empty.className = 'agf-term-empty';
+      empty.textContent = kind === 'include'
+        ? 'Pas encore de terme à inclure.'
+        : 'Pas encore de terme à exclure.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    list.forEach((term, idx) => {
+      const row = document.createElement('div');
+      row.className = 'agf-term-item';
+      const txt = document.createElement('span');
+      txt.textContent = term;
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'agf-term-remove';
+      rm.textContent = 'Retirer';
+      rm.disabled = !canEdit;
+      if (canEdit) {
+        rm.addEventListener('click', () => {
+          if (kind === 'include') state.includeTerms.splice(idx, 1);
+          else state.excludeTerms.splice(idx, 1);
+          syncHiddenTermFields();
+          renderTermList(kind);
+          renderInclusionSummary();
+          resetTextCache();
+          refreshTextIfNeeded();
+        });
+      }
+      row.appendChild(txt);
+      row.appendChild(rm);
+      wrap.appendChild(row);
+    });
+  }
+
+  function renderInclusionSummary() {
+    const i = state.includeTerms.length;
+    const e = state.excludeTerms.length;
+    const previewSuffix = isFeatureEnabled('inclusion') ? '' : ' · aperçu non appliqué';
+    if (ui.incSummary) ui.incSummary.textContent = 'Inclusion: ' + i + ' · Exclusion: ' + e + previewSuffix;
+    if (ui.inclusionChip) ui.inclusionChip.textContent = i + ' / ' + e;
+  }
+
+  function addTerm(kind, rawValue) {
+    const value = normalizeTerm(rawValue);
+    if (!value) return false;
+    const list = kind === 'include' ? state.includeTerms : state.excludeTerms;
+    const key = normalizeTermKey(value);
+    if (!key) return false;
+    if (list.some((x) => normalizeTermKey(x) === key)) return false;
+    list.push(value);
+    syncHiddenTermFields();
+    renderTermList(kind);
+    renderInclusionSummary();
+    return true;
+  }
+
+  function applyPseudoToUi(config) {
+    if (!config) return;
+    const strategy = config.strategy || DEFAULT_PSEUDO_CONFIG.strategy;
+    if (ui.pseudoStrategyRadios && ui.pseudoStrategyRadios.length) {
+      ui.pseudoStrategyRadios.forEach((r) => { r.checked = r.value === strategy; });
+    }
+    if (ui.pseudoScope) ui.pseudoScope.value = config.scope || DEFAULT_PSEUDO_CONFIG.scope;
+    if (ui.pseudoKeyMode) ui.pseudoKeyMode.value = config.keyMode || DEFAULT_PSEUDO_CONFIG.keyMode;
+    if (ui.pseudoRestoreWindow) ui.pseudoRestoreWindow.value = config.restoreWindow || DEFAULT_PSEUDO_CONFIG.restoreWindow;
+    if (ui.pseudoDeterministic) ui.pseudoDeterministic.checked = config.deterministic !== false;
+    if (ui.pseudoPreserveFormat) ui.pseudoPreserveFormat.checked = config.preserveFormat !== false;
+  }
+
+  function readPseudoFromUi() {
+    const selectedRadio = (ui.pseudoStrategyRadios || []).find((r) => r.checked);
+    return {
+      strategy: selectedRadio ? selectedRadio.value : DEFAULT_PSEUDO_CONFIG.strategy,
+      scope: ui.pseudoScope ? ui.pseudoScope.value : DEFAULT_PSEUDO_CONFIG.scope,
+      keyMode: ui.pseudoKeyMode ? ui.pseudoKeyMode.value : DEFAULT_PSEUDO_CONFIG.keyMode,
+      restoreWindow: ui.pseudoRestoreWindow ? ui.pseudoRestoreWindow.value : DEFAULT_PSEUDO_CONFIG.restoreWindow,
+      deterministic: !!(ui.pseudoDeterministic && ui.pseudoDeterministic.checked),
+      preserveFormat: !!(ui.pseudoPreserveFormat && ui.pseudoPreserveFormat.checked)
+    };
+  }
+
+  function strategyLabel(strategy) {
+    if (strategy === 'stable_hash') return 'Hash stable';
+    if (strategy === 'human_alias') return 'Alias métier';
+    return 'Placeholders';
+  }
+
+  function setMode(mode, options) {
+    const opts = options || {};
+    const wantsPseudo = mode === 'pseudonymiser';
+    const pseudoEnabled = isFeatureEnabled('pseudo');
+    if (wantsPseudo && !pseudoEnabled) {
+      state.mode = 'anonymiser';
+      if (!opts.silent) setStatus('info', 'Pseudonymisation en mode aperçu pour le moment. Activation backend en cours.');
+    } else {
+      state.mode = wantsPseudo ? 'pseudonymiser' : 'anonymiser';
+    }
+    const pseudoActive = state.mode === 'pseudonymiser';
+    if (ui.pseudoMode) ui.pseudoMode.classList.toggle('is-active', pseudoActive);
+    if (ui.pseudoBadge) {
+      if (!pseudoEnabled) ui.pseudoBadge.textContent = 'Bientôt';
+      else ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Paramétrer';
+    }
+    const anonRadio = (ui.modeRadios || []).find((r) => r.value === 'anonymiser');
+    if (anonRadio) anonRadio.checked = !pseudoActive;
+
+    // 20/20 Safety: Cancel if mode changes during processing
+    if (state.processing || state.textProcessing) {
+      cancelActiveProcessing();
+    }
+
+    storage.set(STORAGE_MODE, state.mode);
+    resetTextCache();
+    renderPseudoSummary();
+  }
+
+  function renderPseudoSummary() {
+    const cfg = state.pseudoConfig || DEFAULT_PSEUDO_CONFIG;
+    if (ui.pseudoSummary) {
+      if (!isFeatureEnabled('pseudo')) {
+        ui.pseudoSummary.textContent = 'Pseudo: aperçu disponible · activation backend en cours';
+        return;
+      }
+      const modeTxt = state.mode === 'pseudonymiser' ? 'actif' : 'configuré';
+      ui.pseudoSummary.textContent =
+        'Pseudo ' + modeTxt + ': ' + strategyLabel(cfg.strategy) + ' · clé ' + (cfg.keyMode || 'server') + ' · fenêtre ' + (cfg.restoreWindow || '30d');
+    }
+  }
+
+  function loadPreferences() {
+    let entities = DEFAULT_ENTITIES;
+    const raw = storage.get(STORAGE_TYPES);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          const legacyMap = {
+            person_name: 'PR',
+            email: 'MAIL',
+            phone: 'PHON',
+            birth: 'AGE',
+            role: 'TR',
+            address: 'ADR',
+            company: 'CIE',
+            siren: 'CID',
+            accounting: 'ACT',
+            product: 'PROD',
+            contract: 'REF',
+            bank: 'BANK'
+          };
+          const mapped = parsed.map((item) => legacyMap[item] || item);
+          entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
+          if (entities.length === 0) entities = DEFAULT_ENTITIES;
+        }
+      } catch (e) { }
+    }
+    const availableSet = new Set(TYPES_AVAILABLE);
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      const code = chk.getAttribute('data-entity');
+      const isAvailable = availableSet.has(code);
+      // Dynamically enable/disable based on TYPES_AVAILABLE (overrides HTML disabled attr)
+      chk.disabled = !isAvailable;
+      const label = chk.closest('.agf-entity-option');
+      if (label) {
+        if (isAvailable) {
+          label.classList.remove('agf-entity-option--unavailable');
+        } else {
+          label.classList.add('agf-entity-option--unavailable');
+        }
+      }
+      chk.checked = isAvailable && entities.includes(code);
+    });
+
+    state.includeTerms = parseStoredTerms(storage.get(STORAGE_INC));
+    state.excludeTerms = parseStoredTerms(storage.get(STORAGE_EXC));
+    syncHiddenTermFields();
+    renderTermList('include');
+    renderTermList('exclude');
+    renderInclusionSummary();
+
+    try {
+      const pseudoRaw = storage.get(STORAGE_PSEUDO);
+      if (pseudoRaw) {
+        const parsed = JSON.parse(pseudoRaw);
+        if (parsed && typeof parsed === 'object') state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG, ...parsed };
+      }
+    } catch (e) { }
+    applyPseudoToUi(state.pseudoConfig);
+    renderPseudoSummary();
+    const storedMode = storage.get(STORAGE_MODE);
+    setMode(storedMode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser', { silent: true });
+
+    renderTypeCount();
+  }
+
+  async function waitForMemberstack(maxWait, interval) {
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      if (window.$memberstackDom && typeof window.$memberstackDom.getCurrentMember === 'function') return true;
+      await new Promise((resolve) => setTimeout(resolve, interval));
+    }
+    return false;
+  }
+
+  async function detectEdition() {
+    const ms = window.$memberstackDom;
+    if (ms && typeof ms.getCurrentMember === 'function') {
+      try {
+        const result = await ms.getCurrentMember({ cache: 'reload' });
+        const member = result && result.data;
+        if (member) {
+          const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
+          const plans = member.planConnections || [];
+          const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
+          const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
+          if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) return 'ent';
+          if (hasPlan('pln_business')) return 'ent';
+          if (hasPlan('pln_pro')) return 'pro';
+          if (hasPlan('pln_free')) return 'free';
+          if (hasPlan('pln_anonymisation')) return 'anonymisation';
+        }
+      } catch (e) { console.warn('detectEdition error', e); }
+    }
+
+    const fromQuery = new URLSearchParams(window.location.search).get('edition');
+    if (fromQuery) {
+      const n = fromQuery.toLowerCase();
+      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) return n === 'business' ? 'ent' : n;
+    }
+    const stored = storage.get('agilo:edition');
+    if (stored && ['free', 'pro', 'ent', 'anonymisation'].includes(stored)) return stored;
+    if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) return 'ent';
+    if (window.location.pathname.includes('/pro/')) return 'pro';
+    return 'free';
+  }
+
+  async function getUserEmail() {
+    const ms = window.$memberstackDom;
+    if (ms && typeof ms.getCurrentMember === 'function') {
+      try {
+        const result = await ms.getCurrentMember({ cache: 'reload' });
+        const member = result && result.data;
+        if (member && member.email) return member.email;
+      } catch (e) { console.warn('getUserEmail error', e); }
+    }
+    const fromPage = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
+    if (fromPage) return fromPage;
+    return (typeof storage !== 'undefined' && storage.get('agilo:username')) || null;
+  }
+
+  async function fetchWithTimeout(url, options, timeoutMs) {
+    const internalController = new AbortController();
+    const signals = [];
+    if (state.abortController) signals.push(state.abortController.signal);
+    signals.push(internalController.signal);
+
+    // Dynamic signal merging or just use the global one if it exists
+    const signal = state.abortController ? state.abortController.signal : internalController.signal;
+
+    const timer = setTimeout(() => internalController.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...options, signal, cache: 'no-store' });
+    } finally { clearTimeout(timer); }
+  }
+
+  async function getToken(email, edition, retry) {
+    const current = typeof retry === 'number' ? retry : 0;
+    const maxRetry = 3;
+    try {
+      const url = TOKEN_ENDPOINT + '?username=' + encodeURIComponent(email) + '&edition=' + encodeURIComponent(edition);
+      const response = await fetchWithTimeout(url, { method: 'GET' }, 20000);
+      const data = await response.json();
+      if (data && data.status === 'OK' && data.token) { state.token = data.token; return data.token; }
+      throw new Error(sanitizeApiErrorMessage((data && (data.userErrorMessage || data.errorMessage)) || 'Token invalide'));
+    } catch (err) {
+      if (current < maxRetry) {
+        await new Promise((resolve) => setTimeout(resolve, 800 * (current + 1)));
+        return getToken(email, edition, current + 1);
+      }
+      throw err;
+    }
+  }
+
+  async function ensureAuth() {
+    if (!state.email) state.email = await getUserEmail();
+    if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
+    if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
+    if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
+    if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
+    if (!state.token) await getToken(state.email, getEditionForApi(), 0);
+  }
+
+  async function runSessionMaintenance() {
+    if (!state.email || !state.token) return;
+    const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(getEditionForApi());
+    try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
+  }
+
+  async function loadApiVersion() {
+    try {
+      const response = await fetchWithTimeout(VERSION_ENDPOINT, { method: 'GET' }, 10000);
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
+    } catch (e) { }
+  }
+
+  /** Ne jamais afficher un message d'erreur API qui pourrait contenir un token/mot de passe. */
+  function sanitizeApiErrorMessage(msg) {
+    if (!msg || typeof msg !== 'string') return 'Erreur de traitement.';
+    const m = msg.trim();
+    if (m.indexOf('error_invalid_token') !== -1) return 'Erreur d\'authentification. Reconnectez-vous ou vérifiez votre accès.';
+    if (m.indexOf('error_internal') !== -1) return 'Erreur serveur. Réessayez plus tard.';
+    if (m.indexOf('error_anon_not_ready') !== -1) return 'Fichier pas encore prêt. Réessayez dans quelques instants.';
+    if (m.indexOf('error_anon_file_not_exists') !== -1) return 'Fichier introuvable côté serveur.';
+    if (m.indexOf('error_anon_invalid_file_type') !== -1) return 'Type de fichier non accepté pour le téléchargement.';
+    return m;
+  }
+
+  function parseFilename(contentDisposition, fallbackFileName) {
+    if (fallbackFileName) {
+      const base = fallbackFileName.replace(/\.[^.]+$/, '').trim();
+      const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.bin'])[0];
+      const suffix = '_anonymisé';
+      if (/_\s*anonymis(?:e|é|ed)?\s*$/i.test(base)) return base + ext;
+      return (base || 'document') + suffix + ext;
+    }
+    const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+    if (match && match[1]) return match[1].replace(/^['"]|['"]$/g, '').trim();
+    return 'document_anonymisé';
+  }
+
+  function buildFormDataForOneFile(file, fileName) {
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', getEditionForApi());
+    formData.append('fileUpload[]', file, fileName);
+    const entities = selectedEntities();
+    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) formData.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) formData.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
+      formData.append('processingMode', 'pseudonymiser');
+      formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
+      formData.append('pseudoScope', state.pseudoConfig.scope || '');
+      formData.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
+      formData.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
+      formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
+      formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
+    }
+    return formData;
+  }
+
+  function buildFormDataForAsyncUpload(items) {
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', getEditionForApi());
+    // Backend anonAsyncOfficeText attend fileUpload1, fileUpload2, ... fileUploadN
+    items.forEach((item, index) => { formData.append('fileUpload' + (index + 1), item.file, item.fileName); });
+    const entities = selectedEntities();
+    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) formData.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) formData.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
+      formData.append('processingMode', 'pseudonymiser');
+      formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
+      formData.append('pseudoScope', state.pseudoConfig.scope || '');
+      formData.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
+      formData.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
+      formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
+      formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
+    }
+    return formData;
+  }
+
+  async function uploadAsyncAndGetJobIds() {
+    const items = state.processedItems;
+    if (!items.length) return [];
+    const formData = buildFormDataForAsyncUpload(items);
+    const response = await fetchWithTimeout(ANON_ASYNC_UPLOAD, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
+    if (!response.ok) {
+      const raw = await response.text();
+      let msg = 'Erreur de traitement.';
+      const parsed = tryParseJson(raw);
+      if (parsed.ok) {
+        const json = parsed.data;
+        const code = json && (json.errorCode || json.error_code || json.statusCode);
+        if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
+        else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
+        else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
+        else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+      } else {
+        const text = normalizeResponseText(raw);
+        if (text && text.length < 180) msg = sanitizeApiErrorMessage(text);
+      }
+      throw new Error(msg);
+    }
+    const raw = await response.text();
+    const text = normalizeResponseText(raw);
+    let data = null;
+    const parsed = tryParseJson(raw);
+    if (parsed.ok) {
+      data = parsed.data;
+    } else {
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        const firstObj = text.indexOf('{');
+        const lastObj = text.lastIndexOf('}');
+        if (firstObj !== -1 && lastObj > firstObj) {
+          try {
+            data = JSON.parse(text.slice(firstObj, lastObj + 1));
+          } catch (e2) { }
+        }
+      }
+    }
+    if (!data || typeof data !== 'object') throw new Error(buildInvalidJsonMessage(raw, true));
+    if (data.status === 'KO' || data.status === 'ko') {
+      const msg = sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.');
+      throw new Error(msg);
+    }
+    // Backend Nicolas: anonAsyncOfficeText renvoie { "status": "OK", "jobIdList": [ id1, id2, ... ] } (1 ou N fichiers)
+    let jobIds = [];
+    if (Array.isArray(data.jobIdList)) jobIds = data.jobIdList;
+    else if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
+    else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j && (j.id != null ? j.id : j.jobId));
+    else if (typeof data.jobId === 'number') jobIds = items.map(() => data.jobId);
+    else if (typeof data.jobId === 'string' && /^\d+$/.test(data.jobId)) jobIds = items.map(() => parseInt(data.jobId, 10));
+    jobIds = jobIds
+      .map((id) => {
+        if (typeof id === 'number' && Number.isFinite(id)) return id;
+        if (typeof id === 'string') {
+          const t = id.trim();
+          if (/^\d+$/.test(t)) return parseInt(t, 10);
+          if (t) return t;
+        }
+        return null;
+      })
+      .filter((id) => id != null);
+    if (jobIds.length < items.length) throw new Error('Réponse serveur incomplète (jobIds).');
+    return jobIds.slice(0, items.length);
+  }
+
+  async function fetchJobStatus(jobId) {
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('edition', getEditionForApi());
+    const response = await fetchWithTimeout(ANON_STATUS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, STATUS_REQUEST_TIMEOUT);
+    const raw = await response.text();
+    const parsed = tryParseJson(raw);
+    if (!parsed.ok) return { status: 'error', errorMessage: buildInvalidJsonMessage(raw, true) };
+    const data = parsed.data;
+    if (!response.ok) {
+      const msg = (data && (data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage) : 'Erreur de statut.';
+      return { status: 'error', errorMessage: msg };
+    }
+    if (data && (data.status === 'KO' || data.status === 'ko')) {
+      return { status: 'error', errorMessage: sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur.') };
+    }
+    // Backend getAnonStatus: anonStatus = PENDING | ON_ERROR | READY | UNKNOWN
+    const anonStatus = (data && data.anonStatus != null) ? String(data.anonStatus).toUpperCase() : '';
+    if (anonStatus === 'READY') return { status: 'done' };
+    if (anonStatus === 'ON_ERROR') {
+      const errMsg = (data && (data.javaException || data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.javaException || data.userErrorMessage || data.errorMessage) : 'Échec du traitement.';
+      return { status: 'error', errorMessage: errMsg };
+    }
+    if (anonStatus === 'PENDING' || anonStatus === 'UNKNOWN') return { status: 'pending' };
+    // Fallback si le backend renvoie un autre format (status/state/jobStatus)
+    const st = (data && (data.status || data.state || data.jobStatus || '')).toString().toLowerCase();
+    if (st === 'done' || st === 'completed' || st === 'success') return { status: 'done' };
+    if (st === 'error' || st === 'failed') return { status: 'error', errorMessage: sanitizeApiErrorMessage((data && (data.userErrorMessage || data.errorMessage)) || 'Échec du traitement.') };
+    if (st === 'processing' || st === 'running') return { status: 'processing' };
+    return { status: 'pending' };
+  }
+
+  async function receiveAnonFile(jobId, retryCount, fType) {
+    const attempt = typeof retryCount === 'number' ? retryCount : 0;
+    const type = fType || 'ANON';
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('fileType', type);
+    body.set('edition', getEditionForApi());
+    try {
+      const response = await fetchWithTimeout(ANON_RECEIVE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }, REQUEST_TIMEOUT);
+      if (!response.ok) {
+        const raw = await response.text();
+        let msg = 'Impossible de récupérer le fichier.';
+        const parsed = tryParseJson(raw);
+        if (parsed.ok) {
+          const json = parsed.data;
+          if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+        } else {
+          const text = normalizeResponseText(raw);
+          if (text && text.length < 120) msg = sanitizeApiErrorMessage(text);
+        }
+        throw new Error(msg);
+      }
+      const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+      const blob = await response.blob();
+      if (contentType.indexOf('application/json') !== -1) {
+        const text = await blob.text();
+        const parsed = tryParseJson(text);
+        if (parsed.ok) {
+          const json = parsed.data;
+          if (json && (json.status === 'KO' || json.status === 'ko')) throw new Error(sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur.'));
+          throw new Error('Réponse serveur inattendue.');
+        }
+        throw new Error(buildInvalidJsonMessage(text, true));
+      }
+      return { blob, contentDisposition: response.headers.get('Content-Disposition') || '' };
+    } catch (err) {
+      const isTransient = err.name === 'AbortError' || (err.message && (err.message.indexOf('réseau') !== -1 || err.message === 'Failed to fetch'));
+      if (isTransient && attempt < 1) {
+        await new Promise((r) => setTimeout(r, 2000));
+        return receiveAnonFile(jobId, attempt + 1);
+      }
+      throw err;
+    }
+  }
+
+  async function fetchDeleteAnonJob(jobId) {
+    const body = new URLSearchParams();
+    body.set('username', state.email || '');
+    body.set('token', state.token || '');
+    body.set('jobId', String(jobId));
+    body.set('edition', getEditionForApi());
+
+    const response = await fetchWithTimeout(ANON_DELETE, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, STATUS_REQUEST_TIMEOUT);
+
+    const raw = await response.text();
+    const parsed = tryParseJson(raw);
+
+    if (!response.ok) {
+      let msg = 'Échec de la suppression.';
+      if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+        msg = sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage);
+      }
+      throw new Error(msg);
+    }
+
+    if (parsed.ok && parsed.data && (parsed.data.status === 'KO' || parsed.data.status === 'ko')) {
+      throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage || 'Erreur lors de la suppression.'));
+    }
+
+    return true;
+  }
+
+  function toggleJobSelection(jobId, selected) {
+    const id = String(jobId);
+    if (selected) {
+      if (!state.selectedJobIds.includes(id)) state.selectedJobIds.push(id);
+    } else {
+      state.selectedJobIds = state.selectedJobIds.filter(i => i !== id);
+    }
+    updateBulkActionsUI();
+  }
+
+  function toggleSelectAll(selected) {
+    const rawList = state.anonJobsList || [];
+    if (selected) {
+      state.selectedJobIds = rawList.map(j => String(j.jobId));
+    } else {
+      state.selectedJobIds = [];
+    }
+    renderAnonJobsList(); // Re-render to update checkboxes
+  }
+
+  async function handleBulkDelete() {
+    const total = state.selectedJobIds.length;
+    if (total === 0) return;
+    if (!window.confirm(`Voulez-vous vraiment supprimer les ${total} documents sélectionnés ?`)) return;
+
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
+
+    const idsToDelete = [...state.selectedJobIds];
+    state.selectedJobIds = [];
+    setStatus('loading', `Suppression de ${total} document(s)...`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const jobId of idsToDelete) {
+      if (state.abortController && state.abortController.signal.aborted) break;
+      try {
+        setStatus('loading', `Suppression en cours : ${successCount + failCount + 1} / ${total}...`);
+        await fetchDeleteAnonJob(jobId);
+        successCount++;
+      } catch (err) {
+        console.error('Failed to delete job', jobId, err);
+        failCount++;
+      }
+    }
+
+    await loadAnonJobsList();
+    if (failCount === 0) {
+      setStatus('success', `${successCount} document(s) supprimé(s).`);
+    } else {
+      setStatus('error', `${successCount} supprimé(s), ${failCount} échec(s).`);
+    }
+  }
+
+  function updateBulkActionsUI() {
+    const bar = document.getElementById('agfBulkActionsBar');
+    if (!bar) return;
+    const count = state.selectedJobIds.length;
+    bar.classList.toggle('is-visible', count > 0);
+    const label = bar.querySelector('.agf-bulk-count');
+    if (label) label.textContent = count + ' sélectionné' + (count > 1 ? 's' : '');
+
+    // Highlight the wrap if selection active
+    const containers = document.querySelectorAll('#agfAnonJobsList');
+    containers.forEach(c => c.classList.toggle('is-selection-active', count > 0));
+  }
+
+  async function pollAllJobsUntilDone() {
+    const items = state.processedItems;
+    const total = items.length;
+    if (!total) return;
+    items.forEach((item) => {
+      const now = Date.now();
+      if (!item.createdAt) item.createdAt = now;
+      if (!item.pollStartedAt) item.pollStartedAt = now;
+      if (item.status !== 'done' && item.status !== 'error') {
+        item.progressValue = clampProgress(item.progressValue || PROGRESS_START);
+      }
+    });
+    persistInFlightJobs();
+    const deadline = Date.now() + MAX_POLL_TIME_MS;
+    let lastRender = 0;
+    while (true) {
+      if (state.abortController && state.abortController.signal.aborted) throw new Error('AbortError');
+      if (Date.now() > deadline) {
+        items.forEach((p) => {
+          if (p.status !== 'done' && p.status !== 'error') {
+            p.status = 'error';
+            p.errorMessage = 'Délai maximal dépassé. Réessayez ou contactez le support.';
+          }
+        });
+        renderProcessedList();
+        clearInFlightJobs();
+        break;
+      }
+      const pending = items.filter((p) => p.jobId != null && p.status !== 'done' && p.status !== 'error');
+      if (pending.length === 0) break;
+      pending.forEach((item) => bumpItemProgress(item));
+      for (const item of pending) {
+        try {
+          const result = await fetchJobStatus(item.jobId);
+          if (result.status === 'done') {
+            item.status = 'processing';
+            item.progressValue = PROGRESS_MAX_BEFORE_READY;
+            renderProcessedList();
+            persistInFlightJobs();
+            try {
+              const { blob, contentDisposition } = await receiveAnonFile(item.jobId, 0);
+              item.resultBlob = blob;
+              item.resultUrl = URL.createObjectURL(blob);
+              item.resultFilename = parseFilename(contentDisposition, item.fileName);
+              item.resultSize = blob.size;
+              item.status = 'done';
+              item.progressValue = 100;
+              item.justDone = true;
+              refreshAnonJobsList();
+            } catch (err) {
+              item.status = 'error';
+              item.errorMessage = (err && err.message) || 'Échec du téléchargement.';
+            }
+          } else if (result.status === 'error') {
+            item.status = 'error';
+            item.errorMessage = result.errorMessage || 'Échec du traitement.';
+          } else {
+            item.status = result.status === 'processing' ? 'processing' : 'pending';
+            bumpItemProgress(item);
+          }
+        } catch (err) {
+          item.status = 'error';
+          item.errorMessage = (err && err.name === 'AbortError') ? 'Délai dépassé.' : sanitizeApiErrorMessage((err && err.message) || 'Erreur de vérification.');
+        }
+      }
+      const doneCount = items.filter((p) => p.status === 'done').length;
+      const errCount = items.filter((p) => p.status === 'error').length;
+      persistInFlightJobs();
+      const now = Date.now();
+      if (now - lastRender > 400) {
+        renderProcessedList();
+        setStatus('loading', 'Vérification du statut… ' + doneCount + '/' + total + ' fichier(s)' + (errCount ? ', ' + errCount + ' en erreur' : '') + '.');
+        lastRender = now;
+      }
+      if (items.every((p) => p.status === 'done' || p.status === 'error')) break;
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    renderProcessedList();
+    if (items.every((p) => p.status === 'done' || p.status === 'error')) clearInFlightJobs();
+    else persistInFlightJobs();
+  }
+
+  function finalizeFilesProcessingStatus() {
+    const doneCount = state.processedItems.filter((p) => p.status === 'done').length;
+    const errCount = state.processedItems.filter((p) => p.status === 'error').length;
+    if (state.processedItems.length === 0) {
+      setStatus('', '');
+    } else if (errCount === state.processedItems.length) {
+      setStatus('error', 'Aucun fichier n\'a pu être traité.');
+    } else if (errCount > 0) {
+      setStatus('success', 'C\'est prêt. ' + doneCount + ' fichier(s) téléchargeable(s). ' + errCount + ' en erreur.');
+    } else {
+      setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
+    }
+    updateActions();
+  }
+
+  async function submitFiles(event) {
+    event.preventDefault();
+    if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
+
+    try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
+
+    if (!checkAndConsumeQuota()) {
+      setStatus('error', QUOTA_EXCEEDED_MSG);
+      return;
+    }
+
+    state.abortController = new AbortController();
+    state.processing = true;
+    revokeResultUrl();
+    revokeAllProcessedUrls();
+    if (ui.download) { ui.download.href = '#'; ui.download.removeAttribute('download'); ui.download.classList.remove('is-visible'); }
+
+    state.processedItems = state.files.map((f) => ({
+      id: f.id,
+      fileName: f.fileName,
+      size: f.size,
+      file: f.file,
+      status: 'pending',
+      jobId: null,
+      resultUrl: null,
+      resultBlob: null,
+      resultFilename: null,
+      resultSize: null,
+      errorMessage: null,
+      progressValue: PROGRESS_START,
+      createdAt: Date.now(),
+      pollStartedAt: Date.now(),
+      justDone: false
+    }));
+    state.files = [];
+    renderFileList();
+    renderProcessedList();
+    updateActions();
+    setStatus('loading', 'Envoi des fichiers…');
+
+    let jobIds = [];
+    try {
+      jobIds = await uploadAsyncAndGetJobIds();
+    } catch (err) {
+      state.processedItems.forEach((item) => {
+        if (item.status === 'pending' || item.status === 'processing') {
+          const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
+          item.status = isAbort ? 'canceled' : 'error';
+          item.errorMessage = isAbort ? 'Annulé' : ((err && err.message) || 'Erreur lors de l\'envoi.');
+        }
+      });
+      state.abortController = null;
+      state.processing = false;
+      const msg = err.name === 'AbortError' ? 'Traitement annulé.' : ((err && err.message) || 'Erreur lors de l\'envoi.');
+      setStatus(err.name === 'AbortError' ? 'canceled' : 'error', msg);
+      renderProcessedList();
+      clearInFlightJobs();
+      updateActions();
+      return;
+    }
+    state.processedItems.forEach((item, i) => {
+      item.jobId = jobIds[i] != null ? jobIds[i] : null;
+      item.status = 'processing';
+      item.progressValue = Math.max(item.progressValue || PROGRESS_START, 16);
+      item.pollStartedAt = Date.now();
+    });
+    renderProcessedList();
+    persistInFlightJobs();
+    setStatus('loading', 'Vérification du statut…');
+
+    await pollAllJobsUntilDone();
+
+    state.abortController = null;
+    state.processing = false;
+    finalizeFilesProcessingStatus();
+    // Refresh from API first, then local fallback
+    await loadAnonJobsList();
+    refreshAnonJobsList();
+  }
+
+  function resetFiles() {
+    if (state.processing) {
+      cancelActiveProcessing();
+    }
+    state.files = [];
+    state.processedItems = [];
+    revokeResultUrl();
+    revokeAllProcessedUrls();
+    clearInFlightJobs();
+    if (ui.download) { ui.download.href = '#'; ui.download.removeAttribute('download'); ui.download.classList.remove('is-visible'); }
+    setStatus('', '');
+    renderFileList();
+    renderProcessedList();
+    updateActions();
+  }
+
+  function clearProcessedOnly() {
+    if (state.processing) return;
+    state.processedItems = [];
+    revokeAllProcessedUrls();
+    clearInFlightJobs();
+    setStatus('', '');
+    renderProcessedList();
+    updateActions();
+  }
+
+  function buildAndDownloadZip(items, blobs) {
+    const zip = new window.JSZip();
+    items.forEach((item, i) => { zip.file(item.resultFilename || ('file_' + (i + 1)), blobs[i]); });
+    zip.generateAsync({ type: 'blob' }).then((zipBlob) => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(zipBlob);
+      a.download = 'documents_anonymisés.zip';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    });
+  }
+
+  function downloadAllAsZip() {
+    const doneItems = state.processedItems.filter((p) => p.status === 'done' && (p.resultBlob || p.resultUrl));
+    if (doneItems.length < 2) return;
+    document.querySelectorAll('#agfDownloadZip').forEach((el) => { el.disabled = true; });
+    setStatus('loading', 'Préparation du zip…');
+    const jobIdsForZip = doneItems.map((p) => p.jobId).filter((id) => id != null);
+    const reenableZipBtn = () => { updateActions(); };
+    if (jobIdsForZip.length >= 2) {
+      const zipParams = new URLSearchParams();
+      zipParams.append('username', state.email);
+      zipParams.append('token', state.token);
+      zipParams.append('jobIdArray', JSON.stringify(jobIdsForZip));
+      zipParams.append('edition', getEditionForApi());
+      fetchWithTimeout(ANON_RECEIVE_ZIP, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: zipParams.toString()
+      }, REQUEST_TIMEOUT)
+        .then(async (response) => {
+          if (!response.ok) {
+            const raw = await response.text();
+            const parsed = tryParseJson(raw);
+            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
+            }
+            throw new Error('zip-api-failed');
+          }
+          const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+          const blob = await response.blob();
+          if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
+            const raw = await blob.text();
+            const parsed = tryParseJson(raw);
+            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
+              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
+            }
+            throw new Error('zip-api-failed');
+          }
+          return blob;
+        })
+        .then((zipBlob) => {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(zipBlob);
+          a.download = 'documents_anonymisés.zip';
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+          setStatus('success', 'Téléchargement du zip lancé.');
+          reenableZipBtn();
+        })
+        .catch((err) => {
+          if (err && err.message && err.message !== 'zip-api-failed') setStatus('info', sanitizeApiErrorMessage(err.message));
+          setStatus('loading', 'Zip serveur indisponible, création locale en cours…');
+          fallbackDownloadZipClient(doneItems, reenableZipBtn);
+        });
+      return;
+    }
+    fallbackDownloadZipClient(doneItems, reenableZipBtn);
+  }
+
+  function fallbackDownloadZipClient(blobsToZip, onDone) {
+    setStatus('loading', 'Préparation du zip…');
+    const done = typeof onDone === 'function' ? onDone : () => updateActions();
+    Promise.all(blobsToZip.map((item) => {
+      if (item.resultBlob) return Promise.resolve(item.resultBlob);
+      if (!item.resultUrl) return Promise.reject(new Error('missing-result-url'));
+      return fetch(item.resultUrl).then((r) => {
+        if (!r.ok) throw new Error('zip-fetch-failed');
+        return r.blob();
+      });
+    })).then((blobs) => {
+      function runZip() {
+        if (typeof window.JSZip !== 'undefined') {
+          buildAndDownloadZip(blobsToZip, blobs);
+          setStatus('success', 'Téléchargement du zip lancé.');
+          done();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé.'); done(); };
+        script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); done(); };
+        document.head.appendChild(script);
+      }
+      runZip();
+    }).catch(() => { setStatus('error', 'Impossible de créer le fichier zip. Réessayez.'); done(); });
+  }
+
+  async function processText() {
+    let value = '';
+    document.querySelectorAll('#agfInputText').forEach(el => {
+      const v = (el.value || '').trim();
+      if (v) value = v;
+    });
+    const cacheKey = currentTextConfigKey(value);
+
+    if (!value) {
+      resetTextCache();
+      setTextOutput('Collez ou tapez un texte ci-dessus pour l\'anonymiser.', false, null, null, 0);
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      return;
+    }
+    if (value.length < MIN_TEXT_LENGTH_FOR_API) {
+      resetTextCache();
+      setTextOutput('Entrez au moins ' + MIN_TEXT_LENGTH_FOR_API + ' caractères pour lancer l\'anonymisation.', false, null, null, 0);
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      return;
+    }
+    if (state.textProcessing) {
+      textProcessQueued = true;
+      return;
+    }
+    if (lastProcessedCacheKey === cacheKey && lastProcessedResult !== null) {
+      setTextOutput(lastProcessedResult, lastProcessedHasTags, lastProcessedHtml, lastProcessedStats, lastProcessedCounts);
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      return;
+    }
+    state.textProcessing = true;
+    const requestSerial = ++textRequestSerial;
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      el.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
+      el.style.whiteSpace = 'normal';
+      el.classList.add('agf-text-output--loading');
+      el.setAttribute('aria-busy', 'true');
+    });
+
+    try { await ensureAuth(); } catch (e) {
+      setTextOutput(e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.', false, null, null, 0);
+      state.textProcessing = false;
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      return;
+    }
+    if (!checkAndConsumeQuota()) {
+      setTextOutput(QUOTA_EXCEEDED_MSG, false, null, null, 0);
+      state.textProcessing = false;
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      setStatus('error', QUOTA_EXCEEDED_MSG);
+      return;
+    }
+
+    state.abortController = new AbortController();
+
+    const payload = new FormData();
+    payload.append('username', state.email);
+    payload.append('token', state.token);
+    payload.append('edition', getEditionForApi());
+    payload.append('forceTextFormat', 'true');
+    const entities = selectedEntities();
+    if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
+    if (isFeatureEnabled('inclusion')) {
+      const inc = (state.includeTerms || []).join('\n').trim();
+      if (inc) payload.append('includeTerms', inc);
+      const exc = (state.excludeTerms || []).join('\n').trim();
+      if (exc) payload.append('excludeTerms', exc);
+    }
+    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
+      payload.append('processingMode', 'pseudonymiser');
+      payload.append('pseudoStrategy', state.pseudoConfig.strategy || '');
+      payload.append('pseudoScope', state.pseudoConfig.scope || '');
+      payload.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
+      payload.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
+      payload.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
+      payload.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
+    }
+    payload.append('fileUpload1', new Blob([value], { type: 'text/plain;charset=utf-8' }), 'input.txt');
+
+    try {
+      const response = await fetchWithTimeout(ANON_TEXT_ENDPOINT, { method: 'POST', body: payload }, REQUEST_TIMEOUT);
+      if (!response.ok) {
+        const raw = await response.text();
+        let msg = 'Erreur de traitement du texte.';
+        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage); }
+        catch (err) { if (raw && raw.length < 220) msg = sanitizeApiErrorMessage(raw); }
+        throw new Error(msg);
+      }
+      const blob = await response.blob();
+      const raw = await blob.text();
+      // Backend peut renvoyer 200 avec status KO (ex: timeout)
+      let json;
+      try { json = JSON.parse(raw); } catch (_) { json = null; }
+      if (json && json.status === 'KO') {
+        const msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
+        throw new Error(msg);
+      }
+      const out = applyStructuredResponse(raw);
+      if (requestSerial !== textRequestSerial) return;
+      lastProcessedCacheKey = cacheKey;
+      lastProcessedResult = out.plain;
+      lastProcessedHasTags = out.useTags;
+      lastProcessedHtml = out.html || null;
+      lastProcessedStats = out.stats || null;
+      lastProcessedCounts = typeof out.total === 'number' ? out.total : null;
+      setTextOutput(out.plain, out.useTags, lastProcessedHtml, out.stats, out.total);
+    } catch (err) {
+      if (requestSerial !== textRequestSerial) return;
+      const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
+      if (isAbort) {
+        setTextOutput('Traitement annulé.', false, null, null, 0);
+      } else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
+        setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
+      } else {
+        setTextOutput(sanitizeApiErrorMessage((err && err.message) ? err.message : 'Une erreur s\'est produite. Réessayez ou contactez le support si le problème continue.'), false, null, null, 0);
+      }
+    } finally {
+      state.abortController = null;
+      state.textProcessing = false;
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      if (textProcessQueued) {
+        textProcessQueued = false;
+        processText();
+      }
+    }
+  }
+
+  function setTextOutput(plain, useTags, html, stats, total) {
+    document.querySelectorAll('#agfOutputText').forEach(el => {
+      if (useTags && html) {
+        el.innerHTML = html;
+        el.style.whiteSpace = 'pre-wrap';
+      } else {
+        el.textContent = plain || 'Le résultat s\'affichera ici après anonymisation.';
+        // If it's a real result (from processText success), use pre-wrap.
+        // Otherwise (placeholder/error/loading), use normal to collapse white-space issues.
+        el.style.whiteSpace = (plain && plain.length > 50) ? 'pre-wrap' : 'normal';
+      }
+    });
+    renderOutputStats(plain || '', stats || null, typeof total === 'number' ? total : null);
+  }
+
+  function scheduleDebouncedText() {
+    if (debounceTextTimer) clearTimeout(debounceTextTimer);
+    debounceTextTimer = setTimeout(() => {
+      debounceTextTimer = null;
+      processText();
+    }, DEBOUNCE_TEXT_MS);
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s;
+    return div.innerHTML;
+  }
+
+  /** Map backend tag names to UI codes for display/CSS only. Does NOT change backend classification. */
+  function normalizeEntityCode(code) {
+    const raw = (code || '').toString().trim();
+    if (!raw) return '';
+    const clean = raw.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    if (!clean) return '';
+    if (TAG_ALIAS[clean]) return TAG_ALIAS[clean];
+    if (ENTITY_TYPES_TAG.includes(clean)) return clean;
+    return 'OTHER';
+  }
+
+  /** Render backend placeholders [XXX] as colored spans. No client-side anonymization: we only map tag names (e.g. PERSON→PR, LOCATION→LOC) for display. */
+  function buildOutputWithTags(processedText) {
+    if (!processedText) return { plain: processedText || '', useTags: false };
+    const escaped = escapeHtml(processedText);
+    let replaced = false;
+    const html = escaped.replace(/\[([A-Za-z0-9_]{2,32})\]/g, (_, rawType) => {
+      replaced = true;
+      const type = normalizeEntityCode(rawType);
+      if (!type) return '[' + rawType + ']';
+      return '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>';
+    });
+    if (!replaced || html === escaped) return { plain: processedText, useTags: false };
+    return { plain: processedText, useTags: true, html };
+  }
+
+  function extractEntityStats(processedText) {
+    const counts = {};
+    if (!processedText) return counts;
+    let match;
+    while ((match = PLACEHOLDER_RE.exec(processedText)) !== null) {
+      const code = normalizeEntityCode(match[1]);
+      if (!code) continue;
+      counts[code] = (counts[code] || 0) + 1;
+    }
+    PLACEHOLDER_RE.lastIndex = 0;
+    return counts;
+  }
+
+  function renderOutputStats(processedText, explicitStats, explicitTotal) {
+    if (!ui.outputSummary || !ui.outputEntities) return;
+
+    const stats = explicitStats && typeof explicitStats === 'object'
+      ? explicitStats
+      : extractEntityStats(processedText);
+    const entries = Object.entries(stats)
+      .map((entry) => [entry[0], Math.max(0, Math.floor(Number(entry[1] || 0)))])
+      .filter((entry) => entry[1] > 0)
+      .sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return a[0].localeCompare(b[0]);
+      });
+    const total = typeof explicitTotal === 'number'
+      ? explicitTotal
+      : entries.reduce((sum, item) => sum + item[1], 0);
+
+    document.querySelectorAll('#agfOutputEntities').forEach(el => { el.textContent = ''; });
+    if (total === 0) {
+      document.querySelectorAll('#agfOutputSummary').forEach(el => { el.textContent = 'Aucune donnée personnelle détectée pour l\'instant.'; });
+      document.querySelectorAll('#agfLastMaskInfo').forEach(el => { el.textContent = 'Champs anonymisés (texte): 0'; });
+      return;
+    }
+
+    document.querySelectorAll('#agfOutputSummary').forEach(el => { el.textContent = total + ' donnée(s) personnelle(s) détectée(s) sur le dernier traitement.'; });
+    document.querySelectorAll('#agfLastMaskInfo').forEach(el => { el.textContent = 'Champs anonymisés (texte): ' + total; });
+
+    document.querySelectorAll('#agfOutputEntities').forEach(container => {
+      entries.forEach((entry) => {
+        const chip = document.createElement('span');
+        chip.className = 'agf-output-entity-chip agf-tag-' + entry[0];
+        chip.textContent = entry[0] + ': ' + entry[1];
+        container.appendChild(chip);
+      });
+    });
+  }
+
+  function applyStructuredResponse(raw) {
+    let plain = (raw && raw.trim()) ? raw : 'Le serveur n\'a renvoyé aucun résultat. Réessayez.';
+    let stats = null;
+    let total = null;
+    try {
+      const data = JSON.parse(raw);
+      if (data && typeof data.processedText === 'string') plain = data.processedText;
+      if (data && data.audit && data.audit.entityCounts && typeof data.audit.entityCounts === 'object') {
+        stats = {};
+        Object.entries(data.audit.entityCounts).forEach((entry) => {
+          const code = normalizeEntityCode(entry[0]);
+          if (!code) return;
+          const count = Math.max(0, Math.floor(Number(entry[1] || 0)));
+          stats[code] = (stats[code] || 0) + count;
+        });
+      } else if (data && Array.isArray(data.entities)) {
+        stats = {};
+        data.entities.forEach((entity) => {
+          const code = normalizeEntityCode(entity && entity.type);
+          if (!code) return;
+          stats[code] = (stats[code] || 0) + 1;
+        });
+      }
+      if (stats) {
+        total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
+      }
+    } catch (e) { }
+    const built = buildOutputWithTags(plain);
+    return { plain, useTags: built.useTags, html: built.html, stats, total };
+  }
+
+  function applyEditionLocks() {
+    if (ui.openTypes) ui.openTypes.classList.remove('is-locked');
+    if (ui.openInclusion) ui.openInclusion.classList.remove('is-locked');
+  }
+
+  function applyFeatureAvailability() {
+    const pseudoEnabled = isFeatureEnabled('pseudo');
+    const inclusionEnabled = isFeatureEnabled('inclusion');
+
+    if (ui.pseudoMode) ui.pseudoMode.classList.toggle('is-preview', !pseudoEnabled);
+    if (ui.pseudoSaved) ui.pseudoSaved.classList.toggle('is-preview', !pseudoEnabled);
+    if (ui.openInclusion) ui.openInclusion.classList.toggle('is-preview', !inclusionEnabled);
+
+    if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoEnabled ? 'Paramétrer' : 'Bientôt';
+    if (ui.pseudoSavedBadge) ui.pseudoSavedBadge.textContent = pseudoEnabled ? 'Gérer' : 'Aperçu';
+    if (ui.pseudoAvailabilityHint) ui.pseudoAvailabilityHint.hidden = pseudoEnabled;
+    if (ui.inclusionAvailabilityHint) ui.inclusionAvailabilityHint.hidden = inclusionEnabled;
+    if (ui.pseudoPreviewNote) ui.pseudoPreviewNote.hidden = pseudoEnabled;
+    if (ui.inclusionPreviewNote) ui.inclusionPreviewNote.hidden = inclusionEnabled;
+
+    if (!pseudoEnabled && state.mode === 'pseudonymiser') {
+      setMode('anonymiser', { silent: true });
+    }
+
+    if (ui.modals.pseudo) {
+      const pseudoModal = ui.modals.pseudo.querySelector('.agf-modal');
+      if (pseudoModal) pseudoModal.classList.toggle('is-readonly', !pseudoEnabled);
+    }
+    if (ui.modals.inclusion) {
+      const inclusionModal = ui.modals.inclusion.querySelector('.agf-modal');
+      if (inclusionModal) inclusionModal.classList.toggle('is-readonly', !inclusionEnabled);
+    }
+
+    setReadonlyControls(ui.pseudoReadonlyZone, !pseudoEnabled);
+    setReadonlyControls(ui.inclusionReadonlyZone, !inclusionEnabled);
+
+    if (ui.pseudoDefaults) ui.pseudoDefaults.disabled = !pseudoEnabled;
+    if (ui.savePseudo) {
+      ui.savePseudo.disabled = !pseudoEnabled;
+      ui.savePseudo.textContent = pseudoEnabled ? 'Enregistrer la politique' : 'Activation backend en attente';
+    }
+
+    if (ui.includeInput) ui.includeInput.disabled = !inclusionEnabled;
+    if (ui.excludeInput) ui.excludeInput.disabled = !inclusionEnabled;
+    if (ui.includeAdd) ui.includeAdd.disabled = !inclusionEnabled;
+    if (ui.excludeAdd) ui.excludeAdd.disabled = !inclusionEnabled;
+    if (ui.inclusionDefaults) ui.inclusionDefaults.disabled = !inclusionEnabled;
+    if (ui.saveInclusion) {
+      ui.saveInclusion.disabled = !inclusionEnabled;
+      ui.saveInclusion.textContent = inclusionEnabled ? 'Enregistrer les listes' : 'Activation backend en attente';
+    }
+  }
+
+  function shouldCallApiMeta() {
+    if (!ui.apiMeta) return false;
+    const footer = ui.apiMeta.closest('.agf-api-footer');
+    if (!footer) return false;
+    const styles = window.getComputedStyle(footer);
+    return styles.display !== 'none' && styles.visibility !== 'hidden';
+  }
+
+  function bindEvents() {
+    ui.form.addEventListener('submit', submitFiles);
+    if (ui.reset) ui.reset.addEventListener('click', resetFiles);
+    if (ui.clearProcessed) ui.clearProcessed.addEventListener('click', clearProcessedOnly);
+    if (ui.downloadZip) ui.downloadZip.addEventListener('click', downloadAllAsZip);
+
+    ui.tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => setActiveTab(tab.getAttribute('data-tab')));
+      tab.addEventListener('keydown', (e) => {
+        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+        e.preventDefault();
+        let nextIndex = index;
+        if (e.key === 'ArrowRight') nextIndex = (index + 1) % ui.tabs.length;
+        if (e.key === 'ArrowLeft') nextIndex = (index - 1 + ui.tabs.length) % ui.tabs.length;
+        if (e.key === 'Home') nextIndex = 0;
+        if (e.key === 'End') nextIndex = ui.tabs.length - 1;
+        const nextTab = ui.tabs[nextIndex];
+        if (!nextTab) return;
+        setActiveTab(nextTab.getAttribute('data-tab'));
+        nextTab.focus();
+      });
+    });
+
+    ui.dropzone.addEventListener('click', () => ui.input.click());
+    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.input.click(); } });
+    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); ui.dropzone.classList.add('is-dragover'); });
+    ['dragleave', 'dragend'].forEach((evt) => ui.dropzone.addEventListener(evt, () => ui.dropzone.classList.remove('is-dragover')));
+    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+    ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
+
+    if (ui.textInput) {
+      ui.textInput.addEventListener('input', scheduleDebouncedText);
+      ui.textInput.addEventListener('keyup', scheduleDebouncedText);
+    }
+    if (ui.textClear) ui.textClear.addEventListener('click', () => {
+      textRequestSerial += 1;
+      textProcessQueued = false;
+      if (ui.textInput) ui.textInput.value = '';
+      resetTextCache();
+      setTextOutput('Le résultat s\'affichera ici après anonymisation.', false, null, null, 0);
+      if (debounceTextTimer) {
+        clearTimeout(debounceTextTimer);
+        debounceTextTimer = null;
+      }
+    });
+    if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
+
+    if (ui.modeRadios.length) ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
+      setMode(radio.value);
+      refreshTextIfNeeded();
+    }));
+
+    if (ui.pseudoMode) ui.pseudoMode.addEventListener('click', () => {
+      openModal(ui.modals.pseudo);
+      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymisation en aperçu: activation backend en cours.');
+    });
+    if (ui.pseudoSaved) ui.pseudoSaved.addEventListener('click', () => {
+      openModal(ui.modals.pseudo);
+      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymes en aperçu: gestion active dès branchement backend.');
+    });
+    if (ui.openTypes) ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
+    if (ui.openInclusion) ui.openInclusion.addEventListener('click', () => {
+      openModal(ui.modals.inclusion);
+      if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion en aperçu: activation backend en cours.');
+    });
+    if (ui.upgradeRestore) {
+      ui.upgradeRestore.addEventListener('click', () => {
+        openModal(ui.modals.pseudo);
+        if (!isFeatureEnabled('pseudo')) setStatus('info', 'Restauration et pseudonymisation seront activées ensemble côté backend.');
+      });
+    }
+
+    if (ui.modalTypesClose) ui.modalTypesClose.addEventListener('click', () => closeModal(ui.modals.types));
+    if (ui.modalTypesBetaClose && ui.modalTypesBetaOverlay) {
+      ui.modalTypesBetaClose.addEventListener('click', () => ui.modalTypesBetaOverlay.classList.add('is-dismissed'));
+    }
+    if (ui.modalPseudoClose) ui.modalPseudoClose.addEventListener('click', () => closeModal(ui.modals.pseudo));
+    if (ui.modalIncClose) ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
+
+    if (ui.defaultsTypes) ui.defaultsTypes.addEventListener('click', () => {
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (chk.disabled) return;
+        chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
+      });
+      resetTextCache();
+      renderTypeCount();
+      refreshTextIfNeeded();
+    });
+
+    if (ui.detectAllTypes) ui.detectAllTypes.addEventListener('click', () => {
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (!chk.disabled) chk.checked = true;
+      });
+      resetTextCache();
+      renderTypeCount();
+      refreshTextIfNeeded();
+    });
+
+    if (ui.ignoreAllTypes) ui.ignoreAllTypes.addEventListener('click', () => {
+      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+        if (!chk.disabled) chk.checked = false;
+      });
+      resetTextCache();
+      renderTypeCount();
+      refreshTextIfNeeded();
+    });
+
+    if (ui.saveTypes) ui.saveTypes.addEventListener('click', () => {
+      storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+      resetTextCache();
+      renderTypeCount();
+      closeModal(ui.modals.types);
+      refreshTextIfNeeded();
+    });
+
+    if (ui.pseudoDefaults) ui.pseudoDefaults.addEventListener('click', () => {
+      if (!isFeatureEnabled('pseudo')) {
+        setStatus('info', 'Paramètres de pseudonymisation visibles en aperçu uniquement pour l’instant.');
+        return;
+      }
+      state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG };
+      applyPseudoToUi(state.pseudoConfig);
+      renderPseudoSummary();
+    });
+
+    if (ui.savePseudo) ui.savePseudo.addEventListener('click', () => {
+      if (!isFeatureEnabled('pseudo')) {
+        setStatus('info', 'Pseudonymisation non activée côté backend. Configuration conservée en aperçu.');
+        return;
+      }
+      state.pseudoConfig = readPseudoFromUi();
+      storage.set(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
+      resetTextCache();
+      setMode('pseudonymiser');
+      setStatus('success', 'Paramètres enregistrés.');
+      closeModal(ui.modals.pseudo);
+      refreshTextIfNeeded();
+    });
+
+    if (ui.includeAdd) ui.includeAdd.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        return;
+      }
+      if (addTerm('include', ui.includeInput ? ui.includeInput.value : '')) {
+        if (ui.includeInput) ui.includeInput.value = '';
+        if (ui.includeInput) ui.includeInput.focus();
+        resetTextCache();
+        refreshTextIfNeeded();
+      }
+    });
+
+    if (ui.excludeAdd) ui.excludeAdd.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        return;
+      }
+      if (addTerm('exclude', ui.excludeInput ? ui.excludeInput.value : '')) {
+        if (ui.excludeInput) ui.excludeInput.value = '';
+        if (ui.excludeInput) ui.excludeInput.focus();
+        resetTextCache();
+        refreshTextIfNeeded();
+      }
+    });
+
+    if (ui.includeInput) ui.includeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isFeatureEnabled('inclusion')) {
+          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          return;
+        }
+        if (addTerm('include', ui.includeInput.value)) {
+          ui.includeInput.value = '';
+          resetTextCache();
+          refreshTextIfNeeded();
+        }
+      }
+    });
+
+    if (ui.excludeInput) ui.excludeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!isFeatureEnabled('inclusion')) {
+          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          return;
+        }
+        if (addTerm('exclude', ui.excludeInput.value)) {
+          ui.excludeInput.value = '';
+          resetTextCache();
+          refreshTextIfNeeded();
+        }
+      }
+    });
+
+    if (ui.inclusionDefaults) ui.inclusionDefaults.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Listes en aperçu: le reset sera disponible à l’activation backend.');
+        return;
+      }
+      state.includeTerms = [];
+      state.excludeTerms = [];
+      syncHiddenTermFields();
+      renderTermList('include');
+      renderTermList('exclude');
+      renderInclusionSummary();
+      resetTextCache();
+      refreshTextIfNeeded();
+    });
+
+    if (ui.saveInclusion) ui.saveInclusion.addEventListener('click', () => {
+      if (!isFeatureEnabled('inclusion')) {
+        setStatus('info', 'Inclusion / Exclusion non activée côté backend. Aperçu conservé.');
+        return;
+      }
+      if (ui.includeInput && ui.includeInput.value) {
+        addTerm('include', ui.includeInput.value);
+        ui.includeInput.value = '';
+      }
+      if (ui.excludeInput && ui.excludeInput.value) {
+        addTerm('exclude', ui.excludeInput.value);
+        ui.excludeInput.value = '';
+      }
+      syncHiddenTermFields();
+      storage.set(STORAGE_INC, (ui.includeTerms && ui.includeTerms.value) || '');
+      storage.set(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
+      resetTextCache();
+      setStatus('success', 'Listes enregistrées.');
+      closeModal(ui.modals.inclusion);
+      refreshTextIfNeeded();
+    });
+
+    if (ui.manualAuthToggle && ui.manualAuth && ui.manualAuthFields) {
+      ui.manualAuthToggle.addEventListener('click', () => {
+        const collapsed = ui.manualAuth.classList.toggle('is-collapsed');
+        ui.manualAuthFields.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
+        ui.manualAuthToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        ui.manualAuthToggle.textContent = collapsed ? 'Utiliser des identifiants manuels' : 'Masquer les identifiants manuels';
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      trapModalFocus(e);
+      if (e.key === 'Escape') closeAllModals();
+    });
+
+    Object.keys(ui.modals).forEach((key) => {
+      const overlay = ui.modals[key];
+      if (!overlay) return;
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(overlay); });
+    });
+
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      chk.addEventListener('change', () => {
+        renderTypeCount();
+        resetTextCache();
+        refreshTextIfNeeded();
+      });
+    });
+
+    [ui.manualUsername, ui.manualToken, ui.manualEdition].forEach((field) => {
+      if (!field) return;
+      field.addEventListener('change', () => {
+        state.token = '';
+        resetTextCache();
+      });
+    });
+
+    window.addEventListener('pagehide', () => {
+      if (state.processing) persistInFlightJobs();
+    });
+    window.addEventListener('beforeunload', () => {
+      if (state.processing) persistInFlightJobs();
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && state.processing) persistInFlightJobs();
+    });
+  }
+
+  function applyTokenFromEvent(detail) {
+    if (!detail || !detail.token) return;
+    state.token = detail.token;
+    if (detail.email) state.email = detail.email;
+    if (detail.edition) state.edition = normalizeEdition(detail.edition);
+  }
+
+  async function resumeInFlightJobsIfAny() {
+    const restored = restoreInFlightJobs();
+    if (!restored) return;
+    try {
+      await ensureAuth();
+    } catch (err) {
+      state.processing = false;
+      clearInFlightJobs();
+      setStatus('error', (err && err.message) || 'Reprise impossible. Vérifiez votre connexion.');
+      updateActions();
+      return;
+    }
+    await pollAllJobsUntilDone();
+    state.processing = false;
+    finalizeFilesProcessingStatus();
+  }
+
+  async function init() {
+    if (window.__agiloEmbedAnonymisationMounted) return;
+    if (!ui.form || !ui.submit || !ui.dropzone) return;
+    window.__agiloEmbedAnonymisationMounted = true;
+
+    window.addEventListener('agilo:token', (e) => {
+      applyTokenFromEvent(e && e.detail);
+      loadAnonJobsList().catch(function () { });
+    });
+
+    await waitForMemberstack(10000, 200);
+    state.edition = normalizeEdition(await detectEdition());
+    const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
+    if (editionFromUrl) {
+      const n = editionFromUrl.toLowerCase();
+      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = normalizeEdition(n);
+    }
+    state.edition = getEditionForApi();
+    storage.set('agilo:edition', state.edition);
+    if (ui.manualEdition) ui.manualEdition.value = state.edition;
+
+    if (window.globalToken && storage.get('agilo:username')) {
+      state.token = window.globalToken;
+      state.email = storage.get('agilo:username');
+      const cachedEdition = storage.get('agilo:edition');
+      if (cachedEdition) state.edition = normalizeEdition(cachedEdition);
+    } else {
+      state.email = await getUserEmail();
+      if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
+    }
+
+    bindEvents();
+    setActiveTab('file');
+    loadPreferences();
+    applyEditionLocks();
+    applyFeatureAvailability();
+    renderFileList();
+    updateActions();
+    await resumeInFlightJobsIfAny();
+    if (shouldCallApiMeta()) {
+      runSessionMaintenance();
+      loadApiVersion();
+    }
+    loadAnonJobsList().catch(function () { });
+  }
+
+  if (window.__agiloEmbedAnonymisationMounted) return;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
