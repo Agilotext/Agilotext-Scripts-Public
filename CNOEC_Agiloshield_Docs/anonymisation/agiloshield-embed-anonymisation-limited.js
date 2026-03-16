@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.5-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.8-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -154,9 +154,29 @@
   const storage = createSafeStorage();
 
   function getEditionForQuota() {
-    const ed = (window.AGILO_EDITION || storage.get('agilo:edition') || state.edition || 'free').toLowerCase();
+    // Priorité: state.edition (Memberstack à l'init) > override manuel > cache > free
+    const ed = (state.edition || window.AGILO_EDITION || storage.get('agilo:edition') || 'free').toLowerCase();
     if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
     return 'free';
+  }
+
+  /** Retourne { used, limit, remaining } sans consommer */
+  function getQuotaStatus() {
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
+    const raw = storage.get(usageKey);
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : { count: 0, resetAt: now + dayMs };
+    } catch (e) {
+      data = { count: 0, resetAt: now + dayMs };
+    }
+    if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
+    const used = data.count || 0;
+    return { used, limit, remaining: Math.max(0, limit - used) };
   }
 
   /** @param {number} n Nombre de documents à consommer (1 par fichier, 1 pour le texte) */
@@ -164,7 +184,8 @@
     n = Math.max(1, typeof n === 'number' && !isNaN(n) ? n : 1);
     const edition = getEditionForQuota();
     const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
-    const raw = storage.get(STORAGE_USAGE);
+    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
+    const raw = storage.get(usageKey);
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     let data;
@@ -176,16 +197,28 @@
     if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
     if (data.count + n > limit) return false;
     data.count += n;
-    storage.set(STORAGE_USAGE, JSON.stringify(data));
+    storage.set(usageKey, JSON.stringify(data));
     return true;
   }
 
   function updateDropzoneTextForLimited() {
     if (!ui.dropzone) return;
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const status = getQuotaStatus();
+    const used = status.used;
+    const remaining = status.remaining;
     var paras = ui.dropzone.querySelectorAll('p');
-    if (paras[0]) paras[0].textContent = '3 documents gratuits par jour (10 pour Business) — tous formats, 10 Mo max / fichier.';
+    if (paras[0]) paras[0].textContent = used + '/' + limit + ' documents utilisés aujourd\'hui — 10 Mo max / fichier.';
     var p2 = ui.dropzone.querySelector('.agf-formats-explicit') || paras[1];
-    if (p2) p2.innerHTML = 'Formats pris en charge : CSV, Word, Excel, PowerPoint, TXT, PDF. Version illimitée (BETA) : <a href="mailto:contact@agilotext.com">contact@agilotext.com</a>';
+    if (p2) p2.innerHTML = 'Formats : CSV, Word, Excel, PowerPoint, TXT, PDF. Limite atteinte ? <a href="mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)" class="agf-contact-link">contact@agilotext.com</a>';
+    const quotaReached = remaining <= 0;
+    ui.dropzone.classList.toggle('agf-dropzone--quota-reached', quotaReached);
+    ui.dropzone.setAttribute('aria-disabled', quotaReached ? 'true' : 'false');
+    ui.dropzone.style.pointerEvents = quotaReached ? 'none' : '';
+    ui.dropzone.style.opacity = quotaReached ? '0.7' : '1';
+    const fileInp = ui.getFileInput && ui.getFileInput();
+    if (fileInp) fileInp.disabled = quotaReached;
   }
 
   const ui = {
@@ -194,6 +227,12 @@
     panels: { file: document.getElementById('agfPanel-file'), text: document.getElementById('agfPanel-text'), restore: document.getElementById('agfPanel-restore') },
     dropzone: document.getElementById('agfDropzone'),
     input: document.getElementById('agfFileInput'),
+    getFileInput: function() {
+      const el = document.getElementById('agfFileInput');
+      if (!el) return null;
+      if (el.tagName === 'INPUT' && el.type === 'file') return el;
+      return el.querySelector && el.querySelector('input[type="file"]') || null;
+    },
     fileList: document.getElementById('agfFileList'),
     titleFileList: document.getElementById('agfTitleFileList'),
     processedWrap: document.getElementById('agfProcessedWrap'),
@@ -1312,7 +1351,7 @@
     if (!file) return 'format';
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (IMAGE_EXT.includes(ext)) return 'image';
-    if (file.size > MAX_FILE_SIZE) return 'size';
+    if (file.size > MAX_FILE_SIZE) return 'size'; // 10 Mo max par fichier
     if (!SUPPORTED_EXT.includes(ext)) return 'format';
     return null;
   }
@@ -1321,9 +1360,21 @@
     const files = Array.from(fileList || []);
     const rejectedImages = [];
     const rejectedOther = [];
-    const maxToAdd = MAX_FILES - state.files.length;
+    const edition = getEditionForQuota();
+    const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
+    const quotaStatus = getQuotaStatus();
+    const remaining = quotaStatus.remaining;
+    const canAddByQuota = Math.max(0, remaining - state.files.length);
+    if (remaining <= 0 || state.files.length >= limit) {
+      setQuotaExceededStatus();
+      updateDropzoneTextForLimited();
+      renderFileList();
+      return;
+    }
+    const maxToAdd = Math.min(limit - state.files.length, canAddByQuota, MAX_FILES - state.files.length);
     if (maxToAdd <= 0) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
+      setQuotaExceededStatus();
+      updateDropzoneTextForLimited();
       renderFileList();
       return;
     }
@@ -1331,20 +1382,26 @@
     toAdd.forEach((file) => {
       const reason = getRejectReason(file);
       if (reason === 'image') rejectedImages.push(file.name);
-      else if (reason) rejectedOther.push(file.name);
+      else if (reason) rejectedOther.push({ name: file.name, reason });
       else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
+      setStatus('error', 'Limite du jour atteinte (' + limit + ' docs). Vous avez ajouté ' + maxToAdd + ' fichier(s).');
     } else if (rejectedImages.length > 0) {
-      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge. Ce sera disponible prochainement.');
+      setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge.');
     } else if (rejectedOther.length > 0) {
-      const short = rejectedOther.slice(0, 2).join(', ');
-      const more = rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '';
-      setStatus('error', 'Format non accepté ou fichier > 10 Mo : ' + short + more + '.');
+      const hasSize = rejectedOther.some((r) => r.reason === 'size');
+      const hasFormat = rejectedOther.some((r) => r.reason === 'format');
+      let msg = 'Fichier(s) refusé(s) : ';
+      if (hasSize) msg += 'max 10 Mo par fichier. ';
+      if (hasFormat) msg += 'Formats acceptés : PDF, Word, Excel, PowerPoint, TXT, CSV, JSON, FEC. ';
+      const short = rejectedOther.slice(0, 2).map((r) => r.name).join(', ');
+      msg += short + (rejectedOther.length > 2 ? ' +' + (rejectedOther.length - 2) + ' autre(s)' : '') + '.';
+      setStatus('error', msg);
     } else {
       setStatus('', '');
     }
+    updateDropzoneTextForLimited();
     renderFileList();
   }
 
@@ -2175,6 +2232,7 @@
     } else {
       setStatus('success', 'C\'est prêt. Téléchargez vos documents ci-dessus ou tout en .zip.');
     }
+    updateDropzoneTextForLimited();
     updateActions();
   }
 
@@ -2746,12 +2804,13 @@
       });
     });
 
-    ui.dropzone.addEventListener('click', () => ui.input.click());
-    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.input.click(); } });
-    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); ui.dropzone.classList.add('is-dragover'); });
+    const fileInp = ui.getFileInput && ui.getFileInput();
+    ui.dropzone.addEventListener('click', () => { if (fileInp && getQuotaStatus().remaining > 0 && !ui.dropzone.classList.contains('agf-dropzone--quota-reached')) fileInp.click(); });
+    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (fileInp && getQuotaStatus().remaining > 0) fileInp.click(); } });
+    ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); if (getQuotaStatus().remaining > 0) ui.dropzone.classList.add('is-dragover'); });
     ['dragleave', 'dragend'].forEach((evt) => ui.dropzone.addEventListener(evt, () => ui.dropzone.classList.remove('is-dragover')));
-    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
-    ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
+    ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files && getQuotaStatus().remaining > 0) addFiles(e.dataTransfer.files); });
+    if (fileInp) fileInp.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; });
 
     if (ui.textInput) {
       ui.textInput.addEventListener('input', scheduleDebouncedText);
@@ -3050,8 +3109,7 @@
     if (window.globalToken && storage.get('agilo:username')) {
       state.token = window.globalToken;
       state.email = storage.get('agilo:username');
-      const cachedEdition = storage.get('agilo:edition');
-      if (cachedEdition) state.edition = normalizeEdition(cachedEdition);
+      // Ne pas écraser state.edition (déjà correct depuis detectEdition) avec un cache potentiellement obsolète
     } else {
       state.email = await getUserEmail();
       if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
