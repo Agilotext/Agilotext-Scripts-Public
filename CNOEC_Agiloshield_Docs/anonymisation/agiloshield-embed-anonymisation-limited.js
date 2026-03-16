@@ -25,7 +25,8 @@
   const MAX_FILES = 12;
   const STORAGE_USAGE = 'agilo:anon:usage:v1';
   const DAILY_LIMITS = { free: 3, business: 10 };
-  const QUOTA_EXCEEDED_MSG = 'Vous avez atteint la limite du jour (3 documents gratuits / 10 pour Business). Anonymisation illimitée (BETA) : accès sur demande. Contactez-nous : contact@agilotext.com';
+  const QUOTA_EXCEEDED_MSG = 'Vous avez atteint la limite du jour (3 documents gratuits / 10 pour Business). Anonymisation illimitée (BETA) : accès sur demande.';
+  const QUOTA_CONTACT_EMAIL = 'contact@agilotext.com';
   // Backend: csv, doc(x), pdf(x), xls(x), txt, text. PDF/ppt peuvent être désactivés côté serveur.
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
   const IMAGE_EXT = ['png', 'jpg', 'jpeg'];
@@ -158,7 +159,9 @@
     return 'free';
   }
 
-  function checkAndConsumeQuota() {
+  /** @param {number} n Nombre de documents à consommer (1 par fichier, 1 pour le texte) */
+  function checkAndConsumeQuota(n) {
+    n = Math.max(1, typeof n === 'number' && !isNaN(n) ? n : 1);
     const edition = getEditionForQuota();
     const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
     const raw = storage.get(STORAGE_USAGE);
@@ -171,8 +174,8 @@
       data = { count: 0, resetAt: now + dayMs };
     }
     if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
-    if (data.count >= limit) return false;
-    data.count++;
+    if (data.count + n > limit) return false;
+    data.count += n;
     storage.set(STORAGE_USAGE, JSON.stringify(data));
     return true;
   }
@@ -413,6 +416,35 @@
     });
     if (!value || value.length < MIN_TEXT_LENGTH_FOR_API) return;
     scheduleDebouncedText();
+  }
+
+  function setTextOutputQuotaExceeded() {
+    const msg = QUOTA_EXCEEDED_MSG + ' ';
+    const mailto = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
+    document.querySelectorAll('#agfOutputText').forEach((el) => {
+      el.innerHTML = msg + '<a href="' + mailto + '" class="agf-btn-primary agf-status-contact-btn" rel="noopener noreferrer">Contacter par email</a>';
+      el.style.whiteSpace = 'normal';
+    });
+    renderOutputStats('', null, null);
+  }
+
+  function setQuotaExceededStatus() {
+    const statuses = document.querySelectorAll('#agfStatus');
+    statuses.forEach((statusEl) => {
+      statusEl.classList.add('is-visible');
+      statusEl.setAttribute('data-kind', 'error');
+      statusEl.textContent = '';
+      statusEl.querySelectorAll('.agf-status-lottie').forEach((el) => { el.innerHTML = ''; });
+      const txt = document.createElement('span');
+      txt.textContent = QUOTA_EXCEEDED_MSG + ' ';
+      statusEl.appendChild(txt);
+      const btn = document.createElement('a');
+      btn.href = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
+      btn.className = 'agf-btn-primary agf-status-contact-btn';
+      btn.textContent = 'Contacter par email';
+      btn.rel = 'noopener noreferrer';
+      statusEl.appendChild(btn);
+    });
   }
 
   function setStatus(kind, message) {
@@ -2152,8 +2184,8 @@
 
     try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
 
-    if (!checkAndConsumeQuota()) {
-      setStatus('error', QUOTA_EXCEEDED_MSG);
+    if (!checkAndConsumeQuota(state.files.length)) {
+      setQuotaExceededStatus();
       return;
     }
 
@@ -2406,14 +2438,14 @@
       });
       return;
     }
-    if (!checkAndConsumeQuota()) {
-      setTextOutput(QUOTA_EXCEEDED_MSG, false, null, null, 0);
+    if (!checkAndConsumeQuota(1)) {
+      setTextOutputQuotaExceeded();
       state.textProcessing = false;
       document.querySelectorAll('#agfOutputText').forEach(el => {
         el.classList.remove('agf-text-output--loading');
         el.setAttribute('aria-busy', 'false');
       });
-      setStatus('error', QUOTA_EXCEEDED_MSG);
+      setQuotaExceededStatus();
       return;
     }
 

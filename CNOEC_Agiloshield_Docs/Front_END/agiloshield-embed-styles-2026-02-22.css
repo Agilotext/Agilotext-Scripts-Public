@@ -2463,6 +2463,20 @@
     flex-shrink: 0;
   }
 
+  .agf-status-contact-btn {
+    display: inline-block;
+    margin-top: 0.5rem;
+    margin-left: 0.25rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .agf-status-contact-btn:hover {
+    opacity: 0.9;
+  }
+
   /* Badge Annulé */
   .agf-status-badge--canceled {
     background: color-mix(in srgb, var(--agilo-canceled) 12%, transparent);
