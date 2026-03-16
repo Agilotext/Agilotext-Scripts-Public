@@ -259,6 +259,9 @@
     background: color-mix(in srgb, var(--agilo-primary) 6%, transparent);
   }
 
+  .agf-dropzone h4,
+  .agf-dropzone p { pointer-events: none; }
+  .agf-dropzone a { pointer-events: auto; }
   .agf-dropzone h4 {
     font-size: 1rem;
     font-weight: 600;
