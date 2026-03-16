@@ -153,7 +153,7 @@
   const storage = createSafeStorage();
 
   function getEditionForQuota() {
-    const ed = (storage.get('agilo:edition') || state.edition || 'free').toLowerCase();
+    const ed = (window.AGILO_EDITION || storage.get('agilo:edition') || state.edition || 'free').toLowerCase();
     if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
     return 'free';
   }
