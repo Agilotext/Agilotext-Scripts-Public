@@ -25,7 +25,10 @@
   const MAX_FILES = 12;
   const STORAGE_USAGE = 'agilo:anon:usage:v1';
   const DAILY_LIMITS = { free: 3, business: 10 };
-  const QUOTA_EXCEEDED_MSG = 'Vous avez atteint la limite du jour (3 documents gratuits / 10 pour Business). Anonymisation illimitée (BETA) : accès sur demande.';
+  function getQuotaExceededMsg() {
+    const status = getQuotaStatus();
+    return 'Limite du jour atteinte (' + status.used + '/' + status.limit + ' documents). Vous pourrez en traiter de nouveaux demain. Accès illimité (BETA) : contactez-nous.';
+  }
   const QUOTA_CONTACT_EMAIL = 'contact@agilotext.com';
   // Backend: csv, doc(x), pdf(x), xls(x), txt, text. PDF/ppt peuvent être désactivés côté serveur.
   const SUPPORTED_EXT = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'json', 'fec'];
@@ -160,21 +163,48 @@
     return 'free';
   }
 
+  /** Retourne la clé de stockage primaire.
+   *  IMPORTANT : Pour le free, on utilise TOUJOURS la clé sans email comme référence primaire,
+   *  car l'email Memberstack peut ne pas être chargé au moment du premier enregistrement.
+   *  On vérifie aussi la clé avec email si disponible et on prend le count le plus élevé
+   *  pour éviter tout contournement lié au timing de chargement.
+   */
+  function readUsageData(now, dayMs) {
+    const anonKey = STORAGE_USAGE;
+    const emailKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : null;
+    function parseRaw(key) {
+      if (!key) return null;
+      const raw = storage.get(key);
+      if (!raw) return null;
+      try { return JSON.parse(raw); } catch (e) { return null; }
+    }
+    let bestCount = 0;
+    let bestResetAt = now + dayMs;
+    [parseRaw(anonKey), parseRaw(emailKey)].forEach(function(d) {
+      if (!d) return;
+      const resetAt = Number(d.resetAt || 0);
+      if (now >= resetAt) return; // expiré
+      const c = Number(d.count || 0);
+      if (c > bestCount) { bestCount = c; bestResetAt = resetAt; }
+    });
+    return { count: bestCount, resetAt: bestResetAt };
+  }
+
+  function writeUsageData(data) {
+    // Écriture sur les deux clés actives pour garantir la cohérence
+    storage.set(STORAGE_USAGE, JSON.stringify(data));
+    if (state.email) {
+      storage.set(STORAGE_USAGE + ':' + String(state.email).toLowerCase(), JSON.stringify(data));
+    }
+  }
+
   /** Retourne { used, limit, remaining } sans consommer */
   function getQuotaStatus() {
     const edition = getEditionForQuota();
     const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
-    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
-    const raw = storage.get(usageKey);
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-    let data;
-    try {
-      data = raw ? JSON.parse(raw) : { count: 0, resetAt: now + dayMs };
-    } catch (e) {
-      data = { count: 0, resetAt: now + dayMs };
-    }
-    if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
+    const data = readUsageData(now, dayMs);
     const used = data.count || 0;
     return { used, limit, remaining: Math.max(0, limit - used) };
   }
@@ -184,40 +214,22 @@
     n = Math.max(1, typeof n === 'number' && !isNaN(n) ? n : 1);
     const edition = getEditionForQuota();
     const limit = DAILY_LIMITS[edition] || DAILY_LIMITS.free;
-    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
-    const raw = storage.get(usageKey);
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-    let data;
-    try {
-      data = raw ? JSON.parse(raw) : { count: 0, resetAt: now + dayMs };
-    } catch (e) {
-      data = { count: 0, resetAt: now + dayMs };
-    }
-    if (now >= data.resetAt) data = { count: 0, resetAt: now + dayMs };
+    const data = readUsageData(now, dayMs);
     if (data.count + n > limit) return false;
-    data.count += n;
-    storage.set(usageKey, JSON.stringify(data));
+    writeUsageData({ count: data.count + n, resetAt: data.resetAt });
     return true;
   }
 
   /** Remet n unités dans le quota (ex. échec d'upload). Ne descend pas sous 0. */
   function rollbackQuota(n) {
     if (!n || n < 1) return;
-    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
-    const raw = storage.get(usageKey);
-    if (!raw) return;
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
-    let data;
-    try {
-      data = JSON.parse(raw);
-    } catch (e) {
-      return;
-    }
+    const data = readUsageData(now, dayMs);
     if (now >= data.resetAt) return;
-    data.count = Math.max(0, (data.count || 0) - n);
-    storage.set(usageKey, JSON.stringify(data));
+    writeUsageData({ count: Math.max(0, (data.count || 0) - n), resetAt: data.resetAt });
   }
 
   function updateDropzoneTextForLimited() {
@@ -228,15 +240,33 @@
     const used = status.used;
     const remaining = status.remaining;
     var paras = ui.dropzone.querySelectorAll('p');
-    if (paras[0]) paras[0].textContent = used + '/' + limit + ' documents utilisés aujourd\'hui — 10 Mo max / fichier.';
+    // Affichage compteur avec couleur selon usage
+    if (paras[0]) {
+      const pct = used / limit;
+      paras[0].textContent = used + '/' + limit + ' documents utilisés aujourd\'hui — 10 Mo max / fichier.';
+      paras[0].style.color = pct >= 1 ? '#e53e3e' : pct >= 0.67 ? '#dd6b20' : '';
+      paras[0].style.fontWeight = pct >= 1 ? '600' : '';
+    }
     var p2 = ui.dropzone.querySelector('.agf-formats-explicit') || paras[1];
     if (p2) p2.innerHTML = 'Formats : CSV, Word, Excel, PowerPoint, TXT, PDF, JSON, FEC. Limite atteinte ? <a href="mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)" class="agf-contact-link">contact@agilotext.com</a>';
     const quotaReached = remaining <= 0;
     ui.dropzone.classList.toggle('agf-dropzone--quota-reached', quotaReached);
     ui.dropzone.setAttribute('aria-disabled', quotaReached ? 'true' : 'false');
     ui.dropzone.style.pointerEvents = quotaReached ? 'none' : '';
-    ui.dropzone.style.opacity = quotaReached ? '0.7' : '1';
+    ui.dropzone.style.opacity = quotaReached ? '0.5' : '1';
     if (ui.input) ui.input.disabled = quotaReached;
+    // Désactiver le bouton Submit dès le chargement si quota épuisé
+    document.querySelectorAll('#agfSubmit').forEach(function(btn) {
+      if (quotaReached) {
+        btn.disabled = true;
+        btn.title = 'Quota journalier atteint (' + used + '/' + limit + '). Revenez demain ou contactez-nous.';
+      } else {
+        // Laisser updateActions() gérer l'état normal
+        if (btn.title && btn.title.indexOf('Quota') === 0) {
+          btn.title = '';
+        }
+      }
+    });
   }
 
   const ui = {
@@ -470,7 +500,7 @@
   }
 
   function setTextOutputQuotaExceeded() {
-    const msg = QUOTA_EXCEEDED_MSG + ' ';
+    const msg = getQuotaExceededMsg() + ' ';
     const mailto = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
     document.querySelectorAll('#agfOutputText').forEach((el) => {
       el.innerHTML = msg + '<a href="' + mailto + '" class="agf-btn-primary agf-status-contact-btn" rel="noopener noreferrer">Contacter par email</a>';
@@ -487,7 +517,7 @@
       statusEl.textContent = '';
       statusEl.querySelectorAll('.agf-status-lottie').forEach((el) => { el.innerHTML = ''; });
       const txt = document.createElement('span');
-      txt.textContent = QUOTA_EXCEEDED_MSG + ' ';
+      txt.textContent = getQuotaExceededMsg() + ' ';
       statusEl.appendChild(txt);
       const btn = document.createElement('a');
       btn.href = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
@@ -496,6 +526,12 @@
       btn.rel = 'noopener noreferrer';
       statusEl.appendChild(btn);
     });
+    // Griser aussi le bouton submit
+    document.querySelectorAll('#agfSubmit').forEach(function(btn) {
+      btn.disabled = true;
+      btn.title = 'Quota journalier atteint. Revenez demain ou contactez-nous.';
+    });
+    updateDropzoneTextForLimited();
   }
 
   function setStatus(kind, message) {
