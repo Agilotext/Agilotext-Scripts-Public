@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.8-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.9-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -211,14 +211,13 @@
     var paras = ui.dropzone.querySelectorAll('p');
     if (paras[0]) paras[0].textContent = used + '/' + limit + ' documents utilisés aujourd\'hui — 10 Mo max / fichier.';
     var p2 = ui.dropzone.querySelector('.agf-formats-explicit') || paras[1];
-    if (p2) p2.innerHTML = 'Formats : CSV, Word, Excel, PowerPoint, TXT, PDF. Limite atteinte ? <a href="mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)" class="agf-contact-link">contact@agilotext.com</a>';
+    if (p2) p2.innerHTML = 'Formats : CSV, Word, Excel, PowerPoint, TXT, PDF, JSON, FEC. Limite atteinte ? <a href="mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)" class="agf-contact-link">contact@agilotext.com</a>';
     const quotaReached = remaining <= 0;
     ui.dropzone.classList.toggle('agf-dropzone--quota-reached', quotaReached);
     ui.dropzone.setAttribute('aria-disabled', quotaReached ? 'true' : 'false');
     ui.dropzone.style.pointerEvents = quotaReached ? 'none' : '';
     ui.dropzone.style.opacity = quotaReached ? '0.7' : '1';
-    const fileInp = ui.getFileInput && ui.getFileInput();
-    if (fileInp) fileInp.disabled = quotaReached;
+    if (ui.input) ui.input.disabled = quotaReached;
   }
 
   const ui = {
@@ -227,12 +226,6 @@
     panels: { file: document.getElementById('agfPanel-file'), text: document.getElementById('agfPanel-text'), restore: document.getElementById('agfPanel-restore') },
     dropzone: document.getElementById('agfDropzone'),
     input: document.getElementById('agfFileInput'),
-    getFileInput: function() {
-      const el = document.getElementById('agfFileInput');
-      if (!el) return null;
-      if (el.tagName === 'INPUT' && el.type === 'file') return el;
-      return el.querySelector && el.querySelector('input[type="file"]') || null;
-    },
     fileList: document.getElementById('agfFileList'),
     titleFileList: document.getElementById('agfTitleFileList'),
     processedWrap: document.getElementById('agfProcessedWrap'),
@@ -2804,13 +2797,12 @@
       });
     });
 
-    const fileInp = ui.getFileInput && ui.getFileInput();
-    ui.dropzone.addEventListener('click', () => { if (fileInp && getQuotaStatus().remaining > 0 && !ui.dropzone.classList.contains('agf-dropzone--quota-reached')) fileInp.click(); });
-    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (fileInp && getQuotaStatus().remaining > 0) fileInp.click(); } });
+    ui.dropzone.addEventListener('click', () => { if (getQuotaStatus().remaining > 0 && !ui.dropzone.classList.contains('agf-dropzone--quota-reached')) ui.input.click(); });
+    ui.dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (getQuotaStatus().remaining > 0) ui.input.click(); } });
     ui.dropzone.addEventListener('dragover', (e) => { e.preventDefault(); if (getQuotaStatus().remaining > 0) ui.dropzone.classList.add('is-dragover'); });
     ['dragleave', 'dragend'].forEach((evt) => ui.dropzone.addEventListener(evt, () => ui.dropzone.classList.remove('is-dragover')));
     ui.dropzone.addEventListener('drop', (e) => { e.preventDefault(); ui.dropzone.classList.remove('is-dragover'); if (e.dataTransfer && e.dataTransfer.files && getQuotaStatus().remaining > 0) addFiles(e.dataTransfer.files); });
-    if (fileInp) fileInp.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; });
+    ui.input.addEventListener('change', (e) => { if (e.target.files) addFiles(e.target.files); ui.input.value = ''; });
 
     if (ui.textInput) {
       ui.textInput.addEventListener('input', scheduleDebouncedText);
