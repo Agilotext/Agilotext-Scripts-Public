@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.9-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.11-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -199,6 +199,25 @@
     data.count += n;
     storage.set(usageKey, JSON.stringify(data));
     return true;
+  }
+
+  /** Remet n unités dans le quota (ex. échec d'upload). Ne descend pas sous 0. */
+  function rollbackQuota(n) {
+    if (!n || n < 1) return;
+    const usageKey = state.email ? STORAGE_USAGE + ':' + String(state.email).toLowerCase() : STORAGE_USAGE;
+    const raw = storage.get(usageKey);
+    if (!raw) return;
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      return;
+    }
+    if (now >= data.resetAt) return;
+    data.count = Math.max(0, (data.count || 0) - n);
+    storage.set(usageKey, JSON.stringify(data));
   }
 
   function updateDropzoneTextForLimited() {
@@ -1379,7 +1398,7 @@
       else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
-      setStatus('error', 'Limite du jour atteinte (' + limit + ' docs). Vous avez ajouté ' + maxToAdd + ' fichier(s).');
+      setStatus('error', 'Limite du jour atteinte (' + limit + ' docs). Vous avez ajouté ' + maxToAdd + ' fichier(s). Anonymisation illimitée : ' + QUOTA_CONTACT_EMAIL);
     } else if (rejectedImages.length > 0) {
       setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge.');
     } else if (rejectedOther.length > 0) {
@@ -2273,6 +2292,7 @@
     try {
       jobIds = await uploadAsyncAndGetJobIds();
     } catch (err) {
+      rollbackQuota(state.processedItems.length);
       state.processedItems.forEach((item) => {
         if (item.status === 'pending' || item.status === 'processing') {
           const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
@@ -2287,6 +2307,7 @@
       renderProcessedList();
       clearInFlightJobs();
       updateActions();
+      updateDropzoneTextForLimited();
       return;
     }
     state.processedItems.forEach((item, i) => {
