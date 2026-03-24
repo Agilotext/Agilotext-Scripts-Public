@@ -3,6 +3,7 @@
  * ──────────────────────────────────────────────────────────────────
  * Client dictée vocale temps réel (WebSocket + worklet PCM).
  * Point d’ancrage : [data-agilo-streaming-root] (inchangé pour compat. Webflow).
+ * Après modification : recopier vers speechmatics-streaming.js (alias historique).
  * ──────────────────────────────────────────────────────────────────
  */
 (function () {
