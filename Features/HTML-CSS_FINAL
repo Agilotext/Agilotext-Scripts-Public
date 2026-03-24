@@ -1,48 +1,3 @@
-<!--
-  ═══════════════════════════════════════════════════════════════════
-  AGILOTEXT — Composant onglets Fichier | YouTube | Dictée (embed Webflow)
-  ═══════════════════════════════════════════════════════════════════
-
-  OÙ COLLER QUOI
-  ─────────────
-  • Ce fichier (à partir de <style>) → bloc Embed Webflow, idéalement dans le
-    formulaire ms-code-file-upload si tu utilises upload_ent_v2.js.
-  • Les <script> ci-dessous → Page → Paramètres → Code personnalisé → Fin du corps
-    (pas dans l’embed), DANS CET ORDRE.
-
-  RECOMMANDATION PROD (simple, à suivre)
-  ──────────────────────────────────────
-  1. Utilise @main sur jsDelivr pour tous les scripts Agilotext (tu reçois le
-     dernier code poussé sur GitHub main).
-  2. NE mets PAS window.AGILO_SCRIPTS_BASE : le loader a déjà la bonne base par
-     défaut. Ajoute ce bloc SEULEMENT si tu pointes vers une branche, un commit
-     précis ou un fork — et dans ce cas la même base doit servir pour le loader
-     ET pour les scripts qu’il charge en dynamique.
-  3. Garde ?v=12 sur chaque URL Agilotext ; à chaque grosse mise à jour, passe
-     à ?v=13, 14… pour forcer le cache navigateur (ça ne change pas Git, ça évite
-     juste une vieille version en local).
-
-  BLOC À COPIER (footer Webflow) — référence à jour du repo
-  ───────────────────────────────────────────────────────────
-  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/ent.js?v=12"></script>
-  <script src="https://unpkg.com/filepond@4.30.1/dist/filepond.js"></script>
-  <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
-  <script src="https://unpkg.com/filepond-plugin-file-validate-size/dist/filepond-plugin-file-validate-size.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Ent/upload_ent_v2.js?v=12"></script>
-  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Ent/streaming-ent-loader.js?v=12"></script>
-
-  NE PAS ajouter : agilo-live-transcribe.js, speechmatics-streaming.js, mount-streaming.js
-  (le loader les charge → doublon = dictée cassée).
-
-  HTML dictée — à respecter :
-    - Un seul [data-agilo-streaming-root] sur la page
-    - data-agilo-streaming-start / pause / resume / stop sur les boutons
-    - id agilo-streaming-timer, dictee-status-dot, agilo-level-wrap…
-    - Pas de disabled sur « Démarrer » au départ ; statut : Prêt à enregistrer
-    - Classes .dictee-btn (pas les boutons batch .button.record)
-
-  ═══════════════════════════════════════════════════════════════════
--->
 
 <style>
 /* ── Variables Agilotext ─────────────────────────────────────────── */
@@ -54,6 +9,8 @@
   --agilo-border:   #E2E6ED;
   --agilo-text:     #1E2A3A;
   --agilo-muted:    #6B7A8D;
+  --agilo-timer:    var(--agilo-muted);
+  --agilo-timer-sep:var(--agilo-text);
   --agilo-radius:   14px;
   --agilo-shadow:   0 2px 12px rgba(0,0,0,.06);
   --agilo-green:    #1C661A;
@@ -192,9 +149,9 @@
 .dictee-timer {
   font-size: 2.25rem; font-weight: 700; margin-bottom: .75rem;
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
-  color: var(--agilo-text);
+  color: var(--agilo-timer);
 }
-.dictee-timer .sep { color: var(--agilo-border); opacity: .5; }
+.dictee-timer .sep { color: var(--agilo-timer-sep); opacity: .9; }
 
 /* Barre de niveau micro */
 .dictee-level-wrap { max-width: 320px; margin: 0 auto 1rem; }

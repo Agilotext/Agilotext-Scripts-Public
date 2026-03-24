@@ -113,6 +113,21 @@ function mountAgiloLiveVoice() {
       return sendWithRetry(fd, 3, false);
     },
 
+    onLocalAudioReady: function ({ blob, filename }) {
+      try {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
+      } catch (e) {
+        console.warn("Local audio download failed:", e);
+      }
+    },
+
     onStopBegin: function () {
       var fl = document.getElementById("form_loading");
       if (fl) fl.style.display = "block";
