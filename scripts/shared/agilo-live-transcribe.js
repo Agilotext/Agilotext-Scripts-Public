@@ -672,7 +672,14 @@
         var errorKey = "default";
         var em = (err && err._agiloErrorMessage) || (err && err.message) || "";
         if (em.indexOf("invalid_token") !== -1 || em.indexOf("invalidToken") !== -1) errorKey = "invalidToken";
-        else if (em.indexOf("error_quota") !== -1 || em.indexOf("error_limit") !== -1 || em.indexOf("error_subscription") !== -1 || em.indexOf("error_plan_limit") !== -1) errorKey = "tooMuchTraffic";
+        else if (
+          em.indexOf("too_much_traffic") !== -1 ||
+          em.indexOf("error_too_many_calls") !== -1 ||
+          em.indexOf("error_quota") !== -1 ||
+          em.indexOf("error_limit") !== -1 ||
+          em.indexOf("error_subscription") !== -1 ||
+          em.indexOf("error_plan_limit") !== -1
+        ) errorKey = "tooMuchTraffic";
         else if (em.indexOf("error_audio_format") !== -1 || em.indexOf("error_max_file_size") !== -1) errorKey = "audioFormat";
         self.teardownAudio().then(function () {
           self.resetTimer();
