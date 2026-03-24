@@ -144,6 +144,82 @@ function showDicteeLimitModal(reason) {
   document.body.appendChild(overlay);
 }
 
+/**
+ * Même logique que le bloc « else » après sendWithRetry dans pro_v2.js / free_v2.js /
+ * upload_ent_v2.js (erreurs API + préfixes __network__: pour fetchWithTimeout).
+ */
+function mapDicteeUploadErrorToShowErrorKey(raw) {
+  var err = raw || "";
+  if (err.indexOf("__network__:") === 0) {
+    var nt = err.replace("__network__:", "");
+    if (nt === "offline") return { key: "offline" };
+    if (nt === "timeout") return { key: "timeout" };
+    if (nt === "invalidToken") return { key: "invalidToken" };
+    if (nt === "tooMuchTraffic") return { key: "tooMuchTraffic" };
+    if (nt === "serverError") return { key: "serverError" };
+    if (nt === "httpError") return { key: "httpError" };
+    if (nt === "unreachable") return { key: "unreachable" };
+    return { key: "default" };
+  }
+
+  if (err === "error_too_much_traffic") return { key: "tooMuchTraffic" };
+  if (
+    err.indexOf("error_account_pending_validation") !== -1 ||
+    err.indexOf("error_limit_reached_for_user") !== -1 ||
+    err.indexOf("error_quota_exceeded") !== -1 ||
+    err.indexOf("error_pro_quota_exceeded") !== -1 ||
+    err.indexOf("error_subscription_quota") !== -1 ||
+    err.indexOf("error_plan_limit_reached") !== -1 ||
+    err.indexOf("error_subscription_limit") !== -1 ||
+    err.indexOf("error_limit_reached") !== -1
+  ) {
+    return { key: "tooMuchTraffic" };
+  }
+  if (err.indexOf("error_duration_is_too_long_for_summary") !== -1) return { key: "summaryLimit" };
+  if (err.indexOf("error_duration_is_too_long") !== -1 || err.indexOf("error_max_duration_exceeded") !== -1) {
+    return { key: "audioTooLong" };
+  }
+  if (err.indexOf("error_transcript_too_long_for_summary") !== -1) return { key: "summaryLimit" };
+  if (err.indexOf("error_audio_format_not_supported") !== -1 || err.indexOf("error_max_file_size_exceeded") !== -1) {
+    return { key: "audioFormat" };
+  }
+  if (err.indexOf("error_invalid_audio_file_content") !== -1) return { key: "invalidAudioContent" };
+  if (err.indexOf("error_silent_audio_file") !== -1) return { key: "audioFormat" };
+  if (err.indexOf("error_audio_file_not_found") !== -1) return { key: "audioNotFound" };
+  if (err.indexOf("error_invalid_token") !== -1) return { key: "invalidToken" };
+  if (
+    err.indexOf("error_too_many_hours_for_last_30_days") !== -1 ||
+    err.indexOf("error_quota_exceeded") !== -1 ||
+    err.indexOf("error_pro_quota_exceeded") !== -1 ||
+    err.indexOf("error_subscription_quota") !== -1 ||
+    err.indexOf("error_plan_limit_reached") !== -1 ||
+    err.indexOf("error_subscription_limit") !== -1 ||
+    err.indexOf("error_limit_reached") !== -1
+  ) {
+    return { key: "tooManyHours" };
+  }
+  if (err.indexOf("error_too_many_devices_used_for_account") !== -1) {
+    return { key: "default", alertMsg: "Trop d'appareils utilisés pour ce compte. Veuillez contacter le support." };
+  }
+  if (err.indexOf("error_too_many_calls") !== -1) return { key: "tooMuchTraffic" };
+  var el = err.toLowerCase();
+  if (err.indexOf("ERROR_INVALID_YOUTUBE_URL") !== -1 || (el.indexOf("youtube") !== -1 && el.indexOf("invalid") !== -1)) {
+    return { key: "youtubeInvalid" };
+  }
+  if (
+    err.indexOf("ERROR_CANNOT_DONWLOAD_YOUTUBE_URL") !== -1 ||
+    err.indexOf("ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL") !== -1 ||
+    (el.indexOf("youtube") !== -1 && el.indexOf("private") !== -1)
+  ) {
+    return { key: "youtubePrivate" };
+  }
+  if (el.indexOf("youtube") !== -1 && el.indexOf("not found") !== -1) return { key: "youtubeNotFound" };
+  if (err && String(err).trim()) {
+    return { key: "default", alertMsg: "Erreur: " + err };
+  }
+  return { key: "default" };
+}
+
 // ── Montage du contrôleur dictée live ────────────────────────────
 function mountAgiloLiveVoice() {
   if (window.__agiloLiveVoiceMounted) return;
@@ -265,43 +341,9 @@ function mountAgiloLiveVoice() {
     },
 
     onError: function (rawApiMessage) {
-      var em = rawApiMessage || "";
-      var key = "default";
-
-      if (em === "error_too_much_traffic" || em === "error_too_many_calls")
-        key = "tooMuchTraffic";
-      else if (
-        em.indexOf("error_account_pending_validation") !== -1 ||
-        em.indexOf("error_limit_reached") !== -1 ||
-        em.indexOf("error_quota_exceeded") !== -1 ||
-        em.indexOf("error_pro_quota_exceeded") !== -1 ||
-        em.indexOf("error_subscription_quota") !== -1 ||
-        em.indexOf("error_plan_limit_reached") !== -1 ||
-        em.indexOf("error_subscription_limit") !== -1
-      )
-        key = "tooMuchTraffic";
-      else if (em.indexOf("error_too_many_hours_for_last_30_days") !== -1)
-        key = "tooManyHours";
-      else if (em.indexOf("error_duration_is_too_long_for_summary") !== -1 ||
-               em.indexOf("error_transcript_too_long_for_summary") !== -1)
-        key = "summaryLimit";
-      else if (em.indexOf("error_duration_is_too_long") !== -1 ||
-               em.indexOf("error_max_duration_exceeded") !== -1)
-        key = "audioTooLong";
-      else if (em.indexOf("error_audio_format_not_supported") !== -1 ||
-               em.indexOf("error_max_file_size_exceeded") !== -1 ||
-               em.indexOf("error_silent_audio_file") !== -1)
-        key = "audioFormat";
-      else if (em.indexOf("error_invalid_audio_file_content") !== -1)
-        key = "invalidAudioContent";
-      else if (em.indexOf("error_audio_file_not_found") !== -1)
-        key = "audioNotFound";
-      else if (em.indexOf("error_invalid_token") !== -1 || em.indexOf("invalidToken") !== -1)
-        key = "invalidToken";
-      else if (em.indexOf("error_too_many_devices") !== -1)
-        key = "default";
-
-      showError(key);
+      var mapped = mapDicteeUploadErrorToShowErrorKey(rawApiMessage);
+      showError(mapped.key);
+      if (mapped.alertMsg) alert(mapped.alertMsg);
     }
   });
   /** Débogage console : __agiloLiveVoiceInstance.state.status, .render(), etc. */

@@ -670,6 +670,9 @@
       .catch(function (err) {
         console.error("Agilo live voice upload error:", err);
         var rawMessage = (err && err._agiloErrorMessage) || (err && err.message) || "";
+        if (!rawMessage && err && err.type) {
+          rawMessage = "__network__:" + err.type;
+        }
         self.teardownAudio().then(function () {
           self.resetTimer();
           self.setStatus("idle", "Erreur");
