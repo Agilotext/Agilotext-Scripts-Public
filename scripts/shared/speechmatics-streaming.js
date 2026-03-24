@@ -106,11 +106,14 @@
       timer:  this.root.querySelector("#agilo-streaming-timer"),
       dot:    this.root.querySelector("#dictee-status-dot"),
       levelWrap: this.root.querySelector("#agilo-level-wrap"),
-      levelFill: this.root.querySelector("#agilo-level-fill")
+      levelFill: this.root.querySelector("#agilo-level-fill"),
+      copyBtn:  this.root.querySelector("#agilo-copy-btn"),
+      copyText: this.root.querySelector("#agilo-copy-btn-text")
     };
 
     this._timerInterval = null;
     this._timerStart = 0;
+    this._pausedElapsed = 0;
 
     this.bind();
     this.render();
@@ -122,6 +125,21 @@
     this.els.pause.addEventListener("click", function () { self.pause(); });
     this.els.resume.addEventListener("click", function () { self.resume(); });
     this.els.stop.addEventListener("click", function () { self.stop(); });
+
+    if (this.els.copyBtn) {
+      this.els.copyBtn.addEventListener("click", function () {
+        var text = self.els.text.value || "";
+        if (!text.trim()) return;
+        navigator.clipboard.writeText(text).then(function () {
+          if (self.els.copyText) self.els.copyText.textContent = "Copié !";
+          self.els.copyBtn.classList.add("copied");
+          setTimeout(function () {
+            if (self.els.copyText) self.els.copyText.textContent = "Copier le texte";
+            self.els.copyBtn.classList.remove("copied");
+          }, 2000);
+        });
+      });
+    }
   };
 
   AgiloSpeechmaticsStreamingController.prototype.setStatus = function (status, label) {
@@ -142,10 +160,10 @@
     this.els.resume.disabled = !isPaused;
     this.els.stop.disabled   = isIdle || isUploading;
 
-    this.els.start.style.display  = isIdle ? "flex" : "none";
-    this.els.pause.style.display  = isRecording ? "flex" : "none";
-    this.els.resume.style.display = isPaused ? "flex" : "none";
-    this.els.stop.style.display   = (isRecording || isPaused || s === "connecting" || s === "initializing" || s === "pausing") ? "flex" : "none";
+    this.els.start.style.display  = isIdle ? "inline-flex" : "none";
+    this.els.pause.style.display  = isRecording ? "inline-flex" : "none";
+    this.els.resume.style.display = isPaused ? "inline-flex" : "none";
+    this.els.stop.style.display   = (isRecording || isPaused || s === "connecting" || s === "initializing" || s === "pausing") ? "inline-flex" : "none";
 
     this.els.text.readOnly = !isPaused;
 
@@ -159,7 +177,7 @@
 
   AgiloSpeechmaticsStreamingController.prototype.startTimer = function () {
     var self = this;
-    this._timerStart = Date.now();
+    this._timerStart = Date.now() - (this._pausedElapsed || 0);
     if (this._timerInterval) clearInterval(this._timerInterval);
     this._timerInterval = setInterval(function () {
       var elapsed = Math.floor((Date.now() - self._timerStart) / 1000);
@@ -173,13 +191,17 @@
 
   AgiloSpeechmaticsStreamingController.prototype.stopTimer = function () {
     if (this._timerInterval) {
+      this._pausedElapsed = Date.now() - this._timerStart;
       clearInterval(this._timerInterval);
       this._timerInterval = null;
     }
   };
 
   AgiloSpeechmaticsStreamingController.prototype.resetTimer = function () {
-    this.stopTimer();
+    if (this._timerInterval) clearInterval(this._timerInterval);
+    this._timerInterval = null;
+    this._pausedElapsed = 0;
+    this._timerStart = 0;
     if (this.els.timer) {
       this.els.timer.innerHTML = '00<span class="sep">:</span>00';
     }
