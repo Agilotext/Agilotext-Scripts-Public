@@ -41,6 +41,7 @@ async function getSpeechmaticsRtJwt({ email, token, edition }) {
 
 // ── Montage du contrôleur Speechmatics ──────────────────────────
 function mountSpeechmaticsStreaming() {
+  if (window.__agiloSpeechmaticsStreamingMounted) return;
   var root = document.querySelector("[data-agilo-streaming-root]");
   if (!root || !window.AgiloSpeechmaticsStreaming) return;
 
@@ -119,6 +120,7 @@ function mountSpeechmaticsStreaming() {
       showError(key || "default");
     }
   });
+  window.__agiloSpeechmaticsStreamingMounted = true;
 }
 
 // Expose la fonction pour un appel manuel si besoin.
@@ -150,7 +152,7 @@ window.mountSpeechmaticsStreaming = mountSpeechmaticsStreaming;
   }
 
   function tryMount() {
-    if (mounted) return true;
+    if (mounted || window.__agiloSpeechmaticsStreamingMounted) return true;
     if (!hasDashboardDeps() || !hasStreamingDeps()) return false;
     try {
       mountSpeechmaticsStreaming();
