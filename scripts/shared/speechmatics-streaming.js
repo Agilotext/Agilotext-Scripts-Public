@@ -1,8 +1,10 @@
 /**
- * speechmatics-streaming.js — ALIAS HISTORIQUE
- * Contenu identique à agilo-live-transcribe.js (évite une course au chargement
- * si Webflow pointe encore vers ce fichier).
- * Préférez : scripts/shared/agilo-live-transcribe.js
+ * agilo-live-transcribe.js
+ * ──────────────────────────────────────────────────────────────────
+ * Client dictée vocale temps réel (WebSocket + worklet PCM).
+ * Point d’ancrage : [data-agilo-streaming-root] (inchangé pour compat. Webflow).
+ * Références DOM rafraîchies à chaque render (OpenTech / overlays qui recréent le DOM).
+ * Après modification : recopier vers speechmatics-streaming.js (alias historique).
  * ──────────────────────────────────────────────────────────────────
  */
 (function () {
@@ -84,6 +86,7 @@
   function AgiloLiveVoiceController(config) {
     this.config = config;
     this.root = config.root;
+    this.limits = config.limits || null;
     this.state = {
       status: "idle",
       seqNo: 0,
@@ -265,6 +268,11 @@
       if (self.els.timer) {
         self.els.timer.innerHTML = mm + '<span class="sep">:</span>' + ss;
       }
+
+      if (self.limits && self.limits.maxDurationSec && elapsed >= self.limits.maxDurationSec) {
+        self.stop();
+        if (self.config.onLimitReached) self.config.onLimitReached("max_duration");
+      }
     }, 500);
   };
 
@@ -313,6 +321,33 @@
     this.els.levelFill.style.width = pct + "%";
     var hue = pct < 60 ? 120 : pct < 85 ? 40 : 0;
     this.els.levelFill.style.backgroundColor = "hsl(" + hue + ",70%,45%)";
+  };
+
+  /**
+   * Vérifie les limites d'utilisation (Free). Retourne true si autorisé.
+   * Si refusé, appelle config.onLimitReached et retourne false.
+   */
+  AgiloLiveVoiceController.prototype._checkLimits = function () {
+    if (!this.limits) return true;
+
+    var key = this.limits.storageKey || "agilo_dictee_usage";
+    var maxPerDay = this.limits.maxUsagesPerDay;
+    var today = new Date().toISOString().slice(0, 10);
+    var raw = null;
+    try { raw = JSON.parse(localStorage.getItem(key)); } catch (e) {}
+
+    if (!raw || raw.date !== today) {
+      raw = { date: today, count: 0 };
+    }
+
+    if (typeof maxPerDay === "number" && raw.count >= maxPerDay) {
+      if (this.config.onLimitReached) this.config.onLimitReached("max_daily_usage");
+      return false;
+    }
+
+    raw.count += 1;
+    try { localStorage.setItem(key, JSON.stringify(raw)); } catch (e) {}
+    return true;
   };
 
   AgiloLiveVoiceController.prototype.getEmail = function () {
@@ -508,6 +543,8 @@
 
   AgiloLiveVoiceController.prototype.start = function () {
     var self = this;
+
+    if (!this._checkLimits()) return;
 
     this.state.email = this.getEmail();
     if (!this.state.email) {

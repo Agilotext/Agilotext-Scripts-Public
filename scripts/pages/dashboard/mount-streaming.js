@@ -61,6 +61,7 @@ function mountAgiloLiveVoice() {
     root: root,
     language: "fr",
     workletUrl: WORKLET_URL,
+    limits: window.__AGILO_DICTEE_LIMITS || null,
 
     getAgiloAuth: async function (email) {
       var tokenOk = await ensureValidToken(email);
@@ -157,6 +158,15 @@ function mountAgiloLiveVoice() {
       }
 
       checkTranscriptStatus(jobId, email);
+    },
+
+    onLimitReached: function (reason) {
+      if (reason === "max_daily_usage") {
+        showError("tooMuchTraffic");
+        alert("Vous avez atteint votre limite quotidienne de dictée en direct. Passez en Pro pour un accès illimité.");
+      } else if (reason === "max_duration") {
+        alert("La durée maximale de 30 minutes a été atteinte. Votre dictée est en cours d'envoi.");
+      }
     },
 
     onError: function (key) {
