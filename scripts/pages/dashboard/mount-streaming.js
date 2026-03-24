@@ -175,6 +175,8 @@ function mountAgiloLiveVoice() {
     },
 
     uploadBlob: async function ({ blob, email, options }) {
+      await ensureValidToken(email);
+
       var fd = new FormData();
 
       fd.append(
@@ -285,7 +287,6 @@ window.mountAgiloLiveVoice = mountAgiloLiveVoice;
       typeof window.sendWithRetry === "function" &&
       typeof window.checkTranscriptStatus === "function" &&
       typeof window.showError === "function" &&
-      typeof window.globalToken !== "undefined" &&
       typeof window.edition !== "undefined"
     );
   }

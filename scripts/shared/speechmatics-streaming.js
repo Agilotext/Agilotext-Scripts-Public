@@ -651,7 +651,9 @@
       })
       .then(function (response) {
         if (!response || response.status !== "OK") {
-          throw new Error((response && response.errorMessage) || "upload_failed");
+          var apiErr = new Error((response && response.errorMessage) || "upload_failed");
+          apiErr._agiloErrorMessage = (response && response.errorMessage) || "";
+          throw apiErr;
         }
 
         var jobId = response.jobIdList && response.jobIdList[0];
@@ -666,12 +668,17 @@
         });
       })
       .catch(function (err) {
-        console.error(err);
+        console.error("Agilo live voice upload error:", err);
+        var errorKey = "default";
+        var em = (err && err._agiloErrorMessage) || (err && err.message) || "";
+        if (em.indexOf("invalid_token") !== -1 || em.indexOf("invalidToken") !== -1) errorKey = "invalidToken";
+        else if (em.indexOf("error_quota") !== -1 || em.indexOf("error_limit") !== -1 || em.indexOf("error_subscription") !== -1 || em.indexOf("error_plan_limit") !== -1) errorKey = "tooMuchTraffic";
+        else if (em.indexOf("error_audio_format") !== -1 || em.indexOf("error_max_file_size") !== -1) errorKey = "audioFormat";
         self.teardownAudio().then(function () {
           self.resetTimer();
           self.setStatus("idle", "Erreur");
           if (self.config.onStopEnd) self.config.onStopEnd();
-          if (self.config.onError) self.config.onError("default");
+          if (self.config.onError) self.config.onError(errorKey);
         });
       });
   };
