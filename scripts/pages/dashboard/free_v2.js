@@ -62,14 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ─── Envoi multiple → redirection ──────────────────────────── */
-  const multiToggle = document.querySelector('.checkbox-component.multiple-audios .checkbox_toggle');
-  if (multiToggle) {
-    multiToggle.addEventListener('click', e => {
-      e.preventDefault();
-      window.location.href = '/app/free/dashboard/multi-file-upload';
-    });
-  }
+  /* ─── Envoi multiple : masqué en Free (réservé Pro/Business) ── */
+  const multiRow = document.querySelector('.checkbox-component.multiple-audios');
+  if (multiRow) multiRow.style.display = 'none';
 
   /* ---------------- FilePond init ---------------- */
   if (typeof FilePond !== 'undefined' && FilePond.registerPlugin) {
