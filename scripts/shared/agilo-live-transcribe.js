@@ -601,6 +601,11 @@
         if (self.els.levelFill) self.els.levelFill.style.width = "0%";
 
         var blob = pcm16ChunksToWavBlob(self.state.pcmChunks, self.state.sampleRate);
+        var filename = "agilotext-live-" + Date.now() + ".wav";
+
+        if (self.config.onLocalAudioReady) {
+          self.config.onLocalAudioReady({ blob: blob, filename: filename });
+        }
 
         self.setStatus("uploading", "Upload vers Agilotext...");
         return self.config.uploadBlob({

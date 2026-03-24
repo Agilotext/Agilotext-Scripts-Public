@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var BUILD = "20260324d";
+  var BUILD = "20260324e";
 
   var base =
     window.AGILO_SCRIPTS_BASE ||
