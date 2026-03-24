@@ -1,6 +1,7 @@
 /**
- * Ent - loader Webflow pour la dictée vocale temps réel.
- * Ajoutez UNIQUEMENT ce script après ent.js dans Webflow.
+ * Pro - loader Webflow pour la dictée vocale temps réel.
+ * Ajoutez UNIQUEMENT ce script après pro_v2.js dans Webflow.
+ * Pro = illimité (pas de __AGILO_DICTEE_LIMITS).
  * Cache-bust : le loader ajoute ?v=BUILD aux URLs dynamiques.
  */
 (function () {
@@ -48,7 +49,7 @@
         }
       })
       .catch(function (err) {
-        console.error("[Agilotext] Streaming Ent loader error:", err);
+        console.error("[Agilotext] Streaming Pro loader error:", err);
       });
   }
 

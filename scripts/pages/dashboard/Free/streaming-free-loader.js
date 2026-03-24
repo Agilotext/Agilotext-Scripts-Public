@@ -1,6 +1,7 @@
 /**
- * Ent - loader Webflow pour la dictée vocale temps réel.
- * Ajoutez UNIQUEMENT ce script après ent.js dans Webflow.
+ * Free - loader Webflow pour la dictée vocale temps réel.
+ * Ajoutez UNIQUEMENT ce script après free_v2.js dans Webflow.
+ * Limites Free : 1 utilisation/jour, 30 minutes max.
  * Cache-bust : le loader ajoute ?v=BUILD aux URLs dynamiques.
  */
 (function () {
@@ -19,6 +20,12 @@
   var workletUrl        = bust(base + "/scripts/shared/pcm-audio-worklet.js");
 
   window.AGILO_PCM_WORKLET_URL = window.AGILO_PCM_WORKLET_URL || workletUrl;
+
+  window.__AGILO_DICTEE_LIMITS = {
+    maxDurationSec: 1800,
+    maxUsagesPerDay: 1,
+    storageKey: "agilo_dictee_free_usage"
+  };
 
   function loadScriptOnce(src) {
     var key = src.replace(/[?#].*$/, "");
@@ -48,7 +55,7 @@
         }
       })
       .catch(function (err) {
-        console.error("[Agilotext] Streaming Ent loader error:", err);
+        console.error("[Agilotext] Streaming Free loader error:", err);
       });
   }
 
