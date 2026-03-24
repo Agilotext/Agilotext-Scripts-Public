@@ -230,6 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
         if (data.status === 'OK') {
           globalToken = data.token;
+          window.globalToken = data.token;
           console.log('Token récupéré automatiquement');
           return true;
         }
