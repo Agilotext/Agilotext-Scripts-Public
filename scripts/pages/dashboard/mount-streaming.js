@@ -264,8 +264,44 @@ function mountAgiloLiveVoice() {
       showDicteeLimitModal(reason);
     },
 
-    onError: function (key) {
-      showError(key || "default");
+    onError: function (rawApiMessage) {
+      var em = rawApiMessage || "";
+      var key = "default";
+
+      if (em === "error_too_much_traffic" || em === "error_too_many_calls")
+        key = "tooMuchTraffic";
+      else if (
+        em.indexOf("error_account_pending_validation") !== -1 ||
+        em.indexOf("error_limit_reached") !== -1 ||
+        em.indexOf("error_quota_exceeded") !== -1 ||
+        em.indexOf("error_pro_quota_exceeded") !== -1 ||
+        em.indexOf("error_subscription_quota") !== -1 ||
+        em.indexOf("error_plan_limit_reached") !== -1 ||
+        em.indexOf("error_subscription_limit") !== -1
+      )
+        key = "tooMuchTraffic";
+      else if (em.indexOf("error_too_many_hours_for_last_30_days") !== -1)
+        key = "tooManyHours";
+      else if (em.indexOf("error_duration_is_too_long_for_summary") !== -1 ||
+               em.indexOf("error_transcript_too_long_for_summary") !== -1)
+        key = "summaryLimit";
+      else if (em.indexOf("error_duration_is_too_long") !== -1 ||
+               em.indexOf("error_max_duration_exceeded") !== -1)
+        key = "audioTooLong";
+      else if (em.indexOf("error_audio_format_not_supported") !== -1 ||
+               em.indexOf("error_max_file_size_exceeded") !== -1 ||
+               em.indexOf("error_silent_audio_file") !== -1)
+        key = "audioFormat";
+      else if (em.indexOf("error_invalid_audio_file_content") !== -1)
+        key = "invalidAudioContent";
+      else if (em.indexOf("error_audio_file_not_found") !== -1)
+        key = "audioNotFound";
+      else if (em.indexOf("error_invalid_token") !== -1 || em.indexOf("invalidToken") !== -1)
+        key = "invalidToken";
+      else if (em.indexOf("error_too_many_devices") !== -1)
+        key = "default";
+
+      showError(key);
     }
   });
   /** Débogage console : __agiloLiveVoiceInstance.state.status, .render(), etc. */
