@@ -162,6 +162,16 @@
     this.render();
   };
 
+  /** Webflow / thèmes mettent souvent display sur button en !important : le forcer côté script. */
+  function setElDisplayImportant(el, value) {
+    if (!el) return;
+    if (value === "none") {
+      el.style.setProperty("display", "none", "important");
+    } else {
+      el.style.setProperty("display", value, "important");
+    }
+  }
+
   AgiloLiveVoiceController.prototype.render = function () {
     var s = this.state.status;
     var isIdle = s === "idle";
@@ -171,22 +181,24 @@
 
     if (this.els.start) {
       this.els.start.disabled = !isIdle;
-      this.els.start.style.display = isIdle ? "inline-flex" : "none";
+      setElDisplayImportant(this.els.start, isIdle ? "inline-flex" : "none");
     }
     if (this.els.pause) {
       this.els.pause.disabled = !isRecording;
-      this.els.pause.style.display = isRecording ? "inline-flex" : "none";
+      setElDisplayImportant(this.els.pause, isRecording ? "inline-flex" : "none");
     }
     if (this.els.resume) {
       this.els.resume.disabled = !isPaused;
-      this.els.resume.style.display = isPaused ? "inline-flex" : "none";
+      setElDisplayImportant(this.els.resume, isPaused ? "inline-flex" : "none");
     }
     if (this.els.stop) {
       this.els.stop.disabled = isIdle || isUploading;
-      this.els.stop.style.display =
+      setElDisplayImportant(
+        this.els.stop,
         (isRecording || isPaused || s === "connecting" || s === "initializing" || s === "pausing")
           ? "inline-flex"
-          : "none";
+          : "none"
+      );
     }
 
     if (this.els.text) {
@@ -197,7 +209,11 @@
       this.els.dot.classList.toggle("listening", isRecording);
     }
     if (this.els.levelWrap) {
-      this.els.levelWrap.style.display = isRecording ? "" : "none";
+      if (isRecording) {
+        this.els.levelWrap.style.removeProperty("display");
+      } else {
+        this.els.levelWrap.style.setProperty("display", "none", "important");
+      }
     }
   };
 
