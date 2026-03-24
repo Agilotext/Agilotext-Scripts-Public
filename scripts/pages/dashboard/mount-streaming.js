@@ -220,6 +220,27 @@ function mapDicteeUploadErrorToShowErrorKey(raw) {
   return { key: "default" };
 }
 
+/** Clés déjà au format showError() — agilo-live-transcribe.js appelle onError("invalidToken"|"default") hors upload. */
+var AGILO_PRESET_ERROR_KEYS = {
+  default: 1,
+  tooMuchTraffic: 1,
+  audioTooLong: 1,
+  audioFormat: 1,
+  audioNotFound: 1,
+  invalidToken: 1,
+  invalidAudioContent: 1,
+  summaryLimit: 1,
+  offline: 1,
+  timeout: 1,
+  tooManyHours: 1,
+  unreachable: 1,
+  youtubeInvalid: 1,
+  youtubePrivate: 1,
+  youtubeNotFound: 1,
+  serverError: 1,
+  httpError: 1
+};
+
 // ── Montage du contrôleur dictée live ────────────────────────────
 function mountAgiloLiveVoice() {
   if (window.__agiloLiveVoiceMounted) return;
@@ -340,8 +361,12 @@ function mountAgiloLiveVoice() {
       showDicteeLimitModal(reason);
     },
 
-    onError: function (rawApiMessage) {
-      var mapped = mapDicteeUploadErrorToShowErrorKey(rawApiMessage);
+    onError: function (rawOrPresetKey) {
+      if (rawOrPresetKey && AGILO_PRESET_ERROR_KEYS[rawOrPresetKey]) {
+        showError(rawOrPresetKey);
+        return;
+      }
+      var mapped = mapDicteeUploadErrorToShowErrorKey(rawOrPresetKey);
       showError(mapped.key);
       if (mapped.alertMsg) alert(mapped.alertMsg);
     }
