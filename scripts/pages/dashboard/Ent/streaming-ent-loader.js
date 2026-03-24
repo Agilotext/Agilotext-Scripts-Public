@@ -1,5 +1,5 @@
 /**
- * Ent - loader Webflow pour le streaming Speechmatics.
+ * Ent - loader Webflow pour la dictée vocale temps réel.
  * Ajoutez UNIQUEMENT ce script après ent.js dans Webflow.
  */
 (function () {
@@ -9,7 +9,7 @@
     window.AGILO_SCRIPTS_BASE ||
     "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main";
 
-  var speechmaticsUrl = base + "/scripts/shared/speechmatics-streaming.js";
+  var liveTranscribeUrl = base + "/scripts/shared/agilo-live-transcribe.js";
   var mountUrl = base + "/scripts/pages/dashboard/mount-streaming.js";
   var workletUrl = base + "/scripts/shared/pcm-audio-worklet.js";
 
@@ -34,7 +34,7 @@
   }
 
   function start() {
-    loadScriptOnce(speechmaticsUrl)
+    loadScriptOnce(liveTranscribeUrl)
       .then(function () { return loadScriptOnce(mountUrl); })
       .catch(function (err) {
         console.error("[Agilotext] Streaming Ent loader error:", err);
