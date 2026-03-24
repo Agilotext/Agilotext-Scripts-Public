@@ -1,0 +1,367 @@
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  AGILOTEXT — Composant onglets Fichier | YouTube | Dictée (embed Webflow)
+  ═══════════════════════════════════════════════════════════════════
+
+  À coller dans un bloc « Embed » (HTML), à l’intérieur du formulaire
+  ms-code-file-upload si tu utilises upload_ent_v2.js.
+
+  SCRIPTS (ordre, dans le code personnalisé avant </body>) :
+    1. ent.js
+    2. filepond.js + plugins validate-type + validate-size
+    3. upload_ent_v2.js
+    4. (optionnel) window.AGILO_SCRIPTS_BASE = "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main";
+    5. streaming-ent-loader.js
+
+  NE PAS ajouter en plus :
+    - agilo-live-transcribe.js (l’ancien speechmatics-streaming.js redirige vers ce fichier)
+    - mount-streaming.js
+    (le loader les charge déjà → doublon = timer / boutons cassés)
+
+  HTML dictée — à respecter :
+    - Un seul [data-agilo-streaming-root] sur la page
+    - data-agilo-streaming-start / pause / resume / stop sur les boutons
+    - id="agilo-streaming-timer", id="dictee-status-dot", id="agilo-level-wrap"…
+    - PAS de disabled sur le bouton « Démarrer » au départ
+    - Statut initial : « Prêt à enregistrer » (le script met à jour ensuite)
+    - Classes .dictee-btn / .dictee-actions (pas .button.record avec l’enregistrement batch)
+
+  ═══════════════════════════════════════════════════════════════════
+-->
+
+<style>
+/* ── Variables Agilotext ─────────────────────────────────────────── */
+:root {
+  --agilo-primary:  #174A96;
+  --agilo-accent:   #FD7D13;
+  --agilo-bg:       #F7F8FA;
+  --agilo-card:     #FFFFFF;
+  --agilo-border:   #E2E6ED;
+  --agilo-text:     #1E2A3A;
+  --agilo-muted:    #6B7A8D;
+  --agilo-radius:   14px;
+  --agilo-shadow:   0 2px 12px rgba(0,0,0,.06);
+  --agilo-green:    #1C661A;
+  --agilo-red:      #C0392B;
+}
+
+/* ── Carte principale ────────────────────────────────────────────── */
+.source-card {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+/* Conteneur : ~80% desktop, centré ; 100% mobile ; gouttières latérales */
+.agilo-source-wrap {
+  width: 80%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+/* ── Barre d'onglets ─────────────────────────────────────────────── */
+.source-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--agilo-border);
+  background: transparent;
+}
+.source-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  padding: .9rem .5rem;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 500;
+  color: var(--agilo-muted);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  position: relative;
+  transition: color .2s, background .2s;
+}
+.source-tab:hover { color: var(--agilo-text); background: #F0F2F5; }
+.source-tab.active { color: var(--agilo-primary); font-weight: 600; }
+.source-tab.active::after {
+  content: '';
+  position: absolute; bottom: -2px; left: 0; right: 0;
+  height: 3px;
+  background: var(--agilo-primary);
+  border-radius: 3px 3px 0 0;
+}
+.source-tab svg { width: 18px; height: 18px; fill: currentColor; flex-shrink: 0; }
+
+/* ── Panneaux ────────────────────────────────────────────────────── */
+.source-panels { padding: 1.5rem; }
+.source-panel { display: none; }
+.source-panel.active {
+  display: block;
+  animation: panelFadeIn .25s ease;
+}
+@keyframes panelFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════ PANEL FICHIER ═══════════ */
+.panel-file-title { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
+.upload-zone-placeholder {
+  border: 2px dashed var(--agilo-border); border-radius: 10px; padding: 2.5rem 1rem;
+  text-align: center; color: var(--agilo-muted); font-size: .875rem;
+  transition: border-color .25s, background .25s; cursor: pointer;
+}
+.upload-zone-placeholder:hover { border-color: var(--agilo-primary); background: rgba(23,74,150,.03); }
+.upload-zone-placeholder .browse { color: var(--agilo-primary); text-decoration: underline; font-weight: 500; }
+
+/* Toggle */
+.checkbox-component.multiple-audios {
+  display: flex; align-items: center; gap: .65rem; margin-top: 1rem; font-size: .8125rem; position: relative;
+}
+.checkbox-component.multiple-audios .text-size-small { color: var(--agilo-muted); }
+.checkbox-component.multiple-audios .checkbox_toggle {
+  position: relative; width: 38px; height: 22px; background: #CDD5DF; border-radius: 12px;
+  transition: background .25s; cursor: pointer; flex-shrink: 0;
+}
+.checkbox-component.multiple-audios .checkbox_toggle::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); transition: transform .25s;
+}
+.checkbox-component.multiple-audios .checkbox_toggle.w--redirected-checked { background: var(--agilo-accent); }
+.checkbox-component.multiple-audios .checkbox_toggle.w--redirected-checked::after { transform: translateX(16px); }
+.checkbox-component.multiple-audios .checkbox-label { display: none; }
+.checkbox-component.multiple-audios .absolute-link { position: absolute; inset: 0; z-index: 1; }
+
+/* ═══════════ PANEL YOUTUBE ═══════════ */
+.youtube-panel-inner h5 { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
+.youtube-panel-inner .input-youtube {
+  width: 100%; padding: .75rem 1rem; border: 1px solid var(--agilo-border); border-radius: 8px;
+  font-size: .875rem; font-family: inherit; transition: border-color .2s, box-shadow .2s;
+  box-sizing: border-box;
+}
+.youtube-panel-inner .input-youtube:focus { outline: none; border-color: var(--agilo-primary); box-shadow: 0 0 0 3px rgba(23,74,150,.1); }
+.youtube-panel-inner .yt-helper { font-size: .75rem; color: var(--agilo-muted); margin-top: .4rem; }
+
+/* ═══════════ PANEL DICTÉE ═══════════ */
+.dictee-inner-card {
+  background: var(--agilo-card);
+  border: 1px solid var(--agilo-border);
+  border-radius: 12px;
+  padding: 2rem 1.5rem 1.5rem;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+/* Statut */
+.dictee-status-row {
+  display: inline-flex; align-items: center; gap: .45rem;
+  font-size: .8125rem; font-weight: 500; color: var(--agilo-muted);
+  margin-bottom: .5rem;
+}
+.dictee-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--agilo-muted); transition: background .3s; flex-shrink: 0;
+}
+.dictee-status-dot.listening { background: var(--agilo-green); animation: pulseDot 1.5s ease-in-out infinite; }
+@keyframes pulseDot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(28,102,26,.4); }
+  50%      { box-shadow: 0 0 0 6px rgba(28,102,26,0); }
+}
+
+/* Timer */
+.dictee-timer {
+  font-size: 2rem; font-weight: 700; margin-bottom: 1.25rem;
+  font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  color: var(--agilo-text);
+}
+.dictee-timer .sep { color: var(--agilo-border); }
+
+/* Barre de niveau micro */
+.dictee-level-wrap { max-width: 280px; margin: 0 auto 1.25rem; }
+.dictee-level-label {
+  font-size: .65rem; font-weight: 600; color: var(--agilo-muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: .3rem; text-align: left;
+}
+.dictee-level-bar { width: 100%; height: 6px; background: var(--agilo-bg); border-radius: 3px; overflow: hidden; }
+.dictee-level-fill { height: 100%; width: 0%; border-radius: 3px; transition: width .08s linear, background-color .3s ease; }
+
+/* Label apercu */
+.dictee-preview-label {
+  display: flex; align-items: center; justify-content: center; gap: .3rem;
+  font-size: .7rem; color: var(--agilo-muted); margin-bottom: .35rem;
+}
+.dictee-preview-label svg { width: 13px; height: 13px; fill: currentColor; flex-shrink: 0; }
+
+/* Textarea */
+[data-agilo-streaming-text] {
+  width: 100%; min-height: 120px; border: 1px solid var(--agilo-border); border-radius: 10px;
+  padding: 1rem; font-family: inherit; font-size: .875rem; color: var(--agilo-text); resize: vertical;
+  transition: border-color .2s, box-shadow .2s; background: var(--agilo-bg);
+  box-sizing: border-box;
+}
+[data-agilo-streaming-text]:focus { outline: none; border-color: var(--agilo-primary); box-shadow: 0 0 0 3px rgba(23,74,150,.1); }
+
+/* ── Boutons dictée (isolés des .button Enregistrer / Pause / Arrêter batch) ── */
+.dictee-actions {
+  display: flex; justify-content: center; align-items: center;
+  gap: .6rem; margin-top: 1.25rem; flex-wrap: wrap;
+}
+.dictee-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: .4rem;
+  padding: .6rem 1.2rem; font-family: inherit; font-size: .8125rem;
+  font-weight: 600; border-radius: 10px; border: none; cursor: pointer;
+  transition: background .2s, box-shadow .2s, opacity .2s;
+  line-height: 1.3;
+}
+.dictee-btn:disabled { opacity: .45; cursor: not-allowed; }
+.dictee-btn svg { width: 18px; height: 18px; flex-shrink: 0; fill: currentColor; }
+
+.dictee-btn--start   { background: var(--agilo-primary); color: #fff; }
+.dictee-btn--start:hover:not(:disabled)  { background: #12397A; box-shadow: 0 2px 8px rgba(23,74,150,.25); }
+.dictee-btn--pause   { background: transparent; color: var(--agilo-text); border: 1px solid var(--agilo-border); }
+.dictee-btn--pause:hover:not(:disabled)  { border-color: var(--agilo-primary); color: var(--agilo-primary); }
+.dictee-btn--resume  { background: var(--agilo-primary); color: #fff; }
+.dictee-btn--resume:hover:not(:disabled) { background: #12397A; box-shadow: 0 2px 8px rgba(23,74,150,.25); }
+.dictee-btn--stop    { background: var(--agilo-accent); color: #fff; }
+.dictee-btn--stop:hover:not(:disabled)   { background: #E56A08; box-shadow: 0 2px 8px rgba(253,125,19,.25); }
+
+/* Copier texte */
+.dictee-secondary-actions {
+  display: flex; justify-content: center; gap: .5rem; margin-top: .75rem;
+}
+.btn-copy {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: transparent; border: 1px solid var(--agilo-border);
+  border-radius: 8px; padding: .4rem .9rem;
+  font-family: inherit; font-size: .75rem; font-weight: 500;
+  color: var(--agilo-muted); cursor: pointer;
+  transition: border-color .2s, color .2s, background .2s;
+}
+.btn-copy:hover { border-color: var(--agilo-primary); color: var(--agilo-primary); background: rgba(23,74,150,.03); }
+.btn-copy.copied { border-color: var(--agilo-green); color: var(--agilo-green); }
+.btn-copy svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* Note bas de page */
+.dictee-note {
+  font-size: .68rem; color: var(--agilo-muted); margin-top: 1rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .agilo-source-wrap { width: 100%; padding: 0 12px; }
+  .source-tab { font-size: .78rem; padding: .75rem .35rem; gap: .3rem; }
+  .source-panels { padding: 1rem; }
+  .dictee-inner-card { padding: 1.5rem 1rem 1rem; }
+  .dictee-timer { font-size: 1.75rem; }
+  .dictee-btn { padding: .5rem 1rem; font-size: .78rem; }
+}
+</style>
+
+<div class="agilo-source-wrap">
+<section class="source-card">
+
+  <div class="source-tabs" role="tablist">
+    <button type="button" class="source-tab active" role="tab" data-tab="file" aria-selected="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg> Fichier
+    </button>
+    <button type="button" class="source-tab" role="tab" data-tab="youtube" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg> YouTube
+    </button>
+    <button type="button" class="source-tab" role="tab" data-tab="dictee" aria-selected="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg> Dictée en direct
+      <span class="ag-badge orange">Nouveau</span>
+    </button>
+  </div>
+
+  <div class="source-panels">
+    <div class="source-panel active" id="panel-file" role="tabpanel">
+      <div class="panel-file-title">Uploadez votre fichier audio ou vidéo ici :</div>
+      <div class="checkbox-component multiple-audios">
+        <a href="/app/business/dashboard/multi-file-upload" class="text-size-small text-color-grey" style="text-decoration:none;color:inherit;">Envoi multiple</a>
+        <label class="w-checkbox checkbox-field inverse">
+          <div class="w-checkbox-input w-checkbox-input--inputType-custom checkbox_toggle w--redirected-checked"></div>
+          <input name="toggle-format-transcript-2" type="checkbox" id="toggle-format-transcript-2" style="opacity:0;position:absolute;z-index:-1" checked>
+          <span class="checkbox-label w-form-label" for="toggle-format-transcript-2">Off/ On</span>
+        </label>
+        <div class="text-size-small text-color-grey">Envoi unique</div>
+      </div>
+      <div class="uploader" style="margin-top:1rem;">
+        <div class="upload-zone-placeholder">Glissez-déposez votre fichier audio (M4A, MP3, MP4, WAV) ou <span class="browse">Parcourir</span></div>
+      </div>
+    </div>
+
+    <div class="source-panel" id="panel-youtube" role="tabpanel">
+      <div class="youtube-panel-inner">
+        <h5>Transcrire une vidéo YouTube</h5>
+        <input type="url" name="youtubeUrl" id="youtube-url-input" placeholder="https://www.youtube.com/watch?v=..." class="input-youtube" autocomplete="url" inputmode="url">
+        <p class="yt-helper">Collez le lien complet de la vidéo YouTube que vous souhaitez transcrire.</p>
+      </div>
+    </div>
+
+    <div class="source-panel" id="panel-dictee" role="tabpanel">
+      <!-- Un seul bloc racine streaming par page -->
+      <div data-agilo-streaming-root="true" id="live-streaming-panel">
+        <div class="dictee-inner-card">
+
+          <div class="dictee-status-row">
+            <span class="dictee-status-dot" id="dictee-status-dot" aria-hidden="true"></span>
+            <span data-agilo-streaming-status aria-live="polite">Prêt à enregistrer</span>
+          </div>
+
+          <div class="dictee-timer" id="agilo-streaming-timer" aria-live="polite">00<span class="sep">:</span>00</div>
+
+          <div class="dictee-level-wrap" id="agilo-level-wrap" style="display:none;">
+            <div class="dictee-level-label">Niveau micro</div>
+            <div class="dictee-level-bar"><div class="dictee-level-fill" id="agilo-level-fill"></div></div>
+          </div>
+
+          <div class="dictee-preview-label">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+            Aperçu en direct — le résultat final sera traité après envoi
+          </div>
+          <textarea data-agilo-streaming-text rows="5" readonly placeholder="La transcription apparaîtra ici dès que vous commencerez à parler..."></textarea>
+
+          <div class="dictee-actions">
+            <!-- Pas d'attribut disabled ici : le script gère l'état -->
+            <button type="button" class="dictee-btn dictee-btn--start" data-agilo-streaming-start>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              Démarrer la dictée
+            </button>
+            <button type="button" class="dictee-btn dictee-btn--pause" data-agilo-streaming-pause disabled style="display:none;">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+              Pause
+            </button>
+            <button type="button" class="dictee-btn dictee-btn--resume" data-agilo-streaming-resume disabled style="display:none;">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+              Reprendre
+            </button>
+            <button type="button" class="dictee-btn dictee-btn--stop" data-agilo-streaming-stop disabled style="display:none;">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg>
+              Arrêter et transcrire
+            </button>
+          </div>
+
+          <div class="dictee-secondary-actions">
+            <button type="button" class="btn-copy" id="agilo-copy-btn">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              <span id="agilo-copy-btn-text">Copier le texte</span>
+            </button>
+          </div>
+
+          <p class="dictee-note">
+            L'audio reste en local sur votre appareil et n'est envoyé qu'à l'arrêt.<br>
+            Conforme RGPD (serveurs UE). Vous pouvez aussi copier le texte sans envoyer.
+          </p>
+          <input type="hidden" name="streamingLanguage" value="fr">
+
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</div>

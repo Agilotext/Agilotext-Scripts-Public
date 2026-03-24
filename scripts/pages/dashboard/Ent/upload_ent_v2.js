@@ -17,7 +17,7 @@
  *   - filepond.js + filepond-plugin-file-validate-type + size
  *
  * Après ce script, charger (optionnel, streaming) :
- *   - streaming-ent-loader.js (qui charge speechmatics + mount)
+ *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
  * ──────────────────────────────────────────────────────────────────
  */
 

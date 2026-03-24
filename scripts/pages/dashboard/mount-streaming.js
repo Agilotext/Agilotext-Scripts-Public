@@ -4,7 +4,7 @@
  * Patch d'intégration pour ent.js / pro.js / free.js
  *
  * Ce code doit être ajouté à la fin du handler DOMContentLoaded
- * de chaque script dashboard. Il connecte speechmatics-streaming.js
+ * de chaque script dashboard. Il connecte agilo-live-transcribe.js
  * aux helpers existants du dashboard (token, upload, polling).
  *
  * DÉPENDANCES (déjà présentes dans ent/pro/free.js) :
@@ -15,14 +15,21 @@
  *   - globalToken, edition, window.DEVICE_ID
  *
  * SCRIPTS À CHARGER AVANT (dans cet ordre) :
- *   1. speechmatics-streaming.js
+ *   1. agilo-live-transcribe.js (ou speechmatics-streaming.js → shim)
  *   2. ent.js / pro.js / free.js (qui contient ce patch)
+ *
+ * Optionnel : window.AGILO_LIVE_VOICE_JWT_URL — URL POST JSON complète pour
+ * obtenir { jwt, websocketUrl, ... } si vous exposez un alias côté API.
  * ──────────────────────────────────────────────────────────────────
  */
 
-// ── Appel API pour obtenir un JWT Speechmatics court ────────────
-async function getSpeechmaticsRtJwt({ email, token, edition }) {
-  const res = await fetch("https://api.agilotext.com/api/v1/getSpeechmaticsRtJwt", {
+// ── Session temps réel (JWT + URL WebSocket fournis par l’API Agilotext) ─
+async function fetchAgiloLiveVoiceSession({ email, token, edition }) {
+  var jwtUrl =
+    window.AGILO_LIVE_VOICE_JWT_URL ||
+    "https://api.agilotext.com/api/v1/getSpeechmaticsRtJwt";
+
+  const res = await fetch(jwtUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -34,42 +41,40 @@ async function getSpeechmaticsRtJwt({ email, token, edition }) {
 
   const data = await res.json();
   if (!res.ok || data.status !== "OK" || !data.jwt) {
-    throw new Error(data.errorMessage || "speechmatics_rt_jwt_failed");
+    throw new Error(data.errorMessage || "live_voice_jwt_failed");
   }
   return data;
 }
 
-// ── Montage du contrôleur Speechmatics ──────────────────────────
-function mountSpeechmaticsStreaming() {
-  if (window.__agiloSpeechmaticsStreamingMounted) return;
+// ── Montage du contrôleur dictée live ────────────────────────────
+function mountAgiloLiveVoice() {
+  if (window.__agiloLiveVoiceMounted) return;
   var root = document.querySelector("[data-agilo-streaming-root]");
-  if (!root || !window.AgiloSpeechmaticsStreaming) return;
+  if (!root || !window.AgiloLiveVoice) return;
 
   // URL du worklet — doit être HTTPS, même origine ou CORS OK
   var WORKLET_URL =
     window.AGILO_PCM_WORKLET_URL ||
     "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/pcm-audio-worklet.js";
 
-  window.AgiloSpeechmaticsStreaming.mount({
+  window.AgiloLiveVoice.mount({
     root: root,
     language: "fr",
     workletUrl: WORKLET_URL,
 
-    // Authentification : revalide le token Agilotext puis obtient un JWT Speechmatics
     getAgiloAuth: async function (email) {
       var tokenOk = await ensureValidToken(email);
       if (!tokenOk || !globalToken) {
         throw new Error("invalidToken");
       }
 
-      return getSpeechmaticsRtJwt({
+      return fetchAgiloLiveVoiceSession({
         email: email,
         token: globalToken,
         edition: edition
       });
     },
 
-    // Upload du WAV final vers le pipeline Agilotext existant
     uploadBlob: async function ({ blob, email, options }) {
       var fd = new FormData();
 
@@ -108,26 +113,23 @@ function mountSpeechmaticsStreaming() {
       return sendWithRetry(fd, 3, false);
     },
 
-    // Callback quand l'upload est accepté → lance le polling standard
     onUploadAccepted: function ({ jobId, email }) {
       localStorage.setItem("currentJobId", jobId);
       document.dispatchEvent(new CustomEvent("newJobIdAvailable"));
       checkTranscriptStatus(jobId, email);
     },
 
-    // Callback erreur → utilise le showError du dashboard
     onError: function (key) {
       showError(key || "default");
     }
   });
-  window.__agiloSpeechmaticsStreamingMounted = true;
+  window.__agiloLiveVoiceMounted = true;
 }
 
-// Expose la fonction pour un appel manuel si besoin.
-window.mountSpeechmaticsStreaming = mountSpeechmaticsStreaming;
+window.mountAgiloLiveVoice = mountAgiloLiveVoice;
 
 // ── Auto-bootstrap (mode externe, sans patch direct ent/pro/free) ─
-(function bootstrapSpeechmaticsMount() {
+(function bootstrapAgiloLiveVoice() {
   var MAX_ATTEMPTS = 40;
   var RETRY_MS = 300;
   var attempt = 0;
@@ -146,20 +148,20 @@ window.mountSpeechmaticsStreaming = mountSpeechmaticsStreaming;
 
   function hasStreamingDeps() {
     return !!(
-      window.AgiloSpeechmaticsStreaming &&
+      window.AgiloLiveVoice &&
       document.querySelector("[data-agilo-streaming-root]")
     );
   }
 
   function tryMount() {
-    if (mounted || window.__agiloSpeechmaticsStreamingMounted) return true;
+    if (mounted || window.__agiloLiveVoiceMounted) return true;
     if (!hasDashboardDeps() || !hasStreamingDeps()) return false;
     try {
-      mountSpeechmaticsStreaming();
+      mountAgiloLiveVoice();
       mounted = true;
       return true;
     } catch (err) {
-      console.error("Speechmatics mount failed:", err);
+      console.error("Agilo live voice mount failed:", err);
       return false;
     }
   }
@@ -168,7 +170,7 @@ window.mountSpeechmaticsStreaming = mountSpeechmaticsStreaming;
     if (tryMount()) return;
     attempt += 1;
     if (attempt >= MAX_ATTEMPTS) {
-      console.warn("Speechmatics mount skipped: dependencies not ready.");
+      console.warn("Agilo live voice mount skipped: dependencies not ready.");
       return;
     }
     setTimeout(schedule, RETRY_MS);
