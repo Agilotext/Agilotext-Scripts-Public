@@ -3,6 +3,7 @@
  * ──────────────────────────────────────────────────────────────────
  * Client dictée vocale temps réel (WebSocket + worklet PCM).
  * Point d’ancrage : [data-agilo-streaming-root] (inchangé pour compat. Webflow).
+ * Références DOM rafraîchies à chaque render (OpenTech / overlays qui recréent le DOM).
  * Après modification : recopier vers speechmatics-streaming.js (alias historique).
  * ──────────────────────────────────────────────────────────────────
  */
@@ -103,62 +104,97 @@
       email: ""
     };
 
-    this.els = {
-      start:  this.root.querySelector("[data-agilo-streaming-start]"),
-      pause:  this.root.querySelector("[data-agilo-streaming-pause]"),
-      resume: this.root.querySelector("[data-agilo-streaming-resume]"),
-      stop:   this.root.querySelector("[data-agilo-streaming-stop]"),
-      status: this.root.querySelector("[data-agilo-streaming-status]"),
-      text:   this.root.querySelector("[data-agilo-streaming-text]"),
-      timer:  queryTimerEl(this.root),
-      dot:    this.root.querySelector("#dictee-status-dot"),
-      levelWrap: this.root.querySelector("#agilo-level-wrap"),
-      levelFill: this.root.querySelector("#agilo-level-fill"),
-      copyBtn:  this.root.querySelector("#agilo-copy-btn"),
-      copyText: this.root.querySelector("#agilo-copy-btn-text")
-    };
-
+    this.els = {};
     this._timerInterval = null;
     this._timerStart = 0;
     this._pausedElapsed = 0;
 
+    this.refreshDomRefs();
     this.bind();
     this.render();
   }
 
+  /** Ré-attache les nœuds visibles (outils UX / Webflow peuvent recréer le sous-arbre). */
+  AgiloLiveVoiceController.prototype.refreshDomRefs = function () {
+    var r = this.root;
+    if (!r || !document.documentElement.contains(r)) {
+      r =
+        document.querySelector("[data-agilo-streaming-root]") ||
+        document.getElementById("live-streaming-panel");
+      this.root = r;
+    }
+    if (!r) {
+      return;
+    }
+    this.els.start = r.querySelector("[data-agilo-streaming-start]");
+    this.els.pause = r.querySelector("[data-agilo-streaming-pause]");
+    this.els.resume = r.querySelector("[data-agilo-streaming-resume]");
+    this.els.stop = r.querySelector("[data-agilo-streaming-stop]");
+    this.els.status = r.querySelector("[data-agilo-streaming-status]");
+    this.els.text = r.querySelector("[data-agilo-streaming-text]");
+    this.els.timer = queryTimerEl(r);
+    this.els.dot = r.querySelector("#dictee-status-dot");
+    this.els.levelWrap = r.querySelector("#agilo-level-wrap");
+    this.els.levelFill = r.querySelector("#agilo-level-fill");
+    this.els.copyBtn = r.querySelector("#agilo-copy-btn");
+    this.els.copyText = r.querySelector("#agilo-copy-btn-text");
+  };
+
+  /** Un seul listener document : les boutons remplacés par des clones restent utilisables. */
   AgiloLiveVoiceController.prototype.bind = function () {
     var self = this;
-    if (this.els.start) {
-      this.els.start.addEventListener("click", function () { self.start(); });
-    }
-    if (this.els.pause) {
-      this.els.pause.addEventListener("click", function () { self.pause(); });
-    }
-    if (this.els.resume) {
-      this.els.resume.addEventListener("click", function () { self.resume(); });
-    }
-    if (this.els.stop) {
-      this.els.stop.addEventListener("click", function () { self.stop(); });
-    }
+    this._onDocClick = function (e) {
+      var root =
+        (self.root && document.documentElement.contains(self.root) ? self.root : null) ||
+        document.querySelector("[data-agilo-streaming-root]") ||
+        document.getElementById("live-streaming-panel");
+      if (!root || !root.contains(e.target)) return;
 
-    if (this.els.copyBtn) {
-      this.els.copyBtn.addEventListener("click", function () {
+      if (e.target.closest("[data-agilo-streaming-start]")) {
+        e.preventDefault();
+        self.start();
+        return;
+      }
+      if (e.target.closest("[data-agilo-streaming-pause]")) {
+        e.preventDefault();
+        self.pause();
+        return;
+      }
+      if (e.target.closest("[data-agilo-streaming-resume]")) {
+        e.preventDefault();
+        self.resume();
+        return;
+      }
+      if (e.target.closest("[data-agilo-streaming-stop]")) {
+        e.preventDefault();
+        self.stop();
+        return;
+      }
+
+      var copyHit = e.target.closest("#agilo-copy-btn");
+      if (copyHit && root.contains(copyHit)) {
+        e.preventDefault();
+        self.refreshDomRefs();
         var text = (self.els.text && self.els.text.value) || "";
         if (!text.trim()) return;
         navigator.clipboard.writeText(text).then(function () {
+          self.refreshDomRefs();
           if (self.els.copyText) self.els.copyText.textContent = "Copié !";
-          self.els.copyBtn.classList.add("copied");
+          if (self.els.copyBtn) self.els.copyBtn.classList.add("copied");
           setTimeout(function () {
+            self.refreshDomRefs();
             if (self.els.copyText) self.els.copyText.textContent = "Copier le texte";
-            self.els.copyBtn.classList.remove("copied");
+            if (self.els.copyBtn) self.els.copyBtn.classList.remove("copied");
           }, 2000);
         });
-      });
-    }
+      }
+    };
+    document.addEventListener("click", this._onDocClick, false);
   };
 
   AgiloLiveVoiceController.prototype.setStatus = function (status, label) {
     this.state.status = status;
+    this.refreshDomRefs();
     if (this.els.status) this.els.status.textContent = label || status;
     this.render();
   };
@@ -174,6 +210,7 @@
   }
 
   AgiloLiveVoiceController.prototype.render = function () {
+    this.refreshDomRefs();
     var s = this.state.status;
     var isIdle = s === "idle";
     var isRecording = s === "recording";
@@ -223,6 +260,7 @@
     this._timerStart = Date.now() - (this._pausedElapsed || 0);
     if (this._timerInterval) clearInterval(this._timerInterval);
     this._timerInterval = setInterval(function () {
+      self.refreshDomRefs();
       var elapsed = Math.floor((Date.now() - self._timerStart) / 1000);
       var mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
       var ss = String(elapsed % 60).padStart(2, "0");
@@ -245,12 +283,14 @@
     this._timerInterval = null;
     this._pausedElapsed = 0;
     this._timerStart = 0;
+    this.refreshDomRefs();
     if (this.els.timer) {
       this.els.timer.innerHTML = '00<span class="sep">:</span>00';
     }
   };
 
   AgiloLiveVoiceController.prototype.renderText = function () {
+    this.refreshDomRefs();
     if (!this.els.text) return;
     this.els.text.value = joinText([
       this.state.committedText,
@@ -502,6 +542,7 @@
     if (this.state.status !== "paused") return;
     var self = this;
 
+    this.refreshDomRefs();
     // Prendre le texte édité comme nouvelle base
     this.state.committedText = ((this.els.text && this.els.text.value) || "").trim();
     this.state.partialText = "";

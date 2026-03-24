@@ -57,7 +57,7 @@ function mountAgiloLiveVoice() {
     window.AGILO_PCM_WORKLET_URL ||
     "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/pcm-audio-worklet.js";
 
-  window.AgiloLiveVoice.mount({
+  var liveCtrl = window.AgiloLiveVoice.mount({
     root: root,
     language: "fr",
     workletUrl: WORKLET_URL,
@@ -123,6 +123,8 @@ function mountAgiloLiveVoice() {
       showError(key || "default");
     }
   });
+  /** Débogage console : __agiloLiveVoiceInstance.state.status, .render(), etc. */
+  window.__agiloLiveVoiceInstance = liveCtrl;
   window.__agiloLiveVoiceMounted = true;
 }
 

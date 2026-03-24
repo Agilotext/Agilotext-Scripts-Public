@@ -3,28 +3,43 @@
   AGILOTEXT — Composant onglets Fichier | YouTube | Dictée (embed Webflow)
   ═══════════════════════════════════════════════════════════════════
 
-  À coller dans un bloc « Embed » (HTML), à l’intérieur du formulaire
-  ms-code-file-upload si tu utilises upload_ent_v2.js.
+  OÙ COLLER QUOI
+  ─────────────
+  • Ce fichier (à partir de <style>) → bloc Embed Webflow, idéalement dans le
+    formulaire ms-code-file-upload si tu utilises upload_ent_v2.js.
+  • Les <script> ci-dessous → Page → Paramètres → Code personnalisé → Fin du corps
+    (pas dans l’embed), DANS CET ORDRE.
 
-  SCRIPTS (ordre, dans le code personnalisé avant </body>) :
-    1. ent.js
-    2. filepond.js + plugins validate-type + validate-size
-    3. upload_ent_v2.js
-    4. (optionnel) window.AGILO_SCRIPTS_BASE = "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main";
-    5. streaming-ent-loader.js
+  RECOMMANDATION PROD (simple, à suivre)
+  ──────────────────────────────────────
+  1. Utilise @main sur jsDelivr pour tous les scripts Agilotext (tu reçois le
+     dernier code poussé sur GitHub main).
+  2. NE mets PAS window.AGILO_SCRIPTS_BASE : le loader a déjà la bonne base par
+     défaut. Ajoute ce bloc SEULEMENT si tu pointes vers une branche, un commit
+     précis ou un fork — et dans ce cas la même base doit servir pour le loader
+     ET pour les scripts qu’il charge en dynamique.
+  3. Garde ?v=12 sur chaque URL Agilotext ; à chaque grosse mise à jour, passe
+     à ?v=13, 14… pour forcer le cache navigateur (ça ne change pas Git, ça évite
+     juste une vieille version en local).
 
-  NE PAS ajouter en plus :
-    - agilo-live-transcribe.js (speechmatics-streaming.js = même bundle, URL historique)
-    - mount-streaming.js
-    (le loader les charge déjà → doublon = timer / boutons cassés)
+  BLOC À COPIER (footer Webflow) — référence à jour du repo
+  ───────────────────────────────────────────────────────────
+  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/ent.js?v=12"></script>
+  <script src="https://unpkg.com/filepond@4.30.1/dist/filepond.js"></script>
+  <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
+  <script src="https://unpkg.com/filepond-plugin-file-validate-size/dist/filepond-plugin-file-validate-size.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Ent/upload_ent_v2.js?v=12"></script>
+  <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/Ent/streaming-ent-loader.js?v=12"></script>
+
+  NE PAS ajouter : agilo-live-transcribe.js, speechmatics-streaming.js, mount-streaming.js
+  (le loader les charge → doublon = dictée cassée).
 
   HTML dictée — à respecter :
     - Un seul [data-agilo-streaming-root] sur la page
     - data-agilo-streaming-start / pause / resume / stop sur les boutons
-    - id="agilo-streaming-timer", id="dictee-status-dot", id="agilo-level-wrap"…
-    - PAS de disabled sur le bouton « Démarrer » au départ
-    - Statut initial : « Prêt à enregistrer » (le script met à jour ensuite)
-    - Classes .dictee-btn / .dictee-actions (pas .button.record avec l’enregistrement batch)
+    - id agilo-streaming-timer, dictee-status-dot, agilo-level-wrap…
+    - Pas de disabled sur « Démarrer » au départ ; statut : Prêt à enregistrer
+    - Classes .dictee-btn (pas les boutons batch .button.record)
 
   ═══════════════════════════════════════════════════════════════════
 -->
