@@ -34,13 +34,67 @@ function fetchWithTimeout(url, options = {}) {
 
 /* ====================== Main logic ====================== */
 document.addEventListener('DOMContentLoaded', () => {
+
+  /* ─── Source tabs (Fichier / YouTube / Dictée) ─────────────── */
+  const sourceTabs = document.querySelectorAll('.source-tab[data-tab]');
+  const sourcePanels = document.querySelectorAll('.source-panel[id^="panel-"]');
+
+  sourceTabs.forEach(btn => btn.setAttribute('type', 'button'));
+
+  function activateSourceTab(tabValue) {
+    sourceTabs.forEach(btn => {
+      const isActive = btn.getAttribute('data-tab') === tabValue;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    sourcePanels.forEach(panel => {
+      const panelKey = (panel.id || '').replace('panel-', '');
+      panel.classList.toggle('active', panelKey === tabValue);
+    });
+    const sub = document.getElementById('submit-button');
+    if (sub) sub.style.display = (tabValue === 'dictee') ? 'none' : '';
+  }
+
+  sourceTabs.forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.preventDefault();
+      activateSourceTab(btn.getAttribute('data-tab'));
+    });
+  });
+
+  /* ─── Envoi multiple → redirection ──────────────────────────── */
+  const multiToggle = document.querySelector('.checkbox-component.multiple-audios .checkbox_toggle');
+  if (multiToggle) {
+    multiToggle.addEventListener('click', e => {
+      e.preventDefault();
+      window.location.href = '/app/free/dashboard/multi-file-upload';
+    });
+  }
+
   /* ---------------- FilePond init ---------------- */
-  FilePond.registerPlugin(FilePondPluginFileValidateSize, FilePondPluginFileValidateType);
+  if (typeof FilePond !== 'undefined' && FilePond.registerPlugin) {
+    if (typeof FilePondPluginFileValidateSize !== 'undefined') FilePond.registerPlugin(FilePondPluginFileValidateSize);
+    if (typeof FilePondPluginFileValidateType !== 'undefined') FilePond.registerPlugin(FilePondPluginFileValidateType);
+  }
   document.querySelectorAll('form[ms-code-file-upload="form"]').forEach(f => f.setAttribute('enctype', 'multipart/form-data'));
 
-  const inputEl = document.querySelector('input[name="fileToUpload"]');
+  let inputEl = document.querySelector('input[name="fileToUpload"]');
+
+  if (!inputEl) {
+    const uploaderDiv = document.querySelector('.uploader');
+    if (uploaderDiv) {
+      const placeholder = uploaderDiv.querySelector('.upload-zone-placeholder');
+      if (placeholder) placeholder.style.display = 'none';
+      inputEl = document.createElement('input');
+      inputEl.type = 'file';
+      inputEl.name = 'fileToUpload';
+      inputEl.setAttribute('accept', 'audio/*,video/*,video/mp4,audio/mp4,audio/x-m4a,audio/ogg');
+      uploaderDiv.appendChild(inputEl);
+    }
+  }
+
   let pond = null;
-  if (inputEl) {
+  if (inputEl && typeof FilePond !== 'undefined') {
     pond = FilePond.create(inputEl, {
       credits: false,
       storeAsFile: true,
@@ -68,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const newFormBtn = document.getElementById('newForm');
   const newBtn = document.getElementById('newButton');
 
-  // Tabs
+  // Tabs résultats (Transcription / Summary)
   const summaryTabLink = document.querySelector('[data-w-tab="Summary"]');
   const transcriptionTabLink = document.querySelector('[data-w-tab="Transcription"]');
   const tabsMenu = (summaryTabLink && summaryTabLink.closest('.w-tab-menu')) || document.querySelector('.w-tab-menu');
@@ -81,12 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const translateCheckbox = document.getElementById('toggle-translate');
   const translateSelect = document.getElementById('translate-select');
 
-  // YouTube upload source tabs (même si bloqué en FREE, on garde les refs)
-  const fileTabLink = document.querySelector('[data-w-tab="File"]');
-  const youtubeTabLink = document.querySelector('[data-w-tab="YouTube"]');
   const youtubeInput = document.getElementById('youtube-url-input');
-  const youtubeContainer = document.querySelector('.youtube-input-container');
-  const youtubeToggleLink = document.querySelector('.youtube-toggle-link');
 
   /* ------------ Error mapping ------------- */
   const errorMessageDivs = {
@@ -127,20 +176,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const scrollToEl = (el, offset = 0) =>
     window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset + offset, behavior: 'smooth' });
 
-  // Détecter la source active (Fichier ou YouTube)
+  function getActiveSourceTab() {
+    const active = document.querySelector('.source-tab.active');
+    return active ? active.getAttribute('data-tab') : 'file';
+  }
+
   function getActiveUploadSource() {
-    if (fileTabLink && fileTabLink.classList.contains('w--current')) return 'file';
-    if (youtubeTabLink && youtubeTabLink.classList.contains('w--current')) return 'youtube';
-
-    if (youtubeContainer && youtubeContainer.classList.contains('is-visible')) {
-      if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) return 'youtube';
-      return 'youtube';
-    }
-
-    if (youtubeInput && youtubeInput.value && youtubeInput.value.trim()) return 'youtube';
-
-    if (pond && pond.getFiles().length > 0) return 'file';
-
+    const tab = getActiveSourceTab();
+    if (tab === 'youtube') return 'youtube';
+    if (tab === 'dictee') return 'dictation';
     return 'file';
   }
 
@@ -785,34 +829,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     toast("🚫 Fonction réservée aux offres Pro & Business. Passez en Pro pour débloquer la transcription YouTube.", wrap, TIMEOUT_TOAST);
   };
-
-  // Gérer l'ouverture/fermeture du container YouTube (avec blocage pour free)
-  if (youtubeToggleLink && youtubeContainer) {
-    youtubeToggleLink.addEventListener('click', (e) => {
-      e.preventDefault();
-
-      if (edition === 'free') {
-        showUpsell();
-        return;
-      }
-
-      const isVisible = youtubeContainer.classList.contains('is-visible');
-      if (isVisible) {
-        youtubeContainer.classList.remove('is-visible');
-        youtubeToggleLink.classList.remove('is-open');
-      } else {
-        youtubeContainer.classList.add('is-visible');
-        youtubeToggleLink.classList.add('is-open');
-        setTimeout(() => { if (youtubeInput) youtubeInput.focus(); }, 200);
-      }
-    });
-
-    if (edition === 'free') {
-      youtubeToggleLink.style.cursor = 'not-allowed';
-      youtubeToggleLink.style.opacity = '0.6';
-      youtubeToggleLink.setAttribute('title', 'Fonctionnalité réservée aux abonnements Pro & Business');
-    }
-  }
 
   // Expose globals for mount-streaming.js (dictee en direct)
   window.ensureValidToken = ensureValidToken;
