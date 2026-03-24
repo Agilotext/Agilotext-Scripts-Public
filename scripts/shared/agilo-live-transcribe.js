@@ -298,6 +298,20 @@
     ]);
   };
 
+  AgiloLiveVoiceController.prototype._updateLevel = function (chunk) {
+    this.refreshDomRefs();
+    if (!this.els.levelFill) return;
+    var sum = 0;
+    for (var i = 0; i < chunk.length; i++) {
+      sum += chunk[i] * chunk[i];
+    }
+    var rms = Math.sqrt(sum / chunk.length) / 32768;
+    var pct = Math.min(100, Math.round(rms * 500));
+    this.els.levelFill.style.width = pct + "%";
+    var hue = pct < 60 ? 120 : pct < 85 ? 40 : 0;
+    this.els.levelFill.style.backgroundColor = "hsl(" + hue + ",70%,45%)";
+  };
+
   AgiloLiveVoiceController.prototype.getEmail = function () {
     var input = document.querySelector('input[name="memberEmail"]');
     return ((input && (input.value || input.getAttribute("src"))) || "").trim();
@@ -359,6 +373,8 @@
             self.state.ws.send(chunk.buffer);
             self.state.seqNo += 1;
           }
+
+          self._updateLevel(chunk);
         };
 
         mediaSource.connect(workletNode);
@@ -569,13 +585,19 @@
 
     suspendPromise
       .then(function () {
-        self.setStatus("uploading", "Upload vers Agilotext...");
+        self.stopTimer();
+        self.setStatus("uploading", "Préparation du fichier...");
+        if (self.config.onStopBegin) self.config.onStopBegin();
+
         self.state.committedText = ((self.els.text && self.els.text.value) || "").trim();
         self.state.partialText = "";
         self.renderText();
 
+        if (self.els.levelFill) self.els.levelFill.style.width = "0%";
+
         var blob = pcm16ChunksToWavBlob(self.state.pcmChunks, self.state.sampleRate);
 
+        self.setStatus("uploading", "Upload vers Agilotext...");
         return self.config.uploadBlob({
           blob: blob,
           email: self.state.email,
@@ -592,7 +614,7 @@
 
         return self.teardownAudio().then(function () {
           self.resetTimer();
-          self.setStatus("idle", "Envoyé avec succès");
+          self.setStatus("idle", "Envoyé avec succès !");
           if (self.config.onUploadAccepted) {
             self.config.onUploadAccepted({ jobId: jobId, email: self.state.email });
           }
@@ -603,6 +625,7 @@
         self.teardownAudio().then(function () {
           self.resetTimer();
           self.setStatus("idle", "Erreur");
+          if (self.config.onStopEnd) self.config.onStopEnd();
           if (self.config.onError) self.config.onError("default");
         });
       });

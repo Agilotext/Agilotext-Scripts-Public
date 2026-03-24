@@ -113,9 +113,34 @@ function mountAgiloLiveVoice() {
       return sendWithRetry(fd, 3, false);
     },
 
+    onStopBegin: function () {
+      var fl = document.getElementById("form_loading");
+      if (fl) fl.style.display = "block";
+    },
+
+    onStopEnd: function () {
+      var fl = document.getElementById("form_loading");
+      if (fl) fl.style.display = "none";
+    },
+
     onUploadAccepted: function ({ jobId, email }) {
       localStorage.setItem("currentJobId", jobId);
       document.dispatchEvent(new CustomEvent("newJobIdAvailable"));
+
+      var fl = document.getElementById("form_loading");
+      if (fl) fl.style.display = "none";
+
+      var successDiv = document.getElementById("form_success");
+      var loadingAnimDiv = document.getElementById("loading_animation");
+      if (successDiv) successDiv.style.display = "flex";
+      if (loadingAnimDiv) {
+        loadingAnimDiv.style.display = "block";
+        window.scrollTo({
+          top: loadingAnimDiv.getBoundingClientRect().top + window.pageYOffset - 80,
+          behavior: "smooth"
+        });
+      }
+
       checkTranscriptStatus(jobId, email);
     },
 
