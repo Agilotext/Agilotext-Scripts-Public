@@ -102,8 +102,15 @@
       resume: this.root.querySelector("[data-agilo-streaming-resume]"),
       stop:   this.root.querySelector("[data-agilo-streaming-stop]"),
       status: this.root.querySelector("[data-agilo-streaming-status]"),
-      text:   this.root.querySelector("[data-agilo-streaming-text]")
+      text:   this.root.querySelector("[data-agilo-streaming-text]"),
+      timer:  this.root.querySelector("#agilo-streaming-timer"),
+      dot:    this.root.querySelector("#dictee-status-dot"),
+      levelWrap: this.root.querySelector("#agilo-level-wrap"),
+      levelFill: this.root.querySelector("#agilo-level-fill")
     };
+
+    this._timerInterval = null;
+    this._timerStart = 0;
 
     this.bind();
     this.render();
@@ -125,11 +132,57 @@
 
   AgiloSpeechmaticsStreamingController.prototype.render = function () {
     var s = this.state.status;
-    this.els.start.disabled  = s !== "idle";
-    this.els.pause.disabled  = s !== "recording";
-    this.els.resume.disabled = s !== "paused";
-    this.els.stop.disabled   = s === "idle" || s === "uploading";
-    this.els.text.readOnly   = s !== "paused";
+    var isIdle = s === "idle";
+    var isRecording = s === "recording";
+    var isPaused = s === "paused";
+    var isUploading = s === "uploading";
+
+    this.els.start.disabled  = !isIdle;
+    this.els.pause.disabled  = !isRecording;
+    this.els.resume.disabled = !isPaused;
+    this.els.stop.disabled   = isIdle || isUploading;
+
+    this.els.start.style.display  = isIdle ? "flex" : "none";
+    this.els.pause.style.display  = isRecording ? "flex" : "none";
+    this.els.resume.style.display = isPaused ? "flex" : "none";
+    this.els.stop.style.display   = (isRecording || isPaused || s === "connecting" || s === "initializing" || s === "pausing") ? "flex" : "none";
+
+    this.els.text.readOnly = !isPaused;
+
+    if (this.els.dot) {
+      this.els.dot.classList.toggle("listening", isRecording);
+    }
+    if (this.els.levelWrap) {
+      this.els.levelWrap.style.display = isRecording ? "" : "none";
+    }
+  };
+
+  AgiloSpeechmaticsStreamingController.prototype.startTimer = function () {
+    var self = this;
+    this._timerStart = Date.now();
+    if (this._timerInterval) clearInterval(this._timerInterval);
+    this._timerInterval = setInterval(function () {
+      var elapsed = Math.floor((Date.now() - self._timerStart) / 1000);
+      var mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+      var ss = String(elapsed % 60).padStart(2, "0");
+      if (self.els.timer) {
+        self.els.timer.innerHTML = mm + '<span class="sep">:</span>' + ss;
+      }
+    }, 500);
+  };
+
+  AgiloSpeechmaticsStreamingController.prototype.stopTimer = function () {
+    if (this._timerInterval) {
+      clearInterval(this._timerInterval);
+      this._timerInterval = null;
+    }
+  };
+
+  AgiloSpeechmaticsStreamingController.prototype.resetTimer = function () {
+    this.stopTimer();
+    if (this.els.timer) {
+      this.els.timer.innerHTML = '00<span class="sep">:</span>00';
+    }
   };
 
   AgiloSpeechmaticsStreamingController.prototype.renderText = function () {
@@ -353,10 +406,12 @@
         return self.state.audioContext.resume();
       })
       .then(function () {
-        self.setStatus("recording", "En ecoute...");
+        self.setStatus("recording", "En écoute...");
+        self.startTimer();
       })
       .catch(function (err) {
         console.error(err);
+        self.resetTimer();
         self.setStatus("idle", "Erreur");
         if (self.config.onError) self.config.onError("default");
       });
@@ -370,7 +425,7 @@
 
     this.state.audioContext.suspend()
       .then(function () { return self.closeRealtimeSession(); })
-      .then(function () { self.setStatus("paused", "Pause - texte editable"); })
+      .then(function () { self.stopTimer(); self.setStatus("paused", "Pause — texte éditable"); })
       .catch(function (err) {
         console.error(err);
         if (self.config.onError) self.config.onError("default");
@@ -390,7 +445,7 @@
 
     this.openRealtimeSession()
       .then(function () { return self.state.audioContext.resume(); })
-      .then(function () { self.setStatus("recording", "En ecoute..."); })
+      .then(function () { self.setStatus("recording", "En écoute..."); self.startTimer(); })
       .catch(function (err) {
         console.error(err);
         if (self.config.onError) self.config.onError("default");
@@ -429,7 +484,8 @@
         if (!jobId) throw new Error("missing_job_id");
 
         return self.teardownAudio().then(function () {
-          self.setStatus("idle", "Envoye");
+          self.resetTimer();
+          self.setStatus("idle", "Envoyé");
           if (self.config.onUploadAccepted) {
             self.config.onUploadAccepted({ jobId: jobId, email: self.state.email });
           }
@@ -438,6 +494,7 @@
       .catch(function (err) {
         console.error(err);
         self.teardownAudio().then(function () {
+          self.resetTimer();
           self.setStatus("idle", "Erreur");
           if (self.config.onError) self.config.onError("default");
         });

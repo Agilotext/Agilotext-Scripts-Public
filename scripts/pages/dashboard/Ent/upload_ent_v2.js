@@ -65,6 +65,8 @@ document.addEventListener('DOMContentLoaded', function () {
   var sourceTabs = document.querySelectorAll('.source-tab[data-tab]');
   var sourcePanels = document.querySelectorAll('.source-panel[id^="panel-"]');
 
+  sourceTabs.forEach(function (btn) { btn.setAttribute('type', 'button'); });
+
   function activateSourceTab(tabValue) {
     sourceTabs.forEach(function (btn) {
       var isActive = btn.getAttribute('data-tab') === tabValue;
@@ -75,13 +77,25 @@ document.addEventListener('DOMContentLoaded', function () {
       var panelKey = (panel.id || '').replace('panel-', '');
       panel.classList.toggle('active', panelKey === tabValue);
     });
+    var sub = document.getElementById('submit-button');
+    if (sub) sub.style.display = (tabValue === 'dictee') ? 'none' : '';
   }
 
   sourceTabs.forEach(function (btn) {
-    btn.addEventListener('click', function () {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
       activateSourceTab(btn.getAttribute('data-tab'));
     });
   });
+
+  /* ─── Envoi multiple → redirection ──────────────────────────── */
+  var multiToggle = document.querySelector('.checkbox-component.multiple-audios .checkbox_toggle');
+  if (multiToggle) {
+    multiToggle.addEventListener('click', function (e) {
+      e.preventDefault();
+      window.location.href = '/app/business/dashboard/multi-file-upload';
+    });
+  }
 
   /* ─── FilePond ─────────────────────────────────────────────── */
   if (typeof FilePond !== 'undefined' && FilePond.registerPlugin) {
