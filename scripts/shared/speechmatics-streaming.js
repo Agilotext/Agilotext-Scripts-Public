@@ -485,7 +485,7 @@
 
         return self.teardownAudio().then(function () {
           self.resetTimer();
-          self.setStatus("idle", "Envoyé");
+          self.setStatus("idle", "Envoyé avec succès");
           if (self.config.onUploadAccepted) {
             self.config.onUploadAccepted({ jobId: jobId, email: self.state.email });
           }
