@@ -164,10 +164,10 @@
 
 /* ═══════════ PANEL DICTÉE ═══════════ */
 .dictee-inner-card {
-  background: var(--agilo-card);
-  border: 1px solid var(--agilo-border);
-  border-radius: 12px;
-  padding: 2rem 1.5rem 1.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 1rem 0 0;
   text-align: center;
   box-sizing: border-box;
 }
@@ -190,34 +190,42 @@
 
 /* Timer */
 .dictee-timer {
-  font-size: 2rem; font-weight: 700; margin-bottom: 1.25rem;
+  font-size: 2.25rem; font-weight: 700; margin-bottom: .75rem;
   font-variant-numeric: tabular-nums; letter-spacing: .02em;
   color: var(--agilo-text);
 }
-.dictee-timer .sep { color: var(--agilo-border); }
+.dictee-timer .sep { color: var(--agilo-border); opacity: .5; }
 
 /* Barre de niveau micro */
-.dictee-level-wrap { max-width: 280px; margin: 0 auto 1.25rem; }
+.dictee-level-wrap { max-width: 320px; margin: 0 auto 1rem; }
 .dictee-level-label {
-  font-size: .65rem; font-weight: 600; color: var(--agilo-muted);
-  text-transform: uppercase; letter-spacing: .04em; margin-bottom: .3rem; text-align: left;
+  font-size: .6rem; font-weight: 600; color: var(--agilo-muted);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: .25rem; text-align: left;
 }
-.dictee-level-bar { width: 100%; height: 6px; background: var(--agilo-bg); border-radius: 3px; overflow: hidden; }
+.dictee-level-bar { width: 100%; height: 5px; background: var(--agilo-border); border-radius: 3px; overflow: hidden; }
 .dictee-level-fill { height: 100%; width: 0%; border-radius: 3px; transition: width .08s linear, background-color .3s ease; }
 
 /* Label apercu */
 .dictee-preview-label {
   display: flex; align-items: center; justify-content: center; gap: .3rem;
-  font-size: .7rem; color: var(--agilo-muted); margin-bottom: .35rem;
+  font-size: .7rem; color: var(--agilo-muted); margin-bottom: .5rem;
 }
 .dictee-preview-label svg { width: 13px; height: 13px; fill: currentColor; flex-shrink: 0; }
 
 /* Textarea */
 [data-agilo-streaming-text] {
-  width: 100%; min-height: 120px; border: 1px solid var(--agilo-border); border-radius: 10px;
-  padding: 1rem; font-family: inherit; font-size: .875rem; color: var(--agilo-text); resize: vertical;
-  transition: border-color .2s, box-shadow .2s; background: var(--agilo-bg);
+  width: 100%; min-height: 200px; max-height: 50vh;
+  border: 1px solid var(--agilo-border); border-radius: 10px;
+  padding: 1rem 1.15rem; font-family: inherit; font-size: .9rem; line-height: 1.6;
+  color: var(--agilo-text); resize: vertical;
+  transition: border-color .2s, box-shadow .2s, min-height .3s ease;
+  background: var(--agilo-bg);
   box-sizing: border-box;
+}
+[data-agilo-streaming-text]:not([readonly]) {
+  background: var(--agilo-card);
+  border-color: var(--agilo-primary);
+  box-shadow: 0 0 0 3px rgba(23,74,150,.08);
 }
 [data-agilo-streaming-text]:focus { outline: none; border-color: var(--agilo-primary); box-shadow: 0 0 0 3px rgba(23,74,150,.1); }
 
@@ -270,10 +278,11 @@
 @media (max-width: 768px) {
   .agilo-source-wrap { width: 100%; padding: 0 12px; }
   .source-tab { font-size: .78rem; padding: .75rem .35rem; gap: .3rem; }
-  .source-panels { padding: 1rem; }
-  .dictee-inner-card { padding: 1.5rem 1rem 1rem; }
+  .source-panels { padding: 1rem .75rem; }
+  .dictee-inner-card { padding: .75rem 0 0; }
   .dictee-timer { font-size: 1.75rem; }
   .dictee-btn { padding: .5rem 1rem; font-size: .78rem; }
+  [data-agilo-streaming-text] { min-height: 160px; }
 }
 </style>
 
