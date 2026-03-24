@@ -296,6 +296,11 @@
       this.state.committedText,
       this.state.partialText
     ]);
+    var ta = this.els.text;
+    if (ta.scrollHeight > ta.clientHeight) {
+      ta.style.height = "auto";
+      ta.style.height = Math.min(ta.scrollHeight + 4, window.innerHeight * 0.5) + "px";
+    }
   };
 
   AgiloLiveVoiceController.prototype._updateLevel = function (chunk) {
