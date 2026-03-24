@@ -2,19 +2,30 @@
 <style>
 /* ── Variables Agilotext ─────────────────────────────────────────── */
 :root {
-  --agilo-primary:  #174A96;
-  --agilo-accent:   #FD7D13;
-  --agilo-bg:       #F7F8FA;
-  --agilo-card:     #FFFFFF;
-  --agilo-border:   #E2E6ED;
-  --agilo-text:     #1E2A3A;
-  --agilo-muted:    #6B7A8D;
-  --agilo-timer:    var(--agilo-muted);
-  --agilo-timer-sep:var(--agilo-text);
-  --agilo-radius:   14px;
-  --agilo-shadow:   0 2px 12px rgba(0,0,0,.06);
-  --agilo-green:    #1C661A;
-  --agilo-red:      #C0392B;
+  --agilo-primary: var(--color--blue, #174a96);
+  --agilo-primary-soft: color-mix(in srgb, var(--color--blue, #174a96) 18%, transparent);
+  --agilo-text: var(--color--gris_foncé, #020202);
+  --agilo-dim: var(--color--gris, #525252);
+  --agilo-surface: var(--color--white, #ffffff);
+  --agilo-surface-2: var(--color--blanc_gris, #f8f9fa);
+  --agilo-border: var(--color--noir_25, #343a4040);
+  --agilo-divider: color-mix(in srgb, var(--agilo-text) 14%, transparent);
+  --agilo-shadow:
+    0 1px 2px color-mix(in srgb, var(--agilo-text) 8%, transparent),
+    0 4px 10px color-mix(in srgb, var(--agilo-text) 6%, transparent);
+  --agilo-radius: var(--0-5_radius, .5rem);
+  --agilo-gap: .625rem;
+  --agilo-focus: 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent);
+
+  /* Alias compat pour le CSS existant du composant */
+  --agilo-accent: var(--color--orange, #fd7e14);
+  --agilo-bg: var(--agilo-surface-2);
+  --agilo-card: var(--agilo-surface);
+  --agilo-muted: var(--agilo-dim);
+  --agilo-timer: var(--agilo-dim);
+  --agilo-timer-sep: var(--agilo-text);
+  --agilo-green: var(--color--vert, #1c661a);
+  --agilo-red: var(--color--rouge, #a82633);
 }
 
 /* ── Carte principale ────────────────────────────────────────────── */
@@ -82,32 +93,9 @@
 }
 
 /* ═══════════ PANEL FICHIER ═══════════ */
-.panel-file-title { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
-.upload-zone-placeholder {
-  border: 2px dashed var(--agilo-border); border-radius: 10px; padding: 2.5rem 1rem;
-  text-align: center; color: var(--agilo-muted); font-size: .875rem;
-  transition: border-color .25s, background .25s; cursor: pointer;
-}
-.upload-zone-placeholder:hover { border-color: var(--agilo-primary); background: rgba(23,74,150,.03); }
-.upload-zone-placeholder .browse { color: var(--agilo-primary); text-decoration: underline; font-weight: 500; }
-
-/* Toggle */
-.checkbox-component.multiple-audios {
-  display: flex; align-items: center; gap: .65rem; margin-top: 1rem; font-size: .8125rem; position: relative;
-}
-.checkbox-component.multiple-audios .text-size-small { color: var(--agilo-muted); }
-.checkbox-component.multiple-audios .checkbox_toggle {
-  position: relative; width: 38px; height: 22px; background: #CDD5DF; border-radius: 12px;
-  transition: background .25s; cursor: pointer; flex-shrink: 0;
-}
-.checkbox-component.multiple-audios .checkbox_toggle::after {
-  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.15); transition: transform .25s;
-}
-.checkbox-component.multiple-audios .checkbox_toggle.w--redirected-checked { background: var(--agilo-accent); }
-.checkbox-component.multiple-audios .checkbox_toggle.w--redirected-checked::after { transform: translateX(16px); }
-.checkbox-component.multiple-audios .checkbox-label { display: none; }
-.checkbox-component.multiple-audios .absolute-link { position: absolute; inset: 0; z-index: 1; }
+/* Le contenu fichier (FilePond, toggle envoi multiple, etc.)
+   vient du formulaire Webflow natif positionné sous cet embed.
+   Aucun markup dupliqué ici. */
 
 /* ═══════════ PANEL YOUTUBE ═══════════ */
 .youtube-panel-inner h5 { font-size: .95rem; font-weight: 600; margin-bottom: .75rem; }
@@ -261,19 +249,7 @@
 
   <div class="source-panels">
     <div class="source-panel active" id="panel-file" role="tabpanel">
-      <div class="panel-file-title">Uploadez votre fichier audio ou vidéo ici :</div>
-      <div class="checkbox-component multiple-audios">
-        <a href="/app/business/dashboard/multi-file-upload" class="text-size-small text-color-grey" style="text-decoration:none;color:inherit;">Envoi multiple</a>
-        <label class="w-checkbox checkbox-field inverse">
-          <div class="w-checkbox-input w-checkbox-input--inputType-custom checkbox_toggle w--redirected-checked"></div>
-          <input name="toggle-format-transcript-2" type="checkbox" id="toggle-format-transcript-2" style="opacity:0;position:absolute;z-index:-1" checked>
-          <span class="checkbox-label w-form-label" for="toggle-format-transcript-2">Off/ On</span>
-        </label>
-        <div class="text-size-small text-color-grey">Envoi unique</div>
-      </div>
-      <div class="uploader" style="margin-top:1rem;">
-        <div class="upload-zone-placeholder">Glissez-déposez votre fichier audio (M4A, MP3, MP4, WAV) ou <span class="browse">Parcourir</span></div>
-      </div>
+      <!-- Le contenu fichier (FilePond, toggle, etc.) vient du formulaire Webflow natif en dessous de cet embed -->
     </div>
 
     <div class="source-panel" id="panel-youtube" role="tabpanel">
