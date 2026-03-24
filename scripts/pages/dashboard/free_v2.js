@@ -642,19 +642,22 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Validation selon la source
+      if (uploadSource === 'dictation') {
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
       if (uploadSource === 'youtube') {
-        // FREE : on force l'upsell, pas d'envoi YouTube
         showUpsell();
         form.dataset.sending = '0';
         window.removeEventListener('beforeunload', beforeUnloadGuard);
         return;
-      } else {
-        if (!pond || pond.getFiles().length === 0) {
-          showError('audioNotFound');
-          form.dataset.sending = '0';
-          window.removeEventListener('beforeunload', beforeUnloadGuard);
-          return;
-        }
+      }
+      if (!pond || pond.getFiles().length === 0) {
+        showError('audioNotFound');
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
       }
 
       if (!globalToken) {

@@ -600,6 +600,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Validation selon la source
+      if (uploadSource === 'dictation') {
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
       if (uploadSource === 'youtube') {
         if (!youtubeInput || !youtubeInput.value) {
           showError('youtubeInvalid'); alert('Veuillez saisir une URL YouTube');
