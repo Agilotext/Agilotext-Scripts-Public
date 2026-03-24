@@ -14,7 +14,7 @@
     5. streaming-ent-loader.js
 
   NE PAS ajouter en plus :
-    - agilo-live-transcribe.js (l’ancien speechmatics-streaming.js redirige vers ce fichier)
+    - agilo-live-transcribe.js (speechmatics-streaming.js = même bundle, URL historique)
     - mount-streaming.js
     (le loader les charge déjà → doublon = timer / boutons cassés)
 

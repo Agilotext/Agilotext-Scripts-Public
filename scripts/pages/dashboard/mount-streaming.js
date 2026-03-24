@@ -130,10 +130,9 @@ window.mountAgiloLiveVoice = mountAgiloLiveVoice;
 
 // ── Auto-bootstrap (mode externe, sans patch direct ent/pro/free) ─
 (function bootstrapAgiloLiveVoice() {
-  var MAX_ATTEMPTS = 40;
-  var RETRY_MS = 300;
+  var MAX_ATTEMPTS = 80;
+  var RETRY_MS = 250;
   var attempt = 0;
-  var mounted = false;
 
   function hasDashboardDeps() {
     return (
@@ -154,16 +153,15 @@ window.mountAgiloLiveVoice = mountAgiloLiveVoice;
   }
 
   function tryMount() {
-    if (mounted || window.__agiloLiveVoiceMounted) return true;
+    if (window.__agiloLiveVoiceMounted) return true;
     if (!hasDashboardDeps() || !hasStreamingDeps()) return false;
     try {
       mountAgiloLiveVoice();
-      mounted = true;
-      return true;
     } catch (err) {
       console.error("Agilo live voice mount failed:", err);
       return false;
     }
+    return !!window.__agiloLiveVoiceMounted;
   }
 
   function schedule() {
