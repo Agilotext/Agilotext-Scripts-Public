@@ -46,6 +46,104 @@ async function fetchAgiloLiveVoiceSession({ email, token, edition }) {
   return data;
 }
 
+// ── Popup d'upsell Free (limites dictée) ────────────────────────
+function showDicteeLimitModal(reason) {
+  if (document.getElementById("agilo-dictee-limit-modal")) return;
+
+  var isDaily = reason === "max_daily_usage";
+  var title = isDaily
+    ? "Limite quotidienne atteinte"
+    : "Durée maximale atteinte (30 min)";
+  var desc = isDaily
+    ? "Vous avez utilisé votre <strong>dictée en direct gratuite</strong> pour aujourd'hui. Passez en Pro pour un accès illimité, ou en Business pour des comptes rendus avec l'IA Mistral 100% française."
+    : "La durée maximale de <strong>30 minutes</strong> a été atteinte. Votre dictée a été envoyée pour transcription. Pour des dictées plus longues, passez à un abonnement supérieur.";
+
+  var overlay = document.createElement("div");
+  overlay.id = "agilo-dictee-limit-modal";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFadeIn .2s ease";
+
+  var panel = document.createElement("div");
+  panel.style.cssText = "position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloSlideUp .25s ease";
+
+  var closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.style.cssText = "position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem";
+  closeBtn.textContent = "\u00D7";
+  closeBtn.onclick = function () { overlay.remove(); };
+
+  var icon = document.createElement("div");
+  icon.style.cssText = "font-size:2.5rem;margin-bottom:.6rem";
+  icon.textContent = isDaily ? "\u26A0\uFE0F" : "\u23F1\uFE0F";
+
+  var h3 = document.createElement("h3");
+  h3.style.cssText = "margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202";
+  h3.textContent = title;
+
+  var p = document.createElement("p");
+  p.style.cssText = "margin:0 0 1.4rem;font-size:.88rem;line-height:1.55;color:#525252";
+  p.innerHTML = desc;
+
+  var btnPro = document.createElement("button");
+  btnPro.type = "button";
+  btnPro.setAttribute("data-ms-price:update", "prc_pro-qn9f07eb");
+  btnPro.style.cssText = "display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.75rem 1rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.92rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s";
+  btnPro.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="#fff"><rect fill="none" height="24" width="24"/><path d="M9.68,13.69L12,11.93l2.31,1.76-.88-2.85L15.75,9h-2.84L12,6.19 11.09,9H8.25l2.31,1.84-.88,2.85zM20,10c0-4.42-3.58-8-8-8s-8,3.58-8,8c0,2.03.76,3.87,2,5.28V23l6-2 6,2v-7.72C19.24,13.87,20,12.03,20,10zM12,4c3.31,0,6,2.69,6,6s-2.69,6-6,6-6-2.69-6-6S8.69,4,12,4z"/></svg> Passer en Pro \u2014 7 jours gratuits';
+  btnPro.onmouseover = function () { btnPro.style.background = "#12397A"; };
+  btnPro.onmouseout = function () { btnPro.style.background = "#174a96"; };
+  btnPro.onclick = function () {
+    overlay.remove();
+    var existing = document.querySelector('[data-ms-price\\:update^="prc_pro-"]');
+    if (existing && existing !== btnPro) { existing.click(); return; }
+    var link = document.querySelector('a[href*="sign-up-pro"]');
+    if (link) { link.click(); return; }
+    window.location.href = "/auth/sign-up-pro";
+  };
+
+  var btnBiz = document.createElement("button");
+  btnBiz.type = "button";
+  btnBiz.setAttribute("data-ms-price:update", "prc_business-1-seat-aj1780sye");
+  btnBiz.style.cssText = "display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.65rem 1rem;margin-top:.55rem;background:transparent;color:#174a96;border:1.5px solid #174a96;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s,color .2s";
+  btnBiz.textContent = "Ou en Business (100% fran\u00E7ais, IA Mistral)";
+  btnBiz.onmouseover = function () { btnBiz.style.background = "#174a96"; btnBiz.style.color = "#fff"; };
+  btnBiz.onmouseout = function () { btnBiz.style.background = "transparent"; btnBiz.style.color = "#174a96"; };
+  btnBiz.onclick = function () {
+    overlay.remove();
+    var existing = document.querySelector('[data-ms-price\\:update^="prc_business-"]');
+    if (existing && existing !== btnBiz) { existing.click(); return; }
+    var link = document.querySelector('a[href*="sign-up-business"]');
+    if (link) { link.click(); return; }
+  };
+
+  var later = document.createElement("button");
+  later.type = "button";
+  later.style.cssText = "display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline";
+  later.textContent = "Plus tard";
+  later.onclick = function () { overlay.remove(); };
+
+  panel.appendChild(closeBtn);
+  panel.appendChild(icon);
+  panel.appendChild(h3);
+  panel.appendChild(p);
+  panel.appendChild(btnPro);
+  panel.appendChild(btnBiz);
+  panel.appendChild(later);
+  overlay.appendChild(panel);
+
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  if (!document.getElementById("agilo-limit-modal-anim")) {
+    var style = document.createElement("style");
+    style.id = "agilo-limit-modal-anim";
+    style.textContent = "@keyframes agiloFadeIn{from{opacity:0}to{opacity:1}}@keyframes agiloSlideUp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}";
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(overlay);
+}
+
 // ── Montage du contrôleur dictée live ────────────────────────────
 function mountAgiloLiveVoice() {
   if (window.__agiloLiveVoiceMounted) return;
@@ -161,12 +259,7 @@ function mountAgiloLiveVoice() {
     },
 
     onLimitReached: function (reason) {
-      if (reason === "max_daily_usage") {
-        showError("tooMuchTraffic");
-        alert("Vous avez atteint votre limite quotidienne de dictée en direct. Passez en Pro pour un accès illimité.");
-      } else if (reason === "max_duration") {
-        alert("La durée maximale de 30 minutes a été atteinte. Votre dictée est en cours d'envoi.");
-      }
+      showDicteeLimitModal(reason);
     },
 
     onError: function (key) {
