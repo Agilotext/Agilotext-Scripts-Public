@@ -144,6 +144,78 @@ function showDicteeLimitModal(reason) {
   document.body.appendChild(overlay);
 }
 
+// ── Modale réseau bloqué (WebSocket → firewall/proxy entreprise) ─
+function showDicteeNetworkBlockedModal() {
+  if (document.getElementById("agilo-dictee-network-modal")) return;
+
+  var overlay = document.createElement("div");
+  overlay.id = "agilo-dictee-network-modal";
+  overlay.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFadeIn .2s ease";
+
+  var panel = document.createElement("div");
+  panel.style.cssText = "position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(500px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloSlideUp .25s ease";
+
+  var closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.setAttribute("aria-label", "Fermer");
+  closeBtn.style.cssText = "position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem";
+  closeBtn.textContent = "\u00D7";
+  closeBtn.onclick = function () { overlay.remove(); };
+
+  var icon = document.createElement("div");
+  icon.style.cssText = "font-size:2.5rem;margin-bottom:.6rem";
+  icon.textContent = "\uD83D\uDEE1\uFE0F";
+
+  var h3 = document.createElement("h3");
+  h3.style.cssText = "margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202";
+  h3.textContent = "Connexion bloqu\u00E9e par votre r\u00E9seau";
+
+  var p = document.createElement("p");
+  p.style.cssText = "margin:0 0 1.2rem;font-size:.88rem;line-height:1.6;color:#525252;text-align:left";
+  p.innerHTML =
+    "La dict\u00E9e en direct n\u00E9cessite une connexion WebSocket vers notre service vocal. " +
+    "Votre r\u00E9seau (proxy, pare-feu d\u2019entreprise ou VPN) bloque cette connexion.<br><br>" +
+    "<strong>Solutions :</strong>" +
+    "<ul style='margin:.5rem 0 0 1.2rem;padding:0;text-align:left;font-size:.85rem;line-height:1.6'>" +
+    "<li>Utilisez un r\u00E9seau Wi-Fi personnel ou un partage de connexion mobile.</li>" +
+    "<li>D\u00E9sactivez votre VPN si vous en utilisez un.</li>" +
+    "<li>Demandez \u00E0 votre service informatique d\u2019autoriser <code style='background:#f1f3f5;padding:1px 5px;border-radius:4px;font-size:.82rem'>eu.rt.speechmatics.com</code> (port 443, WSS).</li>" +
+    "</ul><br>" +
+    "En attendant, vous pouvez enregistrer votre audio avec l\u2019onglet <strong>Fichier</strong> et l\u2019envoyer normalement.";
+
+  var okBtn = document.createElement("button");
+  okBtn.type = "button";
+  okBtn.style.cssText = "display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.7rem 1.6rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.9rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .2s;margin-top:.4rem";
+  okBtn.textContent = "Compris";
+  okBtn.onmouseover = function () { okBtn.style.background = "#12397A"; };
+  okBtn.onmouseout = function () { okBtn.style.background = "#174a96"; };
+  okBtn.onclick = function () {
+    overlay.remove();
+    var fileTab = document.querySelector('.source-tab[data-tab="file"]');
+    if (fileTab) fileTab.click();
+  };
+
+  panel.appendChild(closeBtn);
+  panel.appendChild(icon);
+  panel.appendChild(h3);
+  panel.appendChild(p);
+  panel.appendChild(okBtn);
+  overlay.appendChild(panel);
+
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  if (!document.getElementById("agilo-limit-modal-anim")) {
+    var style = document.createElement("style");
+    style.id = "agilo-limit-modal-anim";
+    style.textContent = "@keyframes agiloFadeIn{from{opacity:0}to{opacity:1}}@keyframes agiloSlideUp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}";
+    document.head.appendChild(style);
+  }
+
+  document.body.appendChild(overlay);
+}
+
 /**
  * Même logique que le bloc « else » après sendWithRetry dans pro_v2.js / free_v2.js /
  * upload_ent_v2.js (erreurs API + préfixes __network__: pour fetchWithTimeout).
@@ -359,6 +431,10 @@ function mountAgiloLiveVoice() {
 
     onLimitReached: function (reason) {
       showDicteeLimitModal(reason);
+    },
+
+    onNetworkBlocked: function () {
+      showDicteeNetworkBlockedModal();
     },
 
     onError: function (rawOrPresetKey) {

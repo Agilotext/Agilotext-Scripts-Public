@@ -574,8 +574,22 @@
       .catch(function (err) {
         console.error(err);
         self.resetTimer();
-        self.setStatus("idle", "Erreur");
-        if (self.config.onError) self.config.onError("default");
+        var msg = (err && err.message) || "";
+        if (msg === "rt_channel_error" || msg === "rt_stream_error") {
+          self.setStatus("idle", "Connexion bloquée");
+          if (self.config.onNetworkBlocked) {
+            self.config.onNetworkBlocked(msg);
+          } else if (self.config.onError) {
+            self.config.onError("default");
+          }
+        } else if (msg === "NotAllowedError" || msg === "Permission denied" ||
+                   (err && err.name === "NotAllowedError")) {
+          self.setStatus("idle", "Micro refusé");
+          if (self.config.onError) self.config.onError("default");
+        } else {
+          self.setStatus("idle", "Erreur");
+          if (self.config.onError) self.config.onError("default");
+        }
       });
   };
 
@@ -611,7 +625,14 @@
       .then(function () { self.setStatus("recording", "En écoute..."); self.startTimer(); })
       .catch(function (err) {
         console.error(err);
-        if (self.config.onError) self.config.onError("default");
+        var msg = (err && err.message) || "";
+        if (msg === "rt_channel_error" || msg === "rt_stream_error") {
+          self.setStatus("paused", "Connexion bloquée");
+          if (self.config.onNetworkBlocked) self.config.onNetworkBlocked(msg);
+          else if (self.config.onError) self.config.onError("default");
+        } else {
+          if (self.config.onError) self.config.onError("default");
+        }
       });
   };
 
