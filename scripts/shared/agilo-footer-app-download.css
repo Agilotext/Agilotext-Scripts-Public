@@ -1,0 +1,103 @@
+/**
+ * agilo-footer-app-download.css
+ * Affichage du QR au survol (desktop) pour la section « Télécharger l'application »
+ * du footer Webflow.
+ *
+ * Structure attendue :
+ *   .footer-download-item (Div parent, position relative)
+ *     → a.footer_link.--download (ou combo équivalent)
+ *     → .footer-app-qr > img
+ *
+ * Injection Webflow : Site settings → Custom code → Head (entourer de <style>...</style>)
+ * ou héberger ce fichier et lier avec <link rel="stylesheet" href="...">.
+ */
+
+/* Conteneur d’une ligne App Store / Google Play */
+.footer-download-item {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* Popover QR : caché par défaut */
+.footer-download-item .footer-app-qr {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease,
+    transform 0.2s ease;
+  z-index: 50;
+}
+
+.footer-download-item .footer-app-qr img {
+  display: block;
+  width: 120px;
+  height: auto;
+  max-width: min(120px, 28vw);
+  vertical-align: middle;
+}
+
+/* Survol souris + focus clavier sur le lien */
+.footer-download-item:hover .footer-app-qr,
+.footer-download-item:focus-within .footer-app-qr {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+/* Variante : QR à l’intérieur du lien (si tu coches tout dans un seul Link block) */
+.footer_link.--download {
+  position: relative;
+}
+
+.footer_link.--download .footer-app-qr {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  padding: 10px;
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition:
+    opacity 0.2s ease,
+    visibility 0.2s ease,
+    transform 0.2s ease;
+  z-index: 50;
+}
+
+.footer_link.--download:hover .footer-app-qr,
+.footer_link.--download:focus-within .footer-app-qr {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.footer_link.--download .footer-app-qr img {
+  display: block;
+  width: 120px;
+  height: auto;
+}
+
+/* Mobile / tablette : pas de hover fiable — masquer les QR */
+@media (max-width: 991px) {
+  .footer-app-qr {
+    display: none !important;
+  }
+}

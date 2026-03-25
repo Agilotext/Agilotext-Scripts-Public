@@ -19,13 +19,21 @@ scripts/
 │   └── editor/             # Scripts de la page Éditeur
 │       └── relance-compte-rendu.js  # Relance/régénération compte-rendu
 │
-└── shared/                 # Fonctions partagées (futur)
-    └── (à venir)
+└── shared/                 # Scripts et styles partagés (dictée, bannière app, etc.)
+    ├── agilo-live-transcribe.js      # WebSocket Speechmatics temps réel
+    ├── speechmatics-streaming.js
+    ├── pcm-audio-worklet.js
+    ├── agilo-mobile-app-banner.js    # Bannière « Télécharger l’app » (dashboard mobile)
+    └── agilo-footer-app-download.css # QR stores au survol (footer Webflow)
 ```
 
 ---
 
 ## 📋 Utilisation dans Webflow
+
+Repo CDN : **`Agilotext/Agilotext-Scripts-Public`** (branche `main`). Préférer **jsDelivr** pour servir les fichiers :
+
+`https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/chemin/vers/fichier`
 
 ### Page Dashboard ENT
 ```html
@@ -45,6 +53,24 @@ scripts/
 ### Page Éditeur (Relance Compte-Rendu)
 ```html
 <script src="https://raw.githubusercontent.com/Agilotext/Client/main/scripts/pages/editor/relance-compte-rendu.js"></script>
+```
+
+### Bannière app mobile (après connexion, chemins `/app/...`)
+
+Ajouter **après** `ent.js` / `pro.js` / `free.js` (Custom code ou Embed avec balise `script`) :
+
+```html
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-mobile-app-banner.js"></script>
+```
+
+QA bureau : ajouter `?agilo_banner_test=1` sur une URL `/app/...`.
+
+### Footer — QR App Store / Play (CSS global)
+
+Head Webflow :
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-footer-app-download.css">
 ```
 
 ---
@@ -70,4 +96,6 @@ scripts/
 - `pages/dashboard/youtube-transcription.js` (à venir)
 - `shared/utils.js` (fonctions partagées)
 - `shared/api-helpers.js` (helpers API)
+
+Documentation détaillée bannière + footer QR : voir le dépôt **AgilotextMobile** (`docs/WEBFLOW_MOBILE_BANNER_AND_FOOTER_QR.md`).
 
