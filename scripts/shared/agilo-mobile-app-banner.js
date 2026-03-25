@@ -1,6 +1,6 @@
 /**
  * agilo-mobile-app-banner.js
- * Smart banner (bas d'écran) sur le dashboard Webflow quand l'utilisateur
+ * Smart banner (bas d'écran) sur le site Webflow quand l'utilisateur
  * est sur mobile (UA + largeur < 1024). Propose l'ouverture App Store / Play Store.
  *
  * IMPORTANT — Ne pas utiliser un « Embed » Webflow pour coller ce fichier brut :
@@ -10,8 +10,11 @@
  *
  * localStorage : agilo_app_banner_dismissed = timestamp (ms) ; pas de ré-affichage 7 jours.
  *
- * QA sur bureau : ajouter ?agilo_banner_test=1 à l’URL (sur une page /app/...) pour
- * forcer l’affichage (ignore UA, largeur, dismiss et délai court).
+ * QA sur bureau : ajouter ?agilo_banner_test=1 à l’URL pour forcer l’affichage
+ * (ignore UA, largeur, dismiss et délai court).
+ *
+ * Portée : toutes les pages du site, sauf denylist (ex. /auth/post-login, bridges mobile,
+ * /style-guide). Inclut accueil, login, inscription, blog, légal, /app/, outils.
  */
 (function () {
   'use strict';
@@ -28,6 +31,35 @@
 
   var BANNER_ID = 'agilo-mobile-app-banner';
 
+  /** Pas de bannière sur ces préfixes (redirects courts, bridges mobile, page interne). */
+  var PATH_DENYLIST_PREFIXES = [
+    '/style-guide',
+    '/auth/post-login',
+    '/auth/mobile-auth',
+    '/auth/auth-mobile-apple'
+  ];
+
+  function normalizedPathname() {
+    var p = window.location.pathname || '';
+    if (p === '' || p === '/') {
+      return '/';
+    }
+    return p.replace(/\/+$/, '');
+  }
+
+  function isPathAllowedForBanner() {
+    var p = normalizedPathname();
+    var i;
+    var d;
+    for (i = 0; i < PATH_DENYLIST_PREFIXES.length; i++) {
+      d = PATH_DENYLIST_PREFIXES[i];
+      if (p === d || p.indexOf(d + '/') === 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   function getTestMode() {
     try {
       return (
@@ -43,7 +75,7 @@
   var TEST_MODE = getTestMode();
   var showDelayMs = TEST_MODE ? SHOW_DELAY_TEST_MS : SHOW_DELAY_MS;
 
-  if (!/^\/app\//.test(window.location.pathname || '')) {
+  if (!isPathAllowedForBanner()) {
     return;
   }
 
