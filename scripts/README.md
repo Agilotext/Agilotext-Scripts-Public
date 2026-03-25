@@ -23,7 +23,7 @@ scripts/
     ├── agilo-live-transcribe.js      # WebSocket Speechmatics temps réel
     ├── speechmatics-streaming.js
     ├── pcm-audio-worklet.js
-    ├── agilo-mobile-app-banner.js    # Bannière « Télécharger l’app » (dashboard mobile)
+    ├── agilo-mobile-app-banner.js    # Bannière « Télécharger l’app » (site mobile, sauf denylist)
     └── agilo-footer-app-download.css # QR stores au survol (footer Webflow)
 ```
 
@@ -55,15 +55,17 @@ Repo CDN : **`Agilotext/Agilotext-Scripts-Public`** (branche `main`). Préférer
 <script src="https://raw.githubusercontent.com/Agilotext/Client/main/scripts/pages/editor/relance-compte-rendu.js"></script>
 ```
 
-### Bannière app mobile (après connexion, chemins `/app/...`)
+### Bannière app mobile (toutes les pages utiles sauf denylist)
 
-Ajouter **après** `ent.js` / `pro.js` / `free.js` (Custom code ou Embed avec balise `script`) :
+Le script s’affiche sur **accueil, blog, légal, `/auth/*` (login, sign-up, …), `/app/*`, outils**, etc. Il **ne** s’affiche **pas** sur quelques chemins techniques (`/auth/post-login`, `/auth/mobile-auth`, `/auth/auth-mobile-apple`, `/style-guide`).
+
+Ajouter en **Footer code** site (ou après `ent.js` / `pro.js` / `free.js` sur le dashboard) :
 
 ```html
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-mobile-app-banner.js"></script>
 ```
 
-QA bureau : ajouter `?agilo_banner_test=1` sur une URL `/app/...`.
+QA bureau : ajouter `?agilo_banner_test=1` sur n’importe quelle page autorisée (ex. `/` ou `/auth/login`).
 
 ### Footer — QR App Store / Play (CSS global)
 
