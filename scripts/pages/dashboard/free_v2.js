@@ -1,5 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
+ * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * Remplace le code inline du footer Webflow Free.
  * Ne pas modifier free.js (version precedente, encore live).
  */
@@ -222,24 +223,30 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Fonction pour vérifier/rafraîchir le token
-  async function ensureValidToken(email) {
-    if (!globalToken) {
-      try {
-        const response = await fetch(`https://api.agilotext.com/api/v1/getToken?username=${encodeURIComponent(email)}&edition=${edition}`);
-        const data = await response.json();
-        if (data.status === 'OK') {
-          globalToken = data.token;
-          window.globalToken = data.token;
-          console.log('Token récupéré automatiquement');
-          return true;
-        }
-      } catch (err) {
-        console.error('Erreur lors de la récupération du token:', err);
+  async function refreshAgiloTokenFromApi(email) {
+    const em = email && String(email).trim();
+    if (!em) return false;
+    try {
+      const response = await fetch(
+        `https://api.agilotext.com/api/v1/getToken?username=${encodeURIComponent(em)}&edition=${edition}`
+      );
+      const data = await response.json();
+      if (data.status === 'OK' && data.token) {
+        globalToken = data.token;
+        window.globalToken = data.token;
+        return true;
       }
-      return false;
+    } catch (err) {
+      console.error('Erreur lors de la récupération du token:', err);
     }
-    return true;
+    return false;
+  }
+
+  async function ensureValidToken(email, forceRefresh) {
+    if (!forceRefresh && globalToken) return true;
+    const ok = await refreshAgiloTokenFromApi(email);
+    if (ok) console.log(forceRefresh ? 'Token Agilotext rafraîchi (getToken)' : 'Token récupéré automatiquement');
+    return ok;
   }
 
   // UI du Compte-rendu (Summary)
@@ -376,13 +383,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const tokenValid = await ensureValidToken(email);
+      const tokenValid = await ensureValidToken(email, false);
       if (!tokenValid) {
         clearInterval(intId);
         window._agiloStatusInt = null;
         if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
         showError('invalidToken');
-        alert('Votre session a expiré. Veuillez rafraîchir la page.');
+        alert(
+          'Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.'
+        );
         return;
       }
 
@@ -447,16 +456,24 @@ document.addEventListener('DOMContentLoaded', () => {
               break;
           }
         })
-        .catch(err => {
+        .catch(async err => {
           consecutiveErrors++;
           console.error(`getTranscriptStatus (tentative ${pollCount}, erreurs: ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, err);
 
           if (err.type === 'invalidToken') {
+            const renewed = await refreshAgiloTokenFromApi(email);
+            if (renewed) {
+              consecutiveErrors = 0;
+              console.warn('Token Agilotext renouvelé pendant le suivi du job.');
+              return;
+            }
             clearInterval(intId);
             window._agiloStatusInt = null;
             if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
             showError('invalidToken');
-            alert('Votre session a expiré. Veuillez rafraîchir la page.');
+            alert(
+              'Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.'
+            );
             return;
           }
 
@@ -549,6 +566,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const em = (responseData && responseData.errorMessage) || '';
 
+        if (em.includes('error_invalid_token') && attempt < max) {
+          const emailForRefresh = isYouTube
+            ? data && data.username
+            : typeof data.get === 'function'
+              ? data.get('username')
+              : '';
+          if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
+          }
+        }
+
         // ⭐ non retryables (backend)
         if (
           em.includes('error_audio_format_not_supported') ||
@@ -590,6 +620,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return responseData;
       } catch (err) {
+        if (attempt < max && err && err.type === 'invalidToken') {
+          const emailForRefresh = isYouTube
+            ? data && data.username
+            : typeof data.get === 'function'
+              ? data.get('username')
+              : '';
+          if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
+          }
+        }
         if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
           if (err.type === 'offline') { await waitForOnline(); }
           else {
@@ -661,14 +703,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (!globalToken) {
+      const tokenFresh = await ensureValidToken(String(email).trim(), true);
+      if (!tokenFresh || !globalToken) {
         console.error('Token non disponible');
         if (submitBtn) submitBtn.disabled = false;
         if (formLoadingDiv) formLoadingDiv.style.display = 'none';
         form.dataset.sending = '0';
         window.removeEventListener('beforeunload', beforeUnloadGuard);
         showError('invalidToken');
-        alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page ou vous reconnecter.');
+        alert(
+          'Impossible d’obtenir un jeton d’accès Agilotext. Rechargez la page pour continuer (vous restez connecté à votre compte) ou vérifiez votre connexion.'
+        );
         return;
       }
 
