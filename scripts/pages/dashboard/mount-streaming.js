@@ -1,5 +1,6 @@
 /**
  * mount-streaming.js
+ * v1.01 (branche GitHub `1.01`) — ensureValidToken(..., true) avant auth / upload — voir webflow-login-speed-reduce-florian.md
  * ──────────────────────────────────────────────────────────────────
  * Patch d'intégration pour ent.js / pro.js / free.js
  *
@@ -331,7 +332,7 @@ function mountAgiloLiveVoice() {
     limits: window.__AGILO_DICTEE_LIMITS || null,
 
     getAgiloAuth: async function (email) {
-      var tokenOk = await ensureValidToken(email);
+      var tokenOk = await ensureValidToken(email, true);
       if (!tokenOk || !globalToken) {
         throw new Error("invalidToken");
       }
@@ -344,7 +345,7 @@ function mountAgiloLiveVoice() {
     },
 
     uploadBlob: async function ({ blob, email, options }) {
-      await ensureValidToken(email);
+      await ensureValidToken(email, true);
 
       var fd = new FormData();
 

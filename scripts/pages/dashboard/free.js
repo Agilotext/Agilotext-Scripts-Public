@@ -1,4 +1,5 @@
 // Agilotext FREE – Upload & Dashboard logic
+// v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Les CDN FilePond doivent être chargés AVANT ce script dans Webflow
 
@@ -85,6 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // YouTube upload source tabs
   const fileTabLink          = document.querySelector('[data-w-tab="File"]');
   const youtubeTabLink       = document.querySelector('[data-w-tab="YouTube"]');
+  const dictationTabLink     = document.querySelector('[data-w-tab="Dictée"]');
   const youtubeInput         = document.getElementById('youtube-url-input');
   const youtubeContainer     = document.querySelector('.youtube-input-container');
   const youtubeToggleLink    = document.querySelector('.youtube-toggle-link');
@@ -108,22 +110,50 @@ document.addEventListener('DOMContentLoaded', () => {
     youtubeNotFound: document.getElementById('form_error'),
   };
 
+  const A11Y_ERROR_LABELS = {
+    default: 'Une erreur s’est produite. Consultez le message à l’écran.',
+    tooMuchTraffic: 'Trop de demandes en ce moment. Réessayez plus tard.',
+    audioTooLong: 'La durée du fichier dépasse la limite autorisée.',
+    audioFormat: 'Format audio non pris en charge.',
+    audioNotFound: 'Aucun fichier audio à envoyer.',
+    invalidToken:
+      'Accès Agilotext expiré ou renouvelé côté serveur. Rechargez la page pour continuer — vous restez connecté à votre compte (Memberstack).',
+    invalidAudioContent: 'Le contenu audio n’a pas pu être traité.',
+    summaryLimit: 'Durée trop longue pour générer le compte-rendu avec cette option.',
+    offline: 'Pas de connexion internet.',
+    timeout: 'Délai dépassé. Réessayez plus tard.',
+    tooManyHours: 'Quota d’heures audio dépassé sur la période.',
+    unreachable: 'Le serveur est injoignable. Réessayez plus tard.',
+    youtubeInvalid: 'URL YouTube invalide.',
+    youtubePrivate: 'Vidéo YouTube inaccessible ou privée.',
+    youtubeNotFound: 'Vidéo YouTube introuvable.',
+  };
+
+  function agiloA11yAnnounce(msg) {
+    if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+      window.AgilotextA11y.announce(msg);
+    }
+  }
+
   /* ---------------- Helpers ---------------- */
   const hideAllErrors = () => Object.values(errorMessageDivs).forEach(d => d && (d.style.display='none'));
   const showError = key => {
     hideAllErrors();
     if (successDiv) successDiv.style.display = 'none';
     if (errorMessageDivs[key]) errorMessageDivs[key].style.display='block';
+    agiloA11yAnnounce(A11Y_ERROR_LABELS[key] || A11Y_ERROR_LABELS.default);
   };
   const showSuccess = () => {
     hideAllErrors();
     if (successDiv) successDiv.style.display = 'flex';
+    agiloA11yAnnounce('Demande acceptée. Transcription en cours.');
   };
   const scrollToEl = (el, offset=0) => window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset + offset, behavior:'smooth'});
 
-  // Détecter la source active (Fichier ou YouTube)
+  // Détecter la source active (Fichier, YouTube ou Dictée)
   function getActiveUploadSource() {
     // Si onglets présents, utiliser la logique des onglets
+    if (dictationTabLink && dictationTabLink.classList.contains('w--current')) return 'dictation';
     if (fileTabLink && fileTabLink.classList.contains('w--current')) return 'file';
     if (youtubeTabLink && youtubeTabLink.classList.contains('w--current')) return 'youtube';
     
@@ -204,23 +234,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Fonction pour vérifier/rafraîchir le token
-  async function ensureValidToken(email) {
-    if (!globalToken) {
-      try {
-        const response = await fetch(`https://api.agilotext.com/api/v1/getToken?username=${email}&edition=${edition}`);
-        const data = await response.json();
-        if (data.status === 'OK') {
-          globalToken = data.token;
-          console.log('Token récupéré automatiquement');
-          return true;
+  // Jeton Agilotext : le backend peut le faire tourner (ex. toutes les 12 h) — le navigateur garde l’ancien en mémoire tant qu’on ne rappelle pas getToken.
+  async function refreshAgiloTokenFromApi(email) {
+    const em = email && String(email).trim();
+    if (!em) return false;
+    try {
+      const response = await fetch(
+        `https://api.agilotext.com/api/v1/getToken?username=${encodeURIComponent(em)}&edition=${edition}`
+      );
+      const data = await response.json();
+      if (data.status === 'OK' && data.token) {
+        globalToken = data.token;
+        try {
+          window.globalToken = data.token;
+        } catch (e) {
+          /* ignore */
         }
-      } catch (err) {
-        console.error('Erreur lors de la récupération du token:', err);
+        return true;
       }
-      return false;
+    } catch (err) {
+      console.error('Erreur lors de la récupération du token:', err);
     }
-    return true;
+    return false;
+  }
+
+  /** @param forceRefresh si true, rappelle toujours getToken (ex. avant upload ou jeton serveur renouvelé) */
+  async function ensureValidToken(email, forceRefresh) {
+    if (!forceRefresh && globalToken) return true;
+    const ok = await refreshAgiloTokenFromApi(email);
+    if (ok) console.log(forceRefresh ? 'Token Agilotext rafraîchi (getToken)' : 'Token récupéré automatiquement');
+    return ok;
   }
 
   // UI du Compte-rendu (Summary)
@@ -329,13 +372,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      const tokenValid = await ensureValidToken(email);
+      const tokenValid = await ensureValidToken(email, false);
       if (!tokenValid) {
         clearInterval(intId);
         window._agiloStatusInt = null;
         loadingAnimDiv.style.display='none';
         showError('invalidToken');
-        alert('Votre session a expiré. Veuillez rafraîchir la page.');
+        alert(
+          'Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.'
+        );
         return;
       }
 
@@ -393,16 +438,24 @@ document.addEventListener('DOMContentLoaded', () => {
               break;
           }
         })
-        .catch(err=>{
+        .catch(async err=>{
           consecutiveErrors++;
           console.error(`getTranscriptStatus (tentative ${pollCount}, erreurs: ${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, err);
           
           if (err.type === 'invalidToken') {
+            const renewed = await refreshAgiloTokenFromApi(email);
+            if (renewed) {
+              consecutiveErrors = 0;
+              console.warn('Token Agilotext renouvelé pendant le suivi du job.');
+              return;
+            }
             clearInterval(intId);
             window._agiloStatusInt = null;
             loadingAnimDiv.style.display='none';
             showError('invalidToken');
-            alert('Votre session a expiré. Veuillez rafraîchir la page.');
+            alert(
+              'Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.'
+            );
             return;
           }
           
@@ -511,6 +564,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const em = (responseData && responseData.errorMessage) || '';
+        if (em.includes('error_invalid_token') && attempt < max) {
+          const emailForRefresh = isYouTube
+            ? data && data.username
+            : typeof data.get === 'function'
+              ? data.get('username')
+              : '';
+          if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
+          }
+        }
         if (
           em.includes('error_audio_format_not_supported') ||
           em.includes('error_duration_is_too_long_for_summary') ||
@@ -521,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_INVALID_YOUTUBE_URL')
         ) {
-          return data;
+          return responseData;
         }
 
         const retryableHttp = [408, 425, 429, 500, 502, 503, 504].includes(res.status);
@@ -534,6 +599,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return responseData;
 
       } catch (err) {
+        if (
+          attempt < max &&
+          err &&
+          err.type === 'invalidToken'
+        ) {
+          const emailForRefresh = isYouTube
+            ? data && data.username
+            : typeof data.get === 'function'
+              ? data.get('username')
+              : '';
+          if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
+          }
+        }
         if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
           if (err.type === 'offline') {
             await waitForOnline();
@@ -549,8 +630,359 @@ document.addEventListener('DOMContentLoaded', () => {
     throw new Error('upload_failed');
   }
 
+  /* -------------- Dictée streaming (AssemblyAI) -------------- */
+  function getStreamingEmail() {
+    const emailInput = document.querySelector('input[name="memberEmail"]');
+    return (
+      emailInput?.value ||
+      emailInput?.getAttribute('src') ||
+      emailInput?.getAttribute('data-src') ||
+      ''
+    ).trim();
+  }
+
+  async function getAssemblyAiTemporaryToken(email) {
+    const tokenOk = await ensureValidToken(email, true);
+    if (!tokenOk || !globalToken) {
+      throw new Error('agilo_token_missing');
+    }
+
+    const streamingUrl = () =>
+      `https://api.agilotext.com/api/v1/getAssemblyAiStreamingToken?username=${encodeURIComponent(email)}&token=${encodeURIComponent(globalToken)}&edition=${edition}`;
+
+    try {
+      const response = await fetchWithTimeout(streamingUrl(), { timeout: 15000 });
+      const data = await response.json();
+      if (data.status !== 'OK' || !data.token) {
+        throw new Error(data.errorMessage || 'assemblyai_temp_token_failed');
+      }
+      return data.token;
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(email))) {
+        const response2 = await fetchWithTimeout(streamingUrl(), { timeout: 15000 });
+        const data2 = await response2.json();
+        if (data2.status === 'OK' && data2.token) return data2.token;
+      }
+      throw err;
+    }
+  }
+
+  function buildStreamingUploadFormData(file, email) {
+    const fd = new FormData();
+    const speakersChecked = speakersCheckbox && speakersCheckbox.checked;
+
+    fd.append('fileUpload1', file, file.name);
+    fd.append('clientFilesLastModifiedMs', String(Date.now()));
+    fd.append('username', email);
+    fd.append('token', globalToken);
+    fd.append('edition', edition);
+    fd.append('deviceId', window.DEVICE_ID || '');
+    fd.append('mailTranscription', 'true');
+
+    fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
+    fd.append('doSummary', summaryCheckbox && summaryCheckbox.checked ? 'true' : 'false');
+
+    if (speakersChecked) {
+      fd.append('speakersExpected', speakersSelect.value || '2');
+      fd.append('formatTranscript', 'false');
+    } else {
+      fd.append(
+        'formatTranscript',
+        formatCheckbox && formatCheckbox.checked ? 'true' : 'false'
+      );
+    }
+
+    if (translateCheckbox && translateCheckbox.checked) {
+      fd.append('translateTo', translateSelect.value);
+    }
+
+    return fd;
+  }
+
+  function formatStreamingTime(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function initLiveStreamingMode() {
+    const panel = document.getElementById('live-streaming-panel');
+    if (!panel || !window.AgiloAssemblyAIStreaming) {
+      return;
+    }
+
+    const startBtn = document.getElementById('streaming-start');
+    const pauseBtn = document.getElementById('streaming-pause');
+    const resumeBtn = document.getElementById('streaming-resume');
+    const stopBtn = document.getElementById('streaming-stop');
+    const transcriptArea = document.getElementById('streaming-transcript');
+    const statusEl = document.getElementById('streaming-status');
+    const timerEl = document.getElementById('streaming-timer');
+
+    let controller = null;
+    let timerId = null;
+    let seconds = 0;
+    let currentEmail = '';
+
+    function setStatus(text) {
+      if (statusEl) {
+        statusEl.textContent = text;
+      }
+    }
+
+    function startTimer() {
+      stopTimer();
+      seconds = 0;
+      if (timerEl) {
+        timerEl.textContent = '00:00';
+      }
+
+      timerId = window.setInterval(() => {
+        seconds += 1;
+        if (timerEl) {
+          timerEl.textContent = formatStreamingTime(seconds);
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerId) {
+        window.clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function setButtons(mode) {
+      if (!startBtn || !pauseBtn || !resumeBtn || !stopBtn) {
+        return;
+      }
+
+      if (mode === 'idle') {
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = true;
+        if (transcriptArea) transcriptArea.readOnly = false;
+        return;
+      }
+
+      if (mode === 'streaming') {
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = false;
+        if (transcriptArea) transcriptArea.readOnly = true;
+        return;
+      }
+
+      if (mode === 'paused') {
+        startBtn.disabled = true;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = false;
+        stopBtn.disabled = false;
+        if (transcriptArea) transcriptArea.readOnly = false;
+        return;
+      }
+
+      if (mode === 'uploading') {
+        startBtn.disabled = true;
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = true;
+        if (transcriptArea) transcriptArea.readOnly = true;
+      }
+    }
+
+    function mapStreamingStatus(status) {
+      if (status === 'requesting-mic') return 'Autorisation micro…';
+      if (status === 'streaming') return 'Dictée en cours';
+      if (status === 'pausing') return 'Pause…';
+      if (status === 'paused') return 'En pause';
+      if (status === 'stopped') return 'Enregistrement terminé';
+      if (status === 'idle') return 'Prêt';
+      return status;
+    }
+
+    async function createControllerForEmail(email) {
+      return window.AgiloAssemblyAIStreaming.createController({
+        getTemporaryToken: function () {
+          return getAssemblyAiTemporaryToken(email);
+        },
+        onText: function (text) {
+          if (transcriptArea) {
+            transcriptArea.value = text;
+          }
+        },
+        onStatus: function (status) {
+          setStatus(mapStreamingStatus(status));
+        },
+        onError: function (error) {
+          console.error('Streaming error:', error);
+          stopTimer();
+          setButtons('idle');
+          setStatus('Erreur streaming');
+          showError('default');
+        }
+      });
+    }
+
+    async function startStreaming() {
+      currentEmail = getStreamingEmail();
+
+      if (!currentEmail) {
+        showError('invalidToken');
+        return;
+      }
+
+      hideAllErrors();
+
+      if (transcriptArea) {
+        transcriptArea.value = '';
+      }
+
+      controller = await createControllerForEmail(currentEmail);
+
+      await controller.start({
+        speakerLabels: !!(speakersCheckbox && speakersCheckbox.checked),
+        maxSpeakers: Number((speakersSelect && speakersSelect.value) || 2)
+      });
+
+      setButtons('streaming');
+      startTimer();
+    }
+
+    async function pauseStreaming() {
+      if (!controller) {
+        return;
+      }
+
+      await controller.pause(transcriptArea ? transcriptArea.value : '');
+      setButtons('paused');
+    }
+
+    async function resumeStreaming() {
+      if (!controller) {
+        return;
+      }
+
+      await controller.resume(
+        {
+          speakerLabels: !!(speakersCheckbox && speakersCheckbox.checked),
+          maxSpeakers: Number((speakersSelect && speakersSelect.value) || 2)
+        },
+        transcriptArea ? transcriptArea.value : ''
+      );
+
+      setButtons('streaming');
+    }
+
+    async function stopStreamingAndUpload() {
+      if (!controller) {
+        return;
+      }
+
+      try {
+        hideAllErrors();
+        setButtons('uploading');
+        setStatus('Préparation du fichier…');
+        stopTimer();
+
+        if (formLoadingDiv) {
+          formLoadingDiv.style.display = 'block';
+        }
+
+        const result = await controller.stop(transcriptArea ? transcriptArea.value : '');
+        const formData = buildStreamingUploadFormData(result.file, currentEmail);
+
+        setStatus('Upload du fichier audio…');
+        const data = await sendWithRetry(formData, 3, false);
+
+        if (!data || data.status !== 'OK') {
+          const err = data && data.errorMessage ? data.errorMessage : '';
+          if (err.includes('error_audio_format_not_supported')) showError('audioFormat');
+          else if (err.includes('error_audio_file_not_found')) showError('audioNotFound');
+          else if (err.includes('error_invalid_token')) showError('invalidToken');
+          else if (err.includes('error_duration_is_too_long_for_summary')) showError('summaryLimit');
+          else if (err.includes('error_duration_is_too_long')) showError('audioTooLong');
+          else showError('default');
+
+          setButtons('idle');
+          setStatus('Erreur');
+          return;
+        }
+
+        const jobId = data.jobIdList[0];
+        localStorage.setItem('currentJobId', jobId);
+        document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
+
+        if (successDiv) {
+          successDiv.style.display = 'flex';
+        }
+
+        if (loadingAnimDiv) {
+          loadingAnimDiv.style.display = 'block';
+        }
+
+        setStatus('Traitement Agilotext en cours…');
+        checkTranscriptStatus(jobId, currentEmail);
+        setButtons('idle');
+      } catch (error) {
+        console.error('Stop/upload streaming error:', error);
+        showError('default');
+        setButtons('idle');
+        setStatus('Erreur');
+      } finally {
+        if (formLoadingDiv) {
+          formLoadingDiv.style.display = 'none';
+        }
+
+        if (controller) {
+          await controller.destroy();
+        }
+
+        controller = null;
+      }
+    }
+
+    startBtn && startBtn.addEventListener('click', function () {
+      startStreaming().catch((error) => {
+        console.error(error);
+        showError('default');
+        setButtons('idle');
+      });
+    });
+
+    pauseBtn && pauseBtn.addEventListener('click', function () {
+      pauseStreaming().catch((error) => {
+        console.error(error);
+        showError('default');
+        setButtons('idle');
+      });
+    });
+
+    resumeBtn && resumeBtn.addEventListener('click', function () {
+      resumeStreaming().catch((error) => {
+        console.error(error);
+        showError('default');
+        setButtons('idle');
+      });
+    });
+
+    stopBtn && stopBtn.addEventListener('click', function () {
+      stopStreamingAndUpload().catch((error) => {
+        console.error(error);
+        showError('default');
+        setButtons('idle');
+      });
+    });
+
+    setButtons('idle');
+    setStatus('Prêt');
+  }
+
+
   /* -------------- SUBMIT -------------- */
-  form.addEventListener('submit', e => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideAllErrors();
     if (successDiv) successDiv.style.display='none';
@@ -564,7 +996,14 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('📤 Submit - Source détectée:', uploadSource);
     console.log('📤 YouTube container visible:', youtubeContainer?.classList.contains('is-visible'));
     console.log('📤 YouTube input value:', youtubeInput?.value);
-    
+
+    if (uploadSource === 'dictation') {
+      form.dataset.sending = '0';
+      window.removeEventListener('beforeunload', beforeUnloadGuard);
+      alert('Pour la dictée en direct, utilisez le bouton « Stop & envoyer » dans le panneau Dictée.');
+      return;
+    }
+
     // ⭐ Pour YouTube, créer un FormData vide pour éviter les champs de fichier
     const fd = uploadSource === 'youtube' ? new FormData() : new FormData(form);
     
@@ -617,26 +1056,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     }
 
-    if(!globalToken){
+    const tokenFresh = await ensureValidToken(String(email).trim(), true);
+    if (!tokenFresh || !globalToken) {
       console.error('Token non disponible');
-      submitBtn.disabled=false;
-      formLoadingDiv.style.display='none';
+      submitBtn.disabled = false;
+      formLoadingDiv.style.display = 'none';
       form.dataset.sending = '0';
       window.removeEventListener('beforeunload', beforeUnloadGuard);
-      
-      // Afficher un message d'erreur clair à l'utilisateur
-      if (!email || !email.trim()) {
-        showError('invalidToken');
-        alert('Impossible de récupérer vos informations de connexion. Cela peut être dû à une connexion internet instable. Veuillez rafraîchir la page ou vous reconnecter.');
-      } else {
-        showError('invalidToken');
-        alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page ou vous reconnecter.');
-      }
+      showError('invalidToken');
+      alert(
+        'Impossible d’obtenir un jeton d’accès Agilotext. Rechargez la page pour continuer (vous restez connecté à votre compte) ou vérifiez votre connexion.'
+      );
       return;
     }
 
     formLoadingDiv.style.display='block';
     submitBtn.disabled=true;
+    agiloA11yAnnounce('Envoi en cours. Veuillez patienter.');
 
     const speakersChecked=speakersCheckbox.checked;
     const summaryChecked=summaryCheckbox.checked;
@@ -833,5 +1269,13 @@ document.addEventListener('DOMContentLoaded', () => {
       youtubeToggleLink.setAttribute('title', 'Fonctionnalité réservée aux abonnements Pro & Business');
     }
   }
+
+  window.edition = edition;
+  window.ensureValidToken = ensureValidToken;
+  window.sendWithRetry = sendWithRetry;
+  window.checkTranscriptStatus = checkTranscriptStatus;
+  window.showError = showError;
+
+  initLiveStreamingMode();
 });
 
