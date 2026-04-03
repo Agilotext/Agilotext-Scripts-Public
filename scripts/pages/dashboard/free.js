@@ -1,5 +1,6 @@
 // Agilotext FREE – Upload & Dashboard logic
 // v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
+// v1.01+ : jeton sur actions longues — refresh avant upload post-dictée, retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Les CDN FilePond doivent être chargés AVANT ce script dans Webflow
 
@@ -300,50 +301,82 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* -------------- Fetch helpers -------------- */
-  function fetchTranscriptText(jobId,email){
-    if(!globalToken) return console.error('Token manquant');
-    
-    fetchWithTimeout(
-      `https://api.agilotext.com/api/v1/receiveText?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=txt`,
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(r=>r.text())
-      .then(txt=>{
-        const ta = document.getElementById('transcriptText');
-        if (ta) ta.value = txt;
-        window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail:{ text: txt }}));
-        transcriptContainer.style.display='block';
-        submitBtn.style.display='none';
-        transcriptionTabLink && transcriptionTabLink.click();
-      })
-      .catch(err=>{ 
-        console.error('receiveText:',err); 
-        showError(err.type||'default'); 
-      });
+  /* -------------- Fetch helpers (retry 1× si token expiré pendant job long) -------------- */
+  function applyTranscriptTextUI(txt) {
+    const ta = document.getElementById('transcriptText');
+    if (ta) ta.value = txt;
+    window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
+    transcriptContainer.style.display = 'block';
+    submitBtn.style.display = 'none';
+    transcriptionTabLink && transcriptionTabLink.click();
   }
 
-  function fetchSummaryText(jobId,email){
-    if(!globalToken) return console.error('Token manquant');
-    
-    fetchWithTimeout(
-      `https://api.agilotext.com/api/v1/receiveSummary?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=html`,
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(r=>r.text())
-      .then(html=>{
-        summaryText.innerHTML = adjustHtmlContent(html);
-        setSummaryUI('ready');
-        summaryContainer.style.display='block';
-        newFormBtn.style.display = newBtn.style.display = 'flex';
-        submitBtn.style.display='none';
-        summaryTabLink && summaryTabLink.click();
-        window.dispatchEvent(new Event('agilo:rehighlight'));
-      })
-      .catch(err=>{ 
-        console.error('receiveSummary:',err); 
-        showError(err.type||'default'); 
-      });
+  async function fetchTranscriptText(jobId, email) {
+    if (!email) return;
+    const url = () =>
+      `https://api.agilotext.com/api/v1/receiveText?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=txt`;
+    const run = async () => {
+      if (!globalToken) throw { type: 'invalidToken' };
+      const r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      const txt = await run();
+      applyTranscriptTextUI(txt);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          const txt2 = await run();
+          applyTranscriptTextUI(txt2);
+          return;
+        } catch (err2) {
+          console.error('receiveText (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveText:', err);
+      showError(err.type || 'default');
+    }
+  }
+
+  function applySummaryTextUI(html) {
+    summaryText.innerHTML = adjustHtmlContent(html);
+    setSummaryUI('ready');
+    summaryContainer.style.display = 'block';
+    newFormBtn.style.display = newBtn.style.display = 'flex';
+    submitBtn.style.display = 'none';
+    summaryTabLink && summaryTabLink.click();
+    window.dispatchEvent(new Event('agilo:rehighlight'));
+  }
+
+  async function fetchSummaryText(jobId, email) {
+    if (!email) return;
+    const url = () =>
+      `https://api.agilotext.com/api/v1/receiveSummary?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=html`;
+    const run = async () => {
+      if (!globalToken) throw { type: 'invalidToken' };
+      const r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      const html = await run();
+      applySummaryTextUI(html);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          const html2 = await run();
+          applySummaryTextUI(html2);
+          return;
+        } catch (err2) {
+          console.error('receiveSummary (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveSummary:', err);
+      showError(err.type || 'default');
+    }
   }
 
   /* -------------- Poll status -------------- */
@@ -387,6 +420,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (pollCount % 6 === 0) {
         const minutes = Math.floor(elapsed / 60000);
         console.log(`⏳ Traitement en cours depuis ${minutes} minute(s)...`);
+      }
+
+      // Jobs longs (jusqu’à 2 h) : éviter que le v2 expire « entre deux » polls — refresh ~toutes les 10 min (120 × 5 s)
+      if (pollCount > 1 && pollCount % 120 === 0) {
+        await refreshAgiloTokenFromApi(String(email).trim());
       }
 
       fetchWithTimeout(
@@ -892,6 +930,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const result = await controller.stop(transcriptArea ? transcriptArea.value : '');
+
+        // Dictée souvent longue : le v2 Agilotext peut avoir expiré pendant l’enregistrement — forcer un nouveau getToken avant l’upload
+        const tokenOkAfterRecord = await ensureValidToken(String(currentEmail).trim(), true);
+        if (!tokenOkAfterRecord || !globalToken) {
+          showError('invalidToken');
+          setButtons('idle');
+          setStatus('Erreur');
+          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+          if (controller) await controller.destroy();
+          controller = null;
+          return;
+        }
+
         const formData = buildStreamingUploadFormData(result.file, currentEmail);
 
         setStatus('Upload du fichier audio…');

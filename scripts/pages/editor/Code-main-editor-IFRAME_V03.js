@@ -666,6 +666,26 @@
   let _activeSeg = -1;
   let __mode = 'plain';
 
+  /** Recopie le texte visible de chaque segment depuis le DOM vers window._segments (input ne se déclenche pas sur replace/replaceAll). */
+  function syncDomToModel() {
+    const root = editors.transcript;
+    if (!root || !Array.isArray(window._segments) || !window._segments.length) return;
+    if (__mode === 'structured') {
+      Array.from(root.querySelectorAll(':scope > .ag-seg')).forEach((segEl, idx) => {
+        const box = segEl.querySelector('.ag-seg__text');
+        if (box && window._segments[idx]) {
+          window._segments[idx].text = window.visibleTextFromBox(box);
+        }
+      });
+    } else {
+      const plain = root.querySelector('.ag-plain');
+      if (plain && window._segments[0]) {
+        window._segments[0].text = window.visibleTextFromBox(plain);
+      }
+    }
+  }
+  window.syncDomToModel = syncDomToModel;
+
 
   function buildRenameBtn() {
     const btn = document.createElement('button');
@@ -979,6 +999,7 @@
     const el = HITS[CUR];
     el.textContent = repl;
     el.parentNode?.normalize?.();
+    syncDomToModel();
     const keep = CUR; highlight();
     if (HITS.length) { CUR = Math.min(keep, HITS.length - 1); HITS[CUR]?.classList.add('is-current'); updChip(); }
   }
@@ -1000,6 +1021,7 @@
       nodes.forEach(node => { node.textContent = node.textContent.replace(rx, repl); });
       scope.normalize();
     });
+    syncDomToModel();
     highlight(); toast('Remplacements effectués');
   }
 

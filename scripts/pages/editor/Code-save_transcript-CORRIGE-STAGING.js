@@ -487,7 +487,7 @@
     const fromDom   = main ? domSegments(main) : [];
     if (!fromModel || !fromModel.length) return fromDom;
     const canon = str => String(str||'').replace(/\r\n?/g,'\n'); // pas de compression
-    const H = s => [s.speaker, canon(s.text)].join('|').slice(0,256);
+    const H = s => [canon(s.speaker || ''), canon(s.text || '')].join('\u0001');
     const sameLen = fromModel.length === fromDom.length;
     const sameSig = sameLen && fromModel.every((s,i)=> H(s) === H(fromDom[i]));
     if (sameSig) return fromModel;
