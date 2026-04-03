@@ -1,0 +1,22 @@
+Plan déploiement — branche 1.02 (accessibilité)
+================================================
+
+1) GitHub
+   - Pousser la branche : git push -u origin 1.02
+   - Webflow utilise jsDelivr : remplacer @main par @1.02 (ou hash commit) dans les URLs.
+
+2) Webflow — UN SEUL bloc
+   Emplacement : Paramètres du site → Code personnalisé → Pied de page (avant </body>)
+
+   Ordre :
+   a) <link> agilotext-a11y-lite.css
+   b) <script defer> agilotext-a11y-lite.js
+   c) Tes scripts existants (FilePond, ent.js / pro.js / free.js / pro_v2.js, mount-streaming…)
+
+   Ne pas dupliquer ce bloc sur une page ET le site.
+
+3) Le script ne tourne que si l’URL contient /app/
+
+4) Éditeur : garder token + orchestrator sur la page éditeur ; ne pas les doubler dans le footer global.
+
+Voir aussi README.md dans ce dossier (si présent en local).
