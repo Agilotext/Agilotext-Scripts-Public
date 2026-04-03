@@ -1,6 +1,7 @@
 /**
  * pro_v2.js — Agilotext PRO dashboard (fichier externe)
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
+ * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Pro.
  * Ne pas modifier pro.js (version precedente, encore live).
  */
@@ -235,7 +236,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
       if (data.status === 'OK' && data.token) {
         globalToken = data.token;
-        window.globalToken = data.token;
+        try {
+          window.globalToken = data.token;
+        } catch (e) { /* ignore */ }
         return true;
       }
     } catch (err) { console.error('Erreur lors de la récupération du token:', err); }
@@ -281,56 +284,84 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  /* -------------- Fetch helpers -------------- */
-  function fetchTranscriptText(jobId, email) {
-    if (!globalToken) { console.error('Token manquant'); return; }
-    fetchWithTimeout(
-      `https://api.agilotext.com/api/v1/receiveText?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(globalToken)}&edition=${edition}&format=txt`,
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(r => r.text())
-      .then(txt => {
-        const ta = document.getElementById('transcriptText');
-        if (ta) ta.value = txt;
-        window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
-        if (transcriptContainer) transcriptContainer.style.display = 'block';
-        if (submitBtn) submitBtn.style.display = 'none';
-        if (transcriptionTabLink) transcriptionTabLink.click();
-      })
-      .catch(err => {
-        console.error('receiveText:', err);
-        if ((err.type === 'httpError' || err.type === 'serverError') && err.status === 404) return;
-        if (err.type === 'offline') showError('offline');
-        else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
-      });
+  /* -------------- Fetch helpers (retry 1× si token expiré pendant job long) -------------- */
+  function applyTranscriptTextUI(txt) {
+    const ta = document.getElementById('transcriptText');
+    if (ta) ta.value = txt;
+    window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
+    if (transcriptContainer) transcriptContainer.style.display = 'block';
+    if (submitBtn) submitBtn.style.display = 'none';
+    if (transcriptionTabLink) transcriptionTabLink.click();
   }
 
-  function fetchSummaryText(jobId, email) {
-    if (!globalToken) { console.error('Token manquant'); return; }
-    fetchWithTimeout(
-      `https://api.agilotext.com/api/v1/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(globalToken)}&edition=${edition}&format=html`,
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(r => r.text())
-      .then(html => {
-        if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
-        setSummaryUI('ready');
-        if (summaryContainer) summaryContainer.style.display = 'block';
-        if (newFormBtn) newFormBtn.style.display = 'flex';
-        if (newBtn) newBtn.style.display = 'flex';
-        if (submitBtn) submitBtn.style.display = 'none';
-        if (summaryTabLink) summaryTabLink.click();
-        window.dispatchEvent(new Event('agilo:rehighlight'));
-      })
-      .catch(err => {
-        console.error('receiveSummary:', err);
-        if ((err.type === 'httpError' || err.type === 'serverError') && err.status === 404) { setSummaryUI('hidden'); return; }
-        setSummaryUI('error');
-        if (err.type === 'offline') showError('offline');
-        else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
-      });
+  async function fetchTranscriptText(jobId, email) {
+    if (!email) return;
+    const url = () =>
+      `https://api.agilotext.com/api/v1/receiveText?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=txt`;
+    const run = async () => {
+      if (!globalToken) throw { type: 'invalidToken' };
+      const r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      const txt = await run();
+      applyTranscriptTextUI(txt);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          const txt2 = await run();
+          applyTranscriptTextUI(txt2);
+          return;
+        } catch (err2) {
+          console.error('receiveText (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveText:', err);
+      showError(err.type || 'default');
+    }
+  }
+
+  function applySummaryTextUI(html) {
+    if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
+    setSummaryUI('ready');
+    if (summaryContainer) summaryContainer.style.display = 'block';
+    if (newFormBtn) newFormBtn.style.display = 'flex';
+    if (newBtn) newBtn.style.display = 'flex';
+    if (submitBtn) submitBtn.style.display = 'none';
+    if (summaryTabLink) summaryTabLink.click();
+    window.dispatchEvent(new Event('agilo:rehighlight'));
+  }
+
+  async function fetchSummaryText(jobId, email) {
+    if (!email) return;
+    const url = () =>
+      `https://api.agilotext.com/api/v1/receiveSummary?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=html`;
+    const run = async () => {
+      if (!globalToken) throw { type: 'invalidToken' };
+      const r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      const html = await run();
+      applySummaryTextUI(html);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          const html2 = await run();
+          applySummaryTextUI(html2);
+          return;
+        } catch (err2) {
+          console.error('receiveSummary (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveSummary:', err);
+      setSummaryUI('error');
+      showError(err.type || 'default');
+    }
   }
 
   /* -------------- Poll status -------------- */
@@ -371,6 +402,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (pollCount % 6 === 0) {
         const minutes = Math.floor(elapsed / 60000);
         console.log(`⏳ Traitement en cours depuis ${minutes} minute(s)...`);
+      }
+
+      // Jobs longs (jusqu'à 2 h) : refresh ~toutes les 10 min (120 × 5 s)
+      if (pollCount > 1 && pollCount % 120 === 0) {
+        await refreshAgiloTokenFromApi(String(email).trim());
       }
 
       fetchWithTimeout(

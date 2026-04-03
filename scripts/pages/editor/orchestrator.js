@@ -33,7 +33,9 @@
     }
     
     try {
-      document.querySelectorAll('a[href*="receiveText"], a[href*="receiveSummary"]').forEach(a => {
+      document.querySelectorAll(
+        'a[href*="receiveText"], a[href*="receiveSummary"], a[href*="receiveAudio"]'
+      ).forEach(a => {
         const href = a.getAttribute('href'); 
         if (!href) return;
         const u = new URL(href, location.href);
@@ -191,7 +193,86 @@
   };
   document.addEventListener('DOMContentLoaded', loadCredsHandler);
   cleanupFunctions.push(() => document.removeEventListener('DOMContentLoaded', loadCredsHandler));
-  
+
+  // Avant ouverture des téléchargements API : le href contient un token figé (souvent périmé si onglet ouvert longtemps).
+  // On force toujours un getToken frais puis on reconstruit l’URL (évite Invalid Token sur receiveText / receiveSummary).
+  const AGILO_API_V1 = 'https://api.agilotext.com/api/v1';
+
+  const downloadClickHandler = (e) => {
+    const a = e.target.closest?.(
+      'a[href*="/api/v1/receiveText"], a[href*="/api/v1/receiveSummary"], a[href*="/api/v1/receiveAudio"]'
+    );
+    if (!a || a.getAttribute('data-agilo-skip-token-refresh') === 'true') return;
+    const href = a.getAttribute('href');
+    if (!href || !href.includes('api.agilotext.com')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const email = (
+      orch.credentials.email
+      || localStorage.getItem('agilo:username')
+      || document.querySelector('[name="memberEmail"]')?.value
+      || ''
+    ).trim();
+    const edition = orch.credentials.edition || getEdition();
+    const targetWin = a.getAttribute('target') || '_blank';
+
+    const openWithHref = (url) => {
+      if (targetWin === '_blank') window.open(url, '_blank', 'noopener,noreferrer');
+      else window.location.assign(url);
+    };
+
+    const fallbackFetchToken = async () => {
+      if (!email) return;
+      try {
+        const url = `${AGILO_API_V1}/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
+        const r = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data?.status === 'OK' && data?.token) {
+          window.globalToken = data.token;
+          orch.setCredentials({ token: data.token, email, edition });
+        }
+      } catch (err) {
+        if (window.AGILO_DEBUG) console.error('[Orch] getToken fallback:', err);
+      }
+    };
+
+    (async () => {
+      try {
+        if (email && typeof window.getToken === 'function') {
+          await window.getToken(email, edition, true);
+        } else if (email) {
+          await fallbackFetchToken();
+        }
+      } catch (err) {
+        if (window.AGILO_DEBUG) console.error('[Orch] refresh avant téléchargement:', err);
+      }
+
+      const tok = window.globalToken || orch.credentials.token;
+      if (!tok) {
+        window.alert(
+          'Impossible de renouveler votre accès Agilotext (jeton manquant). Rechargez la page puis réessayez le téléchargement.'
+        );
+        return;
+      }
+
+      try {
+        const u = new URL(href, location.href);
+        u.searchParams.set('token', tok);
+        if (email) u.searchParams.set('username', email);
+        const root = document.getElementById('editorRoot');
+        if (root?.dataset?.edition) u.searchParams.set('edition', root.dataset.edition);
+        openWithHref(u.toString());
+      } catch (err) {
+        if (window.AGILO_DEBUG) console.error('[Orch] URL téléchargement:', err);
+        openWithHref(href);
+      }
+    })();
+  };
+  document.addEventListener('click', downloadClickHandler, true);
+  cleanupFunctions.push(() => document.removeEventListener('click', downloadClickHandler, true));
+
   // Cleanup on page unload
   window.addEventListener('beforeunload', () => {
     cleanupFunctions.forEach(fn => {

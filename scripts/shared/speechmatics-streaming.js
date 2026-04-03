@@ -598,10 +598,12 @@
     var self = this;
 
     this.setStatus("pausing", "Pause...");
+    // Stopper le chrono immédiatement (sinon il tourne tant que la WS n’est pas fermée).
+    this.stopTimer();
 
     this.state.audioContext.suspend()
       .then(function () { return self.closeRealtimeSession(); })
-      .then(function () { self.stopTimer(); self.setStatus("paused", "Pause — texte éditable"); })
+      .then(function () { self.setStatus("paused", "Pause — texte éditable"); })
       .catch(function (err) {
         console.error(err);
         if (self.config.onError) self.config.onError("default");

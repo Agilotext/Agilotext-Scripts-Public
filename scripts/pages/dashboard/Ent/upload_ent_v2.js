@@ -18,6 +18,9 @@
  *
  * Après ce script, charger (optionnel, streaming) :
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
+ *
+ * v1.01+ : jeton sur actions longues — refresh avant upload, retry receiveText/Summary
+ * après invalidToken, refresh proactif pendant poll (~10 min), sendWithRetry si error_invalid_token.
  * ──────────────────────────────────────────────────────────────────
  */
 
@@ -137,6 +140,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ─── Variables UI ─────────────────────────────────────────── */
   var edition = 'ent';
+  globalToken = window.globalToken || '';
   var form = document.querySelector('form[ms-code-file-upload="form"]');
   var successDiv = document.getElementById('form_success');
   var formLoadingDiv = document.getElementById('form_loading');
@@ -255,23 +259,33 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  /* ─── Token ────────────────────────────────────────────────── */
-  function ensureValidToken(email) {
-    if (window.globalToken) return Promise.resolve(true);
-    return fetch('https://api.agilotext.com/api/v1/getToken?username=' + encodeURIComponent(email) + '&edition=' + edition)
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.status === 'OK') {
+  /* ─── Token (aligné ent.js v1.01+) ─────────────────────────── */
+  async function refreshAgiloTokenFromApi(email) {
+    var em = email && String(email).trim();
+    if (!em) return false;
+    try {
+      var response = await fetch(
+        'https://api.agilotext.com/api/v1/getToken?username=' + encodeURIComponent(em) + '&edition=' + edition
+      );
+      var data = await response.json();
+      if (data.status === 'OK' && data.token) {
+        globalToken = data.token;
+        try {
           window.globalToken = data.token;
-          console.log('Token récupéré automatiquement');
-          return true;
-        }
-        return false;
-      })
-      .catch(function (err) {
-        console.error('Erreur lors de la récupération du token:', err);
-        return false;
-      });
+        } catch (e) { /* ignore */ }
+        return true;
+      }
+    } catch (err) {
+      console.error('Erreur lors de la récupération du token:', err);
+    }
+    return false;
+  }
+
+  async function ensureValidToken(email, forceRefresh) {
+    if (!forceRefresh && globalToken) return true;
+    var ok = await refreshAgiloTokenFromApi(email);
+    if (ok) console.log(forceRefresh ? 'Token Agilotext rafraîchi (getToken)' : 'Token récupéré automatiquement');
+    return ok;
   }
 
   /* ─── Summary UI ───────────────────────────────────────────── */
@@ -313,61 +327,93 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  /* ─── Fetch transcript / summary ───────────────────────────── */
-  function fetchTranscriptText(jobId, email) {
-    if (!window.globalToken) { console.error('Token manquant'); return; }
-    fetchWithTimeout(
-      'https://api.agilotext.com/api/v1/receiveText?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(window.globalToken) + '&edition=' + edition + '&format=txt',
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(function (r) { return r.text(); })
-      .then(function (txt) {
-        var ta = document.getElementById('transcriptText');
-        if (ta) ta.value = txt;
-        window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
-        if (transcriptContainer) transcriptContainer.style.display = 'block';
-        if (submitBtn) submitBtn.style.display = 'none';
-        if (transcriptionTabLink) transcriptionTabLink.click();
-      })
-      .catch(function (err) {
-        console.error('receiveText:', err);
-        if ((err.type === 'httpError' || err.type === 'serverError') && err.status === 404) return;
-        if (err.type === 'offline') showError('offline');
-        else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
-      });
+  /* ─── Fetch transcript / summary (retry 1× si token expiré) ─ */
+  function applyTranscriptTextUI(txt) {
+    var ta = document.getElementById('transcriptText');
+    if (ta) ta.value = txt;
+    window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
+    if (transcriptContainer) transcriptContainer.style.display = 'block';
+    if (submitBtn) submitBtn.style.display = 'none';
+    if (transcriptionTabLink) transcriptionTabLink.click();
   }
 
-  function fetchSummaryText(jobId, email) {
-    if (!window.globalToken) { console.error('Token manquant'); return; }
-    fetchWithTimeout(
-      'https://api.agilotext.com/api/v1/receiveSummary?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(window.globalToken) + '&edition=' + edition + '&format=html',
-      { timeout: 2 * 60 * 1000 }
-    )
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
-        setSummaryUI('ready');
-        if (summaryContainer) summaryContainer.style.display = 'block';
-        if (newFormBtn) newFormBtn.style.display = 'flex';
-        if (newBtn) newBtn.style.display = 'flex';
-        if (submitBtn) submitBtn.style.display = 'none';
-        if (summaryTabLink) summaryTabLink.click();
-        window.dispatchEvent(new Event('agilo:rehighlight'));
-      })
-      .catch(function (err) {
-        console.error('receiveSummary:', err);
-        if ((err.type === 'httpError' || err.type === 'serverError') && err.status === 404) { setSummaryUI('hidden'); return; }
-        setSummaryUI('error');
-        if (err.type === 'offline') showError('offline');
-        else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
-      });
+  async function fetchTranscriptText(jobId, email) {
+    if (!email) return;
+    var url = function () {
+      return 'https://api.agilotext.com/api/v1/receiveText?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(globalToken) + '&edition=' + edition + '&format=txt';
+    };
+    var run = async function () {
+      if (!globalToken) throw { type: 'invalidToken' };
+      var r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      var txt = await run();
+      applyTranscriptTextUI(txt);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          var txt2 = await run();
+          applyTranscriptTextUI(txt2);
+          return;
+        } catch (err2) {
+          console.error('receiveText (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveText:', err);
+      if (err && (err.type === 'httpError' || err.type === 'serverError') && err.status === 404) return;
+      showError((err && err.type) || 'default');
+    }
+  }
+
+  function applySummaryTextUI(html) {
+    if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
+    setSummaryUI('ready');
+    if (summaryContainer) summaryContainer.style.display = 'block';
+    if (newFormBtn) newFormBtn.style.display = 'flex';
+    if (newBtn) newBtn.style.display = 'flex';
+    if (submitBtn) submitBtn.style.display = 'none';
+    if (summaryTabLink) summaryTabLink.click();
+    window.dispatchEvent(new Event('agilo:rehighlight'));
+  }
+
+  async function fetchSummaryText(jobId, email) {
+    if (!email) return;
+    var url = function () {
+      return 'https://api.agilotext.com/api/v1/receiveSummary?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(globalToken) + '&edition=' + edition + '&format=html';
+    };
+    var run = async function () {
+      if (!globalToken) throw { type: 'invalidToken' };
+      var r = await fetchWithTimeout(url(), { timeout: 2 * 60 * 1000 });
+      return r.text();
+    };
+    try {
+      var html = await run();
+      applySummaryTextUI(html);
+    } catch (err) {
+      if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
+        try {
+          var html2 = await run();
+          applySummaryTextUI(html2);
+          return;
+        } catch (err2) {
+          console.error('receiveSummary (après refresh):', err2);
+          showError(err2.type || 'default');
+          return;
+        }
+      }
+      console.error('receiveSummary:', err);
+      if (err && (err.type === 'httpError' || err.type === 'serverError') && err.status === 404) { setSummaryUI('hidden'); return; }
+      setSummaryUI('error');
+      showError((err && err.type) || 'default');
+    }
   }
 
   /* ─── Polling status ───────────────────────────────────────── */
   function checkTranscriptStatus(jobId, email) {
-    if (!window.globalToken) { console.error('Token manquant'); return; }
+    if (!globalToken) { console.error('Token manquant'); return; }
     if (window._agiloStatusInt) clearInterval(window._agiloStatusInt);
 
     var GLOBAL_TIMEOUT = 2 * 60 * 60 * 1000;
@@ -378,6 +424,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var pollCount = 0;
 
     var intId = setInterval(function () {
+      (async function () {
       pollCount++;
       var elapsed = Date.now() - startTime;
       if (elapsed > GLOBAL_TIMEOUT) {
@@ -389,21 +436,25 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      ensureValidToken(email).then(function (tokenValid) {
-        if (!tokenValid) {
-          clearInterval(intId); window._agiloStatusInt = null;
-          if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
-          showError('invalidToken');
-          alert('Votre session a expiré. Veuillez rafraîchir la page.');
-          return;
-        }
+      var tokenValid = await ensureValidToken(email, false);
+      if (!tokenValid) {
+        clearInterval(intId); window._agiloStatusInt = null;
+        if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
+        showError('invalidToken');
+        alert('Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.');
+        return;
+      }
 
-        if (pollCount % 6 === 0) {
-          console.log('⏳ Traitement en cours depuis ' + Math.floor(elapsed / 60000) + ' minute(s)...');
-        }
+      if (pollCount % 6 === 0) {
+        console.log('⏳ Traitement en cours depuis ' + Math.floor(elapsed / 60000) + ' minute(s)...');
+      }
 
-        fetchWithTimeout(
-          'https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(window.globalToken) + '&edition=' + edition,
+      if (pollCount > 1 && pollCount % 120 === 0) {
+        await refreshAgiloTokenFromApi(String(email).trim());
+      }
+
+      fetchWithTimeout(
+          'https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(globalToken) + '&edition=' + edition,
           { timeout: 30 * 1000 }
         )
           .then(function (r) { return r.json(); })
@@ -441,14 +492,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 console.warn('Statut de transcription inattendu:', data.transcriptStatus);
             }
           })
-          .catch(function (err) {
+          .catch(async function (err) {
             consecutiveErrors++;
             console.error('getTranscriptStatus (tentative ' + pollCount + ', erreurs: ' + consecutiveErrors + '/' + MAX_CONSECUTIVE_ERRORS + '):', err);
             if (err.type === 'invalidToken') {
+              var renewed = await refreshAgiloTokenFromApi(email);
+              if (renewed) {
+                consecutiveErrors = 0;
+                console.warn('Token Agilotext renouvelé pendant le suivi du job.');
+                return;
+              }
               clearInterval(intId); window._agiloStatusInt = null;
               if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
               showError('invalidToken');
-              alert('Votre session a expiré. Veuillez rafraîchir la page.');
+              alert('Le jeton d’accès Agilotext a expiré ou a été renouvelé. Rechargez la page pour continuer — vous restez connecté à votre compte.');
               return;
             }
             if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
@@ -461,7 +518,7 @@ document.addEventListener('DOMContentLoaded', function () {
               else { showError('unreachable'); alert('Impossible de contacter le serveur.'); }
             }
           });
-      });
+      })();
     }, 5000);
 
     window._agiloStatusInt = intId;
@@ -480,7 +537,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  function sendWithRetry(data, max, isYouTube) {
+  async function sendWithRetry(data, max, isYouTube) {
     max = max || 3;
     var url = isYouTube ? 'https://api.agilotext.com/api/v1/sendYoutubeUrl' : 'https://api.agilotext.com/api/v1/sendMultipleAudio';
     console.log('🌐 Envoi vers: ' + url + ' (YouTube: ' + !!isYouTube + ')');
@@ -495,49 +552,72 @@ document.addEventListener('DOMContentLoaded', function () {
       fetchOptions.body = data;
     }
 
-    var attempt = 0;
-    function tryOnce() {
-      attempt++;
-      if (!navigator.onLine) return waitForOnline().then(tryOnce);
+    for (var attempt = 1; attempt <= max; attempt++) {
+      try {
+        if (!navigator.onLine) await waitForOnline();
 
-      return fetchWithTimeout(url, fetchOptions)
-        .then(function (res) {
-          return res.text().then(function (textResponse) {
-            var responseData = {};
-            try { responseData = JSON.parse(textResponse); } catch (e) { console.error('Erreur parsing JSON:', e); }
-            if (res.ok && responseData && responseData.status === 'OK') return responseData;
+        var res = await fetchWithTimeout(url, fetchOptions);
+        var textResponse = await res.text();
+        var responseData = {};
+        try { responseData = JSON.parse(textResponse); } catch (e) { console.error('Erreur parsing JSON:', e); }
 
-            var em = (responseData && responseData.errorMessage) || '';
-            var nonRetryable = [
-              'error_audio_format_not_supported', 'error_max_file_size_exceeded', 'error_duration_is_too_long_for_summary',
-              'error_duration_is_too_long', 'error_max_duration_exceeded', 'error_audio_file_not_found', 'error_invalid_token',
-              'error_too_many_hours_for_last_30_days', 'error_account_pending_validation', 'error_limit_reached_for_user',
-              'error_quota_exceeded', 'error_pro_quota_exceeded', 'error_subscription_quota', 'error_plan_limit_reached',
-              'error_subscription_limit', 'error_limit_reached', 'error_invalid_audio_file_content', 'error_silent_audio_file',
-              'error_transcript_too_long_for_summary', 'error_too_many_devices_used_for_account', 'error_too_many_calls',
-              'ERROR_CANNOT_DONWLOAD_YOUTUBE_URL', 'ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL', 'ERROR_INVALID_YOUTUBE_URL'
-            ];
-            if (nonRetryable.some(function (s) { return em.includes(s); })) return responseData;
+        if (res.ok && responseData && responseData.status === 'OK') return responseData;
 
-            var retryableHttp = [408, 425, 429, 500, 502, 503, 504].indexOf(res.status) !== -1;
-            var retryableApi = em === 'error_too_much_traffic';
-            if ((retryableHttp || retryableApi) && attempt < max) {
-              var backoff = Math.min(12000, 1200 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 400);
-              return delay(backoff).then(tryOnce);
-            }
-            return responseData;
-          });
-        })
-        .catch(function (err) {
-          if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
-            if (err.type === 'offline') return waitForOnline().then(tryOnce);
-            var backoff = Math.min(12000, 1200 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 400);
-            return delay(backoff).then(tryOnce);
+        var em = (responseData && responseData.errorMessage) || '';
+        if (em.indexOf('error_invalid_token') !== -1 && attempt < max) {
+          var emailForRefresh = isYouTube
+            ? (data && data.username)
+            : (typeof data.get === 'function' ? data.get('username') : '');
+          if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
           }
-          throw err;
-        });
+        }
+        if (
+          em.indexOf('error_audio_format_not_supported') !== -1 ||
+          em.indexOf('error_duration_is_too_long_for_summary') !== -1 ||
+          em.indexOf('error_duration_is_too_long') !== -1 ||
+          em.indexOf('error_audio_file_not_found') !== -1 ||
+          em.indexOf('error_invalid_token') !== -1 ||
+          em.indexOf('error_too_many_hours_for_last_30_days') !== -1 ||
+          em.indexOf('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') !== -1 ||
+          em.indexOf('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') !== -1 ||
+          em.indexOf('ERROR_INVALID_YOUTUBE_URL') !== -1
+        ) {
+          return responseData;
+        }
+
+        var retryableHttp = [408, 425, 429, 500, 502, 503, 504].indexOf(res.status) !== -1;
+        var retryableApi = em === 'error_too_much_traffic';
+        if ((retryableHttp || retryableApi) && attempt < max) {
+          var backoff = Math.min(12000, 1200 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 400);
+          await delay(backoff);
+          continue;
+        }
+        return responseData;
+      } catch (err) {
+        if (attempt < max && err && err.type === 'invalidToken') {
+          var emailForRefresh2 = isYouTube
+            ? (data && data.username)
+            : (typeof data.get === 'function' ? data.get('username') : '');
+          if (emailForRefresh2 && (await refreshAgiloTokenFromApi(String(emailForRefresh2)))) {
+            if (isYouTube) data.token = globalToken;
+            else if (typeof data.set === 'function') data.set('token', globalToken);
+            continue;
+          }
+        }
+        if (attempt < max && err && (err.type === 'offline' || err.type === 'timeout' || err.type === 'unreachable')) {
+          if (err.type === 'offline') await waitForOnline();
+          else {
+            var backoff2 = Math.min(12000, 1200 * Math.pow(2, attempt - 1)) + Math.floor(Math.random() * 400);
+            await delay(backoff2);
+          }
+          continue;
+        }
+        throw err;
+      }
     }
-    return tryOnce();
   }
 
   /* ─── SUBMIT ───────────────────────────────────────────────── */
@@ -590,122 +670,128 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       }
 
-      if (!window.globalToken) {
-        showError('invalidToken');
-        alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page.');
-        form.dataset.sending = '0'; window.removeEventListener('beforeunload', beforeUnloadGuard); return;
-      }
+      ensureValidToken(String(email).trim(), true).then(function (tokenOk) {
+        if (!tokenOk || !globalToken) {
+          showError('invalidToken');
+          alert('Votre session a expiré ou n\'a pas pu être initialisée. Veuillez rafraîchir la page.');
+          form.dataset.sending = '0'; window.removeEventListener('beforeunload', beforeUnloadGuard); return;
+        }
 
-      if (formLoadingDiv) formLoadingDiv.style.display = 'block';
-      if (submitBtn) submitBtn.disabled = true;
+        if (formLoadingDiv) formLoadingDiv.style.display = 'block';
+        if (submitBtn) submitBtn.disabled = true;
 
-      var speakersChecked = !!(speakersCheckbox && speakersCheckbox.checked);
-      var summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
-      var formatChecked = !!(formatCheckbox && formatCheckbox.checked);
-      var speakersExpected = speakersSelect ? speakersSelect.value : '';
-      setSummaryUI(summaryChecked ? 'loading' : 'hidden');
+        var speakersChecked = !!(speakersCheckbox && speakersCheckbox.checked);
+        var summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
+        var formatChecked = !!(formatCheckbox && formatCheckbox.checked);
+        var speakersExpected = speakersSelect ? speakersSelect.value : '';
+        setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
-      var buildAndSend;
+        var buildAndSend;
 
-      if (uploadSource === 'youtube') {
-        var memberIdInput = document.querySelector('input[name="memberId"]');
-        var deviceIdInput = document.querySelector('input[name="deviceId"]');
-        var memberId = (memberIdInput && (memberIdInput.value || memberIdInput.getAttribute('src') || memberIdInput.getAttribute('data-src'))) || '';
-        var validation = validateYouTubeUrl(youtubeInput.value);
+        if (uploadSource === 'youtube') {
+          var memberIdInput = document.querySelector('input[name="memberId"]');
+          var deviceIdInput = document.querySelector('input[name="deviceId"]');
+          var memberId = (memberIdInput && (memberIdInput.value || memberIdInput.getAttribute('src') || memberIdInput.getAttribute('data-src'))) || '';
+          var validation = validateYouTubeUrl(youtubeInput.value);
 
-        var payload = {
-          token: window.globalToken, username: email, edition: edition,
-          timestampTranscript: speakersChecked ? 'true' : 'false',
-          formatTranscript: speakersChecked ? 'false' : (formatChecked ? 'true' : 'false'),
-          doSummary: summaryChecked ? 'true' : 'false',
-          url: validation.url,
-          deviceId: (deviceIdInput && deviceIdInput.value) || window.DEVICE_ID || '',
-          mailTranscription: 'true'
-        };
-        if (memberId) payload.memberId = memberId;
-        if (speakersChecked) payload.speakersExpected = speakersExpected;
-        if (translateCheckbox && translateCheckbox.checked && translateSelect) payload.translateTo = translateSelect.value;
+          var payload = {
+            token: globalToken, username: email, edition: edition,
+            timestampTranscript: speakersChecked ? 'true' : 'false',
+            formatTranscript: speakersChecked ? 'false' : (formatChecked ? 'true' : 'false'),
+            doSummary: summaryChecked ? 'true' : 'false',
+            url: validation.url,
+            deviceId: (deviceIdInput && deviceIdInput.value) || window.DEVICE_ID || '',
+            mailTranscription: 'true'
+          };
+          if (memberId) payload.memberId = memberId;
+          if (speakersChecked) payload.speakersExpected = speakersExpected;
+          if (translateCheckbox && translateCheckbox.checked && translateSelect) payload.translateTo = translateSelect.value;
 
-        buildAndSend = Promise.resolve(sendWithRetry(payload, 3, true));
+          buildAndSend = Promise.resolve(sendWithRetry(payload, 3, true));
+        } else {
+          buildAndSend = waitPondFileReady(3000).then(function (file) {
+            if (!(file instanceof File)) {
+              showError('audioNotFound');
+              alert('Le fichier n\'est pas encore prêt. Réessayez.');
+              if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+              if (submitBtn) submitBtn.disabled = false;
+              form.dataset.sending = '0';
+              window.removeEventListener('beforeunload', beforeUnloadGuard);
+              return null;
+            }
 
-      } else {
-        buildAndSend = waitPondFileReady(3000).then(function (file) {
-          if (!(file instanceof File)) {
-            showError('audioNotFound');
-            alert('Le fichier n\'est pas encore prêt. Réessayez.');
+            fd.append('token', globalToken);
+            fd.append('username', email);
+            fd.append('edition', edition);
+            fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
+            if (speakersChecked) { fd.append('speakersExpected', speakersExpected); fd.append('formatTranscript', 'false'); }
+            else { fd.append('formatTranscript', formatChecked ? 'true' : 'false'); }
+            fd.append('doSummary', summaryChecked ? 'true' : 'false');
+            if (translateCheckbox && translateCheckbox.checked && translateSelect) fd.append('translateTo', translateSelect.value);
+            fd.delete('fileToUpload'); fd.delete('audioFile');
+            fd.append('fileUpload1', file, file.name);
+            fd.append('deviceId', window.DEVICE_ID || '');
+            fd.append('mailTranscription', 'true');
+            return sendWithRetry(fd, 3, false);
+          });
+        }
+
+        buildAndSend
+          .then(function (data) {
+            if (!data) return;
+            if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+            if (data && data.status === 'OK') {
+              showSuccess();
+              var jobId = data.jobIdList && data.jobIdList[0];
+              if (jobId) {
+                localStorage.setItem('currentJobId', jobId);
+                document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
+                var sessionInput = form.querySelector('input[name="agilo_record_session_id"]');
+                var recordSessionId = sessionInput ? sessionInput.value : undefined;
+                document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              }
+              if (successDiv) successDiv.style.display = 'flex';
+              if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
+              checkTranscriptStatus(jobId, email);
+              scrollToEl(loadingAnimDiv, -80);
+            } else {
+              document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
+              var err = (data && data.errorMessage) || '';
+              if (err === 'error_too_much_traffic') showError('tooMuchTraffic');
+              else if (err.includes('error_account_pending_validation') || err.includes('error_limit_reached')) showError('tooMuchTraffic');
+              else if (err.includes('error_duration_is_too_long_for_summary')) showError('summaryLimit');
+              else if (err.includes('error_duration_is_too_long') || err.includes('error_max_duration_exceeded')) showError('audioTooLong');
+              else if (err.includes('error_transcript_too_long_for_summary')) showError('summaryLimit');
+              else if (err.includes('error_audio_format_not_supported') || err.includes('error_max_file_size_exceeded')) showError('audioFormat');
+              else if (err.includes('error_invalid_audio_file_content') || err.includes('error_silent_audio_file')) showError('audioFormat');
+              else if (err.includes('error_audio_file_not_found')) showError('audioNotFound');
+              else if (err.includes('error_invalid_token')) showError('invalidToken');
+              else if (err.includes('error_too_many_hours') || err.includes('error_quota_exceeded') || err.includes('error_subscription')) showError('tooManyHours');
+              else if (err.includes('error_too_many_devices')) { showError('default'); alert('Trop d\'appareils utilisés pour ce compte.'); }
+              else if (err.includes('error_too_many_calls')) showError('tooMuchTraffic');
+              else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('invalid') !== -1)) showError('youtubeInvalid');
+              else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL')) showError('youtubePrivate');
+              else if (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('not found') !== -1) showError('youtubeNotFound');
+              else { showError('default'); if (err && err.trim()) alert('Erreur: ' + err); }
+            }
+          })
+          .catch(function (err) {
+            console.error('Erreur lors de l\'envoi:', err);
+            document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (err && err.message) || '' } }));
+            showError((err && err.type) || 'default');
+          })
+          .finally(function () {
             if (formLoadingDiv) formLoadingDiv.style.display = 'none';
             if (submitBtn) submitBtn.disabled = false;
             form.dataset.sending = '0';
             window.removeEventListener('beforeunload', beforeUnloadGuard);
-            return null;
-          }
-
-          fd.append('token', window.globalToken);
-          fd.append('username', email);
-          fd.append('edition', edition);
-          fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
-          if (speakersChecked) { fd.append('speakersExpected', speakersExpected); fd.append('formatTranscript', 'false'); }
-          else { fd.append('formatTranscript', formatChecked ? 'true' : 'false'); }
-          fd.append('doSummary', summaryChecked ? 'true' : 'false');
-          if (translateCheckbox && translateCheckbox.checked && translateSelect) fd.append('translateTo', translateSelect.value);
-          fd.delete('fileToUpload'); fd.delete('audioFile');
-          fd.append('fileUpload1', file, file.name);
-          fd.append('deviceId', window.DEVICE_ID || '');
-          fd.append('mailTranscription', 'true');
-          return sendWithRetry(fd, 3, false);
-        });
-      }
-
-      buildAndSend
-        .then(function (data) {
-          if (!data) return;
-          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-          if (data && data.status === 'OK') {
-            showSuccess();
-            var jobId = data.jobIdList && data.jobIdList[0];
-            if (jobId) {
-              localStorage.setItem('currentJobId', jobId);
-              document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
-              var sessionInput = form.querySelector('input[name="agilo_record_session_id"]');
-              var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
-            }
-            if (successDiv) successDiv.style.display = 'flex';
-            if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
-            checkTranscriptStatus(jobId, email);
-            scrollToEl(loadingAnimDiv, -80);
-          } else {
-            document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
-            var err = (data && data.errorMessage) || '';
-            if (err === 'error_too_much_traffic') showError('tooMuchTraffic');
-            else if (err.includes('error_account_pending_validation') || err.includes('error_limit_reached')) showError('tooMuchTraffic');
-            else if (err.includes('error_duration_is_too_long_for_summary')) showError('summaryLimit');
-            else if (err.includes('error_duration_is_too_long') || err.includes('error_max_duration_exceeded')) showError('audioTooLong');
-            else if (err.includes('error_transcript_too_long_for_summary')) showError('summaryLimit');
-            else if (err.includes('error_audio_format_not_supported') || err.includes('error_max_file_size_exceeded')) showError('audioFormat');
-            else if (err.includes('error_invalid_audio_file_content') || err.includes('error_silent_audio_file')) showError('audioFormat');
-            else if (err.includes('error_audio_file_not_found')) showError('audioNotFound');
-            else if (err.includes('error_invalid_token')) showError('invalidToken');
-            else if (err.includes('error_too_many_hours') || err.includes('error_quota_exceeded') || err.includes('error_subscription')) showError('tooManyHours');
-            else if (err.includes('error_too_many_devices')) { showError('default'); alert('Trop d\'appareils utilisés pour ce compte.'); }
-            else if (err.includes('error_too_many_calls')) showError('tooMuchTraffic');
-            else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('invalid') !== -1)) showError('youtubeInvalid');
-            else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL')) showError('youtubePrivate');
-            else if (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('not found') !== -1) showError('youtubeNotFound');
-            else { showError('default'); if (err && err.trim()) alert('Erreur: ' + err); }
-          }
-        })
-        .catch(function (err) {
-          console.error('Erreur lors de l\'envoi:', err);
-          document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (err && err.message) || '' } }));
-          showError((err && err.type) || 'default');
-        })
-        .finally(function () {
-          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
-          form.dataset.sending = '0';
-          window.removeEventListener('beforeunload', beforeUnloadGuard);
-        });
+          });
+      }).catch(function (err) {
+        console.error('ensureValidToken (submit):', err);
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        showError('default');
+      });
     });
   }
 
@@ -713,6 +799,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ─── Expose globals for mount-streaming.js ────────────────── */
   window.edition = edition;
+  try {
+    window.globalToken = globalToken;
+  } catch (e) { /* ignore */ }
   window.ensureValidToken = ensureValidToken;
   window.sendWithRetry = sendWithRetry;
   window.showError = showError;
