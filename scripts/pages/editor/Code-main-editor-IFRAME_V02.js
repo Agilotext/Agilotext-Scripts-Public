@@ -92,7 +92,7 @@
       // Isoler dans un iframe
       const iframe = document.createElement('iframe');
       iframe.className = 'ag-summary-iframe';
-      iframe.style.cssText = 'width:100%; border:none; min-height:600px; background:white;';
+      iframe.style.cssText = 'width:100%; border:none; min-height:max(600px,100svh); background:white;';
 
       // Vider summaryEditor avant d'ajouter l'iframe
       el.innerHTML = '';
@@ -101,23 +101,45 @@
       // Écrire le contenu dans l'iframe (plus fiable que srcdoc)
       iframe.onload = function () {
         try {
-          const doc = this.contentDocument || this.contentWindow.document;
-          doc.open();
-          doc.write(html);
-          doc.close();
+          const idoc = this.contentDocument || this.contentWindow.document;
+          idoc.open();
+          idoc.write(html);
+          idoc.close();
 
-          // Ajuster la hauteur après chargement
-          setTimeout(() => {
+          const ifr = this;
+          const resolveSummarySvhFloorPx = () => {
             try {
-              const body = doc.body;
-              if (body) {
-                const h = Math.max(body.scrollHeight, body.offsetHeight, 600);
-                this.style.height = (h + 50) + 'px';
-              }
+              const probe = document.createElement('div');
+              probe.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:100svh;visibility:hidden;pointer-events:none;';
+              document.documentElement.appendChild(probe);
+              const h = Math.round(probe.getBoundingClientRect().height);
+              probe.remove();
+              if (h > 200) return h;
+            } catch (e) { /* ignore */ }
+            return Math.round(
+              typeof window !== 'undefined' && window.innerHeight ? window.innerHeight : 880
+            );
+          };
+          const summarySvhFloorPx = resolveSummarySvhFloorPx();
+          const scheduleSummaryIframeFit = () => {
+            try {
+              const body = idoc.body;
+              if (!body) return;
+              const root = idoc.documentElement;
+              const measured = Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                root ? root.scrollHeight : 0,
+                root ? root.offsetHeight : 0
+              );
+              const nextH = Math.max(measured + 24, summarySvhFloorPx);
+              ifr.style.height = nextH + 'px';
+              ifr.style.minHeight = summarySvhFloorPx + 'px';
             } catch (e) {
               console.warn('[Editor] Erreur ajustement hauteur iframe:', e);
             }
-          }, 100);
+          };
+          [0, 120, 450, 1400].forEach((ms) => setTimeout(scheduleSummaryIframeFit, ms));
         } catch (e) {
           console.error('[Editor] Erreur écriture iframe:', e);
           // Fallback : utiliser srcdoc si contentDocument ne fonctionne pas
@@ -1888,7 +1910,7 @@
       .ag-summary-iframe {
         width: 100%;
         border: none;
-        min-height: 600px;
+        min-height: max(600px, 100svh);
         background: white;
         display: block;
       }
