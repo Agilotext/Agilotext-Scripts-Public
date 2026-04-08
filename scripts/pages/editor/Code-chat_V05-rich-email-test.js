@@ -28,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const POLL_TIMEOUT_MS = 240000;
   const RECEIVE_RETRIES = 5;
   const RECEIVE_RETRY_DELAY = 900;
+  /** Même découpe que l’affichage : évite que le commentaire interne se retrouve dans le corps Gmail/mailto. */
+  const AGILO_EMAIL_COMMENT_SPLIT = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(?:\(non envoyé\))?\s*:/i;
   const LINKEDIN_THINKING_MSG = 'Je travaille sur la rédaction du post LinkedIn. Je vous le dépose dans un instant dans l\'onglet Conversation.';
 
   /* ================== DOM ================== */
@@ -523,7 +525,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function stripEmailMarkdownForCopy(s) {
     return String(s || '')
       .replace(/\*\*([\s\S]+?)\*\*/g, '$1')
-      .replace(/\*([^*\n]+?)\*/g, '$1');
+      .replace(/\*([^*\n]+?)\*/g, '$1')
+      .replace(/\*\*/g, '');
   }
 
   /** Sujet affiché dans la bulle : échappement + **gras** → <strong>. */
@@ -594,12 +597,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const copyIconDefault = copyBtn.innerHTML;
         const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
         copyBtn.onclick = async () => {
-          const toCopy = parsedPlain.body || stripEmailMarkdownForCopy(m.text);
+          const bodyOnly = parsedPlain.body || stripEmailMarkdownForCopy(m.text);
+          const toCopy = parsedPlain.subject
+            ? `Objet : ${parsedPlain.subject}\n\n${bodyOnly}`
+            : bodyOnly;
           const success = await copyToClipboard(toCopy);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
             copyBtn.innerHTML = copyIconChecked;
-            toast('Corps du mail copié', 'success');
+            toast('Mail copié (objet + corps)', 'success');
             setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = copyIconDefault; }, 2000);
           } else toast('Échec de la copie', 'error');
         };
@@ -669,8 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Séparer corps email et commentaire (accepter "---" ou "Commentaire interne :" / "Commentaire interne (non envoyé) :")
         const rawBody = String(displayText).trim();
-        const splitRegex = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i;
-        const bodyParts = rawBody.split(splitRegex);
+        const bodyParts = rawBody.split(AGILO_EMAIL_COMMENT_SPLIT);
         let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
         let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
 
@@ -679,7 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Forcer de vrais sauts de paragraphe : double \n avant formules et sections (même si le modèle n'en met qu'un)
         emailBodyText = emailBodyText
-          .replace(/\n(Bonjour\s+[\w\s]+,)/gi, '\n\n$1')
+          .replace(/\n(Bonjour[^,\n]*,)/gi, '\n\n$1')
           .replace(/\n(Prochaines étapes\s*:)/gi, '\n\n$1')
           .replace(/\n(Cordialement,)/gi, '\n\n$1')
           .replace(/\n(Décisions\s*\/\s*points clés\s*:)/gi, '\n\n$1')
@@ -1211,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /** Extrait sujet + corps (sans commentaire interne) pour mailto / Gmail. */
   function parseEmailForCompose(text) {
     const raw = String(text || '').replace(/\r\n/g, '\n').trim();
-    const split = raw.split(/\n\s*---\s*\n|\n\nCommentaire interne\s*:\s*/i);
+    const split = raw.split(AGILO_EMAIL_COMMENT_SPLIT);
     const emailPart = (split[0] || raw).trim();
     const lines = emailPart.split('\n');
     let subject = '';
