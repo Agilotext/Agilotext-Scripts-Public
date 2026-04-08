@@ -1,13 +1,14 @@
-/* Tokens : s’aligner sur les variables Webflow Agilotext si présentes (--agt-*, --color--*) */
+/* Tokens : variables Webflow du projet (--color--*) + surcharges optionnelles --agt-* / themeAccent */
 .agilo-ps-panel {
   --agilo-ps-text: var(--agt-text, var(--color--gris_foncé, #0e0e0e));
-  --agilo-ps-muted: var(--agt-muted, var(--color--Gris, #525252));
-  --agilo-ps-border: var(--agt-border, var(--color--Noir_25, #e5e7eb));
+  --agilo-ps-muted: var(--agt-muted, var(--color--gris, #525252));
+  --agilo-ps-border: var(--agt-border, var(--color--noir_25, #e5e7eb));
   --agilo-ps-surface: var(--agt-bg, var(--color--white, #ffffff));
-  --agilo-ps-surface-2: #f9fafb;
-  /* Vert « peeper » (dashboard Business) ; surcharger avec --agt-accent ou themeAccent si besoin */
-  --agilo-ps-accent: var(--agt-accent, var(--color--vert_agilotext, #05381a));
-  --agilo-ps-accent-hover: #042a14;
+  --agilo-ps-surface-2: var(--agt-surface-2, var(--color--blanc_gris, #f9fafb));
+  /* Accent = swatch « vert » Webflow ; --agt-accent / themeAccent passent avant */
+  --agilo-ps-accent: var(--agt-accent, var(--color--vert, #1c661a));
+  /* Repli si le navigateur n’applique pas color-mix sur :hover du bouton primaire */
+  --agilo-ps-accent-hover: var(--agt-accent-hover, #145a12);
   --agilo-ps-danger-bg: #fef2f2;
   --agilo-ps-danger-text: #991b1b;
   --agilo-ps-warn-bg: #fffbeb;
@@ -446,7 +447,7 @@
 
 .agilo-ps-btn--primary {
   background: var(--agilo-ps-accent);
-  color: #fff;
+  color: var(--agt-on-accent, var(--color--white, #ffffff));
 }
 
 .agilo-ps-btn--primary:hover {
@@ -505,32 +506,53 @@
 }
 
 .agilo-ps-btn--secondary {
-  background: #f3f4f6;
-  color: #111827;
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
 }
 
 .agilo-ps-btn--secondary:hover {
-  background: #e5e7eb;
+  background: var(--agt-surface-2-hover, #e5e7eb);
 }
 
-/* Boutons Enregistrer : même famille verte que le dashboard (secondaire = contour vert) */
+@supports (background: color-mix(in srgb, red, blue)) {
+  .agilo-ps-btn--secondary:hover {
+    background: var(
+      --agt-surface-2-hover,
+      color-mix(in srgb, var(--agilo-ps-border) 35%, var(--agilo-ps-surface-2))
+    );
+  }
+}
+
+/* Boutons Enregistrer : secondaire = contour accent (couleurs suivent --color--vert Webflow) */
 .agilo-ps-save-group .agilo-ps-btn--secondary {
-  background: #fff;
+  background: var(--agilo-ps-surface);
   color: var(--agilo-ps-accent);
   border: 2px solid var(--agilo-ps-accent);
-  box-shadow: 0 1px 2px rgba(5, 56, 26, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+@supports (box-shadow: 0 0 color-mix(in srgb, red, blue)) {
+  .agilo-ps-save-group .agilo-ps-btn--secondary {
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--agilo-ps-accent) 18%, transparent);
+  }
 }
 
 .agilo-ps-save-group .agilo-ps-btn--secondary:hover {
-  background: #d3f8e1;
+  background: var(--agt-accent-soft, #d3f8e1);
   color: var(--agilo-ps-accent);
+}
+
+@supports (background: color-mix(in srgb, red, blue)) {
+  .agilo-ps-save-group .agilo-ps-btn--secondary:hover {
+    background: color-mix(in srgb, var(--agilo-ps-accent) 18%, var(--agilo-ps-surface));
+  }
 }
 
 .agilo-ps-save-group .agilo-ps-btn--secondary:disabled {
   opacity: 0.45;
   border-color: var(--agilo-ps-border);
   color: var(--agilo-ps-muted);
-  background: #f3f4f6;
+  background: var(--agilo-ps-surface-2);
 }
 
 .agilo-ps-btn--ghost {
@@ -554,12 +576,12 @@
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  color: #6b7280;
+  color: var(--agilo-ps-muted);
 }
 
 .agilo-ps-tab--active {
-  background: #f3f4f6;
-  color: #111827;
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
 }
 
 .agilo-ps-tabpanels {
