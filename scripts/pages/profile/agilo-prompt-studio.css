@@ -116,11 +116,13 @@
 
 .agilo-ps-list-item:hover {
   border-color: var(--agilo-ps-accent);
+  background: #f5f3ff;
   background: color-mix(in srgb, var(--agilo-ps-accent) 8%, var(--agilo-ps-surface));
 }
 
 .agilo-ps-list-item--active {
   border-color: var(--agilo-ps-accent);
+  box-shadow: 0 0 0 2px rgba(93, 45, 230, 0.25);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-ps-accent) 35%, transparent);
 }
 
