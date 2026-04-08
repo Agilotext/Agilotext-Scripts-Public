@@ -381,28 +381,44 @@ function mountTextarea(parent, initial, opts) {
     ta.spellcheck = false;
     ta.style.minHeight = minHeight;
     const onInput = opts?.onChange;
-    ta.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter")
-            return;
-        // IME / saisie composée (CJK, etc.)
-        if (e.isComposing)
-            return;
-        e.stopPropagation();
-        // Capture curseur au moment du keydown (autres libs peuvent bouger le focus après).
+    let enterBreakHandledThisTick = false;
+    const insertLineBreakAtCaret = () => {
         const start = ta.selectionStart ?? 0;
         const end = ta.selectionEnd ?? 0;
-        // Webflow / document (capture) peut appeler preventDefault avant nous ; OpenTech UX et
-        // d’autres scripts peuvent le faire après nous sur la phase bulle du textarea. Dans ce cas
-        // defaultPrevented n’est pas encore true dans ce handler : on attend la fin des listeners sync.
+        ta.value = ta.value.slice(0, start) + "\n" + ta.value.slice(end);
+        ta.selectionStart = ta.selectionEnd = start + 1;
+        onInput?.();
+    };
+    const onEnterKeydown = (e) => {
+        if (e.key !== "Enter")
+            return;
+        if (e.isComposing)
+            return;
+        // Prise de contrôle totale : Webflow / OpenTech / extensions peuvent court-circuiter le défaut
+        // (keydown ou beforeinput) ; on n’attend plus defaultPrevented ni queueMicrotask.
+        e.preventDefault();
+        e.stopPropagation();
+        enterBreakHandledThisTick = true;
+        insertLineBreakAtCaret();
         queueMicrotask(() => {
-            if (!e.defaultPrevented)
-                return;
-            const el = ta;
-            el.value = el.value.slice(0, start) + "\n" + el.value.slice(end);
-            el.selectionStart = el.selectionEnd = start + 1;
-            onInput?.();
+            enterBreakHandledThisTick = false;
         });
-    });
+    };
+    // Capture = avant les listeners bulle du textarea (ex. OpenTech UX). Enregistré en premier sur
+    // l’élément tout juste créé, on reste avant les handlers ajoutés après coup sur le même nœud.
+    ta.addEventListener("keydown", onEnterKeydown, true);
+    // Filet si le navigateur n’applique le saut de ligne que via beforeinput (mobile / IME fin).
+    ta.addEventListener("beforeinput", (e) => {
+        if (e.inputType !== "insertLineBreak" && e.inputType !== "insertParagraph")
+            return;
+        if (e.isComposing)
+            return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (enterBreakHandledThisTick)
+            return;
+        insertLineBreakAtCaret();
+    }, true);
     if (onInput)
         ta.addEventListener("input", onInput);
     parent.append(ta);
