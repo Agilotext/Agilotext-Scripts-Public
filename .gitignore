@@ -7,6 +7,7 @@
 # Fichiers de documentation temporaires
 *.md
 !scripts/README.md
+!docs/styled-transcript-pdf/*.md
 
 # Scripts d'aide (pas besoin dans le repo)
 setup-github-repo.sh
