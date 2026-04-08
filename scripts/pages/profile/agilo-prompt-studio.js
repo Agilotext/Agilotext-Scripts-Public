@@ -380,6 +380,10 @@ function mountTextarea(parent, initial, opts) {
     ta.value = initial;
     ta.spellcheck = false;
     ta.style.minHeight = minHeight;
+    ta.addEventListener("keydown", (e) => {
+        if (e.key === "Enter")
+            e.stopPropagation();
+    });
     const onInput = opts?.onChange;
     if (onInput)
         ta.addEventListener("input", onInput);
@@ -419,6 +423,15 @@ function escapeCssAttr(value) {
         return CSS.escape(value);
     return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
+function prependSaveDiskIcon(btn) {
+    const wrap = document.createElement("span");
+    wrap.className = "agilo-ps-btn-save-icon";
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>';
+    btn.prepend(wrap);
+    btn.classList.add("agilo-ps-btn--with-icon");
+}
 function isLikelyAuthError(message) {
     const m = message.toLowerCase();
     return (m.includes("401") ||
@@ -454,6 +467,13 @@ class StudioApp {
     tabTrapHandler = null;
     arrowNavHandler = null;
     previewIframeDebounce = null;
+    previewEmptyNoteEl = null;
+    savePromptBtnRef = null;
+    saveHtmlBtnRef = null;
+    saveAllBtnRef = null;
+    dirtyBannerEl = null;
+    activateDetailTabFn = null;
+    activeDetailTab = "Prompt";
     state = null;
     constructor(getAuth, cfg) {
         const mode = cfg.studioMode === "simple" ? "simple" : "expert";
@@ -503,6 +523,34 @@ class StudioApp {
         const d = this.isDirty();
         this.dirtyIndicatorEl.hidden = !d;
         this.dirtyIndicatorEl.textContent = d ? "Modifications non enregistrées" : "";
+        this.updateDirtyBanner();
+        this.updateSaveButtonsVisibility(this.activeDetailTab);
+    }
+    updateDirtyBanner() {
+        const box = this.dirtyBannerEl;
+        if (!box)
+            return;
+        const d = this.isDirty();
+        box.hidden = !d;
+    }
+    updateSaveButtonsVisibility(tab) {
+        this.activeDetailTab = tab;
+        const sp = this.savePromptBtnRef;
+        const sh = this.saveHtmlBtnRef;
+        const sa = this.saveAllBtnRef;
+        if (this.cfg.readOnly)
+            return;
+        if (!this.cfg.editHtml) {
+            if (sp)
+                sp.hidden = tab !== "Prompt";
+            return;
+        }
+        if (sp)
+            sp.hidden = tab !== "Prompt";
+        if (sh)
+            sh.hidden = tab !== "HTML";
+        if (sa)
+            sa.hidden = false;
     }
     registerSaveBtn(btn) {
         this.saveBtns.push(btn);
@@ -624,6 +672,9 @@ class StudioApp {
         this.modal.setAttribute("aria-modal", "true");
         this.modal.setAttribute("aria-label", "Studio modèles Agilotext");
         const panel = el("div", "agilo-ps-panel");
+        const accent = typeof this.cfg.themeAccent === "string" ? this.cfg.themeAccent.trim() : "";
+        if (accent)
+            panel.style.setProperty("--agilo-ps-accent", accent);
         const header = el("div", "agilo-ps-header");
         const headerText = el("div", "agilo-ps-header-text");
         const title = el("h2", "agilo-ps-title", "Modèles de comptes rendus");
@@ -788,6 +839,12 @@ class StudioApp {
         this.consistencyPanelBody = null;
         this.tabNavButtons = [];
         this.tabNavNames = [];
+        this.savePromptBtnRef = null;
+        this.saveHtmlBtnRef = null;
+        this.saveAllBtnRef = null;
+        this.dirtyBannerEl = null;
+        this.activateDetailTabFn = null;
+        this.previewEmptyNoteEl = null;
     }
     mountPromptEditor() {
         if (this.promptEditor || !this.state || this.cfg.readOnly || !this.promptMountEl)
@@ -821,6 +878,9 @@ class StudioApp {
         if (!this.previewIframe || !this.state)
             return;
         const h = this.getCurrentHtml().trim();
+        if (this.previewEmptyNoteEl) {
+            this.previewEmptyNoteEl.hidden = h.length > 0;
+        }
         if (!h) {
             this.previewIframe.removeAttribute("srcdoc");
             this.previewIframe.srcdoc = "";
@@ -845,6 +905,11 @@ class StudioApp {
             return;
         mainCol.replaceChildren();
         this.saveBtns = [];
+        this.dirtyBannerEl = null;
+        this.previewEmptyNoteEl = null;
+        this.savePromptBtnRef = null;
+        this.saveHtmlBtnRef = null;
+        this.saveAllBtnRef = null;
         const statusBar = el("div", "agilo-ps-status");
         statusBar.setAttribute("aria-live", "polite");
         statusBar.hidden = true;
@@ -926,26 +991,55 @@ class StudioApp {
             toolbar.append(help);
         }
         if (!this.cfg.readOnly) {
-            const saveGroup = el("div", "agilo-ps-btn-group");
+            const saveGroup = el("div", "agilo-ps-btn-group agilo-ps-save-group");
             const savePrompt = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le prompt");
             savePrompt.type = "button";
+            prependSaveDiskIcon(savePrompt);
             savePrompt.addEventListener("click", () => void this.savePrompt(errBox));
             saveGroup.append(savePrompt);
             this.registerSaveBtn(savePrompt);
+            this.savePromptBtnRef = savePrompt;
             if (this.cfg.editHtml) {
                 const saveHtml = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le HTML");
                 saveHtml.type = "button";
+                prependSaveDiskIcon(saveHtml);
                 saveHtml.addEventListener("click", () => void this.saveHtml(errBox));
                 saveGroup.append(saveHtml);
                 this.registerSaveBtn(saveHtml);
+                this.saveHtmlBtnRef = saveHtml;
                 const saveAll = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Enregistrer tout");
                 saveAll.type = "button";
+                prependSaveDiskIcon(saveAll);
                 saveAll.title = "Enregistre le prompt puis le fichier HTML (deux étapes côté serveur).";
                 saveAll.addEventListener("click", () => void this.saveAll(errBox));
                 saveGroup.append(saveAll);
                 this.registerSaveBtn(saveAll);
+                this.saveAllBtnRef = saveAll;
             }
             toolbar.append(saveGroup);
+        }
+        let dirtyBanner = null;
+        if (!this.cfg.readOnly) {
+            dirtyBanner = el("div", "agilo-ps-dirty-banner");
+            dirtyBanner.setAttribute("role", "status");
+            dirtyBanner.setAttribute("aria-live", "polite");
+            dirtyBanner.hidden = true;
+            const dirtyBannerText = el("p", "agilo-ps-dirty-banner-text");
+            dirtyBannerText.textContent =
+                "Modifications non enregistrées — pensez à enregistrer avant de fermer, ou poursuivez la navigation entre onglets.";
+            const dirtyActions = el("div", "agilo-ps-dirty-banner-actions");
+            const goPrompt = el("button", "agilo-ps-btn agilo-ps-btn--ghost", "Aller au prompt");
+            goPrompt.type = "button";
+            goPrompt.addEventListener("click", () => this.activateDetailTabFn?.("Prompt"));
+            dirtyActions.append(goPrompt);
+            if (this.showHtmlTab()) {
+                const goHtml = el("button", "agilo-ps-btn agilo-ps-btn--ghost", "Aller au HTML");
+                goHtml.type = "button";
+                goHtml.addEventListener("click", () => this.activateDetailTabFn?.("HTML"));
+                dirtyActions.append(goHtml);
+            }
+            dirtyBanner.append(dirtyBannerText, dirtyActions);
+            this.dirtyBannerEl = dirtyBanner;
         }
         const tabNames = ["Prompt"];
         if (this.cfg.showPreviewTab)
@@ -965,6 +1059,7 @@ class StudioApp {
         this.tabNavButtons = tabButtons;
         this.tabNavNames = tabNames;
         const activate = (name) => {
+            this.activeDetailTab = name;
             for (const b of tabButtons) {
                 const on = b.dataset.tab === name;
                 b.classList.toggle("agilo-ps-tab--active", on);
@@ -1043,20 +1138,23 @@ class StudioApp {
                 pPrev.id = `agilo-ps-panel-${pi}`;
                 pPrev.setAttribute("aria-labelledby", `agilo-ps-tab-${pi}`);
             }
+            const emptyNote = el("div", "agilo-ps-preview-empty");
+            this.previewEmptyNoteEl = emptyNote;
             if (!s.html.trim()) {
-                pPrev.append(el("p", "agilo-ps-muted", "Aucun HTML à prévisualiser pour ce modèle."), el("p", "agilo-ps-muted", this.showHtmlTab()
-                    ? "Ajoutez ou collez du HTML dans l’onglet HTML, ou importez un fichier."
+                emptyNote.append(el("p", "agilo-ps-muted", "Aucun HTML à prévisualiser pour l’instant."), el("p", "agilo-ps-muted", this.showHtmlTab()
+                    ? "Ajoutez ou collez du HTML dans l’onglet HTML, ou importez un fichier — l’aperçu se mettra à jour ici."
                     : "Si vous attendez un document mis en forme, le template peut être ajouté côté Agilotext ou avec editHtml + mode adapté."));
             }
             else {
-                const wrap = el("div", "agilo-ps-preview-wrap");
-                const iframe = el("iframe", "agilo-ps-preview-frame");
-                iframe.title = "Aperçu du template HTML";
-                iframe.setAttribute("sandbox", "");
-                this.previewIframe = iframe;
-                wrap.append(iframe);
-                pPrev.append(el("p", "agilo-ps-preview-hint", "Aperçu approximatif (styles et scripts externes peuvent différer)."), wrap);
+                emptyNote.hidden = true;
             }
+            const wrap = el("div", "agilo-ps-preview-wrap");
+            const iframe = el("iframe", "agilo-ps-preview-frame");
+            iframe.title = "Aperçu du template HTML";
+            iframe.setAttribute("sandbox", "");
+            this.previewIframe = iframe;
+            wrap.append(iframe);
+            pPrev.append(el("p", "agilo-ps-preview-hint", "Aperçu approximatif (styles et scripts externes peuvent différer)."), emptyNote, wrap);
             panels.set("Aperçu", pPrev);
             panelIndex++;
         }
@@ -1141,7 +1239,11 @@ class StudioApp {
         for (const p of panels.values()) {
             content.append(p);
         }
-        mainCol.append(toolbar, tabs, content);
+        this.activateDetailTabFn = activate;
+        mainCol.append(toolbar);
+        if (dirtyBanner)
+            mainCol.append(dirtyBanner);
+        mainCol.append(tabs, content);
         activate("Prompt");
     }
     close() {
