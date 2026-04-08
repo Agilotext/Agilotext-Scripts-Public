@@ -84,13 +84,13 @@ Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.global
 2. **Head** (paramètres de la page → *Custom Code* → *Head code*) : feuille de styles.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.02/scripts/pages/profile/agilo-prompt-studio.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b4f9c5e/scripts/pages/profile/agilo-prompt-studio.css">
 ```
 
 3. **Footer** (*Before `</body>` tag*, **après** le script qui charge `globalToken` / Memberstack) : script + config + init.
 
 ```html
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.02/scripts/pages/profile/agilo-prompt-studio.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b4f9c5e/scripts/pages/profile/agilo-prompt-studio.js"></script>
 <script>
   window.__AGILO_PROMPT_STUDIO__ = {
     enabled: true,
