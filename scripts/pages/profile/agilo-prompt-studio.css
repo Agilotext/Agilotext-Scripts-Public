@@ -437,12 +437,16 @@
 }
 
 .agilo-ps-btn {
-  border: none;
   border-radius: 8px;
-  padding: 8px 14px;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+/* Sans la classe Webflow `.button`, on garde le style compact du bundle */
+.agilo-ps-btn:not(.button) {
+  border: none;
+  padding: 8px 14px;
 }
 
 .agilo-ps-btn--primary {
@@ -500,7 +504,8 @@
   gap: 8px;
 }
 
-.agilo-ps-btn--primary:disabled {
+.agilo-ps-btn--primary:disabled,
+.agilo-ps-save-group .button.save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -523,32 +528,46 @@
   }
 }
 
-/* Boutons Enregistrer : secondaire = contour accent (couleurs suivent --color--vert Webflow) */
-.agilo-ps-save-group .agilo-ps-btn--secondary {
-  background: var(--agilo-ps-surface);
-  color: var(--agilo-ps-accent);
-  border: 2px solid var(--agilo-ps-accent);
+/*
+ * Enregistrer : mêmes classes que le dashboard Webflow (`.button.save` = fond `--color--vert`).
+ * `.button` seul utilise `--color--orange` sur le site — ne pas l’utiliser sans `.save` / `.is-secondary`.
+ */
+.agilo-ps-save-group .agilo-ps-btn.button.save {
+  background-color: var(--color--vert);
+  color: var(--color--white);
+}
+
+.agilo-ps-save-group .agilo-ps-btn.button.save .agilo-ps-btn-save-icon {
+  color: inherit;
+}
+
+/* « Enregistrer tout » : `.button.is-secondary` + contour vert (même swatch que Sauvegarder) */
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary {
+  background-color: var(--color--white, #ffffff);
+  color: var(--color--vert);
+  border: 2px solid var(--color--vert);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 @supports (box-shadow: 0 0 color-mix(in srgb, red, blue)) {
-  .agilo-ps-save-group .agilo-ps-btn--secondary {
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--agilo-ps-accent) 18%, transparent);
+  .agilo-ps-save-group .agilo-ps-btn.button.is-secondary {
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--color--vert) 18%, transparent);
   }
 }
 
-.agilo-ps-save-group .agilo-ps-btn--secondary:hover {
-  background: var(--agt-accent-soft, #d3f8e1);
-  color: var(--agilo-ps-accent);
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary:hover {
+  opacity: 0.95;
+  background-color: var(--agt-accent-soft, #d3f8e1);
+  color: var(--color--vert);
 }
 
 @supports (background: color-mix(in srgb, red, blue)) {
-  .agilo-ps-save-group .agilo-ps-btn--secondary:hover {
-    background: color-mix(in srgb, var(--agilo-ps-accent) 18%, var(--agilo-ps-surface));
+  .agilo-ps-save-group .agilo-ps-btn.button.is-secondary:hover {
+    background-color: color-mix(in srgb, var(--color--vert) 16%, var(--color--white, #ffffff));
   }
 }
 
-.agilo-ps-save-group .agilo-ps-btn--secondary:disabled {
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary:disabled {
   opacity: 0.45;
   border-color: var(--agilo-ps-border);
   color: var(--agilo-ps-muted);

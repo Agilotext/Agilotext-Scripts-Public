@@ -992,7 +992,7 @@ class StudioApp {
         }
         if (!this.cfg.readOnly) {
             const saveGroup = el("div", "agilo-ps-btn-group agilo-ps-save-group");
-            const savePrompt = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le prompt");
+            const savePrompt = el("button", "agilo-ps-btn agilo-ps-btn--primary button save", "Enregistrer le prompt");
             savePrompt.type = "button";
             prependSaveDiskIcon(savePrompt);
             savePrompt.addEventListener("click", () => void this.savePrompt(errBox));
@@ -1000,14 +1000,14 @@ class StudioApp {
             this.registerSaveBtn(savePrompt);
             this.savePromptBtnRef = savePrompt;
             if (this.cfg.editHtml) {
-                const saveHtml = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le HTML");
+                const saveHtml = el("button", "agilo-ps-btn agilo-ps-btn--primary button save", "Enregistrer le HTML");
                 saveHtml.type = "button";
                 prependSaveDiskIcon(saveHtml);
                 saveHtml.addEventListener("click", () => void this.saveHtml(errBox));
                 saveGroup.append(saveHtml);
                 this.registerSaveBtn(saveHtml);
                 this.saveHtmlBtnRef = saveHtml;
-                const saveAll = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Enregistrer tout");
+                const saveAll = el("button", "agilo-ps-btn agilo-ps-btn--secondary button is-secondary", "Enregistrer tout");
                 saveAll.type = "button";
                 prependSaveDiskIcon(saveAll);
                 saveAll.title = "Enregistre le prompt puis le fichier HTML (deux étapes côté serveur).";
