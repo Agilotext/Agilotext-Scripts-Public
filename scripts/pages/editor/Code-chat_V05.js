@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const POLL_TIMEOUT_MS = 240000;
   const RECEIVE_RETRIES = 5;
   const RECEIVE_RETRY_DELAY = 900;
+  const AGILO_EMAIL_COMMENT_SPLIT = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(?:\(non envoyé\))?\s*:/i;
   const LINKEDIN_THINKING_MSG = 'Je travaille sur la rédaction du post LinkedIn. Je vous le dépose dans un instant dans l\'onglet Conversation.';
 
   /* ================== DOM ================== */
@@ -530,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
         log('buildMessageNode email branch', idx, m.id || '');
-        const parsed = parseEmailForCompose(m.text);
+        const parsed = parseEmailForCompose(displayText);
         const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
         const outlookUrl = 'https://outlook.office.com/mail/deeplink/compose?subject=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
         const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(parsed.subject) + '&body=' + encodeURIComponent(parsed.body);
@@ -632,8 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Séparer corps email et commentaire (accepter "---" ou "Commentaire interne :" / "Commentaire interne (non envoyé) :")
         const rawBody = String(displayText).trim();
-        const splitRegex = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i;
-        const bodyParts = rawBody.split(splitRegex);
+        const bodyParts = rawBody.split(AGILO_EMAIL_COMMENT_SPLIT);
         let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
         let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
 
@@ -642,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Forcer de vrais sauts de paragraphe : double \n avant formules et sections (même si le modèle n'en met qu'un)
         emailBodyText = emailBodyText
-          .replace(/\n(Bonjour\s+[\w\s]+,)/gi, '\n\n$1')
+          .replace(/\n(Bonjour[^,\n]*,)/gi, '\n\n$1')
           .replace(/\n(Prochaines étapes\s*:)/gi, '\n\n$1')
           .replace(/\n(Cordialement,)/gi, '\n\n$1')
           .replace(/\n(Décisions\s*\/\s*points clés\s*:)/gi, '\n\n$1')
@@ -651,7 +651,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
-        const paragraphs = String(emailBodyText).split(/\n\n+/).filter(Boolean);
+        const paragraphs = String(emailBodyText)
+          .split(/\n\n+/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .filter((p) => {
+            if (/^`{3,}[^\n]*$/.test(p)) return false;
+            if (/^\*{1,3}$/.test(p)) return false;
+            return true;
+          });
         if (paragraphs.length > 0) {
           bodyWrap.innerHTML = paragraphs.map(function (p, i) {
             const escaped = String(p).replace(/</g, '&lt;').replace(/\n/g, '<br>');
@@ -1102,9 +1110,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return t.trim();
   }
+
+  function sanitizeEmailModelArtifacts(text) {
+    let t = String(text || '').replace(/\r\n/g, '\n');
+    t = t.replace(/^\s*`{3,}[^\n]*$/gm, '');
+    for (let i = 0; i < 4; i++) {
+      let u = t.trim();
+      if (!u) break;
+      const before = u;
+      if (/^`{3,}/.test(u)) {
+        const nl = u.indexOf('\n');
+        u = (nl === -1 ? '' : u.slice(nl + 1)).trim();
+      }
+      if (/`{3,}\s*$/.test(u)) {
+        const li = u.lastIndexOf('\n');
+        u = (li === -1 ? '' : u.slice(0, li)).trim();
+      }
+      t = u.replace(/\r\n/g, '\n');
+      if (u === before) break;
+    }
+    t = t.replace(/^\s*`{3,}[^\n]*$/gm, '');
+    t = t.replace(/^\s*\*{1,3}\s*$/gm, '');
+    t = t.split('\n').map((line) => {
+      const tr = line.trim();
+      if (/^\*+(?:PS|P\.\s*S\.)\s*[:：]/i.test(tr) && /\*+\s*$/.test(tr)) {
+        return line.replace(/^\s*\*+/, '').replace(/\*+\s*$/, '').trimEnd();
+      }
+      return line;
+    }).join('\n');
+    t = t.replace(/\*\*(\d{1,2}\.)\*\*/g, '$1');
+    return t.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   function postProcessEmail(text) {
     if (!text) return text;
-    let t = String(text).replace(/\r\n/g, '\n');
+    let t = sanitizeEmailModelArtifacts(text);
     // Remove markdown bold/italics
     t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
     // Ensure "Objet:" is on its own line and separated from "Bonjour"
@@ -1174,7 +1214,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /** Extrait sujet + corps (sans commentaire interne) pour mailto / Gmail. */
   function parseEmailForCompose(text) {
     const raw = String(text || '').replace(/\r\n/g, '\n').trim();
-    const split = raw.split(/\n\s*---\s*\n|\n\nCommentaire interne\s*:\s*/i);
+    const split = raw.split(AGILO_EMAIL_COMMENT_SPLIT);
     const emailPart = (split[0] || raw).trim();
     const lines = emailPart.split('\n');
     let subject = '';
@@ -1314,7 +1354,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Langue : celle du transcript ; si flou, celle de la demande.`,
         `- Commencez la sortie **directement** par la ligne « Objet : … » (rien avant).`,
         `- Pas de « J'espère que vous allez bien » ni équivalents creux.`,
-        `- Zéro emoji. Aucun markdown dans la sortie (pas de croisillon titre, pas de gras en astérisques, pas de liste à puces avec tiret en début de ligne). Phrases et retours à la ligne simples.`,
+        `- Zéro emoji. Aucun markdown dans la sortie (pas de croisillon titre, pas de gras en astérisques, pas de liste à puces avec tiret en début de ligne, pas de lignes \`\`\`). Phrases et retours à la ligne simples.`,
+        `- Post-scriptum : « PS : … » ou « P.S. : … » en texte brut, sans astérisques autour de la ligne.`,
         `- Une **ligne vide** entre paragraphes et entre sections (après Bonjour, avant Prochaines étapes, avant Cordialement).`,
         `- Email **court**, **crédible**, **actionnable**, ancré dans le transcript (pas de modèle générique vide).`,
         ``,
