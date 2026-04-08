@@ -380,11 +380,25 @@ function mountTextarea(parent, initial, opts) {
     ta.value = initial;
     ta.spellcheck = false;
     ta.style.minHeight = minHeight;
-    ta.addEventListener("keydown", (e) => {
-        if (e.key === "Enter")
-            e.stopPropagation();
-    });
     const onInput = opts?.onChange;
+    ta.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter")
+            return;
+        // IME / saisie composée (CJK, etc.)
+        if (e.isComposing)
+            return;
+        e.stopPropagation();
+        // Webflow et d’autres scripts font souvent preventDefault() sur document (capture),
+        // ce qui bloque le saut de ligne natif du textarea. Si c’est déjà le cas, on insère \n nous-mêmes.
+        if (e.defaultPrevented) {
+            const el = ta;
+            const start = el.selectionStart ?? 0;
+            const end = el.selectionEnd ?? 0;
+            el.value = el.value.slice(0, start) + "\n" + el.value.slice(end);
+            el.selectionStart = el.selectionEnd = start + 1;
+            onInput?.();
+        }
+    });
     if (onInput)
         ta.addEventListener("input", onInput);
     parent.append(ta);
