@@ -41,6 +41,16 @@
   flex-direction: column;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  /* Remplit la hauteur de l’overlay (align-items: stretch) pour éviter le vide en bas */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 24px);
+}
+
+@supports (height: 100dvh) {
+  .agilo-ps-panel {
+    max-height: calc(100dvh - 24px);
+  }
 }
 
 @media (min-width: 1280px) {
@@ -63,6 +73,7 @@
   gap: 12px 16px;
   padding: 14px 16px 14px 20px;
   border-bottom: 1px solid var(--agilo-ps-border);
+  flex-shrink: 0;
 }
 
 .agilo-ps-header-text {
@@ -125,24 +136,9 @@
 .agilo-ps-body {
   display: grid;
   grid-template-columns: minmax(200px, 260px) 1fr;
-  min-height: min(70vh, 640px);
-  max-height: min(85vh, 900px);
-}
-
-@media (min-height: 800px) {
-  .agilo-ps-body {
-    min-height: min(88vh, 1000px);
-    max-height: min(88vh, 1000px);
-  }
-}
-
-@supports (height: 100dvh) {
-  @media (min-height: 800px) {
-    .agilo-ps-body {
-      min-height: min(88dvh, 1000px);
-      max-height: min(88dvh, 1000px);
-    }
-  }
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
 }
 
 @media (min-width: 1280px) {
@@ -154,22 +150,56 @@
 @media (max-width: 720px) {
   .agilo-ps-body {
     grid-template-columns: 1fr;
-    max-height: none;
-    min-height: min(50vh, 480px);
+    min-height: min(45vh, 420px);
+  }
+
+  .agilo-ps-listcol {
+    max-height: min(38vh, 320px);
+    flex: 0 0 auto;
   }
 }
 
 .agilo-ps-listcol {
   border-right: 1px solid var(--agilo-ps-border);
-  overflow: auto;
   padding: 12px;
   background: var(--agilo-ps-surface-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agilo-ps-listcol > .agilo-ps-subtitle,
+.agilo-ps-listcol > .agilo-ps-error {
+  flex-shrink: 0;
+}
+
+.agilo-ps-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .agilo-ps-main {
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
   padding: 16px;
   min-height: 200px;
+}
+
+.agilo-ps-main > .agilo-ps-status,
+.agilo-ps-main > .agilo-ps-banner,
+.agilo-ps-main > .agilo-ps-placeholder,
+.agilo-ps-main > .agilo-ps-dirty-banner {
+  flex-shrink: 0;
+}
+
+.agilo-ps-main > .agilo-ps-tabpanels {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .agilo-ps-subtitle {
@@ -203,8 +233,8 @@
 
 .agilo-ps-list-item--active {
   border-color: var(--agilo-ps-accent);
-  box-shadow: 0 0 0 2px rgba(93, 45, 230, 0.25);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-ps-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--agilo-ps-accent) 14%, var(--agilo-ps-surface));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-ps-accent) 38%, transparent);
 }
 
 .agilo-ps-list-item-name {
@@ -262,6 +292,13 @@
 
 .agilo-ps-prompt-card {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .agilo-ps-prompt-meta {
@@ -273,6 +310,7 @@
   border-bottom: 1px solid var(--agilo-ps-border);
   font-size: 0.8rem;
   color: var(--agilo-ps-muted);
+  flex-shrink: 0;
 }
 
 .agilo-ps-prompt-meta-item {
@@ -286,17 +324,13 @@
   word-break: break-word;
   font-size: 0.95rem;
   line-height: 1.55;
-  max-height: min(52vh, 560px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   max-width: 75ch;
   margin-inline: auto;
   box-sizing: border-box;
-}
-
-@supports (height: 100dvh) {
-  .agilo-ps-prompt-body {
-    max-height: min(52dvh, 560px);
-  }
+  width: 100%;
 }
 
 .agilo-ps-raw-details {
@@ -342,12 +376,16 @@
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
-  min-height: 280px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .agilo-ps-preview-frame {
   width: 100%;
-  min-height: min(50vh, 480px);
+  flex: 1 1 auto;
+  min-height: 200px;
   border: none;
   display: block;
   background: #fff;
@@ -423,6 +461,7 @@
   gap: 8px 10px;
   align-items: center;
   margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 .agilo-ps-toolbar .agilo-ps-subtitle {
@@ -585,6 +624,7 @@
   gap: 4px;
   border-bottom: 1px solid var(--agilo-ps-border);
   margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 .agilo-ps-tab {
@@ -604,22 +644,59 @@
 }
 
 .agilo-ps-tabpanels {
-  min-height: 280px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .agilo-ps-tabpanel[hidden] {
   display: none !important;
 }
 
+/* Onglet visible : occupe toute la hauteur sous les tabs */
+.agilo-ps-tabpanels > .agilo-ps-tabpanel:not([hidden]) {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agilo-ps-preview-hint,
+.agilo-ps-preview-empty {
+  flex-shrink: 0;
+}
+
+.agilo-ps-tabpanel:not([hidden]) > .agilo-ps-html-toolbar {
+  flex-shrink: 0;
+}
+
+.agilo-ps-fields-dynamic,
+.agilo-ps-consistency-dynamic {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .agilo-ps-editor-mount {
-  min-height: 200px;
   border: 1px solid var(--agilo-ps-border);
   border-radius: 8px;
-  overflow: auto;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agilo-ps-tabpanel:not([hidden]) > .agilo-ps-editor-mount {
+  flex: 1 1 auto;
 }
 
 .agilo-ps-editor-mount--tall {
-  min-height: 360px;
+  min-height: min(280px, 32vh);
 }
 
 .agilo-ps-pre {
@@ -637,6 +714,14 @@
   max-height: min(55vh, 520px);
 }
 
+/* Pré HTML en lecture seule : remplit la zone sous l’onglet */
+.agilo-ps-editor-mount > .agilo-ps-pre {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
 .agilo-ps-native-editor {
   display: block;
   width: 100%;
@@ -651,6 +736,9 @@
   resize: vertical;
   background: #0e0e0e;
   color: #f3f4f6;
+  flex: 1 1 auto;
+  min-height: 200px;
+  max-height: 100%;
 }
 
 @media (min-width: 1200px) {
@@ -691,7 +779,8 @@
   grid-template-columns: minmax(120px, 1fr) 2fr auto;
   gap: 8px;
   padding: 8px 10px;
-  background: #f9fafb;
+  background: var(--agilo-ps-surface-2);
+  border: 1px solid var(--agilo-ps-border);
   border-radius: 6px;
   font-size: 0.85rem;
 }
