@@ -344,6 +344,32 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) { err('Copy failed:', e); return false; }
   }
 
+  /** Colle dans Gmail / Word avec gras et paragraphes ; `text/plain` en repli. */
+  async function copyHtmlToClipboard(plainText, htmlInner) {
+    const frag =
+      '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:14px;line-height:1.55;color:#111">' +
+      htmlInner +
+      '</div>';
+    const html =
+      '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><!--StartFragment-->' +
+      frag +
+      '<!--EndFragment--></body></html>';
+    try {
+      if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([html], { type: 'text/html' }),
+            'text/plain': new Blob([String(plainText || '')], { type: 'text/plain' })
+          })
+        ]);
+        return true;
+      }
+    } catch (e) {
+      warn('Copie riche indisponible, repli texte seul :', e);
+    }
+    return copyToClipboard(plainText);
+  }
+
   /* ================== UI helpers ================== */
   const nowHHMM = () => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const mask = t => !t ? '' : String(t).slice(0, 6) + '…' + String(t).slice(-4);
@@ -571,6 +597,29 @@ document.addEventListener('DOMContentLoaded', () => {
           subject: stripEmailMarkdownForCopy(parsed.subject),
           body: stripEmailMarkdownForCopy(parsed.body)
         };
+
+        const rawBody = String(displayText).trim();
+        const bodyParts = rawBody.split(AGILO_EMAIL_COMMENT_SPLIT);
+        let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
+        let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
+        emailBodyText = emailBodyText.replace(/^\s*Objet\s*:\s*[^\n]+(\n|$)/i, '$1').trim();
+        emailBodyText = emailBodyText
+          .replace(/\n(Bonjour[^,\n]*,)/gi, '\n\n$1')
+          .replace(/\n(Prochaines étapes\s*:)/gi, '\n\n$1')
+          .replace(/\n(Cordialement,)/gi, '\n\n$1')
+          .replace(/\n(Décisions\s*\/\s*points clés\s*:)/gi, '\n\n$1')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        const emailBodyParagraphs = String(emailBodyText)
+          .split(/\n\n+/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .filter((p) => {
+            if (/^`{3,}[^\n]*$/.test(p)) return false;
+            if (/^\*{1,3}$/.test(p)) return false;
+            return true;
+          });
+
         const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(parsedPlain.subject) + '&body=' + encodeURIComponent(parsedPlain.body);
         const outlookUrl = 'https://outlook.office.com/mail/deeplink/compose?subject=' + encodeURIComponent(parsedPlain.subject) + '&body=' + encodeURIComponent(parsedPlain.body);
         const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(parsedPlain.subject) + '&body=' + encodeURIComponent(parsedPlain.body);
@@ -591,21 +640,38 @@ document.addEventListener('DOMContentLoaded', () => {
         const copyBtn = document.createElement('button');
         copyBtn.type = 'button';
         copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
-        copyBtn.setAttribute('aria-label', 'Copier le mail');
-        copyBtn.setAttribute('title', 'Copier le mail');
+        copyBtn.setAttribute('aria-label', 'Copier le mail (gras et paragraphes pour collage dans Gmail)');
+        copyBtn.setAttribute('title', 'Copier avec mise en forme : collez dans le corps du message Gmail / Outlook (Ctrl+V)');
         copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
         const copyIconDefault = copyBtn.innerHTML;
         const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
         copyBtn.onclick = async () => {
           const bodyOnly = parsedPlain.body || stripEmailMarkdownForCopy(m.text);
-          const toCopy = parsedPlain.subject
+          const plainFull = parsedPlain.subject
             ? `Objet : ${parsedPlain.subject}\n\n${bodyOnly}`
             : bodyOnly;
-          const success = await copyToClipboard(toCopy);
+          let htmlInner = '';
+          if (parsed.subject) {
+            htmlInner +=
+              '<p style="margin:0 0 12px 0;line-height:1.5"><span style="color:#64748b;font-weight:600">Objet</span> ' +
+              emailSubjectToDisplayHtml(parsed.subject) +
+              '</p>';
+          }
+          if (emailBodyParagraphs.length > 0) {
+            htmlInner += emailBodyParagraphs
+              .map((p) => '<p style="margin:0 0 12px 0;line-height:1.55">' + emailParagraphToDisplayHtml(p) + '</p>')
+              .join('');
+          } else {
+            htmlInner +=
+              '<p style="margin:0;line-height:1.55">' +
+              escapeHtmlBasic(emailBodyText).replace(/\n/g, '<br>') +
+              '</p>';
+          }
+          const success = await copyHtmlToClipboard(plainFull, htmlInner);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
             copyBtn.innerHTML = copyIconChecked;
-            toast('Mail copié (objet + corps)', 'success');
+            toast('Mail copié (mise en forme pour collage)', 'success');
             setTimeout(() => { copyBtn.classList.remove('agilo-email-btn-copied'); copyBtn.innerHTML = copyIconDefault; }, 2000);
           } else toast('Échec de la copie', 'error');
         };
@@ -616,8 +682,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const openTrigger = document.createElement('button');
         openTrigger.type = 'button';
         openTrigger.className = 'agilo-email-btn agilo-email-btn-open';
-        openTrigger.setAttribute('aria-label', 'Ouvrir dans Gmail, Outlook ou l’app mail');
-        openTrigger.setAttribute('title', 'Ouvrir dans Gmail, Outlook ou l’app mail');
+        openTrigger.setAttribute('aria-label', 'Ouvrir dans Gmail, Outlook ou l’app mail (texte brut uniquement)');
+        openTrigger.setAttribute(
+          'title',
+          'Les liens ne peuvent pas transporter le gras : le corps est en texte brut. Pour le même rendu que l’aperçu, utilisez Copier puis collez dans Gmail.'
+        );
         openTrigger.setAttribute('aria-haspopup', 'menu');
         openTrigger.setAttribute('aria-expanded', 'false');
         openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="agilo-email-icon agilo-email-send-icon"><path d="M10.3009 13.6949L20.102 3.89742M10.5795 14.1355L12.8019 18.5804C13.339 19.6545 13.6075 20.1916 13.9458 20.3356C14.2394 20.4606 14.575 20.4379 14.8492 20.2747C15.1651 20.0866 15.3591 19.5183 15.7472 18.3818L19.9463 6.08434C20.2845 5.09409 20.4535 4.59896 20.3378 4.27142C20.2371 3.98648 20.013 3.76234 19.7281 3.66167C19.4005 3.54595 18.9054 3.71502 17.9151 4.05315L5.61763 8.2523C4.48114 8.64037 3.91289 8.83441 3.72478 9.15032C3.56153 9.42447 3.53891 9.76007 3.66389 10.0536C3.80791 10.3919 4.34498 10.6605 5.41912 11.1975L9.86397 13.42C10.041 13.5085 10.1295 13.5527 10.2061 13.6118C10.2742 13.6643 10.3352 13.7253 10.3876 13.7933C10.4468 13.87 10.491 13.9585 10.5795 14.1355Z"/></svg>';
@@ -673,37 +742,10 @@ document.addEventListener('DOMContentLoaded', () => {
           block.appendChild(subjLine);
         }
 
-        // Séparer corps email et commentaire (accepter "---" ou "Commentaire interne :" / "Commentaire interne (non envoyé) :")
-        const rawBody = String(displayText).trim();
-        const bodyParts = rawBody.split(AGILO_EMAIL_COMMENT_SPLIT);
-        let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
-        let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
-
-        // Retirer la ligne "Objet : ..." du corps (déjà affichée en tête)
-        emailBodyText = emailBodyText.replace(/^\s*Objet\s*:\s*[^\n]+(\n|$)/i, '$1').trim();
-
-        // Forcer de vrais sauts de paragraphe : double \n avant formules et sections (même si le modèle n'en met qu'un)
-        emailBodyText = emailBodyText
-          .replace(/\n(Bonjour[^,\n]*,)/gi, '\n\n$1')
-          .replace(/\n(Prochaines étapes\s*:)/gi, '\n\n$1')
-          .replace(/\n(Cordialement,)/gi, '\n\n$1')
-          .replace(/\n(Décisions\s*\/\s*points clés\s*:)/gi, '\n\n$1')
-          .replace(/\n{3,}/g, '\n\n')
-          .trim();
-
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
-        const paragraphs = String(emailBodyText)
-          .split(/\n\n+/)
-          .map((p) => p.trim())
-          .filter(Boolean)
-          .filter((p) => {
-            if (/^`{3,}[^\n]*$/.test(p)) return false;
-            if (/^\*{1,3}$/.test(p)) return false;
-            return true;
-          });
-        if (paragraphs.length > 0) {
-          bodyWrap.innerHTML = paragraphs.map(function (p, i) {
+        if (emailBodyParagraphs.length > 0) {
+          bodyWrap.innerHTML = emailBodyParagraphs.map(function (p, i) {
             const escaped = emailParagraphToDisplayHtml(p);
             const cls = i === 0 && /^Objet\s*:/i.test(p.trim()) ? 'agilo-email-p agilo-email-p-first' : 'agilo-email-p';
             return '<p class="' + cls + '">' + escaped + '</p>';
