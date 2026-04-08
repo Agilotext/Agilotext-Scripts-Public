@@ -55,25 +55,69 @@
 
 .agilo-ps-header {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: flex-start;
+  justify-content: space-between;
   gap: 12px 16px;
-  padding: 16px 20px;
+  padding: 14px 16px 14px 20px;
   border-bottom: 1px solid var(--agilo-ps-border);
+}
+
+.agilo-ps-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .agilo-ps-title {
   margin: 0;
   font-size: 1.25rem;
   font-weight: 700;
-  flex: 1 1 auto;
 }
 
 .agilo-ps-hint {
   margin: 0;
-  flex: 1 1 100%;
   color: var(--agilo-ps-muted);
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.agilo-ps-close-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -4px -4px 0 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--agilo-ps-muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.agilo-ps-close-btn:hover {
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-close-btn:focus-visible {
+  outline: 2px solid var(--agilo-ps-accent);
+  outline-offset: 2px;
+}
+
+.agilo-ps-close-btn-icon {
+  font-size: 1.75rem;
+  font-weight: 300;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 .agilo-ps-body {
@@ -296,27 +340,27 @@
 
 .agilo-ps-simple-help {
   flex: 1 1 100%;
-  padding: 12px 0 0;
+  padding: 8px 0 0;
   border-top: 1px dashed var(--agilo-ps-border);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .agilo-ps-simple-help-title {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
 }
 
 .agilo-ps-simple-help-list {
-  margin: 0 0 12px;
-  padding-left: 1.2rem;
+  margin: 0 0 8px;
+  padding-left: 1.15rem;
   color: var(--agilo-ps-muted);
-  font-size: 0.85rem;
-  line-height: 1.45;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .agilo-ps-simple-help-li {
-  margin: 4px 0;
+  margin: 2px 0;
 }
 
 .agilo-ps-cta-design {
@@ -361,9 +405,14 @@
 .agilo-ps-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 8px 10px;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+}
+
+.agilo-ps-toolbar .agilo-ps-subtitle {
+  flex: 1 1 100%;
+  margin-bottom: 0;
 }
 
 .agilo-ps-btn-group {

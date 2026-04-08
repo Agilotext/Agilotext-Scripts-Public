@@ -453,6 +453,7 @@ class StudioApp {
     tabNavNames = [];
     tabTrapHandler = null;
     arrowNavHandler = null;
+    previewIframeDebounce = null;
     state = null;
     constructor(getAuth, cfg) {
         const mode = cfg.studioMode === "simple" ? "simple" : "expert";
@@ -624,17 +625,25 @@ class StudioApp {
         this.modal.setAttribute("aria-label", "Studio modèles Agilotext");
         const panel = el("div", "agilo-ps-panel");
         const header = el("div", "agilo-ps-header");
+        const headerText = el("div", "agilo-ps-header-text");
         const title = el("h2", "agilo-ps-title", "Modèles de comptes rendus");
         const hint = el("p", "agilo-ps-hint");
         hint.textContent =
             "Consulter ou exporter le contenu ne lance pas de transcription et ne consomme pas d’audio.";
-        const closeBtn = el("button", "agilo-ps-btn agilo-ps-btn--ghost", "Fermer");
+        headerText.append(title, hint);
+        const closeBtn = el("button", "agilo-ps-close-btn");
         closeBtn.type = "button";
+        closeBtn.setAttribute("aria-label", "Fermer le studio");
+        const closeIcon = el("span", "agilo-ps-close-btn-icon");
+        closeIcon.setAttribute("aria-hidden", "true");
+        closeIcon.textContent = "×";
+        closeBtn.append(closeIcon);
         closeBtn.addEventListener("click", () => this.close());
-        header.append(title, hint, closeBtn);
+        header.append(headerText, closeBtn);
         const body = el("div", "agilo-ps-body");
         const listCol = el("div", "agilo-ps-listcol");
         const listTitle = el("h3", "agilo-ps-subtitle", "Vos modèles");
+        listTitle.tabIndex = -1;
         const listMount = el("div", "agilo-ps-list");
         this.listMountRef = listMount;
         const errBox = el("div", "agilo-ps-error");
@@ -654,7 +663,6 @@ class StudioApp {
         document.body.classList.add("agilo-ps-scroll-lock");
         this.previousActive = document.activeElement;
         this.installModalKeyboardNav(panel);
-        closeBtn.focus();
         this.modal.addEventListener("keydown", (e) => {
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -702,6 +710,20 @@ class StudioApp {
             errBox.hidden = false;
             errBox.textContent = e instanceof Error ? e.message : String(e);
         }
+        this.focusInitialListColumn(listMount, listTitle, errBox);
+    }
+    focusInitialListColumn(listMount, listTitle, errBox) {
+        if (!errBox.hidden && errBox.textContent?.trim()) {
+            errBox.tabIndex = -1;
+            errBox.focus();
+            return;
+        }
+        const first = listMount.querySelector(".agilo-ps-list-item");
+        if (first) {
+            first.focus();
+            return;
+        }
+        listTitle.focus();
     }
     async loadPrompt(promptId, promptName, mainCol, errBox) {
         this.loadGeneration += 1;
@@ -748,6 +770,10 @@ class StudioApp {
         }
     }
     teardownEditors() {
+        if (this.previewIframeDebounce !== null) {
+            clearTimeout(this.previewIframeDebounce);
+            this.previewIframeDebounce = null;
+        }
         this.promptEditor?.destroy();
         this.htmlEditor?.destroy();
         this.promptEditor = null;
@@ -776,7 +802,10 @@ class StudioApp {
         if (this.htmlEditor || !this.state || !this.cfg.editHtml || this.cfg.readOnly || !this.htmlMountEl)
             return;
         this.htmlMountEl.replaceChildren();
-        const onDirty = () => this.updateDirtyIndicator();
+        const onDirty = () => {
+            this.updateDirtyIndicator();
+            this.schedulePreviewFromHtmlEditor();
+        };
         this.htmlEditor = createHtmlEditor(this.htmlMountEl, this.state.html, true, {
             onChange: onDirty,
         });
@@ -798,6 +827,17 @@ class StudioApp {
             return;
         }
         this.previewIframe.srcdoc = h;
+    }
+    /** Aperçu synchronisé pendant la frappe HTML (iframe déjà dans le DOM). */
+    schedulePreviewFromHtmlEditor() {
+        if (!this.previewIframe)
+            return;
+        if (this.previewIframeDebounce !== null)
+            clearTimeout(this.previewIframeDebounce);
+        this.previewIframeDebounce = window.setTimeout(() => {
+            this.previewIframeDebounce = null;
+            this.updatePreviewIframe();
+        }, 320);
     }
     renderDetail(mainCol, errBox) {
         const s = this.state;
@@ -856,17 +896,15 @@ class StudioApp {
         b3.addEventListener("click", () => downloadTextFile(`${sanitizeFilename(s.promptName)}-export-complet.txt`, buildCombinedExport(s.promptName, this.getCurrentPromptText(), this.getCurrentHtml())));
         exportGroup.append(b1, b2, b3);
         toolbar.append(exportGroup);
-        const simpleEditingHtml = this.cfg.studioMode === "simple" && !this.cfg.readOnly && this.cfg.editHtml;
-        if (this.cfg.studioMode === "simple") {
+        if (this.cfg.studioMode === "simple" &&
+            (this.cfg.readOnly || !this.cfg.editHtml)) {
             const help = el("div", "agilo-ps-simple-help");
             help.append(el("p", "agilo-ps-simple-help-title", "Conseils"));
             const ul = el("ul", "agilo-ps-simple-help-list");
             const tips = [
                 "Le texte ci-dessous guide l’IA : ton, structure et règles de sortie.",
                 "Évitez de supprimer les consignes critiques (JSON, placeholders, etc.) sans les comprendre.",
-                simpleEditingHtml
-                    ? "La mise en page du document se modifie dans l’onglet HTML (import ou édition directe)."
-                    : "Pour modifier la mise en page du document généré, utilisez le lien « Faire évoluer mon modèle » ou passez en mode expert.",
+                "Pour modifier la mise en page du document généré, utilisez le lien ci-dessous ou demandez l’activation de l’édition (expert / droits API).",
             ];
             for (const t of tips) {
                 ul.append(el("li", "agilo-ps-simple-help-li", t));
@@ -882,7 +920,7 @@ class StudioApp {
                 a.textContent = "Faire évoluer mon modèle";
                 help.append(a);
             }
-            else if (!simpleEditingHtml) {
+            else {
                 help.append(el("p", "agilo-ps-muted agilo-ps-cta-hint", "Besoin d’un changement de design ? Contactez le support Agilotext ou définissez designHelpUrl dans la config."));
             }
             toolbar.append(help);
