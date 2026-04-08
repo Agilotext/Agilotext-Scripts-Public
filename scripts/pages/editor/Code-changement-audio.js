@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.3.0' };
+  window.__agiloRail = { version: '4.3.1' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -212,22 +212,38 @@ let __pendingLoadTimer = null;
   }
 
   /* ================== API ================== */
-  async function fetchJobs(auth){
+  async function fetchJobs(auth, retried = false){
     const url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=200&offset=0`;
     let resp;
     try { resp = await fetch(url, { credentials:'omit', cache:'no-store' }); }
     catch(e){ dbg('getJobsInfo network error', e); return []; }
 
-    // 401 ? → tenter un refresh via script <head>, puis retry unique
-    if (resp.status === 401 && typeof window.getToken === 'function'){
+    async function refreshAndRetry() {
+      if (retried || !auth.username || typeof window.getToken !== 'function') return null;
       try { window.getToken(auth.username, auth.edition); } catch {}
       const a2 = await ensureAuth(8000);
-      if (a2.token && a2.token !== auth.token) return fetchJobs(a2);
+      if (a2.token) return fetchJobs(a2, true);
+      return null;
+    }
+
+    if ((resp.status === 401 || resp.status === 403) && !retried) {
+      const again = await refreshAndRetry();
+      if (again) return again;
     }
 
     if (!resp.ok) { dbg('getJobsInfo http', resp.status); return []; }
 
     const j = await resp.json().catch(()=>null);
+    const errMsg = String(j?.errorMessage || j?.userErrorMessage || '').toLowerCase();
+    const looksToken =
+      /invalid[_-]?token|bad[_-]?token|expired|jeton|token\s*invalide|non\s*autoris|unauthoriz/i.test(errMsg);
+
+    if (!retried && auth.username && j && j.status !== 'OK' && looksToken) {
+      dbg('getJobsInfo KO token-like', j);
+      const again = await refreshAndRetry();
+      if (again) return again;
+    }
+
     if (!j || j.status!=='OK' || !Array.isArray(j.jobsInfoDtos)) { dbg('getJobsInfo format', j); return []; }
 
     return j.jobsInfoDtos.map(x=>{
@@ -499,6 +515,19 @@ window.addEventListener('agilo:token', async ()=>{
         if (jobs2.length) renderRail(jobs2);
         else renderEmptyRail();
       }, 700);
+    }
+
+    // Liste vide au 1er tir : dernier rattrapage (Memberstack / getToken souvent prêt ~2s après)
+    if (!jobs.length && auth.username) {
+      setTimeout(async ()=>{
+        if (typeof window.getToken === 'function') {
+          try { window.getToken(auth.username, auth.edition); } catch {}
+        }
+        const auth3 = await ensureAuth(10000);
+        const jobs3 = await fetchJobs(auth3);
+        if (jobs3.length) renderRail(jobs3);
+        else renderEmptyRail();
+      }, 2200);
     }
   })();
 })();

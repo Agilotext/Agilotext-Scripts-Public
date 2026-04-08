@@ -1573,6 +1573,7 @@
     if (!auth.username || !auth.token) {
       clearTimeout(__wdTimer);
       __wdToken++;
+      try { window.__agiloLoadPendingToken = id; } catch { }
 
       toast('Authentification manquante');
       editors.transcript?.removeAttribute('aria-busy');
@@ -1580,6 +1581,7 @@
       hideSummaryLoading();
       return;
     }
+    try { window.__agiloLoadPendingToken = ''; } catch { }
     try {
       const [tRes, sRes] = await Promise.allSettled([
         apiGetWithRetry('transcript', id, { ...auth }, 0, __activeFetchCtl.signal),
@@ -1874,11 +1876,22 @@
       (editorRoot?.dataset.jobId ||
         new URLSearchParams(location.search).get('jobId') ||
         '').trim();
-    if (!jid) return;
+    const pending = String(window.__agiloLoadPendingToken || '').trim();
+    const targetJob = pending || jid;
+    if (!targetJob) return;
 
     const auth = readAuthSnapshot();
     const summaryEmpty = editorRoot?.dataset.summaryEmpty === '1';
-    updateDownloadLinks(jid, auth, { summaryEmpty });
+    updateDownloadLinks(jid || targetJob, auth, { summaryEmpty });
+
+    if (auth.username && auth.token && pending) {
+      try { window.__agiloLoadPendingToken = ''; } catch { }
+      try {
+        loadJob(pending);
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.warn('[Editor] reload après agilo:token:', e);
+      }
+    }
   });
 
   // Ajouter les styles CSS pour le loader Lottie
