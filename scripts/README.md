@@ -73,7 +73,7 @@ Snippet **copier-coller** dans un composant **Embed** Webflow (HTML + styles + s
 
 ### Page Mon compte — Studio prompts (`agilo-prompt-studio`)
 
-Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.globalToken`, champ `input[name="memberEmail"]` (comme le reste du site business). Dernière livraison studio : **v1.03** (layout grands écrans, édition prompt/HTML, brouillon, mutex sauvegardes). **Pinner une révision** : remplacer `@1.02` par le hash court du commit (ex. `@7edb23b`) pour un CDN figé.
+Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.globalToken`, champ `input[name="memberEmail"]` (comme le reste du site business). Dernière livraison studio : **v1.04** (fermeture en croix, Conseils/CTA masqués en édition self-service, aperçu HTML live). **Pinner une révision** : utiliser le hash court du commit (ex. `@34beffe`) pour un CDN figé.
 
 1. **Dans le Designer**, sur la page **Mon compte** (ou celle qui affiche les prompts), placer un **Embed** ou bloc HTML avec l’ancre :
 
@@ -84,13 +84,13 @@ Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.global
 2. **Head** (paramètres de la page → *Custom Code* → *Head code*) : feuille de styles.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b4f9c5e/scripts/pages/profile/agilo-prompt-studio.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@34beffe/scripts/pages/profile/agilo-prompt-studio.css">
 ```
 
 3. **Footer** (*Before `</body>` tag*, **après** le script qui charge `globalToken` / Memberstack) : script + config + init.
 
 ```html
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b4f9c5e/scripts/pages/profile/agilo-prompt-studio.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@34beffe/scripts/pages/profile/agilo-prompt-studio.js"></script>
 <script>
   window.__AGILO_PROMPT_STUDIO__ = {
     enabled: true,
