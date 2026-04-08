@@ -96,6 +96,9 @@ Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.global
     enabled: true,
     readOnly: true,
     editHtml: false,
+    studioMode: "simple",
+    designHelpUrl: "https://www.agilotext.com/contact",
+    showPreviewTab: true,
     showFieldList: true,
     showConsistencyTab: true,
     apiBase: "https://api.agilotext.com/api/v1",
@@ -106,6 +109,9 @@ Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.global
   });
 </script>
 ```
+
+- **Mode expert** (édition HTML + cohérence) : omettre `studioMode` ou `studioMode: "expert"`, et `editHtml: true` si besoin.
+- **Ouvrir un modèle depuis le tableau** (même `promptModelId` qu’en API) : `AgiloPromptStudio.openModalAndSelect("374");`
 
 Source TypeScript et build : dépôt client **`Pharmacie_Morel`** → `packages/agilo-prompt-studio` (`npm run build`), puis recopier `dist/*.js` et `dist/*.css` vers ce dossier `profile/` avant commit.
 
