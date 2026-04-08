@@ -73,7 +73,7 @@ Snippet **copier-coller** dans un composant **Embed** Webflow (HTML + styles + s
 
 ### Page Mon compte — Studio prompts (`agilo-prompt-studio`)
 
-Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.globalToken`, champ `input[name="memberEmail"]` (comme le reste du site business). **Pinner une révision** : remplacer `@1.02` par le hash court du commit (ex. `@7edb23b`) pour un CDN figé.
+Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.globalToken`, champ `input[name="memberEmail"]` (comme le reste du site business). Dernière livraison studio : **v1.03** (layout grands écrans, édition prompt/HTML, brouillon, mutex sauvegardes). **Pinner une révision** : remplacer `@1.02` par le hash court du commit (ex. `@7edb23b`) pour un CDN figé.
 
 1. **Dans le Designer**, sur la page **Mon compte** (ou celle qui affiche les prompts), placer un **Embed** ou bloc HTML avec l’ancre :
 
@@ -110,7 +110,8 @@ Bundle **IIFE** : `window.AgiloPromptStudio.init()`. Prérequis : `window.global
 </script>
 ```
 
-- **Mode expert** (édition HTML + cohérence) : omettre `studioMode` ou `studioMode: "expert"`, et `editHtml: true` si besoin.
+- **Édition complète** : `readOnly: false`, `studioMode: "expert"`, `editHtml: true` (réservé aux comptes de confiance). En **simple** avec `readOnly: false` et `editHtml: true`, l’onglet HTML s’affiche aussi.
+- **Mode expert** : omettre `studioMode` ou `studioMode: "expert"` ; combiner avec `editHtml: true` pour l’édition HTML.
 - **Ouvrir un modèle depuis le tableau** (même `promptModelId` qu’en API) : `AgiloPromptStudio.openModalAndSelect("374");`
 
 Source TypeScript et build : dépôt client **`Pharmacie_Morel`** → `packages/agilo-prompt-studio` (`npm run build`), puis recopier `dist/*.js` et `dist/*.css` vers ce dossier `profile/` avant commit.
