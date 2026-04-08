@@ -373,12 +373,16 @@ class AgilotextPromptsClient {
 }
 
 
-function mountTextarea(parent, initial, minHeight) {
+function mountTextarea(parent, initial, opts) {
+    const minHeight = opts?.minHeight ?? "220px";
     const ta = document.createElement("textarea");
     ta.className = "agilo-ps-native-editor";
     ta.value = initial;
     ta.spellcheck = false;
     ta.style.minHeight = minHeight;
+    const onInput = opts?.onChange;
+    if (onInput)
+        ta.addEventListener("input", onInput);
     parent.append(ta);
     return {
         setValue: (v) => {
@@ -386,18 +390,20 @@ function mountTextarea(parent, initial, minHeight) {
         },
         getValue: () => ta.value,
         destroy: () => {
+            if (onInput)
+                ta.removeEventListener("input", onInput);
             ta.remove();
         },
     };
 }
 /** Éditeur texte brut (prompt) — textarea monospace ; CodeMirror optionnel en upgrade. */
-function createTextEditor(parent, initial) {
-    return mountTextarea(parent, initial, "220px");
+function createTextEditor(parent, initial, opts) {
+    return mountTextarea(parent, initial, { ...opts, minHeight: opts?.minHeight ?? "220px" });
 }
 /** Éditeur HTML — même composant ; coloration syntaxique possible via upgrade CodeMirror. */
-function createHtmlEditor(parent, initial, _dark = true) {
+function createHtmlEditor(parent, initial, _dark = true, opts) {
     void _dark;
-    return mountTextarea(parent, initial, "400px");
+    return mountTextarea(parent, initial, { ...opts, minHeight: opts?.minHeight ?? "400px" });
 }
 
 
@@ -413,6 +419,16 @@ function escapeCssAttr(value) {
         return CSS.escape(value);
     return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
+function isLikelyAuthError(message) {
+    const m = message.toLowerCase();
+    return (m.includes("401") ||
+        m.includes("403") ||
+        m.includes("unauthorized") ||
+        m.includes("forbidden") ||
+        m.includes("token") ||
+        m.includes("session") ||
+        m.includes("authentif"));
+}
 class StudioApp {
     client;
     cfg;
@@ -427,6 +443,16 @@ class StudioApp {
     mainColRef = null;
     errBoxRef = null;
     statusBarRef = null;
+    loadGeneration = 0;
+    saving = false;
+    saveBtns = [];
+    dirtyIndicatorEl = null;
+    fieldsPanelBody = null;
+    consistencyPanelBody = null;
+    tabNavButtons = [];
+    tabNavNames = [];
+    tabTrapHandler = null;
+    arrowNavHandler = null;
     state = null;
     constructor(getAuth, cfg) {
         const mode = cfg.studioMode === "simple" ? "simple" : "expert";
@@ -442,8 +468,156 @@ class StudioApp {
         };
         this.client = new AgilotextPromptsClient(this.cfg.apiBase, getAuth);
     }
+    showHtmlTab() {
+        return this.cfg.studioMode === "expert" || (!this.cfg.readOnly && this.cfg.editHtml);
+    }
+    showConsistencyEffective() {
+        return this.cfg.showConsistencyTab && this.showHtmlTab();
+    }
+    getCurrentPromptText() {
+        const s = this.state;
+        if (!s)
+            return "";
+        return this.promptEditor?.getValue() ?? s.promptText;
+    }
+    getCurrentHtml() {
+        const s = this.state;
+        if (!s)
+            return "";
+        return this.htmlEditor?.getValue() ?? s.html;
+    }
+    isDirty() {
+        const s = this.state;
+        if (!s || this.cfg.readOnly)
+            return false;
+        if (this.getCurrentPromptText() !== s.promptText)
+            return true;
+        if (this.cfg.editHtml && this.getCurrentHtml() !== s.html)
+            return true;
+        return false;
+    }
+    updateDirtyIndicator() {
+        if (!this.dirtyIndicatorEl)
+            return;
+        const d = this.isDirty();
+        this.dirtyIndicatorEl.hidden = !d;
+        this.dirtyIndicatorEl.textContent = d ? "Modifications non enregistrées" : "";
+    }
+    registerSaveBtn(btn) {
+        this.saveBtns.push(btn);
+        btn.disabled = this.saving;
+    }
+    setSaving(busy) {
+        this.saving = busy;
+        for (const b of this.saveBtns) {
+            b.disabled = busy;
+        }
+    }
+    confirmDiscardIfDirty() {
+        if (!this.isDirty())
+            return true;
+        return window.confirm("Des modifications ne sont pas enregistrées. Les abandonner ?");
+    }
+    refreshFieldsPanel() {
+        const mount = this.fieldsPanelBody;
+        const s = this.state;
+        if (!mount || !s)
+            return;
+        mount.replaceChildren();
+        const html = this.getCurrentHtml();
+        const fields = parseFormFieldsFromHtml(html);
+        const table = el("div", "agilo-ps-field-table");
+        for (const f of fields) {
+            const row = el("div", "agilo-ps-field-row");
+            row.append(el("span", "agilo-ps-field-id", f.id), el("span", "agilo-ps-field-label", f.label), el("span", "agilo-ps-field-kind", f.kind));
+            table.append(row);
+        }
+        if (fields.length === 0) {
+            const msg = html.trim().length === 0
+                ? "Pas de HTML : aucun champ détecté. Ajoutez un template ou ouvrez un modèle qui en contient un."
+                : "Aucun champ détecté automatiquement (voir onglet HTML).";
+            table.append(el("p", "agilo-ps-muted", msg));
+        }
+        mount.append(table);
+    }
+    refreshConsistencyPanel() {
+        const mount = this.consistencyPanelBody;
+        const s = this.state;
+        if (!mount || !s)
+            return;
+        mount.replaceChildren();
+        const html = this.getCurrentHtml();
+        const promptText = this.getCurrentPromptText();
+        if (!html.trim()) {
+            mount.append(el("p", "agilo-ps-muted", "Sans HTML, l’analyse de cohérence des placeholders est limitée."), el("p", "agilo-ps-muted", "Ajoutez un template pour comparer placeholders et consignes du prompt."));
+            return;
+        }
+        const onlyHtml = placeholdersOnlyInHtml(html, promptText);
+        const missing = tagToFillsMissingInHtml(html, promptText);
+        const allPh = extractPlaceholdersFromHtml(html);
+        mount.append(el("p", "agilo-ps-muted", `${allPh.length} placeholder(s) dans le HTML (texte courant).`), el("h4", "agilo-ps-h4", "Dans le HTML mais peu ou pas cités comme tag-to-fill dans le prompt"), renderList(onlyHtml), el("h4", "agilo-ps-h4", "Cités dans le prompt (tag-to-fill) mais absents du HTML"), renderList(missing));
+    }
+    installModalKeyboardNav(panel) {
+        const trap = (e) => {
+            if (e.key !== "Tab" || !this.modal)
+                return;
+            const root = this.modal;
+            const sel = 'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+            const focusables = Array.from(root.querySelectorAll(sel)).filter((node) => !node.hasAttribute("disabled") && node.tabIndex !== -1);
+            if (focusables.length === 0)
+                return;
+            const first = focusables[0];
+            const last = focusables[focusables.length - 1];
+            const active = document.activeElement;
+            if (e.shiftKey) {
+                if (active === first || !focusables.includes(active)) {
+                    e.preventDefault();
+                    last.focus();
+                }
+            }
+            else {
+                if (active === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
+        this.tabTrapHandler = trap;
+        panel.addEventListener("keydown", trap);
+        const arrows = (e) => {
+            if (e.key !== "ArrowLeft" && e.key !== "ArrowRight")
+                return;
+            const target = e.target;
+            if (!target.classList.contains("agilo-ps-tab"))
+                return;
+            const tabs = this.tabNavButtons;
+            if (tabs.length === 0)
+                return;
+            const i = tabs.indexOf(target);
+            if (i < 0)
+                return;
+            e.preventDefault();
+            const next = e.key === "ArrowRight"
+                ? tabs[(i + 1) % tabs.length]
+                : tabs[(i - 1 + tabs.length) % tabs.length];
+            next?.focus();
+            next?.click();
+        };
+        this.arrowNavHandler = arrows;
+        panel.addEventListener("keydown", arrows);
+    }
+    removeModalKeyboardNav(panel) {
+        if (this.tabTrapHandler) {
+            panel.removeEventListener("keydown", this.tabTrapHandler);
+            this.tabTrapHandler = null;
+        }
+        if (this.arrowNavHandler) {
+            panel.removeEventListener("keydown", this.arrowNavHandler);
+            this.arrowNavHandler = null;
+        }
+    }
     async open(opts) {
-        this.close();
+        this.closeWithoutConfirm();
         this.modal = el("div", "agilo-ps-overlay");
         this.modal.setAttribute("role", "dialog");
         this.modal.setAttribute("aria-modal", "true");
@@ -464,6 +638,9 @@ class StudioApp {
         const listMount = el("div", "agilo-ps-list");
         this.listMountRef = listMount;
         const errBox = el("div", "agilo-ps-error");
+        errBox.id = "agilo-ps-error-live";
+        errBox.setAttribute("role", "alert");
+        errBox.setAttribute("aria-live", "assertive");
         errBox.hidden = true;
         listCol.append(listTitle, errBox, listMount);
         const mainCol = el("div", "agilo-ps-main");
@@ -476,10 +653,13 @@ class StudioApp {
         document.body.appendChild(this.modal);
         document.body.classList.add("agilo-ps-scroll-lock");
         this.previousActive = document.activeElement;
+        this.installModalKeyboardNav(panel);
         closeBtn.focus();
         this.modal.addEventListener("keydown", (e) => {
-            if (e.key === "Escape")
+            if (e.key === "Escape") {
+                e.preventDefault();
                 this.close();
+            }
         });
         try {
             const prompts = await this.client.listPrompts();
@@ -496,6 +676,8 @@ class StudioApp {
                 const id = el("span", "agilo-ps-list-item-id", `id ${p.promptId}`);
                 row.append(name, id);
                 row.addEventListener("click", () => {
+                    if (!this.confirmDiscardIfDirty())
+                        return;
                     listMount.querySelectorAll(".agilo-ps-list-item").forEach((b) => {
                         b.classList.remove("agilo-ps-list-item--active");
                     });
@@ -522,16 +704,22 @@ class StudioApp {
         }
     }
     async loadPrompt(promptId, promptName, mainCol, errBox) {
+        this.loadGeneration += 1;
+        const gen = this.loadGeneration;
         errBox.hidden = true;
         errBox.textContent = "";
         mainCol.replaceChildren(el("p", "agilo-ps-muted", "Chargement…"));
         try {
             const rawRes = await this.client.getPromptContentResponse(promptId);
+            if (gen !== this.loadGeneration)
+                return;
             const promptText = extractPromptTextFromContentResponse(rawRes);
             const rawPayloadJson = rawRes !== null && typeof rawRes === "object"
                 ? JSON.stringify(rawRes, null, 2)
                 : String(rawRes ?? "");
             const tmpl = await this.client.loadTemplateHtml(promptId);
+            if (gen !== this.loadGeneration)
+                return;
             let html = "";
             let templateWarning;
             if (tmpl.ok) {
@@ -552,6 +740,8 @@ class StudioApp {
             this.renderDetail(mainCol, errBox);
         }
         catch (e) {
+            if (gen !== this.loadGeneration)
+                return;
             mainCol.replaceChildren();
             errBox.hidden = false;
             errBox.textContent = e instanceof Error ? e.message : String(e);
@@ -566,18 +756,30 @@ class StudioApp {
         this.htmlMountEl = null;
         this.previewIframe = null;
         this.statusBarRef = null;
+        this.saveBtns = [];
+        this.dirtyIndicatorEl = null;
+        this.fieldsPanelBody = null;
+        this.consistencyPanelBody = null;
+        this.tabNavButtons = [];
+        this.tabNavNames = [];
     }
     mountPromptEditor() {
         if (this.promptEditor || !this.state || this.cfg.readOnly || !this.promptMountEl)
             return;
         this.promptMountEl.replaceChildren();
-        this.promptEditor = createTextEditor(this.promptMountEl, this.state.promptText);
+        const onDirty = () => this.updateDirtyIndicator();
+        this.promptEditor = createTextEditor(this.promptMountEl, this.state.promptText, {
+            onChange: onDirty,
+        });
     }
     mountHtmlEditor() {
         if (this.htmlEditor || !this.state || !this.cfg.editHtml || this.cfg.readOnly || !this.htmlMountEl)
             return;
         this.htmlMountEl.replaceChildren();
-        this.htmlEditor = createHtmlEditor(this.htmlMountEl, this.state.html, true);
+        const onDirty = () => this.updateDirtyIndicator();
+        this.htmlEditor = createHtmlEditor(this.htmlMountEl, this.state.html, true, {
+            onChange: onDirty,
+        });
     }
     setStatus(text, busy) {
         if (!this.statusBarRef)
@@ -589,7 +791,7 @@ class StudioApp {
     updatePreviewIframe() {
         if (!this.previewIframe || !this.state)
             return;
-        const h = this.state.html.trim();
+        const h = this.getCurrentHtml().trim();
         if (!h) {
             this.previewIframe.removeAttribute("srcdoc");
             this.previewIframe.srcdoc = "";
@@ -602,6 +804,7 @@ class StudioApp {
         if (!s)
             return;
         mainCol.replaceChildren();
+        this.saveBtns = [];
         const statusBar = el("div", "agilo-ps-status");
         statusBar.setAttribute("aria-live", "polite");
         statusBar.hidden = true;
@@ -617,6 +820,8 @@ class StudioApp {
             const retry = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Réessayer");
             retry.type = "button";
             retry.addEventListener("click", () => {
+                if (!this.confirmDiscardIfDirty())
+                    return;
                 if (this.mainColRef && this.errBoxRef) {
                     void this.loadPrompt(s.promptId, s.promptName, this.mainColRef, this.errBoxRef);
                 }
@@ -626,34 +831,44 @@ class StudioApp {
         }
         const toolbar = el("div", "agilo-ps-toolbar");
         toolbar.append(el("h3", "agilo-ps-subtitle", s.promptName));
+        const dirtyInd = el("span", "agilo-ps-dirty-badge");
+        dirtyInd.hidden = true;
+        this.dirtyIndicatorEl = dirtyInd;
+        toolbar.append(dirtyInd);
         const exportGroup = el("div", "agilo-ps-btn-group");
         const b1 = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Télécharger le prompt (.txt)");
         b1.type = "button";
-        b1.addEventListener("click", () => downloadTextFile(`${sanitizeFilename(s.promptName)}-prompt.txt`, s.promptText));
+        b1.addEventListener("click", () => downloadTextFile(`${sanitizeFilename(s.promptName)}-prompt.txt`, this.getCurrentPromptText()));
         const b2 = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Télécharger le HTML (.html)");
         b2.type = "button";
-        const hasHtml = s.html.trim().length > 0;
-        b2.disabled = !hasHtml;
-        b2.title = hasHtml ? "" : "Aucun fichier HTML pour ce modèle";
+        const curHtml = this.getCurrentHtml();
+        const hasHtml = curHtml.trim().length > 0;
+        b2.disabled = this.cfg.readOnly && !hasHtml;
+        b2.title = hasHtml ? "" : "Aucun contenu HTML pour l’instant (éditez l’onglet HTML si besoin).";
         b2.addEventListener("click", () => {
-            if (!s.html.trim())
+            const h = this.getCurrentHtml();
+            if (!h.trim())
                 return;
-            downloadTextFile(`${sanitizeFilename(s.promptName)}-template.html`, s.html, "text/html;charset=utf-8");
+            downloadTextFile(`${sanitizeFilename(s.promptName)}-template.html`, h, "text/html;charset=utf-8");
         });
         const b3 = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Télécharger tout (.txt)");
         b3.type = "button";
-        b3.addEventListener("click", () => downloadTextFile(`${sanitizeFilename(s.promptName)}-export-complet.txt`, buildCombinedExport(s.promptName, s.promptText, s.html)));
+        b3.addEventListener("click", () => downloadTextFile(`${sanitizeFilename(s.promptName)}-export-complet.txt`, buildCombinedExport(s.promptName, this.getCurrentPromptText(), this.getCurrentHtml())));
         exportGroup.append(b1, b2, b3);
         toolbar.append(exportGroup);
+        const simpleEditingHtml = this.cfg.studioMode === "simple" && !this.cfg.readOnly && this.cfg.editHtml;
         if (this.cfg.studioMode === "simple") {
             const help = el("div", "agilo-ps-simple-help");
             help.append(el("p", "agilo-ps-simple-help-title", "Conseils"));
             const ul = el("ul", "agilo-ps-simple-help-list");
-            for (const t of [
+            const tips = [
                 "Le texte ci-dessous guide l’IA : ton, structure et règles de sortie.",
                 "Évitez de supprimer les consignes critiques (JSON, placeholders, etc.) sans les comprendre.",
-                "Pour modifier la mise en page du document généré, utilisez le lien « Faire évoluer mon modèle » ou passez en mode expert.",
-            ]) {
+                simpleEditingHtml
+                    ? "La mise en page du document se modifie dans l’onglet HTML (import ou édition directe)."
+                    : "Pour modifier la mise en page du document généré, utilisez le lien « Faire évoluer mon modèle » ou passez en mode expert.",
+            ];
+            for (const t of tips) {
                 ul.append(el("li", "agilo-ps-simple-help-li", t));
             }
             help.append(ul);
@@ -667,7 +882,7 @@ class StudioApp {
                 a.textContent = "Faire évoluer mon modèle";
                 help.append(a);
             }
-            else {
+            else if (!simpleEditingHtml) {
                 help.append(el("p", "agilo-ps-muted agilo-ps-cta-hint", "Besoin d’un changement de design ? Contactez le support Agilotext ou définissez designHelpUrl dans la config."));
             }
             toolbar.append(help);
@@ -676,13 +891,21 @@ class StudioApp {
             const saveGroup = el("div", "agilo-ps-btn-group");
             const savePrompt = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le prompt");
             savePrompt.type = "button";
-            savePrompt.addEventListener("click", () => void this.savePrompt(errBox, savePrompt));
+            savePrompt.addEventListener("click", () => void this.savePrompt(errBox));
             saveGroup.append(savePrompt);
-            if (this.cfg.studioMode === "expert" && this.cfg.editHtml) {
+            this.registerSaveBtn(savePrompt);
+            if (this.cfg.editHtml) {
                 const saveHtml = el("button", "agilo-ps-btn agilo-ps-btn--primary", "Enregistrer le HTML");
                 saveHtml.type = "button";
-                saveHtml.addEventListener("click", () => void this.saveHtml(errBox, saveHtml));
+                saveHtml.addEventListener("click", () => void this.saveHtml(errBox));
                 saveGroup.append(saveHtml);
+                this.registerSaveBtn(saveHtml);
+                const saveAll = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Enregistrer tout");
+                saveAll.type = "button";
+                saveAll.title = "Enregistre le prompt puis le fichier HTML (deux étapes côté serveur).";
+                saveAll.addEventListener("click", () => void this.saveAll(errBox));
+                saveGroup.append(saveAll);
+                this.registerSaveBtn(saveAll);
             }
             toolbar.append(saveGroup);
         }
@@ -691,19 +914,24 @@ class StudioApp {
             tabNames.push("Aperçu");
         if (this.cfg.showFieldList)
             tabNames.push("Champs");
-        if (this.cfg.studioMode === "expert") {
+        if (this.showHtmlTab()) {
             tabNames.push("HTML");
-            if (this.cfg.showConsistencyTab)
+            if (this.showConsistencyEffective())
                 tabNames.push("Cohérence");
         }
         const tabs = el("div", "agilo-ps-tabs");
+        tabs.setAttribute("role", "tablist");
+        tabs.setAttribute("aria-label", "Contenu du modèle");
         const tabButtons = [];
         const panels = new Map();
+        this.tabNavButtons = tabButtons;
+        this.tabNavNames = tabNames;
         const activate = (name) => {
             for (const b of tabButtons) {
                 const on = b.dataset.tab === name;
                 b.classList.toggle("agilo-ps-tab--active", on);
                 b.setAttribute("aria-selected", on ? "true" : "false");
+                b.tabIndex = on ? 0 : -1;
             }
             for (const [k, p] of panels) {
                 p.hidden = k !== name;
@@ -712,15 +940,29 @@ class StudioApp {
                 this.mountPromptEditor();
             if (name === "HTML")
                 this.mountHtmlEditor();
-            if (name === "Aperçu")
+            if (name === "Aperçu") {
+                if (this.state && this.htmlEditor) {
+                    this.state.html = this.htmlEditor.getValue();
+                }
                 this.updatePreviewIframe();
+            }
+            if (name === "Champs")
+                this.refreshFieldsPanel();
+            if (name === "Cohérence")
+                this.refreshConsistencyPanel();
+            this.updateDirtyIndicator();
         };
-        for (const name of tabNames) {
+        for (let i = 0; i < tabNames.length; i++) {
+            const name = tabNames[i];
             const tb = el("button", "agilo-ps-tab");
             tb.type = "button";
             tb.dataset.tab = name;
             tb.textContent = name;
             tb.setAttribute("role", "tab");
+            tb.id = `agilo-ps-tab-${i}`;
+            tb.setAttribute("aria-controls", `agilo-ps-panel-${i}`);
+            tb.setAttribute("aria-selected", "false");
+            tb.tabIndex = i === 0 ? 0 : -1;
             tb.addEventListener("click", () => activate(name));
             tabButtons.push(tb);
             tabs.append(tb);
@@ -728,6 +970,11 @@ class StudioApp {
         const content = el("div", "agilo-ps-tabpanels");
         const pPrompt = el("div", "agilo-ps-tabpanel");
         pPrompt.setAttribute("role", "tabpanel");
+        const promptTabIdx = tabNames.indexOf("Prompt");
+        if (promptTabIdx >= 0) {
+            pPrompt.id = `agilo-ps-panel-${promptTabIdx}`;
+            pPrompt.setAttribute("aria-labelledby", `agilo-ps-tab-${promptTabIdx}`);
+        }
         const promptMount = el("div", "agilo-ps-editor-mount");
         this.promptMountEl = promptMount;
         if (this.cfg.readOnly) {
@@ -749,11 +996,19 @@ class StudioApp {
         }
         pPrompt.append(promptMount);
         panels.set("Prompt", pPrompt);
+        let panelIndex = 1;
         if (this.cfg.showPreviewTab) {
             const pPrev = el("div", "agilo-ps-tabpanel");
             pPrev.setAttribute("role", "tabpanel");
+            const pi = tabNames.indexOf("Aperçu");
+            if (pi >= 0) {
+                pPrev.id = `agilo-ps-panel-${pi}`;
+                pPrev.setAttribute("aria-labelledby", `agilo-ps-tab-${pi}`);
+            }
             if (!s.html.trim()) {
-                pPrev.append(el("p", "agilo-ps-muted", "Aucun HTML à prévisualiser pour ce modèle."), el("p", "agilo-ps-muted", "Si vous attendez un document mis en forme, le template peut être ajouté côté Agilotext ou en mode expert."));
+                pPrev.append(el("p", "agilo-ps-muted", "Aucun HTML à prévisualiser pour ce modèle."), el("p", "agilo-ps-muted", this.showHtmlTab()
+                    ? "Ajoutez ou collez du HTML dans l’onglet HTML, ou importez un fichier."
+                    : "Si vous attendez un document mis en forme, le template peut être ajouté côté Agilotext ou avec editHtml + mode adapté."));
             }
             else {
                 const wrap = el("div", "agilo-ps-preview-wrap");
@@ -765,29 +1020,31 @@ class StudioApp {
                 pPrev.append(el("p", "agilo-ps-preview-hint", "Aperçu approximatif (styles et scripts externes peuvent différer)."), wrap);
             }
             panels.set("Aperçu", pPrev);
+            panelIndex++;
         }
         if (this.cfg.showFieldList) {
             const pFields = el("div", "agilo-ps-tabpanel");
             pFields.setAttribute("role", "tabpanel");
-            const fields = parseFormFieldsFromHtml(s.html);
-            const table = el("div", "agilo-ps-field-table");
-            for (const f of fields) {
-                const row = el("div", "agilo-ps-field-row");
-                row.append(el("span", "agilo-ps-field-id", f.id), el("span", "agilo-ps-field-label", f.label), el("span", "agilo-ps-field-kind", f.kind));
-                table.append(row);
+            const pi = tabNames.indexOf("Champs");
+            if (pi >= 0) {
+                pFields.id = `agilo-ps-panel-${pi}`;
+                pFields.setAttribute("aria-labelledby", `agilo-ps-tab-${pi}`);
             }
-            if (fields.length === 0) {
-                const msg = s.html.trim().length === 0
-                    ? "Pas de HTML : aucun champ détecté. Ajoutez un template ou ouvrez un modèle qui en contient un."
-                    : "Aucun champ détecté automatiquement (voir onglet HTML en mode expert).";
-                table.append(el("p", "agilo-ps-muted", msg));
-            }
-            pFields.append(table);
+            const tableMount = el("div", "agilo-ps-fields-dynamic");
+            this.fieldsPanelBody = tableMount;
+            pFields.append(tableMount);
             panels.set("Champs", pFields);
+            this.refreshFieldsPanel();
+            panelIndex++;
         }
-        if (this.cfg.studioMode === "expert") {
+        if (this.showHtmlTab()) {
             const pHtml = el("div", "agilo-ps-tabpanel");
             pHtml.setAttribute("role", "tabpanel");
+            const pi = tabNames.indexOf("HTML");
+            if (pi >= 0) {
+                pHtml.id = `agilo-ps-panel-${pi}`;
+                pHtml.setAttribute("aria-labelledby", `agilo-ps-tab-${pi}`);
+            }
             const htmlToolbar = el("div", "agilo-ps-html-toolbar");
             if (!this.cfg.readOnly && this.cfg.editHtml) {
                 const fileInput = el("input", "agilo-ps-file-input");
@@ -807,6 +1064,7 @@ class StudioApp {
                         if (this.htmlEditor)
                             this.htmlEditor.setValue(t);
                         this.updatePreviewIframe();
+                        this.updateDirtyIndicator();
                         fileInput.value = "";
                     });
                 });
@@ -815,7 +1073,7 @@ class StudioApp {
             const htmlMount = el("div", "agilo-ps-editor-mount agilo-ps-editor-mount--tall");
             this.htmlMountEl = htmlMount;
             if (!s.html.trim() && this.cfg.readOnly) {
-                htmlMount.append(el("p", "agilo-ps-muted", "Pas de template HTML pour ce modèle."), el("p", "agilo-ps-muted", "Un fichier peut être ajouté via l’équipe Agilotext ou en édition expert avec import."));
+                htmlMount.append(el("p", "agilo-ps-muted", "Pas de template HTML pour ce modèle."), el("p", "agilo-ps-muted", "Un fichier peut être ajouté via l’équipe Agilotext ou en édition avec import."));
             }
             else if (this.cfg.readOnly || !this.cfg.editHtml) {
                 const htmlPre = el("pre", "agilo-ps-pre agilo-ps-pre--tall");
@@ -824,21 +1082,24 @@ class StudioApp {
             }
             pHtml.append(htmlToolbar, htmlMount);
             panels.set("HTML", pHtml);
+            panelIndex++;
         }
-        if (this.cfg.studioMode === "expert" && this.cfg.showConsistencyTab) {
+        if (this.showConsistencyEffective()) {
             const pCo = el("div", "agilo-ps-tabpanel");
             pCo.setAttribute("role", "tabpanel");
-            if (!s.html.trim()) {
-                pCo.append(el("p", "agilo-ps-muted", "Sans HTML, l’analyse de cohérence des placeholders est limitée."), el("p", "agilo-ps-muted", "Ajoutez un template pour comparer placeholders et consignes du prompt."));
+            const pi = tabNames.indexOf("Cohérence");
+            if (pi >= 0) {
+                pCo.id = `agilo-ps-panel-${pi}`;
+                pCo.setAttribute("aria-labelledby", `agilo-ps-tab-${pi}`);
             }
-            else {
-                const onlyHtml = placeholdersOnlyInHtml(s.html, s.promptText);
-                const missing = tagToFillsMissingInHtml(s.html, s.promptText);
-                const allPh = extractPlaceholdersFromHtml(s.html);
-                pCo.append(el("p", "agilo-ps-muted", `${allPh.length} placeholder(s) dans le HTML.`), el("h4", "agilo-ps-h4", "Dans le HTML mais peu ou pas cités comme tag-to-fill dans le prompt"), renderList(onlyHtml), el("h4", "agilo-ps-h4", "Cités dans le prompt (tag-to-fill) mais absents du HTML"), renderList(missing));
-            }
+            const coMount = el("div", "agilo-ps-consistency-dynamic");
+            this.consistencyPanelBody = coMount;
+            pCo.append(coMount);
             panels.set("Cohérence", pCo);
+            this.refreshConsistencyPanel();
+            panelIndex++;
         }
+        void panelIndex;
         for (const p of panels.values()) {
             content.append(p);
         }
@@ -846,6 +1107,14 @@ class StudioApp {
         activate("Prompt");
     }
     close() {
+        if (!this.confirmDiscardIfDirty())
+            return;
+        this.closeWithoutConfirm();
+    }
+    closeWithoutConfirm() {
+        const panel = this.modal?.querySelector(".agilo-ps-panel");
+        if (panel)
+            this.removeModalKeyboardNav(panel);
         this.teardownEditors();
         if (this.modal) {
             this.modal.remove();
@@ -858,12 +1127,12 @@ class StudioApp {
         this.mainColRef = null;
         this.errBoxRef = null;
     }
-    async savePrompt(errBox, btn) {
+    async savePrompt(errBox) {
         const s = this.state;
-        if (!s)
+        if (!s || this.saving)
             return;
-        const text = this.promptEditor?.getValue() ?? s.promptText;
-        btn.disabled = true;
+        const text = this.getCurrentPromptText();
+        this.setSaving(true);
         errBox.hidden = true;
         this.setStatus("Enregistrement en cours… Finalisation côté Agilotext peut prendre 1 à 2 minutes.", true);
         try {
@@ -880,23 +1149,28 @@ class StudioApp {
             s.promptText = text;
             this.setStatus("Enregistrement réussi.", false);
             setTimeout(() => this.setStatus("", false), 4000);
+            this.updateDirtyIndicator();
         }
         catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
             errBox.hidden = false;
-            errBox.textContent = e instanceof Error ? e.message : String(e);
+            errBox.textContent = isLikelyAuthError(msg)
+                ? `Session ou authentification : ${msg}. Reconnectez-vous si besoin.`
+                : msg;
             this.setStatus("", false);
         }
         finally {
-            btn.disabled = false;
+            this.setSaving(false);
         }
     }
-    async saveHtml(errBox, btn) {
+    async saveHtml(errBox) {
         const s = this.state;
-        if (!s)
+        if (!s || this.saving)
             return;
-        const html = this.htmlEditor?.getValue() ?? s.html;
-        const onlyHtml = placeholdersOnlyInHtml(html, s.promptText);
-        const missing = tagToFillsMissingInHtml(html, s.promptText);
+        const html = this.getCurrentHtml();
+        const promptText = this.getCurrentPromptText();
+        const onlyHtml = placeholdersOnlyInHtml(html, promptText);
+        const missing = tagToFillsMissingInHtml(html, promptText);
         if (onlyHtml.length > 0 || missing.length > 0) {
             const detail = [
                 onlyHtml.length ? `${onlyHtml.length} placeholder(s) dans le HTML non reflétés dans le prompt.` : "",
@@ -911,12 +1185,12 @@ class StudioApp {
         if (!window.confirm("Modifier le fichier HTML peut casser les exports ou la génération. Confirmer l’enregistrement ?")) {
             return;
         }
-        btn.disabled = true;
+        this.setSaving(true);
         errBox.hidden = true;
         this.setStatus("Envoi du HTML et finalisation… Patience 1–2 minutes.", true);
         try {
-            await this.client.updateTemplateFile(s.promptId, s.promptText, s.promptName, html);
-            await this.client.updatePromptText(s.promptId, s.promptText, s.promptName);
+            await this.client.updateTemplateFile(s.promptId, promptText, s.promptName, html);
+            await this.client.updatePromptText(s.promptId, promptText, s.promptName);
             const ok = await this.client.waitPromptReady(s.promptId, {
                 onTick: ({ elapsedMs, maxMs }) => {
                     const sec = Math.round(elapsedMs / 1000);
@@ -927,17 +1201,100 @@ class StudioApp {
                 throw new Error("Le modèle n’est pas repassé à READY après mise à jour du HTML. Vérifiez le contenu ou contactez le support.");
             }
             s.html = html;
+            s.promptText = promptText;
             this.updatePreviewIframe();
             this.setStatus("HTML enregistré avec succès.", false);
             setTimeout(() => this.setStatus("", false), 4000);
+            this.updateDirtyIndicator();
         }
         catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
             errBox.hidden = false;
-            errBox.textContent = e instanceof Error ? e.message : String(e);
+            errBox.textContent = isLikelyAuthError(msg)
+                ? `Session ou authentification : ${msg}. Reconnectez-vous si besoin.`
+                : msg;
             this.setStatus("", false);
         }
         finally {
-            btn.disabled = false;
+            this.setSaving(false);
+        }
+    }
+    async saveAll(errBox) {
+        const s = this.state;
+        if (!s || this.saving || !this.cfg.editHtml)
+            return;
+        if (!window.confirm("Enregistrer d’abord le prompt, puis le HTML ? Deux finalisations côté Agilotext peuvent prendre plusieurs minutes.")) {
+            return;
+        }
+        this.setSaving(true);
+        errBox.hidden = true;
+        try {
+            const text = this.getCurrentPromptText();
+            this.setStatus("Étape 1/2 : enregistrement du prompt…", true);
+            await this.client.updatePromptText(s.promptId, text, s.promptName);
+            let ok = await this.client.waitPromptReady(s.promptId, {
+                onTick: ({ elapsedMs, maxMs }) => {
+                    const sec = Math.round(elapsedMs / 1000);
+                    this.setStatus(`Prompt : finalisation… (${sec}s / ~${Math.round(maxMs / 60000)} min max).`, true);
+                },
+            });
+            if (!ok) {
+                throw new Error("Le modèle n’est pas repassé à READY après le prompt.");
+            }
+            s.promptText = text;
+            const html = this.getCurrentHtml();
+            const promptText = this.getCurrentPromptText();
+            const onlyHtml = placeholdersOnlyInHtml(html, promptText);
+            const missing = tagToFillsMissingInHtml(html, promptText);
+            if (onlyHtml.length > 0 || missing.length > 0) {
+                const detail = [
+                    onlyHtml.length ? `${onlyHtml.length} incohérence(s) placeholders.` : "",
+                    missing.length ? `${missing.length} tag(s) manquant(s).` : "",
+                ]
+                    .filter(Boolean)
+                    .join(" ");
+                if (!window.confirm(`Incohérences : ${detail}\n\nContinuer l’enregistrement du HTML ?`)) {
+                    this.setStatus("Prompt enregistré. HTML non envoyé.", false);
+                    this.setSaving(false);
+                    this.updateDirtyIndicator();
+                    return;
+                }
+            }
+            if (!window.confirm("Étape 2/2 : envoyer le fichier HTML ? Cela peut affecter la génération.")) {
+                this.setStatus("Prompt enregistré. HTML non envoyé.", false);
+                this.setSaving(false);
+                this.updateDirtyIndicator();
+                return;
+            }
+            this.setStatus("Étape 2/2 : envoi du HTML…", true);
+            await this.client.updateTemplateFile(s.promptId, promptText, s.promptName, html);
+            await this.client.updatePromptText(s.promptId, promptText, s.promptName);
+            ok = await this.client.waitPromptReady(s.promptId, {
+                onTick: ({ elapsedMs, maxMs }) => {
+                    const sec = Math.round(elapsedMs / 1000);
+                    this.setStatus(`HTML : finalisation… (${sec}s / ~${Math.round(maxMs / 60000)} min max).`, true);
+                },
+            });
+            if (!ok) {
+                throw new Error("Le modèle n’est pas repassé à READY après le HTML.");
+            }
+            s.html = html;
+            s.promptText = promptText;
+            this.updatePreviewIframe();
+            this.setStatus("Prompt et HTML enregistrés.", false);
+            setTimeout(() => this.setStatus("", false), 4000);
+            this.updateDirtyIndicator();
+        }
+        catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            errBox.hidden = false;
+            errBox.textContent = isLikelyAuthError(msg)
+                ? `Session ou authentification : ${msg}. Reconnectez-vous si besoin.`
+                : msg;
+            this.setStatus("", false);
+        }
+        finally {
+            this.setSaving(false);
         }
     }
 }
