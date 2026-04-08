@@ -693,7 +693,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const bodyWrap = document.createElement('div');
         bodyWrap.className = 'agilo-email-block-body';
-        const paragraphs = String(emailBodyText).split(/\n\n+/).filter(Boolean);
+        const paragraphs = String(emailBodyText)
+          .split(/\n\n+/)
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .filter((p) => {
+            if (/^`{3,}[^\n]*$/.test(p)) return false;
+            if (/^\*{1,3}$/.test(p)) return false;
+            return true;
+          });
         if (paragraphs.length > 0) {
           bodyWrap.innerHTML = paragraphs.map(function (p, i) {
             const escaped = emailParagraphToDisplayHtml(p);
@@ -1144,9 +1152,50 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return t.trim();
   }
+
+  /**
+   * Retire les artéfacts fréquents du modèle : blocs ```, *PS…*, lignes ** orphelines, **1.** en liste.
+   * Appelé en tête de postProcessEmail pour affichage + mailto + copie.
+   */
+  function sanitizeEmailModelArtifacts(text) {
+    let t = String(text || '').replace(/\r\n/g, '\n');
+    // Lignes entièrement « fence » markdown (``` ou ```lang)
+    t = t.replace(/^\s*`{3,}[^\n]*$/gm, '');
+    // Enveloppes ``` en tête / fin de texte (plusieurs passes)
+    for (let i = 0; i < 4; i++) {
+      let u = t.trim();
+      if (!u) break;
+      const before = u;
+      if (/^`{3,}/.test(u)) {
+        const nl = u.indexOf('\n');
+        u = (nl === -1 ? '' : u.slice(nl + 1)).trim();
+      }
+      if (/`{3,}\s*$/.test(u)) {
+        const li = u.lastIndexOf('\n');
+        u = (li === -1 ? '' : u.slice(0, li)).trim();
+      }
+      t = u.replace(/\r\n/g, '\n');
+      if (u === before) break;
+    }
+    t = t.replace(/^\s*`{3,}[^\n]*$/gm, '');
+    // Ligne uniquement astérisques (orphelins du gras)
+    t = t.replace(/^\s*\*{1,3}\s*$/gm, '');
+    // *PS : …* ou *P.S. : …* sur une ligne → texte brut
+    t = t.split('\n').map((line) => {
+      const tr = line.trim();
+      if (/^\*+(?:PS|P\.\s*S\.)\s*[:：]/i.test(tr) && /\*+\s*$/.test(tr)) {
+        return line.replace(/^\s*\*+/, '').replace(/\*+\s*$/, '').trimEnd();
+      }
+      return line;
+    }).join('\n');
+    // Numéros de liste jamais en **1.** (le modèle abuse du gras)
+    t = t.replace(/\*\*(\d{1,2}\.)\*\*/g, '$1');
+    return t.replace(/\n{3,}/g, '\n\n').trim();
+  }
+
   function postProcessEmail(text) {
     if (!text) return text;
-    let t = String(text).replace(/\r\n/g, '\n');
+    let t = sanitizeEmailModelArtifacts(text);
     // Conserver **…** pour le rendu HTML dans la bulle (voir emailParagraphToDisplayHtml).
     // Ensure "Objet:" is on its own line and separated from "Bonjour"
     t = t.replace(/^(Objet\s*:[^\n]*)(\s+Bonjour)/i, '$1\n\nBonjour');
@@ -1356,7 +1405,8 @@ document.addEventListener('DOMContentLoaded', () => {
         `- Langue : celle du transcript ; si flou, celle de la demande.`,
         `- Commencez la sortie **directement** par la ligne « Objet : … » (rien avant).`,
         `- Pas de « J'espère que vous allez bien » ni équivalents creux.`,
-        `- Zéro emoji. Pas de titres markdown (#). Pas d’italique en astérisque simple ; pour l’emphase, utilisez uniquement le **gras** avec doubles astérisques (1 à 3 segments par email, brefs).`,
+        `- Zéro emoji. Pas de titres markdown (#). Pas de blocs de code (pas de lignes \`\`\`). Pas d’italique en astérisque simple ; pour l’emphase, utilisez uniquement le **gras** avec doubles astérisques (1 à 3 segments par email, brefs).`,
+        `- Post-scriptum : écrivez « PS : … » ou « P.S. : … » en texte brut, **sans** envelopper la ligne avec des * au début et à la fin.`,
         `- Listes courtes sous « Décisions / points clés » et « Prochaines étapes » : une idée par ligne, préfixée par le caractère • (puce) suivi d’un espace ; évitez le tiret « - » en début de ligne.`,
         `- En français : pas de tiret long d’incise (—) ; préférez la virgule ou des parenthèses.`,
         `- Une **ligne vide** entre paragraphes et entre sections (après Bonjour, avant Prochaines étapes, avant Cordialement).`,
