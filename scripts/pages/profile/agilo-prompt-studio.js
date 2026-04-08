@@ -1078,6 +1078,21 @@ class StudioApp {
                     this.state.html = this.htmlEditor.getValue();
                 }
                 this.updatePreviewIframe();
+                // Chromium / WebKit : iframe srcdoc peut rester blanche après display:none sur le tabpanel
+                const snap = this.getCurrentHtml().trim();
+                const frame = this.previewIframe;
+                if (snap && frame) {
+                    requestAnimationFrame(() => {
+                        if (this.previewIframe !== frame)
+                            return;
+                        frame.srcdoc = snap;
+                        queueMicrotask(() => {
+                            if (this.previewIframe === frame && snap === this.getCurrentHtml().trim()) {
+                                frame.srcdoc = snap;
+                            }
+                        });
+                    });
+                }
             }
             if (name === "Champs")
                 this.refreshFieldsPanel();

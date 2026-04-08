@@ -5,8 +5,9 @@
   --agilo-ps-border: var(--agt-border, var(--color--Noir_25, #e5e7eb));
   --agilo-ps-surface: var(--agt-bg, var(--color--white, #ffffff));
   --agilo-ps-surface-2: #f9fafb;
-  --agilo-ps-accent: var(--agt-accent, var(--color--violet, #5d2de6));
-  --agilo-ps-accent-hover: #4a24b8;
+  /* Vert « peeper » (dashboard Business) ; surcharger avec --agt-accent ou themeAccent si besoin */
+  --agilo-ps-accent: var(--agt-accent, var(--color--vert_agilotext, #05381a));
+  --agilo-ps-accent-hover: #042a14;
   --agilo-ps-danger-bg: #fef2f2;
   --agilo-ps-danger-text: #991b1b;
   --agilo-ps-warn-bg: #fffbeb;
@@ -510,6 +511,26 @@
 
 .agilo-ps-btn--secondary:hover {
   background: #e5e7eb;
+}
+
+/* Boutons Enregistrer : même famille verte que le dashboard (secondaire = contour vert) */
+.agilo-ps-save-group .agilo-ps-btn--secondary {
+  background: #fff;
+  color: var(--agilo-ps-accent);
+  border: 2px solid var(--agilo-ps-accent);
+  box-shadow: 0 1px 2px rgba(5, 56, 26, 0.08);
+}
+
+.agilo-ps-save-group .agilo-ps-btn--secondary:hover {
+  background: #d3f8e1;
+  color: var(--agilo-ps-accent);
+}
+
+.agilo-ps-save-group .agilo-ps-btn--secondary:disabled {
+  opacity: 0.45;
+  border-color: var(--agilo-ps-border);
+  color: var(--agilo-ps-muted);
+  background: #f3f4f6;
 }
 
 .agilo-ps-btn--ghost {
