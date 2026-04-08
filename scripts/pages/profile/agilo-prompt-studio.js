@@ -452,6 +452,8 @@ class StudioApp {
     promptMountEl = null;
     htmlMountEl = null;
     previewIframe = null;
+    /** URL blob pour l’aperçu (évite bugs srcdoc + onglet masqué ; révoquée au changement d’onglet). */
+    previewObjectUrl = null;
     listMountRef = null;
     mainColRef = null;
     errBoxRef = null;
@@ -820,11 +822,31 @@ class StudioApp {
             errBox.textContent = e instanceof Error ? e.message : String(e);
         }
     }
+    releasePreviewObjectUrl() {
+        if (this.previewObjectUrl) {
+            URL.revokeObjectURL(this.previewObjectUrl);
+            this.previewObjectUrl = null;
+        }
+    }
+    /** Vide l’iframe (à la sortie de l’onglet Aperçu ou HTML vide). */
+    clearPreviewIframeContent() {
+        if (!this.previewIframe)
+            return;
+        this.releasePreviewObjectUrl();
+        this.previewIframe.removeAttribute("srcdoc");
+        try {
+            this.previewIframe.src = "about:blank";
+        }
+        catch {
+            /* IE / edge cases */
+        }
+    }
     teardownEditors() {
         if (this.previewIframeDebounce !== null) {
             clearTimeout(this.previewIframeDebounce);
             this.previewIframeDebounce = null;
         }
+        this.releasePreviewObjectUrl();
         this.promptEditor?.destroy();
         this.htmlEditor?.destroy();
         this.promptEditor = null;
@@ -881,12 +903,19 @@ class StudioApp {
         if (this.previewEmptyNoteEl) {
             this.previewEmptyNoteEl.hidden = h.length > 0;
         }
-        if (!h) {
-            this.previewIframe.removeAttribute("srcdoc");
-            this.previewIframe.srcdoc = "";
+        if (this.activeDetailTab !== "Aperçu") {
             return;
         }
-        this.previewIframe.srcdoc = h;
+        if (!h) {
+            this.clearPreviewIframeContent();
+            return;
+        }
+        const frame = this.previewIframe;
+        this.releasePreviewObjectUrl();
+        const blob = new Blob([h], { type: "text/html;charset=utf-8" });
+        this.previewObjectUrl = URL.createObjectURL(blob);
+        frame.removeAttribute("srcdoc");
+        frame.src = this.previewObjectUrl;
     }
     /** Aperçu synchronisé pendant la frappe HTML (iframe déjà dans le DOM). */
     schedulePreviewFromHtmlEditor() {
@@ -896,7 +925,9 @@ class StudioApp {
             clearTimeout(this.previewIframeDebounce);
         this.previewIframeDebounce = window.setTimeout(() => {
             this.previewIframeDebounce = null;
-            this.updatePreviewIframe();
+            if (this.activeDetailTab === "Aperçu") {
+                this.updatePreviewIframe();
+            }
         }, 320);
     }
     renderDetail(mainCol, errBox) {
@@ -1069,6 +1100,9 @@ class StudioApp {
             for (const [k, p] of panels) {
                 p.hidden = k !== name;
             }
+            if (name !== "Aperçu") {
+                this.clearPreviewIframeContent();
+            }
             if (name === "Prompt")
                 this.mountPromptEditor();
             if (name === "HTML")
@@ -1077,22 +1111,17 @@ class StudioApp {
                 if (this.state && this.htmlEditor) {
                     this.state.html = this.htmlEditor.getValue();
                 }
-                this.updatePreviewIframe();
-                // Chromium / WebKit : iframe srcdoc peut rester blanche après display:none sur le tabpanel
-                const snap = this.getCurrentHtml().trim();
-                const frame = this.previewIframe;
-                if (snap && frame) {
+                /*
+                 * 1) Ne jamais pousser le HTML dans l’iframe tant que le tabpanel est hidden (debounce HTML + srcdoc).
+                 * 2) Après hidden=false, WebKit/Chromium ont besoin d’un tick de layout avant d’assigner src / blob.
+                 */
+                requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        if (this.previewIframe !== frame)
+                        if (this.activeDetailTab !== "Aperçu" || !this.previewIframe)
                             return;
-                        frame.srcdoc = snap;
-                        queueMicrotask(() => {
-                            if (this.previewIframe === frame && snap === this.getCurrentHtml().trim()) {
-                                frame.srcdoc = snap;
-                            }
-                        });
+                        this.updatePreviewIframe();
                     });
-                }
+                });
             }
             if (name === "Champs")
                 this.refreshFieldsPanel();
@@ -1166,7 +1195,7 @@ class StudioApp {
             const wrap = el("div", "agilo-ps-preview-wrap");
             const iframe = el("iframe", "agilo-ps-preview-frame");
             iframe.title = "Aperçu du template HTML";
-            iframe.setAttribute("sandbox", "");
+            iframe.setAttribute("sandbox", "allow-same-origin");
             this.previewIframe = iframe;
             wrap.append(iframe);
             pPrev.append(el("p", "agilo-ps-preview-hint", "Aperçu approximatif (styles et scripts externes peuvent différer)."), emptyNote, wrap);
