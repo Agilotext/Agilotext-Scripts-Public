@@ -1105,7 +1105,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function postProcessEmail(text) {
     if (!text) return text;
     let t = String(text).replace(/\r\n/g, '\n');
-    // Conserver le gras **…** (et italique *…* si le modèle en met) pour l'affichage dans la bulle email
+    // Remove markdown bold/italics
+    t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
     // Ensure "Objet:" is on its own line and separated from "Bonjour"
     t = t.replace(/^(Objet\s*:[^\n]*)(\s+Bonjour)/i, '$1\n\nBonjour');
     // If "Objet:" appears later in the text, pull it to the top
@@ -1114,10 +1115,8 @@ document.addEventListener('DOMContentLoaded', () => {
       t = t.replace(objInline[0], '').trim();
       t = `${objInline[0]}\n\n${t}`;
     }
-    // Listes : « - » ou « * » en début de ligne → puce « • » ; conserver les lignes déjà en « • »
-    t = t.replace(/^\s*-\s+/gm, '• ');
-    t = t.replace(/^\s*\*\s+/gm, '');
-    t = t.replace(/^\s*▪\s+/gm, '• ');
+    // Remove bullets/arrows entirely (emails should read like natural sentences)
+    t = t.replace(/^\s*[-*•▪]\s+/gm, '');
     // Remove common arrow bullets (→ ➜ ➔ ➤ ➡ ▶ ► ▸ ▹ »)
     t = t.replace(/\s*[→➜➔➤➡▶►▸▹»]\s*/g, '\n');
     // Force blank lines between key sections
@@ -1299,7 +1298,7 @@ document.addEventListener('DOMContentLoaded', () => {
         `3. Réunion **uniquement interne** (équipe / société) : le destinataire est le **groupe** (« Bonjour à toutes et à tous, ») ou une **personne nommée explicitement** dans le transcript ; mêmes règles : pas de prénom inventé, pas d'étiquette Speaker comme formule d'appel.`,
         `4. En réunion **commerciale / prestation** avec un tiers : le destinataire du suivi est souvent celui qui **exprime le besoin, pose des questions d'achat, valide des jalons** ; l'expéditeur est souvent celui qui **présente l'offre, propose des dates, confirme une livraison**. Si doute raisonnable, préférez une formule **neutre** : « Bonjour, » ou « Bonjour Madame, Bonjour Monsieur, » plutôt qu'un prénom inventé ou tiré d'une étiquette douteuse.`,
         `5. **Plusieurs** interlocuteurs côté client : « Bonjour à toutes et à tous, » ou « Bonjour [prénom de la personne la plus centrale dans l'échange], » uniquement si ce prénom est **clair** dans le transcript.`,
-        `6. **Aucun** prénom fiable : « Bonjour, » uniquement. **Ne pas inventer** de prénom.`,
+        `6. **Aucun** prénom fiable : « Bonjour, » uniquement — **ne pas inventer** de prénom.`,
         `7. N'utilisez jamais « Speaker 1 », « Locuteur A », ni jargon technique comme formule d'appel.`,
         ``,
         `### CONTEXTE MEMBERSTACK (référence expéditeur — ne pas confondre avec le destinataire) :`,
@@ -1313,30 +1312,26 @@ document.addEventListener('DOMContentLoaded', () => {
         ``,
         `### STYLE ET FORMAT :`,
         `- Langue : celle du transcript ; si flou, celle de la demande.`,
-        `- Commencez la sortie **directement** par la ligne « Objet : … » (rien avant). Vous pouvez mettre **en gras** la partie importante du sujet après « Objet : » avec la syntaxe **texte** (deux astérisques).`,
+        `- Commencez la sortie **directement** par la ligne « Objet : … » (rien avant).`,
         `- Pas de « J'espère que vous allez bien » ni équivalents creux.`,
-        `- Zéro emoji. Pas de titre markdown (#). Pas de listes avec tiret « - » en début de ligne : pour les listes sous « Décisions / points clés » et « Prochaines étapes », utilisez **une puce par ligne** avec le caractère **•** suivi d'une espace (ex. « • Première idée »).`,
-        `- Vous pouvez mettre **en gras** un ou deux mots clés par puce (syntaxe **mot**) pour la lisibilité, sans excès.`,
-        `### TYPOGRAPHIE FRANÇAISE (STRICT) :`,
-        `- **Interdiction** d'utiliser le tiret court « - », le demi-cadratin « – » ou le cadratin « — » **à l'intérieur d'une phrase** pour couper une idée en deux, faire office de « demi-deux-points » ou coller deux propositions (style anglais). En français : phrase complète, virgules, deux-points, point-virgule, parenthèses, ou **phrase séparée** sur la ligne suivante.`,
-        `- Les **puces « • »** en début de ligne sont autorisées ; chaque puce doit contenir une **phrase ou proposition française complète**, pas une coupure avec tiret au milieu.`,
-        `- Une **ligne vide** entre paragraphes et entre sections (après Bonjour, après le bloc de rappel, avant Cordialement).`,
+        `- Zéro emoji. Aucun markdown dans la sortie (pas de croisillon titre, pas de gras en astérisques, pas de liste à puces avec tiret en début de ligne). Phrases et retours à la ligne simples.`,
+        `- Une **ligne vide** entre paragraphes et entre sections (après Bonjour, avant Prochaines étapes, avant Cordialement).`,
         `- Email **court**, **crédible**, **actionnable**, ancré dans le transcript (pas de modèle générique vide).`,
         ``,
         `### STRUCTURE OBLIGATOIRE DE LA SORTIE :`,
-        `Objet : **…** ou Objet : texte simple (sujet précis, aligné sur le transcript)`,
+        `Objet : [sujet précis, aligné sur le transcript]`,
         ``,
         `Bonjour [prénom du destinataire OU formule neutre selon règles ci-dessus],`,
         ``,
-        `[Une ou deux phrases de rappel factuel de l'échange, sans tiret incise.]`,
+        `[1–2 lignes de rappel factuel de l'échange]`,
         ``,
         `Décisions / points clés :`,
-        `• [phrase complète ; gras possible sur l'essentiel]`,
-        `• [phrase complète]`,
+        `[ligne courte]`,
+        `[ligne courte]`,
         ``,
         `Prochaines étapes :`,
-        `• [action claire, phrase complète]`,
-        `• [action claire]`,
+        `[action 1]`,
+        `[action 2]`,
         ``,
         `Cordialement,`,
         `${ctx.fullName}`,

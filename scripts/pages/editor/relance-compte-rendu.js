@@ -118,142 +118,6 @@
     };
   }
 
-  const API_V1 = 'https://api.agilotext.com/api/v1';
-  const REGEN_FALLBACK_SEC = 150;
-
-  const __regenWatch = {
-    cancelled: false,
-    countdownId: null,
-    pollTimer: null
-  };
-
-  function clearRegenWatcher() {
-    __regenWatch.cancelled = true;
-    if (__regenWatch.countdownId) {
-      clearInterval(__regenWatch.countdownId);
-      __regenWatch.countdownId = null;
-    }
-    if (__regenWatch.pollTimer) {
-      clearTimeout(__regenWatch.pollTimer);
-      __regenWatch.pollTimer = null;
-    }
-  }
-
-  function isBlankSummaryHtml(html) {
-    const t = String(html || '').replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '');
-    const text = t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    return text.length < 48;
-  }
-
-  async function fetchTranscriptSummaryPending(jobId, email, token, edition) {
-    const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-    const r = await fetch(url, { cache: 'no-store', credentials: 'omit' });
-    const j = await r.json().catch(() => ({}));
-    if (j.status !== 'OK' || !j.transcriptStatus) return { pending: true };
-    const st = String(j.transcriptStatus);
-    if (st === 'READY_SUMMARY_PENDING') return { pending: true };
-    if (/NOT_READY|PENDING|IN_PROGRESS|QUEUED|UPLOADING|SUMMARY_PENDING/i.test(st)) return { pending: true };
-    return { pending: false, status: st };
-  }
-
-  async function fetchSummaryReadyProbe(jobId, email, token, edition) {
-    const url = `${API_V1}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
-    const r = await fetch(url, { cache: 'no-store', credentials: 'omit' });
-    const raw = await r.text();
-    let j = null;
-    try { j = JSON.parse(raw); } catch (_) {}
-    if (j && j.status === 'KO') {
-      const em = String(j.errorMessage || j.javaException || '').toLowerCase();
-      if (/pending|not_ready|ready_summary_pending|in_progress|queued|not\s*ready/i.test(em)) return { ok: false, pending: true };
-      return { ok: false, pending: false };
-    }
-    if (!r.ok) return { ok: false, pending: r.status === 425 || r.status === 503 };
-    if (isBlankSummaryHtml(raw)) return { ok: false, pending: true };
-    return { ok: true };
-  }
-
-  function softReloadEditorJob(jobId) {
-    try {
-      if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
-        window.__agiloOrchestrator.loadJob(String(jobId), { autoplay: false });
-      } else {
-        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId: String(jobId) } }));
-      }
-    } catch (e) {
-      logError('softReloadEditorJob', e);
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('tab', 'summary');
-      newUrl.searchParams.set('_t', Date.now());
-      window.location.href = newUrl.toString();
-    }
-  }
-
-  /**
-   * Après redoSummary : poll léger (statut puis HTML) pour rafraîchir dès que le backend est prêt,
-   * sans attendre 2m30. Repli : rechargement complet comme avant.
-   */
-  function startRegenerationReadyWatch(creds, countdownEl) {
-    if (__regenWatch.pollTimer) {
-      clearTimeout(__regenWatch.pollTimer);
-      __regenWatch.pollTimer = null;
-    }
-    __regenWatch.cancelled = false;
-    const t0 = Date.now();
-    let pollIteration = 0;
-
-    const hardReloadFallback = () => {
-      isGenerating = false;
-      clearRegenWatcher();
-      if (countdownEl) countdownEl.textContent = 'Rechargement…';
-      setTimeout(() => {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('tab', 'summary');
-        newUrl.searchParams.set('_t', Date.now());
-        window.location.href = newUrl.toString();
-      }, 400);
-    };
-
-    const onReady = () => {
-      isGenerating = false;
-      clearRegenWatcher();
-      hideSummaryLoading();
-      showSuccessMessage('Compte-rendu prêt.');
-      softReloadEditorJob(creds.jobId);
-    };
-
-    const scheduleNext = (delayMs) => {
-      if (__regenWatch.cancelled) return;
-      __regenWatch.pollTimer = setTimeout(runPoll, delayMs);
-    };
-
-    const runPoll = async () => {
-      if (__regenWatch.cancelled) return;
-      if (Date.now() - t0 > REGEN_FALLBACK_SEC * 1000) {
-        hardReloadFallback();
-        return;
-      }
-      try {
-        const st = await fetchTranscriptSummaryPending(creds.jobId, creds.email, creds.token, creds.edition);
-        if (__regenWatch.cancelled) return;
-        if (!st.pending) {
-          const sum = await fetchSummaryReadyProbe(creds.jobId, creds.email, creds.token, creds.edition);
-          if (__regenWatch.cancelled) return;
-          if (sum.ok) {
-            onReady();
-            return;
-          }
-        }
-      } catch (e) {
-        logError('regen poll', e);
-      }
-      pollIteration += 1;
-      const delay = Math.min(12000, Math.round(3200 + pollIteration * 600));
-      scheduleNext(delay);
-    };
-
-    scheduleNext(4000);
-  }
-
   // ============================================
   // VARIABLES GLOBALES
   // ============================================
@@ -714,8 +578,7 @@
     const confirmed = confirm(
       `Remplacer le compte-rendu actuel ?\n\n` +
       `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-      `⏳ Dès que le compte-rendu est prêt côté serveur, l’éditeur se mettra à jour automatiquement (souvent 1–2 min). ` +
-      `Rechargement forcé au plus tard après ~2 min 30 si besoin.`
+      `⏳ La page se rechargera automatiquement après 2 min 30.`
     );
     
     if (!confirmed) {
@@ -735,7 +598,6 @@
       
       if (result.status === 'OK' || response.ok) {
         log('redoSummary OK - Incrémentation compteur');
-        clearRegenWatcher();
         incrementRegenerationCount(jobId, edition);
         showSuccessMessage('Régénération lancée...');
         openSummaryTab();
@@ -746,39 +608,27 @@
           const countdown = document.createElement('p');
           countdown.className = 'loading-countdown';
           loaderContainer.appendChild(countdown);
-          const hint = document.createElement('p');
-          hint.className = 'loading-countdown-hint';
-          hint.style.cssText = 'font-size:0.8125rem;color:var(--agilo-dim,#525252);margin:0.35rem 0 0;text-align:center;max-width:22rem;line-height:1.4';
-          hint.textContent = 'Mise à jour dès que le serveur a terminé (vérification automatique).';
-          loaderContainer.appendChild(hint);
-
-          let secondsLeft = REGEN_FALLBACK_SEC;
-          const tickDown = () => {
-            if (__regenWatch.cancelled) return;
-            if (secondsLeft < 0) {
-              if (__regenWatch.countdownId) {
-                clearInterval(__regenWatch.countdownId);
-                __regenWatch.countdownId = null;
-              }
-              return;
-            }
+          let secondsLeft = 150;
+          
+          const updateCountdown = () => {
             const minutes = Math.floor(secondsLeft / 60);
             const seconds = secondsLeft % 60;
-            countdown.textContent = `Rechargement auto au plus tard dans ${minutes}:${seconds.toString().padStart(2, '0')}`;
-            if (secondsLeft === 0) {
-              countdown.textContent = 'Rechargement…';
-              if (__regenWatch.countdownId) {
-                clearInterval(__regenWatch.countdownId);
-                __regenWatch.countdownId = null;
-              }
+            countdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            if (secondsLeft <= 0) {
+              countdown.textContent = 'Rechargement...';
+              setTimeout(() => {
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('tab', 'summary');
+                newUrl.searchParams.set('_t', Date.now());
+                window.location.href = newUrl.toString();
+              }, 500);
             }
             secondsLeft--;
           };
-          tickDown();
-          __regenWatch.countdownId = setInterval(tickDown, 1000);
-
-          startRegenerationReadyWatch(creds, countdown);
-
+          
+          updateCountdown();
+          const countdownInterval = setInterval(updateCountdown, 1000);
+          
           const cancelBtn = document.createElement('button');
           cancelBtn.className = 'loading-cancel-btn';
           cancelBtn.textContent = 'Annuler';
@@ -793,7 +643,7 @@
             );
             
             if (confirmed) {
-              clearRegenWatcher();
+              clearInterval(countdownInterval);
               hideSummaryLoading();
               isGenerating = false;
               const infoMsg = document.createElement('div');
@@ -826,8 +676,6 @@
             }
           };
           loaderContainer.appendChild(cancelBtn);
-        } else {
-          startRegenerationReadyWatch(creds, null);
         }
       } else if (result.status === 'KO') {
         isGenerating = false;
