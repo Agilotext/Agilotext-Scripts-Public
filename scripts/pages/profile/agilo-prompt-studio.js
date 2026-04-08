@@ -388,16 +388,20 @@ function mountTextarea(parent, initial, opts) {
         if (e.isComposing)
             return;
         e.stopPropagation();
-        // Webflow et d’autres scripts font souvent preventDefault() sur document (capture),
-        // ce qui bloque le saut de ligne natif du textarea. Si c’est déjà le cas, on insère \n nous-mêmes.
-        if (e.defaultPrevented) {
+        // Capture curseur au moment du keydown (autres libs peuvent bouger le focus après).
+        const start = ta.selectionStart ?? 0;
+        const end = ta.selectionEnd ?? 0;
+        // Webflow / document (capture) peut appeler preventDefault avant nous ; OpenTech UX et
+        // d’autres scripts peuvent le faire après nous sur la phase bulle du textarea. Dans ce cas
+        // defaultPrevented n’est pas encore true dans ce handler : on attend la fin des listeners sync.
+        queueMicrotask(() => {
+            if (!e.defaultPrevented)
+                return;
             const el = ta;
-            const start = el.selectionStart ?? 0;
-            const end = el.selectionEnd ?? 0;
             el.value = el.value.slice(0, start) + "\n" + el.value.slice(end);
             el.selectionStart = el.selectionEnd = start + 1;
             onInput?.();
-        }
+        });
     });
     if (onInput)
         ta.addEventListener("input", onInput);
