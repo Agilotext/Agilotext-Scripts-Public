@@ -1,0 +1,345 @@
+/* z-index au-dessus des sidebars Webflow typiques */
+.agilo-ps-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(14, 14, 14, 0.55);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #0e0e0e;
+}
+
+.agilo-ps-panel {
+  background: #fff;
+  border-radius: 12px;
+  max-width: min(1200px, 100%);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.agilo-ps-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.agilo-ps-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  flex: 1 1 auto;
+}
+
+.agilo-ps-hint {
+  margin: 0;
+  flex: 1 1 100%;
+  color: #4b5563;
+  font-size: 0.9rem;
+}
+
+.agilo-ps-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  min-height: min(70vh, 640px);
+  max-height: min(85vh, 900px);
+}
+
+@media (max-width: 720px) {
+  .agilo-ps-body {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+}
+
+.agilo-ps-listcol {
+  border-right: 1px solid #e5e7eb;
+  overflow: auto;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.agilo-ps-main {
+  overflow: auto;
+  padding: 16px;
+  min-height: 200px;
+}
+
+.agilo-ps-subtitle {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.agilo-ps-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.agilo-ps-list-item:hover {
+  border-color: #5d2de6;
+  background: #f5f3ff;
+}
+
+.agilo-ps-list-item-name {
+  font-weight: 600;
+}
+
+.agilo-ps-list-item-id {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.agilo-ps-error {
+  padding: 10px;
+  background: #fef2f2;
+  color: #991b1b;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.agilo-ps-placeholder,
+.agilo-ps-muted {
+  color: #6b7280;
+  margin: 0;
+}
+
+.agilo-ps-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.agilo-ps-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agilo-ps-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agilo-ps-btn--primary {
+  background: #5d2de6;
+  color: #fff;
+}
+
+.agilo-ps-btn--primary:hover {
+  background: #4a24b8;
+}
+
+.agilo-ps-btn--primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agilo-ps-btn--secondary {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.agilo-ps-btn--secondary:hover {
+  background: #e5e7eb;
+}
+
+.agilo-ps-btn--ghost {
+  background: transparent;
+  color: #5d2de6;
+}
+
+.agilo-ps-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 12px;
+}
+
+.agilo-ps-tab {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: #6b7280;
+}
+
+.agilo-ps-tab--active {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.agilo-ps-tabpanels {
+  min-height: 280px;
+}
+
+.agilo-ps-tabpanel[hidden] {
+  display: none !important;
+}
+
+.agilo-ps-editor-mount {
+  min-height: 200px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.agilo-ps-editor-mount--tall {
+  min-height: 360px;
+}
+
+.agilo-ps-pre {
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+.agilo-ps-pre--tall {
+  max-height: min(55vh, 520px);
+}
+
+.agilo-ps-native-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  border: none;
+  resize: vertical;
+  background: #0e0e0e;
+  color: #f3f4f6;
+}
+
+.agilo-ps-field-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agilo-ps-field-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 2fr auto;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 600px) {
+  .agilo-ps-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agilo-ps-field-id {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.agilo-ps-field-kind {
+  color: #6b7280;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.agilo-ps-h4 {
+  margin: 16px 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.agilo-ps-bullets {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.agilo-ps-li {
+  margin: 4px 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+body.agilo-ps-scroll-lock {
+  overflow: hidden;
+}
+
+.agilo-ps-launch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #5d2de6;
+  background: #5d2de6;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agilo-ps-launch-btn:hover {
+  background: #4a24b8;
+}
+
+@media print {
+  .agilo-ps-overlay {
+    position: static;
+    background: none;
+    padding: 0;
+  }
+  .agilo-ps-panel {
+    box-shadow: none;
+    max-width: none;
+  }
+  .agilo-ps-listcol,
+  .agilo-ps-tabs,
+  .agilo-ps-toolbar .agilo-ps-btn-group {
+    display: none !important;
+  }
+  .agilo-ps-body {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+}
