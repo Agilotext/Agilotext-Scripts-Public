@@ -157,6 +157,28 @@ function extractPromptTextFromContentResponse(res) {
 }
 
 
+/** Messages utilisateur pour les codes erreur API template (évite d’afficher les identifiants bruts). */
+function humanizeTemplateKoMessage(errorMessage) {
+    const raw = errorMessage.trim();
+    if (!raw) {
+        return "Le serveur n’a pas pu charger la mise en page HTML. Réessayez dans un instant ou contactez le support si cela continue.";
+    }
+    const norm = raw.toLowerCase().replace(/\s+/g, "_");
+    if (norm.includes("error_no_template") || norm === "error_no_template_for_prompt_id") {
+        return "Aucune mise en page HTML n’est associée à ce modèle pour l’instant. Vous pouvez continuer à modifier le prompt ; l’aperçu, les champs du formulaire et l’HTML seront disponibles dès qu’un template aura été ajouté (import depuis l’onglet HTML si votre compte le permet, ou via l’équipe Agilotext).";
+    }
+    if (norm.includes("not_found") || norm.includes("introuvable")) {
+        return "Le template HTML demandé est introuvable côté serveur. Vérifiez que le modèle est bien configuré ou contactez le support Agilotext.";
+    }
+    if (norm.includes("forbidden") || norm.includes("unauthorized") || norm.includes("access_denied")) {
+        return "Vous n’avez pas les droits nécessaires pour récupérer ce template HTML. Reconnectez-vous ou contactez votre administrateur.";
+    }
+    /* Code machine seul (ex. error_xyz) → phrase générique sans jargon inutile */
+    if (/^error_[a-z0-9_]+$/i.test(raw.split(/\s/)[0] ?? "")) {
+        return "Le serveur n’a pas pu fournir le template HTML. Réessayez plus tard ou contactez le support Agilotext en précisant le modèle concerné.";
+    }
+    return raw;
+}
 function parseJsonSafe(text) {
     try {
         return JSON.parse(text);
@@ -303,24 +325,29 @@ class AgilotextPromptsClient {
                 ok: false,
                 kind: "network",
                 message: e instanceof Error
-                    ? e.message
-                    : "Connexion impossible. Vérifiez le réseau et réessayez.",
+                    ? `Connexion impossible (${e.message}). Vérifiez votre réseau, puis cliquez sur « Réessayer ».`
+                    : "Connexion au serveur Agilotext impossible. Vérifiez votre réseau, puis cliquez sur « Réessayer ».",
             };
         }
         const text = await res.text();
         if (!res.ok) {
+            const kind = res.status >= 500 ? "api" : "network";
+            const hint = res.status >= 500
+                ? "Une erreur côté serveur empêche de charger le template. Réessayez dans quelques minutes."
+                : "La requête du template n’a pas abouti. Vérifiez la session ou réessayez.";
             return {
                 ok: false,
-                kind: res.status >= 500 ? "api" : "network",
-                message: `Modèle HTML : erreur ${res.status}. ${text.slice(0, 200)}`,
+                kind,
+                message: `${hint} (code ${res.status})`,
             };
         }
         const data = parseJsonSafe(text);
         if (data && data.status === "KO") {
+            const raw = String(data.errorMessage ?? "").trim();
             return {
                 ok: false,
                 kind: "api",
-                message: String(data.errorMessage || "Réponse serveur KO pour le template."),
+                message: humanizeTemplateKoMessage(raw || "Réponse serveur inattendue pour le template HTML."),
             };
         }
         if (data && typeof data === "object") {
@@ -983,10 +1010,7 @@ class StudioApp {
         if (s.templateWarning) {
             const banner = el("div", "agilo-ps-banner agilo-ps-banner--warn");
             const msg = el("p", "agilo-ps-banner-text");
-            const prefix = s.templateWarning.kind === "network"
-                ? "Template HTML indisponible (réseau). "
-                : "Template HTML indisponible. ";
-            msg.textContent = prefix + s.templateWarning.message;
+            msg.textContent = s.templateWarning.message;
             const retry = el("button", "agilo-ps-btn agilo-ps-btn--secondary", "Réessayer");
             retry.type = "button";
             retry.addEventListener("click", () => {
