@@ -1006,7 +1006,7 @@ class StudioApp {
         statusBar.setAttribute("aria-live", "polite");
         statusBar.hidden = true;
         this.statusBarRef = statusBar;
-        mainCol.append(statusBar);
+        let warnBanner = null;
         if (s.templateWarning) {
             const banner = el("div", "agilo-ps-banner agilo-ps-banner--warn");
             const msg = el("p", "agilo-ps-banner-text");
@@ -1021,7 +1021,7 @@ class StudioApp {
                 }
             });
             banner.append(msg, retry);
-            mainCol.append(banner);
+            warnBanner = banner;
         }
         const toolbar = el("div", "agilo-ps-toolbar");
         toolbar.append(el("h3", "agilo-ps-subtitle", s.promptName));
@@ -1079,6 +1079,7 @@ class StudioApp {
             }
             toolbar.append(help);
         }
+        let saveFooter = null;
         if (!this.cfg.readOnly) {
             const saveGroup = el("div", "agilo-ps-btn-group agilo-ps-save-group");
             const savePrompt = el("button", "agilo-ps-btn agilo-ps-btn--primary button save", "Enregistrer le prompt");
@@ -1105,7 +1106,8 @@ class StudioApp {
                 this.registerSaveBtn(saveAll);
                 this.saveAllBtnRef = saveAll;
             }
-            toolbar.append(saveGroup);
+            saveFooter = el("div", "agilo-ps-main-footer");
+            saveFooter.append(saveGroup);
         }
         let dirtyBanner = null;
         if (!this.cfg.readOnly) {
@@ -1342,10 +1344,17 @@ class StudioApp {
             content.append(p);
         }
         this.activateDetailTabFn = activate;
-        mainCol.append(toolbar);
+        const scrollWrap = el("div", "agilo-ps-main-scroll");
+        scrollWrap.append(statusBar);
+        if (warnBanner)
+            scrollWrap.append(warnBanner);
+        scrollWrap.append(toolbar);
         if (dirtyBanner)
-            mainCol.append(dirtyBanner);
-        mainCol.append(tabs, content);
+            scrollWrap.append(dirtyBanner);
+        scrollWrap.append(tabs, content);
+        mainCol.append(scrollWrap);
+        if (saveFooter)
+            mainCol.append(saveFooter);
         activate("Prompt");
     }
     close() {
