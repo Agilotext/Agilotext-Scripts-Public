@@ -224,11 +224,14 @@
   padding: var(--agilo-ps-space-lg);
 }
 
+/* Chrome du haut : ne jamais grandir (sinon la bannière brouillon mange tout l’espace éditeur). */
 .agilo-ps-main > .agilo-ps-status,
 .agilo-ps-main > .agilo-ps-banner,
 .agilo-ps-main > .agilo-ps-placeholder,
-.agilo-ps-main > .agilo-ps-dirty-banner {
-  flex-shrink: 0;
+.agilo-ps-main > .agilo-ps-toolbar,
+.agilo-ps-main > .agilo-ps-dirty-banner,
+.agilo-ps-main > .agilo-ps-tabs {
+  flex: 0 0 auto;
 }
 
 .agilo-ps-main > .agilo-ps-tabpanels {
@@ -426,7 +429,8 @@
 }
 
 .agilo-ps-simple-help {
-  flex: 1 1 100%;
+  width: 100%;
+  flex: 0 1 100%;
   padding: var(--agilo-ps-space-sm) 0 0;
   border-top: 1px dashed var(--agilo-ps-border);
   margin-top: 0.125rem;
@@ -495,12 +499,14 @@
   gap: var(--agilo-ps-space-sm) var(--agilo-ps-space-md);
   align-items: center;
   margin-bottom: var(--agilo-ps-space-md);
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
 .agilo-ps-toolbar .agilo-ps-subtitle {
-  flex: 1 1 100%;
+  flex: 0 1 100%;
   margin-bottom: 0;
+  min-width: 0;
 }
 
 .agilo-ps-btn-group {
@@ -555,7 +561,8 @@
 
 .agilo-ps-dirty-banner {
   width: 100%;
-  flex: 1 1 100%;
+  flex: 0 0 auto;
+  align-self: stretch;
   margin: 0 0 var(--agilo-ps-space-md);
   padding: var(--agilo-ps-space-md) var(--agilo-ps-space);
   border-radius: var(--agilo-ps-radius);
