@@ -1561,13 +1561,37 @@ function mergeConfig(overrides) {
     const w = window.__AGILO_PROMPT_STUDIO__ || {};
     return { ...w, ...overrides };
 }
+/**
+ * Sans champ `[name="edition"]`, l’API peut refuser le token (error_invalid_token) si l’édition
+ * ne correspond pas au compte (ex. Pro sur /app/premium/ avec défaut "ent").
+ */
+function inferEditionFromLocation() {
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes("/premium"))
+        return "pro";
+    if (path.includes("/business"))
+        return "ent";
+    return "ent";
+}
+/** Aligné sur le script d’en-tête qui appelle getToken — évite pro/free vs défaut ent. */
+function editionFromHeadGlobals() {
+    const a = typeof window.agilotextEdition === "string" ? window.agilotextEdition.trim() : "";
+    const b = typeof window.__AGILOTEXT_EDITION__ === "string"
+        ? window.__AGILOTEXT_EDITION__.trim()
+        : "";
+    return a || b;
+}
 function defaultGetAuth() {
     const token = typeof window.globalToken === "string" ? window.globalToken.trim() : "";
     const emailInput = document.querySelector('[name="memberEmail"]');
     const email = emailInput?.value?.trim() || "";
     if (!token || !email)
         return null;
-    const edition = document.querySelector('[name="edition"]')?.value || "ent";
+    const cfg = window.__AGILO_PROMPT_STUDIO__ || {};
+    const fromInput = document.querySelector('[name="edition"]')?.value?.trim();
+    const fromConfig = typeof cfg.defaultEdition === "string" ? cfg.defaultEdition.trim() : "";
+    const fromHead = editionFromHeadGlobals();
+    const edition = fromInput || fromConfig || fromHead || inferEditionFromLocation();
     return { username: email, token, edition };
 }
 function buildGetAuth(cfg) {
