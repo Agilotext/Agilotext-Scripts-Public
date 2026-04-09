@@ -39,6 +39,8 @@
   justify-content: center;
   padding: var(--agilo-ps-pad-outer);
   box-sizing: border-box;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 0.875rem;
   line-height: 1.45;
@@ -224,17 +226,40 @@
   padding: var(--agilo-ps-space-lg);
 }
 
+/* Zone centrale défilante : titre, exports, onglets, éditeur — tout ce qui peut dépasser en hauteur. */
+.agilo-ps-main-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pied fixe : actions Enregistrer toujours accessibles sans scroller toute la colonne. */
+.agilo-ps-main-footer {
+  flex: 0 0 auto;
+  margin-top: var(--agilo-ps-space-sm);
+  padding-top: var(--agilo-ps-space-md);
+  border-top: 1px solid var(--agilo-ps-border);
+  background: var(--agilo-ps-surface);
+  box-shadow: 0 -0.375rem 0.75rem rgba(0, 0, 0, 0.04);
+  padding-bottom: max(var(--agilo-ps-space-xs), env(safe-area-inset-bottom, 0px));
+}
+
 /* Chrome du haut : ne jamais grandir (sinon la bannière brouillon mange tout l’espace éditeur). */
-.agilo-ps-main > .agilo-ps-status,
-.agilo-ps-main > .agilo-ps-banner,
+.agilo-ps-main-scroll > .agilo-ps-status,
+.agilo-ps-main-scroll > .agilo-ps-banner,
 .agilo-ps-main > .agilo-ps-placeholder,
-.agilo-ps-main > .agilo-ps-toolbar,
-.agilo-ps-main > .agilo-ps-dirty-banner,
-.agilo-ps-main > .agilo-ps-tabs {
+.agilo-ps-main-scroll > .agilo-ps-toolbar,
+.agilo-ps-main-scroll > .agilo-ps-dirty-banner,
+.agilo-ps-main-scroll > .agilo-ps-tabs {
   flex: 0 0 auto;
 }
 
-.agilo-ps-main > .agilo-ps-tabpanels {
+.agilo-ps-main-scroll > .agilo-ps-tabpanels {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -914,6 +939,7 @@ body.agilo-ps-scroll-lock {
   .agilo-ps-tabs,
   .agilo-ps-toolbar .agilo-ps-btn-group,
   .agilo-ps-dirty-banner,
+  .agilo-ps-main-footer,
   .agilo-ps-save-group {
     display: none !important;
   }
