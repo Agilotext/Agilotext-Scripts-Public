@@ -429,6 +429,7 @@
   function getEditionForApi() {
     const normalized = normalizeEdition(state.edition);
     if (state.edition !== normalized) state.edition = normalized;
+    if (normalized === 'anonymisation') return 'free';
     return normalized;
   }
 
