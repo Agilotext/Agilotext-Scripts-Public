@@ -118,6 +118,59 @@
     };
   }
 
+  /**
+   * Dernier promptId connu pour ce job (ex. après clic sur un chip « modèles »).
+   * Clé par jobId pour éviter un mélange entre transcriptions du rail.
+   */
+  function pickStoredSummaryPromptId(jobId) {
+    if (!jobId) return '';
+    try {
+      return sessionStorage.getItem(`agilo:summaryPromptId:${jobId}`) || '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  /**
+   * Sans promptId, l'API redoSummary envoie -1 → PromptModelsGetter utilise le
+   * modèle PAR DÉFAUT du compte, pas celui du job (d'où templates « Assurance maladie » / etc.).
+   * On récupère donc le promptid associé au job dans getJobsInfo.
+   */
+  async function fetchPromptIdForJob(jobId, email, token, edition) {
+    if (!jobId || !email || !token) return '';
+    try {
+      const body = new URLSearchParams();
+      body.append('username', email);
+      body.append('token', token);
+      body.append('edition', edition);
+      body.append('limit', '100');
+      body.append('offset', '0');
+      const r = await fetch('https://api.agilotext.com/api/v1/getJobsInfo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+      const j = await r.json().catch(() => null);
+      if (!j || j.status === 'KO') return '';
+      const list = j.jobsInfoDtos || j.jobs || [];
+      const hit = list.find(function (x) {
+        const id = x.jobid != null ? x.jobid : x.jobId;
+        return String(id) === String(jobId);
+      });
+      if (!hit) return '';
+      const pid = hit.promptid != null ? hit.promptid : hit.promptId;
+      if (pid == null || pid === '') return '';
+      const n = Number(pid);
+      if (!Number.isFinite(n) || n <= 0) return '';
+      return String(n);
+    } catch (e) {
+      logError('fetchPromptIdForJob', e);
+      return '';
+    }
+  }
+
   // ============================================
   // VARIABLES GLOBALES
   // ============================================
@@ -559,6 +612,16 @@
       alert('❌ Informations incomplètes. Veuillez recharger la page.');
       return;
     }
+
+    let summaryPromptId = pickStoredSummaryPromptId(jobId);
+    if (!summaryPromptId) {
+      summaryPromptId = await fetchPromptIdForJob(jobId, email, token, edition);
+    }
+    if (summaryPromptId) {
+      log('promptId pour redoSummary (évite modèle défaut compte):', summaryPromptId);
+    } else {
+      log('Aucun promptId job — redoSummary utilisera le défaut backend (-1)');
+    }
     
     const canRegen = canRegenerate(jobId, edition);
     if (!canRegen.allowed) {
@@ -587,7 +650,10 @@
     }
     
     try {
-      const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      let url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      if (summaryPromptId) {
+        url += `&promptId=${encodeURIComponent(summaryPromptId)}`;
+      }
       log('Appel redoSummary...');
       const response = await fetch(url, {
         method: 'GET',

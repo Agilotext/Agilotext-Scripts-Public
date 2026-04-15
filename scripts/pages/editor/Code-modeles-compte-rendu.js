@@ -370,6 +370,13 @@
       const data = await res.json();
 
       if (data.status === 'OK' || res.ok) {
+        try {
+          sessionStorage.setItem(
+            `agilo:summaryPromptId:${jobId}`,
+            String(model.promptModelId)
+          );
+        } catch (_) {}
+
         // Toast de succès
         if (typeof window.toast === 'function') {
           window.toast(`Régénération lancée avec "${modelName}"...`);
