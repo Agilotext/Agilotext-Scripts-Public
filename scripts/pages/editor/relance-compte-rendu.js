@@ -900,7 +900,7 @@
       confirmed = confirm(
         `Remplacer le compte-rendu actuel ?\n\n` +
           `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-          `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
+          `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu dans l’éditeur.`
       );
     }
 
@@ -932,33 +932,15 @@
         updateButtonVisibility();
 
         const loaderContainer = document.querySelector('.summary-loading-indicator');
-        let pollCancelled = false;
         if (loaderContainer) {
           const statusEl = document.createElement('p');
           statusEl.className = 'loading-status-hint';
           statusEl.textContent = 'Connexion au statut serveur…';
           loaderContainer.appendChild(statusEl);
 
-          const cancelBtn = document.createElement('button');
-          cancelBtn.className = 'loading-cancel-btn';
-          cancelBtn.textContent = 'Arrêter l’affichage d’attente';
-          cancelBtn.onclick = () => {
-            const ok = confirm(
-              'La génération peut continuer côté serveur.\n\n' +
-              'Arrêter seulement l’attente à l’écran ? Vous pourrez recharger la page plus tard pour voir le nouveau compte-rendu.'
-            );
-            if (!ok) return;
-            pollCancelled = true;
-            hideSummaryLoading();
-            isGenerating = false;
-            showSuccessMessage('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
-            updateButtonVisibility();
-          };
-          loaderContainer.appendChild(cancelBtn);
-
-          waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => pollCancelled)
+          waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => false)
             .then((outcome) => {
-              if (pollCancelled || outcome === 'cancelled') {
+              if (outcome === 'cancelled') {
                 hideSummaryLoading();
                 isGenerating = false;
                 updateButtonVisibility();
@@ -966,7 +948,7 @@
               }
               hideSummaryLoading();
               if (outcome === 'ready') {
-                refreshSummaryInEditorWithFallback(jobId, () => pollCancelled);
+                refreshSummaryInEditorWithFallback(jobId, () => false);
                 showSuccessMessage('Compte-rendu prêt');
               } else if (outcome === 'error') {
                 alert(

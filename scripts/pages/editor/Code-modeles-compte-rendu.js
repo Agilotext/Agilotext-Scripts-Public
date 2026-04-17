@@ -1,5 +1,5 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.2 – repo)
-// Grille + promptId job ; après redoSummary : polling getTranscriptStatus (via relance) — pas de décompte 2:30
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.3 – repo)
+// Grille + promptId job ; après redoSummary : polling getTranscriptStatus (via relance), sans bouton d’annulation superflu
 
 (function() {
   'use strict';
@@ -437,18 +437,13 @@
 
     const statusEl = document.createElement('p');
     statusEl.className = 'loading-status-hint';
-    statusEl.textContent = 'Connexion au statut serveur…';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'loading-cancel-btn';
-    cancelBtn.textContent = 'Arrêter l’affichage d’attente';
+    statusEl.textContent = 'Surveillance du statut serveur…';
 
     summaryEditor.appendChild(loaderContainer);
     loaderContainer.appendChild(lottieElement);
     loaderContainer.appendChild(loadingText);
     if (modelName) loaderContainer.appendChild(loadingSubtitle);
     loaderContainer.appendChild(statusEl);
-    loaderContainer.appendChild(cancelBtn);
 
     setTimeout(function () {
       initLottieAnimation(lottieElement);
@@ -463,7 +458,7 @@
       }, 1000);
     }, 100);
 
-    return { loaderContainer: loaderContainer, statusEl: statusEl, cancelBtn: cancelBtn };
+    return { loaderContainer: loaderContainer, statusEl: statusEl };
   }
 
   async function handleChipClick(model) {
@@ -504,7 +499,7 @@
       'Cela remplace le compte-rendu actuel.\n\n' +
       'Modèle : ' + modelName + '\n\n' +
       canRegen.remaining + '/' + canRegen.limit + ' régénération(s) restante(s).\n\n' +
-      'L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.'
+      'L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu dans l’éditeur.'
     );
     if (!confirmed) return;
 
@@ -540,86 +535,67 @@
 
         const ui = showSummaryRegenLoader(modelName);
         const H = window.__agiloSummaryRegenHelpers;
-        var pollCancelled = false;
 
         if (!ui || !ui.statusEl) {
           isGenerating = false;
-        } else {
-          ui.cancelBtn.onclick = function () {
-            var ok = confirm(
-              'La génération peut continuer côté serveur.\n\n' +
-              'Arrêter seulement l’attente à l’écran ? Vous pourrez recharger la page plus tard pour voir le nouveau compte-rendu.'
-            );
-            if (!ok) return;
-            pollCancelled = true;
-            if (H && typeof H.hideSummaryLoading === 'function') {
-              H.hideSummaryLoading();
-            } else {
-              hideSummaryRegenLoader();
-            }
-            isGenerating = false;
-            if (typeof window.toast === 'function') {
-              window.toast('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
-            }
-          };
-
-          if (H && typeof H.waitForSummaryTerminalState === 'function') {
-            H.waitForSummaryTerminalState(jobId, email, token, edition, ui.statusEl, function () {
-              return pollCancelled;
-            })
-              .then(function (outcome) {
-                if (pollCancelled || outcome === 'cancelled') {
-                  if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-                  else hideSummaryRegenLoader();
-                  isGenerating = false;
-                  return;
-                }
-                if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-                else hideSummaryRegenLoader();
-                if (outcome === 'ready') {
-                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
-                    H.refreshSummaryInEditorWithFallback(jobId, function () { return pollCancelled; });
-                  }
-                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
-                } else if (outcome === 'error') {
-                  alert(
-                    'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
-                    'Rechargez la page : le compte-rendu est peut‑être déjà là.'
-                  );
-                } else {
-                  alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
-                }
-                isGenerating = false;
-                try {
-                  isPopulated = false;
-                  cachedModels = null;
-                  populateContainer(true);
-                } catch (e) {}
-              })
-              .catch(function (e) {
-                log('waitForSummaryTerminalState', e);
-                if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-                else hideSummaryRegenLoader();
-                isGenerating = false;
-                alert('Erreur lors de la surveillance du statut. Rechargez la page.');
-              });
-          } else {
-            ui.statusEl.textContent =
-              'Chargez aussi le script « relance-compte-rendu » (même version) pour le suivi automatique ; actualisation dans quelques secondes…';
-            setTimeout(function () {
-              if (pollCancelled) return;
-              try {
-                window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId: jobId } }));
-                if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
-                  window.__agiloOrchestrator.loadJob(jobId, { autoplay: false });
-                } else {
-                  window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId: jobId, autoplay: false } }));
-                }
-              } catch (e2) {}
-              hideSummaryRegenLoader();
-              isGenerating = false;
-            }, 4000);
+        } else if (H && typeof H.waitForSummaryTerminalState === 'function') {
+          if (typeof H.formatPollStatusLabel === 'function') {
+            ui.statusEl.textContent = H.formatPollStatusLabel(null);
           }
+          H.waitForSummaryTerminalState(jobId, email, token, edition, ui.statusEl, function () {
+            return false;
+          })
+            .then(function (outcome) {
+              if (outcome === 'cancelled') {
+                if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+                else hideSummaryRegenLoader();
+                isGenerating = false;
+                return;
+              }
+              if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+              else hideSummaryRegenLoader();
+              if (outcome === 'ready') {
+                if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
+                  H.refreshSummaryInEditorWithFallback(jobId, function () { return false; });
+                }
+                if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
+              } else if (outcome === 'error') {
+                alert(
+                  'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
+                  'Rechargez la page : le compte-rendu est peut‑être déjà là.'
+                );
+              } else {
+                alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+              }
+              isGenerating = false;
+              try {
+                isPopulated = false;
+                cachedModels = null;
+                populateContainer(true);
+              } catch (e) {}
+            })
+            .catch(function (e) {
+              log('waitForSummaryTerminalState', e);
+              if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+              else hideSummaryRegenLoader();
+              isGenerating = false;
+              alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+            });
+        } else {
+          ui.statusEl.textContent =
+            'Script « relance-compte-rendu » introuvable ou obsolète. Actualisation du job dans quelques secondes…';
+          setTimeout(function () {
+            try {
+              window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId: jobId } }));
+              if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
+                window.__agiloOrchestrator.loadJob(jobId, { autoplay: false });
+              } else {
+                window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId: jobId, autoplay: false } }));
+              }
+            } catch (e2) {}
+            hideSummaryRegenLoader();
+            isGenerating = false;
+          }, 4000);
         }
       } else if (data.status === 'KO') {
         isGenerating = false;
@@ -636,13 +612,13 @@
   }
 
   function injectStyles() {
-    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-tpl-styles-v3'].forEach(function (sel) {
       const n = document.querySelector(sel);
       if (n) n.remove();
     });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles-v5';
+    style.id = 'agilo-modeles-styles-v6';
     style.textContent = `
       #cr-template-chips {
         display: flex;
@@ -893,16 +869,6 @@
         margin: 0.75rem 1rem 0;
         text-align: center;
         max-width: 28rem;
-      }
-      .loading-cancel-btn {
-        margin-top: 1.25rem;
-        cursor: pointer;
-        padding: 0.625rem 1.25rem;
-        border-radius: 0.5rem;
-        border: 1px solid rgba(52, 58, 64, 0.25);
-        background: #020202;
-        color: #ffffff;
-        font: 500 0.875rem/1.4 system-ui, sans-serif;
       }
     `;
     document.head.appendChild(style);
