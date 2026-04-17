@@ -24,6 +24,21 @@
     return null;
   }
 
+  async function receiveSummaryIndicatesCrReady(jobId, email, token, edition) {
+    try {
+      const url = `${API_BASE}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+      const text = await r.text();
+      if (!r.ok) return false;
+      const lower = text.toLowerCase();
+      if (lower.includes('error_summary_transcript_file_not_exists')) return false;
+      if (lower.includes('"status":"ko"') || lower.includes('"status": "ko"')) return false;
+      return text.length >= 400;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function refreshSummaryInEditor(jobId) {
     if (!jobId) return;
     try {
@@ -54,7 +69,9 @@
     if (!st) return 'Vérification du statut…';
     if (st === 'READY_SUMMARY_PENDING') return 'Génération du compte-rendu en cours sur le serveur…';
     if (st === 'READY_SUMMARY_READY') return 'Finalisation, récupération du texte…';
-    if (st === 'READY_SUMMARY_ON_ERROR') return 'Le serveur signale une erreur sur cette étape…';
+    if (st === 'READY_SUMMARY_ON_ERROR') {
+      return 'Statut « erreur » côté API — vérification (souvent incohérent avec le contenu réel)…';
+    }
     if (String(st).startsWith('READY_SUMMARY_')) {
       const tail = String(st).replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ').toLowerCase();
       return 'Étape : ' + tail;
@@ -106,6 +123,11 @@
       if (statusEl) statusEl.textContent = formatPollStatusLabel(st);
       if (st === 'READY_SUMMARY_READY') return 'ready';
       if (st !== 'READY_SUMMARY_ON_ERROR') return 'continue';
+    }
+    if (statusEl) statusEl.textContent = 'Dernier contrôle : contenu du compte-rendu…';
+    if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition)) {
+      log('receiveSummary OK malgré READY_SUMMARY_ON_ERROR — traité comme prêt');
+      return 'ready';
     }
     return 'error';
   }
