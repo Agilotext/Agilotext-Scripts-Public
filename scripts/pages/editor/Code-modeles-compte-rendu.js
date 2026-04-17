@@ -1,5 +1,5 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.1 – repo, alignement type V3 + API)
-// Grille de chips, promptId du job (getJobsInfo), quotas régénération, retry réseau redoSummary
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.2 – repo)
+// Grille + promptId job ; après redoSummary : polling getTranscriptStatus (via relance) — pas de décompte 2:30
 
 (function() {
   'use strict';
@@ -391,12 +391,23 @@
     }
   }
 
-  function showSummaryLoading(modelName) {
+  function hideSummaryRegenLoader() {
     const summaryEditor = document.querySelector('#summaryEditor') ||
       document.querySelector('#ag-summary') ||
       document.querySelector('[data-editor="summary"]');
     if (!summaryEditor) return;
+    const loader = summaryEditor.querySelector('.summary-loading-indicator');
+    if (loader) loader.style.display = 'none';
+  }
 
+  /** Loader aligné relance-compte-rendu : pas de décompte ; le texte de statut est mis à jour par le polling. */
+  function showSummaryRegenLoader(modelName) {
+    const summaryEditor = document.querySelector('#summaryEditor') ||
+      document.querySelector('#ag-summary') ||
+      document.querySelector('[data-editor="summary"]');
+    if (!summaryEditor) return null;
+
+    summaryEditor.innerHTML = '';
     const loaderContainer = document.createElement('div');
     loaderContainer.className = 'summary-loading-indicator';
 
@@ -422,19 +433,21 @@
     loadingSubtitle.className = 'loading-subtitle';
     loadingSubtitle.innerHTML = modelName
       ? 'Modèle : <strong>' + modelName + '</strong>'
-      : 'La page se rechargera automatiquement dans :';
-    const countdown = document.createElement('p');
-    countdown.className = 'loading-countdown';
+      : '';
+
+    const statusEl = document.createElement('p');
+    statusEl.className = 'loading-status-hint';
+    statusEl.textContent = 'Connexion au statut serveur…';
+
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'loading-cancel-btn';
-    cancelBtn.textContent = 'Annuler le rechargement';
+    cancelBtn.textContent = 'Arrêter l’affichage d’attente';
 
-    summaryEditor.innerHTML = '';
     summaryEditor.appendChild(loaderContainer);
     loaderContainer.appendChild(lottieElement);
     loaderContainer.appendChild(loadingText);
-    loaderContainer.appendChild(loadingSubtitle);
-    loaderContainer.appendChild(countdown);
+    if (modelName) loaderContainer.appendChild(loadingSubtitle);
+    loaderContainer.appendChild(statusEl);
     loaderContainer.appendChild(cancelBtn);
 
     setTimeout(function () {
@@ -450,35 +463,7 @@
       }, 1000);
     }, 100);
 
-    let secondsLeft = 150;
-    const updateCountdown = function () {
-      const minutes = Math.floor(secondsLeft / 60);
-      const seconds = secondsLeft % 60;
-      countdown.textContent = minutes + ':' + seconds.toString().padStart(2, '0');
-      if (secondsLeft <= 0) {
-        countdown.textContent = 'Rechargement...';
-        setTimeout(function () {
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('tab', 'summary');
-          newUrl.searchParams.set('_t', Date.now());
-          window.location.href = newUrl.toString();
-        }, 500);
-        return;
-      }
-      secondsLeft--;
-    };
-    updateCountdown();
-    const countdownInterval = setInterval(updateCountdown, 1000);
-
-    cancelBtn.onclick = function () {
-      clearInterval(countdownInterval);
-      countdown.textContent = 'Rechargement annulé';
-      cancelBtn.textContent = 'Recharger maintenant';
-      cancelBtn.onclick = function () { window.location.reload(); };
-      isGenerating = false;
-    };
-
-    return countdownInterval;
+    return { loaderContainer: loaderContainer, statusEl: statusEl, cancelBtn: cancelBtn };
   }
 
   async function handleChipClick(model) {
@@ -519,7 +504,7 @@
       'Cela remplace le compte-rendu actuel.\n\n' +
       'Modèle : ' + modelName + '\n\n' +
       canRegen.remaining + '/' + canRegen.limit + ' régénération(s) restante(s).\n\n' +
-      'La page se rechargera automatiquement après 2 min 30.'
+      'L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.'
     );
     if (!confirmed) return;
 
@@ -547,7 +532,95 @@
         }
         const summaryTab = document.querySelector('#tab-summary');
         if (summaryTab) summaryTab.click();
-        showSummaryLoading(modelName);
+
+        const summaryEditorClear = document.querySelector('#summaryEditor') ||
+          document.querySelector('#ag-summary') ||
+          document.querySelector('[data-editor="summary"]');
+        if (summaryEditorClear) summaryEditorClear.innerHTML = '';
+
+        const ui = showSummaryRegenLoader(modelName);
+        const H = window.__agiloSummaryRegenHelpers;
+        var pollCancelled = false;
+
+        if (!ui || !ui.statusEl) {
+          isGenerating = false;
+        } else {
+          ui.cancelBtn.onclick = function () {
+            var ok = confirm(
+              'La génération peut continuer côté serveur.\n\n' +
+              'Arrêter seulement l’attente à l’écran ? Vous pourrez recharger la page plus tard pour voir le nouveau compte-rendu.'
+            );
+            if (!ok) return;
+            pollCancelled = true;
+            if (H && typeof H.hideSummaryLoading === 'function') {
+              H.hideSummaryLoading();
+            } else {
+              hideSummaryRegenLoader();
+            }
+            isGenerating = false;
+            if (typeof window.toast === 'function') {
+              window.toast('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
+            }
+          };
+
+          if (H && typeof H.waitForSummaryTerminalState === 'function') {
+            H.waitForSummaryTerminalState(jobId, email, token, edition, ui.statusEl, function () {
+              return pollCancelled;
+            })
+              .then(function (outcome) {
+                if (pollCancelled || outcome === 'cancelled') {
+                  if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+                  else hideSummaryRegenLoader();
+                  isGenerating = false;
+                  return;
+                }
+                if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+                else hideSummaryRegenLoader();
+                if (outcome === 'ready') {
+                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
+                    H.refreshSummaryInEditorWithFallback(jobId, function () { return pollCancelled; });
+                  }
+                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
+                } else if (outcome === 'error') {
+                  alert(
+                    'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
+                    'Rechargez la page : le compte-rendu est peut‑être déjà là.'
+                  );
+                } else {
+                  alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+                }
+                isGenerating = false;
+                try {
+                  isPopulated = false;
+                  cachedModels = null;
+                  populateContainer(true);
+                } catch (e) {}
+              })
+              .catch(function (e) {
+                log('waitForSummaryTerminalState', e);
+                if (H && typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+                else hideSummaryRegenLoader();
+                isGenerating = false;
+                alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+              });
+          } else {
+            ui.statusEl.textContent =
+              'Chargez aussi le script « relance-compte-rendu » (même version) pour le suivi automatique ; actualisation dans quelques secondes…';
+            setTimeout(function () {
+              if (pollCancelled) return;
+              try {
+                window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId: jobId } }));
+                if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
+                  window.__agiloOrchestrator.loadJob(jobId, { autoplay: false });
+                } else {
+                  window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId: jobId, autoplay: false } }));
+                }
+              } catch (e2) {}
+              hideSummaryRegenLoader();
+              isGenerating = false;
+            }, 4000);
+          }
+        }
       } else if (data.status === 'KO') {
         isGenerating = false;
         alert('Une génération est déjà en cours. Patientez un instant.');
@@ -563,13 +636,13 @@
   }
 
   function injectStyles() {
-    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-tpl-styles-v3'].forEach(function (sel) {
       const n = document.querySelector(sel);
       if (n) n.remove();
     });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles-v4';
+    style.id = 'agilo-modeles-styles-v5';
     style.textContent = `
       #cr-template-chips {
         display: flex;
@@ -814,13 +887,12 @@
         color: #525252;
         margin-top: 0.5rem;
       }
-      .loading-countdown {
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin: 1.25rem 0 0.75rem;
-        color: #174a96;
-        font-variant-numeric: tabular-nums;
-        font-family: ui-monospace, Menlo, monospace;
+      .summary-loading-indicator .loading-status-hint {
+        font: 400 0.875rem/1.45 system-ui, -apple-system, sans-serif;
+        color: #525252;
+        margin: 0.75rem 1rem 0;
+        text-align: center;
+        max-width: 28rem;
       }
       .loading-cancel-btn {
         margin-top: 1.25rem;
