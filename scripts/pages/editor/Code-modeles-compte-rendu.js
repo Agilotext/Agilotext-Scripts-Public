@@ -13,12 +13,14 @@
   const SUMMARY_POLL_MS = 10000;
   const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
   const SUMMARY_RELOAD_FALLBACK_MS = 3200;
+  const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
+  const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
 
   async function fetchTranscriptStatus(jobId, email, token, edition) {
     const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
     const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
     const j = await r.json().catch(() => ({}));
-    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus);
+    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus).trim();
     return null;
   }
 
@@ -92,6 +94,22 @@
     }, SUMMARY_RELOAD_FALLBACK_MS);
   }
 
+  async function recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel) {
+    if (statusEl) statusEl.textContent = 'Vérification du statut (parfois transitoire après génération)…';
+    for (let i = 0; i < SUMMARY_ON_ERROR_RECHECK_TIMES; i++) {
+      await new Promise(r => setTimeout(r, SUMMARY_ON_ERROR_RECHECK_MS));
+      if (shouldCancel && shouldCancel()) return 'cancelled';
+      let st = null;
+      try {
+        st = await fetchTranscriptStatus(jobId, email, token, edition);
+      } catch (_) {}
+      if (statusEl) statusEl.textContent = formatPollStatusLabel(st);
+      if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st !== 'READY_SUMMARY_ON_ERROR') return 'continue';
+    }
+    return 'error';
+  }
+
   async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
     const t0 = Date.now();
     await new Promise(r => setTimeout(r, 800));
@@ -105,7 +123,14 @@
         statusEl.textContent = formatPollStatusLabel(st);
       }
       if (st === 'READY_SUMMARY_READY') return 'ready';
-      if (st === 'READY_SUMMARY_ON_ERROR') return 'error';
+      if (st === 'READY_SUMMARY_ON_ERROR') {
+        const sub = await recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel);
+        if (sub === 'ready') return 'ready';
+        if (sub === 'error') return 'error';
+        if (sub === 'cancelled') return 'cancelled';
+        await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+        continue;
+      }
       await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
     }
     return 'timeout';
@@ -117,7 +142,7 @@
       document.querySelector('[data-editor="summary"]');
     if (!summaryEditor) return;
     const loader = summaryEditor.querySelector('.summary-loading-indicator');
-    if (loader) loader.style.display = 'none';
+    if (loader) loader.remove();
   }
 
   // ============================================
@@ -473,7 +498,11 @@
         const { statusEl, cancelledRef } = showSummaryLoading(modelName);
         waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => cancelledRef.value)
           .then((outcome) => {
-            if (cancelledRef.value || outcome === 'cancelled') return;
+            if (cancelledRef.value || outcome === 'cancelled') {
+              hideModelLoader();
+              isGenerating = false;
+              return;
+            }
             hideModelLoader();
             if (outcome === 'ready') {
               refreshSummaryInEditorWithFallback(jobId, () => cancelledRef.value);
@@ -481,7 +510,11 @@
                 window.toast('Compte-rendu prêt');
               }
             } else if (outcome === 'error') {
-              alert('La génération du compte-rendu s’est terminée avec une erreur. Rechargez la page ou réessayez.');
+              alert(
+                'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
+                  'Si vous avez reçu un e-mail de succès, rechargez la page : le compte-rendu est peut‑être déjà là.\n\n' +
+                  'Sinon, réessayez ou contactez le support avec le numéro de job.'
+              );
             } else {
               alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
             }
