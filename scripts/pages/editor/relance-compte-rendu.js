@@ -196,7 +196,7 @@
       return true;
     }
     const notAskedTitle = document.querySelector(
-      '#editorRoot .ag-alert__title, #summaryEditor .ag-alert__title, .ag-alert--warn .ag-alert__title'
+      '#editorRoot .ag-alert--warn .ag-alert__title, #summaryEditor .ag-alert--warn .ag-alert__title'
     );
     const notAskedText = (notAskedTitle?.textContent || '').toLowerCase();
     if (
@@ -304,24 +304,33 @@
    * Créer ou mettre à jour le badge de compteur
    * ✅ CORRECTION : Ne crée le compteur QUE si un compte-rendu existe
    */
+  /** Bouton toolbar Webflow (pas le CTA inline injecté). Déclaré tôt pour compteur / visibilité. */
+  function getToolbarRelanceButton() {
+    return (
+      document.querySelector('[data-action="relancer-compte-rendu"]:not(.agilo-inline-gen-cr-btn)') ||
+      document.querySelector('[data-action="relancer-compte-rendu"]')
+    );
+  }
+
   function updateRegenerationCounter(jobId, edition) {
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
+    const btn = getToolbarRelanceButton();
+    if (!btn || !btn.parentElement) return;
+    const parent = btn.parentElement;
     
     // ✅ NOUVEAU : Vérifier d'abord si un compte-rendu existe
     // Si pas de compte-rendu, supprimer le compteur et ne rien créer
     if (!hasSummaryExists()) {
-      const oldCounter = btn.parentElement.querySelector('.regeneration-counter, #regeneration-info');
+      const oldCounter = parent.querySelector('.regeneration-counter, #regeneration-info');
       if (oldCounter) oldCounter.remove();
-      const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+      const oldMessage = parent.querySelector('.regeneration-limit-message, .regeneration-premium-message');
       if (oldMessage) oldMessage.remove();
       return; // Ne pas créer de compteur si pas de compte-rendu
     }
     
     // Supprimer l'ancien compteur s'il existe
-    const oldCounter = btn.parentElement.querySelector('.regeneration-counter, #regeneration-info');
+    const oldCounter = parent.querySelector('.regeneration-counter, #regeneration-info');
     if (oldCounter) oldCounter.remove();
-    const oldMessage = btn.parentElement.querySelector('.regeneration-limit-message, .regeneration-premium-message');
+    const oldMessage = parent.querySelector('.regeneration-limit-message, .regeneration-premium-message');
     if (oldMessage) oldMessage.remove();
     
     const canRegen = canRegenerate(jobId, edition);
@@ -344,7 +353,7 @@
           <div class="regeneration-limit-detail">${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} utilisée${canRegen.limit > 1 ? 's' : ''} (plan ${planName})</div>
         </div>
       `;
-      btn.parentElement.appendChild(limitMsg);
+      parent.appendChild(limitMsg);
       return;
     }
     
@@ -356,7 +365,7 @@
     counter.title = `Il vous reste ${canRegen.remaining} régénération${canRegen.remaining > 1 ? 's' : ''} pour ce transcript`;
     counter.setAttribute('aria-live', 'polite');
     counter.setAttribute('aria-atomic', 'true');
-    btn.parentElement.appendChild(counter);
+    parent.appendChild(counter);
   }
 
   function updateButtonState(jobId, edition) {
@@ -438,14 +447,22 @@
     anchor.insertAdjacentElement('afterend', wrap);
   }
 
+  function applyRelanceButtonLabel() {
+    const label = getButtonText();
+    const toolbarBtn = getToolbarRelanceButton();
+    if (toolbarBtn) {
+      const textDiv = toolbarBtn.querySelector('div');
+      if (textDiv) textDiv.textContent = label;
+    }
+  }
+
   function updateButtonVisibility() {
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    const btn = getToolbarRelanceButton();
     if (!btn) return;
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
     const isSummaryTab = activeTab?.id === 'tab-summary';
     const isTranscriptTab = activeTab?.id === 'tab-transcript';
-    const textDiv = btn.querySelector('div');
-    if (textDiv) textDiv.textContent = getButtonText();
+    applyRelanceButtonLabel();
     const noSummary = shouldHideButtonForNonSummaryTabs();
     
     if (noSummary && !isSummaryTab) {
@@ -676,6 +693,7 @@
       isGenerating = false;
       logError('Erreur credentials', err);
       alert('❌ Erreur de connexion. Veuillez réessayer.');
+      updateButtonVisibility();
       return;
     }
     
@@ -684,6 +702,7 @@
       isGenerating = false;
       logError('Informations incomplètes', { email: !!email, token: !!token, jobId: !!jobId });
       alert('❌ Informations incomplètes. Veuillez recharger la page.');
+      updateButtonVisibility();
       return;
     }
     
@@ -702,6 +721,7 @@
         } else {
           alert(`⚠️ Limite atteinte: ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} utilisée${canRegen.limit > 1 ? 's' : ''} pour ce transcript.`);
         }
+        updateButtonVisibility();
         return;
       }
     }
@@ -720,6 +740,7 @@
     
     if (!confirmed) {
       isGenerating = false;
+      updateButtonVisibility();
       return;
     }
     
@@ -766,6 +787,7 @@
             hideSummaryLoading();
             isGenerating = false;
             showSuccessMessage('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
+            updateButtonVisibility();
           };
           loaderContainer.appendChild(cancelBtn);
 
@@ -782,28 +804,34 @@
                 alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
               }
               isGenerating = false;
+              updateButtonVisibility();
             })
             .catch((e) => {
               logError('waitForSummaryTerminalState', e);
               hideSummaryLoading();
               isGenerating = false;
               alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+              updateButtonVisibility();
             });
         } else {
           isGenerating = false;
+          updateButtonVisibility();
         }
       } else if (result.status === 'KO') {
         isGenerating = false;
         alert('⚠️ Une génération est déjà en cours. Veuillez patienter.');
+        updateButtonVisibility();
       } else {
         isGenerating = false;
         logError('Erreur redoSummary', result);
         alert('❌ Erreur: ' + (result.message || result.error || 'Une erreur est survenue. Veuillez réessayer.'));
+        updateButtonVisibility();
       }
     } catch (err) {
       isGenerating = false;
       logError('Erreur réseau', err);
       alert('❌ Erreur de connexion. Vérifiez votre connexion internet et réessayez.');
+      updateButtonVisibility();
     }
   }
 
