@@ -1,4 +1,4 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.3 – repo)
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.4 – repo)
 // Grille + promptId job ; après redoSummary : polling getTranscriptStatus (via relance), sans bouton d’annulation superflu
 
 (function() {
@@ -7,6 +7,31 @@
   const DEBUG = false;
   const log = (...args) => { if (DEBUG) console.log('[AGILO:MODELES]', ...args); };
   const API_BASE = 'https://api.agilotext.com/api/v1';
+
+  function agiloEditorCredsRoot() {
+    const c = window.__agiloEditorCreds;
+    if (!c || typeof c.pickEdition !== 'function') {
+      throw new Error(
+        '[AGILO:MODELES] Charger agilo-editor-creds.js avant Code-modeles-compte-rendu.js (ordre des <script> dans Webflow).'
+      );
+    }
+    return c;
+  }
+  function pickEdition() {
+    return agiloEditorCredsRoot().pickEdition();
+  }
+  function pickJobId() {
+    return agiloEditorCredsRoot().pickJobId();
+  }
+  function pickEmail() {
+    return agiloEditorCredsRoot().pickEmail();
+  }
+  function pickToken(edition, email) {
+    return agiloEditorCredsRoot().pickToken(edition, email);
+  }
+  function querySummaryEditor() {
+    return agiloEditorCredsRoot().querySummaryEditor();
+  }
 
   let cachedModels = null;
   let isLoadingModels = false;
@@ -26,59 +51,6 @@
       }
     }
     throw lastErr || new Error('fetch réseau');
-  }
-
-  function pickEdition() {
-    const root = document.querySelector('#editorRoot');
-    const raw = window.AGILO_EDITION
-      || new URLSearchParams(location.search).get('edition')
-      || root?.dataset.edition
-      || localStorage.getItem('agilo:edition')
-      || 'ent';
-    const v = String(raw || '').toLowerCase().trim();
-    if (['enterprise', 'entreprise', 'business', 'team', 'ent'].includes(v)) return 'ent';
-    if (v.startsWith('pro')) return 'pro';
-    if (v.startsWith('free') || v === 'gratuit') return 'free';
-    return 'ent';
-  }
-
-  function pickEmail() {
-    const root = document.querySelector('#editorRoot');
-    return (
-      root?.dataset.username ||
-      document.querySelector('[name="memberEmail"]')?.value ||
-      window.memberEmail ||
-      window.__agiloOrchestrator?.credentials?.email ||
-      localStorage.getItem('agilo:username') ||
-      document.querySelector('[data-ms-member="email"]')?.textContent ||
-      ''
-    ).trim();
-  }
-
-  function pickToken(edition, email) {
-    const root = document.querySelector('#editorRoot');
-    const k = `agilo:token:${edition}:${String(email || '').toLowerCase()}`;
-    return (
-      root?.dataset.token ||
-      window.__agiloOrchestrator?.credentials?.token ||
-      window.globalToken ||
-      localStorage.getItem(k) ||
-      localStorage.getItem(`agilo:token:${edition}`) ||
-      localStorage.getItem('agilo:token') ||
-      ''
-    );
-  }
-
-  function pickJobId() {
-    const u = new URL(location.href);
-    const root = document.querySelector('#editorRoot');
-    return (
-      u.searchParams.get('jobId') ||
-      root?.dataset.jobId ||
-      window.__agiloOrchestrator?.currentJobId ||
-      document.querySelector('.rail-item.is-active')?.dataset?.jobId ||
-      ''
-    );
   }
 
   async function getJobPromptIdFromAPI(jobId, forceRefresh) {
@@ -392,9 +364,7 @@
   }
 
   function hideSummaryRegenLoader() {
-    const summaryEditor = document.querySelector('#summaryEditor') ||
-      document.querySelector('#ag-summary') ||
-      document.querySelector('[data-editor="summary"]');
+    const summaryEditor = querySummaryEditor();
     if (!summaryEditor) return;
     const loader = summaryEditor.querySelector('.summary-loading-indicator');
     if (loader) loader.style.display = 'none';
@@ -402,9 +372,7 @@
 
   /** Loader aligné relance-compte-rendu : pas de décompte ; le texte de statut est mis à jour par le polling. */
   function showSummaryRegenLoader(modelName) {
-    const summaryEditor = document.querySelector('#summaryEditor') ||
-      document.querySelector('#ag-summary') ||
-      document.querySelector('[data-editor="summary"]');
+    const summaryEditor = querySummaryEditor();
     if (!summaryEditor) return null;
 
     summaryEditor.innerHTML = '';
@@ -431,9 +399,12 @@
     loadingText.textContent = 'Génération du compte-rendu en cours...';
     const loadingSubtitle = document.createElement('p');
     loadingSubtitle.className = 'loading-subtitle';
-    loadingSubtitle.innerHTML = modelName
-      ? 'Modèle : <strong>' + modelName + '</strong>'
-      : '';
+    if (modelName) {
+      loadingSubtitle.appendChild(document.createTextNode('Modèle : '));
+      const strong = document.createElement('strong');
+      strong.textContent = String(modelName);
+      loadingSubtitle.appendChild(strong);
+    }
 
     const statusEl = document.createElement('p');
     statusEl.className = 'loading-status-hint';
@@ -528,9 +499,7 @@
         const summaryTab = document.querySelector('#tab-summary');
         if (summaryTab) summaryTab.click();
 
-        const summaryEditorClear = document.querySelector('#summaryEditor') ||
-          document.querySelector('#ag-summary') ||
-          document.querySelector('[data-editor="summary"]');
+        const summaryEditorClear = querySummaryEditor();
         if (summaryEditorClear) summaryEditorClear.innerHTML = '';
 
         const ui = showSummaryRegenLoader(modelName);
@@ -955,7 +924,7 @@
   function hasSummaryContent() {
     const root = document.querySelector('#editorRoot');
     if (root?.dataset.summaryEmpty === '1') return false;
-    const el = document.querySelector('#summaryEditor, #ag-summary, [data-editor="summary"]');
+    const el = querySummaryEditor();
     if (!el) return false;
     const txt = (el.textContent || '').toLowerCase();
     if (txt.includes('pas encore disponible') || txt.includes('fichier manquant')) return false;
@@ -1010,7 +979,7 @@
       }
     });
 
-    const summaryEl = document.querySelector('#summaryEditor');
+    const summaryEl = querySummaryEditor();
     if (summaryEl) {
       const obs = new MutationObserver(function () {
         if (isGenerating) return;

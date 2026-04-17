@@ -1,4 +1,4 @@
-// Agilotext – Relance Compte-Rendu (VERSION PRODUCTION OPTIMISÉE)
+// Agilotext – Relance Compte-Rendu (VERSION PRODUCTION OPTIMISÉE + creds partagés)
 (function() {
   'use strict';
 
@@ -18,6 +18,32 @@
   /** L’API peut renvoyer READY_SUMMARY_ON_ERROR de façon transitoire alors que le CR finit par être prêt. */
   const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
   const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
+
+  // Credentials & panneau CR : charger agilo-editor-creds.js avant ce script.
+  function agiloEditorCredsRoot() {
+    const c = window.__agiloEditorCreds;
+    if (!c || typeof c.pickEdition !== 'function') {
+      throw new Error(
+        '[AGILO:RELANCE] Charger agilo-editor-creds.js avant relance-compte-rendu.js (ordre des <script> dans Webflow).'
+      );
+    }
+    return c;
+  }
+  function pickEdition() {
+    return agiloEditorCredsRoot().pickEdition();
+  }
+  function pickJobId() {
+    return agiloEditorCredsRoot().pickJobId();
+  }
+  function pickEmail() {
+    return agiloEditorCredsRoot().pickEmail();
+  }
+  function pickToken(edition, email) {
+    return agiloEditorCredsRoot().pickToken(edition, email);
+  }
+  function querySummaryEditor() {
+    return agiloEditorCredsRoot().querySummaryEditor();
+  }
 
   async function fetchTranscriptStatus(jobId, email, token, edition) {
     const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
@@ -92,9 +118,7 @@
   function summaryPaneLooksEmptyOrPlaceholder() {
     const root = document.querySelector('#editorRoot');
     if (root?.dataset.summaryEmpty === '1') return true;
-    const summaryEl = document.querySelector('#summaryEditor') ||
-      document.querySelector('#ag-summary') ||
-      document.querySelector('[data-editor="summary"]');
+    const summaryEl = querySummaryEditor();
     if (!summaryEl) return true;
     const loader = summaryEl.querySelector('.summary-loading-indicator');
     if (loader && loader.style.display !== 'none') return true;
@@ -185,61 +209,8 @@
   }
 
   // ============================================
-  // RÉCUPÉRATION DES CREDENTIALS
+  // RÉCUPÉRATION DES CREDENTIALS (pick* → agilo-editor-creds.js)
   // ============================================
-  function pickEdition() {
-    const root = document.querySelector('#editorRoot');
-    const raw = window.AGILO_EDITION
-      || new URLSearchParams(location.search).get('edition')
-      || root?.dataset.edition
-      || localStorage.getItem('agilo:edition')
-      || 'ent';
-    const v = String(raw || '').toLowerCase().trim();
-    if (['enterprise', 'entreprise', 'business', 'team', 'ent'].includes(v)) return 'ent';
-    if (v.startsWith('pro')) return 'pro';
-    if (v.startsWith('free') || v === 'gratuit') return 'free';
-    return 'ent';
-  }
-
-  function pickJobId() {
-    const u = new URL(location.href);
-    const root = document.querySelector('#editorRoot');
-    return (
-      u.searchParams.get('jobId') ||
-      root?.dataset.jobId ||
-      window.__agiloOrchestrator?.currentJobId ||
-      document.querySelector('.rail-item.is-active')?.dataset?.jobId ||
-      ''
-    );
-  }
-
-  function pickEmail() {
-    const root = document.querySelector('#editorRoot');
-    return (
-      root?.dataset.username ||
-      document.querySelector('[name="memberEmail"]')?.value ||
-      window.memberEmail ||
-      window.__agiloOrchestrator?.credentials?.email ||
-      localStorage.getItem('agilo:username') ||
-      document.querySelector('[data-ms-member="email"]')?.textContent ||
-      ''
-    );
-  }
-
-  function pickToken(edition, email) {
-    const root = document.querySelector('#editorRoot');
-    const k = `agilo:token:${edition}:${String(email || '').toLowerCase()}`;
-    return (
-      root?.dataset.token ||
-      window.__agiloOrchestrator?.credentials?.token ||
-      window.globalToken ||
-      localStorage.getItem(k) ||
-      localStorage.getItem(`agilo:token:${edition}`) ||
-      localStorage.getItem('agilo:token') ||
-      ''
-    );
-  }
-
   async function ensureToken(email, edition) {
     const have = pickToken(edition, email);
     if (have) return have;
@@ -322,9 +293,7 @@
       log('Bannière « pas demandé de CR » détectée');
       return true;
     }
-    const summaryEl = document.querySelector('#summaryEditor') || 
-                      document.querySelector('#ag-summary') || 
-                      document.querySelector('[data-editor="summary"]');
+    const summaryEl = querySummaryEditor();
     if (!summaryEl) return false;
     const text = (summaryEl.textContent || summaryEl.innerText || '').trim();
     const lowerText = text.toLowerCase();
@@ -650,9 +619,10 @@
         counter.style.removeProperty('visibility');
       }
       if (noSummary) {
+        const summaryPane = querySummaryEditor();
         const alertBox =
           document.querySelector('#editorRoot .ag-alert.ag-alert--warn') ||
-          document.querySelector('#summaryEditor .ag-alert.ag-alert--warn');
+          (summaryPane && summaryPane.querySelector('.ag-alert.ag-alert--warn'));
         syncInlineGenerateCta(alertBox);
       } else {
         syncInlineGenerateCta(null);
@@ -724,9 +694,7 @@
   }
 
   function showSummaryLoading() {
-    const summaryEditor = document.querySelector('#summaryEditor') || 
-                          document.querySelector('#ag-summary') || 
-                          document.querySelector('[data-editor="summary"]');
+    const summaryEditor = querySummaryEditor();
     if (!summaryEditor) return;
     let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
     
@@ -793,9 +761,7 @@
   }
 
   function hideSummaryLoading() {
-    const summaryEditor = document.querySelector('#summaryEditor') || 
-                          document.querySelector('#ag-summary') || 
-                          document.querySelector('[data-editor="summary"]');
+    const summaryEditor = querySummaryEditor();
     if (!summaryEditor) return;
     const loader = summaryEditor.querySelector('.summary-loading-indicator');
     if (loader) loader.remove();
@@ -924,9 +890,7 @@
         if (!firstGen && !skipRegenCharge) incrementRegenerationCount(jobId, edition);
         showSuccessMessage(firstGen ? 'Génération du compte-rendu lancée…' : 'Régénération lancée...');
         openSummaryTab();
-        const summaryEditorClear = document.querySelector('#summaryEditor') ||
-          document.querySelector('#ag-summary') ||
-          document.querySelector('[data-editor="summary"]');
+        const summaryEditorClear = querySummaryEditor();
         if (summaryEditorClear) summaryEditorClear.innerHTML = '';
         showSummaryLoading();
         updateButtonVisibility();
@@ -1098,7 +1062,7 @@
       observer.observe(root, { attributes: true, attributeFilter: ['data-summary-empty'] });
     }
     
-    const summaryEl = document.querySelector('#summaryEditor');
+    const summaryEl = querySummaryEditor();
     if (summaryEl) {
       let debounceTimer;
       const observer = new MutationObserver(() => {
