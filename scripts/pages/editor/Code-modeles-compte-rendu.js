@@ -16,6 +16,20 @@
   const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
   const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
 
+  async function fetchGetWithRetry(url, maxAttempts) {
+    var lastErr;
+    var n = maxAttempts || 3;
+    for (var a = 1; a <= n; a++) {
+      try {
+        return await fetch(url, { method: 'GET', cache: 'no-store' });
+      } catch (err) {
+        lastErr = err;
+        if (a < n) await new Promise(function (r) { setTimeout(r, 400 * a); });
+      }
+    }
+    throw lastErr || new Error('fetch réseau');
+  }
+
   async function fetchTranscriptStatus(jobId, email, token, edition) {
     const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
     const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
@@ -507,7 +521,7 @@
       
       log('Appel redoSummary avec promptId:', model.promptModelId);
       
-      const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      const res = await fetchGetWithRetry(url, 3);
       const data = await res.json();
 
       if (data.status === 'OK' || res.ok) {
