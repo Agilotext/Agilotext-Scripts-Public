@@ -1,5 +1,6 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.4 – repo)
-// Grille + promptId job ; après redoSummary : polling getTranscriptStatus (via relance), sans bouton d’annulation superflu
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.4.1 – repo)
+// Grille + promptId job ; après redoSummary l’API annonce désormais READY_SUMMARY_PENDING puis READY (poll via relance) ;
+// sans bouton d’annulation superflu sur le loader.
 
 (function() {
   'use strict';

@@ -1,4 +1,6 @@
 // Agilotext – Relance Compte-Rendu (VERSION PRODUCTION OPTIMISÉE + creds partagés)
+// Contrat API (correctif backend ~04/2026) : après redoSummary, getTranscriptStatus → READY_SUMMARY_PENDING puis READY_SUMMARY_READY ;
+// le poll + recheck ON_ERROR / receiveSummary reste pour jobs anciens ou réponses encore ambiguës.
 (function() {
   'use strict';
 
