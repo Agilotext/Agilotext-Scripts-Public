@@ -403,6 +403,48 @@
     } catch (e) {}
   }
 
+
+  /** L'API peut laisser un message « incident » obsolète côté javaException. */
+  function isPhantomIncidentStatusPayload(j) {
+    if (!j) return false;
+    var blob = [j.javaException, j.userErrorMessage, j.exceptionName, j.javaStackTrace].filter(Boolean).join(' ');
+    return /killed by a backend|backend incident|incident.{0,40}backend|job was killed/i.test(blob);
+  }
+
+  /**
+   * Relance sans consommer le quota : incident / coupure serveur (erreur API + message type incident).
+   */
+  async function shouldSkipRegenerationCharge(jobId, email, token, edition) {
+    if (!jobId || !email || !token) return false;
+    try {
+      var url = 'https://api.agilotext.com/api/v1/getTranscriptStatus?jobId=' +
+        encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) +
+        '&token=' + encodeURIComponent(token) + '&edition=' + encodeURIComponent(edition);
+      var r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+      var j = await r.json().catch(function () { return null; });
+      if (!j || j.status === 'KO') return false;
+      if (!isPhantomIncidentStatusPayload(j)) return false;
+      var ts = String(j.transcriptStatus || '');
+      return ts === 'READY_SUMMARY_ON_ERROR' || ts === 'ON_ERROR';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function fetchRedoSummaryWithRetry(url, maxAttempts) {
+    var lastErr;
+    var n = maxAttempts || 3;
+    for (var a = 1; a <= n; a++) {
+      try {
+        return await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+      } catch (err) {
+        lastErr = err;
+        if (a < n) await new Promise(function (r) { setTimeout(r, 400 * a); });
+      }
+    }
+    throw lastErr || new Error('redoSummary réseau');
+  }
+
   function canRegenerate(jobId, edition) {
     const ed = String(edition || '').toLowerCase().trim();
     if (ed.startsWith('free') || ed === 'gratuit') {
@@ -820,11 +862,12 @@
       return;
     }
     
+    var skipRegenCharge = await shouldSkipRegenerationCharge(jobId, email, token, edition);
     const firstGen = hasErrorMessageInDOM();
     let canRegen = { allowed: true, remaining: 0, limit: 0 };
     if (!firstGen) {
       canRegen = canRegenerate(jobId, edition);
-      if (!canRegen.allowed) {
+      if (!canRegen.allowed && !skipRegenCharge) {
         isGenerating = false;
         if (canRegen.reason === 'free') {
           if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
@@ -839,19 +882,28 @@
         return;
       }
     }
-    
-    const confirmed = firstGen
-      ? confirm(
-          'Générer un compte-rendu pour cette transcription ?\n\n' +
-            'Le modèle par défaut de votre compte sera utilisé (comme sur l’app mobile).\n\n' +
-            'L’interface attendra la fin de la génération puis actualisera le compte-rendu.'
-        )
-      : confirm(
-          `Remplacer le compte-rendu actuel ?\n\n` +
-            `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-            `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
-        );
-    
+
+    var confirmed = false;
+    if (firstGen) {
+      confirmed = confirm(
+        'Générer un compte-rendu pour cette transcription ?\n\n' +
+          'Le modèle par défaut de votre compte sera utilisé (comme sur l’app mobile).\n\n' +
+          'L’interface attendra la fin de la génération puis actualisera le compte-rendu.'
+      );
+    } else if (skipRegenCharge) {
+      confirmed = confirm(
+        `Relancer la génération du compte-rendu ?\n\n` +
+          `Suite à un incident serveur, cette relance ne compte pas comme une régénération.\n\n` +
+          `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.`
+      );
+    } else {
+      confirmed = confirm(
+        `Remplacer le compte-rendu actuel ?\n\n` +
+          `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
+          `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
+      );
+    }
+
     if (!confirmed) {
       isGenerating = false;
       updateButtonVisibility();
@@ -861,16 +913,15 @@
     try {
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       log('Appel redoSummary...');
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        credentials: 'omit'
-      });
+      const response = await fetchRedoSummaryWithRetry(url, 3);
       const result = await response.json();
       
       if (result.status === 'OK' || response.ok) {
-        log('redoSummary OK' + (firstGen ? ' (première génération)' : ' - Incrémentation compteur'));
-        if (!firstGen) incrementRegenerationCount(jobId, edition);
+        log(
+          'redoSummary OK' +
+            (firstGen ? ' (première génération)' : skipRegenCharge ? ' (relance incident)' : ' — compteur')
+        );
+        if (!firstGen && !skipRegenCharge) incrementRegenerationCount(jobId, edition);
         showSuccessMessage(firstGen ? 'Génération du compte-rendu lancée…' : 'Régénération lancée...');
         openSummaryTab();
         const summaryEditorClear = document.querySelector('#summaryEditor') ||
