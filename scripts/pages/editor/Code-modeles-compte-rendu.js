@@ -1,20 +1,18 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION SIMPLIFIÉE)
-// Affiche les modèles standards ET personnalisés dans des accordéons
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.1 – repo, alignement type V3 + API)
+// Grille de chips, promptId du job (getJobsInfo), quotas régénération, retry réseau redoSummary
 
 (function() {
   'use strict';
 
-  // ============================================
-  // CONFIGURATION
-  // ============================================
   const DEBUG = false;
   const log = (...args) => { if (DEBUG) console.log('[AGILO:MODELES]', ...args); };
   const API_BASE = 'https://api.agilotext.com/api/v1';
-  const SUMMARY_POLL_MS = 10000;
-  const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
-  const SUMMARY_RELOAD_FALLBACK_MS = 3200;
-  const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
-  const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
+
+  let cachedModels = null;
+  let isLoadingModels = false;
+  let isPopulated = false;
+  let lastPopulatedJobId = '';
+  const cachedJobPromptIds = new Map();
 
   async function fetchGetWithRetry(url, maxAttempts) {
     var lastErr;
@@ -30,160 +28,6 @@
     throw lastErr || new Error('fetch réseau');
   }
 
-  async function fetchTranscriptStatus(jobId, email, token, edition) {
-    const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-    const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
-    const j = await r.json().catch(() => ({}));
-    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus).trim();
-    return null;
-  }
-
-  async function receiveSummaryIndicatesCrReady(jobId, email, token, edition) {
-    try {
-      const url = `${API_BASE}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-      const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
-      const text = await r.text();
-      if (!r.ok) return false;
-      const lower = text.toLowerCase();
-      if (lower.includes('error_summary_transcript_file_not_exists')) return false;
-      if (lower.includes('"status":"ko"') || lower.includes('"status": "ko"')) return false;
-      return text.length >= 400;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function refreshSummaryInEditor(jobId) {
-    if (!jobId) return;
-    try {
-      const audio = document.getElementById('agilo-audio');
-      const wantAutoplay = audio ? !audio.paused : false;
-      window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId } }));
-      if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
-        window.__agiloOrchestrator.loadJob(jobId, { autoplay: wantAutoplay });
-      } else {
-        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId, autoplay: wantAutoplay } }));
-      }
-    } catch (e) {
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.set('tab', 'summary');
-      newUrl.searchParams.set('_t', String(Date.now()));
-      window.location.href = newUrl.toString();
-    }
-  }
-
-  function hardReloadEditorSummaryTab() {
-    const newUrl = new URL(window.location.href);
-    newUrl.searchParams.set('tab', 'summary');
-    newUrl.searchParams.set('_t', String(Date.now()));
-    window.location.href = newUrl.toString();
-  }
-
-  function formatPollStatusLabel(st) {
-    if (!st) return 'Vérification du statut…';
-    if (st === 'READY_SUMMARY_PENDING') return 'Génération du compte-rendu en cours sur le serveur…';
-    if (st === 'READY_SUMMARY_READY') return 'Finalisation, récupération du texte…';
-    if (st === 'READY_SUMMARY_ON_ERROR') {
-      return 'Statut « erreur » côté API — vérification (souvent incohérent avec le contenu réel)…';
-    }
-    if (String(st).startsWith('READY_SUMMARY_')) {
-      const tail = String(st).replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ').toLowerCase();
-      return 'Étape : ' + tail;
-    }
-    return 'Traitement en cours…';
-  }
-
-  function summaryPaneLooksEmptyOrPlaceholder() {
-    const root = document.querySelector('#editorRoot');
-    if (root?.dataset.summaryEmpty === '1') return true;
-    const summaryEl = document.querySelector('#summaryEditor') ||
-      document.querySelector('#ag-summary') ||
-      document.querySelector('[data-editor="summary"]');
-    if (!summaryEl) return true;
-    const loader = summaryEl.querySelector('.summary-loading-indicator');
-    if (loader && loader.style.display !== 'none') return true;
-    const txt = (summaryEl.textContent || summaryEl.innerText || '').trim();
-    if (txt.length < 48) return true;
-    const lower = txt.toLowerCase();
-    if (
-      lower.includes('pas demandé') ||
-      lower.includes('fichier manquant') ||
-      lower.includes('pas encore disponible') ||
-      lower.includes('non publié')
-    ) return true;
-    return false;
-  }
-
-  function refreshSummaryInEditorWithFallback(jobId, isCancelled) {
-    refreshSummaryInEditor(jobId);
-    window.setTimeout(() => {
-      if (typeof isCancelled === 'function' && isCancelled()) return;
-      if (summaryPaneLooksEmptyOrPlaceholder()) {
-        log('Panneau CR vide après loadJob → rechargement page');
-        hardReloadEditorSummaryTab();
-      }
-    }, SUMMARY_RELOAD_FALLBACK_MS);
-  }
-
-  async function recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel) {
-    if (statusEl) statusEl.textContent = 'Vérification du statut (parfois transitoire après génération)…';
-    for (let i = 0; i < SUMMARY_ON_ERROR_RECHECK_TIMES; i++) {
-      await new Promise(r => setTimeout(r, SUMMARY_ON_ERROR_RECHECK_MS));
-      if (shouldCancel && shouldCancel()) return 'cancelled';
-      let st = null;
-      try {
-        st = await fetchTranscriptStatus(jobId, email, token, edition);
-      } catch (_) {}
-      if (statusEl) statusEl.textContent = formatPollStatusLabel(st);
-      if (st === 'READY_SUMMARY_READY') return 'ready';
-      if (st !== 'READY_SUMMARY_ON_ERROR') return 'continue';
-    }
-    if (statusEl) statusEl.textContent = 'Dernier contrôle : contenu du compte-rendu…';
-    if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition)) {
-      log('receiveSummary OK malgré READY_SUMMARY_ON_ERROR — traité comme prêt');
-      return 'ready';
-    }
-    return 'error';
-  }
-
-  async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
-    const t0 = Date.now();
-    await new Promise(r => setTimeout(r, 800));
-    while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
-      if (shouldCancel && shouldCancel()) return 'cancelled';
-      let st = null;
-      try {
-        st = await fetchTranscriptStatus(jobId, email, token, edition);
-      } catch (_) {}
-      if (statusEl) {
-        statusEl.textContent = formatPollStatusLabel(st);
-      }
-      if (st === 'READY_SUMMARY_READY') return 'ready';
-      if (st === 'READY_SUMMARY_ON_ERROR') {
-        const sub = await recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel);
-        if (sub === 'ready') return 'ready';
-        if (sub === 'error') return 'error';
-        if (sub === 'cancelled') return 'cancelled';
-        await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
-        continue;
-      }
-      await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
-    }
-    return 'timeout';
-  }
-
-  function hideModelLoader() {
-    const summaryEditor = document.querySelector('#summaryEditor') ||
-      document.querySelector('#ag-summary') ||
-      document.querySelector('[data-editor="summary"]');
-    if (!summaryEditor) return;
-    const loader = summaryEditor.querySelector('.summary-loading-indicator');
-    if (loader) loader.remove();
-  }
-
-  // ============================================
-  // CREDENTIALS
-  // ============================================
   function pickEdition() {
     const root = document.querySelector('#editorRoot');
     const raw = window.AGILO_EDITION
@@ -237,23 +81,174 @@
     );
   }
 
-  // ============================================
-  // CHARGER LES MODÈLES (2 APIs en parallèle)
-  // ============================================
-  async function loadAllModels() {
+  async function getJobPromptIdFromAPI(jobId, forceRefresh) {
+    if (!jobId) return null;
+    if (!forceRefresh && cachedJobPromptIds.has(jobId)) {
+      return cachedJobPromptIds.get(jobId);
+    }
     const email = pickEmail();
     const edition = pickEdition();
     const token = pickToken(edition, email);
+    if (!email || !token) return null;
+    try {
+      let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=100&offset=0`;
+      let res = await fetch(url, { method: 'GET', cache: 'no-store' });
+      let data = await res.json();
+      if (data.status === 'OK' && Array.isArray(data.jobsInfoDtos)) {
+        let job = data.jobsInfoDtos.find(function (j) {
+          const id = j.jobid != null ? j.jobid : j.jobId;
+          return String(id) === String(jobId);
+        });
+        if (!job && data.jobsInfoDtos.length === 100) {
+          for (let offset = 100; offset < 300; offset += 100) {
+            url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=100&offset=${offset}`;
+            res = await fetch(url, { method: 'GET', cache: 'no-store' });
+            data = await res.json();
+            if (data.status === 'OK' && Array.isArray(data.jobsInfoDtos)) {
+              job = data.jobsInfoDtos.find(function (j) {
+                const id = j.jobid != null ? j.jobid : j.jobId;
+                return String(id) === String(jobId);
+              });
+              if (job) break;
+              if (data.jobsInfoDtos.length < 100) break;
+            } else break;
+          }
+        }
+        if (job) {
+          const raw = job.promptid != null ? job.promptid : job.promptId;
+          const promptId = raw && raw !== -1 && raw !== '-1' ? Number(raw) : null;
+          if (promptId && !isNaN(promptId)) {
+            cachedJobPromptIds.set(jobId, promptId);
+            return promptId;
+          }
+          cachedJobPromptIds.set(jobId, null);
+        }
+      }
+    } catch (err) {
+      log('getJobsInfo', err);
+    }
+    return null;
+  }
 
+  function getJobPromptIdLocal(jobId) {
+    if (!jobId) return null;
+    try {
+      const storage = localStorage.getItem('agilo:job-prompt-ids');
+      if (!storage) return null;
+      const data = JSON.parse(storage);
+      const n = Number(data[jobId]);
+      return !isNaN(n) ? n : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function setJobPromptIdLocal(jobId, promptId) {
+    if (!jobId || !promptId) return;
+    try {
+      const storage = localStorage.getItem('agilo:job-prompt-ids');
+      const data = storage ? JSON.parse(storage) : {};
+      data[jobId] = promptId;
+      localStorage.setItem('agilo:job-prompt-ids', JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function getRegenerationLimit(edition) {
+    const ed = String(edition || '').toLowerCase().trim();
+    if (ed.startsWith('pro')) return 2;
+    if (ed === 'ent' || ed === 'business' || ed === 'enterprise' || ed === 'entreprise' || ed === 'team') return 4;
+    return 0;
+  }
+
+  function getRegenerationCount(jobId) {
+    if (!jobId) return 0;
+    try {
+      const storage = localStorage.getItem('agilo:regenerations');
+      if (!storage) return 0;
+      const data = JSON.parse(storage);
+      return data[jobId]?.count || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function incrementRegenerationCount(jobId, edition) {
+    if (!jobId) return;
+    try {
+      const storage = localStorage.getItem('agilo:regenerations');
+      const data = storage ? JSON.parse(storage) : {};
+      if (!data[jobId]) {
+        data[jobId] = {
+          count: 0,
+          max: getRegenerationLimit(edition),
+          edition: edition,
+          lastReset: new Date().toISOString()
+        };
+      }
+      data[jobId].count += 1;
+      data[jobId].lastUsed = new Date().toISOString();
+      localStorage.setItem('agilo:regenerations', JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  function canRegenerate(jobId, edition) {
+    const ed = String(edition || '').toLowerCase().trim();
+    if (ed.startsWith('free') || ed === 'gratuit') {
+      return { allowed: false, reason: 'free' };
+    }
+    const limit = getRegenerationLimit(edition);
+    const count = getRegenerationCount(jobId);
+    if (count >= limit) {
+      return { allowed: false, reason: 'limit', count, limit };
+    }
+    return { allowed: true, count, limit, remaining: limit - count };
+  }
+
+  function updateExistingRegenerationCounter(jobId, edition) {
+    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
+    if (!btn || !jobId) return;
+    if (typeof window.updateRegenerationCounter === 'function') {
+      window.updateRegenerationCounter(jobId, edition);
+      return;
+    }
+    const canRegen = canRegenerate(jobId, edition);
+    const oldCounter = btn.parentElement?.querySelector('.regeneration-counter, #regeneration-info, .regeneration-limit-message, .regeneration-premium-message');
+    if (oldCounter) oldCounter.remove();
+    if (canRegen.reason === 'free') return;
+    if (canRegen.reason === 'limit') {
+      const planName = edition === 'ent' || edition === 'business' ? 'Business' : 'Pro';
+      const limitMsg = document.createElement('div');
+      limitMsg.className = 'regeneration-limit-message';
+      limitMsg.innerHTML =
+        '<span class="regeneration-limit-icon">⚠️</span>' +
+        '<div class="regeneration-limit-content">' +
+        '<strong>Limite atteinte</strong>' +
+        '<div class="regeneration-limit-detail">' +
+        canRegen.count + '/' + canRegen.limit + ' régénération(s) utilisée(s) (plan ' + planName + ')' +
+        '</div></div>';
+      btn.parentElement?.appendChild(limitMsg);
+      return;
+    }
+    const counter = document.createElement('div');
+    counter.id = 'regeneration-info';
+    counter.className = 'regeneration-counter';
+    counter.textContent = canRegen.remaining + '/' + canRegen.limit + ' régénérations restantes';
+    btn.parentElement?.appendChild(counter);
+  }
+
+  async function loadAllModels(forceRefresh) {
+    if (cachedModels && !forceRefresh) return cachedModels;
+    if (isLoadingModels) return cachedModels || { standard: [], custom: [], defaultId: null };
+
+    const email = pickEmail();
+    const edition = pickEdition();
+    const token = pickToken(edition, email);
     if (!email || !token) {
-      log('Credentials manquants');
       return { standard: [], custom: [], defaultId: null };
     }
 
-    log('Chargement des modèles...');
-
+    isLoadingModels = true;
     try {
-      // Appeler les DEUX APIs (les deux ont besoin de edition!)
       const [resUser, resStd] = await Promise.all([
         fetch(`${API_BASE}/getPromptModelsUserInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`),
         fetch(`${API_BASE}/getPromptModelsStandardInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`)
@@ -263,126 +258,121 @@
       let standardModels = [];
       let defaultId = null;
 
-      // Réponse User
       if (resUser.ok) {
         const data = await resUser.json().catch(() => null);
         if (data?.status === 'OK' && Array.isArray(data.promptModeInfoDTOList)) {
           userModels = data.promptModeInfoDTOList;
           defaultId = data.defaultPromptModelId;
-          log('API User:', userModels.length, 'modèles, default:', defaultId);
-          log('API User - Tous les IDs:', userModels.map(m => m.promptModelId));
         }
       }
-
-      // Réponse Standard
-      log('API Standard - Status HTTP:', resStd.status);
       if (resStd.ok) {
         const data = await resStd.json().catch(() => null);
-        log('API Standard - Réponse:', JSON.stringify(data));
         if (data?.status === 'OK' && Array.isArray(data.promptModeInfoDTOList)) {
           standardModels = data.promptModeInfoDTOList;
-          log('API Standard:', standardModels.length, 'modèles');
-        } else {
-          log('API Standard - Format inattendu ou pas de modèles');
         }
-      } else {
-        log('API Standard - Erreur HTTP:', resStd.status);
       }
 
-      // Fusionner tout (dédupliquer par ID)
       const allMap = new Map();
       for (const m of standardModels) allMap.set(m.promptModelId, m);
       for (const m of userModels) allMap.set(m.promptModelId, m);
-
       const all = Array.from(allMap.values());
-      
-      // Séparer: standard = ID < 100, custom = ID >= 100
-      const standard = all.filter(m => m.promptModelId < 100);
-      const custom = all.filter(m => m.promptModelId >= 100);
+      const standard = all.filter(function (m) { return m.promptModelId < 100; });
+      const custom = all.filter(function (m) { return m.promptModelId >= 100; });
 
-      log('Résultat: Standard:', standard.length, '| Custom:', custom.length);
-      log('IDs Standards:', standard.map(m => m.promptModelId));
-      log('IDs Custom:', custom.map(m => m.promptModelId));
-
-      return { standard, custom, defaultId };
+      cachedModels = { standard, custom, defaultId };
+      return cachedModels;
     } catch (err) {
-      console.error('[AGILO:MODELES] Erreur:', err);
+      console.error('[AGILO:MODELES]', err);
       return { standard: [], custom: [], defaultId: null };
+    } finally {
+      isLoadingModels = false;
     }
   }
 
-  // ============================================
-  // CRÉER UN ACCORDÉON
-  // ============================================
-  function createAccordion(title, models, type, defaultId, isOpen = false) {
+  function createAccordion(title, models, type, defaultId, jobPromptId, isOpen, isFree) {
     const section = document.createElement('div');
-    section.className = `models-section section-${type}`;
+    section.className = 'models-section section-' + type;
     if (isOpen) section.classList.add('is-open');
 
-    // Header
     const header = document.createElement('button');
     header.type = 'button';
     header.className = 'models-section-header';
-    header.innerHTML = `
-      <span class="models-section-title">${title}</span>
-      <span class="models-section-count">${models.length}</span>
-      <svg class="models-section-arrow" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M7 10l5 5 5-5z"/>
-      </svg>
-    `;
+    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    header.innerHTML =
+      '<span class="models-section-title">' + title + '</span>' +
+      '<span class="models-section-count">' + models.length + '</span>' +
+      '<svg class="models-section-arrow" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
+      '<path d="M7 10l5 5 5-5z"/></svg>';
 
-    // Contenu
     const content = document.createElement('div');
     content.className = 'models-section-content';
-
     const chips = document.createElement('div');
     chips.className = 'models-chips';
 
-    models.forEach(m => {
+    const defaultIdNum = defaultId != null ? Number(defaultId) : null;
+    const jobPromptIdNum = jobPromptId != null ? Number(jobPromptId) : null;
+
+    models.forEach(function (m) {
       const chip = document.createElement('button');
       chip.type = 'button';
-      // Classe de base + classe de couleur selon le type
       const colorClass = type === 'standard' ? 'chip-standard' : 'chip-custom';
-      chip.className = `model-chip ${colorClass}`;
-      if (m.promptModelId === defaultId) chip.classList.add('is-current');
-      
-      chip.dataset.promptId = m.promptModelId;
-      chip.textContent = m.promptModelName || 'Modèle ' + m.promptModelId;
-      chip.title = m.promptModelId === defaultId 
-        ? 'Votre modèle par défaut' 
-        : 'Cliquez pour régénérer avec ce modèle';
+      chip.className = 'model-chip ' + colorClass;
 
-      chip.addEventListener('click', () => handleChipClick(m));
+      const modelIdNum = Number(m.promptModelId);
+      const chipText = m.promptModelName || 'Modèle ' + m.promptModelId;
+
+      const isUsedForThisJob = jobPromptIdNum != null && !isNaN(jobPromptIdNum) && modelIdNum === jobPromptIdNum;
+      const isDefaultAccount = defaultIdNum != null && !isNaN(defaultIdNum) && modelIdNum === defaultIdNum;
+
+      if (isUsedForThisJob) {
+        chip.classList.add('is-used');
+        chip.disabled = true;
+      } else if (isDefaultAccount) {
+        chip.classList.add('is-default-account');
+      }
+
+      if (isFree && !isUsedForThisJob) {
+        chip.classList.add('is-locked');
+        chip.setAttribute('data-plan-min', 'pro');
+        chip.setAttribute('data-upgrade-reason', 'Régénération avec le modèle « ' + chipText + ' »');
+      }
+
+      chip.dataset.promptId = m.promptModelId;
+      const textSpan = document.createElement('span');
+      textSpan.className = 'model-chip-text';
+      textSpan.textContent = chipText;
+      chip.appendChild(textSpan);
+      chip.title = isUsedForThisJob
+        ? chipText + ' — modèle actuel pour ce job'
+        : isDefaultAccount
+          ? chipText + ' — modèle par défaut du compte'
+          : chipText;
+
+      if (!isUsedForThisJob && !isFree) {
+        chip.addEventListener('click', function () { handleChipClick(m); });
+      }
+
       chips.appendChild(chip);
     });
 
     content.appendChild(chips);
-
-    // Toggle
-    header.addEventListener('click', () => {
-      section.classList.toggle('is-open');
+    header.addEventListener('click', function () {
+      const open = section.classList.toggle('is-open');
+      header.setAttribute('aria-expanded', open ? 'true' : 'false');
     });
-
     section.appendChild(header);
     section.appendChild(content);
-
     return section;
   }
 
-  // ============================================
-  // ÉTAT GLOBAL
-  // ============================================
   let isGenerating = false;
 
-  // ============================================
-  // LOADER (même style que le script relance)
-  // ============================================
   function initLottieAnimation(element) {
     if (window.Webflow && window.Webflow.require) {
       try {
         const ix2 = window.Webflow.require('ix2');
         if (ix2 && typeof ix2.init === 'function') {
-          setTimeout(() => ix2.init(), 100);
+          setTimeout(function () { ix2.init(); }, 100);
         }
       } catch (e) {}
     }
@@ -402,16 +392,14 @@
   }
 
   function showSummaryLoading(modelName) {
-    const summaryEditor = document.querySelector('#summaryEditor') || 
-                          document.querySelector('#ag-summary') || 
-                          document.querySelector('[data-editor="summary"]');
+    const summaryEditor = document.querySelector('#summaryEditor') ||
+      document.querySelector('#ag-summary') ||
+      document.querySelector('[data-editor="summary"]');
     if (!summaryEditor) return;
 
-    // Créer le loader
     const loaderContainer = document.createElement('div');
     loaderContainer.className = 'summary-loading-indicator';
-    
-    // Animation Lottie
+
     let lottieElement = document.querySelector('#loading-summary');
     if (!lottieElement) {
       lottieElement = document.createElement('div');
@@ -426,39 +414,32 @@
       lottieElement = lottieElement.cloneNode(true);
       lottieElement.id = 'loading-summary-model';
     }
-    
+
     const loadingText = document.createElement('p');
     loadingText.className = 'loading-text';
     loadingText.textContent = 'Génération du compte-rendu en cours...';
-    
     const loadingSubtitle = document.createElement('p');
     loadingSubtitle.className = 'loading-subtitle';
     loadingSubtitle.innerHTML = modelName
-      ? `Modèle : <strong>${modelName}</strong><br><span style="font-weight:400;font-size:0.92em">Mise à jour automatique dès que le compte-rendu est prêt.</span>`
-      : 'Mise à jour automatique dès que le compte-rendu est prêt.';
-    
-    const statusEl = document.createElement('p');
-    statusEl.className = 'loading-status-hint';
-    statusEl.id = 'model-countdown';
-    statusEl.textContent = 'Connexion au statut serveur…';
-    
+      ? 'Modèle : <strong>' + modelName + '</strong>'
+      : 'La page se rechargera automatiquement dans :';
+    const countdown = document.createElement('p');
+    countdown.className = 'loading-countdown';
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'loading-cancel-btn';
-    cancelBtn.textContent = 'Arrêter l’affichage d’attente';
-    
+    cancelBtn.textContent = 'Annuler le rechargement';
+
     summaryEditor.innerHTML = '';
     summaryEditor.appendChild(loaderContainer);
     loaderContainer.appendChild(lottieElement);
     loaderContainer.appendChild(loadingText);
     loaderContainer.appendChild(loadingSubtitle);
-    loaderContainer.appendChild(statusEl);
+    loaderContainer.appendChild(countdown);
     loaderContainer.appendChild(cancelBtn);
-    
-    // Initialiser Lottie
-    setTimeout(() => {
+
+    setTimeout(function () {
       initLottieAnimation(lottieElement);
-      // Fallback si Lottie ne charge pas
-      setTimeout(() => {
+      setTimeout(function () {
         const hasLottie = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
         if (!hasLottie) {
           const fallback = document.createElement('div');
@@ -469,31 +450,39 @@
       }, 1000);
     }, 100);
 
-    const cancelledRef = { value: false };
-    cancelBtn.onclick = () => {
-      if (!confirm(
-        'La génération peut continuer côté serveur.\n\n' +
-        'Arrêter seulement l’attente à l’écran ?'
-      )) return;
-      cancelledRef.value = true;
-      hideModelLoader();
-      isGenerating = false;
-      if (typeof window.toast === 'function') {
-        window.toast('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
+    let secondsLeft = 150;
+    const updateCountdown = function () {
+      const minutes = Math.floor(secondsLeft / 60);
+      const seconds = secondsLeft % 60;
+      countdown.textContent = minutes + ':' + seconds.toString().padStart(2, '0');
+      if (secondsLeft <= 0) {
+        countdown.textContent = 'Rechargement...';
+        setTimeout(function () {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('tab', 'summary');
+          newUrl.searchParams.set('_t', Date.now());
+          window.location.href = newUrl.toString();
+        }, 500);
+        return;
       }
+      secondsLeft--;
+    };
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+
+    cancelBtn.onclick = function () {
+      clearInterval(countdownInterval);
+      countdown.textContent = 'Rechargement annulé';
+      cancelBtn.textContent = 'Recharger maintenant';
+      cancelBtn.onclick = function () { window.location.reload(); };
+      isGenerating = false;
     };
 
-    return { statusEl, cancelledRef };
+    return countdownInterval;
   }
 
-  // ============================================
-  // CLIC SUR UN CHIP
-  // ============================================
   async function handleChipClick(model) {
-    if (isGenerating) {
-      log('Déjà en cours de génération');
-      return;
-    }
+    if (isGenerating) return;
 
     const jobId = pickJobId();
     const email = pickEmail();
@@ -505,93 +494,92 @@
       return;
     }
 
+    const ed = String(edition || '').toLowerCase().trim();
+    const isFree = ed.startsWith('free') || ed === 'gratuit';
+    if (isFree) {
+      const modelName = model.promptModelName || 'Modèle ' + model.promptModelId;
+      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+        window.AgiloGate.showUpgrade('pro', 'Régénération avec le modèle « ' + modelName + ' »');
+      } else {
+        alert('Cette fonctionnalité nécessite un abonnement Pro ou Business.');
+      }
+      return;
+    }
+
+    const canRegen = canRegenerate(jobId, edition);
+    if (!canRegen.allowed) {
+      if (canRegen.reason === 'limit') {
+        alert('Limite atteinte: ' + canRegen.count + '/' + canRegen.limit + ' régénération(s) pour ce transcript.');
+      }
+      return;
+    }
+
     const modelName = model.promptModelName || 'Modèle ' + model.promptModelId;
     const confirmed = confirm(
-      `⚠️ Attention, cela va remplacer le compte-rendu existant.\n\n` +
-      `Modèle : ${modelName}\n\n` +
-      `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.`
+      'Cela remplace le compte-rendu actuel.\n\n' +
+      'Modèle : ' + modelName + '\n\n' +
+      canRegen.remaining + '/' + canRegen.limit + ' régénération(s) restante(s).\n\n' +
+      'La page se rechargera automatiquement après 2 min 30.'
     );
-
     if (!confirmed) return;
 
     isGenerating = true;
-
     try {
-      const url = `${API_BASE}/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&promptId=${encodeURIComponent(model.promptModelId)}`;
-      
-      log('Appel redoSummary avec promptId:', model.promptModelId);
-      
+      const url = API_BASE + '/redoSummary?jobId=' + encodeURIComponent(jobId) +
+        '&username=' + encodeURIComponent(email) +
+        '&token=' + encodeURIComponent(token) +
+        '&edition=' + encodeURIComponent(edition) +
+        '&promptId=' + encodeURIComponent(model.promptModelId);
+
       const res = await fetchGetWithRetry(url, 3);
       const data = await res.json();
 
       if (data.status === 'OK' || res.ok) {
+        incrementRegenerationCount(jobId, edition);
+        updateExistingRegenerationCounter(jobId, edition);
+        setJobPromptIdLocal(jobId, model.promptModelId);
+        cachedJobPromptIds.set(jobId, Number(model.promptModelId));
+        try {
+          sessionStorage.setItem('agilo:summaryPromptId:' + jobId, String(model.promptModelId));
+        } catch (_) {}
         if (typeof window.toast === 'function') {
-          window.toast(`Régénération lancée avec "${modelName}"...`);
+          window.toast('Régénération lancée avec « ' + modelName + ' »…');
         }
         const summaryTab = document.querySelector('#tab-summary');
         if (summaryTab) summaryTab.click();
-
-        const { statusEl, cancelledRef } = showSummaryLoading(modelName);
-        waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => cancelledRef.value)
-          .then((outcome) => {
-            if (cancelledRef.value || outcome === 'cancelled') {
-              hideModelLoader();
-              isGenerating = false;
-              return;
-            }
-            hideModelLoader();
-            if (outcome === 'ready') {
-              refreshSummaryInEditorWithFallback(jobId, () => cancelledRef.value);
-              if (typeof window.toast === 'function') {
-                window.toast('Compte-rendu prêt');
-              }
-            } else if (outcome === 'error') {
-              alert(
-                'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
-                  'Si vous avez reçu un e-mail de succès, rechargez la page : le compte-rendu est peut‑être déjà là.\n\n' +
-                  'Sinon, réessayez ou contactez le support avec le numéro de job.'
-              );
-            } else {
-              alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
-            }
-            isGenerating = false;
-          })
-          .catch(() => {
-            hideModelLoader();
-            isGenerating = false;
-            alert('Erreur lors de la surveillance du statut. Rechargez la page.');
-          });
+        showSummaryLoading(modelName);
       } else if (data.status === 'KO') {
         isGenerating = false;
-        alert('⚠️ Une génération est déjà en cours. Veuillez patienter.');
+        alert('Une génération est déjà en cours. Patientez un instant.');
       } else {
         isGenerating = false;
-        alert('❌ Erreur: ' + (data.errorMessage || data.message || 'Une erreur est survenue'));
+        alert('Erreur: ' + (data.errorMessage || data.message || 'Réessayez.'));
       }
     } catch (err) {
       isGenerating = false;
-      console.error('[AGILO:MODELES] Erreur:', err);
-      alert('❌ Erreur de connexion. Vérifiez votre connexion internet.');
+      console.error('[AGILO:MODELES]', err);
+      alert('Erreur réseau. Vérifiez la connexion.');
     }
   }
 
-  // ============================================
-  // INJECTION DES STYLES
-  // ============================================
   function injectStyles() {
-    if (document.querySelector('#agilo-modeles-styles')) return;
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+      const n = document.querySelector(sel);
+      if (n) n.remove();
+    });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles';
+    style.id = 'agilo-modeles-styles-v4';
     style.textContent = `
-      /* Container */
       #cr-template-chips {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 10px;
+        min-height: 120px;
+        padding-bottom: max(5.5rem, env(safe-area-inset-bottom, 0px));
+        box-sizing: border-box;
       }
 
-      /* Section accordéon */
       .models-section {
         background: #fff;
         border: 1px solid rgba(52, 58, 64, 0.15);
@@ -599,12 +587,12 @@
         overflow: hidden;
       }
 
-      /* Header */
       .models-section-header {
         display: flex;
         align-items: center;
         gap: 10px;
         width: 100%;
+        min-height: 44px;
         padding: 12px 14px;
         background: #f8f9fa;
         border: none;
@@ -613,29 +601,30 @@
         font-weight: 600;
         color: #020202;
         text-align: left;
+        box-sizing: border-box;
       }
 
-      .models-section-header:hover {
-        background: #eef1f4;
-      }
+      .models-section-header:hover { background: #eef1f4; }
 
       .models-section-title {
         flex: 1;
+        min-width: 0;
+        line-height: 1.35;
       }
 
       .models-section-count {
+        flex-shrink: 0;
         min-width: 22px;
         height: 22px;
         padding: 0 6px;
         border-radius: 11px;
         font-size: 11px;
         font-weight: 600;
-        display: flex;
+        display: inline-flex;
         align-items: center;
         justify-content: center;
       }
 
-      /* Couleurs des badges selon le type */
       .models-section.section-standard .models-section-count {
         background: rgba(23, 74, 150, 0.12);
         color: #174a96;
@@ -647,118 +636,139 @@
       }
 
       .models-section-arrow {
+        flex-shrink: 0;
+        align-self: center;
+        width: 16px;
+        height: 16px;
         transition: transform 0.2s;
-        opacity: 0.5;
+        opacity: 0.55;
       }
 
       .models-section.is-open .models-section-arrow {
         transform: rotate(180deg);
       }
 
-      /* Contenu */
       .models-section-content {
         display: none;
-        padding: 12px 14px;
+        padding: 14px 14px 16px;
         border-top: 1px solid rgba(52, 58, 64, 0.1);
       }
 
-      .models-section.is-open .models-section-content {
-        display: block;
-      }
+      .models-section.is-open .models-section-content { display: block; }
 
-      /* Chips container */
       .models-chips {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+        gap: 10px;
+        align-items: stretch;
       }
 
-      /* Chip - Base */
+      @media (max-width: 480px) {
+        .models-chips { grid-template-columns: 1fr; gap: 8px; }
+      }
+
       .model-chip {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        padding: 8px 14px;
-        border-radius: 20px;
+        justify-content: center;
+        min-height: 44px;
+        max-height: 72px;
+        padding: 10px 12px;
+        border-radius: 8px;
         font-size: 13px;
         font-weight: 500;
+        line-height: 1.35;
         cursor: pointer;
-        transition: all 0.15s;
+        transition: box-shadow 0.15s ease, transform 0.15s ease, background 0.15s ease;
+        text-align: center;
+        box-sizing: border-box;
+        width: 100%;
+        border: 1px solid transparent;
       }
 
-      .model-chip:hover {
-        transform: translateY(-1px);
+      .model-chip-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+        text-align: center;
+        width: 100%;
       }
 
-      /* Chip Standard (bleu) */
+      .model-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+
       .model-chip.chip-standard {
-        border: 1px solid rgba(23, 74, 150, 0.3);
+        border-color: rgba(23, 74, 150, 0.35);
         background: rgba(23, 74, 150, 0.08);
         color: #174a96;
       }
+      .model-chip.chip-standard:hover { background: rgba(23, 74, 150, 0.14); }
 
-      .model-chip.chip-standard:hover {
-        background: rgba(23, 74, 150, 0.15);
+      .model-chip.chip-custom {
+        border-color: rgba(28, 102, 26, 0.35);
+        background: rgba(28, 102, 26, 0.08);
+        color: #1c661a;
+      }
+      .model-chip.chip-custom:hover { background: rgba(28, 102, 26, 0.14); }
+
+      .model-chip.is-default-account {
+        border-width: 2px;
+        font-weight: 600;
       }
 
-      .model-chip.chip-standard.is-current {
+      .model-chip.is-default-account::after {
+        content: ' (défaut)';
+        font-size: 10px;
+        font-weight: 600;
+        opacity: 0.9;
+        margin-left: 4px;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+
+      .model-chip.is-used {
+        cursor: default;
+        opacity: 0.95;
+      }
+      .model-chip.is-used:hover { transform: none; box-shadow: none; }
+
+      .model-chip.chip-standard.is-used {
         background: #174a96;
         color: #fff;
         border-color: #174a96;
       }
-
-      /* Chip Personnalisé (vert) */
-      .model-chip.chip-custom {
-        border: 1px solid rgba(28, 102, 26, 0.3);
-        background: rgba(28, 102, 26, 0.08);
-        color: #1c661a;
-      }
-
-      .model-chip.chip-custom:hover {
-        background: rgba(28, 102, 26, 0.15);
-      }
-
-      .model-chip.chip-custom.is-current {
+      .model-chip.chip-custom.is-used {
         background: #1c661a;
         color: #fff;
         border-color: #1c661a;
       }
 
-      /* État actuel */
-      .model-chip.is-current {
-        cursor: default;
-      }
-
-      .model-chip.is-current:hover {
-        transform: none;
-      }
-
-      .model-chip.is-current::after {
-        content: ' (par défaut)';
+      .model-chip.is-used .model-chip-text::after {
+        content: ' (actuel)';
         font-size: 10px;
-        opacity: 0.8;
-        margin-left: 4px;
+        font-weight: 600;
+        opacity: 0.95;
       }
 
-      /* Vue templates cachée par défaut */
-      [data-view="templates"] {
-        display: none;
+      .model-chip.is-locked {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .model-chip.is-locked:hover { transform: none; box-shadow: none; }
+
+      .agilo-modeles-free-banner {
+        padding: 12px 14px;
+        margin-bottom: 4px;
+        background: rgba(253, 126, 20, 0.08);
+        border: 1px solid rgba(253, 126, 20, 0.28);
+        border-radius: 8px;
+        font-size: 13px;
+        color: #525252;
       }
 
-      /* Responsive */
-      @media (max-width: 480px) {
-        .model-chip {
-          padding: 6px 12px;
-          font-size: 12px;
-        }
-        .models-section-header {
-          padding: 10px 12px;
-          font-size: 12px;
-        }
-      }
+      [data-view="templates"] { display: none; }
 
-      /* ================================
-         LOADER (même style que relance)
-         ================================ */
       .summary-loading-indicator {
         display: flex;
         flex-direction: column;
@@ -770,12 +780,10 @@
         background: #ffffff;
         animation: agilo-fadeIn 0.3s ease-out;
       }
-
       @keyframes agilo-fadeIn {
         from { opacity: 0; transform: translateY(10px); }
         to { opacity: 1; transform: translateY(0); }
       }
-
       .summary-loading-indicator #loading-summary-model,
       .summary-loading-indicator .lottie-check-statut {
         width: 5.5rem;
@@ -783,7 +791,6 @@
         margin: 0 auto 1.5rem;
         display: block;
       }
-
       .summary-loading-indicator .lottie-fallback {
         width: 5.5rem;
         height: 5.5rem;
@@ -793,43 +800,28 @@
         border-radius: 50%;
         animation: agilo-spin 1s linear infinite;
       }
-
       @keyframes agilo-spin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
       }
-
       .summary-loading-indicator .loading-text {
         font: 500 1rem/1.35 system-ui, -apple-system, sans-serif;
         color: #020202;
         margin-top: 0.5rem;
-        margin-bottom: 0.25rem;
       }
-
       .summary-loading-indicator .loading-subtitle {
         font: 400 0.875rem/1.4 system-ui, -apple-system, sans-serif;
         color: #525252;
         margin-top: 0.5rem;
       }
-
-      .summary-loading-indicator .loading-status-hint {
-        font: 400 0.875rem/1.45 system-ui, -apple-system, sans-serif;
-        color: #525252;
-        margin: 0.75rem 1rem 0;
-        text-align: center;
-        max-width: 28rem;
-      }
-
       .loading-countdown {
         font-size: 1.75rem;
         font-weight: 700;
         margin: 1.25rem 0 0.75rem;
         color: #174a96;
         font-variant-numeric: tabular-nums;
-        letter-spacing: 0.04em;
         font-family: ui-monospace, Menlo, monospace;
       }
-
       .loading-cancel-btn {
         margin-top: 1.25rem;
         cursor: pointer;
@@ -838,133 +830,158 @@
         border: 1px solid rgba(52, 58, 64, 0.25);
         background: #020202;
         color: #ffffff;
-        font: 500 0.875rem/1.4 system-ui, -apple-system, sans-serif;
-        transition: all 0.15s ease;
-      }
-
-      .loading-cancel-btn:hover {
-        background: #333;
-        transform: translateY(-1px);
-      }
-
-      @media (max-width: 480px) {
-        .summary-loading-indicator {
-          padding: 2.5rem 1rem;
-          min-height: 15rem;
-        }
-        .loading-countdown {
-          font-size: 1.5rem;
-        }
-        .loading-cancel-btn {
-          padding: 0.5rem 1rem;
-          font-size: 0.8125rem;
-        }
+        font: 500 0.875rem/1.4 system-ui, sans-serif;
       }
     `;
     document.head.appendChild(style);
   }
 
-  // ============================================
-  // REMPLIR LE CONTAINER
-  // ============================================
-  async function populateContainer() {
+  async function populateContainer(forceRefresh) {
     const container = document.querySelector('#cr-template-chips');
-    if (!container) {
-      log('Container #cr-template-chips non trouvé');
+    if (!container) return;
+
+    const jobId = pickJobId();
+    if (!forceRefresh && isPopulated && lastPopulatedJobId === jobId && container.querySelector('.models-section')) {
       return;
     }
 
-    // Loader
-    container.innerHTML = '<div style="padding:12px;color:#525252;font-size:13px;">Chargement...</div>';
+    container.innerHTML = '<div style="padding:12px;color:#525252;font-size:13px;">Chargement…</div>';
 
-    const { standard, custom, defaultId } = await loadAllModels();
+    const pack = await loadAllModels(forceRefresh);
+    const standard = pack.standard;
+    const custom = pack.custom;
+    const defaultId = pack.defaultId;
 
+    let jobPromptId = null;
+    if (jobId) {
+      jobPromptId = await getJobPromptIdFromAPI(jobId, !!forceRefresh);
+      if (jobPromptId == null || jobPromptId === -1) {
+        jobPromptId = getJobPromptIdLocal(jobId);
+      }
+      if (jobPromptId != null) {
+        const n = Number(jobPromptId);
+        jobPromptId = isNaN(n) ? null : n;
+      }
+    }
+
+    if (!document.querySelector('#cr-template-chips')) return;
     container.innerHTML = '';
 
-    // Section Standards
+    const edition = pickEdition();
+    const ed = String(edition || '').toLowerCase().trim();
+    const isFree = ed.startsWith('free') || ed === 'gratuit';
+
+    if (isFree) {
+      const banner = document.createElement('div');
+      banner.className = 'agilo-modeles-free-banner';
+      banner.innerHTML = '<strong style="color:#fd7e14;display:block;margin-bottom:4px;">Fonctionnalité Pro / Business</strong>' +
+        '<span>Passez en Pro pour régénérer avec les modèles ci-dessous.</span>';
+      container.appendChild(banner);
+    }
+
     if (standard.length > 0) {
-      const stdSection = createAccordion('Modèles standards', standard, 'standard', defaultId, true);
-      container.appendChild(stdSection);
-    } else {
-      log('Aucun modèle standard trouvé');
+      container.appendChild(createAccordion('Modèles standards', standard, 'standard', defaultId, jobPromptId, true, isFree));
     }
-
-    // Section Personnalisés
     if (custom.length > 0) {
-      const custSection = createAccordion('Mes modèles personnalisés', custom, 'custom', defaultId, true);
-      container.appendChild(custSection);
+      container.appendChild(createAccordion('Mes modèles personnalisés', custom, 'custom', defaultId, jobPromptId, true, isFree));
     }
-
     if (standard.length === 0 && custom.length === 0) {
       container.innerHTML = '<div style="padding:16px;color:#525252;font-size:13px;text-align:center;">Aucun modèle disponible</div>';
     }
+
+    if (jobId) updateExistingRegenerationCounter(jobId, edition);
+    if (isFree && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+      setTimeout(function () { window.AgiloGate.decorate(); }, 120);
+    }
+
+    isPopulated = true;
+    lastPopulatedJobId = jobId || '';
+
+    if (jobId && (jobPromptId == null || jobPromptId === -1)) {
+      setTimeout(async function () {
+        const retry = await getJobPromptIdFromAPI(jobId, true);
+        if (retry != null && retry !== jobPromptId) {
+          cachedModels = null;
+          isPopulated = false;
+          await populateContainer(true);
+        }
+      }, 2000);
+    }
   }
 
-  // ============================================
-  // SWITCH VIEW (IA vs Templates)
-  // ============================================
   function isSummaryTabActive() {
     const tab = document.querySelector('[role="tab"][aria-selected="true"]');
-    return tab?.id === 'tab-summary' || tab?.id?.includes('summary');
+    return tab?.id === 'tab-summary' || (tab?.id && tab.id.includes('summary'));
   }
 
   function hasSummaryContent() {
     const root = document.querySelector('#editorRoot');
     if (root?.dataset.summaryEmpty === '1') return false;
-    
     const el = document.querySelector('#summaryEditor, #ag-summary, [data-editor="summary"]');
     if (!el) return false;
-    
-    const txt = el.textContent?.toLowerCase() || '';
+    const txt = (el.textContent || '').toLowerCase();
     if (txt.includes('pas encore disponible') || txt.includes('fichier manquant')) return false;
-    
     return true;
+  }
+
+  let debounceTimer = null;
+  function debouncedPopulate() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(function () { populateContainer(false); }, 280);
   }
 
   function switchView() {
     const iaView = document.querySelector('[data-view="ia"]');
     const templatesView = document.querySelector('[data-view="templates"]');
-    
     if (!iaView || !templatesView) return;
 
     if (isSummaryTabActive() && hasSummaryContent()) {
       iaView.style.display = 'none';
       templatesView.style.display = 'block';
-      populateContainer();
+      debouncedPopulate();
     } else {
       iaView.style.display = 'block';
       templatesView.style.display = 'none';
     }
   }
 
-  // ============================================
-  // INIT
-  // ============================================
   function init() {
     if (window.__agiloModelesInitialized) return;
     window.__agiloModelesInitialized = true;
 
-    log('Initialisation...');
     injectStyles();
 
-    // Écouter les clics sur les onglets
-    document.addEventListener('click', (e) => {
+    let lastJobId = pickJobId();
+    setInterval(function () {
+      const cur = pickJobId();
+      if (cur && cur !== lastJobId) {
+        lastJobId = cur;
+        isPopulated = false;
+        cachedModels = null;
+        debouncedPopulate();
+      }
+    }, 2000);
+
+    document.addEventListener('click', function (e) {
       if (e.target.closest('[role="tab"]')) {
+        const t = e.target.closest('[role="tab"]');
+        if (t && t.id && !t.id.includes('summary')) {
+          isPopulated = false;
+        }
         setTimeout(switchView, 100);
       }
     });
 
-    // Observer le summaryEditor
     const summaryEl = document.querySelector('#summaryEditor');
     if (summaryEl) {
-      const obs = new MutationObserver(() => setTimeout(switchView, 200));
+      const obs = new MutationObserver(function () {
+        if (isGenerating) return;
+        setTimeout(switchView, 200);
+      });
       obs.observe(summaryEl, { childList: true, subtree: true });
     }
 
-    // Check initial
     setTimeout(switchView, 500);
-
-    log('Prêt');
   }
 
   if (document.readyState === 'loading') {
@@ -972,5 +989,4 @@
   } else {
     setTimeout(init, 100);
   }
-
 })();
