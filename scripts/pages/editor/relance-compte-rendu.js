@@ -10,8 +10,11 @@
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
   const API_V1 = 'https://api.agilotext.com/api/v1';
-  const SUMMARY_POLL_MS = 2500;
+  /** Intervalle entre deux getTranscriptStatus (réduit la charge côté API). */
+  const SUMMARY_POLL_MS = 10000;
   const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
+  /** Délai avant rechargement si le CR ne remonte pas après loadJob (orchestrateur / timing). */
+  const SUMMARY_RELOAD_FALLBACK_MS = 3200;
 
   async function fetchTranscriptStatus(jobId, email, token, edition) {
     const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
@@ -41,6 +44,62 @@
     }
   }
 
+  function hardReloadEditorSummaryTab() {
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('tab', 'summary');
+    newUrl.searchParams.set('_t', String(Date.now()));
+    window.location.href = newUrl.toString();
+  }
+
+  /** Libellé lisible pour l’utilisateur (évite « PENDING » en majuscules géantes). */
+  function formatPollStatusLabel(st) {
+    if (!st) return 'Vérification du statut…';
+    if (st === 'READY_SUMMARY_PENDING') return 'Génération du compte-rendu en cours sur le serveur…';
+    if (st === 'READY_SUMMARY_READY') return 'Finalisation, récupération du texte…';
+    if (st === 'READY_SUMMARY_ON_ERROR') return 'Le serveur signale une erreur sur cette étape…';
+    if (String(st).startsWith('READY_SUMMARY_')) {
+      const tail = String(st).replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ').toLowerCase();
+      return 'Étape : ' + tail;
+    }
+    return 'Traitement en cours…';
+  }
+
+  function summaryPaneLooksEmptyOrPlaceholder() {
+    const root = document.querySelector('#editorRoot');
+    if (root?.dataset.summaryEmpty === '1') return true;
+    const summaryEl = document.querySelector('#summaryEditor') ||
+      document.querySelector('#ag-summary') ||
+      document.querySelector('[data-editor="summary"]');
+    if (!summaryEl) return true;
+    const loader = summaryEl.querySelector('.summary-loading-indicator');
+    if (loader && loader.style.display !== 'none') return true;
+    const txt = (summaryEl.textContent || summaryEl.innerText || '').trim();
+    if (txt.length < 48) return true;
+    const lower = txt.toLowerCase();
+    if (
+      lower.includes('pas demandé') ||
+      lower.includes('fichier manquant') ||
+      lower.includes('pas encore disponible') ||
+      lower.includes('non publié')
+    ) return true;
+    return false;
+  }
+
+  /**
+   * Après statut READY, l’orchestrateur peut ne pas repeupler #summaryEditor tout de suite.
+   * Rechargement complet en dernier recours (même effet que ton F5 manuel).
+   */
+  function refreshSummaryInEditorWithFallback(jobId, isCancelled) {
+    refreshSummaryInEditor(jobId);
+    window.setTimeout(() => {
+      if (typeof isCancelled === 'function' && isCancelled()) return;
+      if (summaryPaneLooksEmptyOrPlaceholder()) {
+        log('Panneau CR vide après loadJob → rechargement page');
+        hardReloadEditorSummaryTab();
+      }
+    }, SUMMARY_RELOAD_FALLBACK_MS);
+  }
+
   /**
    * Attend READY_SUMMARY_READY ou READY_SUMMARY_ON_ERROR via getTranscriptStatus.
    * @returns {'ready'|'error'|'timeout'|'cancelled'}
@@ -57,9 +116,7 @@
         logError('poll getTranscriptStatus', e);
       }
       if (statusEl) {
-        statusEl.textContent = st
-          ? `Statut serveur : ${st.replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ')}`
-          : 'Vérification du statut…';
+        statusEl.textContent = formatPollStatusLabel(st);
       }
       if (st === 'READY_SUMMARY_READY') return 'ready';
       if (st === 'READY_SUMMARY_ON_ERROR') return 'error';
@@ -770,7 +827,7 @@
         let pollCancelled = false;
         if (loaderContainer) {
           const statusEl = document.createElement('p');
-          statusEl.className = 'loading-countdown';
+          statusEl.className = 'loading-status-hint';
           statusEl.textContent = 'Connexion au statut serveur…';
           loaderContainer.appendChild(statusEl);
 
@@ -796,7 +853,7 @@
               if (pollCancelled || outcome === 'cancelled') return;
               hideSummaryLoading();
               if (outcome === 'ready') {
-                refreshSummaryInEditor(jobId);
+                refreshSummaryInEditorWithFallback(jobId, () => pollCancelled);
                 showSuccessMessage('Compte-rendu prêt');
               } else if (outcome === 'error') {
                 alert('La génération du compte-rendu s’est terminée avec une erreur. Rechargez la page ou réessayez.');
@@ -1036,6 +1093,13 @@
         font: 400 0.875rem/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
         color: var(--agilo-dim, var(--color--gris, #525252));
         margin-top: 0.5rem;
+      }
+      .summary-loading-indicator .loading-status-hint {
+        font: 400 0.875rem/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-dim, #525252);
+        margin: 0.75rem 1rem 0;
+        text-align: center;
+        max-width: 28rem;
       }
       .regeneration-cancel-info {
         padding: 1rem;
