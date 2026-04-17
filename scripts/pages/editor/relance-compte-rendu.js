@@ -195,6 +195,17 @@
       log('summaryEmpty=1 détecté → Pas de compte-rendu');
       return true;
     }
+    const notAskedTitle = document.querySelector(
+      '#editorRoot .ag-alert__title, #summaryEditor .ag-alert__title, .ag-alert--warn .ag-alert__title'
+    );
+    const notAskedText = (notAskedTitle?.textContent || '').toLowerCase();
+    if (
+      notAskedText.includes('pas demandé') &&
+      (notAskedText.includes('compte-rendu') || notAskedText.includes('compte rendu'))
+    ) {
+      log('Bannière « pas demandé de CR » détectée');
+      return true;
+    }
     const summaryEl = document.querySelector('#summaryEditor') || 
                       document.querySelector('#ag-summary') || 
                       document.querySelector('[data-editor="summary"]');
@@ -209,7 +220,9 @@
     if (text.length < 200 && (
       lowerText.includes('pas encore disponible') || 
       lowerText.includes('fichier manquant') ||
-      lowerText.includes('non publié')
+      lowerText.includes('non publié') ||
+      (lowerText.includes('pas demandé') &&
+        (lowerText.includes('compte-rendu') || lowerText.includes('compte rendu')))
     )) {
       log('Pattern erreur détecté dans contenu court → Pas de compte-rendu');
       return true;
@@ -217,7 +230,11 @@
     return false;
   }
 
-  function shouldHideButton() {
+  /**
+   * Masquer le bouton toolbar quand il n’y a pas de CR : sauf sur l’onglet Compte rendu,
+   * où l’on affiche « Générer un compte-rendu » (parité app mobile).
+   */
+  function shouldHideButtonForNonSummaryTabs() {
     return hasErrorMessageInDOM();
   }
 
@@ -343,41 +360,82 @@
   }
 
   function updateButtonState(jobId, edition) {
-    const btn = document.querySelector('[data-action="relancer-compte-rendu"]');
-    if (!btn) return;
-    const canRegen = canRegenerate(jobId, edition);
-    if (canRegen.reason === 'free') {
-      btn.disabled = false;
-      btn.removeAttribute('aria-disabled');
-      btn.setAttribute('data-plan-min', 'pro');
-      btn.setAttribute('data-upgrade-reason', 'Régénération de compte-rendu');
-      btn.style.opacity = '0.5';
-      btn.style.cursor = 'pointer';
-      if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
-        window.AgiloGate.decorate();
+    const buttons = document.querySelectorAll('[data-action="relancer-compte-rendu"]');
+    if (!buttons.length) return;
+    const applyOne = (btn) => {
+      if (hasErrorMessageInDOM()) {
+        btn.disabled = false;
+        btn.setAttribute('aria-disabled', 'false');
+        btn.removeAttribute('data-plan-min');
+        btn.removeAttribute('data-upgrade-reason');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        return;
       }
-      return;
-    }
-    if (!canRegen.allowed) {
-      btn.disabled = true;
-      btn.setAttribute('aria-disabled', 'true');
-      btn.style.opacity = '0.5';
-      btn.style.cursor = 'not-allowed';
-    } else {
-      btn.disabled = false;
-      btn.setAttribute('aria-disabled', 'false');
-      btn.removeAttribute('data-plan-min');
-      btn.removeAttribute('data-upgrade-reason');
-      btn.style.opacity = '1';
-      btn.style.cursor = 'pointer';
+      const canRegen = canRegenerate(jobId, edition);
+      if (canRegen.reason === 'free') {
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+        btn.setAttribute('data-plan-min', 'pro');
+        btn.setAttribute('data-upgrade-reason', 'Régénération de compte-rendu');
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'pointer';
+        return;
+      }
+      if (!canRegen.allowed) {
+        btn.disabled = true;
+        btn.setAttribute('aria-disabled', 'true');
+        btn.style.opacity = '0.5';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        btn.disabled = false;
+        btn.setAttribute('aria-disabled', 'false');
+        btn.removeAttribute('data-plan-min');
+        btn.removeAttribute('data-upgrade-reason');
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
+    };
+    buttons.forEach(applyOne);
+    if (!hasErrorMessageInDOM() && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+      window.AgiloGate.decorate();
     }
   }
 
   function getButtonText() {
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    if (activeTab?.id === 'tab-summary' && hasErrorMessageInDOM()) return 'Générer un compte-rendu';
     if (activeTab?.id === 'tab-summary') return 'Régénérer';
     if (activeTab?.id === 'tab-transcript' && transcriptModified) return 'Régénérer compte-rendu';
     return 'Relancer';
+  }
+
+  function syncInlineGenerateCta(anchor) {
+    const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
+    const isSummaryTab = activeTab?.id === 'tab-summary';
+    const empty = hasErrorMessageInDOM();
+    const old = document.getElementById('agilo-inline-generate-cr-wrap');
+    if (!isSummaryTab || !empty || isGenerating) {
+      if (old) old.remove();
+      return;
+    }
+    if (!anchor || !anchor.isConnected) {
+      if (old) old.remove();
+      return;
+    }
+    if (old && old.previousElementSibling === anchor) return;
+    if (old) old.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'agilo-inline-generate-cr-wrap';
+    wrap.className = 'agilo-inline-gen-cr-wrap';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'agilo-inline-gen-cr-btn';
+    b.setAttribute('data-action', 'relancer-compte-rendu');
+    b.setAttribute('aria-label', 'Générer un compte-rendu');
+    b.textContent = 'Générer un compte-rendu';
+    wrap.appendChild(b);
+    anchor.insertAdjacentElement('afterend', wrap);
   }
 
   function updateButtonVisibility() {
@@ -388,10 +446,10 @@
     const isTranscriptTab = activeTab?.id === 'tab-transcript';
     const textDiv = btn.querySelector('div');
     if (textDiv) textDiv.textContent = getButtonText();
-    const shouldHide = shouldHideButton();
+    const noSummary = shouldHideButtonForNonSummaryTabs();
     
-    if (shouldHide) {
-      log('Cache le bouton (pas de compte-rendu)');
+    if (noSummary && !isSummaryTab) {
+      log('Cache le bouton (pas de compte-rendu, hors onglet CR)');
       btn.style.setProperty('display', 'none', 'important');
       btn.style.setProperty('visibility', 'hidden', 'important');
       btn.style.setProperty('opacity', '0', 'important');
@@ -401,6 +459,7 @@
         counter.style.setProperty('display', 'none', 'important');
         counter.style.setProperty('visibility', 'hidden', 'important');
       }
+      syncInlineGenerateCta(null);
       return;
     }
     
@@ -414,6 +473,14 @@
       if (counter) {
         counter.style.removeProperty('display');
         counter.style.removeProperty('visibility');
+      }
+      if (noSummary) {
+        const alertBox =
+          document.querySelector('#editorRoot .ag-alert.ag-alert--warn') ||
+          document.querySelector('#summaryEditor .ag-alert.ag-alert--warn');
+        syncInlineGenerateCta(alertBox);
+      } else {
+        syncInlineGenerateCta(null);
       }
     } else if (isTranscriptTab && transcriptModified) {
       log('Affiche le bouton (transcript modifié)');
@@ -437,6 +504,7 @@
         counter.style.setProperty('display', 'none', 'important');
         counter.style.setProperty('visibility', 'hidden', 'important');
       }
+      syncInlineGenerateCta(null);
     }
   }
 
@@ -619,26 +687,36 @@
       return;
     }
     
-    const canRegen = canRegenerate(jobId, edition);
-    if (!canRegen.allowed) {
-      isGenerating = false;
-      if (canRegen.reason === 'free') {
-        if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
-          window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
+    const firstGen = hasErrorMessageInDOM();
+    let canRegen = { allowed: true, remaining: 0, limit: 0 };
+    if (!firstGen) {
+      canRegen = canRegenerate(jobId, edition);
+      if (!canRegen.allowed) {
+        isGenerating = false;
+        if (canRegen.reason === 'free') {
+          if (typeof window.AgiloGate !== 'undefined' && window.AgiloGate.showUpgrade) {
+            window.AgiloGate.showUpgrade('pro', 'Régénération de compte-rendu');
+          } else {
+            alert('🔒 Cette fonctionnalité nécessite un abonnement Pro ou Business.');
+          }
         } else {
-          alert('🔒 Cette fonctionnalité nécessite un abonnement Pro ou Business.');
+          alert(`⚠️ Limite atteinte: ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} utilisée${canRegen.limit > 1 ? 's' : ''} pour ce transcript.`);
         }
-      } else {
-        alert(`⚠️ Limite atteinte: ${canRegen.count}/${canRegen.limit} régénération${canRegen.limit > 1 ? 's' : ''} utilisée${canRegen.limit > 1 ? 's' : ''} pour ce transcript.`);
+        return;
       }
-      return;
     }
     
-    const confirmed = confirm(
-      `Remplacer le compte-rendu actuel ?\n\n` +
-      `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-      `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
-    );
+    const confirmed = firstGen
+      ? confirm(
+          'Générer un compte-rendu pour cette transcription ?\n\n' +
+            'Le modèle par défaut de votre compte sera utilisé (comme sur l’app mobile).\n\n' +
+            'L’interface attendra la fin de la génération puis actualisera le compte-rendu.'
+        )
+      : confirm(
+          `Remplacer le compte-rendu actuel ?\n\n` +
+            `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
+            `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
+        );
     
     if (!confirmed) {
       isGenerating = false;
@@ -656,15 +734,16 @@
       const result = await response.json();
       
       if (result.status === 'OK' || response.ok) {
-        log('redoSummary OK - Incrémentation compteur');
-        incrementRegenerationCount(jobId, edition);
-        showSuccessMessage('Régénération lancée...');
+        log('redoSummary OK' + (firstGen ? ' (première génération)' : ' - Incrémentation compteur'));
+        if (!firstGen) incrementRegenerationCount(jobId, edition);
+        showSuccessMessage(firstGen ? 'Génération du compte-rendu lancée…' : 'Régénération lancée...');
         openSummaryTab();
         const summaryEditorClear = document.querySelector('#summaryEditor') ||
           document.querySelector('#ag-summary') ||
           document.querySelector('[data-editor="summary"]');
         if (summaryEditorClear) summaryEditorClear.innerHTML = '';
         showSummaryLoading();
+        updateButtonVisibility();
 
         const loaderContainer = document.querySelector('.summary-loading-indicator');
         let pollCancelled = false;
@@ -1061,6 +1140,39 @@
         font-size: 0.75rem;
         color: var(--agilo-dim, #525252);
         margin-top: 0.125rem;
+      }
+      .agilo-inline-gen-cr-wrap {
+        display: flex;
+        justify-content: center;
+        margin: 1rem 0 1.25rem;
+      }
+      .agilo-inline-gen-cr-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.65rem 1.35rem;
+        border-radius: var(--agilo-radius, 0.5rem);
+        border: 1px solid var(--agilo-primary, #174a96);
+        background: var(--agilo-surface, #ffffff);
+        color: var(--agilo-primary, #174a96);
+        font: 600 0.875rem/1.3 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease, transform 0.12s ease;
+      }
+      .agilo-inline-gen-cr-btn:hover {
+        background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, var(--agilo-surface, #ffffff) 90%);
+      }
+      .agilo-inline-gen-cr-btn:active {
+        transform: translateY(0.0625rem);
+      }
+      .agilo-inline-gen-cr-btn:focus-visible {
+        outline: var(--agilo-focus, 0.125rem solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));
+        outline-offset: 0.125rem;
+      }
+      .agilo-inline-gen-cr-btn:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
       }
       .agilo-toast-success {
         animation: slideInRight 0.3s ease-out;
