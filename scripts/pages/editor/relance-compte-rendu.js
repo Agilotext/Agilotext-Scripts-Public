@@ -15,12 +15,15 @@
   const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
   /** Délai avant rechargement si le CR ne remonte pas après loadJob (orchestrateur / timing). */
   const SUMMARY_RELOAD_FALLBACK_MS = 3200;
+  /** L’API peut renvoyer READY_SUMMARY_ON_ERROR de façon transitoire alors que le CR finit par être prêt. */
+  const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
+  const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
 
   async function fetchTranscriptStatus(jobId, email, token, edition) {
     const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
     const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
     const j = await r.json().catch(() => ({}));
-    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus);
+    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus).trim();
     return null;
   }
 
@@ -101,7 +104,29 @@
   }
 
   /**
-   * Attend READY_SUMMARY_READY ou READY_SUMMARY_ON_ERROR via getTranscriptStatus.
+   * Si READY_SUMMARY_ON_ERROR : re-vérifie plusieurs fois (statut souvent transitoire pendant la génération).
+   * @returns {'ready'|'error'|'cancelled'|'continue'}
+   */
+  async function recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel) {
+    if (statusEl) statusEl.textContent = 'Vérification du statut (parfois transitoire après génération)…';
+    for (let i = 0; i < SUMMARY_ON_ERROR_RECHECK_TIMES; i++) {
+      await new Promise(r => setTimeout(r, SUMMARY_ON_ERROR_RECHECK_MS));
+      if (shouldCancel && shouldCancel()) return 'cancelled';
+      let st = null;
+      try {
+        st = await fetchTranscriptStatus(jobId, email, token, edition);
+      } catch (e) {
+        logError('poll getTranscriptStatus (recheck)', e);
+      }
+      if (statusEl) statusEl.textContent = formatPollStatusLabel(st);
+      if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st !== 'READY_SUMMARY_ON_ERROR') return 'continue';
+    }
+    return 'error';
+  }
+
+  /**
+   * Attend READY_SUMMARY_READY ou READY_SUMMARY_ON_ERROR confirmé via getTranscriptStatus.
    * @returns {'ready'|'error'|'timeout'|'cancelled'}
    */
   async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
@@ -119,7 +144,14 @@
         statusEl.textContent = formatPollStatusLabel(st);
       }
       if (st === 'READY_SUMMARY_READY') return 'ready';
-      if (st === 'READY_SUMMARY_ON_ERROR') return 'error';
+      if (st === 'READY_SUMMARY_ON_ERROR') {
+        const sub = await recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel);
+        if (sub === 'ready') return 'ready';
+        if (sub === 'error') return 'error';
+        if (sub === 'cancelled') return 'cancelled';
+        await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+        continue;
+      }
       await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
     }
     return 'timeout';
@@ -697,9 +729,7 @@
                           document.querySelector('[data-editor="summary"]');
     if (!summaryEditor) return;
     const loader = summaryEditor.querySelector('.summary-loading-indicator');
-    const lottieElement = summaryEditor.querySelector('#loading-summary, #loading-summary-clone');
-    if (loader) loader.style.display = 'none';
-    if (lottieElement) lottieElement.style.display = 'none';
+    if (loader) loader.remove();
   }
 
   function showSuccessMessage(message) {
@@ -850,13 +880,22 @@
 
           waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => pollCancelled)
             .then((outcome) => {
-              if (pollCancelled || outcome === 'cancelled') return;
+              if (pollCancelled || outcome === 'cancelled') {
+                hideSummaryLoading();
+                isGenerating = false;
+                updateButtonVisibility();
+                return;
+              }
               hideSummaryLoading();
               if (outcome === 'ready') {
                 refreshSummaryInEditorWithFallback(jobId, () => pollCancelled);
                 showSuccessMessage('Compte-rendu prêt');
               } else if (outcome === 'error') {
-                alert('La génération du compte-rendu s’est terminée avec une erreur. Rechargez la page ou réessayez.');
+                alert(
+                  'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
+                    'Si vous avez reçu un e-mail de succès, rechargez la page : le compte-rendu est peut‑être déjà là.\n\n' +
+                    'Sinon, réessayez ou contactez le support avec le numéro de job.'
+                );
               } else {
                 alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
               }
