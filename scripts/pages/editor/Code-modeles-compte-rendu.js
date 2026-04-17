@@ -10,6 +10,65 @@
   const DEBUG = false;
   const log = (...args) => { if (DEBUG) console.log('[AGILO:MODELES]', ...args); };
   const API_BASE = 'https://api.agilotext.com/api/v1';
+  const SUMMARY_POLL_MS = 2500;
+  const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
+
+  async function fetchTranscriptStatus(jobId, email, token, edition) {
+    const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+    const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+    const j = await r.json().catch(() => ({}));
+    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus);
+    return null;
+  }
+
+  function refreshSummaryInEditor(jobId) {
+    if (!jobId) return;
+    try {
+      const audio = document.getElementById('agilo-audio');
+      const wantAutoplay = audio ? !audio.paused : false;
+      window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId } }));
+      if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
+        window.__agiloOrchestrator.loadJob(jobId, { autoplay: wantAutoplay });
+      } else {
+        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId, autoplay: wantAutoplay } }));
+      }
+    } catch (e) {
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('tab', 'summary');
+      newUrl.searchParams.set('_t', String(Date.now()));
+      window.location.href = newUrl.toString();
+    }
+  }
+
+  async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
+    const t0 = Date.now();
+    await new Promise(r => setTimeout(r, 800));
+    while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
+      if (shouldCancel && shouldCancel()) return 'cancelled';
+      let st = null;
+      try {
+        st = await fetchTranscriptStatus(jobId, email, token, edition);
+      } catch (_) {}
+      if (statusEl) {
+        statusEl.textContent = st
+          ? `Statut serveur : ${st.replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ')}`
+          : 'Vérification du statut…';
+      }
+      if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st === 'READY_SUMMARY_ON_ERROR') return 'error';
+      await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+    }
+    return 'timeout';
+  }
+
+  function hideModelLoader() {
+    const summaryEditor = document.querySelector('#summaryEditor') ||
+      document.querySelector('#ag-summary') ||
+      document.querySelector('[data-editor="summary"]');
+    if (!summaryEditor) return;
+    const loader = summaryEditor.querySelector('.summary-loading-indicator');
+    if (loader) loader.style.display = 'none';
+  }
 
   // ============================================
   // CREDENTIALS
@@ -263,24 +322,25 @@
     
     const loadingSubtitle = document.createElement('p');
     loadingSubtitle.className = 'loading-subtitle';
-    loadingSubtitle.innerHTML = modelName 
-      ? `Modèle : <strong>${modelName}</strong>` 
-      : 'La page se rechargera automatiquement dans :';
+    loadingSubtitle.innerHTML = modelName
+      ? `Modèle : <strong>${modelName}</strong><br><span style="font-weight:400;font-size:0.92em">Mise à jour automatique dès que le compte-rendu est prêt.</span>`
+      : 'Mise à jour automatique dès que le compte-rendu est prêt.';
     
-    const countdown = document.createElement('p');
-    countdown.className = 'loading-countdown';
-    countdown.id = 'model-countdown';
+    const statusEl = document.createElement('p');
+    statusEl.className = 'loading-countdown';
+    statusEl.id = 'model-countdown';
+    statusEl.textContent = 'Connexion au statut serveur…';
     
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'loading-cancel-btn';
-    cancelBtn.textContent = 'Annuler le rechargement';
+    cancelBtn.textContent = 'Arrêter l’affichage d’attente';
     
     summaryEditor.innerHTML = '';
     summaryEditor.appendChild(loaderContainer);
     loaderContainer.appendChild(lottieElement);
     loaderContainer.appendChild(loadingText);
     loaderContainer.appendChild(loadingSubtitle);
-    loaderContainer.appendChild(countdown);
+    loaderContainer.appendChild(statusEl);
     loaderContainer.appendChild(cancelBtn);
     
     // Initialiser Lottie
@@ -297,38 +357,22 @@
         }
       }, 1000);
     }, 100);
-    
-    // Countdown 2min30
-    let secondsLeft = 150;
-    const updateCountdown = () => {
-      const minutes = Math.floor(secondsLeft / 60);
-      const seconds = secondsLeft % 60;
-      countdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-      if (secondsLeft <= 0) {
-        countdown.textContent = 'Rechargement...';
-        setTimeout(() => {
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set('tab', 'summary');
-          newUrl.searchParams.set('_t', Date.now());
-          window.location.href = newUrl.toString();
-        }, 500);
-        return;
-      }
-      secondsLeft--;
-    };
-    updateCountdown();
-    const countdownInterval = setInterval(updateCountdown, 1000);
-    
-    // Bouton annuler
+
+    const cancelledRef = { value: false };
     cancelBtn.onclick = () => {
-      clearInterval(countdownInterval);
-      countdown.textContent = 'Rechargement annulé';
-      cancelBtn.textContent = 'Recharger maintenant';
-      cancelBtn.onclick = () => window.location.reload();
+      if (!confirm(
+        'La génération peut continuer côté serveur.\n\n' +
+        'Arrêter seulement l’attente à l’écran ?'
+      )) return;
+      cancelledRef.value = true;
+      hideModelLoader();
       isGenerating = false;
+      if (typeof window.toast === 'function') {
+        window.toast('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
+      }
     };
-    
-    return countdownInterval;
+
+    return { statusEl, cancelledRef };
   }
 
   // ============================================
@@ -354,7 +398,7 @@
     const confirmed = confirm(
       `⚠️ Attention, cela va remplacer le compte-rendu existant.\n\n` +
       `Modèle : ${modelName}\n\n` +
-      `La page se rechargera automatiquement après 2 min 30.`
+      `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.`
     );
 
     if (!confirmed) return;
@@ -370,18 +414,34 @@
       const data = await res.json();
 
       if (data.status === 'OK' || res.ok) {
-        // Toast de succès
         if (typeof window.toast === 'function') {
           window.toast(`Régénération lancée avec "${modelName}"...`);
         }
-        
-        // Basculer sur l'onglet compte-rendu
         const summaryTab = document.querySelector('#tab-summary');
         if (summaryTab) summaryTab.click();
-        
-        // Afficher le loader avec countdown
-        showSummaryLoading(modelName);
-        
+
+        const { statusEl, cancelledRef } = showSummaryLoading(modelName);
+        waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => cancelledRef.value)
+          .then((outcome) => {
+            if (cancelledRef.value || outcome === 'cancelled') return;
+            hideModelLoader();
+            if (outcome === 'ready') {
+              refreshSummaryInEditor(jobId);
+              if (typeof window.toast === 'function') {
+                window.toast('Compte-rendu prêt');
+              }
+            } else if (outcome === 'error') {
+              alert('La génération du compte-rendu s’est terminée avec une erreur. Rechargez la page ou réessayez.');
+            } else {
+              alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+            }
+            isGenerating = false;
+          })
+          .catch(() => {
+            hideModelLoader();
+            isGenerating = false;
+            alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+          });
       } else if (data.status === 'KO') {
         isGenerating = false;
         alert('⚠️ Une génération est déjà en cours. Veuillez patienter.');

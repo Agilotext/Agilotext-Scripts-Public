@@ -9,6 +9,65 @@
   const log = (...args) => { if (DEBUG) console.log('[AGILO:RELANCE]', ...args); };
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
+  const API_V1 = 'https://api.agilotext.com/api/v1';
+  const SUMMARY_POLL_MS = 2500;
+  const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
+
+  async function fetchTranscriptStatus(jobId, email, token, edition) {
+    const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+    const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+    const j = await r.json().catch(() => ({}));
+    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus);
+    return null;
+  }
+
+  function refreshSummaryInEditor(jobId) {
+    if (!jobId) return;
+    try {
+      const audio = document.getElementById('agilo-audio');
+      const wantAutoplay = audio ? !audio.paused : false;
+      window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId } }));
+      if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
+        window.__agiloOrchestrator.loadJob(jobId, { autoplay: wantAutoplay });
+      } else {
+        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId, autoplay: wantAutoplay } }));
+      }
+    } catch (e) {
+      logError('refreshSummaryInEditor', e);
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('tab', 'summary');
+      newUrl.searchParams.set('_t', String(Date.now()));
+      window.location.href = newUrl.toString();
+    }
+  }
+
+  /**
+   * Attend READY_SUMMARY_READY ou READY_SUMMARY_ON_ERROR via getTranscriptStatus.
+   * @returns {'ready'|'error'|'timeout'|'cancelled'}
+   */
+  async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
+    const t0 = Date.now();
+    await new Promise(r => setTimeout(r, 800));
+    while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
+      if (shouldCancel && shouldCancel()) return 'cancelled';
+      let st = null;
+      try {
+        st = await fetchTranscriptStatus(jobId, email, token, edition);
+      } catch (e) {
+        logError('poll getTranscriptStatus', e);
+      }
+      if (statusEl) {
+        statusEl.textContent = st
+          ? `Statut serveur : ${st.replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ')}`
+          : 'Vérification du statut…';
+      }
+      if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st === 'READY_SUMMARY_ON_ERROR') return 'error';
+      await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+    }
+    return 'timeout';
+  }
+
   // ============================================
   // RÉCUPÉRATION DES CREDENTIALS
   // ============================================
@@ -458,7 +517,7 @@
       loadingText.textContent = 'Génération du compte-rendu en cours...';
       const loadingSubtitle = document.createElement('p');
       loadingSubtitle.className = 'loading-subtitle';
-      loadingSubtitle.textContent = 'La page se rechargera automatiquement dans :';
+      loadingSubtitle.textContent = 'Mise à jour automatique dès que le compte-rendu est prêt.';
       
       summaryEditor.innerHTML = '';
       summaryEditor.appendChild(loaderContainer);
@@ -578,7 +637,7 @@
     const confirmed = confirm(
       `Remplacer le compte-rendu actuel ?\n\n` +
       `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-      `⏳ La page se rechargera automatiquement après 2 min 30.`
+      `L’interface attendra la fin de la génération (statut serveur) puis rechargera le compte-rendu.`
     );
     
     if (!confirmed) {
@@ -601,81 +660,58 @@
         incrementRegenerationCount(jobId, edition);
         showSuccessMessage('Régénération lancée...');
         openSummaryTab();
+        const summaryEditorClear = document.querySelector('#summaryEditor') ||
+          document.querySelector('#ag-summary') ||
+          document.querySelector('[data-editor="summary"]');
+        if (summaryEditorClear) summaryEditorClear.innerHTML = '';
         showSummaryLoading();
-        
+
         const loaderContainer = document.querySelector('.summary-loading-indicator');
+        let pollCancelled = false;
         if (loaderContainer) {
-          const countdown = document.createElement('p');
-          countdown.className = 'loading-countdown';
-          loaderContainer.appendChild(countdown);
-          let secondsLeft = 150;
-          
-          const updateCountdown = () => {
-            const minutes = Math.floor(secondsLeft / 60);
-            const seconds = secondsLeft % 60;
-            countdown.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-            if (secondsLeft <= 0) {
-              countdown.textContent = 'Rechargement...';
-              setTimeout(() => {
-                const newUrl = new URL(window.location.href);
-                newUrl.searchParams.set('tab', 'summary');
-                newUrl.searchParams.set('_t', Date.now());
-                window.location.href = newUrl.toString();
-              }, 500);
-            }
-            secondsLeft--;
-          };
-          
-          updateCountdown();
-          const countdownInterval = setInterval(updateCountdown, 1000);
-          
+          const statusEl = document.createElement('p');
+          statusEl.className = 'loading-countdown';
+          statusEl.textContent = 'Connexion au statut serveur…';
+          loaderContainer.appendChild(statusEl);
+
           const cancelBtn = document.createElement('button');
           cancelBtn.className = 'loading-cancel-btn';
-          cancelBtn.textContent = 'Annuler';
+          cancelBtn.textContent = 'Arrêter l’affichage d’attente';
           cancelBtn.onclick = () => {
-            const confirmed = confirm(
-              '⚠️ La régénération est déjà en cours sur le serveur.\n\n' +
-              'Si vous annulez maintenant :\n' +
-              '• Le compte-rendu actuel sera remplacé dans 2-3 minutes\n' +
-              '• Vous devrez recharger la page pour voir le nouveau compte-rendu\n\n' +
-              '💡 CONSEIL : Téléchargez et sauvegardez votre compte-rendu actuel avant de continuer, car il sera remplacé.\n\n' +
-              'Souhaitez-vous vraiment annuler ?'
+            const ok = confirm(
+              'La génération peut continuer côté serveur.\n\n' +
+              'Arrêter seulement l’attente à l’écran ? Vous pourrez recharger la page plus tard pour voir le nouveau compte-rendu.'
             );
-            
-            if (confirmed) {
-              clearInterval(countdownInterval);
-              hideSummaryLoading();
-              isGenerating = false;
-              const infoMsg = document.createElement('div');
-              infoMsg.className = 'regeneration-cancel-info';
-              infoMsg.innerHTML = `
-                <div style="padding: 1rem; background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, var(--agilo-surface, #ffffff) 92%); border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent); border-radius: var(--agilo-radius, 0.5rem); margin-top: 1rem;">
-                  <strong style="color: var(--agilo-primary, #174a96); display: block; margin-bottom: 0.5rem; font-size: 0.875rem;">ℹ️ Régénération en cours sur le serveur</strong>
-                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
-                    <strong>⚠️ Important :</strong> La régénération est déjà lancée. Votre compte-rendu actuel sera remplacé dans 2-3 minutes.
-                  </p>
-                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.5rem; line-height: 1.5;">
-                    💡 Si vous souhaitez conserver le compte-rendu actuel, <strong>téléchargez-le maintenant</strong> via les boutons de téléchargement avant qu'il ne soit remplacé.
-                  </p>
-                  <p style="font-size: 0.8125rem; color: var(--agilo-dim, #525252); margin: 0 0 0.75rem; line-height: 1.5;">
-                    Rechargez la page dans 2-3 minutes pour voir le nouveau compte-rendu.
-                  </p>
-                  <button class="loading-cancel-btn" style="margin-top: 0.5rem; width: 100%;" onclick="window.location.reload()">
-                    Recharger la page maintenant
-                  </button>
-                </div>
-              `;
-              const summaryEditor = document.querySelector('#summaryEditor');
-              if (summaryEditor) {
-                summaryEditor.innerHTML = '';
-                summaryEditor.appendChild(infoMsg);
-              }
-              showSuccessMessage('Régénération annulée - Rechargez la page dans 2-3 minutes');
-            } else {
-              log('Annulation non confirmée - Le compteur continue');
-            }
+            if (!ok) return;
+            pollCancelled = true;
+            hideSummaryLoading();
+            isGenerating = false;
+            showSuccessMessage('Attente arrêtée — rechargez la page pour actualiser le compte-rendu si besoin.');
           };
           loaderContainer.appendChild(cancelBtn);
+
+          waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => pollCancelled)
+            .then((outcome) => {
+              if (pollCancelled || outcome === 'cancelled') return;
+              hideSummaryLoading();
+              if (outcome === 'ready') {
+                refreshSummaryInEditor(jobId);
+                showSuccessMessage('Compte-rendu prêt');
+              } else if (outcome === 'error') {
+                alert('La génération du compte-rendu s’est terminée avec une erreur. Rechargez la page ou réessayez.');
+              } else {
+                alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+              }
+              isGenerating = false;
+            })
+            .catch((e) => {
+              logError('waitForSummaryTerminalState', e);
+              hideSummaryLoading();
+              isGenerating = false;
+              alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+            });
+        } else {
+          isGenerating = false;
         }
       } else if (result.status === 'KO') {
         isGenerating = false;
