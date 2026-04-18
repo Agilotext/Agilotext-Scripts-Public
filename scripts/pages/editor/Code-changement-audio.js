@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.5.0' };
+  window.__agiloRail = { version: '4.5.1' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -357,16 +357,18 @@ let __pendingLoadTimer = null;
     lab.textContent = 'Dossiers';
     bar.appendChild(lab);
 
-    bar.appendChild(chip('all', 'Tous', state.folderFilter === 'all'));
-    bar.appendChild(chip('root', `Racine (${rootJobsCount})`, state.folderFilter === 'root'));
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'agilo-folder-chips';
+    chipsWrap.appendChild(chip('all', 'Tous', state.folderFilter === 'all'));
+    chipsWrap.appendChild(chip('root', `Racine (${rootJobsCount})`, state.folderFilter === 'root'));
     folders.forEach((f) => {
       const active = Number(state.folderFilter) === Number(f.folderId);
-      bar.appendChild(chip(String(f.folderId), `${f.folderName} (${f.jobsCount})`, active));
+      chipsWrap.appendChild(chip(String(f.folderId), `${f.folderName} (${f.jobsCount})`, active));
     });
 
     const newFoldBtn = document.createElement('button');
     newFoldBtn.type = 'button';
-    newFoldBtn.className = 'agilo-folder-chip';
+    newFoldBtn.className = 'agilo-folder-chip agilo-folder-chip--new';
     newFoldBtn.textContent = '+ Dossier';
     newFoldBtn.addEventListener('click', async () => {
       const name = window.prompt('Nom du nouveau dossier ?');
@@ -385,7 +387,8 @@ let __pendingLoadTimer = null;
       state.foldersCache = await fetchTranscriptFoldersList(a);
       renderFolderBarDom(a);
     });
-    bar.appendChild(newFoldBtn);
+    chipsWrap.appendChild(newFoldBtn);
+    bar.appendChild(chipsWrap);
 
     const moveWrap = document.createElement('div');
     moveWrap.className = 'agilo-folder-move';
