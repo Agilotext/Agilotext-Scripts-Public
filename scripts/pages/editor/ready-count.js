@@ -94,12 +94,12 @@
     }
   };
 
+  // DOMContentLoaded : assez tôt pour enregistrer agilo:token, sans attendre images/fonts (load est trop tard pour le badge).
   if (document.readyState === 'loading') {
-    window.addEventListener('load', init);
-    window.addEventListener('beforeunload', cleanup);
+    document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
     init();
-    window.addEventListener('beforeunload', cleanup);
   }
+  window.addEventListener('beforeunload', cleanup);
 })();
 
