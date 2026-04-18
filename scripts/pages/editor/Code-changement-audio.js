@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.4.0' };
+  window.__agiloRail = { version: '4.5.0' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -467,6 +467,16 @@ let __pendingLoadTimer = null;
   }
 
   /* ================== Empty state ================== */
+  function renderLoadingRail(){
+    rail.list.innerHTML = '';
+    const div = document.createElement('div');
+    div.className = 'rail-loading';
+    div.setAttribute('role', 'status');
+    div.textContent = 'Chargement des transcriptions…';
+    rail.list.appendChild(div);
+    rail.list.setAttribute('aria-busy', 'true');
+  }
+
   function renderEmptyRail(){
     rail.list.innerHTML = '';
     const div = document.createElement('div');
@@ -474,7 +484,43 @@ let __pendingLoadTimer = null;
     div.setAttribute('role','status');
     div.textContent = 'Aucun transcript trouvé.';
     rail.list.appendChild(div);
+    rail.list.removeAttribute('aria-busy');
   }
+
+  /** Annule les hydratations concurrentes (token vs init) */
+  let __railHydrateGen = 0;
+
+  async function hydrateRailWithAuth(auth){
+    const gen = ++__railHydrateGen;
+    const [foldersData, jobs] = await Promise.all([
+      fetchTranscriptFoldersList(auth),
+      fetchJobs(auth)
+    ]);
+    if (gen !== __railHydrateGen) return { stale: true, jobCount: 0 };
+    state.foldersCache = foldersData;
+    renderFolderBarDom(auth);
+    rail.list.removeAttribute('aria-busy');
+    const list = jobs || [];
+    if (list.length) renderRail(list);
+    else renderEmptyRail();
+    return { stale: false, jobCount: list.length };
+  }
+
+  let __railRefreshDebounce = null;
+  function scheduleRailRefresh(){
+    if (__railRefreshDebounce) clearTimeout(__railRefreshDebounce);
+    __railRefreshDebounce = setTimeout(async ()=>{
+      __railRefreshDebounce = null;
+      try{
+        const auth = await ensureAuth();
+        if (!auth.username || !auth.token) return;
+        await hydrateRailWithAuth(auth);
+      } catch (e) {
+        if (state.debug) console.warn('[Rail] refresh', e);
+      }
+    }, 200);
+  }
+
 
   /* ================== Rendu ================== */
   function renderRail(jobs){
@@ -541,6 +587,8 @@ let __pendingLoadTimer = null;
         detail: { jobId: active.dataset.jobId, title: active.dataset.title || active.querySelector('.ri-title')?.textContent || 'Transcript' }
       }));
     }
+
+    rail.list.removeAttribute('aria-busy');
 
     // Pas de seed auto si aucun job : on laisse l'empty state gérer
   }
@@ -679,14 +727,7 @@ if (window.__agiloOrchestrator?.loadJob) {
     if (jobId && status) updateItemStatus(jobId, status);
   });
 
-  window.addEventListener('agilo:refresh-rail', async ()=>{
-    const auth = await ensureAuth();
-    state.foldersCache = await fetchTranscriptFoldersList(auth);
-    renderFolderBarDom(auth);
-    const jobs = await fetchJobs(auth);
-    if (jobs?.length) renderRail(jobs);
-    else renderEmptyRail();
-  });
+  window.addEventListener('agilo:refresh-rail', () => { scheduleRailRefresh(); });
   
   // Si un load est déclenché ailleurs, on resynchronise la sélection visuelle + URL
 window.addEventListener('agilo:load', (e)=>{
@@ -703,16 +744,9 @@ window.addEventListener('agilo:load', (e)=>{
 });
 
 
-  // Si le token arrive après coup (script <head> lent) → re-fetch auto
-window.addEventListener('agilo:token', async ()=>{
-  const auth = readAuthSnapshot();
-  if (!auth.username || !auth.token) return;
-  state.foldersCache = await fetchTranscriptFoldersList(auth);
-  renderFolderBarDom(auth);
-  const jobs = await fetchJobs(auth);
-  if (jobs?.length) renderRail(jobs);
-  else renderEmptyRail();
-});
+  // Token (Memberstack) ou creds orchestrateur → même chemin debouncé (évite double appel token+credsUpdated)
+  window.addEventListener('agilo:token', () => { scheduleRailRefresh(); }, { passive: true });
+  window.addEventListener('agilo:credsUpdated', () => { scheduleRailRefresh(); }, { passive: true });
 
   /* ================== INIT ================== */
   (async function init(){
@@ -721,38 +755,34 @@ window.addEventListener('agilo:token', async ()=>{
     if (rail.search) rail.search.value = '';
     bootstrapExistingRailItems();
 
+    renderLoadingRail();
     const auth = await ensureAuth();
-    state.foldersCache = await fetchTranscriptFoldersList(auth);
-    renderFolderBarDom(auth);
-    const jobs = await fetchJobs(auth);
-
-    if (jobs.length){ renderRail(jobs); }
-    else { renderEmptyRail(); }
+    let jobCount = 0;
+    if (auth.username && auth.token) {
+      const res = await hydrateRailWithAuth(auth);
+      if (res && !res.stale) jobCount = res.jobCount;
+      else jobCount = rail.list.querySelectorAll('.rail-item').length;
+    } else {
+      rail.list.removeAttribute('aria-busy');
+      renderEmptyRail();
+    }
 
     // Petit rattrapage si la liste semble incomplète au premier tir
-    if (jobs.length <= 1) {
+    if (jobCount <= 1) {
       setTimeout(async ()=>{
         const auth2 = await ensureAuth();
-        state.foldersCache = await fetchTranscriptFoldersList(auth2);
-        renderFolderBarDom(auth2);
-        const jobs2 = await fetchJobs(auth2);
-        if (jobs2.length) renderRail(jobs2);
-        else renderEmptyRail();
+        if (auth2.username && auth2.token) await hydrateRailWithAuth(auth2);
       }, 700);
     }
 
     // Liste vide au 1er tir : dernier rattrapage (Memberstack / getToken souvent prêt ~2s après)
-    if (!jobs.length && auth.username) {
+    if (!jobCount && auth.username) {
       setTimeout(async ()=>{
         if (typeof window.getToken === 'function') {
           try { window.getToken(auth.username, auth.edition); } catch {}
         }
         const auth3 = await ensureAuth(10000);
-        state.foldersCache = await fetchTranscriptFoldersList(auth3);
-        renderFolderBarDom(auth3);
-        const jobs3 = await fetchJobs(auth3);
-        if (jobs3.length) renderRail(jobs3);
-        else renderEmptyRail();
+        if (auth3.username && auth3.token) await hydrateRailWithAuth(auth3);
       }, 2200);
     }
   })();
