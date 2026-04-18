@@ -1,80 +1,139 @@
 // Agilotext - Ready Count
 // ⚠️ Ce fichier est chargé depuis GitHub
-// Met à jour le compteur de jobs prêts dans le menu
+// Met à jour le compteur de jobs prêts dans le menu (tous plans : free / pro / ent)
 
-(function() {
+(function () {
   'use strict';
-  
+
   let checkTokenInterval = null;
-  
-  function fetchAndUpdateReadyCount(globalToken) {
+
+  function normalizeEdition(v) {
+    v = String(v || '').trim().toLowerCase();
+    if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent';
+    if (/^pro/.test(v)) return 'pro';
+    if (/^free|gratuit/.test(v)) return 'free';
+    return 'ent';
+  }
+
+  /** Aligné token-resolver / rail : query → editorRoot → html → localStorage */
+  function resolveEdition() {
+    try {
+      const qs = new URLSearchParams(location.search).get('edition');
+      const root = document.getElementById('editorRoot')?.dataset?.edition;
+      const html = document.documentElement.getAttribute('data-edition');
+      const ls = localStorage.getItem('agilo:edition');
+      return normalizeEdition(qs || root || html || ls || 'ent');
+    } catch {
+      return 'ent';
+    }
+  }
+
+  function pickEdition(override) {
+    if (override != null && String(override).trim() !== '') {
+      return normalizeEdition(override);
+    }
+    return resolveEdition();
+  }
+
+  function fetchAndUpdateReadyCount(token, editionOverride) {
     const userEmailElement = document.querySelector('[name="memberEmail"]');
     const userEmail = userEmailElement ? userEmailElement.value : null;
-    if (!userEmail || !globalToken) {
-      if (window.AGILO_DEBUG) console.error("Email utilisateur ou token global non disponible");
+    if (!userEmail || !token) {
+      if (window.AGILO_DEBUG) console.error('[ready-count] Email ou token indisponible');
       return;
     }
 
-    const url = `https://api.agilotext.com/api/v1/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(globalToken)}&edition=ent&limit=1000&offset=0`;
-    
+    const edition = pickEdition(editionOverride);
+
+    const url =
+      'https://api.agilotext.com/api/v1/getJobsInfo?username=' +
+      encodeURIComponent(userEmail) +
+      '&token=' +
+      encodeURIComponent(token) +
+      '&edition=' +
+      encodeURIComponent(edition) +
+      '&limit=1000&offset=0';
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
-    
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
     fetch(url, {
       method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller.signal
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
     })
-    .then(response => {
-      clearTimeout(timeout);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json();
-    })
-    .then(data => {
-      if (data.status === "OK") {
-        let readyCount = 0;
-        data.jobsInfoDtos.forEach(job => {
-          if (job.transcriptStatus === "READY_SUMMARY_READY") {
-            readyCount++;
-          }
-        });
-        const countEl = document.getElementById('readyCount');
-        if (countEl) countEl.textContent = readyCount;
-      } else {
-        if (window.AGILO_DEBUG) console.error("Erreur lors de la récupération des jobs:", data.errorMessage);
+      .then((response) => {
+        clearTimeout(timeout);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        if (data.status === 'OK') {
+          let readyCount = 0;
+          data.jobsInfoDtos.forEach((job) => {
+            if (job.transcriptStatus === 'READY_SUMMARY_READY') {
+              readyCount++;
+            }
+          });
+          const countEl = document.getElementById('readyCount');
+          if (countEl) countEl.textContent = readyCount;
+        } else {
+          if (window.AGILO_DEBUG) console.error('[ready-count] API:', data.errorMessage);
+        }
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        if (error.name !== 'AbortError' && window.AGILO_DEBUG) {
+          console.error('[ready-count] getJobsInfo:', error);
+        }
+      });
+  }
+
+  function refreshIfToken(editionHint) {
+    if (typeof globalToken !== 'undefined' && globalToken) {
+      if (checkTokenInterval) {
+        clearInterval(checkTokenInterval);
+        checkTokenInterval = null;
       }
-    })
-    .catch(error => {
-      clearTimeout(timeout);
-      if (error.name !== 'AbortError' && window.AGILO_DEBUG) {
-        console.error("Erreur lors de l'appel à l'API getJobsInfo:", error);
-      }
-    });
+      fetchAndUpdateReadyCount(globalToken, editionHint);
+      return true;
+    }
+    return false;
   }
 
   function init() {
-    const tryOnce = () => {
-      if (typeof globalToken !== 'undefined' && globalToken) {
-        if (checkTokenInterval) {
-          clearInterval(checkTokenInterval);
-          checkTokenInterval = null;
+    window.addEventListener(
+      'agilo:token',
+      (e) => {
+        refreshIfToken(e?.detail?.edition);
+      },
+      { passive: true }
+    );
+
+    window.addEventListener(
+      'agilo:credsUpdated',
+      (e) => {
+        const tok = e?.detail?.token || (typeof globalToken !== 'undefined' ? globalToken : '');
+        if (tok) fetchAndUpdateReadyCount(tok, e?.detail?.edition);
+      },
+      { passive: true }
+    );
+
+    // Navigation client (changement ?edition= sans reload complet)
+    window.addEventListener(
+      'popstate',
+      () => {
+        if (typeof globalToken !== 'undefined' && globalToken) {
+          fetchAndUpdateReadyCount(globalToken);
         }
-        fetchAndUpdateReadyCount(globalToken);
-        return true;
-      }
-      return false;
-    };
+      },
+      { passive: true }
+    );
 
-    window.addEventListener('agilo:token', () => { tryOnce(); }, { passive: true });
-    window.addEventListener('agilo:credsUpdated', (e) => {
-      const tok = (e && e.detail && e.detail.token) || (typeof globalToken !== 'undefined' ? globalToken : '');
-      if (tok) fetchAndUpdateReadyCount(tok);
-    }, { passive: true });
-
-    if (tryOnce()) return;
+    if (refreshIfToken()) return;
 
     checkTokenInterval = setInterval(() => {
-      if (tryOnce()) return;
+      if (refreshIfToken()) return;
     }, 120);
 
     setTimeout(() => {
@@ -86,7 +145,6 @@
     }, 10000);
   }
 
-  // Cleanup
   const cleanup = () => {
     if (checkTokenInterval) {
       clearInterval(checkTokenInterval);
@@ -94,7 +152,6 @@
     }
   };
 
-  // DOMContentLoaded : assez tôt pour enregistrer agilo:token, sans attendre images/fonts (load est trop tard pour le badge).
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init, { once: true });
   } else {
@@ -102,4 +159,3 @@
   }
   window.addEventListener('beforeunload', cleanup);
 })();
-
