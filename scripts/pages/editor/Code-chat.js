@@ -475,6 +475,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const LSKEY = ()=> `agilo:chat:${ACTIVE_JOB||'nojob'}`;
   let MESSAGES = [];
 
+  function getActiveTranscriptDisplayTitle(){
+    const jid = ACTIVE_JOB || getJobId();
+    if (!jid) return 'Transcript';
+    try {
+      const el = document.querySelector(`.rail-item.is-active[data-job-id="${CSS.escape(String(jid))}"]`);
+      const t = (el?.dataset?.title || el?.querySelector('.ri-title')?.textContent || '').trim();
+      if (t) return t;
+    } catch {}
+    return `Transcript ${jid}`;
+  }
+
   function loadHistory(){
     try{ MESSAGES = JSON.parse(localStorage.getItem(LSKEY())||'[]') || []; }catch{ MESSAGES=[]; }
     if (!MESSAGES.length){
@@ -649,7 +660,7 @@ function updateThinking(jobId, runId, cycle){
 
     if (f === 'pdf') { // rendu propre local
       const md = (MESSAGES[msgIndex]?.text || '').trim();
-      const title = `Transcript ${ACTIVE_JOB||getJobId()||''}`;
+      const title = getActiveTranscriptDisplayTitle();
       const fname = `transcript_${ACTIVE_JOB||'unknown'}_${Date.now()}.pdf`;
       exportLocalPDF(md, fname, title);
       return;
