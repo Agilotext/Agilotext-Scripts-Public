@@ -7,6 +7,10 @@
 
   let checkTokenInterval = null;
 
+  const POLL_MS = 200;
+  /** Après 10 s on arrêtait le polling : si le jeton arrive à 11 s (Memberstack lent), le badge restait vide. */
+  const POLL_MAX_MS = 120000;
+
   function normalizeEdition(v) {
     v = String(v || '').trim().toLowerCase();
     if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent';
@@ -35,9 +39,20 @@
     return resolveEdition();
   }
 
+  /** Email parfois rempli après le token (Memberstack) — même sources que les autres scripts */
+  function getUserEmail() {
+    const v =
+      document.querySelector('[name="memberEmail"]')?.value ||
+      document.getElementById('memberEmail')?.value ||
+      window.memberEmail ||
+      localStorage.getItem('agilo:username') ||
+      '';
+    const t = String(v || '').trim();
+    return t || null;
+  }
+
   function fetchAndUpdateReadyCount(token, editionOverride) {
-    const userEmailElement = document.querySelector('[name="memberEmail"]');
-    const userEmail = userEmailElement ? userEmailElement.value : null;
+    const userEmail = getUserEmail();
     if (!userEmail || !token) {
       if (window.AGILO_DEBUG) console.error('[ready-count] Email ou token indisponible');
       return;
@@ -119,7 +134,6 @@
       { passive: true }
     );
 
-    // Navigation client (changement ?edition= sans reload complet)
     window.addEventListener(
       'popstate',
       () => {
@@ -130,19 +144,43 @@
       { passive: true }
     );
 
+    // Autre onglet / écriture tardive du jeton dans localStorage
+    window.addEventListener(
+      'storage',
+      (e) => {
+        if (!e.key) return;
+        if (!e.key.startsWith('agilo:token') && e.key !== 'agilo:username') return;
+        if (typeof globalToken !== 'undefined' && globalToken) {
+          fetchAndUpdateReadyCount(globalToken);
+        }
+      },
+      { passive: true }
+    );
+
+    // Onglet reprend le focus : email peut être enfin injecté
+    window.addEventListener(
+      'focus',
+      () => {
+        if (typeof globalToken !== 'undefined' && globalToken) {
+          fetchAndUpdateReadyCount(globalToken);
+        }
+      },
+      { passive: true }
+    );
+
     if (refreshIfToken()) return;
 
+    const pollStart = Date.now();
     checkTokenInterval = setInterval(() => {
       if (refreshIfToken()) return;
-    }, 120);
-
-    setTimeout(() => {
-      if (checkTokenInterval) {
+      if (Date.now() - pollStart > POLL_MAX_MS) {
         clearInterval(checkTokenInterval);
         checkTokenInterval = null;
-        if (window.AGILO_DEBUG) console.warn('[ready-count] Token non disponible après 10s');
+        if (window.AGILO_DEBUG) {
+          console.warn('[ready-count] Pas de jeton après', POLL_MAX_MS / 1000, 's — vérifier Memberstack / ordre des scripts');
+        }
       }
-    }, 10000);
+    }, POLL_MS);
   }
 
   const cleanup = () => {
