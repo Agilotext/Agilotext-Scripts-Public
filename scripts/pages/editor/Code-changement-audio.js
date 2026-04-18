@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.3.1' };
+  window.__agiloRail = { version: '4.4.0' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -38,9 +38,66 @@ let __pendingLoadTimer = null;
     isSwitching: false,
     lastRequestedJobId: '',
     edition: EDITION_FALLBACK,
-    debug: false
+    debug: false,
+    /** 'all' | 'root' | number (folderId > 0) — voir MODE_EMPLOI folders */
+    folderFilter: 'all',
+    foldersCache: { rootJobsCount: 0, folders: [] }
   };
   const dbg = (...a) => state.debug && console.debug('[Rail]', ...a);
+
+  function stemFilename(name){
+    const s = String(name || '');
+    const i = s.lastIndexOf('.');
+    return i > 0 ? s.slice(0, i) : s;
+  }
+  function displayTitleFromDto(x){
+    const raw = x.jobTitle != null ? String(x.jobTitle) : (x.jobtitle != null ? String(x.jobtitle) : '');
+    const jt = raw.trim();
+    if (jt) return jt;
+    const fn = x.filename || '';
+    if (fn) return stemFilename(fn) || fn;
+    return `Transcript ${x.jobid}`;
+  }
+
+  async function postForm(endpoint, fields){
+    const body = new URLSearchParams(fields);
+    let resp;
+    try {
+      resp = await fetch(`${API_BASE}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+    } catch (e) {
+      return { ok: false, error: e?.message || 'réseau' };
+    }
+    const raw = await resp.text();
+    let j = null;
+    try { j = JSON.parse(raw); } catch { return { ok: false, error: raw || 'réponse invalide' }; }
+    if (j && String(j.status).toUpperCase() === 'OK') return { ok: true, data: j };
+    const msg = j?.message || j?.errorMessage || j?.userErrorMessage || j?.error || 'Erreur API';
+    return { ok: false, error: String(msg), data: j };
+  }
+
+  async function fetchTranscriptFoldersList(auth){
+    const url = `${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+    let resp;
+    try { resp = await fetch(url, { credentials: 'omit', cache: 'no-store' }); }
+    catch (e) { dbg('getTranscriptFolders network', e); return { rootJobsCount: 0, folders: [] }; }
+    if (!resp.ok) { dbg('getTranscriptFolders http', resp.status); return { rootJobsCount: 0, folders: [] }; }
+    const j = await resp.json().catch(() => null);
+    if (!j || String(j.status).toUpperCase() !== 'OK') { dbg('getTranscriptFolders KO', j); return { rootJobsCount: 0, folders: [] }; }
+    const rawList = j.folders || j.transcriptFolderDtos || j.transcriptFolders || j.folderDtos || [];
+    const folders = (Array.isArray(rawList) ? rawList : []).map((f) => ({
+      folderId: Number(f.folderId != null ? f.folderId : f.id) || 0,
+      folderName: String(f.folderName != null ? f.folderName : f.name || '').trim(),
+      jobsCount: Number(f.jobsCount != null ? f.jobsCount : f.count) || 0
+    })).filter((f) => f.folderId > 0 && f.folderName);
+    const rootJobsCount = Number(j.rootJobsCount != null ? j.rootJobsCount : j.rootCount) || 0;
+    return { rootJobsCount, folders };
+  }
 
   /* ================== Utils ================== */
   function normalizeEdition(v){
@@ -213,7 +270,12 @@ let __pendingLoadTimer = null;
 
   /* ================== API ================== */
   async function fetchJobs(auth, retried = false){
-    const url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=200&offset=0`;
+    let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=200&offset=0`;
+    if (state.folderFilter === 'root') {
+      url += '&folderId=0';
+    } else if (typeof state.folderFilter === 'number' && state.folderFilter > 0) {
+      url += `&folderId=${encodeURIComponent(String(state.folderFilter))}`;
+    }
     let resp;
     try { resp = await fetch(url, { credentials:'omit', cache:'no-store' }); }
     catch(e){ dbg('getJobsInfo network error', e); return []; }
@@ -249,8 +311,149 @@ let __pendingLoadTimer = null;
     return j.jobsInfoDtos.map(x=>{
       const m = String(x.dtCreation||'').match(/(\d{2})[-/](\d{2})[-/](\d{4})\s+(\d{2}):(\d{2}):(\d{2})/);
       const iso = m ? new Date(+m[3], +m[2]-1, +m[1], +m[4], +m[5], +m[6]).toISOString() : new Date().toISOString();
-      return { jobId:String(x.jobid), title:x.filename||`Transcript ${x.jobid}`, createdAt:iso, ts:Date.parse(iso)||0, status:x.transcriptStatus||'PENDING' };
+      const title = displayTitleFromDto(x);
+      const folderId = x.folderId != null ? Number(x.folderId) : 0;
+      const folderName = (x.folderName != null ? String(x.folderName) : '').trim();
+      return {
+        jobId: String(x.jobid),
+        title,
+        filename: String(x.filename || ''),
+        folderId,
+        folderName,
+        createdAt: iso,
+        ts: Date.parse(iso) || 0,
+        status: x.transcriptStatus || 'PENDING'
+      };
     });
+  }
+
+  function renderFolderBarDom(auth){
+    const bar = ensureFolderBar();
+    if (!bar || !auth?.username || !auth?.token) return;
+    const { rootJobsCount, folders } = state.foldersCache;
+
+    function chip(id, label, active){
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'agilo-folder-chip' + (active ? ' is-active' : '');
+      b.dataset.filter = String(id);
+      b.textContent = label;
+      b.addEventListener('click', async () => {
+        if (id === 'all') state.folderFilter = 'all';
+        else if (id === 'root') state.folderFilter = 'root';
+        else state.folderFilter = Number(id);
+        const a = await ensureAuth();
+        renderFolderBarDom(a);
+        const jobs = await fetchJobs(a);
+        if (jobs?.length) renderRail(jobs);
+        else renderEmptyRail();
+      });
+      return b;
+    }
+
+    bar.innerHTML = '';
+    const lab = document.createElement('span');
+    lab.className = 'agilo-folder-label';
+    lab.textContent = 'Dossiers';
+    bar.appendChild(lab);
+
+    bar.appendChild(chip('all', 'Tous', state.folderFilter === 'all'));
+    bar.appendChild(chip('root', `Racine (${rootJobsCount})`, state.folderFilter === 'root'));
+    folders.forEach((f) => {
+      const active = Number(state.folderFilter) === Number(f.folderId);
+      bar.appendChild(chip(String(f.folderId), `${f.folderName} (${f.jobsCount})`, active));
+    });
+
+    const newFoldBtn = document.createElement('button');
+    newFoldBtn.type = 'button';
+    newFoldBtn.className = 'agilo-folder-chip';
+    newFoldBtn.textContent = '+ Dossier';
+    newFoldBtn.addEventListener('click', async () => {
+      const name = window.prompt('Nom du nouveau dossier ?');
+      if (!name || !String(name).trim()) return;
+      const r = await postForm('createTranscriptFolder', {
+        username: auth.username,
+        token: auth.token,
+        edition: auth.edition,
+        folderName: String(name).trim()
+      });
+      if (!r.ok) {
+        window.alert(r.error || 'Création impossible');
+        return;
+      }
+      const a = await ensureAuth();
+      state.foldersCache = await fetchTranscriptFoldersList(a);
+      renderFolderBarDom(a);
+    });
+    bar.appendChild(newFoldBtn);
+
+    const moveWrap = document.createElement('div');
+    moveWrap.className = 'agilo-folder-move';
+    const sel = document.createElement('select');
+    sel.id = 'agilo-folder-move-select';
+    const o0 = document.createElement('option');
+    o0.value = '';
+    o0.textContent = 'Ranger job actif →';
+    sel.appendChild(o0);
+    const oR = document.createElement('option');
+    oR.value = '0';
+    oR.textContent = 'Racine';
+    sel.appendChild(oR);
+    folders.forEach((f) => {
+      const o = document.createElement('option');
+      o.value = String(f.folderId);
+      o.textContent = f.folderName;
+      sel.appendChild(o);
+    });
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.textContent = 'OK';
+    go.addEventListener('click', async () => {
+      const jid = currentJobId();
+      const v = sel.value;
+      if (!jid) {
+        window.alert('Aucun job ouvert.');
+        return;
+      }
+      if (v === '') {
+        window.alert('Choisis un dossier cible.');
+        return;
+      }
+      const a = await ensureAuth();
+      const r = await postForm('moveTranscriptToFolder', {
+        username: a.username,
+        token: a.token,
+        edition: a.edition,
+        jobId: jid,
+        folderId: v
+      });
+      if (!r.ok) {
+        window.alert(r.error || 'Déplacement impossible');
+        return;
+      }
+      state.foldersCache = await fetchTranscriptFoldersList(a);
+      renderFolderBarDom(a);
+      const jobs = await fetchJobs(a);
+      if (jobs?.length) renderRail(jobs);
+      else renderEmptyRail();
+    });
+    moveWrap.appendChild(sel);
+    moveWrap.appendChild(go);
+    bar.appendChild(moveWrap);
+  }
+
+  function ensureFolderBar(){
+    let bar = byId('agilo-folder-bar');
+    if (bar) return bar;
+    const parent = rail.list?.parentElement;
+    if (!parent) return null;
+    bar = document.createElement('div');
+    bar.id = 'agilo-folder-bar';
+    bar.className = 'agilo-folder-bar';
+    bar.setAttribute('role', 'navigation');
+    bar.setAttribute('aria-label', 'Dossiers transcriptions');
+    parent.insertBefore(bar, rail.list);
+    return bar;
   }
 
   /* ================== Bootstrap items déjà présents ================== */
@@ -288,6 +491,7 @@ let __pendingLoadTimer = null;
       if (!el.querySelector('.ri-title')) {
         el.innerHTML = `
           <div class="ri-top"><span class="ri-title"></span><span class="ri-date"></span></div>
+          <div class="ri-folder-hint" hidden></div>
           <div class="ri-bottom">
             <span class="ri-badge ri-badge-ok"><div class="dot-ready"></div><div>Ok</div></span>
             <span class="ri-badge ri-badge-wip" hidden><div class="dot-ready pending"></div><div>En cours</div></span>
@@ -297,6 +501,8 @@ let __pendingLoadTimer = null;
       el.type = 'button';
       el.dataset.jobId     = String(j.jobId);
       el.dataset.title     = j.title || ('Transcript ' + j.jobId);
+      el.dataset.filename  = j.filename || '';
+      el.dataset.folderName = j.folderName || '';
       el.dataset.status    = j.status || '';
       el.dataset.createdAt = j.createdAt || '';
       el.dataset.ts        = String(j.ts||0);
@@ -309,6 +515,16 @@ let __pendingLoadTimer = null;
 
       el.querySelector('.ri-title').textContent = el.dataset.title;
       el.querySelector('.ri-date').textContent  = fmtDate(j.createdAt || new Date().toISOString());
+      const fh = el.querySelector('.ri-folder-hint');
+      if (fh) {
+        if (j.folderName) {
+          fh.textContent = j.folderName;
+          fh.hidden = false;
+        } else {
+          fh.textContent = '';
+          fh.hidden = true;
+        }
+      }
 
       applyBadgeVisibility(el, j.status);
       rail.list.appendChild(el);
@@ -465,6 +681,8 @@ if (window.__agiloOrchestrator?.loadJob) {
 
   window.addEventListener('agilo:refresh-rail', async ()=>{
     const auth = await ensureAuth();
+    state.foldersCache = await fetchTranscriptFoldersList(auth);
+    renderFolderBarDom(auth);
     const jobs = await fetchJobs(auth);
     if (jobs?.length) renderRail(jobs);
     else renderEmptyRail();
@@ -489,6 +707,8 @@ window.addEventListener('agilo:load', (e)=>{
 window.addEventListener('agilo:token', async ()=>{
   const auth = readAuthSnapshot();
   if (!auth.username || !auth.token) return;
+  state.foldersCache = await fetchTranscriptFoldersList(auth);
+  renderFolderBarDom(auth);
   const jobs = await fetchJobs(auth);
   if (jobs?.length) renderRail(jobs);
   else renderEmptyRail();
@@ -502,6 +722,8 @@ window.addEventListener('agilo:token', async ()=>{
     bootstrapExistingRailItems();
 
     const auth = await ensureAuth();
+    state.foldersCache = await fetchTranscriptFoldersList(auth);
+    renderFolderBarDom(auth);
     const jobs = await fetchJobs(auth);
 
     if (jobs.length){ renderRail(jobs); }
@@ -511,6 +733,8 @@ window.addEventListener('agilo:token', async ()=>{
     if (jobs.length <= 1) {
       setTimeout(async ()=>{
         const auth2 = await ensureAuth();
+        state.foldersCache = await fetchTranscriptFoldersList(auth2);
+        renderFolderBarDom(auth2);
         const jobs2 = await fetchJobs(auth2);
         if (jobs2.length) renderRail(jobs2);
         else renderEmptyRail();
@@ -524,6 +748,8 @@ window.addEventListener('agilo:token', async ()=>{
           try { window.getToken(auth.username, auth.edition); } catch {}
         }
         const auth3 = await ensureAuth(10000);
+        state.foldersCache = await fetchTranscriptFoldersList(auth3);
+        renderFolderBarDom(auth3);
         const jobs3 = await fetchJobs(auth3);
         if (jobs3.length) renderRail(jobs3);
         else renderEmptyRail();

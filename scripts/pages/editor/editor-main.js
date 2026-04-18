@@ -10,8 +10,19 @@
   // Flag de debug global
   window.AGILO_DEBUG = window.AGILO_DEBUG || new URLSearchParams(location.search).get('debug') === '1';
 
-  // Base URL jsDelivr CDN
-  const CDN_BASE = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/editor';
+  // Base URL jsDelivr CDN — défaut @main ; surcharge tests : ?agilo_cdn_branch=1.05
+  const __CDN_BRANCH = (() => {
+    try {
+      const b = new URLSearchParams(location.search).get('agilo_cdn_branch') || 'main';
+      return String(b).replace(/[^a-zA-Z0-9._-]/g, '') || 'main';
+    } catch {
+      return 'main';
+    }
+  })();
+  const CDN_BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${__CDN_BRANCH}/scripts/pages/editor`;
+  if (window.AGILO_DEBUG) {
+    console.log('[agilo:loader] Branche CDN jsDelivr :', __CDN_BRANCH, '→', CDN_BASE);
+  }
 
   // Liste des scripts à charger dans l'ordre
   const scripts = [

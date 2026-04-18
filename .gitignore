@@ -8,6 +8,7 @@
 *.md
 !scripts/README.md
 !docs/styled-transcript-pdf/*.md
+!docs/integration-titres-dossiers-1.05/**/*.md
 
 # Scripts d'aide (pas besoin dans le repo)
 setup-github-repo.sh
@@ -19,6 +20,7 @@ upload-to-github.js
 !README.html
 !CNOEC_Agiloshield_Docs/anonymisation/*.html
 !CNOEC_Agiloshield_Docs/Front_END/*.html
+!docs/integration-titres-dossiers-1.05/webflow-exports/*.html
 
 # Fichiers JavaScript de test/développement
 *_TEST*.js
