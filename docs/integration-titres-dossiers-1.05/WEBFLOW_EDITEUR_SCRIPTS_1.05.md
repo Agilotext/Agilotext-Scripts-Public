@@ -1,6 +1,6 @@
 # Webflow — page « Éditeur de transcripts » (Business) : scripts 1.05
 
-Base CDN (remplace `@1.02` / fichiers locaux `_files` par la branche **`1.05`** une fois mergée et jsDelivr à jour) :
+Base CDN (remplace `@1.02` / fichiers locaux `_files` par la branche `**1.05**` une fois mergée et jsDelivr à jour) :
 
 ```text
 https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/<NOM_FICHIER>.js
@@ -16,7 +16,7 @@ Dans le **footer** de la page (ou un seul embed global), **une** balise :
 
 Tests sans toucher la prod : ajoute sur l’URL de la page `?agilo_cdn_branch=1.05&debug=1` (la query `agilo_cdn_branch` surcharge la branche Git utilisée par jsDelivr dans `editor-main.js`).
 
-**Important :** le loader charge `Code-main-editor.js` (iframe « standard » du repo). Si ta page utilise aujourd’hui **`Code-main-editor-IFRAME_V04.js`**, tu as deux choix :
+**Important :** le loader charge `Code-main-editor.js` (iframe « standard » du repo). Si ta page utilise aujourd’hui `**Code-main-editor-IFRAME_V04.js`**, tu as deux choix :
 
 1. **Garder IFRAME_V04** : laisse **un** embed avec ce script **en plus** du loader, mais **retire** du loader la ligne équivalente en dupliquant… En pratique, plus simple : **ne pas** utiliser le loader complet et passe à l’option B en remplaçant fichier par fichier.
 2. **Aligner sur le repo** : remplace l’embed IFRAME_V04 par la version servie par le loader (`Code-main-editor.js`) **seulement** après test fonctionnel (comportement iframe / résumé).
@@ -58,6 +58,7 @@ Suite (ordre inchangé) :
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/Code-changement-audio.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/Code-editor-auth-sync.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/Code-chat.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/Code-ed-header.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/editor/Code-questions-ia.js"></script>
@@ -74,7 +75,13 @@ Les autres scripts de ton export (ex. `Code-modeles-compte-rendu.js`, variante `
 
 ## Fichier nouveau côté 1.05
 
-- [`Code-ed-header.js`](../../scripts/pages/editor/Code-ed-header.js) : header (titre via `jobTitle` + `renameTranscriptTitle`, plus téléchargements / export / webhook / suppression). Remplace l’embed inline `__agiloEditorHeader_v4`.
+- `[Code-ed-header.js](../../scripts/pages/editor/Code-ed-header.js)` : header (titre via `jobTitle` + `renameTranscriptTitle`, plus téléchargements / export / webhook / suppression). Remplace l’embed inline `__agiloEditorHeader_v4`.
+- `[Code-editor-auth-sync.js](../../scripts/pages/editor/Code-editor-auth-sync.js)` : **juste après** `Code-changement-audio.js` — rafraîchit le rail quand l’onglet redevient visible ou qu’un autre onglet met à jour le jeton (`localStorage`). Sans ce fichier, le reste fonctionne encore ; c’est un filet de sécurité léger.
+
+### Comportement rail / badge (versions récentes du repo)
+
+- `getTranscriptFolders` et `getJobsInfo` sont enchaînés en **parallèle** dans le rail pour réduire la latence.
+- Les événements `agilo:token` et `agilo:credsUpdated` passent par un **rafraîchissement debouncé** commun pour éviter les doubles appels.
 
 ---
 

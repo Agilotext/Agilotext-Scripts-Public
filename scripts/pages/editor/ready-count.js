@@ -53,16 +53,30 @@
   }
 
   function init() {
-    // Vérification de la disponibilité du token global avant d'exécuter la fonction de mise à jour
-    checkTokenInterval = setInterval(() => {
+    const tryOnce = () => {
       if (typeof globalToken !== 'undefined' && globalToken) {
-        clearInterval(checkTokenInterval);
-        checkTokenInterval = null;
+        if (checkTokenInterval) {
+          clearInterval(checkTokenInterval);
+          checkTokenInterval = null;
+        }
         fetchAndUpdateReadyCount(globalToken);
+        return true;
       }
-    }, 100); // Interval de vérification toutes les 100ms
-    
-    // Timeout de sécurité : arrêter après 10 secondes si le token n'arrive pas
+      return false;
+    };
+
+    window.addEventListener('agilo:token', () => { tryOnce(); }, { passive: true });
+    window.addEventListener('agilo:credsUpdated', (e) => {
+      const tok = (e && e.detail && e.detail.token) || (typeof globalToken !== 'undefined' ? globalToken : '');
+      if (tok) fetchAndUpdateReadyCount(tok);
+    }, { passive: true });
+
+    if (tryOnce()) return;
+
+    checkTokenInterval = setInterval(() => {
+      if (tryOnce()) return;
+    }, 120);
+
     setTimeout(() => {
       if (checkTokenInterval) {
         clearInterval(checkTokenInterval);

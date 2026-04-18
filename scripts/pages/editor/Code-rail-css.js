@@ -90,6 +90,17 @@
   opacity:.72;
   margin-top:.15rem;
 }
+
+.rail-loading{
+  padding:.75rem;
+  font-size:.8125rem;
+  color:var(--agilo-muted, #6b7280);
+}
+.rail-empty{
+  padding:.75rem;
+  font-size:.8125rem;
+  color:var(--agilo-muted, #6b7280);
+}
 `;
 
   const style = document.createElement('style');

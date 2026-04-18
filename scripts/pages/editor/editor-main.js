@@ -41,6 +41,7 @@
     'Code-lecteur-audio.js',
     'Code-main-editor.js',
     'Code-changement-audio.js',
+    'Code-editor-auth-sync.js',
     'Code-chat.js',
     'Code-ed-header.js',
     'Code-questions-ia.js',
