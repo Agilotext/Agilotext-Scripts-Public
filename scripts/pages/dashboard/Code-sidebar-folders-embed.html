@@ -1,0 +1,14 @@
+<!--
+  Webflow — Embed « Custom code » : placer SOUS le bloc du lien « Transcriptions »
+  (dans dashboard-left / menu app).
+
+  Remplacer la branche dans l’URL si besoin (ex. 1.05 → main) ou utiliser jsDelivr.
+-->
+
+<div id="agilo-nav-folders-root" data-base-href="/app/business/mes-transcripts" hidden></div>
+
+<!-- 1) Styles (une fois par page) -->
+<script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/1.05/scripts/pages/dashboard/Code-sidebar-folders-css.js"></script>
+
+<!-- 2) Logique (après token-resolver / Memberstack si possible) -->
+<script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/1.05/scripts/pages/dashboard/Code-sidebar-folders.js"></script>
