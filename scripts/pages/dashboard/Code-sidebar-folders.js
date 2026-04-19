@@ -1,8 +1,9 @@
 // Agilotext — liste dossiers dans la nav (sous Transcriptions), style type Plaud
 // ⚠️ Ce fichier est chargé depuis GitHub — après Code-sidebar-folders-css.js et les scripts auth
 //
-// Webflow : placer un conteneur vide puis ce script, ex. :
-//   <div id="agilo-nav-folders-root" data-base-href="/app/business/mes-transcripts"></div>
+// Base « Mes transcripts » : par défaut /app/{segment}/mes-transcripts où {segment} est lu dans
+// location.pathname (/app/free/…, /app/pro/…, /app/business/…, etc.). Surcharge optionnelle :
+//   data-base-href="/app/custom/mes-transcripts"
 
 (function () {
   'use strict';
@@ -14,7 +15,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.0.0', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.1.0', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -222,14 +223,24 @@
     return `hsl(${hue} 52% 40%)`;
   }
 
+  /** Segment après /app/ (free, pro, business, …) — aligné Code-ed-header / profil */
+  function getAppTierFromLocation() {
+    const m = location.pathname.match(/^\/app\/([^/]+)/);
+    return m ? m[1] : null;
+  }
+
   function resolveBaseHref() {
     const raw = mount.getAttribute('data-base-href');
-    if (raw && raw.trim()) {
+    if (raw != null && String(raw).trim() !== '') {
       try {
-        return new URL(raw.trim(), location.origin).pathname;
+        return new URL(String(raw).trim(), location.origin).pathname;
       } catch {
-        return '/app/business/mes-transcripts';
+        /* fallthrough */
       }
+    }
+    const tier = getAppTierFromLocation();
+    if (tier) {
+      return `/app/${tier}/mes-transcripts`;
     }
     const navLink = $('a[href*="mes-transcripts"]');
     if (navLink) {
@@ -255,12 +266,7 @@
   }
 
   function mesTranscriptsPathname() {
-    const basePath = resolveBaseHref();
-    try {
-      return new URL(basePath, location.origin).pathname;
-    } catch {
-      return '/app/business/mes-transcripts';
-    }
+    return resolveBaseHref();
   }
 
   function currentFilterFromUrl() {
