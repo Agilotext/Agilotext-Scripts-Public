@@ -6,7 +6,7 @@
 
   const css = `
 /* =============================================================================
-   NAV DOSSIERS — minimal, sans encadré ; toggle native <details>
+   NAV DOSSIERS — lisible, pastilles charte, ligne active type « carte »
    ============================================================================= */
 .agilo-nav-folders-details{
   margin:0;
@@ -23,7 +23,7 @@
   gap:.5rem;
   width:100%;
   box-sizing:border-box;
-  padding:0;
+  padding:.2rem 0 .35rem;
   margin:0;
   font:inherit;
   color:inherit;
@@ -32,11 +32,11 @@
   display:none;
 }
 .agilo-nav-folders__summary-text{
-  font-size:.7rem;
+  font-size:.68rem;
   font-weight:600;
-  letter-spacing:.06em;
+  letter-spacing:.07em;
   text-transform:uppercase;
-  color:var(--color--gris, var(--agilo-dim, #525252));
+  color:color-mix(in srgb, var(--color--gris, var(--agilo-dim, #525252)) 88%, var(--agilo-text, #020202) 12%);
 }
 .agilo-nav-folders__chev{
   flex:0 0 auto;
@@ -44,7 +44,7 @@
   height:.5rem;
   border-right:2px solid currentColor;
   border-bottom:2px solid currentColor;
-  opacity:.55;
+  opacity:.45;
   transform:rotate(-45deg);
   transition:transform .18s ease, opacity .18s ease;
   margin-right:.15rem;
@@ -52,10 +52,11 @@
 .agilo-nav-folders-details[open] > summary .agilo-nav-folders__chev{
   transform:rotate(45deg);
   margin-top:-.1rem;
+  opacity:.55;
 }
 .agilo-nav-folders{
   margin:0;
-  padding:.25rem 0 .15rem;
+  padding:.2rem 0 .2rem;
   border:none;
   background:transparent;
   font-size:inherit;
@@ -63,40 +64,45 @@
 .agilo-nav-folders__list{
   display:flex;
   flex-direction:column;
-  gap:0;
-  padding:.15rem 0 0 .15rem;
+  gap:.2rem;
+  padding:.2rem 0 0 .2rem;
   margin:0;
-  border-left:1px solid color-mix(in srgb, var(--agilo-text, #020202) 10%, transparent);
+  border-left:1px solid color-mix(in srgb, var(--agilo-text, #020202) 8%, transparent);
 }
 .agilo-nav-folders__list--match-nav{
   padding-left:0;
-  padding-top:.1rem;
+  padding-top:.15rem;
   border-left:none;
+  gap:.25rem;
 }
 .agilo-nav-folders__row{
   display:flex;
   align-items:center;
-  gap:.4rem;
-  padding:.28rem .15rem .28rem 0;
-  border-radius:var(--agilo-radius, .35rem);
+  gap:.45rem;
+  padding:.38rem .45rem .38rem .35rem;
+  border-radius:.5rem;
   text-decoration:none;
-  color:inherit;
+  color:var(--agilo-text, #020202);
   line-height:1.3;
-  transition:background .12s ease, opacity .12s ease;
-  border:none;
+  transition:background .14s ease, box-shadow .14s ease, color .12s ease;
+  border:1px solid transparent;
   box-sizing:border-box;
   width:100%;
 }
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .5rem);
-  padding-left:0;
-  padding-right:0;
+  padding-left:.35rem;
+  padding-right:.35rem;
 }
 .agilo-nav-folders__row:hover{
-  background:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 7%, transparent);
+  background:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 6%, var(--agilo-surface, var(--color--white, #ffffff)) 94%);
+  border-color:color-mix(in srgb, var(--color--gris, #525252) 12%, transparent);
 }
 .agilo-nav-folders__row.is-active{
-  background:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 11%, transparent);
+  background:var(--agilo-surface, var(--color--white, #ffffff));
+  border-color:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 22%, transparent);
+  box-shadow:0 1px 2px color-mix(in srgb, var(--agilo-text, #020202) 6%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 10%, transparent);
   font-weight:600;
 }
 .agilo-nav-folders__icon{
@@ -112,6 +118,13 @@
   width:100%;
   height:100%;
   display:block;
+}
+/* Icônes dossier : contour uniquement (évite le rendu « plein » hérité du site) */
+.agilo-nav-folders__row--folder .agilo-nav-folders__icon svg,
+.agilo-nav-folders__row--folder .agilo-nav-folders__icon-wrap svg{
+  fill:none !important;
+  stroke:currentColor !important;
+  stroke-width:1.5;
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__icon-wrap{
   flex:0 0 auto;
@@ -135,21 +148,39 @@
   text-overflow:ellipsis;
   white-space:nowrap;
   font-size:.8125rem;
+  color:color-mix(in srgb, var(--agilo-text, #020202) 92%, var(--color--gris, #525252) 8%);
 }
-.agilo-nav-folders__count{
+.agilo-nav-folders__row.is-active .agilo-nav-folders__name{
+  color:var(--agilo-text, #020202);
+}
+/* Pastilles compteur : neutre charte (surcharge styles Webflow .readycount) */
+.agilo-nav-folders__list .agilo-nav-folders__row .agilo-nav-folders__count{
   flex:0 0 auto;
-  font-size:.72rem;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:1.4rem;
+  min-height:1.4rem;
+  padding:0 .38rem;
+  box-sizing:border-box;
+  border-radius:999px;
+  font-size:.6875rem;
   font-weight:600;
-  color:var(--color--gris, var(--agilo-dim, #525252));
-  min-width:1.15rem;
-  text-align:right;
-  opacity:.9;
+  line-height:1;
+  text-align:center;
+  color:var(--color--gris, var(--agilo-dim, #525252)) !important;
+  background:color-mix(in srgb, var(--agilo-surface, var(--color--white, #ffffff)) 88%, var(--color--gris, #525252) 12%) !important;
+  border:1px solid color-mix(in srgb, var(--color--gris, #525252) 20%, transparent) !important;
+  box-shadow:none !important;
+  opacity:1;
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
-  font-size:inherit;
+  font-size:.6875rem;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__count{
-  color:var(--agilo-text, #020202);
+  color:var(--agilo-text, #020202) !important;
+  background:var(--agilo-surface, var(--color--white, #ffffff)) !important;
+  border-color:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 28%, transparent) !important;
 }
 .agilo-nav-folders--loading .agilo-nav-folders__placeholder{
   padding:.2rem 0 .1rem;
