@@ -4,6 +4,9 @@
 // Webflow — #agilo-nav-folders-root (attributs personnalisés) :
 //   data-link-class, data-summary-class, data-agilo-folders-start, data-base-href
 //   data-agilo-folder-palette="--color--blue,--color--orange,..." (optionnel, virgules)
+//   data-agilo-folder-accent-mode="hash" | "sequence"
+//     — hash (défaut) : couleur stable par folderId, palette répétée en boucle (illimité)
+//     — sequence : couleur par position dans la liste (1er = 1re teinte, …)
 //   data-row-structure="match-nav" → DOM type menu (icon-small, readycount)
 //   data-icon-class, data-name-class, data-count-class → surcharges classes match-nav
 
@@ -17,7 +20,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.3.0', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.4.1', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -243,7 +246,11 @@
     'var(--color--blue, var(--agilo-primary, #174a96))',
     'var(--color--orange, #fd7e14)',
     'var(--color--vert, #1c661a)',
-    'var(--color--rouge, #a82633)'
+    'var(--color--rouge, #a82633)',
+    'color-mix(in srgb, var(--color--blue, #174a96) 55%, var(--color--vert, #1c661a))',
+    'color-mix(in srgb, var(--color--orange, #fd7e14) 50%, var(--color--rouge, #a82633))',
+    'color-mix(in srgb, var(--color--blue, #174a96) 65%, var(--color--orange, #fd7e14))',
+    'color-mix(in srgb, var(--color--vert, #1c661a) 50%, var(--color--rouge, #a82633))'
   ];
 
   function normalizePaletteToken(t) {
@@ -263,13 +270,32 @@
     return parts.length ? parts : DEFAULT_FOLDER_PALETTE.slice();
   }
 
-  /** Couleur d’icône dossier : palette charte, index stable par folderId */
+  function getFolderAccentMode() {
+    const v = String(mount.getAttribute('data-agilo-folder-accent-mode') || 'hash')
+      .trim()
+      .toLowerCase();
+    if (v === 'sequence' || v === 'order' || v === 'list') return 'sequence';
+    return 'hash';
+  }
+
+  /** Couleur d’icône dossier : palette charte, répétée en boucle (nombre de dossiers illimité) */
   function folderAccentForId(folderId, palette) {
     const pal = palette && palette.length ? palette : DEFAULT_FOLDER_PALETTE;
     let h = 0;
     const s = String(folderId);
     for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
     return pal[Math.abs(h) % pal.length];
+  }
+
+  function folderAccentForListIndex(listIndex, palette) {
+    const pal = palette && palette.length ? palette : DEFAULT_FOLDER_PALETTE;
+    const i = Math.max(0, Number(listIndex) || 0);
+    return pal[i % pal.length];
+  }
+
+  function pickFolderAccent(folderId, listIndex, palette, mode) {
+    if (mode === 'sequence') return folderAccentForListIndex(listIndex, palette);
+    return folderAccentForId(folderId, palette);
   }
 
   /** Segment après /app/ (free, pro, business, …) — aligné Code-ed-header / profil */
@@ -347,7 +373,7 @@
   }
 
   const FOLDER_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>';
   const STACK_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
@@ -422,10 +448,17 @@
 
     const linkExtra = extraClasses('data-link-class');
     const folderPalette = getFolderPalette();
+    const accentMode = getFolderAccentMode();
 
     function addRow(filter, label, count, iconHtml, accentCss) {
+      const isFolderRow = typeof filter === 'number' && Number.isFinite(filter);
       const a = document.createElement('a');
-      a.className = ['agilo-nav-folders__row', linkExtra, useMatchNav ? 'agilo-nav-folders__row--match-nav' : '']
+      a.className = [
+        'agilo-nav-folders__row',
+        linkExtra,
+        useMatchNav ? 'agilo-nav-folders__row--match-nav' : '',
+        isFolderRow ? 'agilo-nav-folders__row--folder' : ''
+      ]
         .filter(Boolean)
         .join(' ');
       a.href = hrefForFilter(basePath, filter);
@@ -464,8 +497,8 @@
     addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, ACCENT_ALL);
     addRow('root', 'Non classé', rootCount, ROOT_SVG, ACCENT_ROOT);
 
-    merged.folders.forEach((f) => {
-      const accent = folderAccentForId(f.folderId, folderPalette);
+    merged.folders.forEach((f, idx) => {
+      const accent = pickFolderAccent(f.folderId, idx, folderPalette, accentMode);
       addRow(Number(f.folderId), f.folderName, f.jobsCount, FOLDER_SVG, accent);
     });
 
