@@ -21,6 +21,7 @@ upload-to-github.js
 !CNOEC_Agiloshield_Docs/anonymisation/*.html
 !CNOEC_Agiloshield_Docs/Front_END/*.html
 !docs/integration-titres-dossiers-1.05/webflow-exports/*.html
+!scripts/pages/dashboard/Code-sidebar-folders-embed.html
 
 # Fichiers JavaScript de test/développement
 *_TEST*.js
