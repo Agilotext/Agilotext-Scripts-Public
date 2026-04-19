@@ -1,5 +1,6 @@
 // Agilotext — liste dossiers dans la nav (sous Transcriptions), style type Plaud
-// ⚠️ Ce fichier est chargé depuis GitHub — après Code-sidebar-folders-css.js et les scripts auth
+// ⚠️ Charger après le script qui définit getToken / globalToken et émet agilotext:token
+//    (alias d’écoute : agilo:token). Voir readBootstrapGlobalToken + waitForTokenEvent.
 //
 // Base « Mes transcripts » : par défaut /app/{segment}/mes-transcripts où {segment} est lu dans
 // location.pathname (/app/free/…, /app/pro/…, /app/business/…, etc.). Surcharge optionnelle :
@@ -15,7 +16,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.1.0', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.1.1', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -42,6 +43,17 @@
     return `agilo:token:${normalizeEdition(edition)}:${String(email || '').toLowerCase()}`;
   }
 
+  /**
+   * Script inline Agilotext : `let globalToken` + dispatch `agilotext:token` (pas `window.globalToken`).
+   * try/catch : TDZ si ce script s’exécute avant l’init du jeton.
+   */
+  function readBootstrapGlobalToken() {
+    try {
+      if (globalToken) return String(globalToken);
+    } catch (_) {}
+    return '';
+  }
+
   function readAuthSnapshot() {
     const edition = getEdition();
     const email =
@@ -53,7 +65,8 @@
       '';
     const token =
       byId('editorRoot')?.dataset?.token ||
-      window.globalToken ||
+      readBootstrapGlobalToken() ||
+      (typeof window.globalToken === 'string' ? window.globalToken : '') ||
       localStorage.getItem(tokenKey(email, edition)) ||
       localStorage.getItem('agilo:token') ||
       '';
@@ -77,20 +90,26 @@
           : true;
         const okEd = wantEdition ? normalizeEdition(d.edition) === normalizeEdition(wantEdition) : true;
         if (d.token && okEmail && okEd) {
+          removeTokenListeners(onEvt);
           finish({ username: d.email, token: d.token, edition: normalizeEdition(d.edition) });
         }
       };
+      function removeTokenListeners(handler) {
+        window.removeEventListener('agilo:token', handler);
+        window.removeEventListener('agilotext:token', handler);
+      }
       window.addEventListener('agilo:token', onEvt, { passive: true });
+      window.addEventListener('agilotext:token', onEvt, { passive: true });
       (function loop() {
         if (done) return;
         const snap = readAuthSnapshot();
         if (snap.username && snap.token) {
-          window.removeEventListener('agilo:token', onEvt);
+          removeTokenListeners(onEvt);
           finish(snap);
           return;
         }
         if (performance.now() - t0 > timeoutMs) {
-          window.removeEventListener('agilo:token', onEvt);
+          removeTokenListeners(onEvt);
           finish(readAuthSnapshot());
           return;
         }
@@ -422,6 +441,7 @@
   window.__agiloNavFolders.refresh = load;
 
   window.addEventListener('agilo:token', () => load(), { passive: true });
+  window.addEventListener('agilotext:token', () => load(), { passive: true });
   window.addEventListener('popstate', () => updateActiveRowsOnly(), { passive: true });
 
   if (document.readyState === 'loading') {
