@@ -1,10 +1,15 @@
 <!--
-  Webflow — Embed sous « Transcriptions », APRÈS le script getToken / Memberstack.
-  jsDelivr @1.05 — compatible agilotext:token + globalToken (v1.1.1+).
-  Base Mes transcripts : /app/{segment}/mes-transcripts selon l’URL (option data-base-href).
+  Webflow : Embed sous Transcriptions, après Memberstack / getToken.
+  Bloc Div : id agilo-nav-folders-root + attributs ci‑dessous (Settings → Custom attributes).
 -->
 
-<div id="agilo-nav-folders-root" hidden></div>
+<div
+  id="agilo-nav-folders-root"
+  hidden
+  data-agilo-folders-start="auto"
+  data-link-class="dashboard-link w-inline-block"
+  data-summary-class="dashboard-link w-inline-block"
+></div>
 
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/dashboard/Code-sidebar-folders-css.js"></script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.05/scripts/pages/dashboard/Code-sidebar-folders.js"></script>

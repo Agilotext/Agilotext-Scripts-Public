@@ -1,10 +1,11 @@
-// Agilotext — liste dossiers dans la nav (sous Transcriptions), style type Plaud
-// ⚠️ Charger après le script qui définit getToken / globalToken et émet agilotext:token
-//    (alias d’écoute : agilo:token). Voir readBootstrapGlobalToken + waitForTokenEvent.
+// Agilotext — liste dossiers dans la nav (sous Transcriptions), repli <details> par défaut
+// ⚠️ Charger après getToken / agilotext:token.
 //
-// Base « Mes transcripts » : par défaut /app/{segment}/mes-transcripts où {segment} est lu dans
-// location.pathname (/app/free/…, /app/pro/…, /app/business/…, etc.). Surcharge optionnelle :
-//   data-base-href="/app/custom/mes-transcripts"
+// Webflow — sur le div #agilo-nav-folders-root (attributs personnalisés) :
+//   data-link-class="dashboard-link w-inline-block"     → classes ajoutées à chaque lien dossier
+//   data-summary-class="dashboard-link w-inline-block"  → optionnel, ligne « Dossiers » (toggle)
+//   data-agilo-folders-start="closed|open|auto"         → auto = ouvert si ?folderId= sur Mes transcripts
+//   data-base-href="/app/…/mes-transcripts"             → surcharge rare
 
 (function () {
   'use strict';
@@ -16,7 +17,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.1.1', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.2.0', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -298,6 +299,24 @@
     return n;
   }
 
+  /** Repli par défaut ; `auto` = ouvrir si un folderId est dans l’URL (page Mes transcripts). */
+  function shouldDetailsStartOpen() {
+    const v = (mount.getAttribute('data-agilo-folders-start') || 'closed').trim().toLowerCase();
+    if (v === 'open') return true;
+    if (v === 'closed') return false;
+    if (location.pathname !== mesTranscriptsPathname()) return false;
+    const q = new URLSearchParams(location.search).get('folderId');
+    return q !== null && q !== '';
+  }
+
+  function extraClasses(attr) {
+    return String(mount.getAttribute(attr) || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .join(' ');
+  }
+
   const FOLDER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.11 0-2 .89-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2Z"/></svg>';
   const STACK_SVG =
@@ -310,21 +329,36 @@
   function renderLoading() {
     mount.innerHTML = '';
     mount.removeAttribute('hidden');
-    const nav = document.createElement('div');
-    nav.className = 'agilo-nav-folders agilo-nav-folders--loading';
-    nav.setAttribute('role', 'status');
-    nav.innerHTML =
-      '<div class="agilo-nav-folders__label">Dossiers</div><div class="agilo-nav-folders__placeholder">Chargement…</div>';
-    mount.appendChild(nav);
+    const details = document.createElement('details');
+    details.className = 'agilo-nav-folders-details';
+    const sum = document.createElement('summary');
+    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
+    sum.innerHTML =
+      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+    const inner = document.createElement('div');
+    inner.className = 'agilo-nav-folders agilo-nav-folders--loading';
+    inner.setAttribute('role', 'status');
+    inner.innerHTML = '<div class="agilo-nav-folders__placeholder">Chargement…</div>';
+    details.appendChild(sum);
+    details.appendChild(inner);
+    mount.appendChild(details);
   }
 
   function renderError(msg) {
     mount.innerHTML = '';
     mount.removeAttribute('hidden');
-    const nav = document.createElement('div');
-    nav.className = 'agilo-nav-folders';
-    nav.innerHTML = `<div class="agilo-nav-folders__label">Dossiers</div><div class="agilo-nav-folders__empty">${msg}</div>`;
-    mount.appendChild(nav);
+    const details = document.createElement('details');
+    details.className = 'agilo-nav-folders-details';
+    const sum = document.createElement('summary');
+    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
+    sum.innerHTML =
+      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+    const inner = document.createElement('div');
+    inner.className = 'agilo-nav-folders';
+    inner.innerHTML = `<div class="agilo-nav-folders__empty">${msg}</div>`;
+    details.appendChild(sum);
+    details.appendChild(inner);
+    mount.appendChild(details);
   }
 
   function renderMerged(auth, merged, totalAll, jobsDerived) {
@@ -334,21 +368,27 @@
     mount.innerHTML = '';
     mount.removeAttribute('hidden');
 
+    const details = document.createElement('details');
+    details.className = 'agilo-nav-folders-details';
+    if (shouldDetailsStartOpen()) details.setAttribute('open', '');
+
+    const sum = document.createElement('summary');
+    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
+    sum.innerHTML =
+      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+
     const nav = document.createElement('nav');
     nav.className = 'agilo-nav-folders';
     nav.setAttribute('aria-label', 'Dossiers transcriptions');
 
-    const lab = document.createElement('div');
-    lab.className = 'agilo-nav-folders__label';
-    lab.textContent = 'Dossiers';
-    nav.appendChild(lab);
-
     const list = document.createElement('div');
     list.className = 'agilo-nav-folders__list';
 
+    const linkExtra = extraClasses('data-link-class');
+
     function addRow(filter, label, count, iconHtml, accentCss) {
       const a = document.createElement('a');
-      a.className = 'agilo-nav-folders__row';
+      a.className = ['agilo-nav-folders__row', linkExtra].filter(Boolean).join(' ');
       a.href = hrefForFilter(basePath, filter);
       a.dataset.filter =
         filter === 'all' || filter === 'root' ? filter : String(Number(filter));
@@ -382,7 +422,9 @@
     });
 
     nav.appendChild(list);
-    mount.appendChild(nav);
+    details.appendChild(sum);
+    details.appendChild(nav);
+    mount.appendChild(details);
 
     try {
       window.dispatchEvent(new CustomEvent('agilo:nav-folders-rendered', { detail: { auth: !!auth.token } }));
