@@ -20,7 +20,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.4.1', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.4.2', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -417,6 +417,15 @@
   }
 
   function renderMerged(auth, merged, totalAll, jobsDerived) {
+    try {
+      renderMergedInner(auth, merged, totalAll, jobsDerived);
+    } catch (e) {
+      dbg('renderMerged', e);
+      renderError('Affichage des dossiers impossible.');
+    }
+  }
+
+  function renderMergedInner(auth, merged, totalAll, jobsDerived) {
     const basePath = resolveBaseHref();
     const active = currentFilterFromUrl();
 
@@ -488,8 +497,10 @@
       } else {
         a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span><span class="agilo-nav-folders__name"></span><span class="agilo-nav-folders__count"></span>`;
       }
-      a.querySelector('.agilo-nav-folders__name').textContent = label;
-      a.querySelector('.agilo-nav-folders__count').textContent = String(count);
+      const nameEl = a.querySelector('.agilo-nav-folders__name');
+      const countEl = a.querySelector('.agilo-nav-folders__count');
+      if (nameEl) nameEl.textContent = label;
+      if (countEl) countEl.textContent = String(count);
       list.appendChild(a);
     }
 
