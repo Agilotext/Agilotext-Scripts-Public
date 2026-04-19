@@ -36,7 +36,7 @@
   font-weight:600;
   letter-spacing:.06em;
   text-transform:uppercase;
-  color:var(--agilo-dim, #525252);
+  color:var(--color--gris, var(--agilo-dim, #525252));
 }
 .agilo-nav-folders__chev{
   flex:0 0 auto;
@@ -68,6 +68,11 @@
   margin:0;
   border-left:1px solid color-mix(in srgb, var(--agilo-text, #020202) 10%, transparent);
 }
+.agilo-nav-folders__list--match-nav{
+  padding-left:0;
+  padding-top:.1rem;
+  border-left:none;
+}
 .agilo-nav-folders__row{
   display:flex;
   align-items:center;
@@ -82,11 +87,16 @@
   box-sizing:border-box;
   width:100%;
 }
+.agilo-nav-folders__row--match-nav{
+  gap:var(--agilo-gap, .5rem);
+  padding-left:0;
+  padding-right:0;
+}
 .agilo-nav-folders__row:hover{
-  background:color-mix(in srgb, var(--agilo-primary, #174a96) 6%, transparent);
+  background:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 7%, transparent);
 }
 .agilo-nav-folders__row.is-active{
-  background:color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent);
+  background:color-mix(in srgb, var(--color--blue, var(--agilo-primary, #174a96)) 11%, transparent);
   font-weight:600;
 }
 .agilo-nav-folders__icon{
@@ -96,9 +106,24 @@
   display:flex;
   align-items:center;
   justify-content:center;
-  color:var(--agilo-folder-accent, var(--agilo-primary, #174a96));
+  color:var(--agilo-folder-accent, var(--color--blue, var(--agilo-primary, #174a96)));
 }
 .agilo-nav-folders__icon svg{
+  width:100%;
+  height:100%;
+  display:block;
+}
+.agilo-nav-folders__row--match-nav .agilo-nav-folders__icon-wrap{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:1.25rem;
+  height:1.25rem;
+  min-width:1.25rem;
+  color:var(--agilo-folder-accent, var(--color--blue, var(--agilo-primary, #174a96)));
+}
+.agilo-nav-folders__row--match-nav .agilo-nav-folders__icon-wrap svg{
   width:100%;
   height:100%;
   display:block;
@@ -115,10 +140,13 @@
   flex:0 0 auto;
   font-size:.72rem;
   font-weight:600;
-  color:var(--agilo-dim, #525252);
+  color:var(--color--gris, var(--agilo-dim, #525252));
   min-width:1.15rem;
   text-align:right;
   opacity:.9;
+}
+.agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
+  font-size:inherit;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__count{
   color:var(--agilo-text, #020202);

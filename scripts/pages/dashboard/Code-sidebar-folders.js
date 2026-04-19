@@ -1,11 +1,11 @@
 // Agilotext — liste dossiers dans la nav (sous Transcriptions), repli <details> par défaut
 // ⚠️ Charger après getToken / agilotext:token.
 //
-// Webflow — sur le div #agilo-nav-folders-root (attributs personnalisés) :
-//   data-link-class="dashboard-link w-inline-block"     → classes ajoutées à chaque lien dossier
-//   data-summary-class="dashboard-link w-inline-block"  → optionnel, ligne « Dossiers » (toggle)
-//   data-agilo-folders-start="closed|open|auto"         → auto = ouvert si ?folderId= sur Mes transcripts
-//   data-base-href="/app/…/mes-transcripts"             → surcharge rare
+// Webflow — #agilo-nav-folders-root (attributs personnalisés) :
+//   data-link-class, data-summary-class, data-agilo-folders-start, data-base-href
+//   data-agilo-folder-palette="--color--blue,--color--orange,..." (optionnel, virgules)
+//   data-row-structure="match-nav" → DOM type menu (icon-small, readycount)
+//   data-icon-class, data-name-class, data-count-class → surcharges classes match-nav
 
 (function () {
   'use strict';
@@ -17,7 +17,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.2.0', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.3.0', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -234,13 +234,42 @@
     return { rootJobsCount: mergedRoot, folders };
   }
 
-  /** Couleur stable par folderId (HSL lisible sur fond clair) */
-  function folderAccentHsl(folderId) {
-    let h = 216;
+  const ACCENT_ALL =
+    'var(--color--blue, var(--agilo-primary, #174a96))';
+  const ACCENT_ROOT =
+    'var(--color--gris, var(--agilo-dim, #525252))';
+
+  const DEFAULT_FOLDER_PALETTE = [
+    'var(--color--blue, var(--agilo-primary, #174a96))',
+    'var(--color--orange, #fd7e14)',
+    'var(--color--vert, #1c661a)',
+    'var(--color--rouge, #a82633)'
+  ];
+
+  function normalizePaletteToken(t) {
+    t = String(t || '').trim();
+    if (!t) return null;
+    if (/^--[a-zA-Z0-9_-]+$/.test(t)) return `var(${t})`;
+    return t;
+  }
+
+  function getFolderPalette() {
+    const raw = mount.getAttribute('data-agilo-folder-palette');
+    if (raw == null || !String(raw).trim()) return DEFAULT_FOLDER_PALETTE.slice();
+    const parts = String(raw)
+      .split(',')
+      .map((s) => normalizePaletteToken(s))
+      .filter(Boolean);
+    return parts.length ? parts : DEFAULT_FOLDER_PALETTE.slice();
+  }
+
+  /** Couleur d’icône dossier : palette charte, index stable par folderId */
+  function folderAccentForId(folderId, palette) {
+    const pal = palette && palette.length ? palette : DEFAULT_FOLDER_PALETTE;
+    let h = 0;
     const s = String(folderId);
     for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-    const hue = Math.abs(h) % 360;
-    return `hsl(${hue} 52% 40%)`;
+    return pal[Math.abs(h) % pal.length];
   }
 
   /** Segment après /app/ (free, pro, business, …) — aligné Code-ed-header / profil */
@@ -381,14 +410,24 @@
     nav.className = 'agilo-nav-folders';
     nav.setAttribute('aria-label', 'Dossiers transcriptions');
 
+    const useMatchNav = mount.getAttribute('data-row-structure') === 'match-nav';
+    const nameExtra = extraClasses('data-name-class');
+    const countExtra = extraClasses('data-count-class');
+    const iconExtra = extraClasses('data-icon-class');
+
     const list = document.createElement('div');
-    list.className = 'agilo-nav-folders__list';
+    list.className = ['agilo-nav-folders__list', useMatchNav ? 'agilo-nav-folders__list--match-nav' : '']
+      .filter(Boolean)
+      .join(' ');
 
     const linkExtra = extraClasses('data-link-class');
+    const folderPalette = getFolderPalette();
 
     function addRow(filter, label, count, iconHtml, accentCss) {
       const a = document.createElement('a');
-      a.className = ['agilo-nav-folders__row', linkExtra].filter(Boolean).join(' ');
+      a.className = ['agilo-nav-folders__row', linkExtra, useMatchNav ? 'agilo-nav-folders__row--match-nav' : '']
+        .filter(Boolean)
+        .join(' ');
       a.href = hrefForFilter(basePath, filter);
       a.dataset.filter =
         filter === 'all' || filter === 'root' ? filter : String(Number(filter));
@@ -406,19 +445,28 @@
         a.setAttribute('aria-current', 'page');
       }
 
-      a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span><span class="agilo-nav-folders__name"></span><span class="agilo-nav-folders__count"></span>`;
+      if (useMatchNav) {
+        const iconWrapClass = iconExtra
+          ? ['agilo-nav-folders__icon-wrap', iconExtra].filter(Boolean).join(' ')
+          : ['icon-small', 'w-embed', 'agilo-nav-folders__icon-wrap'].join(' ');
+        const nameClasses = ['agilo-nav-folders__name', nameExtra].filter(Boolean).join(' ');
+        const countClasses = ['readycount', 'agilo-nav-folders__count', countExtra].filter(Boolean).join(' ');
+        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div><div class="${nameClasses}"></div><span class="${countClasses}"></span>`;
+      } else {
+        a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span><span class="agilo-nav-folders__name"></span><span class="agilo-nav-folders__count"></span>`;
+      }
       a.querySelector('.agilo-nav-folders__name').textContent = label;
       a.querySelector('.agilo-nav-folders__count').textContent = String(count);
       list.appendChild(a);
     }
 
     const rootCount = merged.rootJobsCount;
-    addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, 'var(--agilo-primary, #174a96)');
-    addRow('root', 'Racine', rootCount, ROOT_SVG, 'var(--agilo-dim, #525252)');
+    addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, ACCENT_ALL);
+    addRow('root', 'Non classé', rootCount, ROOT_SVG, ACCENT_ROOT);
 
     merged.folders.forEach((f) => {
-      const hue = folderAccentHsl(f.folderId);
-      addRow(Number(f.folderId), f.folderName, f.jobsCount, FOLDER_SVG, hue);
+      const accent = folderAccentForId(f.folderId, folderPalette);
+      addRow(Number(f.folderId), f.folderName, f.jobsCount, FOLDER_SVG, accent);
     });
 
     nav.appendChild(list);
