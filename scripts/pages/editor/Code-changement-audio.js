@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.5.1' };
+  window.__agiloRail = { version: '4.6.1' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -59,6 +59,21 @@ let __pendingLoadTimer = null;
     return `Transcript ${x.jobid}`;
   }
 
+  /** Compteur dossier depuis getTranscriptFolders — alias de champs API possibles */
+  function folderDtoJobsCount(f) {
+    const v =
+      f.jobsCount ??
+      f.count ??
+      f.jobCount ??
+      f.nbJobs ??
+      f.totalJobs ??
+      f.jobs_count ??
+      f.numJobs ??
+      f.numberOfJobs;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
   async function postForm(endpoint, fields){
     const body = new URLSearchParams(fields);
     let resp;
@@ -93,10 +108,58 @@ let __pendingLoadTimer = null;
     const folders = (Array.isArray(rawList) ? rawList : []).map((f) => ({
       folderId: Number(f.folderId != null ? f.folderId : f.id) || 0,
       folderName: String(f.folderName != null ? f.folderName : f.name || '').trim(),
-      jobsCount: Number(f.jobsCount != null ? f.jobsCount : f.count) || 0
+      jobsCount: folderDtoJobsCount(f)
     })).filter((f) => f.folderId > 0 && f.folderName);
     const rootJobsCount = Number(j.rootJobsCount != null ? j.rootJobsCount : j.rootCount) || 0;
     return { rootJobsCount, folders };
+  }
+
+  /** Décompte racine + par folderId depuis la liste jobs (getJobsInfo, même fenêtre que « Tous »). */
+  function deriveFolderCountsFromJobs(jobs) {
+    let rootJobsCount = 0;
+    const byFolder = new Map();
+    if (!Array.isArray(jobs)) return { rootJobsCount, byFolder };
+    jobs.forEach((j) => {
+      const fid = Number(j.folderId);
+      if (!Number.isFinite(fid) || fid < 0) return;
+      if (fid === 0) rootJobsCount++;
+      else byFolder.set(fid, (byFolder.get(fid) || 0) + 1);
+    });
+    return { rootJobsCount, byFolder };
+  }
+
+  /**
+   * Fusionne compteurs API dossiers et décompte client (max des deux).
+   * Si AGILO_DEBUG ou state.debug : journaliser quand le dérivé corrige l’agrégat — écart persistant → vérifier getTranscriptFolders côté API / BDD.
+   */
+  function mergeFoldersCacheWithDerived(cache, derived) {
+    const apiRoot = Number(cache?.rootJobsCount) || 0;
+    const mergedRoot = Math.max(apiRoot, derived.rootJobsCount);
+    const doLog = typeof window !== 'undefined' && (window.AGILO_DEBUG || state.debug);
+    if (doLog && mergedRoot > apiRoot) {
+      console.debug('[Rail] rootJobsCount : agrégat API', apiRoot, '— dérivé getJobsInfo', derived.rootJobsCount, '— affiché', mergedRoot);
+    }
+    const folders = (Array.isArray(cache?.folders) ? cache.folders : []).map((f) => {
+      const fid = Number(f.folderId);
+      const api = Number(f.jobsCount) || 0;
+      const d = Number.isFinite(fid) && fid > 0 ? (derived.byFolder.get(fid) || 0) : 0;
+      const m = Math.max(api, d);
+      if (doLog && m > api) {
+        console.debug('[Rail] jobsCount dossier', f.folderName, fid, ': API', api, '— dérivé', d, '— affiché', m);
+      }
+      return { ...f, jobsCount: m };
+    });
+    return { rootJobsCount: mergedRoot, folders };
+  }
+
+  /** Recharge dossiers + réconciliation à partir de getJobsInfo sans filtre dossier. Retourne la liste « tous » (limite API). */
+  async function refreshFoldersCacheMerged(auth) {
+    const [foldersData, jobsAll] = await Promise.all([
+      fetchTranscriptFoldersList(auth),
+      fetchJobs(auth, false, 'all')
+    ]);
+    state.foldersCache = mergeFoldersCacheWithDerived(foldersData, deriveFolderCountsFromJobs(jobsAll));
+    return jobsAll;
   }
 
   /* ================== Utils ================== */
@@ -269,12 +332,18 @@ let __pendingLoadTimer = null;
   }
 
   /* ================== API ================== */
-  async function fetchJobs(auth, retried = false){
+  /**
+   * @param {{ username: string, token: string, edition: string }} auth
+   * @param {boolean} retried
+   * @param {'all'|'root'|number|undefined} overrideFilter — si défini, remplace state.folderFilter pour cet appel (ex. 'all' pour décomptes)
+   */
+  async function fetchJobs(auth, retried = false, overrideFilter){
+    const ff = overrideFilter !== undefined ? overrideFilter : state.folderFilter;
     let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=200&offset=0`;
-    if (state.folderFilter === 'root') {
+    if (ff === 'root') {
       url += '&folderId=0';
-    } else if (typeof state.folderFilter === 'number' && state.folderFilter > 0) {
-      url += `&folderId=${encodeURIComponent(String(state.folderFilter))}`;
+    } else if (typeof ff === 'number' && ff > 0) {
+      url += `&folderId=${encodeURIComponent(String(ff))}`;
     }
     let resp;
     try { resp = await fetch(url, { credentials:'omit', cache:'no-store' }); }
@@ -284,7 +353,7 @@ let __pendingLoadTimer = null;
       if (retried || !auth.username || typeof window.getToken !== 'function') return null;
       try { window.getToken(auth.username, auth.edition); } catch {}
       const a2 = await ensureAuth(8000);
-      if (a2.token) return fetchJobs(a2, true);
+      if (a2.token) return fetchJobs(a2, true, ff);
       return null;
     }
 
@@ -384,19 +453,28 @@ let __pendingLoadTimer = null;
         return;
       }
       const a = await ensureAuth();
-      state.foldersCache = await fetchTranscriptFoldersList(a);
+      await refreshFoldersCacheMerged(a);
       renderFolderBarDom(a);
     });
     chipsWrap.appendChild(newFoldBtn);
     bar.appendChild(chipsWrap);
 
-    const moveWrap = document.createElement('div');
-    moveWrap.className = 'agilo-folder-move';
+    const moveDetails = document.createElement('details');
+    moveDetails.className = 'agilo-folder-move-details';
+    const moveSum = document.createElement('summary');
+    moveSum.textContent = 'Déplacer le transcript ouvert…';
+    const moveInner = document.createElement('div');
+    moveInner.className = 'agilo-folder-move-inner';
+    const moveHelp = document.createElement('p');
+    moveHelp.className = 'agilo-folder-move-help';
+    moveHelp.id = 'agilo-folder-move-help';
+    moveHelp.textContent = 'S’applique au job dont l’identifiant est dans la barre d’adresse (paramètre jobId). Choisissez le dossier de destination puis validez.';
     const sel = document.createElement('select');
     sel.id = 'agilo-folder-move-select';
+    sel.setAttribute('aria-describedby', 'agilo-folder-move-help');
     const o0 = document.createElement('option');
     o0.value = '';
-    o0.textContent = 'Ranger job actif →';
+    o0.textContent = '— Destination —';
     sel.appendChild(o0);
     const oR = document.createElement('option');
     oR.value = '0';
@@ -434,15 +512,18 @@ let __pendingLoadTimer = null;
         window.alert(r.error || 'Déplacement impossible');
         return;
       }
-      state.foldersCache = await fetchTranscriptFoldersList(a);
+      await refreshFoldersCacheMerged(a);
       renderFolderBarDom(a);
       const jobs = await fetchJobs(a);
       if (jobs?.length) renderRail(jobs);
       else renderEmptyRail();
     });
-    moveWrap.appendChild(sel);
-    moveWrap.appendChild(go);
-    bar.appendChild(moveWrap);
+    moveInner.appendChild(moveHelp);
+    moveInner.appendChild(sel);
+    moveInner.appendChild(go);
+    moveDetails.appendChild(moveSum);
+    moveDetails.appendChild(moveInner);
+    bar.appendChild(moveDetails);
   }
 
   function ensureFolderBar(){
@@ -485,8 +566,23 @@ let __pendingLoadTimer = null;
     const div = document.createElement('div');
     div.className = 'rail-empty';
     div.setAttribute('role','status');
-    div.textContent = 'Aucun transcript trouvé.';
+    let msg = 'Aucun transcript trouvé.';
+    if (state.folderFilter === 'root') {
+      msg = 'Aucun transcript à la racine.';
+    } else if (typeof state.folderFilter === 'number' && state.folderFilter > 0) {
+      const name = state.foldersCache.folders.find((x) => Number(x.folderId) === Number(state.folderFilter))?.folderName;
+      msg = name
+        ? `Aucun transcript dans le dossier « ${name} ».`
+        : 'Aucun transcript dans ce dossier.';
+    }
+    div.textContent = msg;
     rail.list.appendChild(div);
+    if (state.folderFilter === 'all') {
+      const hint = document.createElement('div');
+      hint.className = 'rail-empty-hint';
+      hint.textContent = 'Les compteurs sur les dossiers peuvent inclure des transcripts au-delà des 200 derniers affichés dans cette liste.';
+      rail.list.appendChild(hint);
+    }
     rail.list.removeAttribute('aria-busy');
   }
 
@@ -495,15 +591,17 @@ let __pendingLoadTimer = null;
 
   async function hydrateRailWithAuth(auth){
     const gen = ++__railHydrateGen;
-    const [foldersData, jobs] = await Promise.all([
-      fetchTranscriptFoldersList(auth),
-      fetchJobs(auth)
-    ]);
+    const jobsAll = await refreshFoldersCacheMerged(auth);
     if (gen !== __railHydrateGen) return { stale: true, jobCount: 0 };
-    state.foldersCache = foldersData;
     renderFolderBarDom(auth);
     rail.list.removeAttribute('aria-busy');
-    const list = jobs || [];
+    let list;
+    if (state.folderFilter === 'all') {
+      list = jobsAll || [];
+    } else {
+      list = await fetchJobs(auth);
+      if (gen !== __railHydrateGen) return { stale: true, jobCount: 0 };
+    }
     if (list.length) renderRail(list);
     else renderEmptyRail();
     return { stale: false, jobCount: list.length };

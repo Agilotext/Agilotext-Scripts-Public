@@ -119,26 +119,47 @@
 .agilo-folder-bar button.agilo-folder-chip--new:hover{
   color:var(--agilo-primary, #174a96);
 }
-.agilo-folder-bar .agilo-folder-move{
-  display:flex;
-  flex-wrap:wrap;
-  align-items:center;
-  gap:.4rem;
+.agilo-folder-bar .agilo-folder-move-details{
   flex:1 1 100%;
   margin:0;
   padding-top:.45rem;
   border-top:1px solid color-mix(in srgb, var(--agilo-text, #020202) 8%, transparent);
 }
 @media (min-width:720px){
-  .agilo-folder-bar .agilo-folder-move{
+  .agilo-folder-bar .agilo-folder-move-details{
     flex:0 1 auto;
     margin-left:auto;
     padding-top:0;
     border-top:none;
-    max-width:min(100%, 22rem);
+    max-width:min(100%, 24rem);
   }
 }
-.agilo-folder-bar .agilo-folder-move select{
+.agilo-folder-bar .agilo-folder-move-details > summary{
+  cursor:pointer;
+  list-style-position:outside;
+  font-size:.8125rem;
+  font-weight:600;
+  color:var(--agilo-dim, #525252);
+  padding:.15rem 0;
+}
+.agilo-folder-bar .agilo-folder-move-details > summary::-webkit-details-marker{
+  color:var(--agilo-dim, #525252);
+}
+.agilo-folder-bar .agilo-folder-move-inner{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:.4rem;
+  margin-top:.35rem;
+}
+.agilo-folder-bar .agilo-folder-move-help{
+  flex:1 1 100%;
+  margin:0 0 .15rem 0;
+  font-size:.72rem;
+  line-height:1.35;
+  color:var(--agilo-dim, #525252);
+}
+.agilo-folder-bar .agilo-folder-move-inner select{
   flex:1 1 8rem;
   min-width:0;
   max-width:14rem;
@@ -149,8 +170,7 @@
   font-size:.8125rem;
   color:var(--agilo-text, #020202);
 }
-.agilo-folder-bar .agilo-folder-move button[type="button"],
-.agilo-folder-bar .agilo-folder-move button:not(.agilo-folder-chip){
+.agilo-folder-bar .agilo-folder-move-inner button[type="button"]{
   padding:.4rem .75rem;
   border-radius:var(--agilo-radius, .5rem);
   border:1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 35%, transparent);
@@ -161,8 +181,7 @@
   cursor:pointer;
   white-space:nowrap;
 }
-.agilo-folder-bar .agilo-folder-move button[type="button"]:hover,
-.agilo-folder-bar .agilo-folder-move button:not(.agilo-folder-chip):hover{
+.agilo-folder-bar .agilo-folder-move-inner button[type="button"]:hover{
   filter:brightness(1.06);
 }
 .ri-folder-hint{
@@ -181,6 +200,12 @@
   padding:.75rem;
   font-size:.8125rem;
   color:var(--agilo-muted, #6b7280);
+}
+.rail-empty-hint{
+  padding:0 .75rem .75rem;
+  font-size:.72rem;
+  line-height:1.35;
+  color:var(--agilo-dim, #525252);
 }
 `;
 
