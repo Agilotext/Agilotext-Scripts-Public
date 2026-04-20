@@ -8,7 +8,7 @@
   //  - Renommage, partage, suppression, téléchargements
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.3';
+  const VERSION = '1.1.4';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
   // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification) ---
@@ -66,12 +66,18 @@
     return 'ent'; // Default fallback
   }
 
+  function getAppTierFromLocation() {
+    const m = location.pathname.match(/^\/app\/([^/]+)/);
+    return m ? m[1] : null;
+  }
+
   function getEdition() {
+    const fromPath = getAppTierFromLocation();
     const fromQS = new URLSearchParams(location.search).get('edition');
     const fromRoot = document.getElementById('editorRoot')?.dataset?.edition;
     const fromHtml = document.documentElement?.getAttribute('data-edition');
     const fromLS = localStorage.getItem('agilo:edition');
-    return normalizeEdition(fromQS || fromRoot || fromHtml || fromLS || 'ent');
+    return normalizeEdition(fromPath || fromQS || fromRoot || fromHtml || fromLS || 'ent');
   }
 
   // --- Garde de liens (enable / disable + popup) ---------------------

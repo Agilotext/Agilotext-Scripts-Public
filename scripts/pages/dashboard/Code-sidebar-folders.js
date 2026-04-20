@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.20';
+  const APP_VERSION = '1.7.21';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -49,11 +49,12 @@
   }
 
   function getEdition() {
+    const fromPath = getAppTierFromLocation();
     const fromQS = new URLSearchParams(location.search).get('edition');
     const fromRoot = byId('editorRoot')?.dataset?.edition;
     const fromHtml = document.documentElement?.getAttribute('data-edition');
     const fromLS = localStorage.getItem('agilo:edition');
-    return normalizeEdition(fromQS || fromRoot || fromHtml || fromLS || EDITION_FALLBACK);
+    return normalizeEdition(fromPath || fromQS || fromRoot || fromHtml || fromLS || EDITION_FALLBACK);
   }
 
   function tokenKey(email, edition) {
