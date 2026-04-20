@@ -20,7 +20,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.7', refresh: function () {} },
+      { version: '1.7.8', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -33,7 +33,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.7';
+  const APP_VERSION = '1.7.8';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 

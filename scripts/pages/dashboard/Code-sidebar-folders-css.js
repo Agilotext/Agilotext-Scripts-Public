@@ -19,6 +19,37 @@
   padding-left:.42rem;
   padding-right:.52rem;
 }
+/* Webflow Mes transcripts : <div class="dashboard-link"><div class="embed-code-dossier w-embed">…#root — sans 100% la nav rétrécit */
+div.dashboard-link:has(#agilo-nav-folders-root),
+.embed-code-dossier:has(#agilo-nav-folders-root),
+.w-embed:has(#agilo-nav-folders-root),
+.w-embed.w-script:has(#agilo-nav-folders-root){
+  display:block !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box;
+}
+/* w-inline-block sur les <a> dossiers = largeur « shrink-to-fit » → pastilles en dehors du fond blanc */
+#agilo-nav-folders-root a.agilo-nav-folders__row.w-inline-block,
+#agilo-nav-folders-root a.agilo-nav-folders__row.dashboard-link{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  display:flex !important;
+  flex-wrap:nowrap !important;
+  align-items:center !important;
+  box-sizing:border-box !important;
+}
+/* Même combat sur le <summary> (w-inline-block) : largeur pleine pour coller le + à droite fermé */
+#agilo-nav-folders-root summary.agilo-nav-folders__summary.w-inline-block,
+#agilo-nav-folders-root summary.agilo-nav-folders__summary{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  display:flex !important;
+  box-sizing:border-box !important;
+}
 .agilo-nav-folders-details{
   margin:0;
   padding:0;
@@ -205,12 +236,7 @@
   justify-content:flex-start !important;
   text-align:left !important;
 }
-/* Webflow : liens dashboard souvent min-width:auto → casse l’ellipse sur noms longs */
-a.agilo-nav-folders__row.dashboard-link,
-a.agilo-nav-folders__row.w-inline-block{
-  min-width:0 !important;
-  max-width:100% !important;
-}
+/* (règles largeur dossiers → voir #agilo-nav-folders-root a.agilo-nav-folders__row… ci-dessus) */
 .agilo-nav-folders__row{
   gap:.4rem;
   padding:.22rem 0 .22rem .04rem;
@@ -489,10 +515,32 @@ a.agilo-nav-folders__row.w-inline-block{
   .agilo-nav-folders__chev{ transition:none; }
   .agilo-nav-folders__row{ transition:none; }
 }
-/* Optionnel : pastille #readyCount « Tous les fichiers » (hors embed) — un peu d’air à droite dans le bloc blanc */
-.full-width a[data-tour="nav-transcripts"] .wrapper-link{
-  padding-right:.28rem;
+/* Lien « Tous les fichiers » : pleine largeur + pastille #readyCount dans le bloc blanc (Webflow) */
+.full-width a[data-tour="nav-transcripts"]{
+  display:flex !important;
+  flex-direction:row;
+  flex-wrap:nowrap;
+  align-items:center;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
   box-sizing:border-box;
+  padding-right:.55rem;
+  gap:.38rem;
+}
+.full-width a[data-tour="nav-transcripts"] .wrapper-link{
+  display:inline-flex !important;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:.38rem;
+  margin-left:auto;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+.full-width a[data-tour="nav-transcripts"] .wrapper-link .readycount,
+.full-width a[data-tour="nav-transcripts"] #readyCount{
+  flex-shrink:0;
 }
 `;
 
