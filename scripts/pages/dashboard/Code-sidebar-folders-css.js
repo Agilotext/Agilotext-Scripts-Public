@@ -505,26 +505,29 @@
   .agilo-nav-folders__row{ transition:none; }
 }
 /*
- * « Tous les fichiers » / Transcriptions : Webflow = svg + .wrapper-link (titre + #readyCount) + .text-cr.
- * Grille : icône | zone titre+pastille (1fr) | suffixe — évite de traiter .wrapper-link comme seul flex enfant.
- * Double sélecteur : .full-width (ancien) OU lien .dashboard-link seul si le parent n’a pas cette classe.
+ * « Tous les fichiers » : même logique que les autres liens nav (flex row), pas de grille
+ * (la grille + grid-column 2/-1 décalait l’icône vs « Tableau de bord » selon le DOM Webflow).
+ * Webflow typique : > svg + .wrapper-link (titre + #readyCount) + éventuel .text-cr.
  */
 .full-width a[data-tour="nav-transcripts"],
 a.dashboard-link[data-tour="nav-transcripts"]{
-  display:grid !important;
-  grid-template-columns:auto minmax(0,1fr) auto;
+  display:flex !important;
+  flex-direction:row;
+  flex-wrap:nowrap;
   align-items:center;
-  column-gap:.35rem;
-  width:100% !important;
-  max-width:100% !important;
-  min-width:0 !important;
+  justify-content:flex-start;
+  gap:.35rem;
+  width:100%;
+  max-width:100%;
+  min-width:0;
   box-sizing:border-box;
-  padding-right:.5rem;
+  padding-left:0;
+  padding-right:0;
   vertical-align:middle;
 }
 .full-width a[data-tour="nav-transcripts"] > svg,
 a.dashboard-link[data-tour="nav-transcripts"] > svg{
-  grid-column:1;
+  flex:0 0 auto;
   align-self:center;
   width:auto;
   height:auto;
@@ -532,12 +535,13 @@ a.dashboard-link[data-tour="nav-transcripts"] > svg{
 }
 .full-width a[data-tour="nav-transcripts"] .wrapper-link,
 a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
-  grid-column:2;
-  display:inline-flex !important;
+  flex:1 1 0%;
+  min-width:0;
+  display:flex !important;
+  flex-direction:row;
   align-items:center;
   flex-wrap:nowrap;
-  min-width:0;
-  max-width:100%;
+  justify-content:flex-start;
   gap:.35rem;
   box-sizing:border-box;
 }
@@ -555,19 +559,13 @@ a.dashboard-link[data-tour="nav-transcripts"] #readyCount{
 }
 .full-width a[data-tour="nav-transcripts"] > .text-cr,
 a.dashboard-link[data-tour="nav-transcripts"] > .text-cr{
-  grid-column:3;
+  flex:0 0 auto;
   align-self:center;
-  flex-shrink:0;
   min-width:0;
   max-width:100%;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-}
-/* Variante Webflow sans .text-cr : la pastille peut occuper la 3e colonne visuellement */
-.full-width a[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link,
-a.dashboard-link[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link{
-  grid-column:2 / -1;
 }
 `;
 
