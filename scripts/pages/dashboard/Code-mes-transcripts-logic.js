@@ -4,123 +4,26 @@
   // ═══════════════════════════════════════════════════════════════════
   //  LISTE DES JOBS — UNIVERSEL (Free, Pro, Enterprise)
   //  - Titres intelligents (jobTitle)
-  //  - Actions en masse (Bulk Actions: Delete, Export, Webhook)
   //  - Détection automatique de l'édition
-  //  - UI Dialog & Confirmation intégrée
+  //  - Renommage, partage, suppression, téléchargements
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.1.2';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
-  // --- Thème UI (Dialog + List) ---------------------------------------
-  (function injectUITheme() {
-    if (document.getElementById('agilo-unified-theme')) return;
+  // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification) ---
+  (function injectListTheme() {
+    if (document.getElementById('agilo-list-theme')) return;
     const css = `
       .is-disabled { opacity: .6; cursor: not-allowed; }
       .is-verifying { cursor: progress; }
-      .file-name-input { width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-      
-      .agilo-overlay{position:fixed; inset:0; display:none; z-index:99999; background: rgba(0,0,0,.35);}
-      .agilo-modal{max-width:560px; margin:6vh auto; background:#fff; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.2); overflow:hidden; color: #333; font-family: sans-serif;}
-      .agilo-modal__header{padding:18px 22px; border-bottom:1px solid #eee; background: #fff;}
-      .agilo-modal__title{margin:0; font-size:18px; font-weight: 600;}
-      .agilo-modal__subtitle{margin:6px 0 0; color: #666; font-size:14px;}
-      .agilo-modal__body{padding:16px 22px; max-height:60vh; overflow:auto; background: #fff; line-height: 1.5;}
-      .agilo-modal__footer{display:flex; gap:8px; justify-content:flex-end; padding:14px 16px; border-top:1px solid #eee; background: #f9f9f9;}
-      
-      .agilo-block{margin-bottom:14px;}
-      .agilo-block__heading{font-weight:600; margin-bottom:4px;}
-      .agilo-block__text{color: #444; margin-bottom:6px;}
-      .agilo-block__pre{white-space:pre-wrap; background: #f4f4f4; border:1px solid #ddd; border-radius: 4px; padding:8px; margin-top:6px; font-size:12px; font-family: monospace;}
-      
-      .agilo-btn, .agilo-link{padding:10px 16px; border-radius: 6px; border:1px solid #ddd; background: #fff; color: #333; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; font-size: 14px; font-weight: 500; transition: all .15s ease;}
-      .agilo-btn:hover{background: #f0f0f0; border-color: #ccc;}
-      .agilo-btn--primary{border-color: #0056b3; background: #0056b3; color: #fff;}
-      .agilo-btn--primary:hover{background: #004494; border-color: #004494;}
-      .agilo-btn--danger{border-color: #dc3545; background: #dc3545; color: #fff;}
-      .agilo-btn--danger:hover{background: #c82333; border-color: #bd2130;}
-      
-      .agilo-linklist{font-size:13px;}
-      .agilo-linklist a{display:block; margin:4px 0; color: #0056b3; text-decoration: none;}
-      .agilo-linklist a:hover{text-decoration: underline;}
-      .agilo-kbdrow{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;}
+      .file-name-input { width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; }
     `;
     const st = document.createElement('style');
-    st.id = 'agilo-unified-theme';
+    st.id = 'agilo-list-theme';
     st.textContent = css;
     document.head.appendChild(st);
   })();
-
-  // --- Dialog & UI Elements -------------------------------------------
-  function ensureDialog() {
-    if (document.getElementById('agilo-dialog')) return;
-    const html = `
-      <div id="agilo-dialog" role="dialog" aria-modal="true" class="agilo-overlay" lang="fr">
-        <div class="agilo-modal">
-          <div class="agilo-modal__header">
-            <h3 id="agilo-dialog-title" class="agilo-modal__title">Résultat</h3>
-            <p id="agilo-dialog-sub" class="agilo-modal__subtitle"></p>
-          </div>
-          <div id="agilo-dialog-body" class="agilo-modal__body"></div>
-          <div class="agilo-modal__footer" id="agilo-dialog-footer">
-            <button id="agilo-dialog-close" class="agilo-btn">Fermer</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.getElementById('agilo-dialog-close').addEventListener('click', () => hideDialog());
-    document.getElementById('agilo-dialog').addEventListener('click', (e) => { if(e.target.id === 'agilo-dialog') hideDialog(); });
-  }
-
-  function hideDialog() { 
-    const m = document.getElementById('agilo-dialog'); 
-    if (m) m.style.display = 'none'; 
-  }
-
-  function showDialog({ title, subtitle, blocks, footerHtml }) {
-    ensureDialog();
-    document.getElementById('agilo-dialog-title').textContent = title || 'Information';
-    document.getElementById('agilo-dialog-sub').textContent = subtitle || '';
-    const body = document.getElementById('agilo-dialog-body');
-    body.innerHTML = '';
-    (blocks || []).forEach(b => {
-      const box = document.createElement('div');
-      box.className = 'agilo-block';
-      box.innerHTML = `
-        ${b.heading ? `<div class="agilo-block__heading">${b.heading}</div>` : ''}
-        ${b.text ? `<div class="agilo-block__text">${b.text}</div>` : ''}
-        ${b.html ? b.html : ''}
-        ${b.cta ? `<a href="${b.cta.href}" ${b.cta.sameTab ? '' : 'target="_blank"'} class="agilo-link">${b.cta.label}</a>` : ''}
-        ${b.details ? `<details style="margin-top:8px"><summary style="cursor:pointer; font-size:12px; color:#666">Détails techniques</summary><pre class="agilo-block__pre">${b.details}</pre></details>` : ''}`;
-      body.appendChild(box);
-    });
-    
-    // Restaurer le bouton fermer par défaut ou utiliser le footer spécial
-    const footer = document.getElementById('agilo-dialog-footer');
-    if (footerHtml) {
-      footer.innerHTML = footerHtml;
-    } else {
-      footer.innerHTML = `<button id="agilo-dialog-close" class="agilo-btn">Fermer</button>`;
-      document.getElementById('agilo-dialog-close').addEventListener('click', () => hideDialog());
-    }
-    
-    document.getElementById('agilo-dialog').style.display = 'block';
-  }
-
-  function showConfirmation({ title, message, confirmText = "Oui", cancelText = "Non", confirmClass = "agilo-btn--primary" }) {
-    return new Promise((resolve) => {
-      showDialog({
-        title,
-        blocks: [{ html: `<div class="agilo-block__text">${message}</div>` }],
-        footerHtml: `
-          <button id="agilo-confirm-yes" class="agilo-btn ${confirmClass}">${confirmText}</button>
-          <button id="agilo-confirm-no" class="agilo-btn">${cancelText}</button>
-        `
-      });
-      document.getElementById('agilo-confirm-yes').addEventListener('click', () => { hideDialog(); resolve(true); });
-      document.getElementById('agilo-confirm-no').addEventListener('click', () => { hideDialog(); resolve(false); });
-    });
-  }
 
   // --- Utilitaires ----------------------------------------------------
   function convertDateStringToDate(dateString) {
@@ -160,76 +63,139 @@
     if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent';
     if (/^pro/.test(v)) return 'pro';
     if (/^free|gratuit/.test(v)) return 'free';
-    return 'ent';
+    return 'ent'; // Default fallback
   }
 
   function getEdition() {
     const fromQS = new URLSearchParams(location.search).get('edition');
-    const fromRoot = document.getElementById('editorRoot')?.dataset?.edition || document.querySelector('.dashboard-content')?.dataset?.edition;
+    const fromRoot = document.getElementById('editorRoot')?.dataset?.edition;
     const fromHtml = document.documentElement?.getAttribute('data-edition');
     const fromLS = localStorage.getItem('agilo:edition');
     return normalizeEdition(fromQS || fromRoot || fromHtml || fromLS || 'ent');
   }
 
-  const __GLOBAL = { token: null, email: null, edition: getEdition() };
-
-  // --- Garde de liens -------------------------------------------------
-  function setDownloadLink(link, href, disabledMsg = '') {
+  // --- Garde de liens (enable / disable + popup) ---------------------
+  function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
     if (!link) return;
-    if (link.__clickHandler) { link.removeEventListener('click', link.__clickHandler); link.__clickHandler = null; }
+
+    if (link.__clickHandler) {
+      link.removeEventListener('click', link.__clickHandler);
+      link.__clickHandler = null;
+    }
+
     if (!disabledMsg) {
       link.classList.remove('is-disabled', 'is-verifying');
+      link.removeAttribute('aria-disabled');
+      link.removeAttribute('title');
+      link.style.pointerEvents = '';
+      link.style.cursor = '';
       link.setAttribute('href', href);
       link.setAttribute('target', '_blank');
-      link.style.pointerEvents = '';
+      link.setAttribute('rel', 'noopener');
       return;
     }
-    link.classList.add('is-disabled'); link.setAttribute('href', '#'); link.removeAttribute('target');
-    link.__clickHandler = (e) => { e.preventDefault(); alert(disabledMsg); };
-    link.addEventListener('click', link.__clickHandler);
+
+    const hard = opts.hard === true;
+    link.classList.add('is-disabled');
+    link.classList.remove('is-verifying');
+    link.setAttribute('aria-disabled', 'true');
+    link.setAttribute('title', disabledMsg);
+
+    if (hard) {
+      link.style.pointerEvents = 'none';
+      link.style.cursor = 'not-allowed';
+      link.removeAttribute('href');
+      link.removeAttribute('target');
+      link.removeAttribute('download');
+    } else {
+      link.style.pointerEvents = 'auto';
+      link.style.cursor = 'not-allowed';
+      link.setAttribute('href', '#');
+      link.removeAttribute('target');
+      link.removeAttribute('download');
+
+      link.__clickHandler = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        alert(disabledMsg || "Pas de compte-rendu disponible.");
+      };
+      link.addEventListener('click', link.__clickHandler);
+    }
   }
 
-  // --- API calls ------------------------------------------------------
+  // --- Vérif Asset ---------------------------------------------------
   const _assetOkCache = new Map();
   async function verifyAssetOnce(jobId, url, key) {
     if (_assetOkCache.has(key)) return _assetOkCache.get(key);
+
     let ok = false;
     try {
-      const r = await fetch(url, { method: 'GET', cache: 'no-store' });
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          'Accept': 'application/octet-stream,application/pdf,application/msword,application/rtf,text/html;q=0.9,application/json;q=0.1'
+        }
+      });
+
       const ct = (r.headers.get('content-type') || '').toLowerCase();
       const cd = r.headers.get('content-disposition') || '';
-      if (r.ok && (/attachment|filename=/i.test(cd) || /(application\/pdf|msword|officedocument|rtf)/.test(ct))) ok = true;
-      else {
-        const text = await r.text();
-        if (/"status"\s*:\s*"OK"/i.test(text)) ok = true;
-        else ok = r.ok && (ct.includes('text/html') || text.trim().length > 0) && !/"status"\s*:\s*"KO"/i.test(text);
+
+      if (r.ok && (/attachment|filename=/i.test(cd) || /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
+        ok = true;
+      } else {
+        const text = await r.text().catch(() => '');
+        let j = null; try { j = JSON.parse(text); } catch {}
+        if (j) {
+          ok = (String(j.status || '').toUpperCase() === 'OK');
+        } else {
+          if (/"status"\s*:\s*"KO"/i.test(text) || /error_summary_transcript_file_not_exists/i.test(text)) {
+            ok = false;
+          } else {
+            ok = r.ok && (ct.includes('text/html') || text.trim().length > 0);
+          }
+        }
       }
     } catch { ok = false; }
-    _assetOkCache.set(key, ok); return ok;
+
+    _assetOkCache.set(key, ok);
+    return ok;
   }
 
-  function guardClick(a, url, jobId, key, failMsg) {
-    if (!a || a.__guarded) return; a.__guarded = true;
+  function guardClick(a, url, jobId, key, failMsg = 'Résumé indisponible.') {
+    if (!a || a.__guarded) return;
+    a.__guarded = true;
+
     a.addEventListener('click', async (e) => {
-      if (a.getAttribute('href') !== '#') return;
-      e.preventDefault(); a.classList.add('is-verifying');
+      if (a.getAttribute('href') && !a.hasAttribute('aria-disabled')) return;
+      e.preventDefault(); e.stopPropagation();
+      a.classList.add('is-verifying');
       const ok = await verifyAssetOnce(jobId, url, key);
       a.classList.remove('is-verifying');
-      if (ok) { setDownloadLink(a, url); window.open(url, '_blank'); }
-      else alert(failMsg);
-    });
+
+      if (ok) {
+        setDownloadLink(a, url);
+        a.setAttribute('target', '_blank');
+        window.open(url, '_blank', 'noopener');
+      } else {
+        setDownloadLink(a, '#', failMsg);
+      }
+    }, { passive: false });
   }
 
+  // --- API: renommage ------------------------------------------------
   async function renameOnServer({ jobId, userEmail, token, edition, newFilename }) {
     const body = new URLSearchParams({ username: userEmail, token, edition, jobId: String(jobId), filename: newFilename });
     try {
       const r = await fetch(`${API_BASE}/renameTranscriptFile`, {
-        method: "POST", headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString()
       });
       const data = await r.json();
-      return { ok: data.status === "OK", error: data.errorMessage || data.error };
-    } catch (e) { return { ok: false, error: "Erreur réseau" }; }
+      if (data.status === "OK") return { ok: true };
+      return { ok: false, error: data.message || data.errorMessage || data.error || "Erreur inconnue" };
+    } catch (e) { return { ok: false, error: e?.message || "Erreur réseau" }; }
   }
 
   function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
@@ -282,233 +248,197 @@
     });
   }
 
-  // --- Bulk Actions Module -------------------------------------------
-  const AgilotextBulk = (function() {
-    const SELECTORS = {
-      container: '#jobs-container',
-      row: '.wrapper-content_item-row',
-      selectAll: '#select-all',
-      selectedCount: '#selected-count',
-      exportBtn: '#exportBtn',
-      resendWebhookBtn: '#resendWebhookBtn',
-      bulkDeleteBtn: '#bulkDeleteBtn',
-      automationProvider: '#automationProvider'
+  // --- Icônes d’état --------------------------------------------------
+  function updateIconVisibility(root, status) {
+    const icons = {
+      error: root.querySelector('.icon-error'),
+      inprogress: root.querySelector('.icon-inprogress'),
+      readySummaryPending: root.querySelector('.icon-ready_summary_pending'),
+      readySummaryReady: root.querySelector('.icon-ready_summary_ready'),
+      readySummaryOnError: root.querySelector('.icon-ready_summary_on_error'),
+      ready: root.querySelector('.icon-ready')
     };
-
-    const getSelectedRows = () => Array.from(document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select:checked`)).map(cb => cb.closest(SELECTORS.row));
-    const getJobId = (row) => row?.getAttribute('data-job-id');
-
-    async function pMap(array, mapper, concurrency = 4) {
-      const ret = []; let i = 0;
-      const exec = async () => { for (; i < array.length;) { const c = i++; try { ret[c] = await mapper(array[c], c); } catch(e) { ret[c] = { ok: false, error: e.message }; }}};
-      await Promise.all(Array.from({ length: Math.min(concurrency, array.length) }, exec));
-      return ret;
+    Object.values(icons).forEach(i => i && (i.style.display = 'none'));
+    const st = (status || '').toUpperCase();
+    if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE', 'ERROR_TRANSLATE_FILES_NOT_EXISTS', 'ERROR_TRANSLATE_NOT_READY', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
+      if (icons.error) icons.error.style.display = 'block';
+    } else if (['PENDING', 'IN_PROGRESS'].includes(st)) {
+      if (icons.inprogress) icons.inprogress.style.display = 'block';
+    } else if (st === 'READY_SUMMARY_PENDING') {
+      if (icons.readySummaryPending) icons.readySummaryPending.style.display = 'block';
+    } else if (st === 'READY_SUMMARY_READY') {
+      if (icons.readySummaryReady) icons.readySummaryReady.style.display = 'block';
+    } else if (st === 'READY_SUMMARY_ON_ERROR') {
+      if (icons.readySummaryOnError) icons.readySummaryOnError.style.display = 'block';
+    } else {
+      if (icons.ready) icons.ready.style.display = 'block';
     }
+  }
 
-    async function handleBulkDelete() {
-      const rows = getSelectedRows();
-      if (!rows.length) return alert('Sélectionnez au moins un élément.');
-      
-      const confirmed = await showConfirmation({
-        title: "Suppression multiple",
-        message: `Voulez-vous supprimer ces <strong>${rows.length}</strong> transcriptions ?`,
-        confirmText: "Supprimer", confirmClass: "agilo-btn--danger"
-      });
-      if (!confirmed) return;
-
-      const results = await pMap(rows, async (row) => {
-        const jobId = getJobId(row);
-        const r = await fetch(`${API_BASE}/deleteJob?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(__GLOBAL.edition)}`);
-        const d = await r.json();
-        if (d.status === "OK") { row.remove(); return { ok: true }; }
-        return { ok: false, jobId, error: d.errorMessage };
-      });
-      
-      const kos = results.filter(r => !r.ok);
-      if (kos.length) showDialog({ title: "Résultat suppression", subtitle: `${results.length - kos.length} OK, ${kos.length} échecs.`, blocks: [{ details: kos.map(r => `${r.jobId}: ${r.error}`).join('\n') }] });
-      updateUI();
-    }
-
-    async function handleBulkWebhook() {
-      const rows = getSelectedRows();
-      if (!rows.length) return alert('Sélectionnez au moins un élément.');
-      
-      const confirmed = await showConfirmation({
-        title: "Renvoi Webhook",
-        message: `Relancer l'automatisation pour <strong>${rows.length}</strong> éléments ?`,
-        confirmText: "Relancer"
-      });
-      if (!confirmed) return;
-
-      const provider = document.querySelector(SELECTORS.automationProvider)?.value?.trim() || '';
-      const results = await pMap(rows, async (row) => {
-        const jobId = getJobId(row);
-        const body = new URLSearchParams({ username: __GLOBAL.email, token: __GLOBAL.token, jobId, edition: __GLOBAL.edition });
-        if (provider) body.set('automationProvider', provider);
-        const r = await fetch(`${API_BASE}/webhookResend`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
-        const d = await r.json();
-        return { ok: d.status === "OK", jobId, error: d.errorMessage || d.status };
-      });
-
-      const kos = results.filter(r => !r.ok);
-      showDialog({ title: "Résultat Webhook", subtitle: `${results.length - kos.length} réussis.`, blocks: kos.length ? [{ heading: "Échecs", details: kos.map(r => `${r.jobId}: ${r.error}`).join('\n') }] : [{ text: "Tout a été envoyé avec succès ✅" }] });
-    }
-
-    async function handleBulkExport() {
-      const rows = getSelectedRows();
-      if (!rows.length) return alert('Sélectionnez au moins un élément.');
-
-      const results = await pMap(rows, async (row) => {
-        const jobId = getJobId(row);
-        const r = await fetch(`${API_BASE}/getSharedUrl`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ username: __GLOBAL.email, token: __GLOBAL.token, jobId, edition: __GLOBAL.edition }).toString() });
-        const d = await r.json();
-        return { ok: d.status === "OK", jobId, url: d.url };
-      });
-
-      const oks = results.filter(r => r.ok);
-      const kos = results.filter(r => !r.ok);
-      
-      if (oks.length) {
-        const html = `
-          <div class="agilo-kbdrow"><button id="agilo-dl-all" class="agilo-btn agilo-btn--primary">Tout ouvrir (${oks.length})</button></div>
-          <div class="agilo-linklist">${oks.map(o => `<a href="${o.url}-download" target="_blank">${o.jobId} — Télécharger</a>`).join('')}</div>
-        `;
-        showDialog({ title: "Export", subtitle: `${oks.length} liens générés.`, blocks: [{ html }] });
-        document.getElementById('agilo-dl-all')?.addEventListener('click', () => {
-          oks.forEach((o, i) => setTimeout(() => window.open(`${o.url}-download`, '_blank'), i * 600));
-        });
-      } else {
-        alert("Aucun lien n'a pu être généré.");
-      }
-    }
-
-    function updateUI() {
-      const all = document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`);
-      const checked = document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select:checked`);
-      const countEl = document.querySelector(SELECTORS.selectedCount);
-      if (countEl) countEl.textContent = `${checked.length} sélectionné(s)`;
-      const master = document.querySelector(SELECTORS.selectAll);
-      if (master) { master.checked = checked.length === all.length && all.length > 0; master.indeterminate = checked.length > 0 && checked.length < all.length; }
-    }
-
-    function bind() {
-      document.addEventListener('change', (e) => { 
-        if (e.target.matches(SELECTORS.selectAll)) {
-          document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`).forEach(cb => cb.checked = e.target.checked);
-          updateUI();
+  // --- Suppression ----------------------------------------------------
+  function deleteJob(jobId, userEmail, token, edition) {
+    fetch(`${API_BASE}/deleteJob?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(edition)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status === "OK") {
+          const row = document.querySelector(`[data-job-id="${jobId}"]`);
+          if (row) row.closest('.wrapper-content_item-row')?.remove();
         }
-        if (e.target.matches('.job-select')) updateUI();
-      });
+      }).catch(err => console.error('Erreur suppression:', err));
+  }
 
-      document.getElementById('bulkDeleteBtn')?.addEventListener('click', (e) => { e.preventDefault(); handleBulkDelete(); });
-      document.getElementById('resendWebhookBtn')?.addEventListener('click', (e) => { e.preventDefault(); handleBulkWebhook(); });
-      document.getElementById('exportBtn')?.addEventListener('click', (e) => { e.preventDefault(); handleBulkExport(); });
-      
-      const obs = new MutationObserver(() => updateUI());
-      const container = document.querySelector(SELECTORS.container);
-      if (container) obs.observe(container, { childList: true });
-    }
+  // --- Partage --------------------------------------------------------
+  async function updateShareLink(jobId, userEmail, token, edition, el) {
+    try {
+      const r = await fetch(`${API_BASE}/getSharedUrl?jobId=${jobId}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`);
+      const data = await r.json();
+      if (data.status === "OK" && data.url) { el.href = data.url; el.style.display = 'inline'; }
+    } catch (e) { console.error('Erreur partage:', e); }
+  }
 
-    return { init: bind };
-  })();
-
-  // --- Rendering ------------------------------------------------------
+  // --- Construction d’une ligne job ----------------------------------
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
     const clone = document.importNode(template, true);
     const row = clone.querySelector('.wrapper-content_item-row');
     if (!row) return;
 
+    row.setAttribute('data-creation-date', job.dtCreation);
     row.setAttribute('data-job-id', job.jobid);
-    const creation = clone.querySelector('.creation-date'); 
-    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
+    updateIconVisibility(clone, job.transcriptStatus);
 
+    // Clic icône état
+    const stateDiv = clone.querySelector('.state');
+    const visibleIcon = stateDiv?.querySelector('svg:not([style*="display: none"])');
+    if (visibleIcon) {
+      visibleIcon.style.cursor = 'pointer';
+      visibleIcon.addEventListener('click', () => {
+        const st = (job.transcriptStatus || '').toUpperCase();
+        let message = '';
+        if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE', 'ERROR_TRANSLATE_FILES_NOT_EXISTS', 'ERROR_TRANSLATE_NOT_READY', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) message = `Le traitement a échoué : ${extractErrorMessage(job.javaException)}`;
+        else if (['PENDING', 'IN_PROGRESS'].includes(st)) message = 'Le traitement est en cours, merci de patienter.';
+        else if (st === 'READY_SUMMARY_PENDING') message = 'Le transcript est disponible, le résumé est en cours de génération.';
+        else if (st === 'READY_SUMMARY_READY') message = 'Le transcript et le résumé sont disponibles.';
+        else if (st === 'READY_SUMMARY_ON_ERROR') message = `Le transcript est disponible, mais le résumé a échoué : ${extractErrorMessage(job.javaException)}`;
+        else message = 'Statut non reconnu.';
+        alert(message);
+      });
+    }
+
+    // Dates
+    const creation = clone.querySelector('.creation-date');
+    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
+    const update = clone.querySelector('.update-date');
+    if (update) update.textContent = convertDateStringToDate(job.dtUpdate).toLocaleString();
+
+    // Nom + Titre Intelligent
     const fileNameAnchor = clone.querySelector('.file-name');
-    const renameButton = clone.querySelector('.rename-btn');
+    const renameButton   = clone.querySelector('.rename-btn');
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
       fileNameAnchor.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      fileNameAnchor.setAttribute('download', job.filename);
     }
     setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
 
-    // Status icons & guard clicks
-    const st = (job.transcriptStatus || '').toUpperCase();
+    // Partage
+    const shareLink = clone.querySelector('.share-link');
+    if (shareLink) updateShareLink(job.jobid, userEmail, token, edition, shareLink);
+
+    // Téléchargements
     const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
-    formats.forEach(f => {
-      const aT = clone.querySelector(`.download_wrapper-link_transcript_${f}`);
+    const st = (job.transcriptStatus || '').toUpperCase();
+    formats.forEach(fmt => {
+      const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
       if (aT) {
-        const u = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${f}&edition=${encodeURIComponent(edition)}`;
-        setDownloadLink(aT, '#', ['PENDING','IN_PROGRESS'].includes(st) ? 'En cours...' : '');
-        guardClick(aT, u, job.jobid, `${job.jobid}|${f}|tx`, 'Indisponible');
+        if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) setDownloadLink(aT, '#', `Erreur : ${extractErrorMessage(job.javaException)}`);
+        else if (['PENDING', 'IN_PROGRESS'].includes(st)) setDownloadLink(aT, '#', 'En cours...');
+        else {
+          const u = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
+          setDownloadLink(aT, u);
+          guardClick(aT, u, job.jobid, `${job.jobid}|${fmt}|text|${edition}`, 'Transcript indisponible.');
+          aT.setAttribute('download', `transcript.${fmt}`);
+        }
       }
-      const aS = clone.querySelector(`.download_wrapper-link_summary_${f}`);
+      const aS = clone.querySelector(`.download_wrapper-link_summary_${fmt}`);
       if (aS) {
-        const apiFmt = f === 'txt' ? 'html' : f;
-        const u = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFmt}&edition=${encodeURIComponent(edition)}`;
-        setDownloadLink(aS, '#', st !== 'READY_SUMMARY_READY' ? 'Non prêt' : '');
-        guardClick(aS, u, job.jobid, `${job.jobid}|${f}|sum`, 'Indisponible');
+        if (['READY_SUMMARY_ON_ERROR', 'ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'].includes(st)) setDownloadLink(aS, '#', 'Résumé indisponible.');
+        else if (['PENDING', 'IN_PROGRESS', 'READY_SUMMARY_PENDING'].includes(st)) setDownloadLink(aS, '#', 'Patientez...');
+        else if (st === 'READY_SUMMARY_READY') {
+          const apiFmt = (fmt === 'txt') ? 'html' : fmt;
+          const u = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFmt}&edition=${encodeURIComponent(edition)}`;
+          const key = `${job.jobid}|${fmt}|summary|${edition}`;
+          setDownloadLink(aS, '#', 'Vérification...');
+          aS.classList.add('is-verifying');
+          verifyAssetOnce(job.jobid, u, key).then(ok => {
+            aS.classList.remove('is-verifying');
+            if (ok) { setDownloadLink(aS, u); aS.setAttribute('download', `summary.${fmt === 'txt' ? 'html' : fmt}`); }
+            else setDownloadLink(aS, '#', 'Indisponible.');
+          });
+        } else setDownloadLink(aS, '#', 'Indisponible.');
       }
     });
 
+    // Suppression
+    const delBtn = clone.querySelector('.delete-job-button_to-confirm');
+    if (delBtn) {
+      delBtn.setAttribute('data-job-id', job.jobid);
+      delBtn.addEventListener('click', () => {
+        window.__currentJobIdToDelete = job.jobid;
+        const popup = document.querySelector('.popup-container');
+        if (popup) popup.style.display = 'flex';
+      });
+    }
     container.appendChild(clone);
   }
 
-  function main(token) {
-    __GLOBAL.token = token;
-    // On récupère l'email de l'utilisateur depuis l'input caché Memberstack
-    __GLOBAL.email = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent;
-    
-    if (!__GLOBAL.email) {
-      console.warn("[Agilotext] Email non trouvé, le chargement peut échouer.");
+  // --- Orchestration --------------------------------------------------
+  const __GLOBAL = { token: null, email: null, edition: getEdition() };
+
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('delete-job-button_to-confirm')) {
+      window.__currentJobIdToDelete = e.target.closest('.wrapper-content_item-row')?.getAttribute('data-job-id');
+      const popup = document.querySelector('.popup-container');
+      if (popup) popup.style.display = 'flex';
     }
+  });
 
-    fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(__GLOBAL.edition)}&limit=9999`)
-      .then(r => r.json())
-      .then(data => {
-        const container = document.getElementById('jobs-container');
-        const templateEl = document.getElementById('template-row');
-        
-        if (!container) {
-          console.error("[Agilotext] Élément #jobs-container manquant dans la page.");
-          return;
-        }
-        if (!templateEl) {
-          console.error("[Agilotext] Élément #template-row manquant. Assurez-vous que l'embed contient bien le script de template.");
-          return;
-        }
-
-        const template = templateEl.content;
-        container.innerHTML = '';
-
-        const jobs = data.jobsInfoDtos || [];
-        if (jobs.length === 0) {
-          container.innerHTML = '<div class="text-center text-color-grey" style="padding: 40px">Aucune transcription trouvée.</div>';
-          return;
-        }
-
-        // Tri par date décroissante
-        jobs.sort((a,b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation)).forEach(job => {
-          buildJobRow({ job, userEmail: __GLOBAL.email, token, edition: __GLOBAL.edition, template, container });
-        });
-
-        // Initialisation des bulk actions (checkboxes, boutons delete/export/webhook)
-        AgilotextBulk.init();
-      })
-      .catch(err => {
-        console.error("[Agilotext] Erreur lors du chargement des jobs:", err);
-      });
+  const confirmBtn = document.querySelector('.delete-job-button_confirmed');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      if (window.__currentJobIdToDelete) {
+        const userEmail = document.querySelector('[name="memberEmail"]')?.value || '';
+        deleteJob(window.__currentJobIdToDelete, userEmail, __GLOBAL.token, __GLOBAL.edition);
+        const popup = document.querySelector('.popup-container'); if (popup) popup.style.display = 'none';
+        window.__currentJobIdToDelete = null;
+      }
+    });
   }
 
-  /**
-   * INITIALISATION
-   * On attend que le token soit disponible (globalToken est souvent injecté par un autre script Memberstack)
-   */
-  const itv = setInterval(() => {
-    // On essaie de trouver globalToken (window ou global)
-    const token = window.globalToken || (typeof globalToken !== 'undefined' ? globalToken : null);
-    if (token) {
-      clearInterval(itv);
-      console.log(`[Agilotext] Initializing script v${VERSION} (${__GLOBAL.edition})`);
-      main(token);
-    }
+  function mainScriptExecution(token) {
+    const userEmail = document.querySelector('[name="memberEmail"]')?.value;
+    const edition = __GLOBAL.edition;
+    __GLOBAL.token = token;
+    __GLOBAL.email = userEmail;
+
+    fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=9999&offset=0`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status !== "OK") return;
+        const container = document.getElementById('jobs-container');
+        const templateEl = document.getElementById('template-row');
+        if (!container || !templateEl) return;
+        const template = templateEl.content;
+        const sortedJobs = (data.jobsInfoDtos || []).slice().sort((a, b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation));
+        const readyCount = sortedJobs.reduce((n, j) => n + (String(j.transcriptStatus).toUpperCase() === 'READY_SUMMARY_READY' ? 1 : 0), 0);
+        const readyCountEl = document.getElementById('readyCount');
+        if (readyCountEl) readyCountEl.textContent = readyCount;
+        container.innerHTML = '';
+        sortedJobs.forEach(job => buildJobRow({ job, userEmail, token, edition, template, container }));
+      }).catch(err => console.error('Erreur data:', err));
+  }
+
+  const tmr = setInterval(() => {
+    if (typeof globalToken !== 'undefined' && globalToken) { clearInterval(tmr); mainScriptExecution(globalToken); }
   }, 100);
+
 })();
