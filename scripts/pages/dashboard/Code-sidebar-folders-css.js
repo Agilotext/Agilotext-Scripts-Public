@@ -58,22 +58,19 @@
   flex:1 1 0%;
   padding-left:0;
 }
-.agilo-nav-folders__summary-icon{
+/* Alignement Webflow : même couple que les lignes (icon-small / icon-1x1-small dashboard) */
+.agilo-nav-folders__summary-icon-root{
   flex:0 0 auto;
-  width:1.06rem;
-  height:1.06rem;
-  min-width:1.06rem;
   display:flex;
   align-items:center;
   justify-content:center;
-  color:var(--color--gris, var(--agilo-dim, #525252));
+  line-height:0;
 }
-.agilo-nav-folders__summary-icon svg{
-  width:100%;
-  height:100%;
+.agilo-nav-folders__summary-icon-slot{
+  flex:0 0 auto;
+}
+.agilo-nav-folders__summary-icon-slot svg.icon-1x1-small.dashboard{
   display:block;
-  fill:currentColor;
-  stroke:none;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
@@ -269,6 +266,14 @@ a.agilo-nav-folders__row.w-inline-block{
   align-items:center;
   gap:.12rem;
   overflow:hidden;
+}
+.agilo-nav-folders__row--folder .agilo-nav-folders__name-block{
+  max-width:min(5.6rem, 36vw);
+}
+@media (min-width: 400px){
+  .agilo-nav-folders__row--folder .agilo-nav-folders__name-block{
+    max-width:min(6.2rem, 42%);
+  }
 }
 .agilo-nav-folders__name-block .agilo-nav-folders__name{
   flex:1 1 0%;

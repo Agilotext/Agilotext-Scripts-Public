@@ -1,5 +1,5 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions"
-// Version 2.1.2
+// Version 2.1.3
 //
 // Objectif:
 // - filtrer les lignes par dossier depuis folderId (all, root, N)
@@ -12,7 +12,7 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.1.2';
+  const BRIDGE_VERSION = '2.1.3';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -294,7 +294,10 @@
     const container = getJobsContainer();
     if (!container) return;
     const rows = getRows();
-    if (!rows.length) return;
+    if (!rows.length) {
+      updateBulkMoveUiState();
+      return;
+    }
 
     state.applying = true;
     try {
@@ -372,13 +375,13 @@
   }
 
   function selectedJobIds() {
-    const rows = Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row'));
+    const container = getJobsContainer();
+    if (!container) return [];
     const ids = [];
-    rows.forEach((row) => {
-      const cb =
-        row.querySelector('.job-select:checked') ||
-        row.querySelector('input[type="checkbox"]:checked');
-      if (!cb) return;
+    /* Webflow : case sans .job-select ou input délégué — tout checkbox coché dans le container */
+    container.querySelectorAll('input[type="checkbox"]:checked').forEach((cb) => {
+      const row = cb.closest('.wrapper-content_item-row');
+      if (!row) return;
       const id = rowJobId(row);
       if (id) ids.push(id);
     });
@@ -399,6 +402,9 @@
         gap:.5rem;
         margin-left:.6rem;
         flex-wrap:wrap;
+        flex:1 1 auto;
+        min-width:0;
+        max-width:100%;
       }
       .agilo-bulk-folder-current[hidden]{
         display:none !important;
@@ -488,8 +494,9 @@
     if (currentChip) {
       currentChip.classList.remove('agilo-bulk-folder-current--context');
       if (n > 0) {
-        currentChip.hidden = false;
-        currentChip.innerHTML = `Dossier actuel : <strong>${activeFolderLabel()}</strong>`;
+        /* À la sélection : uniquement select + « Déplacer » (dossier courant = sidebar / URL) */
+        currentChip.innerHTML = '';
+        currentChip.hidden = true;
       } else if (inScopedView) {
         /* 0 coché mais URL = dossier / racine : contexte lisible (plus de cadre vide) */
         currentChip.hidden = false;
@@ -514,7 +521,14 @@
     ensureBulkMoveCss();
 
     let box = document.getElementById('agilo-bulk-folder-move');
-    if (!box) {
+    /* Barre recréée côté Webflow : nœud hors du DOM ou plus sous .bulk-actions-bar */
+    if (!box || !bar.contains(box)) {
+      state.bulkUiMounted = false;
+      if (box) {
+        try {
+          box.remove();
+        } catch (_) {}
+      }
       box = document.createElement('span');
       box.id = 'agilo-bulk-folder-move';
       box.className = 'agilo-bulk-folder-move';
@@ -535,13 +549,21 @@
 
     if (!state.bulkUiMounted && applyBtn && selectEl) {
       state.bulkUiMounted = true;
-      document.addEventListener('change', (ev) => {
-        const t = ev?.target;
-        if (!t) return;
-        if (t.id === 'select-all' || t.classList?.contains('job-select')) {
-          updateBulkMoveUiState();
-        }
-      }, { capture: true, passive: true });
+      document.addEventListener(
+        'change',
+        (ev) => {
+          const t = ev?.target;
+          if (!t) return;
+          if (t.id === 'select-all' || t.classList?.contains('job-select')) {
+            updateBulkMoveUiState();
+            return;
+          }
+          if (t.matches?.('input[type="checkbox"]') && t.closest?.('#jobs-container')) {
+            updateBulkMoveUiState();
+          }
+        },
+        { capture: true, passive: true }
+      );
 
       applyBtn.addEventListener('click', async () => {
         const folderValue = String(selectEl.value || '');
