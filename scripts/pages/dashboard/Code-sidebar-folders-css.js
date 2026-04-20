@@ -10,12 +10,11 @@
    NAV DOSSIERS — style compact, aligné gauche, sans encadré
    ============================================================================= */
 #agilo-nav-folders-root{
-  display:block;
-  width:100%;
-  max-width:100%;
+  display:block !important;
+  width:100% !important;
+  max-width:100% !important;
   min-width:0;
   box-sizing:border-box;
-  /* Pas de padding horizontal : le parent Webflow `.dashboard-link.folder` applique déjà le même padding que les liens */
   padding-left:0;
   padding-right:0;
 }
@@ -97,16 +96,29 @@
   padding-left:0;
   overflow:hidden;
 }
-/* Résumé « Dossiers » : .icon-small.w-embed injecté par le JS (même que Tableau de bord) — SVG 24×24 dedans */
-#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed{
+/* Résumé « Dossiers » : .icon-small.w-embed injecté par le JS (même que Tableau de bord) — SVG 576×512 dedans */
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed,
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > span.icon-small.w-embed{
   flex:0 0 auto;
   flex-shrink:0;
+  width:1.5rem !important;
+  height:1.5rem !important;
+  display:flex !important;
+  align-items:center;
+  justify-content:center;
   color:var(--color--gris, var(--agilo-dim, #525252));
 }
-#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed svg{
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed svg,
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > span.icon-small.w-embed svg{
   width:100%;
-  height:100%;
+  height:auto;
+  max-height:100%;
   display:block;
+}
+/* Surcharge Font Awesome style (576x512) pour éviter l'explosion */
+#agilo-nav-folders-root .agilo-nav-folders__summary-main .agilo-nav-folders__summary-icon-root svg{
+  width:1.1rem !important;
+  height:auto !important;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
