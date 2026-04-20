@@ -1,6 +1,8 @@
 <!--
   Webflow : Embed sous Transcriptions, après Memberstack / getToken.
-  Div #agilo-nav-folders-root : ajouter les Custom attributes dans Webflow (Settings).
+  Ordre obligatoire : 1) cette <div id="agilo-nav-folders-root"> 2) css.js 3) folders.js
+  (si le script est au-dessus du div, l’init attend le DOM jusqu’à ~10 s — mieux vaut remonter le div.)
+  Page Mes transcriptions : optionnel — Code-mes-transcripts-folder-url-bridge.js + hooks dans le JS liste (voir commentaires en tête du bridge).
 -->
 
 <div
@@ -10,6 +12,7 @@
   data-link-class="dashboard-link w-inline-block"
   data-summary-class="dashboard-link w-inline-block"
   data-row-structure="match-nav"
+  data-agilo-folder-accent-mode="hash"
   data-agilo-folder-palette="--color--blue,--color--orange,--color--vert,--color--rouge"
 ></div>
 
