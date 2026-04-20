@@ -15,9 +15,9 @@
   max-width:100%;
   min-width:0;
   box-sizing:border-box;
-  /* Marge intérieure : pastilles / boutons restent dans la carte blanche Webflow */
-  padding-left:.42rem;
-  padding-right:.52rem;
+  /* Pas de padding horizontal : le parent Webflow `.dashboard-link.folder` applique déjà le même padding que les liens */
+  padding-left:0;
+  padding-right:0;
 }
 /* Ne pas forcer width sur .dashboard-link ancêtres Webflow (peut englober toute la nav et casser w-inline-block). */
 .embed-code-dossier:has(#agilo-nav-folders-root),
@@ -505,37 +505,25 @@
   .agilo-nav-folders__row{ transition:none; }
 }
 /*
- * « Tous les fichiers » : même logique que les autres liens nav (flex row), pas de grille
- * (la grille + grid-column 2/-1 décalait l’icône vs « Tableau de bord » selon le DOM Webflow).
- * Webflow typique : > svg + .wrapper-link (titre + #readyCount) + éventuel .text-cr.
+ * « Tous les fichiers » : ne PAS surcharger le <a> (Webflow = width 80 %, padding .5rem 1rem, flex).
+ * On aligne seulement le slot icône sur `.icon-small` des autres entrées (1.5rem + margin-right .2rem).
  */
-.full-width a[data-tour="nav-transcripts"],
-a.dashboard-link[data-tour="nav-transcripts"]{
-  display:flex !important;
-  flex-direction:row;
-  flex-wrap:nowrap;
-  align-items:center;
-  justify-content:flex-start;
-  gap:.35rem;
-  width:100%;
-  max-width:100%;
-  min-width:0;
-  box-sizing:border-box;
-  padding-left:0;
-  padding-right:0;
-  vertical-align:middle;
-}
-.full-width a[data-tour="nav-transcripts"] > svg,
-a.dashboard-link[data-tour="nav-transcripts"] > svg{
+.full-width a[data-tour="nav-transcripts"] > svg:first-child,
+a.dashboard-link[data-tour="nav-transcripts"] > svg:first-child{
   flex:0 0 auto;
+  width:1.5rem;
+  min-width:1.5rem;
+  height:1.5rem;
+  margin-right:.2rem;
+  padding:.1875rem;
+  box-sizing:border-box;
+  display:block;
+  max-height:none;
   align-self:center;
-  width:auto;
-  height:auto;
-  max-height:1.25rem;
 }
 .full-width a[data-tour="nav-transcripts"] .wrapper-link,
 a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
-  flex:1 1 0%;
+  flex:1 1 auto;
   min-width:0;
   display:flex !important;
   flex-direction:row;
