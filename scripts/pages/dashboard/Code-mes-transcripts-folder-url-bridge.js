@@ -1,5 +1,5 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions"
-// Version 2.1.0
+// Version 2.1.1
 //
 // Objectif:
 // - filtrer les lignes par dossier depuis folderId (all, root, N)
@@ -12,7 +12,7 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.1.0';
+  const BRIDGE_VERSION = '2.1.1';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -348,10 +348,13 @@
   }
 
   function selectedJobIds() {
-    const checks = Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row .job-select:checked'));
+    const rows = Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row'));
     const ids = [];
-    checks.forEach((cb) => {
-      const row = cb.closest('.wrapper-content_item-row');
+    rows.forEach((row) => {
+      const cb =
+        row.querySelector('.job-select:checked') ||
+        row.querySelector('input[type="checkbox"]:checked');
+      if (!cb) return;
       const id = rowJobId(row);
       if (id) ids.push(id);
     });
@@ -439,13 +442,24 @@
   }
 
   function updateBulkMoveUiState() {
+    const box = document.getElementById('agilo-bulk-folder-move');
     const currentChip = document.getElementById('agilo-bulk-folder-current');
     const controls = document.getElementById('agilo-bulk-folder-controls');
+    const n = selectedJobIds().length;
     if (currentChip) {
-      currentChip.innerHTML = `Dossier actuel : <strong>${activeFolderLabel()}</strong>`;
+      if (n > 0) {
+        currentChip.hidden = false;
+        currentChip.innerHTML = `Dossier actuel : <strong>${activeFolderLabel()}</strong>`;
+      } else {
+        currentChip.innerHTML = '';
+        currentChip.hidden = true;
+      }
     }
-    if (controls) {
-      controls.hidden = selectedJobIds().length === 0;
+    if (controls) controls.hidden = n === 0;
+    /* Tout le bloc (libellé + liste + bouton) masqué sans sélection — évite « Dossier… » visible à tort */
+    if (box) {
+      box.hidden = n === 0;
+      box.setAttribute('aria-hidden', n === 0 ? 'true' : 'false');
     }
   }
 
@@ -523,7 +537,11 @@
           }
         }
 
-        Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row .job-select:checked')).forEach((cb) => {
+        Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row')).forEach((row) => {
+          const cb =
+            row.querySelector('.job-select:checked') ||
+            row.querySelector('input[type="checkbox"]:checked');
+          if (!cb) return;
           cb.checked = false;
           cb.dispatchEvent(new Event('change', { bubbles: true }));
         });
