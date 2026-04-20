@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.17';
+  const APP_VERSION = '1.7.19';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -293,9 +293,8 @@
       await load();
     } else {
       const err = String(res.error || '').toLowerCase();
-      // On détecte si c'est une erreur de type "non vide" (souvent un code 409 ou message explicite)
-      if (err.includes('not empty') || err.includes('not_empty') || err.includes('transcription') || err.includes('job')) {
-        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il n'est pas vide.\n\nVeuillez d'abord déplacer vos transcriptions vers un autre dossier ou les supprimer avant de pouvoir supprimer ce dossier.`);
+      if (err.includes('not empty') || err.includes('not_empty')) {
+        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
       } else {
         window.alert(res.error || 'Impossible de supprimer ce dossier.');
       }
