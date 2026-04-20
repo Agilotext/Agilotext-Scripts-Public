@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.6.1' };
+  window.__agiloRail = { version: '4.7.0' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -29,6 +29,30 @@ let __pendingLoadTimer = null;
     toggle:   $('.rail-toggle') || $('[data-action="toggle-rail"]')
   };
   if (!rail.list) return;
+
+  /**
+   * Barre dossiers (chips) au-dessus du rail — optionnelle.
+   * Sur `#rail-list` (ou équivalent) : `data-agilo-folder-bar="off"` pour masquer tout le bloc
+   * (filtre reste « tous » ; déplacement possible ailleurs ex. page Mes transcripts).
+   * `data-agilo-chip-folder-max="24"` : longueur max du nom dans un chip (défaut 24), titre = nom complet.
+   */
+  function folderBarDisabled() {
+    const v = String(rail.list?.dataset?.agiloFolderBar || '').trim().toLowerCase();
+    return v === 'off' || v === '0' || v === 'false' || v === 'no';
+  }
+
+  function chipFolderNameMax() {
+    const n = Number(rail.list?.dataset?.agiloChipFolderMax);
+    if (Number.isFinite(n) && n >= 6 && n <= 60) return Math.floor(n);
+    return 24;
+  }
+
+  function truncateChipFolderName(name) {
+    const s = String(name || '').trim();
+    const m = chipFolderNameMax();
+    if (s.length <= m) return s;
+    return `${s.slice(0, Math.max(1, m - 1))}…`;
+  }
 
   // Rôle accessible si absent
   if (!rail.list.getAttribute('role')) rail.list.setAttribute('role', 'listbox');
@@ -397,16 +421,23 @@ let __pendingLoadTimer = null;
   }
 
   function renderFolderBarDom(auth){
+    if (folderBarDisabled()) {
+      const old = byId('agilo-folder-bar');
+      if (old) old.remove();
+      return;
+    }
     const bar = ensureFolderBar();
     if (!bar || !auth?.username || !auth?.token) return;
     const { rootJobsCount, folders } = state.foldersCache;
 
-    function chip(id, label, active){
+    function chip(id, label, active, titleFull){
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'agilo-folder-chip' + (active ? ' is-active' : '');
       b.dataset.filter = String(id);
       b.textContent = label;
+      if (titleFull && String(titleFull) !== String(label)) b.setAttribute('title', String(titleFull));
+      else if (titleFull) b.setAttribute('title', String(titleFull));
       b.addEventListener('click', async () => {
         if (id === 'all') state.folderFilter = 'all';
         else if (id === 'root') state.folderFilter = 'root';
@@ -428,11 +459,21 @@ let __pendingLoadTimer = null;
 
     const chipsWrap = document.createElement('div');
     chipsWrap.className = 'agilo-folder-chips';
-    chipsWrap.appendChild(chip('all', 'Tous', state.folderFilter === 'all'));
-    chipsWrap.appendChild(chip('root', `Racine (${rootJobsCount})`, state.folderFilter === 'root'));
+    chipsWrap.appendChild(chip('all', 'Tous', state.folderFilter === 'all', 'Tous les transcripts'));
+    chipsWrap.appendChild(
+      chip(
+        'root',
+        `Non classé (${rootJobsCount})`,
+        state.folderFilter === 'root',
+        `Non classé (${rootJobsCount})`
+      )
+    );
     folders.forEach((f) => {
       const active = Number(state.folderFilter) === Number(f.folderId);
-      chipsWrap.appendChild(chip(String(f.folderId), `${f.folderName} (${f.jobsCount})`, active));
+      const full = `${f.folderName} (${f.jobsCount})`;
+      const shortName = truncateChipFolderName(f.folderName);
+      const lab = `${shortName} (${f.jobsCount})`;
+      chipsWrap.appendChild(chip(String(f.folderId), lab, active, full));
     });
 
     const newFoldBtn = document.createElement('button');
@@ -478,7 +519,7 @@ let __pendingLoadTimer = null;
     sel.appendChild(o0);
     const oR = document.createElement('option');
     oR.value = '0';
-    oR.textContent = 'Racine';
+    oR.textContent = 'Non classé';
     sel.appendChild(oR);
     folders.forEach((f) => {
       const o = document.createElement('option');
@@ -568,7 +609,7 @@ let __pendingLoadTimer = null;
     div.setAttribute('role','status');
     let msg = 'Aucun transcript trouvé.';
     if (state.folderFilter === 'root') {
-      msg = 'Aucun transcript à la racine.';
+      msg = 'Aucun transcript non classé.';
     } else if (typeof state.folderFilter === 'number' && state.folderFilter > 0) {
       const name = state.foldersCache.folders.find((x) => Number(x.folderId) === Number(state.folderFilter))?.folderName;
       msg = name

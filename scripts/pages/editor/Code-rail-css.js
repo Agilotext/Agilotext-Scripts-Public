@@ -89,6 +89,7 @@
   border-radius:999px;
   padding:.35rem .7rem;
   min-height:2rem;
+  max-width:min(100%, 12.5rem);
   cursor:pointer;
   line-height:1.2;
   font-size:.8125rem;
@@ -96,6 +97,9 @@
   color:var(--agilo-text, #020202);
   box-shadow:0 1px 1px color-mix(in srgb, var(--agilo-text, #020202) 5%, transparent);
   transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 .agilo-folder-bar button.agilo-folder-chip:hover{
   border-color:color-mix(in srgb, var(--agilo-primary, #174a96) 45%, transparent);

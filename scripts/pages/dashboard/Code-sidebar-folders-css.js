@@ -339,13 +339,11 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   gap:.12rem;
   overflow:hidden;
 }
+/* Largeur : laisser le flex + data-folder-name-max (JS) décider — pas de cap fixe en rem (cassait 22 car.) */
 .agilo-nav-folders__row--folder .agilo-nav-folders__name-block{
-  max-width:min(5.6rem, 36vw);
-}
-@media (min-width: 400px){
-  .agilo-nav-folders__row--folder .agilo-nav-folders__name-block{
-    max-width:min(6.2rem, 42%);
-  }
+  flex:1 1 0%;
+  min-width:0;
+  max-width:none;
 }
 .agilo-nav-folders__name-block .agilo-nav-folders__name{
   flex:1 1 0%;
