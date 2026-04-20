@@ -2,6 +2,9 @@
 // ⚠️ Charger après getToken / agilotext:token.
 //
 // Webflow — #agilo-nav-folders-root (attributs personnalisés) :
+//   Placer la <div id="agilo-nav-folders-root"> AVANT les <script> GitHub (sinon init différée 10 s max).
+//   Liste « Mes transcriptions » : le filtre dossier est souvent dans le JS inline Webflow (__selectedFolderFilter).
+//   Synchroniser avec ?folderId= : voir scripts/pages/dashboard/Code-mes-transcripts-folder-url-bridge.js + commentaires en tête de ce fichier.
 //   data-link-class, data-summary-class, data-agilo-folders-start, data-base-href
 //   data-agilo-folder-palette="--color--blue,--color--orange,..." (optionnel, virgules)
 //   data-agilo-folder-accent-mode="hash" | "sequence"
@@ -13,6 +16,7 @@
 (function () {
   'use strict';
 
+  function runNavFoldersApp() {
   const byId = (id) => document.getElementById(id);
   const $ = (s, r = document) => r.querySelector(s);
 
@@ -20,7 +24,7 @@
   if (!mount) return;
   if (window.__agiloNavFolders) return;
 
-  window.__agiloNavFolders = { version: '1.4.2', refresh: function () {} };
+  window.__agiloNavFolders = { version: '1.5.0', refresh: function () {} };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -246,11 +250,7 @@
     'var(--color--blue, var(--agilo-primary, #174a96))',
     'var(--color--orange, #fd7e14)',
     'var(--color--vert, #1c661a)',
-    'var(--color--rouge, #a82633)',
-    'color-mix(in srgb, var(--color--blue, #174a96) 55%, var(--color--vert, #1c661a))',
-    'color-mix(in srgb, var(--color--orange, #fd7e14) 50%, var(--color--rouge, #a82633))',
-    'color-mix(in srgb, var(--color--blue, #174a96) 65%, var(--color--orange, #fd7e14))',
-    'color-mix(in srgb, var(--color--vert, #1c661a) 50%, var(--color--rouge, #a82633))'
+    'var(--color--rouge, #a82633)'
   ];
 
   function normalizePaletteToken(t) {
@@ -576,11 +576,39 @@
 
   window.addEventListener('agilo:token', () => load(), { passive: true });
   window.addEventListener('agilotext:token', () => load(), { passive: true });
-  window.addEventListener('popstate', () => updateActiveRowsOnly(), { passive: true });
+  window.addEventListener('popstate', () => {
+    updateActiveRowsOnly();
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:nav-folder-url-changed'));
+    } catch (_) {}
+  }, { passive: true });
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', load, { once: true });
   } else {
     load();
+  }
+  }
+
+  function scheduleNavFolders() {
+    if (document.getElementById('agilo-nav-folders-root')) {
+      runNavFoldersApp();
+      return;
+    }
+    var attempts = 0;
+    var tid = setInterval(function () {
+      if (document.getElementById('agilo-nav-folders-root')) {
+        clearInterval(tid);
+        runNavFoldersApp();
+      } else if (++attempts > 100) {
+        clearInterval(tid);
+      }
+    }, 100);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', scheduleNavFolders, { once: true });
+  } else {
+    scheduleNavFolders();
   }
 })();
