@@ -26,9 +26,8 @@
   min-width:0;
   box-sizing:border-box;
 }
-/* w-inline-block sur les <a> dossiers = shrink-to-fit → pastilles hors carte */
-#agilo-nav-folders-root a.agilo-nav-folders__row.w-inline-block,
-#agilo-nav-folders-root a.agilo-nav-folders__row.dashboard-link{
+/* Lignes dossiers : pas de classe Webflow « dashboard-link » (réservée au menu) — layout ici uniquement */
+#agilo-nav-folders-root a.agilo-nav-folders__row{
   width:100% !important;
   max-width:100% !important;
   min-width:0 !important;
@@ -64,8 +63,8 @@
   display:none;
 }
 /* Flex + margin-left:auto sur les actions : « + » toujours à droite (ouvert ou fermé), même avec w-inline-block */
-.agilo-nav-folders-details > summary.agilo-nav-folders__summary,
-.agilo-nav-folders__summary{
+#agilo-nav-folders-root .agilo-nav-folders-details > summary.agilo-nav-folders__summary,
+#agilo-nav-folders-root summary.agilo-nav-folders__summary{
   list-style:none;
   cursor:pointer;
   display:flex !important;
@@ -87,14 +86,6 @@
   border:0 !important;
   border-radius:0 !important;
   box-shadow:none !important;
-}
-#agilo-nav-folders-root .agilo-nav-folders__summary.dashboard-link,
-#agilo-nav-folders-root .agilo-nav-folders__summary.w-inline-block,
-#agilo-nav-folders-root .agilo-nav-folders__summary.dashboard-link.w-inline-block{
-  display:flex !important;
-  width:100% !important;
-  max-width:100% !important;
-  min-width:0 !important;
 }
 .agilo-nav-folders__summary-main{
   display:flex;
@@ -426,9 +417,6 @@
 .agilo-nav-folders__list .agilo-nav-folders__row .agilo-nav-folders__count:empty{
   min-width:1.42rem;
 }
-.agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
-  font-size:.6rem;
-}
 .agilo-nav-folders__row.is-active .agilo-nav-folders__count{
   color:var(--agilo-text, #020202) !important;
   background:linear-gradient(180deg, #fff 0%, #f4f6fb 100%) !important;
@@ -519,8 +507,10 @@
 /*
  * « Tous les fichiers » / Transcriptions : Webflow = svg + .wrapper-link (titre + #readyCount) + .text-cr.
  * Grille : icône | zone titre+pastille (1fr) | suffixe — évite de traiter .wrapper-link comme seul flex enfant.
+ * Double sélecteur : .full-width (ancien) OU lien .dashboard-link seul si le parent n’a pas cette classe.
  */
-.full-width a[data-tour="nav-transcripts"]{
+.full-width a[data-tour="nav-transcripts"],
+a.dashboard-link[data-tour="nav-transcripts"]{
   display:grid !important;
   grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;
@@ -532,14 +522,16 @@
   padding-right:.5rem;
   vertical-align:middle;
 }
-.full-width a[data-tour="nav-transcripts"] > svg{
+.full-width a[data-tour="nav-transcripts"] > svg,
+a.dashboard-link[data-tour="nav-transcripts"] > svg{
   grid-column:1;
   align-self:center;
   width:auto;
   height:auto;
   max-height:1.25rem;
 }
-.full-width a[data-tour="nav-transcripts"] .wrapper-link{
+.full-width a[data-tour="nav-transcripts"] .wrapper-link,
+a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
   grid-column:2;
   display:inline-flex !important;
   align-items:center;
@@ -549,16 +541,20 @@
   gap:.35rem;
   box-sizing:border-box;
 }
-.full-width a[data-tour="nav-transcripts"] .wrapper-link > div:first-child{
+.full-width a[data-tour="nav-transcripts"] .wrapper-link > div:first-child,
+a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link > div:first-child{
   flex:0 1 auto;
   min-width:0;
 }
 .full-width a[data-tour="nav-transcripts"] .wrapper-link .readycount,
-.full-width a[data-tour="nav-transcripts"] #readyCount{
+.full-width a[data-tour="nav-transcripts"] #readyCount,
+a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link .readycount,
+a.dashboard-link[data-tour="nav-transcripts"] #readyCount{
   flex:0 0 auto;
   margin-left:auto;
 }
-.full-width a[data-tour="nav-transcripts"] > .text-cr{
+.full-width a[data-tour="nav-transcripts"] > .text-cr,
+a.dashboard-link[data-tour="nav-transcripts"] > .text-cr{
   grid-column:3;
   align-self:center;
   flex-shrink:0;
@@ -569,7 +565,8 @@
   text-overflow:ellipsis;
 }
 /* Variante Webflow sans .text-cr : la pastille peut occuper la 3e colonne visuellement */
-.full-width a[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link{
+.full-width a[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link,
+a.dashboard-link[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link{
   grid-column:2 / -1;
 }
 `;

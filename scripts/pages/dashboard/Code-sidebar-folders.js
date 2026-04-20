@@ -10,7 +10,8 @@
 //   data-agilo-folder-accent-mode="hash" | "sequence"
 //     — hash (défaut) : couleur stable par folderId, palette répétée en boucle (illimité)
 //     — sequence : couleur par position dans la liste (1er = 1re teinte, …)
-//   data-row-structure="match-nav" → DOM type menu (icon-small, readycount)
+//   data-row-structure="match-nav" → DOM type menu (icon-small, pastille .agilo-nav-folders__count)
+//   Les classes Webflow « dashboard-link » / « readycount » sur data-link-class sont ignorées (évite conflit avec « Tous les fichiers »).
 //   data-icon-class, data-name-class, data-count-class → surcharges classes match-nav
 //   data-folder-name-max="14" → longueur max affichée des noms de dossier (4–80, défaut 14) + ellipse CSS
 
@@ -20,7 +21,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.10', refresh: function () {} },
+      { version: '1.7.11', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -33,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.10';
+  const APP_VERSION = '1.7.11';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -523,6 +524,16 @@
       .join(' ');
   }
 
+  /** Ne pas recoller les mêmes classes que le lien Webflow « Tous les fichiers » (#readyCount.readycount, .dashboard-link). */
+  function stripConflictingWebflowClasses(classStr) {
+    return String(classStr || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((c) => c !== 'dashboard-link' && c !== 'readycount')
+      .join(' ');
+  }
+
   /** Longueur max affichée (caractères) pour les noms de dossier ; `data-folder-name-max` sur le mount (6–80). */
   function folderNameMaxChars() {
     const raw = Number(mount.getAttribute('data-folder-name-max'));
@@ -686,7 +697,7 @@
 
   function createSummary(auth) {
     const sum = document.createElement('summary');
-    const summaryExtra = extraClasses('data-summary-class');
+    const summaryExtra = stripConflictingWebflowClasses(extraClasses('data-summary-class'));
     sum.className = ['agilo-nav-folders__summary', summaryExtra].filter(Boolean).join(' ');
 
     const main = document.createElement('span');
@@ -809,7 +820,7 @@
       .filter(Boolean)
       .join(' ');
 
-    const linkExtra = extraClasses('data-link-class');
+    const linkExtra = stripConflictingWebflowClasses(extraClasses('data-link-class'));
     const folderPalette = getFolderPalette();
     const accentMode = getFolderAccentMode();
 
@@ -864,7 +875,9 @@
           ? ['agilo-nav-folders__icon-wrap', iconExtra].filter(Boolean).join(' ')
           : ['icon-small', 'w-embed', 'agilo-nav-folders__icon-wrap'].join(' ');
         const nameClasses = ['agilo-nav-folders__name', nameExtra].filter(Boolean).join(' ');
-        const countClasses = ['readycount', 'agilo-nav-folders__count', countExtra].filter(Boolean).join(' ');
+        const countClasses = ['agilo-nav-folders__count', stripConflictingWebflowClasses(countExtra)]
+          .filter(Boolean)
+          .join(' ');
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
