@@ -15,6 +15,9 @@
   max-width:100%;
   min-width:0;
   box-sizing:border-box;
+  /* Marge intérieure : pastilles / boutons restent dans la carte blanche Webflow */
+  padding-left:.42rem;
+  padding-right:.52rem;
 }
 .agilo-nav-folders-details{
   margin:0;
@@ -28,56 +31,51 @@
   /* Fermé : sans liste, la largeur reste celle de la nav → colonne « Dossiers » + bouton + aligné à droite */
   display:block;
 }
-.agilo-nav-folders-details > summary{
+.agilo-nav-folders-details > summary::-webkit-details-marker{
+  display:none;
+}
+/* Flex + margin-left:auto sur les actions : « + » toujours à droite (ouvert ou fermé), même avec w-inline-block */
+.agilo-nav-folders-details > summary.agilo-nav-folders__summary,
+.agilo-nav-folders__summary{
   list-style:none;
   cursor:pointer;
-  display:flex;
+  display:flex !important;
+  flex-direction:row;
+  flex-wrap:nowrap;
   align-items:center;
-  justify-content:space-between;
-  gap:.6rem;
-  width:100%;
-  box-sizing:border-box;
+  justify-content:flex-start;
+  gap:.42rem;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  box-sizing:border-box !important;
   padding:.14rem 0 .28rem;
   margin:0;
   font:inherit;
   color:inherit;
-}
-.agilo-nav-folders-details > summary::-webkit-details-marker{
-  display:none;
-}
-.agilo-nav-folders__summary{
-  display:grid !important;
-  grid-template-columns:minmax(0, 1fr) max-content !important;
-  align-items:center !important;
-  justify-items:stretch !important;
   text-align:left !important;
   background:transparent !important;
   border:0 !important;
   border-radius:0 !important;
   box-shadow:none !important;
-  width:100% !important;
-  max-width:100% !important;
-  min-width:0 !important;
-  box-sizing:border-box !important;
-  column-gap:.5rem !important;
 }
-/* Webflow : data-summary-class="dashboard-link w-inline-block" rétrécit le <summary> → le + colle à la flèche */
 .agilo-nav-folders__summary.dashboard-link,
 .agilo-nav-folders__summary.w-inline-block,
 .agilo-nav-folders__summary.dashboard-link.w-inline-block{
-  display:grid !important;
+  display:flex !important;
   width:100% !important;
   max-width:100% !important;
-  vertical-align:top;
+  min-width:0 !important;
 }
 .agilo-nav-folders__summary-main{
-  display:inline-flex;
+  display:flex;
   align-items:center;
   gap:.38rem;
   justify-content:flex-start;
   min-width:0;
   flex:1 1 0%;
   padding-left:0;
+  overflow:hidden;
 }
 /* Alignement Webflow : même couple que les lignes (icon-small / icon-1x1-small dashboard) */
 .agilo-nav-folders__summary-icon-root{
@@ -113,10 +111,10 @@
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
   align-items:center;
-  justify-content:flex-end !important;
-  justify-self:end !important;
+  justify-content:center;
   flex:0 0 auto;
-  margin-left:0;
+  flex-shrink:0;
+  margin-left:auto !important;
 }
 .agilo-nav-folders__summary-text{
   min-width:0;
@@ -194,7 +192,7 @@
 }
 .agilo-nav-folders__list--match-nav{
   padding-left:0;
-  padding-right:.28rem;
+  padding-right:0;
   padding-top:0;
   border-left:none;
   box-sizing:border-box;
@@ -233,7 +231,7 @@ a.agilo-nav-folders__row.w-inline-block{
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .48rem);
   padding-left:.04rem;
-  padding-right:.24rem;
+  padding-right:0;
   box-sizing:border-box;
 }
 .agilo-nav-folders__row:hover{
@@ -423,10 +421,19 @@ a.agilo-nav-folders__row.w-inline-block{
 .agilo-nav-folders__row--inline-create{
   display:flex !important;
   align-items:center;
+  flex-wrap:nowrap;
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box;
+  overflow:hidden;
+}
+.agilo-nav-folders__row--inline-create.agilo-nav-folders__row--match-nav{
+  gap:var(--agilo-gap, .42rem);
 }
 .agilo-nav-folders__input{
-  flex:1 1 auto;
-  min-width:0;
+  flex:1 1 0% !important;
+  min-width:0 !important;
+  max-width:100%;
   border:none;
   border-bottom:1px solid rgba(82, 82, 82, 0.28);
   background:transparent;
@@ -446,7 +453,9 @@ a.agilo-nav-folders__row.w-inline-block{
   display:inline-flex;
   align-items:center;
   gap:.12rem;
-  margin-left:.2rem;
+  margin-left:.15rem;
+  flex:0 0 auto;
+  flex-shrink:0;
 }
 .agilo-nav-folders__inline-btn{
   width:1rem;
@@ -479,6 +488,11 @@ a.agilo-nav-folders__row.w-inline-block{
 @media (prefers-reduced-motion: reduce){
   .agilo-nav-folders__chev{ transition:none; }
   .agilo-nav-folders__row{ transition:none; }
+}
+/* Optionnel : pastille #readyCount « Tous les fichiers » (hors embed) — un peu d’air à droite dans le bloc blanc */
+.full-width a[data-tour="nav-transcripts"] .wrapper-link{
+  padding-right:.28rem;
+  box-sizing:border-box;
 }
 `;
 
