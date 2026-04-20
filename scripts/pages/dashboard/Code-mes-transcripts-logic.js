@@ -8,7 +8,7 @@
   //  - Renommage, partage, suppression, téléchargements
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.2';
+  const VERSION = '1.1.3';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
   // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification) ---
@@ -184,10 +184,10 @@
   }
 
   // --- API: renommage ------------------------------------------------
-  async function renameOnServer({ jobId, userEmail, token, edition, newFilename }) {
-    const body = new URLSearchParams({ username: userEmail, token, edition, jobId: String(jobId), filename: newFilename });
+  async function renameOnServer({ jobId, userEmail, token, edition, jobTitle }) {
+    const body = new URLSearchParams({ username: userEmail, token, edition, jobId: String(jobId), jobTitle });
     try {
-      const r = await fetch(`${API_BASE}/renameTranscriptFile`, {
+      const r = await fetch(`${API_BASE}/renameTranscriptTitle`, {
         method: "POST",
         headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString()
@@ -204,10 +204,6 @@
       if (anchorEl.__editing) return;
       anchorEl.__editing = true;
       
-      const currentFullFilename = (job.filename || "").trim();
-      const dot = currentFullFilename.lastIndexOf(".");
-      const ext = dot > 0 ? currentFullFilename.slice(dot) : "";
-      
       const currentTitle = (anchorEl.textContent || "").trim();
       const input = document.createElement("input");
       input.className = "file-name-input";
@@ -216,35 +212,38 @@
       anchorEl.replaceWith(input);
       input.focus(); input.select();
       
-      const cleanup = () => { if(input.parentNode) input.replaceWith(anchorEl); anchorEl.__editing = false; };
+      const cleanup = () => { 
+        if(input.parentNode) input.replaceWith(anchorEl); 
+        anchorEl.__editing = false; 
+      };
       
       const commit = async () => {
-        let typedVal = input.value.trim();
-        if (!typedVal) { cleanup(); return; }
+        if (anchorEl.__committing) return;
+        const typedVal = input.value.trim();
+        if (!typedVal || typedVal === currentTitle) { cleanup(); return; }
         
-        // Si l'utilisateur a tapé l'extension, on l'enlève pour éviter les doublons type .mp3.mp3
-        if (ext && typedVal.toLowerCase().endsWith(ext.toLowerCase())) {
-          typedVal = typedVal.slice(0, -ext.length);
-        }
-        
-        const newBase = sanitizeFilenameBase(typedVal);
-        const newFilename = `${newBase}${ext}`;
-        
-        if (newFilename === currentFullFilename) { cleanup(); return; }
-        
-        const res = await renameOnServer({ jobId: job.jobid, userEmail, token, edition, newFilename });
+        anchorEl.__committing = true;
+        const res = await renameOnServer({ jobId: job.jobid, userEmail, token, edition, jobTitle: typedVal });
+        anchorEl.__committing = false;
+
         if (res.ok) {
-          anchorEl.textContent = typedVal; // On affiche le nouveau titre (sans extension)
-          anchorEl.setAttribute("download", newFilename);
-          job.filename = newFilename;
+          anchorEl.textContent = typedVal;
+          job.jobTitle = typedVal; // Mise à jour locale pour que displayJobTitle() reste cohérent
         } else {
-          alert(`Renommage impossible : ${res.error || 'Erreur inconnue'}`);
+          alert(`Erreur : ${res.error || 'Impossible de renommer'}`);
         }
         cleanup();
       };
       
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") cleanup(); });
-      input.addEventListener("blur", commit);
+      input.addEventListener("keydown", (e) => { 
+        if (e.key === "Enter") { e.preventDefault(); commit(); } 
+        if (e.key === "Escape") { e.preventDefault(); cleanup(); } 
+      });
+      input.addEventListener("blur", () => {
+        // On laisse un petit délai pour permettre au clic sur Enter d'aboutir proprement 
+        // ou pour éviter les conflits si cleanup() est déjà en cours.
+        setTimeout(() => { if (anchorEl.__editing) commit(); }, 100);
+      });
     });
   }
 
