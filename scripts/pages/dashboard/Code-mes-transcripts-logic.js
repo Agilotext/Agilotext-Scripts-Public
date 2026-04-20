@@ -454,20 +454,61 @@
 
   function main(token) {
     __GLOBAL.token = token;
-    __GLOBAL.email = document.querySelector('[name="memberEmail"]')?.value;
+    // On récupère l'email de l'utilisateur depuis l'input caché Memberstack
+    __GLOBAL.email = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent;
+    
+    if (!__GLOBAL.email) {
+      console.warn("[Agilotext] Email non trouvé, le chargement peut échouer.");
+    }
+
     fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(__GLOBAL.edition)}&limit=9999`)
       .then(r => r.json())
       .then(data => {
         const container = document.getElementById('jobs-container');
-        const template = document.getElementById('template-row')?.content;
-        if (!container || !template) return;
+        const templateEl = document.getElementById('template-row');
+        
+        if (!container) {
+          console.error("[Agilotext] Élément #jobs-container manquant dans la page.");
+          return;
+        }
+        if (!templateEl) {
+          console.error("[Agilotext] Élément #template-row manquant. Assurez-vous que l'embed contient bien le script de template.");
+          return;
+        }
+
+        const template = templateEl.content;
         container.innerHTML = '';
-        (data.jobsInfoDtos || []).sort((a,b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation)).forEach(job => {
+
+        const jobs = data.jobsInfoDtos || [];
+        if (jobs.length === 0) {
+          container.innerHTML = '<div class="text-center text-color-grey" style="padding: 40px">Aucune transcription trouvée.</div>';
+          return;
+        }
+
+        // Tri par date décroissante
+        jobs.sort((a,b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation)).forEach(job => {
           buildJobRow({ job, userEmail: __GLOBAL.email, token, edition: __GLOBAL.edition, template, container });
         });
+
+        // Initialisation des bulk actions (checkboxes, boutons delete/export/webhook)
         AgilotextBulk.init();
+      })
+      .catch(err => {
+        console.error("[Agilotext] Erreur lors du chargement des jobs:", err);
       });
   }
 
-  const itv = setInterval(() => { if (window.globalToken) { clearInterval(itv); main(window.globalToken); } }, 100);
+  /**
+   * INITIALISATION
+   * On attend que le token soit disponible (globalToken est souvent injecté par un autre script Memberstack)
+   */
+  const itv = setInterval(() => {
+    // On essaie de trouver globalToken (window ou global)
+    const token = window.globalToken || (typeof globalToken !== 'undefined' ? globalToken : null);
+    if (token) {
+      clearInterval(itv);
+      console.log(`[Agilotext] Initializing script v${VERSION} (${__GLOBAL.edition})`);
+      main(token);
+    }
+  }, 100);
 })();
