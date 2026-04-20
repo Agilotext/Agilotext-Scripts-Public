@@ -21,7 +21,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.14', refresh: function () {} },
+      { version: '1.7.15', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.14';
+  const APP_VERSION = '1.7.15';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -550,12 +550,6 @@
 
   const FOLDER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>';
-  /** Icône dossiers empilés (viewBox 576×512) — fill `currentColor` pour le thème (remplace #fff du SVG source). */
-  const SUMMARY_STACKED_FOLDERS_MARKUP =
-    '<span class="agilo-nav-folders__summary-icon-slot agilo-nav-folders__summary-fa-folder-wrap" aria-hidden="true">' +
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" aria-hidden="true" class="agilo-nav-folders__summary-fa-folder">' +
-    '<path d="M64 32C64 14.3 49.7 0 32 0S0 14.3 0 32v96V384c0 35.3 28.7 64 64 64H256V384H64V160H256V96H64V32zM288 192c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V64c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4L409.4 9.4c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V192zm0 288c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V352c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4l-13.3-13.3c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V480z"/>' +
-    '</svg></span>';
   const STACK_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
@@ -703,10 +697,11 @@
     const main = document.createElement('span');
     main.className = 'agilo-nav-folders__summary-main';
 
+    /* Même classes Webflow que « Tableau de bord » (span = ok dans <summary>) ; SVG 24×24, pas Font Awesome 576×512 */
     const iconWrap = document.createElement('span');
-    iconWrap.className = 'agilo-nav-folders__summary-icon-root';
+    iconWrap.className = 'icon-small w-embed';
     iconWrap.setAttribute('aria-hidden', 'true');
-    iconWrap.innerHTML = SUMMARY_STACKED_FOLDERS_MARKUP;
+    iconWrap.innerHTML = FOLDER_SVG;
 
     const txt = document.createElement('span');
     txt.className = 'agilo-nav-folders__summary-text';
