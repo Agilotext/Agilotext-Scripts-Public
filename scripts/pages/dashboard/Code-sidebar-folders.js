@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.19';
+  const APP_VERSION = '1.7.20';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -281,23 +281,25 @@
     return { ok: false, error: 'Renommage dossier non disponible (API).' };
   }
 
-  async function deleteFolder(auth, folderId, folderName) {
-    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?\n\nAttention : l'API refusera la suppression si le dossier n'est pas vide.`)) return;
+  async function deleteFolder(auth, folderId, folderName, jobsCount) {
+    if (jobsCount > 0) {
+      window.alert(`Impossible de supprimer le dossier « ${folderName} » car il n'est pas vide (contient ${jobsCount} fichiers).\n\nVeuillez d'abord déplacer vos transcriptions vers un autre dossier ou les supprimer.`);
+      return;
+    }
+    
+    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?`)) return;
+    
     const res = await postForm('deleteTranscriptFolder', {
       username: auth.username,
       token: auth.token,
       edition: auth.edition,
       folderId: String(folderId)
     });
+    
     if (res.ok) {
       await load();
     } else {
-      const err = String(res.error || '').toLowerCase();
-      if (err.includes('not empty') || err.includes('not_empty')) {
-        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
-      } else {
-        window.alert(res.error || 'Impossible de supprimer ce dossier.');
-      }
+      window.alert(res.error || 'Impossible de supprimer ce dossier.');
     }
   }
 
@@ -943,7 +945,7 @@
         deleteBtn.addEventListener('click', (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          deleteFolder(auth, Number(filter), label);
+          deleteFolder(auth, Number(filter), label, count);
         });
       }
       list.appendChild(a);
