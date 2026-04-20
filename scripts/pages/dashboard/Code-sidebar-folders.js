@@ -19,7 +19,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.0', refresh: function () {} },
+      { version: '1.7.1', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -32,7 +32,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.0';
+  const APP_VERSION = '1.7.1';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -547,18 +547,6 @@
     return raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
-  function maxFolderLabelLength() {
-    const n = Number(mount.getAttribute('data-folder-name-max') || 28);
-    return Number.isFinite(n) && n >= 12 ? Math.floor(n) : 28;
-  }
-
-  function truncateFolderLabel(raw) {
-    const s = String(raw || '').trim();
-    const max = maxFolderLabelLength();
-    if (s.length <= max) return { display: s, truncated: false };
-    return { display: `${s.slice(0, Math.max(0, max - 3)).trimEnd()}...`, truncated: true };
-  }
-
   function fallbackCreateAction(auth) {
     const targetSelector = String(mount.getAttribute('data-folder-create-selector') || '').trim();
     if (targetSelector) {
@@ -862,9 +850,13 @@
       const nameEl = a.querySelector('.agilo-nav-folders__name');
       const countEl = a.querySelector('.agilo-nav-folders__count');
       if (nameEl) {
-        const labelInfo = isFolderRow ? truncateFolderLabel(label) : { display: label, truncated: false };
-        nameEl.textContent = labelInfo.display;
-        if (labelInfo.truncated) nameEl.setAttribute('title', String(label || ''));
+        /* Texte complet : ellipse gérée par CSS (Webflow peut annuler si on tronque mal au caractère). */
+        nameEl.textContent = String(label || '');
+        if (isFolderRow && String(label || '').length > 18) {
+          nameEl.setAttribute('title', String(label || ''));
+        } else {
+          nameEl.removeAttribute('title');
+        }
       }
       if (countEl) countEl.textContent = String(count);
       const renameBtn = a.querySelector('.agilo-nav-folders__rename-btn');

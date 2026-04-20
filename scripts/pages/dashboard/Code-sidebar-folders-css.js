@@ -148,6 +148,12 @@
   justify-content:flex-start !important;
   text-align:left !important;
 }
+/* Webflow : liens dashboard souvent min-width:auto → casse l’ellipse sur noms longs */
+a.agilo-nav-folders__row.dashboard-link,
+a.agilo-nav-folders__row.w-inline-block{
+  min-width:0 !important;
+  max-width:100% !important;
+}
 .agilo-nav-folders__row{
   gap:.4rem;
   padding:.22rem 0 .22rem .04rem;
@@ -224,7 +230,7 @@
   display:block;
 }
 .agilo-nav-folders__name{
-  flex:1 1 auto;
+  flex:1 1 0%;
   min-width:0;
   max-width:100%;
   overflow:hidden;
@@ -234,10 +240,11 @@
   text-align:left !important;
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
-  max-width:calc(100% - 3.1rem);
+  flex:1 1 0% !important;
+  max-width:none;
 }
 .agilo-nav-folders__row--folder.agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
-  max-width:calc(100% - 4.25rem);
+  max-width:none;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__name{
   color:var(--agilo-text, #020202);
