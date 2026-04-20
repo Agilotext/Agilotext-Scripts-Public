@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.7.1' };
+  window.__agiloRail = { version: '4.7.2' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -13,6 +13,11 @@
   // Anti-clics frénétiques : n'expédier que le dernier changement
 const DISPATCH_DEBOUNCE_MS = 500;
 let __pendingLoadTimer = null;
+
+  const FOLDERS_STACKED_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" aria-hidden="true"><path d="M64 32C64 14.3 49.7 0 32 0S0 14.3 0 32v96V384c0 35.3 28.7 64 64 64H256V384H64V160H256V96H64V32zM288 192c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V64c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4L409.4 9.4c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V192zm0 288c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V352c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4l-13.3-13.3c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V480z"/></svg>';
+  const PLUS_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
 
   /* ================== DOM helpers ================== */
@@ -452,10 +457,37 @@ let __pendingLoadTimer = null;
     }
 
     bar.innerHTML = '';
-    const lab = document.createElement('span');
-    lab.className = 'agilo-folder-label';
-    lab.textContent = 'Dossiers';
-    bar.appendChild(lab);
+    
+    const details = document.createElement('details');
+    details.className = 'agilo-folder-details';
+    // Par défaut fermé (masqué) sauf si filtre actif n'est pas 'all'
+    if (state.folderFilter !== 'all') details.setAttribute('open', '');
+
+    const sum = document.createElement('summary');
+    sum.className = 'agilo-folder-summary';
+    
+    const sumMain = document.createElement('div');
+    sumMain.className = 'agilo-folder-summary-main';
+    
+    const sumIcon = document.createElement('span');
+    sumIcon.className = 'agilo-folder-summary-icon icon-small w-embed';
+    sumIcon.innerHTML = FOLDERS_STACKED_SVG;
+    
+    const sumTxt = document.createElement('span');
+    sumTxt.className = 'agilo-folder-summary-text';
+    sumTxt.textContent = 'Dossiers';
+    
+    const sumChev = document.createElement('span');
+    sumChev.className = 'agilo-folder-summary-chev';
+
+    sumMain.appendChild(sumIcon);
+    sumMain.appendChild(sumTxt);
+    sumMain.appendChild(sumChev);
+    sum.appendChild(sumMain);
+    details.appendChild(sum);
+
+    const inner = document.createElement('div');
+    inner.className = 'agilo-folder-inner';
 
     const chipsWrap = document.createElement('div');
     chipsWrap.className = 'agilo-folder-chips';
@@ -479,7 +511,7 @@ let __pendingLoadTimer = null;
     const newFoldBtn = document.createElement('button');
     newFoldBtn.type = 'button';
     newFoldBtn.className = 'agilo-folder-chip agilo-folder-chip--new';
-    newFoldBtn.textContent = '+ Dossier';
+    newFoldBtn.innerHTML = `${PLUS_SVG} Dossier`;
     newFoldBtn.addEventListener('click', async () => {
       const name = window.prompt('Nom du nouveau dossier ?');
       if (!name || !String(name).trim()) return;
@@ -498,7 +530,9 @@ let __pendingLoadTimer = null;
       renderFolderBarDom(a);
     });
     chipsWrap.appendChild(newFoldBtn);
-    bar.appendChild(chipsWrap);
+    inner.appendChild(chipsWrap);
+    details.appendChild(inner);
+    bar.appendChild(details);
 
     const moveDetails = document.createElement('details');
     moveDetails.className = 'agilo-folder-move-details';
