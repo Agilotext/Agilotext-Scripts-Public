@@ -21,7 +21,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.16', refresh: function () {} },
+      { version: '1.7.17', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.16';
+  const APP_VERSION = '1.7.17';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -292,7 +292,12 @@
     if (res.ok) {
       await load();
     } else {
-      window.alert(res.error || 'Impossible de supprimer ce dossier.');
+      const err = String(res.error || '').toLowerCase();
+      if (err.includes('not empty') || err.includes('not_empty')) {
+        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
+      } else {
+        window.alert(res.error || 'Impossible de supprimer ce dossier.');
+      }
     }
   }
 

@@ -1,0 +1,515 @@
+<script>
+window.addEventListener('load', function() {
+  // ═══════════════════════════════════════════════════════════════════
+  //  LISTE DES JOBS — renommage, partage, suppression, téléchargements
+  //  + garde "clic → vérification" pour les résumés (compte-rendus)
+  // ═══════════════════════════════════════════════════════════════════
+
+  // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification)
+  (function injectListTheme(){
+    if (document.getElementById('agilo-list-theme')) return;
+    const css = `
+      .is-disabled{opacity:.6; cursor:not-allowed;}
+      .is-verifying{cursor:progress;}
+    `;
+    const st = document.createElement('style');
+    st.id='agilo-list-theme';
+    st.textContent = css;
+    document.head.appendChild(st);
+  })();
+
+  // --- Utilitaires ----------------------------------------------------
+  function convertDateStringToDate(dateString) {
+    const parts = dateString.split(/[- :]/);
+    return new Date(parts[2], parts[1] - 1, parts[0], parts[3], parts[4], parts[5]);
+  }
+  function sanitizeFilenameBase(base) {
+    return (base || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
+  }
+  function extractErrorMessage(javaException) {
+    if (!javaException) return 'Cause inconnue.';
+    const parts = javaException.split(':');
+    return (parts.length > 1 ? parts.slice(1).join(':') : javaException).trim();
+  }
+
+  // --- Garde de liens (enable / disable + popup) ---------------------
+  function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
+    if (!link) return;
+
+    // Nettoyage d’un ancien handler
+    if (link.__clickHandler) {
+      link.removeEventListener('click', link.__clickHandler);
+      link.__clickHandler = null;
+    }
+
+    if (!disabledMsg) {
+      // ENABLE
+      link.classList.remove('is-disabled','is-verifying');
+      link.removeAttribute('aria-disabled');
+      link.removeAttribute('title');
+      link.style.pointerEvents = '';
+      link.style.cursor = '';
+      link.setAttribute('href', href);
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener');
+      return;
+    }
+
+    // DISABLE
+    const hard = opts.hard === true;
+    link.classList.add('is-disabled');
+    link.classList.remove('is-verifying');
+    link.setAttribute('aria-disabled', 'true');
+    link.setAttribute('title', disabledMsg);
+
+    if (hard) {
+      link.style.pointerEvents = 'none';
+      link.style.cursor = 'not-allowed';
+      link.removeAttribute('href');
+      link.removeAttribute('target');
+      link.removeAttribute('download');
+    } else {
+      link.style.pointerEvents = 'auto';
+      link.style.cursor = 'not-allowed';
+      link.setAttribute('href', '#');
+      link.removeAttribute('target');
+      link.removeAttribute('download');
+
+      link.__clickHandler = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        alert(disabledMsg || "Pas de compte-rendu disponible.");
+      };
+      link.addEventListener('click', link.__clickHandler);
+    }
+  }
+
+  // --- Vérif “existe vraiment ?” (cache par job/format/type) ---------
+  const _assetOkCache = new Map(); // key = `${jobId}|${fmt}|${type}|${edition}`
+  async function verifyAssetOnce(jobId, url, key){
+    if (_assetOkCache.has(key)) return _assetOkCache.get(key);
+
+    let ok = false;
+    try {
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'follow',
+        headers: {
+          'Accept': 'application/octet-stream,application/pdf,application/msword,application/rtf,text/html;q=0.9,application/json;q=0.1'
+        }
+      });
+
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const cd = r.headers.get('content-disposition') || '';
+
+      // Si c'est clairement un fichier
+      if (r.ok && (/attachment|filename=/i.test(cd) ||
+          /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
+        ok = true;
+      } else {
+        const text = await r.text().catch(()=>'');
+
+        let j = null; try { j = JSON.parse(text); } catch {}
+        if (j) {
+          const st = String(j.status||'').toUpperCase();
+          ok = (st === 'OK');
+        } else {
+          // Si c'est HTML non-JSON : on regarde heuristique KO
+          if (/"status"\s*:\s*"KO"/i.test(text) || /error_summary_transcript_file_not_exists/i.test(text)) {
+            ok = false;
+          } else {
+            ok = r.ok && (ct.includes('text/html') || text.trim().length > 0);
+          }
+        }
+      }
+    } catch {
+      ok = false;
+    }
+
+    _assetOkCache.set(key, ok);
+    return ok;
+  }
+
+  // Interception: on ne laisse ouvrir qu’après vérif live
+  function guardClick(a, url, jobId, key, failMsg='Résumé indisponible.') {
+    if (!a || a.__guarded) return;
+    a.__guarded = true;
+
+    a.addEventListener('click', async (e)=>{
+      // si déjà activé → laisser faire
+      if (a.getAttribute('href') && !a.hasAttribute('aria-disabled')) return;
+
+      e.preventDefault(); e.stopPropagation();
+      a.classList.add('is-verifying');
+      const ok = await verifyAssetOnce(jobId, url, key);
+      a.classList.remove('is-verifying');
+
+      if (ok) {
+        setDownloadLink(a, url); // active définitivement
+        a.setAttribute('target','_blank');
+        window.open(url, '_blank', 'noopener');
+      } else {
+        setDownloadLink(a, '#', failMsg); // bloque + popup
+      }
+    }, { passive:false });
+  }
+
+  // --- API: renommage ------------------------------------------------
+  const RENAME_ENDPOINT = "https://api.agilotext.com/api/v1/renameTranscriptFile";
+  async function renameOnServer({ jobId, userEmail, token, edition, newFilename }) {
+    const body = new URLSearchParams({
+      username: userEmail, token, edition,
+      jobId: String(jobId), filename: newFilename
+    });
+
+    try {
+      const r = await fetch(RENAME_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body.toString()
+      });
+      const raw = await r.text();
+      let data; try { data = JSON.parse(raw); } catch {
+        return { ok: false, error: `Réponse non JSON (${r.status})` };
+      }
+      if (data.status === "OK") return { ok: true };
+
+      const msg = data.message || data.errorMessage || data.error || data.reason || "Erreur inconnue";
+      return { ok: false, error: msg };
+    } catch (e) {
+      return { ok: false, error: e?.message || "Erreur réseau" };
+    }
+  }
+
+  function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
+    if (!anchorEl || !buttonEl) return;
+    const enterEditMode = () => {
+      if (anchorEl.__editing) return;
+      anchorEl.__editing = true;
+
+      const currentFull = (anchorEl.textContent || "").trim();
+      const dot = currentFull.lastIndexOf(".");
+      const base = dot > 0 ? currentFull.slice(0, dot) : currentFull;
+      const ext  = dot > 0 ? currentFull.slice(dot) : "";
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "file-name-input";
+      input.value = base;
+
+      anchorEl.replaceWith(input);
+      input.focus(); input.select();
+
+      const cleanup = () => { input.replaceWith(anchorEl); anchorEl.__editing = false; };
+
+      const commit = async () => {
+        const newBase = sanitizeFilenameBase(input.value);
+        if (!newBase) { cleanup(); return; }
+        const newFilename = `${newBase}${ext}`;
+        if (newFilename === currentFull) { cleanup(); return; }
+
+        const res = await renameOnServer({ jobId: job.jobid, userEmail, token, edition, newFilename });
+        if (res.ok) {
+          anchorEl.textContent = newFilename;
+          anchorEl.setAttribute("download", newFilename);
+          job.filename = newFilename;
+        } else {
+          alert(`Renommage impossible : ${res.error}`);
+        }
+        cleanup();
+      };
+
+      input.addEventListener("keydown", (e)=>{ if (e.key === "Enter") commit(); if (e.key === "Escape") cleanup(); });
+      input.addEventListener("blur", commit);
+    };
+    buttonEl.addEventListener("click", enterEditMode);
+  }
+
+  // --- Icônes d’état --------------------------------------------------
+  function updateIconVisibility(root, status) {
+    const icons = {
+      error: root.querySelector('.icon-error'),
+      inprogress: root.querySelector('.icon-inprogress'),
+      readySummaryPending: root.querySelector('.icon-ready_summary_pending'),
+      readySummaryReady: root.querySelector('.icon-ready_summary_ready'),
+      readySummaryOnError: root.querySelector('.icon-ready_summary_on_error'),
+      ready: root.querySelector('.icon-ready')
+    };
+    Object.values(icons).forEach(i=> i && (i.style.display='none'));
+
+    switch ((status||'').toUpperCase()) {
+      case 'ON_ERROR':
+      case 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS':
+      case 'ERROR_TOO_MANY_LANGUAGES_CODE':
+      case 'ERROR_TRANSLATE_FILES_NOT_EXISTS':
+      case 'ERROR_TRANSLATE_NOT_READY':
+      case 'ERROR_TRANSLATE_ON_ERROR':
+        if (icons.error) icons.error.style.display = 'block'; break;
+      case 'PENDING':
+      case 'IN_PROGRESS':
+        if (icons.inprogress) icons.inprogress.style.display = 'block'; break;
+      case 'READY_SUMMARY_PENDING':
+        if (icons.readySummaryPending) icons.readySummaryPending.style.display = 'block'; break;
+      case 'READY_SUMMARY_READY':
+        if (icons.readySummaryReady) icons.readySummaryReady.style.display = 'block'; break;
+      case 'READY_SUMMARY_ON_ERROR':
+        if (icons.readySummaryOnError) icons.readySummaryOnError.style.display = 'block'; break;
+      default:
+        if (icons.ready) icons.ready.style.display = 'block';
+    }
+  }
+
+  // --- Suppression ----------------------------------------------------
+  function deleteJob(jobId, userEmail, token, edition='ent') {
+    fetch(`https://api.agilotext.com/api/v1/deleteJob?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(edition)}`, {
+      method: 'GET', headers: { 'Accept': 'application/json' }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if (data.status === "OK") {
+        const row = document.querySelector(`[data-job-id="${jobId}"]`);
+        const parent = row?.closest('.wrapper-content_item-row');
+        if (parent) parent.remove();
+      } else {
+        console.warn('Suppression non confirmée:', data);
+      }
+    })
+    .catch(err=>console.error('Erreur lors de la suppression:', err));
+  }
+
+  // --- Partage --------------------------------------------------------
+  async function updateShareLink(jobId, userEmail, token, edition, el) {
+    try {
+      const r = await fetch(
+        `https://api.agilotext.com/api/v1/getSharedUrl?jobId=${jobId}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`
+      );
+      const data = await r.json();
+      if (data.status === "OK" && data.url) {
+        el.href = data.url;
+        el.style.display = 'inline';
+      }
+    } catch (e) { console.error('Erreur lien partageable:', e); }
+  }
+
+  // --- Construction d’une ligne job ----------------------------------
+  function buildJobRow({ job, userEmail, token, edition, template, container }) {
+    const clone = document.importNode(template, true);
+    const row = clone.querySelector('.wrapper-content_item-row');
+    if (!row) return;
+
+    row.setAttribute('data-creation-date', job.dtCreation);
+    row.setAttribute('data-job-id', job.jobid);
+
+    updateIconVisibility(clone, job.transcriptStatus);
+
+    // Clic sur icône d’état → explication
+    const stateDiv = clone.querySelector('.state');
+    const visibleIcon = stateDiv ? stateDiv.querySelector('svg:not([style*="display: none"])') : null;
+    if (visibleIcon) {
+      visibleIcon.style.cursor = 'pointer';
+      visibleIcon.addEventListener('click', function(){
+        const st = (job.transcriptStatus||'').toUpperCase();
+        let message = '';
+        if (['ON_ERROR','ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS','ERROR_TOO_MANY_LANGUAGES_CODE','ERROR_TRANSLATE_FILES_NOT_EXISTS','ERROR_TRANSLATE_NOT_READY','ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
+          message = `Le traitement a échoué : ${extractErrorMessage(job.javaException)}`;
+        } else if (['PENDING','IN_PROGRESS'].includes(st)) {
+          message = 'Le traitement est en cours, merci de patienter.';
+        } else if (st === 'READY_SUMMARY_PENDING') {
+          message = 'Le transcript est disponible, le résumé est en cours de génération.';
+        } else if (st === 'READY_SUMMARY_READY') {
+          message = 'Le transcript et le résumé sont disponibles.';
+        } else if (st === 'READY_SUMMARY_ON_ERROR') {
+          message = `Le transcript est disponible, mais le résumé a échoué : ${extractErrorMessage(job.javaException)}`;
+        } else {
+          message = 'Statut non reconnu.';
+        }
+        alert(message);
+      });
+    }
+
+    // Dates
+    const creation = clone.querySelector('.creation-date');
+    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
+    const update = clone.querySelector('.update-date');
+    if (update) update.textContent = convertDateStringToDate(job.dtUpdate).toLocaleString();
+
+    // Nom + renommage
+    const fileNameAnchor = clone.querySelector('.file-name');
+    const renameButton   = clone.querySelector('.rename-btn');
+    if (fileNameAnchor) {
+      fileNameAnchor.textContent = job.filename;
+      // Téléchargement de l'audio d'origine
+      fileNameAnchor.href = `https://api.agilotext.com/api/v1/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      fileNameAnchor.setAttribute('download', job.filename);
+    }
+    setupInlineRename({ anchorEl:fileNameAnchor, buttonEl:renameButton, job, userEmail, token, edition });
+
+    // Lien de partage
+    const shareLinkElement = clone.querySelector('.share-link');
+    if (shareLinkElement) {
+      updateShareLink(job.jobid, userEmail, token, edition, shareLinkElement);
+      const wrapperMessagePro = shareLinkElement.nextElementSibling;
+      if (wrapperMessagePro) {
+        shareLinkElement.addEventListener('mouseenter', ()=> wrapperMessagePro.style.display = 'block');
+        shareLinkElement.addEventListener('mouseleave', ()=> wrapperMessagePro.style.display = 'none');
+      }
+    }
+
+    // Liens de téléchargement
+    const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
+    const st = (job.transcriptStatus||'').toUpperCase();
+
+    // Transcript
+    formats.forEach(fmt=>{
+      const a = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
+      if (!a) return;
+
+      if (['ON_ERROR','ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS','ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
+        setDownloadLink(a, '#', `Le traitement a échoué : ${extractErrorMessage(job.javaException)}`);
+      } else if (['PENDING','IN_PROGRESS'].includes(st)) {
+        setDownloadLink(a, '#', 'Le traitement est en cours, merci de patienter.');
+      } else {
+        const url = `https://api.agilotext.com/api/v1/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
+        const key = `${job.jobid}|${fmt}|text|${edition}`;
+        // on active mais on garde une garde “au clic” (plus sûr)
+        setDownloadLink(a, url);
+        guardClick(a, url, job.jobid, key, 'Transcript indisponible.');
+        a.setAttribute('download', `transcript.${fmt}`);
+      }
+    });
+
+    // Résumé (compte-rendu) — logique stricte “clic → vérif”
+    formats.forEach(fmt=>{
+      const a = clone.querySelector(`.download_wrapper-link_summary_${fmt}`);
+      if (!a) return;
+
+      // doc/pdf peuvent être paywallés ailleurs si besoin
+      if (['READY_SUMMARY_ON_ERROR','ON_ERROR','ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'].includes(st)) {
+        setDownloadLink(a, '#', `Le résumé n'est pas disponible${job?.javaException?` : ${extractErrorMessage(job.javaException)}`:''}`);
+        return;
+      }
+
+      if (['PENDING','IN_PROGRESS','READY_SUMMARY_PENDING'].includes(st)) {
+        setDownloadLink(a, '#', 'Le résumé n’est pas encore disponible, merci de patienter.');
+        return;
+      }
+
+      if (st === 'READY_SUMMARY_READY') {
+        // Par défaut: désactivé + vérification
+        const apiFmt = (fmt === 'txt') ? 'html' : fmt; // backend txt=html
+        const u   = `https://api.agilotext.com/api/v1/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFmt}&edition=${encodeURIComponent(edition)}`;
+        const key = `${job.jobid}|${fmt}|summary|${edition}`;
+
+        setDownloadLink(a, '#', 'Vérification en cours…'); // bloqué visuellement
+        a.classList.add('is-verifying');
+
+        // Garde au clic (simulation) + pré-vérif pour activer si OK
+        guardClick(a, u, job.jobid, key, 'Résumé indisponible.');
+        verifyAssetOnce(job.jobid, u, key).then(ok=>{
+          a.classList.remove('is-verifying');
+          if (ok) {
+            setDownloadLink(a, u);
+            a.setAttribute('download', `summary.${fmt==='txt'?'html':fmt}`);
+          } else {
+            setDownloadLink(a, '#', 'Résumé indisponible.');
+          }
+        });
+        return;
+      }
+
+      // Inconnu → blocage
+      setDownloadLink(a, '#', 'Résumé indisponible.');
+    });
+
+    // Suppression
+    const deleteButton = clone.querySelector('.delete-job-button_to-confirm');
+    if (deleteButton) {
+      deleteButton.setAttribute('data-job-id', job.jobid);
+      deleteButton.addEventListener('click', function(){
+        currentJobIdToDelete = job.jobid;
+        const popup = document.querySelector('.popup-container');
+        if (popup) popup.style.display = 'flex';
+      });
+    }
+
+    container.appendChild(clone);
+  }
+
+  // --- Orchestration --------------------------------------------------
+  let currentJobIdToDelete = null;
+  const __GLOBAL = { token: null, email: null, edition: 'ent' };
+
+  // Popup suppression (ouverture par délégation déjà plus haut si besoin)
+  document.addEventListener('click', function(e){
+    if (e.target.classList.contains('delete-job-button_to-confirm')) {
+      const row = e.target.closest('.wrapper-content_item-row');
+      if (!row) return;
+      const jobId = row.getAttribute('data-job-id');
+      currentJobIdToDelete = jobId;
+      const popup = document.querySelector('.popup-container');
+      if (popup) popup.style.display = 'flex';
+    }
+  });
+
+  // Confirmation suppression (utilise __GLOBAL.token)
+  const confirmBtn = document.querySelector('.delete-job-button_confirmed');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', function(){
+      if (currentJobIdToDelete) {
+        const emailInput = document.querySelector('[name="memberEmail"]');
+        const userEmail  = emailInput ? emailInput.value : '';
+        deleteJob(currentJobIdToDelete, userEmail, __GLOBAL.token, __GLOBAL.edition);
+        const popup = document.querySelector('.popup-container'); if (popup) popup.style.display = 'none';
+        currentJobIdToDelete = null;
+      }
+    });
+  }
+
+  function mainScriptExecution(token) {
+    const userEmailEl = document.querySelector('[name="memberEmail"]');
+    const userEmail   = userEmailEl ? userEmailEl.value : null;
+    const edition     = __GLOBAL.edition;
+
+    __GLOBAL.token = token;
+    __GLOBAL.email = userEmail;
+
+    fetch(`https://api.agilotext.com/api/v1/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=9999&offset=0`, {
+      method: 'GET', headers: { 'Accept': 'application/json' }
+    })
+    .then(r=>r.json())
+    .then(data=>{
+      if (data.status !== "OK") return;
+
+      const container = document.getElementById('jobs-container');
+      const templateEl = document.getElementById('template-row');
+      if (!container || !templateEl) return;
+      const template = templateEl.content;
+
+      const sortedJobs = (data.jobsInfoDtos||[]).slice().sort((a,b)=>
+        convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation)
+      );
+
+      // Compteur de résumés prêts
+      const readyCount = sortedJobs.reduce((n,j)=> n + (String(j.transcriptStatus).toUpperCase()==='READY_SUMMARY_READY' ? 1 : 0), 0);
+      const readyCountEl = document.getElementById('readyCount');
+      if (readyCountEl) readyCountEl.textContent = readyCount;
+
+      sortedJobs.forEach(job=>{
+        buildJobRow({ job, userEmail, token, edition, template, container });
+      });
+    })
+    .catch(err=>console.error('Erreur lors de la récupération des données:', err));
+  }
+
+  // Attente du token global (fourni par la page)
+  const tmr = setInterval(()=>{
+    if (typeof globalToken !== 'undefined' && globalToken) {
+      clearInterval(tmr);
+      mainScriptExecution(globalToken);
+    }
+  }, 100);
+});
+</script>
