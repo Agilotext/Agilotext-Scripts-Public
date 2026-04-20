@@ -12,6 +12,9 @@
 #agilo-nav-folders-root{
   display:block;
   width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
 }
 .agilo-nav-folders-details{
   margin:0;
@@ -54,8 +57,18 @@
   box-shadow:none !important;
   width:100% !important;
   max-width:100% !important;
+  min-width:0 !important;
   box-sizing:border-box !important;
   column-gap:.5rem !important;
+}
+/* Webflow : data-summary-class="dashboard-link w-inline-block" rétrécit le <summary> → le + colle à la flèche */
+.agilo-nav-folders__summary.dashboard-link,
+.agilo-nav-folders__summary.w-inline-block,
+.agilo-nav-folders__summary.dashboard-link.w-inline-block{
+  display:grid !important;
+  width:100% !important;
+  max-width:100% !important;
+  vertical-align:top;
 }
 .agilo-nav-folders__summary-main{
   display:inline-flex;
@@ -83,8 +96,19 @@
   justify-content:center;
   line-height:0;
 }
-.agilo-nav-folders__summary-icon-slot svg.icon-1x1-small.dashboard{
+.agilo-nav-folders__summary-fa-folder-wrap{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:0;
+  color:var(--color--gris, var(--agilo-dim, #525252));
+  opacity:.9;
+}
+.agilo-nav-folders__summary-fa-folder{
   display:block;
+  width:auto;
+  height:1.02rem;
+  max-width:1.14rem;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
@@ -170,8 +194,10 @@
 }
 .agilo-nav-folders__list--match-nav{
   padding-left:0;
+  padding-right:.28rem;
   padding-top:0;
   border-left:none;
+  box-sizing:border-box;
 }
 /* Webflow impose souvent inline-block sur les liens : forcer flex pour le layout */
 .agilo-nav-folders__list > .agilo-nav-folders__row{
@@ -207,7 +233,8 @@ a.agilo-nav-folders__row.w-inline-block{
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .48rem);
   padding-left:.04rem;
-  padding-right:0;
+  padding-right:.24rem;
+  box-sizing:border-box;
 }
 .agilo-nav-folders__row:hover{
   background:transparent;
@@ -343,39 +370,45 @@ a.agilo-nav-folders__row.w-inline-block{
   box-shadow:0 0 0 2px rgba(23,74,150,.22);
   border-radius:4px;
 }
-/* Pastilles : neutres (surcharge .readycount Webflow) */
+/* Pastilles compteur : lisibles, pas rognées, léger relief */
 .agilo-nav-folders__list .agilo-nav-folders__row .agilo-nav-folders__count{
   flex:0 0 auto;
   display:inline-flex !important;
   align-items:center;
   justify-content:center;
   margin-left:auto;
-  min-width:1.28rem;
-  min-height:1.28rem;
-  padding:0 .32rem;
+  margin-right:0;
+  min-width:1.42rem;
+  min-height:1.42rem;
+  padding:0 .4rem;
   box-sizing:border-box;
   border-radius:999px;
-  font-size:.66rem;
+  font-size:.6rem;
   font-weight:600;
   line-height:1;
+  letter-spacing:.01em;
   text-align:center;
   color:var(--color--gris, var(--agilo-dim, #525252)) !important;
-  background:rgba(255, 255, 255, 0.92) !important;
-  border:1px solid rgba(82, 82, 82, 0.18) !important;
-  box-shadow:none !important;
+  background:linear-gradient(180deg, #fff 0%, #f7f7f7 100%) !important;
+  border:1px solid rgba(0, 0, 0, 0.07) !important;
+  box-shadow:0 1px 1px rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
   opacity:1 !important;
   visibility:visible !important;
   flex-shrink:0;
   position:relative;
   z-index:1;
 }
+.agilo-nav-folders__list .agilo-nav-folders__row .agilo-nav-folders__count:empty{
+  min-width:1.42rem;
+}
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
-  font-size:.66rem;
+  font-size:.6rem;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__count{
   color:var(--agilo-text, #020202) !important;
-  background:transparent !important;
-  border-color:rgba(23, 74, 150, 0.24) !important;
+  background:linear-gradient(180deg, #fff 0%, #f4f6fb 100%) !important;
+  border-color:rgba(23, 74, 150, 0.22) !important;
+  box-shadow:0 1px 1px rgba(23, 74, 150, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.95) !important;
 }
 .agilo-nav-folders--loading .agilo-nav-folders__placeholder{
   padding:.2rem 0 .1rem;
