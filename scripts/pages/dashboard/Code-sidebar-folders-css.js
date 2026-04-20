@@ -19,14 +19,11 @@
   padding-left:.42rem;
   padding-right:.52rem;
 }
-/* Webflow : uniquement la chaîne « dossiers » (évite tout .w-embed du site) */
-div.dashboard-link:has(#agilo-nav-folders-root),
+/* Ne pas forcer width sur .dashboard-link ancêtres Webflow (peut englober toute la nav et casser w-inline-block). */
 .embed-code-dossier:has(#agilo-nav-folders-root),
 .dashboard-link .embed-code-dossier.w-embed:has(#agilo-nav-folders-root){
-  display:block !important;
-  width:100% !important;
-  max-width:100% !important;
-  min-width:0 !important;
+  max-width:100%;
+  min-width:0;
   box-sizing:border-box;
 }
 /* w-inline-block sur les <a> dossiers = shrink-to-fit → pastilles hors carte */
@@ -91,9 +88,9 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   border-radius:0 !important;
   box-shadow:none !important;
 }
-.agilo-nav-folders__summary.dashboard-link,
-.agilo-nav-folders__summary.w-inline-block,
-.agilo-nav-folders__summary.dashboard-link.w-inline-block{
+#agilo-nav-folders-root .agilo-nav-folders__summary.dashboard-link,
+#agilo-nav-folders-root .agilo-nav-folders__summary.w-inline-block,
+#agilo-nav-folders-root .agilo-nav-folders__summary.dashboard-link.w-inline-block{
   display:flex !important;
   width:100% !important;
   max-width:100% !important;
@@ -339,11 +336,11 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   gap:.12rem;
   overflow:hidden;
 }
-/* Largeur : laisser le flex + data-folder-name-max (JS) décider — pas de cap fixe en rem (cassait 22 car.) */
+/* Pas de cap en rem sur le nom dossier (sinon ellipse avant data-folder-name-max) ; rester dans la ligne comme les autres rows */
 .agilo-nav-folders__row--folder .agilo-nav-folders__name-block{
   flex:1 1 0%;
   min-width:0;
-  max-width:none;
+  max-width:100%;
 }
 .agilo-nav-folders__name-block .agilo-nav-folders__name{
   flex:1 1 0%;
