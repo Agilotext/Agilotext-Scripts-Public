@@ -19,18 +19,17 @@
   padding-left:.42rem;
   padding-right:.52rem;
 }
-/* Webflow Mes transcripts : <div class="dashboard-link"><div class="embed-code-dossier w-embed">…#root — sans 100% la nav rétrécit */
+/* Webflow : uniquement la chaîne « dossiers » (évite tout .w-embed du site) */
 div.dashboard-link:has(#agilo-nav-folders-root),
 .embed-code-dossier:has(#agilo-nav-folders-root),
-.w-embed:has(#agilo-nav-folders-root),
-.w-embed.w-script:has(#agilo-nav-folders-root){
+.dashboard-link .embed-code-dossier.w-embed:has(#agilo-nav-folders-root){
   display:block !important;
   width:100% !important;
   max-width:100% !important;
   min-width:0 !important;
   box-sizing:border-box;
 }
-/* w-inline-block sur les <a> dossiers = largeur « shrink-to-fit » → pastilles en dehors du fond blanc */
+/* w-inline-block sur les <a> dossiers = shrink-to-fit → pastilles hors carte */
 #agilo-nav-folders-root a.agilo-nav-folders__row.w-inline-block,
 #agilo-nav-folders-root a.agilo-nav-folders__row.dashboard-link{
   width:100% !important;
@@ -41,13 +40,15 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   align-items:center !important;
   box-sizing:border-box !important;
 }
-/* Même combat sur le <summary> (w-inline-block) : largeur pleine pour coller le + à droite fermé */
-#agilo-nav-folders-root summary.agilo-nav-folders__summary.w-inline-block,
+#agilo-nav-folders-root a.agilo-nav-folders__row .agilo-nav-folders__icon-wrap,
+#agilo-nav-folders-root a.agilo-nav-folders__row .agilo-nav-folders__icon{
+  flex-shrink:0;
+}
+/* <summary> w-inline-block : pleine largeur pour le + à droite */
 #agilo-nav-folders-root summary.agilo-nav-folders__summary{
   width:100% !important;
   max-width:100% !important;
   min-width:0 !important;
-  display:flex !important;
   box-sizing:border-box !important;
 }
 .agilo-nav-folders-details{
@@ -114,6 +115,9 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   display:flex;
   align-items:center;
   justify-content:center;
+  width:1.06rem;
+  height:1.06rem;
+  min-width:1.06rem;
   line-height:0;
 }
 .agilo-nav-folders__summary-icon-slot{
@@ -135,9 +139,11 @@ div.dashboard-link:has(#agilo-nav-folders-root),
 }
 .agilo-nav-folders__summary-fa-folder{
   display:block;
+  height:1.06rem;
   width:auto;
-  height:1.02rem;
-  max-width:1.14rem;
+  max-width:1.22rem;
+  aspect-ratio:576 / 512;
+  object-fit:contain;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
@@ -515,32 +521,61 @@ div.dashboard-link:has(#agilo-nav-folders-root),
   .agilo-nav-folders__chev{ transition:none; }
   .agilo-nav-folders__row{ transition:none; }
 }
-/* Lien « Tous les fichiers » : pleine largeur + pastille #readyCount dans le bloc blanc (Webflow) */
+/*
+ * « Tous les fichiers » / Transcriptions : Webflow = svg + .wrapper-link (titre + #readyCount) + .text-cr.
+ * Grille : icône | zone titre+pastille (1fr) | suffixe — évite de traiter .wrapper-link comme seul flex enfant.
+ */
 .full-width a[data-tour="nav-transcripts"]{
-  display:flex !important;
-  flex-direction:row;
-  flex-wrap:nowrap;
+  display:grid !important;
+  grid-template-columns:auto minmax(0,1fr) auto;
   align-items:center;
+  column-gap:.35rem;
   width:100% !important;
   max-width:100% !important;
   min-width:0 !important;
   box-sizing:border-box;
-  padding-right:.55rem;
-  gap:.38rem;
+  padding-right:.5rem;
+  vertical-align:middle;
+}
+.full-width a[data-tour="nav-transcripts"] > svg{
+  grid-column:1;
+  align-self:center;
+  width:auto;
+  height:auto;
+  max-height:1.25rem;
 }
 .full-width a[data-tour="nav-transcripts"] .wrapper-link{
+  grid-column:2;
   display:inline-flex !important;
   align-items:center;
   flex-wrap:nowrap;
-  gap:.38rem;
-  margin-left:auto;
   min-width:0;
   max-width:100%;
+  gap:.35rem;
   box-sizing:border-box;
+}
+.full-width a[data-tour="nav-transcripts"] .wrapper-link > div:first-child{
+  flex:0 1 auto;
+  min-width:0;
 }
 .full-width a[data-tour="nav-transcripts"] .wrapper-link .readycount,
 .full-width a[data-tour="nav-transcripts"] #readyCount{
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.full-width a[data-tour="nav-transcripts"] > .text-cr{
+  grid-column:3;
+  align-self:center;
   flex-shrink:0;
+  min-width:0;
+  max-width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* Variante Webflow sans .text-cr : la pastille peut occuper la 3e colonne visuellement */
+.full-width a[data-tour="nav-transcripts"]:not(:has(> .text-cr)) .wrapper-link{
+  grid-column:2 / -1;
 }
 `;
 
