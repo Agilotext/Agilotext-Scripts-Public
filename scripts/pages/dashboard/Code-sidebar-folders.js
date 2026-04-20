@@ -19,7 +19,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.5.1', refresh: function () {} },
+      { version: '1.6.0', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -32,6 +32,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
+  const APP_VERSION = '1.6.0';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -57,6 +58,42 @@
     return `agilo:token:${normalizeEdition(edition)}:${String(email || '').toLowerCase()}`;
   }
 
+  function readValueFromEl(el) {
+    if (!el) return '';
+    return String(
+      el.value ??
+      el.getAttribute?.('value') ??
+      el.getAttribute?.('src') ??
+      el.getAttribute?.('data-ms-member-email') ??
+      el.getAttribute?.('data-member-email') ??
+      el.textContent ??
+      ''
+    ).trim();
+  }
+
+  function readFirstNonEmpty(selList) {
+    for (let i = 0; i < selList.length; i++) {
+      const el = $(selList[i]);
+      const v = readValueFromEl(el);
+      if (v) return v;
+    }
+    return '';
+  }
+
+  function findAnyAgiloTokenInStorage() {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k === 'agilo:token' || k.indexOf('agilo:token:') === 0) {
+          const v = String(localStorage.getItem(k) || '').trim();
+          if (v) return v;
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
   /**
    * Script inline Agilotext : `let globalToken` + dispatch `agilotext:token` (pas `window.globalToken`).
    * try/catch : TDZ si ce script s’exécute avant l’init du jeton.
@@ -72,13 +109,17 @@
     const edition = getEdition();
     const email =
       byId('editorRoot')?.dataset?.username ||
-      byId('memberEmail')?.value ||
-      $('[name="memberEmail"]')?.value ||
-      $('input#memberEmail')?.value ||
-      $('input#email')?.value ||
-      $('input[type="email"]')?.value ||
-      $('[data-ms-member-email]')?.getAttribute?.('data-ms-member-email') ||
-      $('[data-member-email]')?.getAttribute?.('data-member-email') ||
+      readValueFromEl(byId('memberEmail')) ||
+      readFirstNonEmpty([
+        '[name="memberEmail"]',
+        'input#memberEmail',
+        '#email',
+        'input[type="email"]',
+        '[data-ms-member-email]',
+        '[data-member-email]',
+        '[data-ms-member="email"]',
+        '.memberemail'
+      ]) ||
       localStorage.getItem('agilo:username') ||
       localStorage.getItem('memberEmail') ||
       window.memberEmail ||
@@ -89,6 +130,7 @@
       (typeof window.globalToken === 'string' ? window.globalToken : '') ||
       localStorage.getItem(tokenKey(String(email || '').trim(), edition)) ||
       localStorage.getItem('agilo:token') ||
+      findAnyAgiloTokenInStorage() ||
       '';
     return { username: String(email || '').trim(), token: String(token || ''), edition };
   }
@@ -174,7 +216,7 @@
     return Number.isFinite(n) && n >= 0 ? n : 0;
   }
 
-  async function fetchTranscriptFoldersList(auth) {
+  async function fetchTranscriptFoldersList(auth, retried = false) {
     const url = `${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
     let resp;
     try {
@@ -182,6 +224,13 @@
     } catch (e) {
       dbg('getTranscriptFolders network', e);
       return { rootJobsCount: 0, folders: [] };
+    }
+    if ((resp.status === 401 || resp.status === 403) && !retried && auth.username && typeof window.getToken === 'function') {
+      try {
+        window.getToken(auth.username, auth.edition);
+      } catch {}
+      const a2 = await ensureAuth(8000);
+      if (a2.token) return fetchTranscriptFoldersList(a2, true);
     }
     if (!resp.ok) return { rootJobsCount: 0, folders: [] };
     const j = await resp.json().catch(() => null);
@@ -396,18 +445,102 @@
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 3 2 12h3v8h6v-6h2v6h6v-8h3L12 3Z"/></svg>';
+  const PLUS_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
 
   let __loading = false;
+  let __retryAttempt = 0;
+  let __retryTimer = null;
+
+  function summaryLabelText() {
+    return String(mount.getAttribute('data-summary-label') || 'dossiers').trim() || 'dossiers';
+  }
+
+  function triggerCreateFolder(auth, ev) {
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    const targetSelector = String(mount.getAttribute('data-folder-create-selector') || '').trim();
+    if (targetSelector) {
+      const target = document.querySelector(targetSelector);
+      if (target && typeof target.click === 'function') {
+        target.click();
+        return;
+      }
+    }
+    const href = String(mount.getAttribute('data-folder-create-href') || '').trim();
+    if (href) {
+      try {
+        location.href = new URL(href, location.origin).toString();
+        return;
+      } catch (_) {}
+    }
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:nav-folder-create', { detail: { auth } }));
+    } catch (_) {}
+  }
+
+  function createSummary(auth) {
+    const sum = document.createElement('summary');
+    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
+
+    const main = document.createElement('span');
+    main.className = 'agilo-nav-folders__summary-main';
+
+    const txt = document.createElement('span');
+    txt.className = 'agilo-nav-folders__summary-text';
+    txt.textContent = summaryLabelText();
+
+    const chev = document.createElement('span');
+    chev.className = 'agilo-nav-folders__chev';
+    chev.setAttribute('aria-hidden', 'true');
+
+    main.appendChild(txt);
+    main.appendChild(chev);
+
+    const actions = document.createElement('span');
+    actions.className = 'agilo-nav-folders__summary-actions';
+
+    const createBtn = document.createElement('button');
+    createBtn.type = 'button';
+    createBtn.className = 'agilo-nav-folders__create-btn';
+    createBtn.setAttribute('aria-label', 'Créer un dossier');
+    createBtn.setAttribute('title', 'Créer un dossier');
+    createBtn.innerHTML = PLUS_SVG;
+    createBtn.addEventListener('click', (event) => triggerCreateFolder(auth, event));
+
+    actions.appendChild(createBtn);
+    sum.appendChild(main);
+    sum.appendChild(actions);
+    return sum;
+  }
+
+  function clearRetry() {
+    if (__retryTimer) {
+      clearTimeout(__retryTimer);
+      __retryTimer = null;
+    }
+    __retryAttempt = 0;
+  }
+
+  function scheduleRetry(reason) {
+    if (__retryTimer) return;
+    __retryAttempt += 1;
+    const delay = Math.min(900 + (__retryAttempt * 700), 7000);
+    dbg('retry', __retryAttempt, reason || '', `(${delay}ms)`);
+    __retryTimer = setTimeout(() => {
+      __retryTimer = null;
+      load();
+    }, delay);
+  }
 
   function renderLoading() {
     mount.innerHTML = '';
     mount.removeAttribute('hidden');
     const details = document.createElement('details');
     details.className = 'agilo-nav-folders-details';
-    const sum = document.createElement('summary');
-    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
-    sum.innerHTML =
-      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+    const sum = createSummary(null);
     const inner = document.createElement('div');
     inner.className = 'agilo-nav-folders agilo-nav-folders--loading';
     inner.setAttribute('role', 'status');
@@ -422,10 +555,7 @@
     mount.removeAttribute('hidden');
     const details = document.createElement('details');
     details.className = 'agilo-nav-folders-details';
-    const sum = document.createElement('summary');
-    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
-    sum.innerHTML =
-      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+    const sum = createSummary(null);
     const inner = document.createElement('div');
     inner.className = 'agilo-nav-folders';
     inner.innerHTML = `<div class="agilo-nav-folders__empty">${msg}</div>`;
@@ -454,10 +584,7 @@
     details.className = 'agilo-nav-folders-details';
     if (shouldDetailsStartOpen()) details.setAttribute('open', '');
 
-    const sum = document.createElement('summary');
-    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
-    sum.innerHTML =
-      '<span class="agilo-nav-folders__summary-text">Dossiers</span><span class="agilo-nav-folders__chev" aria-hidden="true"></span>';
+    const sum = createSummary(auth);
 
     const nav = document.createElement('nav');
     nav.className = 'agilo-nav-folders';
@@ -491,6 +618,7 @@
       a.href = hrefForFilter(basePath, filter);
       a.dataset.filter =
         filter === 'all' || filter === 'root' ? filter : String(Number(filter));
+      if (isFolderRow) a.dataset.folderId = String(Number(filter));
       if (accentCss) a.style.setProperty('--agilo-folder-accent', accentCss);
       else a.style.removeProperty('--agilo-folder-accent');
 
@@ -556,8 +684,8 @@
         edition: auth.edition || snapLate.edition
       };
       if (!auth.username || !auth.token) {
-        mount.setAttribute('hidden', '');
-        mount.innerHTML = '';
+        renderLoading();
+        scheduleRetry('missing-auth');
         __loading = false;
         return;
       }
@@ -568,9 +696,11 @@
       const totalAll = Array.isArray(jobsRows) ? jobsRows.length : 0;
 
       renderMerged(auth, merged, totalAll, derived);
+      clearRetry();
     } catch (e) {
       dbg(e);
       renderError('Dossiers indisponibles pour le moment.');
+      scheduleRetry('exception');
     } finally {
       __loading = false;
     }
@@ -600,6 +730,17 @@
 
   window.addEventListener('agilo:token', () => load(), { passive: true });
   window.addEventListener('agilotext:token', () => load(), { passive: true });
+  window.addEventListener('focus', () => load(), { passive: true });
+  window.addEventListener('pageshow', () => load(), { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) load();
+  }, { passive: true });
+  window.addEventListener('storage', (e) => {
+    if (!e || typeof e.key !== 'string') return;
+    if (e.key === 'memberEmail' || e.key === 'agilo:username' || e.key === 'agilo:token' || e.key.indexOf('agilo:token:') === 0) {
+      load();
+    }
+  }, { passive: true });
   window.addEventListener('popstate', () => {
     updateActiveRowsOnly();
     try {
@@ -621,7 +762,7 @@
 
   try {
     mount.setAttribute('data-agilo-nav-folders-bound', '1');
-    window.__agiloNavFolders.version = '1.5.1';
+    window.__agiloNavFolders.version = APP_VERSION;
   } catch (_) {}
   }
 
