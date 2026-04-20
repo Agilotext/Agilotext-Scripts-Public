@@ -1,9 +1,10 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions"
-// Version 2.0.0
+// Version 2.1.0
 //
 // Objectif:
 // - filtrer les lignes par dossier depuis folderId (all, root, N)
 // - conserver un tri date création asc/desc
+// - ajouter un contrôle "Déplacer vers dossier" depuis la barre bulk
 // - fonctionner même sans hooks internes du script inline Webflow
 
 (function () {
@@ -11,20 +12,24 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.0.0';
+  const BRIDGE_VERSION = '2.1.0';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
   const state = {
     jobsById: new Map(),
+    folders: [],
+    auth: null,
     filter: 'all',
     sortDir: 'desc',
     observer: null,
     applyRaf: 0,
     applying: false,
+    ignoreMutations: false,
     loadingPromise: null,
     retryTimer: null,
-    retryCount: 0
+    retryCount: 0,
+    bulkUiMounted: false
   };
 
   const dbg = (...args) => window.AGILO_DEBUG && console.debug('[MesTranscriptsBridge]', ...args);
@@ -131,6 +136,35 @@
       if (snap.email && snap.token) return snap;
     }
     return snap;
+  }
+
+  async function postForm(endpoint, fields) {
+    const body = new URLSearchParams(fields);
+    const response = await fetch(`${API_BASE}/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: body.toString(),
+      credentials: 'omit',
+      cache: 'no-store'
+    });
+    const payload = await response.json().catch(() => null);
+    if (payload && String(payload.status).toUpperCase() === 'OK') return { ok: true, data: payload };
+    const msg =
+      payload?.message ||
+      payload?.errorMessage ||
+      payload?.userErrorMessage ||
+      payload?.error ||
+      `http ${response.status}`;
+    return { ok: false, error: String(msg), data: payload };
+  }
+
+  function sortFoldersByName(list) {
+    return (Array.isArray(list) ? list.slice() : []).sort((a, b) =>
+      String(a.folderName || '').localeCompare(String(b.folderName || ''), 'fr', { sensitivity: 'base' })
+    );
   }
 
   function parseFolderFilter(raw) {
@@ -255,7 +289,23 @@
         if (state.sortDir === 'asc') return a.ts - b.ts;
         return b.ts - a.ts;
       });
-      rowsWithMeta.forEach((it) => container.appendChild(it.row));
+      let mustReorder = false;
+      for (let i = 0; i < rowsWithMeta.length; i++) {
+        if (rows[i] !== rowsWithMeta[i].row) {
+          mustReorder = true;
+          break;
+        }
+      }
+      if (mustReorder) {
+        state.ignoreMutations = true;
+        try {
+          const frag = document.createDocumentFragment();
+          rowsWithMeta.forEach((it) => frag.appendChild(it.row));
+          container.appendChild(frag);
+        } finally {
+          state.ignoreMutations = false;
+        }
+      }
 
       updateReadyCount(visibleRows);
       setSortDirUi();
@@ -285,6 +335,150 @@
       });
     });
     setSortDirUi();
+  }
+
+  function selectedJobIds() {
+    const checks = Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row .job-select:checked'));
+    const ids = [];
+    checks.forEach((cb) => {
+      const row = cb.closest('.wrapper-content_item-row');
+      const id = rowJobId(row);
+      if (id) ids.push(id);
+    });
+    return Array.from(new Set(ids));
+  }
+
+  function ensureBulkMoveCss() {
+    if (document.getElementById('agilo-bulk-folder-move-style')) return;
+    const style = document.createElement('style');
+    style.id = 'agilo-bulk-folder-move-style';
+    style.textContent = `
+      .agilo-bulk-folder-move{
+        display:inline-flex;
+        align-items:center;
+        gap:.35rem;
+        margin-left:.5rem;
+        flex-wrap:nowrap;
+      }
+      .agilo-bulk-folder-move__select{
+        min-width:148px;
+        max-width:220px;
+        border:1px solid rgba(82, 82, 82, .2);
+        border-radius:8px;
+        background:#fff;
+        font-size:.78rem;
+        line-height:1.2;
+        padding:.34rem .45rem;
+      }
+      .agilo-bulk-folder-move__btn{
+        border:1px solid rgba(82, 82, 82, .24);
+        border-radius:8px;
+        background:#fff;
+        font-size:.78rem;
+        line-height:1.2;
+        padding:.34rem .5rem;
+      }
+      .agilo-bulk-folder-move__btn[disabled],
+      .agilo-bulk-folder-move__select[disabled]{
+        opacity:.55;
+        cursor:not-allowed;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function fillBulkMoveOptions(selectEl) {
+    if (!selectEl) return;
+    const previous = selectEl.value;
+    const options = ['<option value="">Dossier…</option>', '<option value="0">Non classé</option>'];
+    sortFoldersByName(state.folders).forEach((f) => {
+      options.push(`<option value="${String(f.folderId)}">${String(f.folderName)}</option>`);
+    });
+    selectEl.innerHTML = options.join('');
+    if (previous) selectEl.value = previous;
+  }
+
+  function ensureBulkMoveUi() {
+    const bar = document.querySelector('.bulk-actions-bar');
+    if (!bar) return;
+    ensureBulkMoveCss();
+
+    let box = document.getElementById('agilo-bulk-folder-move');
+    if (!box) {
+      box = document.createElement('span');
+      box.id = 'agilo-bulk-folder-move';
+      box.className = 'agilo-bulk-folder-move';
+      box.innerHTML = `
+        <select id="agilo-bulk-folder-select" class="agilo-bulk-folder-move__select" aria-label="Choisir dossier destination"></select>
+        <button type="button" id="agilo-bulk-folder-apply" class="agilo-bulk-folder-move__btn">Déplacer</button>
+      `;
+      bar.appendChild(box);
+    }
+
+    const selectEl = document.getElementById('agilo-bulk-folder-select');
+    const applyBtn = document.getElementById('agilo-bulk-folder-apply');
+    fillBulkMoveOptions(selectEl);
+
+    if (!state.bulkUiMounted && applyBtn && selectEl) {
+      state.bulkUiMounted = true;
+      applyBtn.addEventListener('click', async () => {
+        const folderValue = String(selectEl.value || '');
+        if (!folderValue) {
+          window.alert('Choisis un dossier de destination.');
+          return;
+        }
+        const ids = selectedJobIds();
+        if (!ids.length) {
+          window.alert('Sélectionne au moins un transcript.');
+          return;
+        }
+
+        let auth = state.auth;
+        if (!auth?.email || !auth?.token) auth = await ensureAuth(8000);
+        if (!auth?.email || !auth?.token) {
+          window.alert('Authentification manquante, recharge la page.');
+          return;
+        }
+
+        applyBtn.disabled = true;
+        selectEl.disabled = true;
+        let moved = 0;
+        let failed = 0;
+        for (let i = 0; i < ids.length; i++) {
+          const jobId = ids[i];
+          try {
+            const r = await moveJobToFolder(auth, jobId, folderValue);
+            if (r.ok) {
+              moved += 1;
+              const meta = state.jobsById.get(jobId);
+              if (meta) meta.folderId = Number(folderValue);
+            } else {
+              failed += 1;
+            }
+          } catch (_) {
+            failed += 1;
+          }
+        }
+
+        Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row .job-select:checked')).forEach((cb) => {
+          cb.checked = false;
+          cb.dispatchEvent(new Event('change', { bubbles: true }));
+        });
+
+        try {
+          state.folders = await fetchFolders(auth);
+        } catch (_) {}
+        fillBulkMoveOptions(selectEl);
+        scheduleApply();
+        window.__agiloNavFolders?.refresh?.();
+
+        applyBtn.disabled = false;
+        selectEl.disabled = false;
+        if (failed > 0) {
+          window.alert(`Déplacement terminé : ${moved} OK, ${failed} en échec.`);
+        }
+      });
+    }
   }
 
   async function fetchJobsMap(auth, retried = false) {
@@ -326,6 +520,48 @@
     return map;
   }
 
+  async function fetchFolders(auth, retried = false) {
+    const url = `${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(auth.email)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      credentials: 'omit',
+      cache: 'no-store'
+    });
+
+    if ((response.status === 401 || response.status === 403) && !retried && auth.email && typeof window.getToken === 'function') {
+      try {
+        window.getToken(auth.email, auth.edition);
+      } catch (_) {}
+      const fresh = await ensureAuth(8000);
+      if (fresh.token) return fetchFolders(fresh, true);
+    }
+
+    if (!response.ok) return [];
+
+    const payload = await response.json().catch(() => null);
+    if (!payload || String(payload.status).toUpperCase() !== 'OK') return [];
+    const raw = payload.folders || payload.transcriptFolderDtos || payload.transcriptFolders || payload.folderDtos || [];
+    return sortFoldersByName(
+      (Array.isArray(raw) ? raw : [])
+        .map((f) => ({
+          folderId: Number(f.folderId != null ? f.folderId : f.id),
+          folderName: String(f.folderName != null ? f.folderName : f.name || '').trim()
+        }))
+        .filter((f) => Number.isFinite(f.folderId) && f.folderId > 0 && f.folderName)
+    );
+  }
+
+  async function moveJobToFolder(auth, jobId, folderId) {
+    return postForm('moveTranscriptToFolder', {
+      username: auth.email,
+      token: auth.token,
+      edition: auth.edition,
+      jobId: String(jobId),
+      folderId: String(folderId)
+    });
+  }
+
   function clearRetry() {
     if (state.retryTimer) {
       clearTimeout(state.retryTimer);
@@ -354,10 +590,13 @@
       if (!auth.email || !auth.token) {
         throw new Error('auth incomplet');
       }
-      const map = await fetchJobsMap(auth);
+      const [map, folders] = await Promise.all([fetchJobsMap(auth), fetchFolders(auth)]);
       state.jobsById = map;
+      state.folders = folders;
+      state.auth = auth;
       clearRetry();
       dbg('jobs map loaded', map.size);
+      ensureBulkMoveUi();
       scheduleApply();
       return map;
     })().catch((err) => {
@@ -381,7 +620,9 @@
     if (!container) return;
     if (state.observer) state.observer.disconnect();
     state.observer = new MutationObserver(() => {
+      if (state.ignoreMutations || state.applying) return;
       bindSort();
+      ensureBulkMoveUi();
       scheduleApply();
     });
     state.observer.observe(container, { childList: true });
@@ -402,6 +643,7 @@
     syncFromUrl();
     bindSort();
     observeRows();
+    ensureBulkMoveUi();
     await refreshData(false);
     scheduleApply();
   }
