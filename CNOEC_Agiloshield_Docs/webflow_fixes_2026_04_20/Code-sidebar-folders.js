@@ -10,10 +10,8 @@
 //   data-agilo-folder-accent-mode="hash" | "sequence"
 //     — hash (défaut) : couleur stable par folderId, palette répétée en boucle (illimité)
 //     — sequence : couleur par position dans la liste (1er = 1re teinte, …)
-//   data-row-structure="match-nav" → DOM type menu (icon-small, pastille .agilo-nav-folders__count)
-//   Les classes Webflow « dashboard-link » / « readycount » sur data-link-class sont ignorées (évite conflit avec « Tous les fichiers »).
+//   data-row-structure="match-nav" → DOM type menu (icon-small, readycount)
 //   data-icon-class, data-name-class, data-count-class → surcharges classes match-nav
-//   data-folder-name-max="14" → longueur max affichée des noms de dossier (4–80, défaut 14) + ellipse CSS
 
 (function () {
   'use strict';
@@ -21,7 +19,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.17', refresh: function () {} },
+      { version: '1.7.0', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -34,7 +32,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.17';
+  const APP_VERSION = '1.7.0';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -281,26 +279,6 @@
     return { ok: false, error: 'Renommage dossier non disponible (API).' };
   }
 
-  async function deleteFolder(auth, folderId, folderName) {
-    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?\n\nAttention : l'API refusera la suppression si le dossier n'est pas vide.`)) return;
-    const res = await postForm('deleteTranscriptFolder', {
-      username: auth.username,
-      token: auth.token,
-      edition: auth.edition,
-      folderId: String(folderId)
-    });
-    if (res.ok) {
-      await load();
-    } else {
-      const err = String(res.error || '').toLowerCase();
-      if (err.includes('not empty') || err.includes('not_empty')) {
-        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
-      } else {
-        window.alert(res.error || 'Impossible de supprimer ce dossier.');
-      }
-    }
-  }
-
   async function fetchTranscriptFoldersList(auth, retried = false) {
     const url = `${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
     let resp;
@@ -544,34 +522,8 @@
       .join(' ');
   }
 
-  /** Ne pas recoller les mêmes classes que le lien Webflow « Tous les fichiers » (#readyCount.readycount, .dashboard-link). */
-  function stripConflictingWebflowClasses(classStr) {
-    return String(classStr || '')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter((c) => c !== 'dashboard-link' && c !== 'readycount')
-      .join(' ');
-  }
-
-  /** Longueur max affichée (caractères) pour les noms de dossier ; `data-folder-name-max` sur le mount (6–80). */
-  function folderNameMaxChars() {
-    const raw = Number(mount.getAttribute('data-folder-name-max'));
-    if (Number.isFinite(raw) && raw >= 4 && raw <= 80) return Math.floor(raw);
-    return 14;
-  }
-
-  function displayFolderNavName(full) {
-    const s = String(full || '').trim();
-    const max = folderNameMaxChars();
-    if (s.length <= max) return { text: s, titleAttr: null };
-    return { text: `${s.slice(0, Math.max(1, max - 1))}…`, titleAttr: s };
-  }
-
   const FOLDER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>';
-  const FOLDERS_STACKED_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" fill="currentColor" aria-hidden="true"><path d="M64 32C64 14.3 49.7 0 32 0S0 14.3 0 32v96V384c0 35.3 28.7 64 64 64H256V384H64V160H256V96H64V32zM288 192c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V64c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4L409.4 9.4c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V192zm0 288c0 17.7 14.3 32 32 32H544c17.7 0 32-14.3 32-32V352c0-17.7-14.3-32-32-32H445.3c-8.5 0-16.6-3.4-22.6-9.4l-13.3-13.3c-6-6-14.1-9.4-22.6-9.4H320c-17.7 0-32 14.3-32 32V480z"/></svg>';
   const STACK_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
@@ -584,8 +536,6 @@
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   const PENCIL_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const TRASH_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   let __loading = false;
   let __retryAttempt = 0;
@@ -595,6 +545,18 @@
     const raw = String(mount.getAttribute('data-summary-label') || 'Dossiers').trim();
     if (!raw) return 'Dossiers';
     return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  function maxFolderLabelLength() {
+    const n = Number(mount.getAttribute('data-folder-name-max') || 28);
+    return Number.isFinite(n) && n >= 12 ? Math.floor(n) : 28;
+  }
+
+  function truncateFolderLabel(raw) {
+    const s = String(raw || '').trim();
+    const max = maxFolderLabelLength();
+    if (s.length <= max) return { display: s, truncated: false };
+    return { display: `${s.slice(0, Math.max(0, max - 3)).trimEnd()}...`, truncated: true };
   }
 
   function fallbackCreateAction(auth) {
@@ -715,17 +677,10 @@
 
   function createSummary(auth) {
     const sum = document.createElement('summary');
-    const summaryExtra = stripConflictingWebflowClasses(extraClasses('data-summary-class'));
-    sum.className = ['agilo-nav-folders__summary', summaryExtra].filter(Boolean).join(' ');
+    sum.className = 'agilo-nav-folders__summary';
 
     const main = document.createElement('span');
     main.className = 'agilo-nav-folders__summary-main';
-
-    /* Même classes Webflow que « Tableau de bord » (span = ok dans <summary>) ; SVG 576×512 restreint en CSS */
-    const iconWrap = document.createElement('span');
-    iconWrap.className = 'icon-small w-embed agilo-nav-folders__summary-icon-root';
-    iconWrap.setAttribute('aria-hidden', 'true');
-    iconWrap.innerHTML = FOLDERS_STACKED_SVG;
 
     const txt = document.createElement('span');
     txt.className = 'agilo-nav-folders__summary-text';
@@ -735,7 +690,6 @@
     chev.className = 'agilo-nav-folders__chev';
     chev.setAttribute('aria-hidden', 'true');
 
-    main.appendChild(iconWrap);
     main.appendChild(txt);
     main.appendChild(chev);
 
@@ -839,7 +793,7 @@
       .filter(Boolean)
       .join(' ');
 
-    const linkExtra = stripConflictingWebflowClasses(extraClasses('data-link-class'));
+    const linkExtra = extraClasses('data-link-class');
     const folderPalette = getFolderPalette();
     const accentMode = getFolderAccentMode();
 
@@ -894,40 +848,23 @@
           ? ['agilo-nav-folders__icon-wrap', iconExtra].filter(Boolean).join(' ')
           : ['icon-small', 'w-embed', 'agilo-nav-folders__icon-wrap'].join(' ');
         const nameClasses = ['agilo-nav-folders__name', nameExtra].filter(Boolean).join(' ');
-        const countClasses = ['agilo-nav-folders__count', stripConflictingWebflowClasses(countExtra)]
-          .filter(Boolean)
-          .join(' ');
+        const countClasses = ['readycount', 'agilo-nav-folders__count', countExtra].filter(Boolean).join(' ');
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
-        const deleteHtml = isFolderRow
-          ? `<button type="button" class="agilo-nav-folders__delete-btn" aria-label="Supprimer le dossier" title="Supprimer">${TRASH_SVG}</button>`
-          : '';
-        const middle = isFolderRow
-          ? `<div class="agilo-nav-folders__name-block"><div class="${nameClasses}"></div>${renameHtml}${deleteHtml}</div>`
-          : `<div class="${nameClasses}"></div>`;
-        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div>${middle}<span class="${countClasses}"></span>`;
+        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div><div class="${nameClasses}"></div>${renameHtml}<span class="${countClasses}"></span>`;
       } else {
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
-        const middle = isFolderRow
-          ? `<span class="agilo-nav-folders__name-block"><span class="agilo-nav-folders__name"></span>${renameHtml}</span>`
-          : `<span class="agilo-nav-folders__name"></span>`;
-        a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span>${middle}<span class="agilo-nav-folders__count"></span>`;
+        a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span><span class="agilo-nav-folders__name"></span>${renameHtml}<span class="agilo-nav-folders__count"></span>`;
       }
       const nameEl = a.querySelector('.agilo-nav-folders__name');
       const countEl = a.querySelector('.agilo-nav-folders__count');
       if (nameEl) {
-        if (isFolderRow) {
-          const { text, titleAttr } = displayFolderNavName(label);
-          nameEl.textContent = text;
-          if (titleAttr) nameEl.setAttribute('title', titleAttr);
-          else nameEl.removeAttribute('title');
-        } else {
-          nameEl.textContent = String(label || '');
-          nameEl.removeAttribute('title');
-        }
+        const labelInfo = isFolderRow ? truncateFolderLabel(label) : { display: label, truncated: false };
+        nameEl.textContent = labelInfo.display;
+        if (labelInfo.truncated) nameEl.setAttribute('title', String(label || ''));
       }
       if (countEl) countEl.textContent = String(count);
       const renameBtn = a.querySelector('.agilo-nav-folders__rename-btn');
@@ -936,14 +873,6 @@
           ev.preventDefault();
           ev.stopPropagation();
           renameFolderFromRow(Number(filter), label);
-        });
-      }
-      const deleteBtn = a.querySelector('.agilo-nav-folders__delete-btn');
-      if (deleteBtn && isFolderRow) {
-        deleteBtn.addEventListener('click', (ev) => {
-          ev.preventDefault();
-          ev.stopPropagation();
-          deleteFolder(auth, Number(filter), label);
         });
       }
       list.appendChild(a);
