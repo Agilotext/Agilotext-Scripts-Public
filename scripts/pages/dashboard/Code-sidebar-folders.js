@@ -16,15 +16,21 @@
 (function () {
   'use strict';
 
+  /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
+  try {
+    window.__agiloNavFolders = Object.assign(
+      { version: '1.5.1', refresh: function () {} },
+      window.__agiloNavFolders || {}
+    );
+  } catch (_) {}
+
   function runNavFoldersApp() {
   const byId = (id) => document.getElementById(id);
   const $ = (s, r = document) => r.querySelector(s);
 
   const mount = byId('agilo-nav-folders-root');
   if (!mount) return;
-  if (window.__agiloNavFolders) return;
-
-  window.__agiloNavFolders = { version: '1.5.0', refresh: function () {} };
+  if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -68,14 +74,20 @@
       byId('editorRoot')?.dataset?.username ||
       byId('memberEmail')?.value ||
       $('[name="memberEmail"]')?.value ||
+      $('input#memberEmail')?.value ||
+      $('input#email')?.value ||
+      $('input[type="email"]')?.value ||
+      $('[data-ms-member-email]')?.getAttribute?.('data-ms-member-email') ||
+      $('[data-member-email]')?.getAttribute?.('data-member-email') ||
       localStorage.getItem('agilo:username') ||
+      localStorage.getItem('memberEmail') ||
       window.memberEmail ||
       '';
     const token =
       byId('editorRoot')?.dataset?.token ||
       readBootstrapGlobalToken() ||
       (typeof window.globalToken === 'string' ? window.globalToken : '') ||
-      localStorage.getItem(tokenKey(email, edition)) ||
+      localStorage.getItem(tokenKey(String(email || '').trim(), edition)) ||
       localStorage.getItem('agilo:token') ||
       '';
     return { username: String(email || '').trim(), token: String(token || ''), edition };
@@ -99,7 +111,12 @@
         const okEd = wantEdition ? normalizeEdition(d.edition) === normalizeEdition(wantEdition) : true;
         if (d.token && okEmail && okEd) {
           removeTokenListeners(onEvt);
-          finish({ username: d.email, token: d.token, edition: normalizeEdition(d.edition) });
+          const post = readAuthSnapshot();
+          finish({
+            username: String(d.email || d.username || post.username || '').trim(),
+            token: String(d.token || post.token || ''),
+            edition: normalizeEdition(d.edition || post.edition)
+          });
         }
       };
       function removeTokenListeners(handler) {
@@ -135,10 +152,11 @@
       } catch {}
     }
     const final = await waitForTokenEvent(timeoutMs, snap.username, snap.edition);
+    const post = readAuthSnapshot();
     return {
-      username: final.username || snap.username,
-      token: final.token || snap.token,
-      edition: final.edition || snap.edition
+      username: String(final.username || snap.username || post.username || '').trim(),
+      token: String(final.token || snap.token || post.token || ''),
+      edition: final.edition || snap.edition || post.edition
     };
   }
 
@@ -530,7 +548,13 @@
     __loading = true;
     renderLoading();
     try {
-      const auth = await ensureAuth(12000);
+      let auth = await ensureAuth(12000);
+      const snapLate = readAuthSnapshot();
+      auth = {
+        username: (auth.username || snapLate.username || '').trim(),
+        token: (auth.token || snapLate.token || '').trim(),
+        edition: auth.edition || snapLate.edition
+      };
       if (!auth.username || !auth.token) {
         mount.setAttribute('hidden', '');
         mount.innerHTML = '';
@@ -583,11 +607,22 @@
     } catch (_) {}
   }, { passive: true });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', load, { once: true });
-  } else {
-    load();
+  function scheduleFirstLoad() {
+    const run = function () {
+      setTimeout(load, 150);
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run, { once: true });
+    } else {
+      run();
+    }
   }
+  scheduleFirstLoad();
+
+  try {
+    mount.setAttribute('data-agilo-nav-folders-bound', '1');
+    window.__agiloNavFolders.version = '1.5.1';
+  } catch (_) {}
   }
 
   function scheduleNavFolders() {
