@@ -19,6 +19,11 @@
   border:none;
   background:transparent;
   width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  /* Fermé : sans liste, la largeur reste celle de la nav → colonne « Dossiers » + bouton + aligné à droite */
+  display:block;
 }
 .agilo-nav-folders-details > summary{
   list-style:none;
@@ -39,15 +44,18 @@
 }
 .agilo-nav-folders__summary{
   display:grid !important;
-  grid-template-columns:minmax(0, 1fr) auto !important;
+  grid-template-columns:minmax(0, 1fr) max-content !important;
   align-items:center !important;
+  justify-items:stretch !important;
   text-align:left !important;
   background:transparent !important;
   border:0 !important;
   border-radius:0 !important;
   box-shadow:none !important;
   width:100% !important;
-  column-gap:.32rem !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+  column-gap:.5rem !important;
 }
 .agilo-nav-folders__summary-main{
   display:inline-flex;
@@ -69,6 +77,12 @@
 .agilo-nav-folders__summary-icon-slot{
   flex:0 0 auto;
 }
+.agilo-nav-folders__summary-icon-slot--solo{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:0;
+}
 .agilo-nav-folders__summary-icon-slot svg.icon-1x1-small.dashboard{
   display:block;
 }
@@ -76,9 +90,9 @@
   display:inline-flex;
   align-items:center;
   justify-content:flex-end !important;
-  justify-self:end;
+  justify-self:end !important;
   flex:0 0 auto;
-  margin-left:auto;
+  margin-left:0;
 }
 .agilo-nav-folders__summary-text{
   min-width:0;
@@ -187,7 +201,8 @@ a.agilo-nav-folders__row.w-inline-block{
   width:100%;
   max-width:100%;
   min-width:0;
-  overflow:hidden;
+  /* Ne pas masquer la pastille compteur à droite */
+  overflow:visible;
 }
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .48rem);
@@ -345,11 +360,14 @@ a.agilo-nav-folders__row.w-inline-block{
   line-height:1;
   text-align:center;
   color:var(--color--gris, var(--agilo-dim, #525252)) !important;
-  background:transparent !important;
+  background:rgba(255, 255, 255, 0.92) !important;
   border:1px solid rgba(82, 82, 82, 0.18) !important;
   box-shadow:none !important;
-  opacity:1;
+  opacity:1 !important;
+  visibility:visible !important;
   flex-shrink:0;
+  position:relative;
+  z-index:1;
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
   font-size:.66rem;

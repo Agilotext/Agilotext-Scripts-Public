@@ -20,7 +20,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.4', refresh: function () {} },
+      { version: '1.7.5', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -33,7 +33,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.4';
+  const APP_VERSION = '1.7.5';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -539,8 +539,15 @@
 
   const FOLDER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>';
-  /** Même gabarit Webflow que « Tous les fichiers » : `icon-small w-embed` + `icon-1x1-small dashboard` sur le SVG. */
-  const SUMMARY_FOLDER_ICON_MARKUP = `<span class="icon-small w-embed agilo-nav-folders__summary-icon-slot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true" class="icon-1x1-small dashboard"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg></span>`;
+  /** Même icône / classes que le lien « Tous les fichiers » (document). */
+  const SUMMARY_FOLDER_ICON_MARKUP =
+    '<span class="agilo-nav-folders__summary-icon-slot agilo-nav-folders__summary-icon-slot--solo" aria-hidden="true">' +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-1x1-small dashboard" aria-hidden="true">' +
+    '<path d="M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4"></path>' +
+    '<path d="M19 17V5a2 2 0 0 0-2-2H4"></path>' +
+    '<path d="M15 8h-5"></path>' +
+    '<path d="M15 12h-5"></path>' +
+    '</svg></span>';
   const STACK_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
