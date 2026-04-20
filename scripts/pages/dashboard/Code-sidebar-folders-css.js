@@ -336,7 +336,8 @@
 .agilo-nav-folders__row.is-active .agilo-nav-folders__name{
   color:var(--agilo-text, #020202);
 }
-.agilo-nav-folders__rename-btn{
+.agilo-nav-folders__rename-btn,
+.agilo-nav-folders__delete-btn{
   width:1rem;
   height:1rem;
   min-width:1rem;
@@ -353,20 +354,27 @@
   align-items:center;
   justify-content:center;
 }
-.agilo-nav-folders__rename-btn svg{
+.agilo-nav-folders__rename-btn svg,
+.agilo-nav-folders__delete-btn svg{
   width:.86rem;
   height:.86rem;
   display:block;
 }
 .agilo-nav-folders__row--folder:hover .agilo-nav-folders__rename-btn,
-.agilo-nav-folders__row--folder:focus-within .agilo-nav-folders__rename-btn{
+.agilo-nav-folders__row--folder:focus-within .agilo-nav-folders__rename-btn,
+.agilo-nav-folders__row--folder:hover .agilo-nav-folders__delete-btn,
+.agilo-nav-folders__row--folder:focus-within .agilo-nav-folders__delete-btn{
   opacity:.85;
   pointer-events:auto;
 }
 .agilo-nav-folders__rename-btn:hover{
   color:var(--color--blue, var(--agilo-primary, #174a96));
 }
-.agilo-nav-folders__rename-btn:focus-visible{
+.agilo-nav-folders__delete-btn:hover{
+  color:#b4232f;
+}
+.agilo-nav-folders__rename-btn:focus-visible,
+.agilo-nav-folders__delete-btn:focus-visible{
   opacity:1;
   pointer-events:auto;
   outline:none;

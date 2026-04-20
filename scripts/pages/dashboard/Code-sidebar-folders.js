@@ -281,6 +281,21 @@
     return { ok: false, error: 'Renommage dossier non disponible (API).' };
   }
 
+  async function deleteFolder(auth, folderId, folderName) {
+    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?\n\nAttention : l'API refusera la suppression si le dossier n'est pas vide.`)) return;
+    const res = await postForm('deleteTranscriptFolder', {
+      username: auth.username,
+      token: auth.token,
+      edition: auth.edition,
+      folderId: String(folderId)
+    });
+    if (res.ok) {
+      await load();
+    } else {
+      window.alert(res.error || 'Impossible de supprimer ce dossier.');
+    }
+  }
+
   async function fetchTranscriptFoldersList(auth, retried = false) {
     const url = `${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
     let resp;
@@ -564,6 +579,8 @@
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   const PENCIL_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.12 2.12 0 1 0-3-3L5 17v3Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const TRASH_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   let __loading = false;
   let __retryAttempt = 0;
@@ -878,8 +895,11 @@
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
+        const deleteHtml = isFolderRow
+          ? `<button type="button" class="agilo-nav-folders__delete-btn" aria-label="Supprimer le dossier" title="Supprimer">${TRASH_SVG}</button>`
+          : '';
         const middle = isFolderRow
-          ? `<div class="agilo-nav-folders__name-block"><div class="${nameClasses}"></div>${renameHtml}</div>`
+          ? `<div class="agilo-nav-folders__name-block"><div class="${nameClasses}"></div>${renameHtml}${deleteHtml}</div>`
           : `<div class="${nameClasses}"></div>`;
         a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div>${middle}<span class="${countClasses}"></span>`;
       } else {
@@ -911,6 +931,14 @@
           ev.preventDefault();
           ev.stopPropagation();
           renameFolderFromRow(Number(filter), label);
+        });
+      }
+      const deleteBtn = a.querySelector('.agilo-nav-folders__delete-btn');
+      if (deleteBtn && isFolderRow) {
+        deleteBtn.addEventListener('click', (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          deleteFolder(auth, Number(filter), label);
         });
       }
       list.appendChild(a);
