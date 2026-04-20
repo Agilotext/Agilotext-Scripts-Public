@@ -42,29 +42,31 @@
   }
 }
 
-/* Barre dossiers (éditeur) — toolbar lisible, chips scrollables si beaucoup de dossiers */
+/* Barre dossiers (éditeur) — discret : pas de 2e carte (évite double contour avec la colonne Webflow) */
 .agilo-folder-bar{
   display:flex;
   flex-wrap:wrap;
   align-items:stretch;
-  gap:.5rem .65rem;
-  margin-bottom:.75rem;
-  padding:.6rem .65rem;
-  border:1px solid color-mix(in srgb, var(--agilo-text, #020202) 10%, transparent);
-  border-radius:var(--agilo-radius, .5rem);
-  background:linear-gradient(180deg, var(--agilo-surface, #fff) 0%, var(--agilo-surface-2, #f8f9fa) 100%);
-  box-shadow:0 1px 2px color-mix(in srgb, var(--agilo-text, #020202) 6%, transparent);
+  gap:.4rem .5rem;
+  margin-bottom:.55rem;
+  padding:.25rem 0 .5rem 0;
+  border:none;
+  border-bottom:1px solid color-mix(in srgb, var(--agilo-text, #020202) 7%, transparent);
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
   font-size:.8125rem;
-  row-gap:.55rem;
+  row-gap:.4rem;
 }
 .agilo-folder-bar .agilo-folder-label{
   flex:0 0 100%;
   font-weight:600;
-  font-size:.7rem;
-  letter-spacing:.02em;
+  font-size:.68rem;
+  letter-spacing:.04em;
   text-transform:uppercase;
-  color:var(--agilo-dim, #525252);
-  margin:0 0 .1rem 0;
+  color:var(--agilo-dim, #6b7280);
+  margin:0 0 .06rem 0;
+  opacity:.92;
 }
 @media (min-width:520px){
   .agilo-folder-bar .agilo-folder-label{
@@ -77,43 +79,43 @@
   display:flex;
   flex-wrap:wrap;
   align-items:center;
-  gap:.35rem;
+  gap:.3rem;
   flex:1 1 12rem;
   min-width:0;
   max-width:100%;
-  padding:.15rem 0;
+  padding:.08rem 0;
 }
 .agilo-folder-bar button.agilo-folder-chip{
-  border:1px solid color-mix(in srgb, var(--agilo-text, #020202) 14%, transparent);
-  background:var(--agilo-surface, #fff);
+  border:1px solid color-mix(in srgb, var(--agilo-text, #020202) 9%, transparent);
+  background:color-mix(in srgb, var(--agilo-surface, #fff) 88%, var(--agilo-surface-2, #f3f4f6) 12%);
   border-radius:999px;
-  padding:.35rem .7rem;
-  min-height:2rem;
+  padding:.3rem .62rem;
+  min-height:1.85rem;
   max-width:min(100%, 12.5rem);
   cursor:pointer;
   line-height:1.2;
-  font-size:.8125rem;
+  font-size:.78rem;
   font-weight:500;
   color:var(--agilo-text, #020202);
-  box-shadow:0 1px 1px color-mix(in srgb, var(--agilo-text, #020202) 5%, transparent);
-  transition:background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  box-shadow:none;
+  transition:background .15s ease, border-color .15s ease;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
 }
 .agilo-folder-bar button.agilo-folder-chip:hover{
-  border-color:color-mix(in srgb, var(--agilo-primary, #174a96) 45%, transparent);
-  background:color-mix(in srgb, var(--agilo-primary, #174a96) 6%, #fff);
+  border-color:color-mix(in srgb, var(--agilo-primary, #174a96) 35%, transparent);
+  background:color-mix(in srgb, var(--agilo-primary, #174a96) 5%, var(--agilo-surface, #fff));
 }
 .agilo-folder-bar button.agilo-folder-chip:focus-visible{
   outline:2px solid var(--agilo-primary, #174a96);
   outline-offset:2px;
 }
 .agilo-folder-bar button.agilo-folder-chip.is-active{
-  border-color:var(--agilo-primary, #174a96);
-  background:color-mix(in srgb, var(--agilo-primary, #174a96) 14%, #fff);
+  border-color:color-mix(in srgb, var(--agilo-primary, #174a96) 55%, transparent);
+  background:color-mix(in srgb, var(--agilo-primary, #174a96) 10%, var(--agilo-surface, #fff));
   font-weight:600;
-  box-shadow:0 1px 3px color-mix(in srgb, var(--agilo-primary, #174a96) 25%, transparent);
+  box-shadow:none;
 }
 .agilo-folder-bar button.agilo-folder-chip--new{
   border-style:dashed;
@@ -126,8 +128,8 @@
 .agilo-folder-bar .agilo-folder-move-details{
   flex:1 1 100%;
   margin:0;
-  padding-top:.45rem;
-  border-top:1px solid color-mix(in srgb, var(--agilo-text, #020202) 8%, transparent);
+  padding-top:.35rem;
+  border-top:1px solid color-mix(in srgb, var(--agilo-text, #020202) 6%, transparent);
 }
 @media (min-width:720px){
   .agilo-folder-bar .agilo-folder-move-details{
@@ -141,10 +143,10 @@
 .agilo-folder-bar .agilo-folder-move-details > summary{
   cursor:pointer;
   list-style-position:outside;
-  font-size:.8125rem;
-  font-weight:600;
-  color:var(--agilo-dim, #525252);
-  padding:.15rem 0;
+  font-size:.78rem;
+  font-weight:500;
+  color:var(--agilo-dim, #6b7280);
+  padding:.1rem 0;
 }
 .agilo-folder-bar .agilo-folder-move-details > summary::-webkit-details-marker{
   color:var(--agilo-dim, #525252);

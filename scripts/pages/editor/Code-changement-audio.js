@@ -5,7 +5,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.7.0' };
+  window.__agiloRail = { version: '4.7.1' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -503,13 +503,13 @@ let __pendingLoadTimer = null;
     const moveDetails = document.createElement('details');
     moveDetails.className = 'agilo-folder-move-details';
     const moveSum = document.createElement('summary');
-    moveSum.textContent = 'Déplacer le transcript ouvert…';
+    moveSum.textContent = 'Déplacer le fichier ouvert…';
     const moveInner = document.createElement('div');
     moveInner.className = 'agilo-folder-move-inner';
     const moveHelp = document.createElement('p');
     moveHelp.className = 'agilo-folder-move-help';
     moveHelp.id = 'agilo-folder-move-help';
-    moveHelp.textContent = 'S’applique au job dont l’identifiant est dans la barre d’adresse (paramètre jobId). Choisissez le dossier de destination puis validez.';
+    moveHelp.textContent = 'S’applique au fichier ouvert : l’identifiant du job est celui de la barre d’adresse (paramètre jobId). Choisissez le dossier de destination puis validez.';
     const sel = document.createElement('select');
     sel.id = 'agilo-folder-move-select';
     sel.setAttribute('aria-describedby', 'agilo-folder-move-help');
