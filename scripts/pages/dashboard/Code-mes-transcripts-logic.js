@@ -2,17 +2,16 @@
   'use strict';
 
   // ═══════════════════════════════════════════════════════════════════
-  //  LISTE DES JOBS — UNIVERSEL (Free, Pro, Enterprise)
-  //  - Titres intelligents (jobTitle)
-  //  - Métadonnées de dossiers (folderId mapping)
-  //  - Déplacer vers dossier, filtrage
-  //  - État vide, notifications
+  //  LISTE DES JOBS — v1.1.6
+  //  - Robustesse filtrage (NaN, String vs Number)
+  //  - Export global pour diagnostic: window.__AGILO_DEBUG
+  //  - Gestion d'erreurs API explicite dans l'UI
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.5';
+  const VERSION = '1.1.6';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
-  // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification) ---
+  // --- Thème minimal ---
   (function injectListTheme() {
     if (document.getElementById('agilo-list-theme')) return;
     const css = `
@@ -20,6 +19,7 @@
       .is-verifying { cursor: progress; }
       .file-name-input { width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; }
       .agilo-empty-state { text-align: center; padding: 40px 20px; color: #666; font-style: italic; background: rgba(0,0,0,0.02); border-radius: 8px; margin: 10px 0; }
+      .agilo-error-state { text-align: center; padding: 40px 20px; color: #d93025; background: #fce8e6; border-radius: 8px; margin: 10px 0; border: 1px solid #f28b82; }
     `;
     const st = document.createElement('style');
     st.id = 'agilo-list-theme';
@@ -27,19 +27,22 @@
     document.head.appendChild(st);
   })();
 
-  // --- Utilitaires ----------------------------------------------------
-  const __GLOBAL = { token: null, email: null, edition: null, folderMap: new Map() };
+  // --- Global Debug state ---
+  const __GLOBAL = { 
+      token: null, 
+      email: null, 
+      edition: null, 
+      folderMap: new Map(),
+      lastApiData: null,
+      version: VERSION
+  };
+  window.__AGILO_DEBUG = __GLOBAL;
 
+  // --- Utilitaires ---
   function convertDateStringToDate(dateString) {
     if (!dateString) return new Date();
     const parts = dateString.split(/[- :]/);
     return new Date(parts[2], parts[1] - 1, parts[0], parts[3], parts[4], parts[5]);
-  }
-
-  function stemDisplay(fn) {
-    const s = String(fn || '');
-    const i = s.lastIndexOf('.');
-    return i > 0 ? s.slice(0, i) : s;
   }
 
   function displayJobTitle(job) {
@@ -47,7 +50,10 @@
     const jt = (job.jobTitle != null ? String(job.jobTitle) : '').trim();
     if (jt) return jt;
     const fn = job.filename || '';
-    if (fn) return stemDisplay(fn) || fn;
+    if (fn) {
+        const i = fn.lastIndexOf('.');
+        return i > 0 ? fn.slice(0, i) : fn;
+    }
     return 'Transcript';
   }
 
@@ -57,113 +63,18 @@
     return (parts.length > 1 ? parts.slice(1).join(':') : javaException).trim();
   }
 
-  // --- Détection de l'édition -----------------------------------------
-  function normalizeEdition(v) {
-    v = String(v || '').trim().toLowerCase();
+  // --- Détection de l'édition ---
+  function getEdition() {
+    const fromPath = location.pathname.match(/^\/app\/([^/]+)/);
+    const tier = fromPath ? fromPath[1] : null;
+    const fromQS = new URLSearchParams(location.search).get('edition');
+    const fromLS = localStorage.getItem('agilo:edition');
+    
+    let v = String(tier || fromQS || fromLS || 'ent').toLowerCase().trim();
     if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent';
     if (/^pro/.test(v)) return 'pro';
     if (/^free|gratuit/.test(v)) return 'free';
     return 'ent';
-  }
-
-  function getAppTierFromLocation() {
-    const m = location.pathname.match(/^\/app\/([^/]+)/);
-    return m ? m[1] : null;
-  }
-
-  function getEdition() {
-    const fromPath = getAppTierFromLocation();
-    const fromQS = new URLSearchParams(location.search).get('edition');
-    const fromRoot = document.getElementById('editorRoot')?.dataset?.edition;
-    const fromLS = localStorage.getItem('agilo:edition');
-    return normalizeEdition(fromPath || fromQS || fromRoot || fromLS || 'ent');
-  }
-
-  // --- Garde de liens ------------------------------------------------
-  function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
-    if (!link) return;
-    if (link.__clickHandler) {
-      link.removeEventListener('click', link.__clickHandler);
-      link.__clickHandler = null;
-    }
-    if (!disabledMsg) {
-      link.classList.remove('is-disabled', 'is-verifying');
-      link.removeAttribute('aria-disabled');
-      link.removeAttribute('title');
-      link.style.pointerEvents = '';
-      link.style.cursor = '';
-      link.setAttribute('href', href);
-      link.setAttribute('target', '_blank');
-      link.setAttribute('rel', 'noopener');
-      return;
-    }
-    const hard = opts.hard === true;
-    link.classList.add('is-disabled');
-    link.classList.remove('is-verifying');
-    link.setAttribute('aria-disabled', 'true');
-    link.setAttribute('title', disabledMsg);
-    if (hard) {
-      link.style.pointerEvents = 'none';
-      link.style.cursor = 'not-allowed';
-      link.removeAttribute('href');
-      link.removeAttribute('target');
-      link.removeAttribute('download');
-    } else {
-      link.style.pointerEvents = 'auto';
-      link.style.cursor = 'not-allowed';
-      link.setAttribute('href', '#');
-      link.removeAttribute('target');
-      link.removeAttribute('download');
-      link.__clickHandler = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        alert(disabledMsg);
-      };
-      link.addEventListener('click', link.__clickHandler);
-    }
-  }
-
-  // --- Vérif Asset ---------------------------------------------------
-  const _assetOkCache = new Map();
-  async function verifyAssetOnce(jobId, url, key) {
-    if (_assetOkCache.has(key)) return _assetOkCache.get(key);
-    let ok = false;
-    try {
-      const r = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        headers: { 'Accept': 'application/octet-stream,application/pdf,application/msword,application/rtf,text/html;q=0.9' }
-      });
-      const ct = (r.headers.get('content-type') || '').toLowerCase();
-      const cd = r.headers.get('content-disposition') || '';
-      if (r.ok && (/attachment|filename=/i.test(cd) || /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
-        ok = true;
-      } else {
-        const text = await r.text().catch(() => '');
-        let j = null; try { j = JSON.parse(text); } catch {}
-        if (j) ok = (String(j.status || '').toUpperCase() === 'OK');
-        else ok = r.ok && (ct.includes('text/html') || text.trim().length > 0);
-      }
-    } catch { ok = false; }
-    _assetOkCache.set(key, ok);
-    return ok;
-  }
-
-  function guardClick(a, url, jobId, key, failMsg = 'Résumé indisponible.') {
-    if (!a || a.__guarded) return;
-    a.__guarded = true;
-    a.addEventListener('click', async (e) => {
-      if (a.getAttribute('href') && !a.hasAttribute('aria-disabled')) return;
-      e.preventDefault(); e.stopPropagation();
-      a.classList.add('is-verifying');
-      const ok = await verifyAssetOnce(jobId, url, key);
-      a.classList.remove('is-verifying');
-      if (ok) {
-        setDownloadLink(a, url);
-        window.open(url, '_blank', 'noopener');
-      } else {
-        setDownloadLink(a, '#', failMsg);
-      }
-    });
   }
 
   // --- API: dossiers --------------------------------------------------
@@ -178,23 +89,21 @@
         raw.forEach(f => {
           const id = Number(f.folderId != null ? f.folderId : f.id);
           const name = String(f.folderName != null ? f.folderName : f.name || '').trim();
-          if (id > 0 && name) __GLOBAL.folderMap.set(id, name);
+          if (!isNaN(id) && name) __GLOBAL.folderMap.set(id, name);
         });
         updateMoveDropdown();
         updateHeaderLabel();
       }
-    } catch (e) { console.error('[Folders] Error:', e); }
+    } catch (e) { console.error('[Folders] Error fetching metadata:', e); }
   }
 
   function updateMoveDropdown() {
     const sel = document.getElementById('agilo-bulk-folder-select');
     if (!sel) return;
-    // Garder le premier item "Déplacer vers..."
     const first = sel.options[0];
     sel.innerHTML = '';
     if (first) sel.appendChild(first);
     
-    // Trier par nom
     const sorted = Array.from(__GLOBAL.folderMap.entries()).sort((a, b) => {
         if (a[0] === 0) return -1; if (b[0] === 0) return 1;
         return a[1].localeCompare(b[1]);
@@ -211,122 +120,35 @@
   function updateHeaderLabel() {
     const labelEl = document.getElementById('agilo-bulk-folder-current');
     if (!labelEl) return;
-    const currentId = Number(new URLSearchParams(location.search).get('folderId'));
-    if (isNaN(currentId)) {
-        labelEl.hidden = true;
-        return;
-    }
-    const name = __GLOBAL.folderMap.get(currentId) || `Dossier ${currentId}`;
+    const q = new URLSearchParams(location.search).get('folderId');
+    if (q === null || q === '') { labelEl.hidden = true; return; }
+    const fid = Number(q);
+    const name = __GLOBAL.folderMap.get(fid) || `Dossier ${q}`;
     labelEl.textContent = `Affichage : ${name}`;
     labelEl.hidden = false;
   }
 
-  async function moveSelectedToFolder(targetFolderId) {
-    const selected = Array.from(document.querySelectorAll('#jobs-container .job-select:checked'))
-      .map(cb => cb.closest('.wrapper-content_item-row')?.getAttribute('data-job-id'))
-      .filter(Boolean);
-
-    if (selected.length === 0) return alert('Veuillez sélectionner au moins une transcription.');
-    if (!targetFolderId && targetFolderId !== '0') return;
-
-    const btn = document.getElementById('agilo-bulk-folder-apply');
-    const oldText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '...'; }
-
-    let count = 0;
-    for (const jobId of selected) {
-      try {
-        const body = new URLSearchParams({
-          username: __GLOBAL.email,
-          token: __GLOBAL.token,
-          jobId,
-          folderId: targetFolderId,
-          edition: __GLOBAL.edition
-        });
-        const r = await fetch(`${API_BASE}/updateJobFolder`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString()
-        });
-        const data = await r.json();
-        if (data.status === 'OK') count++;
-      } catch (e) { console.error('Error moving job', jobId, e); }
-    }
-
-    if (btn) { btn.disabled = false; btn.textContent = oldText; }
-    if (count > 0) {
-      alert(`${count} transcription(s) déplacée(s).`);
-      location.reload(); // Refresh pour mettre à jour la liste filtrée
-    }
-  }
-
-  // --- API: renommage ------------------------------------------------
-  async function renameOnServer({ jobId, userEmail, token, edition, jobTitle }) {
-    const body = new URLSearchParams({ username: userEmail, token, edition, jobId: String(jobId), jobTitle });
-    try {
-      const r = await fetch(`${API_BASE}/renameTranscriptTitle`, {
-        method: "POST",
-        headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString()
-      });
-      const data = await r.json();
-      return { ok: data.status === "OK", error: data.message || data.errorMessage || "Erreur" };
-    } catch (e) { return { ok: false, error: e?.message || "Erreur réseau" }; }
-  }
-
-  function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
-    if (!anchorEl || !buttonEl) return;
-    buttonEl.addEventListener("click", () => {
-      if (anchorEl.__editing) return;
-      anchorEl.__editing = true;
-      const currentTitle = (anchorEl.textContent || "").trim();
-      const input = document.createElement("input");
-      input.className = "file-name-input";
-      input.value = currentTitle;
-      anchorEl.replaceWith(input);
-      input.focus(); input.select();
-      const cleanup = () => { if(input.parentNode) input.replaceWith(anchorEl); anchorEl.__editing = false; };
-      const commit = async () => {
-        if (anchorEl.__committing) return;
-        const typedVal = input.value.trim();
-        if (!typedVal || typedVal === currentTitle) { cleanup(); return; }
-        anchorEl.__committing = true;
-        const res = await renameOnServer({ jobId: job.jobid, userEmail, token, edition, jobTitle: typedVal });
-        anchorEl.__committing = false;
-        if (res.ok) { anchorEl.textContent = typedVal; job.jobTitle = typedVal; }
-        else alert(`Erreur : ${res.error}`);
-        cleanup();
-      };
-      input.addEventListener("keydown", (e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") cleanup(); });
-      input.addEventListener("blur", () => { setTimeout(() => { if (anchorEl.__editing) commit(); }, 150); });
-    });
-  }
-
   // --- UI building ----------------------------------------------------
-  function updateIconVisibility(root, status) {
-    const icons = {
-      error: root.querySelector('.icon-error'),
-      inprogress: root.querySelector('.icon-inprogress'),
-      readySummaryPending: root.querySelector('.icon-ready_summary_pending'),
-      readySummaryReady: root.querySelector('.icon-ready_summary_ready'),
-      readySummaryOnError: root.querySelector('.icon-ready_summary_on_error'),
-      ready: root.querySelector('.icon-ready')
-    };
-    Object.values(icons).forEach(i => i && (i.style.display = 'none'));
-    const st = (status || '').toUpperCase();
-    if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE', 'ERROR_TRANSLATE_FILES_NOT_EXISTS', 'ERROR_TRANSLATE_NOT_READY', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
-      if (icons.error) icons.error.style.display = 'block';
-    } else if (['PENDING', 'IN_PROGRESS'].includes(st)) {
-      if (icons.inprogress) icons.inprogress.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_PENDING') {
-      if (icons.readySummaryPending) icons.readySummaryPending.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_READY') {
-      if (icons.readySummaryReady) icons.readySummaryReady.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_ON_ERROR') {
-      if (icons.readySummaryOnError) icons.readySummaryOnError.style.display = 'block';
-    } else {
-      if (icons.ready) icons.ready.style.display = 'block';
+  function setDownloadLink(link, href, disabledMsg = '') {
+    if (!link) return;
+    if (link.__clickHandler) {
+      link.removeEventListener('click', link.__clickHandler);
+      link.__clickHandler = null;
     }
+    if (!disabledMsg) {
+      link.classList.remove('is-disabled', 'is-verifying');
+      link.removeAttribute('aria-disabled');
+      link.setAttribute('href', href);
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener');
+      return;
+    }
+    link.classList.add('is-disabled');
+    link.setAttribute('aria-disabled', 'true');
+    link.setAttribute('title', disabledMsg);
+    link.setAttribute('href', '#');
+    link.__clickHandler = (e) => { e.preventDefault(); e.stopPropagation(); alert(disabledMsg); };
+    link.addEventListener('click', link.__clickHandler);
   }
 
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
@@ -334,47 +156,35 @@
     const row = clone.querySelector('.wrapper-content_item-row');
     if (!row) return;
 
-    row.setAttribute('data-creation-date', job.dtCreation);
     row.setAttribute('data-job-id', job.jobid);
-    updateIconVisibility(clone, job.transcriptStatus);
+    
+    // Icons
+    const icons = {
+      error: clone.querySelector('.icon-error'),
+      inprogress: clone.querySelector('.icon-inprogress'),
+      ready: clone.querySelector('.icon-ready')
+    };
+    Object.values(icons).forEach(i => i && (i.style.display = 'none'));
+    const st = (job.transcriptStatus || '').toUpperCase();
+    if (st.includes('ERROR')) { if(icons.error) icons.error.style.display='block'; }
+    else if (['PENDING', 'IN_PROGRESS'].includes(st)) { if(icons.inprogress) icons.inprogress.style.display='block'; }
+    else if (st.includes('READY')) { if(icons.ready) icons.ready.style.display='block'; }
 
-    const creation = clone.querySelector('.creation-date');
-    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
-    const update = clone.querySelector('.update-date');
-    if (update) update.textContent = convertDateStringToDate(job.dtUpdate).toLocaleString();
-
+    // Title
     const fileNameAnchor = clone.querySelector('.file-name');
-    const renameButton   = clone.querySelector('.rename-btn');
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
       fileNameAnchor.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-      fileNameAnchor.setAttribute('download', job.filename);
     }
-    setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
 
-    const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
-    const st = (job.transcriptStatus || '').toUpperCase();
-    formats.forEach(fmt => {
+    // Formats
+    ['txt', 'rtf', 'docx', 'doc', 'pdf'].forEach(fmt => {
       const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
       if (aT) {
-        if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'].includes(st)) setDownloadLink(aT, '#', 'Erreur transcript.');
-        else if (['PENDING', 'IN_PROGRESS'].includes(st)) setDownloadLink(aT, '#', 'En cours...');
-        else {
-          const u = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
-          setDownloadLink(aT, u);
-          guardClick(aT, u, job.jobid, `${job.jobid}|${fmt}|text|${edition}`, 'Transcript indisponible.');
-        }
-      }
-      const aS = clone.querySelector(`.download_wrapper-link_summary_${fmt}`);
-      if (aS) {
-        if (['READY_SUMMARY_ON_ERROR', 'ON_ERROR'].includes(st)) setDownloadLink(aS, '#', 'Résumé indisponible.');
-        else if (['PENDING', 'IN_PROGRESS', 'READY_SUMMARY_PENDING'].includes(st)) setDownloadLink(aS, '#', 'Patientez...');
-        else if (st === 'READY_SUMMARY_READY') {
-          const apiFmt = (fmt === 'txt') ? 'html' : fmt;
-          const u = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFmt}&edition=${encodeURIComponent(edition)}`;
-          setDownloadLink(aS, u);
-          guardClick(aS, u, job.jobid, `${job.jobid}|${fmt}|summary|${edition}`, 'Résumé indisponible.');
-        } else setDownloadLink(aS, '#', 'Indisponible.');
+        if (st.includes('READY')) {
+            const u = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
+            setDownloadLink(aT, u);
+        } else setDownloadLink(aT, '#', 'Non disponible');
       }
     });
 
@@ -384,20 +194,7 @@
     container.appendChild(clone);
   }
 
-  // --- Orchestration --------------------------------------------------
-  function setupBulkMove() {
-      const applyBtn = document.getElementById('agilo-bulk-folder-apply');
-      const selectEl = document.getElementById('agilo-bulk-folder-select');
-      if (applyBtn && selectEl) {
-          applyBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              const target = selectEl.value;
-              if (target === "") return alert("Choisissez un dossier de destination.");
-              moveSelectedToFolder(target);
-          });
-      }
-  }
-
+  // --- Orchestration ---
   async function mainScriptExecution(token) {
     const userEmail = document.querySelector('[name="memberEmail"]')?.value;
     if (!userEmail || !token) return;
@@ -407,46 +204,56 @@
     __GLOBAL.email = userEmail;
     __GLOBAL.edition = edition;
 
-    await fetchFolders(userEmail, token, edition);
-    setupBulkMove();
+    // Pas d'await ici pour charger les jobs même si les dossiers rament
+    fetchFolders(userEmail, token, edition);
+
+    const container = document.getElementById('jobs-container');
+    if (!container) return;
 
     try {
         const resp = await fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=9999&offset=0`);
         const data = await resp.json();
-        if (data.status !== "OK") return;
+        __GLOBAL.lastApiData = data;
 
-        const container = document.getElementById('jobs-container');
+        if (data.status !== "OK") {
+            container.innerHTML = `<div class="agilo-error-state">Erreur API : ${data.errorMessage || data.message || 'Status KO'}</div>`;
+            return;
+        }
+
         const templateEl = document.getElementById('template-row');
-        if (!container || !templateEl) return;
+        if (!templateEl) return;
         const template = templateEl.content;
 
-        const currentFolderId = new URLSearchParams(location.search).get('folderId');
-        let filteredJobs = data.jobsInfoDtos || [];
+        const q = new URLSearchParams(location.search).get('folderId');
+        const fid = (q !== null && q !== '' && !isNaN(Number(q))) ? Number(q) : null;
         
-        // Filtrage par dossier
-        if (currentFolderId !== null && currentFolderId !== '') {
-            const fid = Number(currentFolderId);
-            filteredJobs = filteredJobs.filter(j => (j.folderId != null ? Number(j.folderId) : 0) === fid);
+        let jobs = data.jobsInfoDtos || [];
+        if (fid !== null) {
+            jobs = jobs.filter(j => {
+                const jfid = (j.folderId != null) ? Number(j.folderId) : 0;
+                return jfid === fid;
+            });
         }
-
-        const sortedJobs = filteredJobs.slice().sort((a, b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation));
-        
-        // Quotas / Ready count (sur tous les jobs du compte pour le badge)
-        const readyCount = (data.jobsInfoDtos || []).reduce((n, j) => n + (String(j.transcriptStatus).toUpperCase() === 'READY_SUMMARY_READY' ? 1 : 0), 0);
-        const readyCountEl = document.getElementById('readyCount');
-        if (readyCountEl) readyCountEl.textContent = readyCount;
 
         container.innerHTML = '';
-        if (sortedJobs.length === 0) {
-            container.innerHTML = `<div class="agilo-empty-state">Aucune transcription trouvée dans ce dossier.</div>`;
+        if (jobs.length === 0) {
+            container.innerHTML = `<div class="agilo-empty-state">Aucune transcription trouvée ici.</div>`;
         } else {
-            sortedJobs.forEach(job => buildJobRow({ job, userEmail, token, edition, template, container }));
+            jobs.sort((a,b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation))
+                .forEach(job => buildJobRow({ job, userEmail, token, edition, template, container }));
         }
-    } catch (err) { console.error('Error fetching jobs:', err); }
+
+    } catch (err) { 
+        console.error('[TranscriptLogic] API Error:', err);
+        container.innerHTML = `<div class="agilo-error-state">Erreur de connexion : impossible de charger vos fichiers.</div>`;
+    }
   }
 
   const tmr = setInterval(() => {
-    if (typeof globalToken !== 'undefined' && globalToken) { clearInterval(tmr); mainScriptExecution(globalToken); }
+    if (typeof globalToken !== 'undefined' && globalToken) { 
+        clearInterval(tmr); 
+        mainScriptExecution(globalToken); 
+    }
   }, 100);
 
 })();
