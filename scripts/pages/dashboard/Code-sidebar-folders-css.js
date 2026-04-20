@@ -97,52 +97,16 @@
   padding-left:0;
   overflow:hidden;
 }
-/* Alignement Webflow : même couple que les lignes (icon-small / icon-1x1-small dashboard) */
-.agilo-nav-folders__summary-icon-root{
+/* Résumé « Dossiers » : .icon-small.w-embed injecté par le JS (même que Tableau de bord) — SVG 24×24 dedans */
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed{
   flex:0 0 auto;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  width:1.06rem;
-  height:1.06rem;
-  min-width:1.06rem;
-  max-width:1.06rem;
-  max-height:1.06rem;
-  overflow:hidden;
-  line-height:0;
-}
-.agilo-nav-folders__summary-icon-slot{
-  flex:0 0 auto;
-}
-.agilo-nav-folders__summary-icon-slot--solo{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  line-height:0;
-}
-.agilo-nav-folders__summary-fa-folder-wrap{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  line-height:0;
-  max-width:1.22rem;
-  max-height:1.06rem;
-  overflow:hidden;
+  flex-shrink:0;
   color:var(--color--gris, var(--agilo-dim, #525252));
-  opacity:.9;
 }
-/* viewBox 576×512 : sans cap explicite, certains CSS site (svg width 100 %) explosent la taille */
-#agilo-nav-folders-root .agilo-nav-folders__summary-fa-folder,
-.agilo-nav-folders__summary-fa-folder{
+#agilo-nav-folders-root .agilo-nav-folders__summary-main > .icon-small.w-embed svg{
+  width:100%;
+  height:100%;
   display:block;
-  width:auto !important;
-  max-width:1.22rem !important;
-  height:1.06rem !important;
-  max-height:1.06rem !important;
-  flex:0 0 auto !important;
-  aspect-ratio:576 / 512;
-  object-fit:contain;
-  box-sizing:border-box;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
