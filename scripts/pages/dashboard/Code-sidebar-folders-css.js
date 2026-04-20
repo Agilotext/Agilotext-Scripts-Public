@@ -72,6 +72,8 @@
   width:100%;
   height:100%;
   display:block;
+  fill:currentColor;
+  stroke:none;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
