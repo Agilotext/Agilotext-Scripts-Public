@@ -9,11 +9,16 @@
 /* =============================================================================
    NAV DOSSIERS — style compact, aligné gauche, sans encadré
    ============================================================================= */
+#agilo-nav-folders-root{
+  display:block;
+  width:100%;
+}
 .agilo-nav-folders-details{
   margin:0;
   padding:0;
   border:none;
   background:transparent;
+  width:100%;
 }
 .agilo-nav-folders-details > summary{
   list-style:none;
@@ -33,27 +38,32 @@
   display:none;
 }
 .agilo-nav-folders__summary{
-  display:flex !important;
+  display:grid !important;
+  grid-template-columns:minmax(0, 1fr) auto !important;
   align-items:center !important;
-  justify-content:space-between !important;
   text-align:left !important;
   background:transparent !important;
   border:0 !important;
   border-radius:0 !important;
   box-shadow:none !important;
   width:100% !important;
+  column-gap:.32rem !important;
 }
 .agilo-nav-folders__summary-main{
   display:inline-flex;
   align-items:center;
   gap:.4rem;
+  justify-content:flex-start;
   min-width:0;
+  padding-left:calc(1.06rem + var(--agilo-gap, .48rem));
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
   align-items:center;
-  justify-content:flex-end;
+  justify-content:flex-end !important;
+  justify-self:end;
   flex:0 0 auto;
+  margin-left:auto;
 }
 .agilo-nav-folders__summary-text{
   font-size:.82rem;
@@ -79,10 +89,10 @@
   margin-top:-.05rem;
 }
 .agilo-nav-folders__create-btn{
-  width:1.1rem;
-  height:1.1rem;
-  min-width:1.1rem;
-  border-radius:0;
+  width:1.34rem;
+  height:1.34rem;
+  min-width:1.34rem;
+  border-radius:999px;
   border:none;
   background:transparent;
   color:var(--color--gris, var(--agilo-dim, #525252));
@@ -95,18 +105,19 @@
   transition:color .15s ease, opacity .15s ease, box-shadow .15s ease;
 }
 .agilo-nav-folders__create-btn svg{
-  width:.84rem;
-  height:.84rem;
+  width:.86rem;
+  height:.86rem;
   display:block;
 }
 .agilo-nav-folders__create-btn:hover{
   color:var(--color--blue, var(--agilo-primary, #174a96));
-  opacity:.92;
+  opacity:1;
+  background:rgba(255, 255, 255, 0.92);
+  box-shadow:0 0 0 1px rgba(82, 82, 82, 0.1);
 }
 .agilo-nav-folders__create-btn:focus-visible{
   outline:none;
-  box-shadow:0 0 0 2px rgba(23,74,150,.22);
-  border-radius:4px;
+  box-shadow:0 0 0 2px rgba(23,74,150,.22), 0 0 0 1px rgba(82, 82, 82, 0.08);
 }
 .agilo-nav-folders{
   margin:0;
@@ -150,6 +161,8 @@
   box-sizing:border-box;
   width:100%;
   max-width:100%;
+  min-width:0;
+  overflow:hidden;
 }
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .48rem);
@@ -213,11 +226,18 @@
 .agilo-nav-folders__name{
   flex:1 1 auto;
   min-width:0;
+  max-width:100%;
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
   font-size:.8rem;
   text-align:left !important;
+}
+.agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
+  max-width:calc(100% - 3.1rem);
+}
+.agilo-nav-folders__row--folder.agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
+  max-width:calc(100% - 4.25rem);
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__name{
   color:var(--agilo-text, #020202);
@@ -231,6 +251,7 @@
   background:transparent;
   color:var(--color--gris, var(--agilo-dim, #525252));
   padding:0;
+  flex:0 0 auto;
   opacity:0;
   pointer-events:none;
   transition:opacity .12s ease, color .12s ease;
@@ -279,6 +300,7 @@
   border:1px solid rgba(82, 82, 82, 0.18) !important;
   box-shadow:none !important;
   opacity:1;
+  flex-shrink:0;
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__count.readycount{
   font-size:.66rem;

@@ -527,7 +527,7 @@
   const STACK_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4 6h16v2H4V6Zm0 5h16v2H4v-2Zm0 5h10v2H4v-2Z"/></svg>';
   const ROOT_SVG =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.75 8.25h16.5m-15 0v9.75a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25V8.25m-9-4.5h4.5a1.5 1.5 0 0 1 1.5 1.5v3h-7.5v-3a1.5 1.5 0 0 1 1.5-1.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 7.5 9-4.5 9 4.5-9 4.5-9-4.5Zm0 0V16.5L12 21l9-4.5V7.5" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const PLUS_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
   const CHECK_SVG =
@@ -545,6 +545,18 @@
     const raw = String(mount.getAttribute('data-summary-label') || 'Dossiers').trim();
     if (!raw) return 'Dossiers';
     return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  function maxFolderLabelLength() {
+    const n = Number(mount.getAttribute('data-folder-name-max') || 28);
+    return Number.isFinite(n) && n >= 12 ? Math.floor(n) : 28;
+  }
+
+  function truncateFolderLabel(raw) {
+    const s = String(raw || '').trim();
+    const max = maxFolderLabelLength();
+    if (s.length <= max) return { display: s, truncated: false };
+    return { display: `${s.slice(0, Math.max(0, max - 3)).trimEnd()}...`, truncated: true };
   }
 
   function fallbackCreateAction(auth) {
@@ -624,7 +636,7 @@
 
     row.innerHTML = `
       <div class="${iconWrapClass}">${FOLDER_SVG}</div>
-      <input class="agilo-nav-folders__input" type="text" maxlength="80" placeholder="Nouveau dossier" />
+      <input class="agilo-nav-folders__input" type="text" maxlength="60" placeholder="Nouveau dossier" />
       <span class="agilo-nav-folders__inline-actions">
         <button type="button" class="agilo-nav-folders__inline-btn agilo-nav-folders__inline-btn--ok" aria-label="Valider">${CHECK_SVG}</button>
         <button type="button" class="agilo-nav-folders__inline-btn agilo-nav-folders__inline-btn--cancel" aria-label="Annuler">${X_SVG}</button>
@@ -849,7 +861,11 @@
       }
       const nameEl = a.querySelector('.agilo-nav-folders__name');
       const countEl = a.querySelector('.agilo-nav-folders__count');
-      if (nameEl) nameEl.textContent = label;
+      if (nameEl) {
+        const labelInfo = isFolderRow ? truncateFolderLabel(label) : { display: label, truncated: false };
+        nameEl.textContent = labelInfo.display;
+        if (labelInfo.truncated) nameEl.setAttribute('title', String(label || ''));
+      }
       if (countEl) countEl.textContent = String(count);
       const renameBtn = a.querySelector('.agilo-nav-folders__rename-btn');
       if (renameBtn && isFolderRow) {

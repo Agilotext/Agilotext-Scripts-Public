@@ -182,6 +182,15 @@
     }
   }
 
+  function activeFolderLabel() {
+    if (state.filter === 'all') return 'Tous les fichiers';
+    if (state.filter === 'root') return 'Non classé';
+    const id = Number(state.filter);
+    if (!Number.isFinite(id) || id <= 0) return 'Tous les fichiers';
+    const f = state.folders.find((x) => Number(x.folderId) === id);
+    return f?.folderName || `Dossier ${id}`;
+  }
+
   function parseDateFlexible(raw) {
     const s = String(raw || '').trim();
     if (!s) return 0;
@@ -309,6 +318,7 @@
 
       updateReadyCount(visibleRows);
       setSortDirUi();
+      updateBulkMoveUiState();
     } finally {
       state.applying = false;
     }
@@ -356,27 +366,57 @@
       .agilo-bulk-folder-move{
         display:inline-flex;
         align-items:center;
-        gap:.35rem;
-        margin-left:.5rem;
-        flex-wrap:nowrap;
+        gap:.5rem;
+        margin-left:.6rem;
+        flex-wrap:wrap;
+      }
+      .agilo-bulk-folder-current{
+        display:inline-flex;
+        align-items:center;
+        min-height:40px;
+        padding:0 .72rem;
+        border:1px solid rgba(82, 82, 82, .16);
+        border-radius:10px;
+        background:#fff;
+        font-size:.86rem;
+        line-height:1.2;
+        color:#525252;
+        white-space:nowrap;
+      }
+      .agilo-bulk-folder-current strong{
+        color:#202124;
+        font-weight:600;
+        margin-left:.2rem;
+      }
+      .agilo-bulk-folder-controls{
+        display:inline-flex;
+        align-items:center;
+        gap:.38rem;
+      }
+      .agilo-bulk-folder-controls[hidden]{
+        display:none !important;
       }
       .agilo-bulk-folder-move__select{
-        min-width:148px;
-        max-width:220px;
+        min-width:182px;
+        max-width:260px;
+        height:40px;
         border:1px solid rgba(82, 82, 82, .2);
-        border-radius:8px;
+        border-radius:10px;
         background:#fff;
-        font-size:.78rem;
+        font-size:.92rem;
         line-height:1.2;
-        padding:.34rem .45rem;
+        padding:0 .8rem;
       }
       .agilo-bulk-folder-move__btn{
-        border:1px solid rgba(82, 82, 82, .24);
-        border-radius:8px;
-        background:#fff;
-        font-size:.78rem;
+        height:40px;
+        border-radius:10px;
+        font-size:.92rem;
         line-height:1.2;
-        padding:.34rem .5rem;
+        padding:0 .95rem;
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        white-space:nowrap;
       }
       .agilo-bulk-folder-move__btn[disabled],
       .agilo-bulk-folder-move__select[disabled]{
@@ -390,12 +430,23 @@
   function fillBulkMoveOptions(selectEl) {
     if (!selectEl) return;
     const previous = selectEl.value;
-    const options = ['<option value="">Dossier…</option>', '<option value="0">Non classé</option>'];
+    const options = ['<option value="">Déplacer vers…</option>', '<option value="0">Non classé</option>'];
     sortFoldersByName(state.folders).forEach((f) => {
       options.push(`<option value="${String(f.folderId)}">${String(f.folderName)}</option>`);
     });
     selectEl.innerHTML = options.join('');
     if (previous) selectEl.value = previous;
+  }
+
+  function updateBulkMoveUiState() {
+    const currentChip = document.getElementById('agilo-bulk-folder-current');
+    const controls = document.getElementById('agilo-bulk-folder-controls');
+    if (currentChip) {
+      currentChip.innerHTML = `Dossier actuel : <strong>${activeFolderLabel()}</strong>`;
+    }
+    if (controls) {
+      controls.hidden = selectedJobIds().length === 0;
+    }
   }
 
   function ensureBulkMoveUi() {
@@ -409,8 +460,11 @@
       box.id = 'agilo-bulk-folder-move';
       box.className = 'agilo-bulk-folder-move';
       box.innerHTML = `
-        <select id="agilo-bulk-folder-select" class="agilo-bulk-folder-move__select" aria-label="Choisir dossier destination"></select>
-        <button type="button" id="agilo-bulk-folder-apply" class="agilo-bulk-folder-move__btn">Déplacer</button>
+        <span id="agilo-bulk-folder-current" class="agilo-bulk-folder-current"></span>
+        <span id="agilo-bulk-folder-controls" class="agilo-bulk-folder-controls" hidden>
+          <select id="agilo-bulk-folder-select" class="agilo-bulk-folder-move__select" aria-label="Choisir dossier destination"></select>
+          <button type="button" id="agilo-bulk-folder-apply" class="button-secondary black agilo-bulk-folder-move__btn">Déplacer</button>
+        </span>
       `;
       bar.appendChild(box);
     }
@@ -418,9 +472,18 @@
     const selectEl = document.getElementById('agilo-bulk-folder-select');
     const applyBtn = document.getElementById('agilo-bulk-folder-apply');
     fillBulkMoveOptions(selectEl);
+    updateBulkMoveUiState();
 
     if (!state.bulkUiMounted && applyBtn && selectEl) {
       state.bulkUiMounted = true;
+      document.addEventListener('change', (ev) => {
+        const t = ev?.target;
+        if (!t) return;
+        if (t.id === 'select-all' || t.classList?.contains('job-select')) {
+          updateBulkMoveUiState();
+        }
+      }, { capture: true, passive: true });
+
       applyBtn.addEventListener('click', async () => {
         const folderValue = String(selectEl.value || '');
         if (!folderValue) {
@@ -469,6 +532,7 @@
           state.folders = await fetchFolders(auth);
         } catch (_) {}
         fillBulkMoveOptions(selectEl);
+        updateBulkMoveUiState();
         scheduleApply();
         window.__agiloNavFolders?.refresh?.();
 
@@ -597,6 +661,7 @@
       clearRetry();
       dbg('jobs map loaded', map.size);
       ensureBulkMoveUi();
+      updateBulkMoveUiState();
       scheduleApply();
       return map;
     })().catch((err) => {
@@ -612,6 +677,7 @@
 
   function syncFromUrl() {
     state.filter = readFolderFilterFromUrl();
+    updateBulkMoveUiState();
     scheduleApply();
   }
 
@@ -623,6 +689,7 @@
       if (state.ignoreMutations || state.applying) return;
       bindSort();
       ensureBulkMoveUi();
+      updateBulkMoveUiState();
       scheduleApply();
     });
     state.observer.observe(container, { childList: true });
