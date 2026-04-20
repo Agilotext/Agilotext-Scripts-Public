@@ -32,6 +32,17 @@
 .agilo-nav-folders-details > summary::-webkit-details-marker{
   display:none;
 }
+.agilo-nav-folders__summary{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  text-align:left !important;
+  background:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+  width:100% !important;
+}
 .agilo-nav-folders__summary-main{
   display:inline-flex;
   align-items:center;
@@ -99,7 +110,7 @@
 }
 .agilo-nav-folders{
   margin:0;
-  padding:.2rem 0 .15rem;
+  padding:.08rem 0 .05rem;
   border:none;
   background:transparent;
   font-size:inherit;
@@ -107,14 +118,15 @@
 .agilo-nav-folders__list{
   display:flex;
   flex-direction:column;
-  gap:.2rem;
-  padding:.15rem 0 0 .15rem;
+  gap:.14rem;
+  padding:.02rem 0 0;
   margin:0;
-  border-left:1px solid rgba(2, 2, 2, 0.08);
+  border-left:none;
+  background:transparent;
 }
 .agilo-nav-folders__list--match-nav{
   padding-left:0;
-  padding-top:.1rem;
+  padding-top:0;
   border-left:none;
 }
 /* Webflow impose souvent inline-block sur les liens : forcer flex pour le layout */
@@ -122,33 +134,37 @@
   display:flex !important;
   align-items:center;
   flex-direction:row;
+  justify-content:flex-start !important;
+  text-align:left !important;
 }
 .agilo-nav-folders__row{
   gap:.45rem;
-  padding:.34rem .42rem .34rem .32rem;
-  border-radius:.45rem;
+  padding:.25rem 0 .25rem .1rem;
+  border-radius:0;
   text-decoration:none;
   color:var(--agilo-text, #020202);
   line-height:1.3;
-  transition:background .12s ease, box-shadow .12s ease, border-color .12s ease;
-  border:1px solid transparent;
+  transition:color .12s ease, opacity .12s ease;
+  border:0;
+  background:transparent;
   box-sizing:border-box;
   width:100%;
   max-width:100%;
 }
 .agilo-nav-folders__row--match-nav{
   gap:var(--agilo-gap, .5rem);
-  padding-left:.33rem;
-  padding-right:.33rem;
+  padding-left:.1rem;
+  padding-right:0;
 }
 .agilo-nav-folders__row:hover{
-  background:rgba(23, 74, 150, 0.06);
-  border-color:rgba(82, 82, 82, 0.12);
+  background:transparent;
+  color:var(--agilo-text, #020202);
+  opacity:.88;
 }
 .agilo-nav-folders__row.is-active{
-  background:var(--agilo-surface, var(--color--white, #ffffff));
-  border-color:rgba(23, 74, 150, 0.22);
-  box-shadow:0 1px 2px rgba(2, 2, 2, 0.06), 0 0 0 1px rgba(23, 74, 150, 0.1);
+  background:transparent;
+  border-color:transparent;
+  box-shadow:none;
   font-weight:600;
 }
 .agilo-nav-folders__icon{
@@ -186,6 +202,7 @@
   width:1.25rem;
   height:1.25rem;
   min-width:1.25rem;
+  margin-left:0;
   color:var(--agilo-folder-accent, var(--color--blue, var(--agilo-primary, #174a96)));
 }
 .agilo-nav-folders__row--match-nav .agilo-nav-folders__icon-wrap svg{
@@ -200,6 +217,7 @@
   text-overflow:ellipsis;
   white-space:nowrap;
   font-size:.8125rem;
+  text-align:left !important;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__name{
   color:var(--agilo-text, #020202);
@@ -210,6 +228,7 @@
   display:inline-flex !important;
   align-items:center;
   justify-content:center;
+  margin-left:auto;
   min-width:1.35rem;
   min-height:1.35rem;
   padding:0 .35rem;

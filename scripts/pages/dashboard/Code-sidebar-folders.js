@@ -19,7 +19,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.6.0', refresh: function () {} },
+      { version: '1.6.1', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -32,7 +32,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.6.0';
+  const APP_VERSION = '1.6.1';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -338,20 +338,33 @@
   }
 
   function getFolderAccentMode() {
-    const v = String(mount.getAttribute('data-agilo-folder-accent-mode') || 'hash')
+    const v = String(mount.getAttribute('data-agilo-folder-accent-mode') || 'auto')
       .trim()
       .toLowerCase();
     if (v === 'sequence' || v === 'order' || v === 'list') return 'sequence';
-    return 'hash';
+    if (v === 'palette' || v === 'palette-hash') return 'palette';
+    return 'auto';
   }
 
-  /** Couleur d’icône dossier : palette charte, répétée en boucle (nombre de dossiers illimité) */
-  function folderAccentForId(folderId, palette) {
-    const pal = palette && palette.length ? palette : DEFAULT_FOLDER_PALETTE;
+  function stableHash(value) {
     let h = 0;
-    const s = String(folderId);
+    const s = String(value == null ? '' : value);
     for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-    return pal[Math.abs(h) % pal.length];
+    return Math.abs(h);
+  }
+
+  function folderAccentForIdPalette(folderId, palette) {
+    const pal = palette && palette.length ? palette : DEFAULT_FOLDER_PALETTE;
+    return pal[stableHash(folderId) % pal.length];
+  }
+
+  /** Couleur d’icône dossier : génération HSL stable (illimitée) */
+  function folderAccentForIdAuto(folderId) {
+    const h = stableHash(folderId);
+    const hue = h % 360;
+    const sat = 58 + (h % 18);   // 58..75
+    const light = 38 + (h % 14); // 38..51
+    return `hsl(${hue}, ${sat}%, ${light}%)`;
   }
 
   function folderAccentForListIndex(listIndex, palette) {
@@ -362,7 +375,13 @@
 
   function pickFolderAccent(folderId, listIndex, palette, mode) {
     if (mode === 'sequence') return folderAccentForListIndex(listIndex, palette);
-    return folderAccentForId(folderId, palette);
+    if (mode === 'palette') return folderAccentForIdPalette(folderId, palette);
+    return folderAccentForIdAuto(folderId);
+  }
+
+  function shouldShowAllRow() {
+    const v = String(mount.getAttribute('data-show-all-row') || 'false').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes' || v === 'on';
   }
 
   /** Segment après /app/ (free, pro, business, …) — aligné Code-ed-header / profil */
@@ -483,7 +502,7 @@
 
   function createSummary(auth) {
     const sum = document.createElement('summary');
-    sum.className = ['agilo-nav-folders__summary', extraClasses('data-summary-class')].filter(Boolean).join(' ');
+    sum.className = 'agilo-nav-folders__summary';
 
     const main = document.createElement('span');
     main.className = 'agilo-nav-folders__summary-main';
@@ -651,7 +670,9 @@
     }
 
     const rootCount = merged.rootJobsCount;
-    addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, ACCENT_ALL);
+    if (shouldShowAllRow()) {
+      addRow('all', 'Tous les fichiers', totalAll, STACK_SVG, ACCENT_ALL);
+    }
     addRow('root', 'Non classé', rootCount, ROOT_SVG, ACCENT_ROOT);
 
     merged.folders.forEach((f, idx) => {
