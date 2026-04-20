@@ -52,10 +52,26 @@
 .agilo-nav-folders__summary-main{
   display:inline-flex;
   align-items:center;
-  gap:.4rem;
+  gap:.38rem;
   justify-content:flex-start;
   min-width:0;
-  padding-left:calc(1.06rem + var(--agilo-gap, .48rem));
+  flex:1 1 0%;
+  padding-left:0;
+}
+.agilo-nav-folders__summary-icon{
+  flex:0 0 auto;
+  width:1.06rem;
+  height:1.06rem;
+  min-width:1.06rem;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--color--gris, var(--agilo-dim, #525252));
+}
+.agilo-nav-folders__summary-icon svg{
+  width:100%;
+  height:100%;
+  display:block;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
@@ -66,6 +82,10 @@
   margin-left:auto;
 }
 .agilo-nav-folders__summary-text{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
   font-size:.82rem;
   font-weight:600;
   letter-spacing:.005em;
@@ -181,9 +201,9 @@ a.agilo-nav-folders__row.w-inline-block{
   opacity:.88;
 }
 .agilo-nav-folders__row.is-active{
-  background:transparent;
-  border-color:transparent;
-  box-shadow:none;
+  background:rgba(255, 255, 255, 0.96) !important;
+  border-radius:.38rem;
+  box-shadow:0 0 0 1px rgba(0, 0, 0, 0.06);
   font-weight:600;
 }
 .agilo-nav-folders__icon{
@@ -239,12 +259,27 @@ a.agilo-nav-folders__row.w-inline-block{
   font-size:.8rem;
   text-align:left !important;
 }
-.agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
-  flex:1 1 0% !important;
-  max-width:none;
+.agilo-nav-folders__name-block{
+  flex:1 1 0%;
+  min-width:0;
+  max-width:100%;
+  display:inline-flex;
+  align-items:center;
+  gap:.12rem;
+  overflow:hidden;
 }
-.agilo-nav-folders__row--folder.agilo-nav-folders__row--match-nav .agilo-nav-folders__name{
-  max-width:none;
+.agilo-nav-folders__name-block .agilo-nav-folders__name{
+  flex:1 1 0%;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.agilo-nav-folders__row--match-nav > .agilo-nav-folders__name{
+  flex:1 1 0% !important;
+  min-width:0;
+  max-width:100%;
 }
 .agilo-nav-folders__row.is-active .agilo-nav-folders__name{
   color:var(--agilo-text, #020202);

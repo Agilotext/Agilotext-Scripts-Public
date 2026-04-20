@@ -12,6 +12,7 @@
 //     — sequence : couleur par position dans la liste (1er = 1re teinte, …)
 //   data-row-structure="match-nav" → DOM type menu (icon-small, readycount)
 //   data-icon-class, data-name-class, data-count-class → surcharges classes match-nav
+//   data-folder-name-max="28" → longueur max affichée des noms de dossier (6–80, défaut 28) + ellipse CSS
 
 (function () {
   'use strict';
@@ -19,7 +20,7 @@
   /** Toujours présent si ce fichier est parsé (évite « undefined » en console ; refresh réel après init). */
   try {
     window.__agiloNavFolders = Object.assign(
-      { version: '1.7.1', refresh: function () {} },
+      { version: '1.7.2', refresh: function () {} },
       window.__agiloNavFolders || {}
     );
   } catch (_) {}
@@ -32,7 +33,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.7.1';
+  const APP_VERSION = '1.7.2';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -522,6 +523,20 @@
       .join(' ');
   }
 
+  /** Longueur max affichée (caractères) pour les noms de dossier ; `data-folder-name-max` sur le mount (6–80). */
+  function folderNameMaxChars() {
+    const raw = Number(mount.getAttribute('data-folder-name-max'));
+    if (Number.isFinite(raw) && raw >= 6 && raw <= 80) return Math.floor(raw);
+    return 28;
+  }
+
+  function displayFolderNavName(full) {
+    const s = String(full || '').trim();
+    const max = folderNameMaxChars();
+    if (s.length <= max) return { text: s, titleAttr: null };
+    return { text: `${s.slice(0, Math.max(1, max - 1))}…`, titleAttr: s };
+  }
+
   const FOLDER_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"/></svg>';
   const STACK_SVG =
@@ -670,6 +685,11 @@
     const main = document.createElement('span');
     main.className = 'agilo-nav-folders__summary-main';
 
+    const iconWrap = document.createElement('span');
+    iconWrap.className = 'agilo-nav-folders__summary-icon';
+    iconWrap.setAttribute('aria-hidden', 'true');
+    iconWrap.innerHTML = FOLDER_SVG;
+
     const txt = document.createElement('span');
     txt.className = 'agilo-nav-folders__summary-text';
     txt.textContent = summaryLabelText();
@@ -678,6 +698,7 @@
     chev.className = 'agilo-nav-folders__chev';
     chev.setAttribute('aria-hidden', 'true');
 
+    main.appendChild(iconWrap);
     main.appendChild(txt);
     main.appendChild(chev);
 
@@ -840,21 +861,29 @@
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
-        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div><div class="${nameClasses}"></div>${renameHtml}<span class="${countClasses}"></span>`;
+        const middle = isFolderRow
+          ? `<div class="agilo-nav-folders__name-block"><div class="${nameClasses}"></div>${renameHtml}</div>`
+          : `<div class="${nameClasses}"></div>`;
+        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div>${middle}<span class="${countClasses}"></span>`;
       } else {
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
           : '';
-        a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span><span class="agilo-nav-folders__name"></span>${renameHtml}<span class="agilo-nav-folders__count"></span>`;
+        const middle = isFolderRow
+          ? `<span class="agilo-nav-folders__name-block"><span class="agilo-nav-folders__name"></span>${renameHtml}</span>`
+          : `<span class="agilo-nav-folders__name"></span>`;
+        a.innerHTML = `<span class="agilo-nav-folders__icon">${iconHtml}</span>${middle}<span class="agilo-nav-folders__count"></span>`;
       }
       const nameEl = a.querySelector('.agilo-nav-folders__name');
       const countEl = a.querySelector('.agilo-nav-folders__count');
       if (nameEl) {
-        /* Texte complet : ellipse gérée par CSS (Webflow peut annuler si on tronque mal au caractère). */
-        nameEl.textContent = String(label || '');
-        if (isFolderRow && String(label || '').length > 18) {
-          nameEl.setAttribute('title', String(label || ''));
+        if (isFolderRow) {
+          const { text, titleAttr } = displayFolderNavName(label);
+          nameEl.textContent = text;
+          if (titleAttr) nameEl.setAttribute('title', titleAttr);
+          else nameEl.removeAttribute('title');
         } else {
+          nameEl.textContent = String(label || '');
           nameEl.removeAttribute('title');
         }
       }

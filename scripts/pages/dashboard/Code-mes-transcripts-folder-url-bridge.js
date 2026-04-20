@@ -1,5 +1,5 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions"
-// Version 2.1.1
+// Version 2.1.2
 //
 // Objectif:
 // - filtrer les lignes par dossier depuis folderId (all, root, N)
@@ -12,7 +12,7 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.1.1';
+  const BRIDGE_VERSION = '2.1.2';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -191,6 +191,30 @@
     return f?.folderName || `Dossier ${id}`;
   }
 
+  /** Après déplacement : aligner l’URL sur le dossier cible (sinon filtre URL ≠ dossiers réels → liste « vide »). */
+  function setFolderIdInUrl(folderValue) {
+    const u = new URL(location.href);
+    const v = String(folderValue ?? '');
+    if (v === '' || v === 'all') u.searchParams.delete('folderId');
+    else if (v === '0') u.searchParams.set('folderId', '0');
+    else {
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) u.searchParams.set('folderId', String(n));
+    }
+    try {
+      history.pushState({}, '', u.pathname + u.search + u.hash);
+    } catch (_) {}
+    state.filter = readFolderFilterFromUrl();
+    scheduleApply();
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:nav-folder-url-changed'));
+    } catch (_) {}
+    try {
+      window.__agiloNavFolders?.refresh?.();
+    } catch (_) {}
+    updateBulkMoveUiState();
+  }
+
   function parseDateFlexible(raw) {
     const s = String(raw || '').trim();
     if (!s) return 0;
@@ -366,12 +390,18 @@
     const style = document.createElement('style');
     style.id = 'agilo-bulk-folder-move-style';
     style.textContent = `
+      .agilo-bulk-folder-move[hidden]{
+        display:none !important;
+      }
       .agilo-bulk-folder-move{
         display:inline-flex;
         align-items:center;
         gap:.5rem;
         margin-left:.6rem;
         flex-wrap:wrap;
+      }
+      .agilo-bulk-folder-current[hidden]{
+        display:none !important;
       }
       .agilo-bulk-folder-current{
         display:inline-flex;
@@ -390,6 +420,9 @@
         color:#202124;
         font-weight:600;
         margin-left:.2rem;
+      }
+      .agilo-bulk-folder-current--context{
+        opacity:.92;
       }
       .agilo-bulk-folder-controls{
         display:inline-flex;
@@ -446,20 +479,32 @@
     const currentChip = document.getElementById('agilo-bulk-folder-current');
     const controls = document.getElementById('agilo-bulk-folder-controls');
     const n = selectedJobIds().length;
+    const inNumericFolder = typeof state.filter === 'number' && state.filter > 0;
+    const inRootFolder = state.filter === 'root';
+    const inScopedView = inNumericFolder || inRootFolder;
+
+    if (controls) controls.hidden = n === 0;
+
     if (currentChip) {
+      currentChip.classList.remove('agilo-bulk-folder-current--context');
       if (n > 0) {
         currentChip.hidden = false;
         currentChip.innerHTML = `Dossier actuel : <strong>${activeFolderLabel()}</strong>`;
+      } else if (inScopedView) {
+        /* 0 coché mais URL = dossier / racine : contexte lisible (plus de cadre vide) */
+        currentChip.hidden = false;
+        currentChip.classList.add('agilo-bulk-folder-current--context');
+        currentChip.innerHTML = `Affichage : <strong>${activeFolderLabel()}</strong>`;
       } else {
         currentChip.innerHTML = '';
         currentChip.hidden = true;
       }
     }
-    if (controls) controls.hidden = n === 0;
-    /* Tout le bloc (libellé + liste + bouton) masqué sans sélection — évite « Dossier… » visible à tort */
+
     if (box) {
-      box.hidden = n === 0;
-      box.setAttribute('aria-hidden', n === 0 ? 'true' : 'false');
+      const showBox = n > 0 || inScopedView;
+      box.hidden = !showBox;
+      box.setAttribute('aria-hidden', showBox ? 'false' : 'true');
     }
   }
 
@@ -550,9 +595,13 @@
           state.folders = await fetchFolders(auth);
         } catch (_) {}
         fillBulkMoveOptions(selectEl);
-        updateBulkMoveUiState();
-        scheduleApply();
-        window.__agiloNavFolders?.refresh?.();
+        if (moved > 0 && failed === 0) {
+          setFolderIdInUrl(folderValue);
+        } else {
+          updateBulkMoveUiState();
+          scheduleApply();
+          window.__agiloNavFolders?.refresh?.();
+        }
 
         applyBtn.disabled = false;
         selectEl.disabled = false;
