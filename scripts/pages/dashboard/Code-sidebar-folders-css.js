@@ -106,6 +106,9 @@
   width:1.06rem;
   height:1.06rem;
   min-width:1.06rem;
+  max-width:1.06rem;
+  max-height:1.06rem;
+  overflow:hidden;
   line-height:0;
 }
 .agilo-nav-folders__summary-icon-slot{
@@ -122,16 +125,24 @@
   align-items:center;
   justify-content:center;
   line-height:0;
+  max-width:1.22rem;
+  max-height:1.06rem;
+  overflow:hidden;
   color:var(--color--gris, var(--agilo-dim, #525252));
   opacity:.9;
 }
+/* viewBox 576×512 : sans cap explicite, certains CSS site (svg width 100 %) explosent la taille */
+#agilo-nav-folders-root .agilo-nav-folders__summary-fa-folder,
 .agilo-nav-folders__summary-fa-folder{
   display:block;
-  height:1.06rem;
-  width:auto;
-  max-width:1.22rem;
+  width:auto !important;
+  max-width:1.22rem !important;
+  height:1.06rem !important;
+  max-height:1.06rem !important;
+  flex:0 0 auto !important;
   aspect-ratio:576 / 512;
   object-fit:contain;
+  box-sizing:border-box;
 }
 .agilo-nav-folders__summary-actions{
   display:inline-flex;
@@ -505,23 +516,65 @@
   .agilo-nav-folders__row{ transition:none; }
 }
 /*
- * « Tous les fichiers » : ne PAS surcharger le <a> (Webflow = width 80 %, padding .5rem 1rem, flex).
- * On aligne seulement le slot icône sur `.icon-small` des autres entrées (1.5rem + margin-right .2rem).
+ * « Tous les fichiers » : uniquement le lien direct sous .full-width (évite tout effet de bord dans l’embed).
+ * Ne pas toucher padding/width du <a> Webflow. Slot svg = même empreinte que .icon-small (1.5rem + .2rem).
  */
-.full-width a[data-tour="nav-transcripts"] > svg:first-child,
-a.dashboard-link[data-tour="nav-transcripts"] > svg:first-child{
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] > svg:first-child{
   flex:0 0 auto;
   width:1.5rem;
   min-width:1.5rem;
+  max-width:1.5rem;
   height:1.5rem;
+  max-height:1.5rem;
   margin-right:.2rem;
   padding:.1875rem;
   box-sizing:border-box;
   display:block;
-  max-height:none;
   align-self:center;
 }
-.full-width a[data-tour="nav-transcripts"] .wrapper-link,
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
+  flex:1 1 auto;
+  min-width:0;
+  display:flex !important;
+  flex-direction:row;
+  align-items:center;
+  flex-wrap:nowrap;
+  justify-content:flex-start;
+  gap:.35rem;
+  box-sizing:border-box;
+}
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link > div:first-child{
+  flex:0 1 auto;
+  min-width:0;
+}
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link .readycount,
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] #readyCount{
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.full-width > a.dashboard-link[data-tour="nav-transcripts"] > .text-cr{
+  flex:0 0 auto;
+  align-self:center;
+  min-width:0;
+  max-width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+/* Même alignement si le lien « Mes transcripts » n’est pas enfant direct de .full-width */
+a.dashboard-link[data-tour="nav-transcripts"] > svg:first-child{
+  flex:0 0 auto;
+  width:1.5rem;
+  min-width:1.5rem;
+  max-width:1.5rem;
+  height:1.5rem;
+  max-height:1.5rem;
+  margin-right:.2rem;
+  padding:.1875rem;
+  box-sizing:border-box;
+  display:block;
+  align-self:center;
+}
 a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
   flex:1 1 auto;
   min-width:0;
@@ -533,19 +586,15 @@ a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link{
   gap:.35rem;
   box-sizing:border-box;
 }
-.full-width a[data-tour="nav-transcripts"] .wrapper-link > div:first-child,
 a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link > div:first-child{
   flex:0 1 auto;
   min-width:0;
 }
-.full-width a[data-tour="nav-transcripts"] .wrapper-link .readycount,
-.full-width a[data-tour="nav-transcripts"] #readyCount,
 a.dashboard-link[data-tour="nav-transcripts"] .wrapper-link .readycount,
 a.dashboard-link[data-tour="nav-transcripts"] #readyCount{
   flex:0 0 auto;
   margin-left:auto;
 }
-.full-width a[data-tour="nav-transcripts"] > .text-cr,
 a.dashboard-link[data-tour="nav-transcripts"] > .text-cr{
   flex:0 0 auto;
   align-self:center;
