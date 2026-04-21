@@ -281,23 +281,27 @@
     return { ok: false, error: 'Renommage dossier non disponible (API).' };
   }
 
-  async function deleteFolder(auth, folderId, folderName) {
-    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?\n\nAttention : l'API refusera la suppression si le dossier n'est pas vide.`)) return;
+  async function deleteFolder(auth, folderId, folderName, count = 0) {
+    // Si le dossier n'est pas vide (détection locale via le compteur), on bloque tout de suite avec le bon message.
+    if (count > 0) {
+      window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
+      return;
+    }
+
+    // Si le dossier est vide, on demande une confirmation simple et propre.
+    if (!window.confirm(`Supprimer le dossier « ${folderName} » ?`)) return;
+
     const res = await postForm('deleteTranscriptFolder', {
       username: auth.username,
       token: auth.token,
       edition: auth.edition,
       folderId: String(folderId)
     });
+
     if (res.ok) {
       await load();
     } else {
-      const err = String(res.error || '').toLowerCase();
-      if (err.includes('not empty') || err.includes('not_empty')) {
-        window.alert(`Impossible de supprimer le dossier « ${folderName} » car il contient encore des transcriptions.\n\nVeuillez d'abord déplacer ou supprimer les fichiers présents dans ce dossier avant de le supprimer.`);
-      } else {
-        window.alert(res.error || 'Impossible de supprimer ce dossier.');
-      }
+      window.alert(res.error || 'Impossible de supprimer ce dossier.');
     }
   }
 
@@ -943,7 +947,7 @@
         deleteBtn.addEventListener('click', (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
-          deleteFolder(auth, Number(filter), label);
+          deleteFolder(auth, Number(filter), label, count);
         });
       }
       list.appendChild(a);
