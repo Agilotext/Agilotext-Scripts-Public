@@ -989,6 +989,14 @@
       obs.observe(summaryEl, { childList: true, subtree: true });
     }
 
+    // Sécurité Token Resolver : rafraîchir quand le token arrive
+    window.addEventListener('agilo:token', function () {
+      if (isGenerating) return;
+      cachedModels = null; // Invalider le cache pour forcer un vrai rechargement
+      isPopulated = false; 
+      setTimeout(switchView, 150);
+    });
+
     setTimeout(switchView, 500);
   }
 

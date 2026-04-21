@@ -53,9 +53,9 @@
     const root = document.querySelector('#editorRoot');
     const k = `agilo:token:${edition}:${String(email || '').toLowerCase()}`;
     return (
+      window.globalToken || // Source de vérité rafraîchie (token-resolver.js)
       root?.dataset.token ||
       window.__agiloOrchestrator?.credentials?.token ||
-      window.globalToken ||
       localStorage.getItem(k) ||
       localStorage.getItem(`agilo:token:${edition}`) ||
       localStorage.getItem('agilo:token') ||
