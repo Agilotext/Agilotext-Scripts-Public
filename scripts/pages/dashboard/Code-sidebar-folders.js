@@ -657,6 +657,11 @@
       fallbackCreateAction(auth);
       return;
     }
+
+    // ✅ AMÉLIORATION : Ouvrir le menu s'il est fermé
+    const details = list.closest('details');
+    if (details && !details.open) details.open = true;
+
     const existing = list.querySelector('.agilo-nav-folders__row--inline-create');
     if (existing) {
       const oldInput = existing.querySelector('.agilo-nav-folders__input');
