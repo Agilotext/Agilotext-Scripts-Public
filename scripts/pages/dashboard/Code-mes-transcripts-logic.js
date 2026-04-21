@@ -194,7 +194,19 @@
       if (!container || !templateEl) return;
       
       container.innerHTML = '';
-      (data.jobsInfoDtos || []).forEach(job => buildJobRow({ 
+
+      if (!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) {
+        container.innerHTML = `
+          <div style="grid-column: 1 / -1; padding: 60px 20px; text-align: center; background: #ffffff; border: 1px dashed #d1d5db; border-radius: 12px; margin: 20px 0;">
+            <div style="font-size: 32px; margin-bottom: 12px;">📁</div>
+            <p style="margin: 0; color: #111827; font-size: 16px; font-weight: 600;">Aucune transcription trouvée</p>
+            <p style="margin: 8px 0 0; color: #6b7280; font-size: 14px;">Vos fichiers apparaîtront ici dès qu'ils seront traités.</p>
+          </div>
+        `;
+        return;
+      }
+
+      data.jobsInfoDtos.forEach(job => buildJobRow({ 
           job, userEmail, token, edition, 
           template: templateEl.content, 
           container 
