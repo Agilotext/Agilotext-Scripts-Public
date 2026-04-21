@@ -1,449 +1,604 @@
-(function() {
-  'use strict';
+(() => {
+  if (window.AgilotextBulk) return; // évite double injection
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  LISTE DES JOBS — UNIVERSEL (Free, Pro, Enterprise)
-  //  - Titres intelligents (jobTitle)
-  //  - Détection automatique de l'édition
-  //  - Renommage, partage, suppression, téléchargements
-  // ═══════════════════════════════════════════════════════════════════
-
-  const VERSION = '1.1.4';
-  const API_BASE = 'https://api.agilotext.com/api/v1';
-
-  // --- Thème minimal pour curseurs/états (🚫 interdit / ⏳ vérification) ---
-  (function injectListTheme() {
-    if (document.getElementById('agilo-list-theme')) return;
-    const css = `
-      .is-disabled { opacity: .6; cursor: not-allowed; }
-      .is-verifying { cursor: progress; }
-      .file-name-input { width: 100%; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; }
-    `;
-    const st = document.createElement('style');
-    st.id = 'agilo-list-theme';
-    st.textContent = css;
-    document.head.appendChild(st);
-  })();
-
-  // --- Utilitaires ----------------------------------------------------
-  function convertDateStringToDate(dateString) {
-    if (!dateString) return new Date();
-    const parts = dateString.split(/[- :]/);
-    return new Date(parts[2], parts[1] - 1, parts[0], parts[3], parts[4], parts[5]);
-  }
-
-  function sanitizeFilenameBase(base) {
-    return (base || "").replace(/[<>:"/\\|?*\x00-\x1F]/g, "").replace(/\s+/g, " ").trim();
-  }
-
-  function extractErrorMessage(javaException) {
-    if (!javaException) return 'Cause inconnue.';
-    const parts = javaException.split(':');
-    return (parts.length > 1 ? parts.slice(1).join(':') : javaException).trim();
-  }
-
-  function stemDisplay(fn) {
-    const s = String(fn || '');
-    const i = s.lastIndexOf('.');
-    return i > 0 ? s.slice(0, i) : s;
-  }
-
-  function displayJobTitle(job) {
-    if (!job) return 'Transcript';
-    const jt = (job.jobTitle != null ? String(job.jobTitle) : '').trim();
-    if (jt) return jt;
-    const fn = job.filename || '';
-    if (fn) return stemDisplay(fn) || fn;
-    return 'Transcript';
-  }
-
-  // --- Détection de l'édition -----------------------------------------
-  function normalizeEdition(v) {
-    v = String(v || '').trim().toLowerCase();
-    if (/(^ent$|enterprise|entreprise|business|team|biz)/.test(v)) return 'ent';
-    if (/^pro/.test(v)) return 'pro';
-    if (/^free|gratuit/.test(v)) return 'free';
-    return 'ent'; // Default fallback
-  }
-
-  function getAppTierFromLocation() {
-    const m = location.pathname.match(/^\/app\/([^/]+)/);
+  // ───────────────────────────────────────────────────────────────────────────
+  // Helpers: tier-aware URLs (/app/{tier}/...)
+  // ───────────────────────────────────────────────────────────────────────────
+  function getAppTier() {
+    const m = location.pathname.match(/^\/app\/([^\/]+)/);
     return m ? m[1] : null;
   }
-
-  function getEdition() {
-    const fromPath = getAppTierFromLocation();
-    const fromQS = new URLSearchParams(location.search).get('edition');
-    const fromRoot = document.getElementById('editorRoot')?.dataset?.edition;
-    const fromHtml = document.documentElement?.getAttribute('data-edition');
-    const fromLS = localStorage.getItem('agilo:edition');
-    return normalizeEdition(fromPath || fromQS || fromRoot || fromHtml || fromLS || 'ent');
+  function appUrl(subpath = "") {
+    const tier = getAppTier() || "business";
+    const clean = String(subpath).replace(/^\/+/, "");
+    return `/app/${tier}/${clean}`;
   }
-
-  // --- Garde de liens (enable / disable + popup) ---------------------
-  function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
-    if (!link) return;
-
-    if (link.__clickHandler) {
-      link.removeEventListener('click', link.__clickHandler);
-      link.__clickHandler = null;
-    }
-
-    if (!disabledMsg) {
-      link.classList.remove('is-disabled', 'is-verifying');
-      link.removeAttribute('aria-disabled');
-      link.removeAttribute('title');
-      link.style.pointerEvents = '';
-      link.style.cursor = '';
-      link.setAttribute('href', href);
-      link.setAttribute('target', '_blank');
-      link.setAttribute('rel', 'noopener');
-      return;
-    }
-
-    const hard = opts.hard === true;
-    link.classList.add('is-disabled');
-    link.classList.remove('is-verifying');
-    link.setAttribute('aria-disabled', 'true');
-    link.setAttribute('title', disabledMsg);
-
-    if (hard) {
-      link.style.pointerEvents = 'none';
-      link.style.cursor = 'not-allowed';
-      link.removeAttribute('href');
-      link.removeAttribute('target');
-      link.removeAttribute('download');
-    } else {
-      link.style.pointerEvents = 'auto';
-      link.style.cursor = 'not-allowed';
-      link.setAttribute('href', '#');
-      link.removeAttribute('target');
-      link.removeAttribute('download');
-
-      link.__clickHandler = (e) => {
-        e.preventDefault(); e.stopPropagation();
-        alert(disabledMsg || "Pas de compte-rendu disponible.");
-      };
-      link.addEventListener('click', link.__clickHandler);
-    }
+  function injectDialogTheme() {
+    if (document.getElementById('agilo-dialog-theme')) return;
+    const css = `
+    .agilo-overlay{position:fixed; inset:0; display:none; z-index:99999; background: var(--agilo-overlay, rgba(0,0,0,.35));}
+    .agilo-modal{max-width:560px; margin:6vh auto; background:var(--color--white); border-radius: var(--0-5_radius); box-shadow: var(--agilo-shadow, 0 10px 30px rgba(0,0,0,.2)); overflow:hidden; color: var(--color--gris_foncé);}
+    .agilo-modal__header{padding:18px 22px; border-bottom:1px solid var(--color--noir_25); background: var(--color--white);}
+    .agilo-modal__title{margin:0; font-size:18px;}
+    .agilo-modal__subtitle{margin:6px 0 0; color: var(--color--gris); font-size:14px;}
+    .agilo-modal__body{padding:16px 22px; max-height:60vh; overflow:auto; background: var(--color--white);}
+    .agilo-modal__footer{display:flex; gap:8px; justify-content:flex-end; padding:14px 16px; border-top:1px solid var(--color--noir_25); background: var(--color--blanc_gris);}
+    .agilo-block{margin-bottom:14px;}
+    .agilo-block__heading{font-weight:600; margin-bottom:4px;}
+    .agilo-block__text{color: var(--color--gris_foncé); margin-bottom:6px;}
+    .agilo-block__details summary{cursor:pointer; color: var(--color--gris);}
+    .agilo-block__pre{white-space:pre-wrap; background: var(--color--blanc_gris); border:1px solid var(--color--noir_25); border-radius: var(--0-5_radius); padding:8px; margin-top:6px; font-size:12px;}
+    .agilo-kbdrow{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;}
+    .agilo-linklist{font-size:13px; line-height:1.4;}
+    .agilo-linklist a{display:block; margin:4px 0;}
+    .agilo-btn,.agilo-link{padding:10px 14px; border-radius: var(--0-5_radius); border:1px solid var(--color--noir_25); background: var(--color--white); color: var(--color--gris_foncé); cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; transition: background .15s ease, border-color .15s ease, filter .15s ease;}
+    .agilo-btn:hover,.agilo-link:hover{background: var(--color--blanc_gris);}
+    .agilo-btn--primary{border-color: var(--color--blue); background: var(--color--blue); color: var(--color--white);}
+    .agilo-btn--primary:hover{filter:none; background: var(--color--blue);}
+    .agilo-btn--danger{border-color: #dc3545; background: #dc3545; color: white;}
+    .agilo-btn--danger:hover{background: #c82333; border-color: #bd2130;}
+    .agilo-btn:focus-visible,.agilo-link:focus-visible{outline:2px solid var(--color--blue); outline-offset:2px;}
+    `;
+    const style = document.createElement('style');
+    style.id = 'agilo-dialog-theme';
+    style.textContent = css;
+    document.head.appendChild(style);
   }
-
-  // --- Vérif Asset ---------------------------------------------------
-  const _assetOkCache = new Map();
-  async function verifyAssetOnce(jobId, url, key) {
-    if (_assetOkCache.has(key)) return _assetOkCache.get(key);
-
-    let ok = false;
-    try {
-      const r = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        redirect: 'follow',
-        headers: {
-          'Accept': 'application/octet-stream,application/pdf,application/msword,application/rtf,text/html;q=0.9,application/json;q=0.1'
-        }
-      });
-
-      const ct = (r.headers.get('content-type') || '').toLowerCase();
-      const cd = r.headers.get('content-disposition') || '';
-
-      if (r.ok && (/attachment|filename=/i.test(cd) || /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
-        ok = true;
-      } else {
-        const text = await r.text().catch(() => '');
-        let j = null; try { j = JSON.parse(text); } catch {}
-        if (j) {
-          ok = (String(j.status || '').toUpperCase() === 'OK');
-        } else {
-          if (/"status"\s*:\s*"KO"/i.test(text) || /error_summary_transcript_file_not_exists/i.test(text)) {
-            ok = false;
-          } else {
-            ok = r.ok && (ct.includes('text/html') || text.trim().length > 0);
-          }
-        }
-      }
-    } catch { ok = false; }
-
-    _assetOkCache.set(key, ok);
-    return ok;
+  function ensureDialog() {
+    injectDialogTheme();
+    const legacy = document.querySelector('#agilo-dialog[style]'); if (legacy) legacy.remove();
+    if (document.getElementById('agilo-dialog')) return;
+    const html = `
+      <div id="agilo-dialog" role="dialog" aria-modal="true" class="agilo-overlay" lang="fr">
+        <div class="agilo-modal">
+          <div class="agilo-modal__header">
+            <h3 id="agilo-dialog-title" class="agilo-modal__title">Résultat</h3>
+            <p id="agilo-dialog-sub" class="agilo-modal__subtitle"></p>
+          </div>
+          <div id="agilo-dialog-body" class="agilo-modal__body"></div>
+          <div class="agilo-modal__footer">
+            <button id="agilo-dialog-close" class="agilo-btn">Fermer</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    document.getElementById('agilo-dialog-close').addEventListener('click', ()=>hideDialog());
+    document.getElementById('agilo-dialog').addEventListener('click', (e)=>{ if(e.target.id==='agilo-dialog') hideDialog(); });
   }
-
-  function guardClick(a, url, jobId, key, failMsg = 'Résumé indisponible.') {
-    if (!a || a.__guarded) return;
-    a.__guarded = true;
-
-    a.addEventListener('click', async (e) => {
-      if (a.getAttribute('href') && !a.hasAttribute('aria-disabled')) return;
-      e.preventDefault(); e.stopPropagation();
-      a.classList.add('is-verifying');
-      const ok = await verifyAssetOnce(jobId, url, key);
-      a.classList.remove('is-verifying');
-
-      if (ok) {
-        setDownloadLink(a, url);
-        a.setAttribute('target', '_blank');
-        window.open(url, '_blank', 'noopener');
-      } else {
-        setDownloadLink(a, '#', failMsg);
-      }
-    }, { passive: false });
+  function showDialog({ title, subtitle, blocks }) {
+    ensureDialog();
+    document.getElementById('agilo-dialog-title').textContent = title || 'Résultat';
+    document.getElementById('agilo-dialog-sub').textContent = subtitle || '';
+    const body = document.getElementById('agilo-dialog-body');
+    body.innerHTML = '';
+    (blocks || []).forEach(b => {
+      const box = document.createElement('div');
+      box.className = 'agilo-block';
+      box.innerHTML = `
+        ${b.heading ? `<div class="agilo-block__heading">${b.heading}</div>` : ''}
+        ${b.text ? `<div class="agilo-block__text">${b.text}</div>` : ''}
+        ${b.html ? b.html : ''}
+        ${b.cta ? `<a href="${b.cta.href}" ${b.cta.sameTab ? '' : 'target="_blank"'} class="agilo-link">${b.cta.label}</a>` : ''}
+        ${b.details ? `<details class="agilo-block__details"><summary>Détails techniques</summary><pre class="agilo-block__pre">${b.details}</pre></details>` : ''}`;
+      body.appendChild(box);
+    });
+    document.getElementById('agilo-dialog').style.display = 'block';
   }
+  function hideDialog(){ const m = document.getElementById('agilo-dialog'); if (m) m.style.display = 'none'; }
 
-  // --- API: renommage ------------------------------------------------
-  async function renameOnServer({ jobId, userEmail, token, edition, jobTitle }) {
-    const body = new URLSearchParams({ username: userEmail, token, edition, jobId: String(jobId), jobTitle });
-    try {
-      const r = await fetch(`${API_BASE}/renameTranscriptTitle`, {
-        method: "POST",
-        headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString()
-      });
-      const data = await r.json();
-      if (data.status === "OK") return { ok: true };
-      return { ok: false, error: data.message || data.errorMessage || data.error || "Erreur inconnue" };
-    } catch (e) { return { ok: false, error: e?.message || "Erreur réseau" }; }
-  }
-
-  function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
-    if (!anchorEl || !buttonEl) return;
-    buttonEl.addEventListener("click", () => {
-      if (anchorEl.__editing) return;
-      anchorEl.__editing = true;
+  // ───────────────────────────────────────────────────────────────────────────
+  // CONFIRMATION CUSTOM
+  // ───────────────────────────────────────────────────────────────────────────
+  function showConfirmation({ title, message, confirmText = "Oui", cancelText = "Non", onConfirm, onCancel }) {
+    return new Promise((resolve) => {
+      ensureDialog();
       
-      const currentTitle = (anchorEl.textContent || "").trim();
-      const input = document.createElement("input");
-      input.className = "file-name-input";
-      input.value = currentTitle;
+      document.getElementById('agilo-dialog-title').textContent = title || 'Confirmation';
+      document.getElementById('agilo-dialog-sub').textContent = '';
       
-      anchorEl.replaceWith(input);
-      input.focus(); input.select();
+      const body = document.getElementById('agilo-dialog-body');
+      body.innerHTML = `
+        <div class="agilo-block">
+          <div class="agilo-block__text">${message}</div>
+        </div>
+      `;
       
-      const cleanup = () => { 
-        if(input.parentNode) input.replaceWith(anchorEl); 
-        anchorEl.__editing = false; 
+      // Remplacer le footer avec les boutons de confirmation
+      const footer = document.querySelector('.agilo-modal__footer');
+      footer.innerHTML = `
+        <button id="agilo-confirm-btn" class="agilo-btn agilo-btn--primary">${confirmText}</button>
+        <button id="agilo-cancel-btn" class="agilo-btn">${cancelText}</button>
+      `;
+      
+      // Gestion des clics
+      const confirmBtn = document.getElementById('agilo-confirm-btn');
+      const cancelBtn = document.getElementById('agilo-cancel-btn');
+      
+      const handleConfirm = () => {
+        hideDialog();
+        if (onConfirm) onConfirm();
+        resolve(true);
       };
       
-      const commit = async () => {
-        if (anchorEl.__committing) return;
-        const typedVal = input.value.trim();
-        if (!typedVal || typedVal === currentTitle) { cleanup(); return; }
-        
-        anchorEl.__committing = true;
-        const res = await renameOnServer({ jobId: job.jobid, userEmail, token, edition, jobTitle: typedVal });
-        anchorEl.__committing = false;
-
-        if (res.ok) {
-          anchorEl.textContent = typedVal;
-          job.jobTitle = typedVal; // Mise à jour locale pour que displayJobTitle() reste cohérent
-        } else {
-          alert(`Erreur : ${res.error || 'Impossible de renommer'}`);
-        }
-        cleanup();
+      const handleCancel = () => {
+        hideDialog();
+        if (onCancel) onCancel();
+        resolve(false);
       };
       
-      input.addEventListener("keydown", (e) => { 
-        if (e.key === "Enter") { e.preventDefault(); commit(); } 
-        if (e.key === "Escape") { e.preventDefault(); cleanup(); } 
-      });
-      input.addEventListener("blur", () => {
-        // On laisse un petit délai pour permettre au clic sur Enter d'aboutir proprement 
-        // ou pour éviter les conflits si cleanup() est déjà en cours.
-        setTimeout(() => { if (anchorEl.__editing) commit(); }, 100);
-      });
+      confirmBtn.addEventListener('click', handleConfirm);
+      cancelBtn.addEventListener('click', handleCancel);
+      
+      // Afficher la modal
+      document.getElementById('agilo-dialog').style.display = 'block';
     });
   }
 
-  // --- Icônes d’état --------------------------------------------------
-  function updateIconVisibility(root, status) {
-    const icons = {
-      error: root.querySelector('.icon-error'),
-      inprogress: root.querySelector('.icon-inprogress'),
-      readySummaryPending: root.querySelector('.icon-ready_summary_pending'),
-      readySummaryReady: root.querySelector('.icon-ready_summary_ready'),
-      readySummaryOnError: root.querySelector('.icon-ready_summary_on_error'),
-      ready: root.querySelector('.icon-ready')
+  // ───────────────────────────────────────────────────────────────────────────
+  // BULK MODULE
+  // ───────────────────────────────────────────────────────────────────────────
+  window.AgilotextBulk = (function () {
+    const SELECTORS = {
+      container: '#jobs-container',
+      row: '.wrapper-content_item-row',
+      selectAll: '#select-all',
+      selectedCount: '#selected-count',
+      exportBtn: '#exportBtn',
+      resendWebhookBtn: '#resendWebhookBtn',
+      bulkDeleteBtn: '#bulkDeleteBtn',
+      openBtn: '.button-open',
+      automationProvider: '#automationProvider'
     };
-    Object.values(icons).forEach(i => i && (i.style.display = 'none'));
-    const st = (status || '').toUpperCase();
-    if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE', 'ERROR_TRANSLATE_FILES_NOT_EXISTS', 'ERROR_TRANSLATE_NOT_READY', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
-      if (icons.error) icons.error.style.display = 'block';
-    } else if (['PENDING', 'IN_PROGRESS'].includes(st)) {
-      if (icons.inprogress) icons.inprogress.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_PENDING') {
-      if (icons.readySummaryPending) icons.readySummaryPending.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_READY') {
-      if (icons.readySummaryReady) icons.readySummaryReady.style.display = 'block';
-    } else if (st === 'READY_SUMMARY_ON_ERROR') {
-      if (icons.readySummaryOnError) icons.readySummaryOnError.style.display = 'block';
-    } else {
-      if (icons.ready) icons.ready.style.display = 'block';
+
+    const EDITION  = 'ent';
+    const API_BASE =
+      document.querySelector(SELECTORS.container)?.dataset.apiBase ||
+      'https://api.agilotext.com/api/v1';
+
+    const containerEl = document.querySelector(SELECTORS.container);
+    const EDITOR_BASE = appUrl(
+      containerEl?.dataset.editorTail ||
+      document.querySelector('.dashboard-content')?.dataset.editorTail ||
+      'editor'
+    );
+    const SETTINGS_URL = appUrl(
+      containerEl?.dataset.webhookSettingsTail ||
+      document.querySelector('.dashboard-content')?.dataset.webhookSettingsTail ||
+      'profile#integrations'
+    );
+
+    const ENDPOINTS = {
+      deleteJob: (jobId, email, token) =>
+        `${API_BASE}/deleteJob?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(EDITION)}`,
+      webhookResendPost: () => `${API_BASE}/webhookResend`,
+      getSharedUrl: () => `${API_BASE}/getSharedUrl`
+    };
+    const CONCURRENCY = 4;
+
+    const ERROR_TRANSLATIONS = {
+      error_no_webhook_configured: {
+        title: "Aucun webhook configuré",
+        explain: "Pour renvoyer l'automatisation, vous devez d'abord configurer un webhook dans votre compte.",
+        next: "Configurer un webhook",
+        link: SETTINGS_URL
+      },
+      error_invalid_automation_provider: {
+        title: "Fournisseur d'automatisation invalide",
+        explain: "Le provider transmis (Make/Zapier/n8n) n'a pas été trouvé pour cet utilisateur.",
+        tip: "Vérifiez le champ « Automation Provider »."
+      },
+      error_transcript_not_ready: {
+        title: "Transcript non prêt",
+        explain: "Aucun transcript à l'état READY.",
+        tip: "Attendez la fin du traitement, puis rechargez la page."
+      }
+    };
+    function translateError(code, raw) {
+      const t = ERROR_TRANSLATIONS[code];
+      return t ? { ...t, raw } : { title:"Erreur inconnue", explain:"Une erreur est survenue.", tip:"Réessayez plus tard.", raw };
     }
-  }
 
-  // --- Suppression ----------------------------------------------------
-  function deleteJob(jobId, userEmail, token, edition) {
-    fetch(`${API_BASE}/deleteJob?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(edition)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.status === "OK") {
-          const row = document.querySelector(`[data-job-id="${jobId}"]`);
-          if (row) row.closest('.wrapper-content_item-row')?.remove();
-        }
-      }).catch(err => console.error('Erreur suppression:', err));
-  }
+    const getUserEmail = () => document.querySelector('[name="memberEmail"]')?.value || '';
+    const getToken = () => (typeof globalToken !== 'undefined' && globalToken) ? globalToken : null;
 
-  // --- Partage --------------------------------------------------------
-  async function updateShareLink(jobId, userEmail, token, edition, el) {
-    try {
-      const r = await fetch(`${API_BASE}/getSharedUrl?jobId=${jobId}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`);
-      const data = await r.json();
-      if (data.status === "OK" && data.url) { el.href = data.url; el.style.display = 'inline'; }
-    } catch (e) { console.error('Erreur partage:', e); }
-  }
+    const getRow = (el) => el?.closest(`${SELECTORS.row}[data-job-id]`);
+    const getJobIdFromRow = (row) => row?.getAttribute('data-job-id') || '';
 
-  // --- Construction d’une ligne job ----------------------------------
-  function buildJobRow({ job, userEmail, token, edition, template, container }) {
-    const clone = document.importNode(template, true);
-    const row = clone.querySelector('.wrapper-content_item-row');
-    if (!row) return;
+    const getSelectedRows = () => Array.from(document.querySelectorAll(
+      `${SELECTORS.container} ${SELECTORS.row} .job-select:checked`
+    )).map(cb => cb.closest(SELECTORS.row));
 
-    row.setAttribute('data-creation-date', job.dtCreation);
-    row.setAttribute('data-job-id', job.jobid);
-    updateIconVisibility(clone, job.transcriptStatus);
+    async function pMap(array, mapper, { concurrency = 4 } = {}) {
+      const ret = []; let i = 0;
+      const exec = async () => { for (; i < array.length;) {
+        const cur = i++;
+        try { ret[cur] = await mapper(array[cur], cur); }
+        catch (e) { ret[cur] = { ok: false, error: e?.message || 'Erreur' }; }
+      }};
+      const workers = Array.from({ length: Math.min(concurrency, array.length) }, exec);
+      await Promise.all(workers);
+      return ret;
+    }
 
-    // Clic icône état
-    const stateDiv = clone.querySelector('.state');
-    const visibleIcon = stateDiv?.querySelector('svg:not([style*="display: none"])');
-    if (visibleIcon) {
-      visibleIcon.style.cursor = 'pointer';
-      visibleIcon.addEventListener('click', () => {
-        const st = (job.transcriptStatus || '').toUpperCase();
-        let message = '';
-        if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE', 'ERROR_TRANSLATE_FILES_NOT_EXISTS', 'ERROR_TRANSLATE_NOT_READY', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) message = `Le traitement a échoué : ${extractErrorMessage(job.javaException)}`;
-        else if (['PENDING', 'IN_PROGRESS'].includes(st)) message = 'Le traitement est en cours, merci de patienter.';
-        else if (st === 'READY_SUMMARY_PENDING') message = 'Le transcript est disponible, le résumé est en cours de génération.';
-        else if (st === 'READY_SUMMARY_READY') message = 'Le transcript et le résumé sont disponibles.';
-        else if (st === 'READY_SUMMARY_ON_ERROR') message = `Le transcript est disponible, mais le résumé a échoué : ${extractErrorMessage(job.javaException)}`;
-        else message = 'Statut non reconnu.';
-        alert(message);
+    async function bulkDelete(rows, email, token) {
+      const tasks = rows.map(row => ({ row, jobId: getJobIdFromRow(row) })).filter(t => !!t.jobId);
+      const results = await pMap(tasks, async (t) => {
+        const res  = await fetch(ENDPOINTS.deleteJob(t.jobId, email, token), { method: 'GET', headers: { 'Accept': 'application/json' } });
+        const data = await res.json().catch(() => ({}));
+        if (data.status === 'OK') { t.row.remove(); setSelectAllState(); return { ok: true, jobId: t.jobId }; }
+        return { ok: false, jobId: t.jobId, error: data.errorMessage || 'KO' };
+      }, { concurrency: CONCURRENCY });
+
+      const ok = results.filter(r => r?.ok).length;
+      const ko = results.filter(r => !r?.ok);
+
+      showDialog({
+        title: "Suppression",
+        subtitle: `${ok} OK, ${ko.length} échec(s).`,
+        blocks: ko.length ? [{
+          heading: "Éléments en échec",
+          text: ko.slice(0,10).map(r=>`• ${r.jobId} : ${r.error || 'Erreur'}`).join('<br>') + (ko.length>10?'<br>…':'' )
+        }] : []
       });
     }
 
-    // Dates
-    const creation = clone.querySelector('.creation-date');
-    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
-    const update = clone.querySelector('.update-date');
-    if (update) update.textContent = convertDateStringToDate(job.dtUpdate).toLocaleString();
-
-    // Nom + Titre Intelligent
-    const fileNameAnchor = clone.querySelector('.file-name');
-    const renameButton   = clone.querySelector('.rename-btn');
-    if (fileNameAnchor) {
-      fileNameAnchor.textContent = displayJobTitle(job);
-      fileNameAnchor.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
-      fileNameAnchor.setAttribute('download', job.filename);
+    function toDownloadUrl(sharedUrl) { return sharedUrl.endsWith('-download') ? sharedUrl : `${sharedUrl}-download`; }
+    function triggerDownload(url) {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none'; iframe.src = url; document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 20000);
     }
-    setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
+    async function fetchSharedUrl(jobId, email, token) {
+      const body = new URLSearchParams({ username: email, token: token, jobId: String(jobId), edition: EDITION });
+      try {
+        const res = await fetch(ENDPOINTS.getSharedUrl(), {
+          method:'POST', headers:{ 'Accept':'application/json','Content-Type':'application/x-www-form-urlencoded' }, body: body.toString()
+        });
+        const data = await res.json().catch(()=> ({}));
+        if (res.ok && data.status === 'OK' && data.url) return { ok:true, jobId, url:data.url, download: toDownloadUrl(data.url) };
+        return { ok:false, jobId, code: data.errorMessage || 'share_unknown', raw: JSON.stringify(data) };
+      } catch (e) { return { ok:false, jobId, code:'network_error', raw: e?.message || String(e) }; }
+    }
+    async function exportShared(rows, email, token) {
+      const tasks = rows.map(row => ({ row, jobId: getJobIdFromRow(row) })).filter(t => !!t.jobId);
+      const results = await pMap(tasks, (t) => fetchSharedUrl(t.jobId, email, token), { concurrency: CONCURRENCY });
+      const oks = results.filter(r => r.ok), kos = results.filter(r => !r.ok);
 
-    // Partage
-    const shareLink = clone.querySelector('.share-link');
-    if (shareLink) updateShareLink(job.jobid, userEmail, token, edition, shareLink);
+      if (tasks.length === 1 && oks.length === 1) { triggerDownload(oks[0].download); return; }
 
-    // Téléchargements
-    const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
-    const st = (job.transcriptStatus || '').toUpperCase();
-    formats.forEach(fmt => {
-      const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
-      if (aT) {
-        if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) setDownloadLink(aT, '#', `Erreur : ${extractErrorMessage(job.javaException)}`);
-        else if (['PENDING', 'IN_PROGRESS'].includes(st)) setDownloadLink(aT, '#', 'En cours...');
-        else {
-          const u = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
-          setDownloadLink(aT, u);
-          guardClick(aT, u, job.jobid, `${job.jobid}|${fmt}|text|${edition}`, 'Transcript indisponible.');
-          aT.setAttribute('download', `transcript.${fmt}`);
+      const linksHtml = oks.length
+        ? `<div class="agilo-kbdrow"><button id="agilo-dl-all" class="agilo-btn agilo-btn--primary">Télécharger tout (${oks.length})</button></div>
+           <div class="agilo-linklist">${oks.map(x => `<a href="${x.download}" rel="noopener">${x.jobId} — Télécharger</a>`).join('')}</div>`
+        : `<div class="agilo-block__text">Aucun lien de partage généré.</div>`;
+
+      const blocks = [{ heading: "Liens de téléchargement", html: linksHtml }];
+      if (kos.length) blocks.push({
+        heading: "Échecs",
+        details: kos.slice(0,10).map(r => `• ${r.jobId} : ${r.code} ${r.raw ? '('+r.raw+')' : ''}`).join('\n') + (kos.length>10?'\n…':'')
+      });
+
+      showDialog({ title: "Export (liens de partage)", subtitle: `${oks.length} OK, ${kos.length} échec(s).`, blocks });
+
+      const dlAllBtn = document.getElementById('agilo-dl-all');
+      if (dlAllBtn) dlAllBtn.addEventListener('click', () => {
+        const delay = 700; oks.forEach((x,i) => setTimeout(() => triggerDownload(x.download), i*delay));
+      });
+    }
+
+    function safeCsv(val) {
+      const s = String(val ?? '');
+      return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
+    }
+    function setSelectAllState() {
+      const all = Array.from(document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`));
+      const checked = all.filter(i => i.checked);
+      const selectAll = document.querySelector(SELECTORS.selectAll);
+      const countEl = document.querySelector(SELECTORS.selectedCount);
+      if (countEl) countEl.textContent = `${checked.length} sélectionné(s)`;
+      if (!selectAll) return;
+      if (checked.length === 0) { selectAll.checked = false; selectAll.indeterminate = false; }
+      else if (checked.length === all.length) { selectAll.checked = true; selectAll.indeterminate = false; }
+      else { selectAll.checked = false; selectAll.indeterminate = true; }
+    }
+    function toggleAll(checked) {
+      document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`).forEach(cb => { cb.checked = checked; });
+      setSelectAllState();
+    }
+
+    function openEditorForRow(row) {
+      const jobId = getJobIdFromRow(row);
+      if (!jobId) return;
+      try { localStorage.setItem('agilotext:lastJobId', jobId); } catch(e){}
+      const url = `${EDITOR_BASE}?jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(EDITION)}`;
+      window.location.href = url;
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+    // BINDING — délégation + capture (robuste aux ré-injections)
+    // ───────────────────────────────────────────────────────────────────────────
+    function bindUI() {
+      // Toujours activer l'UI immédiatement (pas d'attente du token)
+      const container = document.querySelector(SELECTORS.container);
+      if (container) {
+        container.addEventListener('change', (e) => {
+          if (e.target?.classList?.contains('job-select')) setSelectAllState();
+        });
+        // Observer pour maintenir le compteur/cochage
+        if (!container.__bulkObserver) {
+          const obs = new MutationObserver(() => { setSelectAllState(); forceButtonTypes(); });
+          obs.observe(container, { childList: true, subtree: true });
+          container.__bulkObserver = obs;
         }
       }
-      const aS = clone.querySelector(`.download_wrapper-link_summary_${fmt}`);
-      if (aS) {
-        if (['READY_SUMMARY_ON_ERROR', 'ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'].includes(st)) setDownloadLink(aS, '#', 'Résumé indisponible.');
-        else if (['PENDING', 'IN_PROGRESS', 'READY_SUMMARY_PENDING'].includes(st)) setDownloadLink(aS, '#', 'Patientez...');
-        else if (st === 'READY_SUMMARY_READY') {
-          const apiFmt = (fmt === 'txt') ? 'html' : fmt;
-          const u = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFmt}&edition=${encodeURIComponent(edition)}`;
-          const key = `${job.jobid}|${fmt}|summary|${edition}`;
-          setDownloadLink(aS, '#', 'Vérification...');
-          aS.classList.add('is-verifying');
-          verifyAssetOnce(job.jobid, u, key).then(ok => {
-            aS.classList.remove('is-verifying');
-            if (ok) { setDownloadLink(aS, u); aS.setAttribute('download', `summary.${fmt === 'txt' ? 'html' : fmt}`); }
-            else setDownloadLink(aS, '#', 'Indisponible.');
+
+      // Forcer les types button pour éviter submit
+      function forceButtonTypes(){
+        ['#bulkDeleteBtn','#exportBtn','#resendWebhookBtn'].forEach(sel=>{
+          document.querySelectorAll(sel).forEach(b=>{ if(b.tagName==='BUTTON') b.type='button'; });
+        });
+      }
+      forceButtonTypes();
+
+      // Open editor (par ligne) — déjà en délégation dans ton code
+      document.addEventListener('click', (e) => {
+        const btn = e.target.closest(SELECTORS.openBtn);
+        if (!btn) return;
+        e.preventDefault();
+        const row = btn.closest(SELECTORS.row);
+        if (row) openEditorForRow(row);
+      }, { capture:true });
+
+      // Select all
+      document.addEventListener('change', (e) => {
+        const el = e.target.closest(SELECTORS.selectAll);
+        if (!el) return;
+        toggleAll(!!el.checked);
+      }, { capture:true });
+
+      // BULK DELETE (délégation + capture) - AVEC CONFIRMATION
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest(SELECTORS.bulkDeleteBtn);
+        if (!btn) return;
+        e.preventDefault();
+
+        const rows = getSelectedRows();
+        if (rows.length === 0) { 
+          showDialog({ 
+            title:'Suppression', 
+            subtitle:'0 sélection', 
+            blocks:[{text:'Sélectionnez au moins un élément.'}]
+          }); 
+          return; 
+        }
+
+        // ✅ CONFIRMATION DE SUPPRESSION
+        const confirmed = await showConfirmation({
+          title: "Confirmer la suppression",
+          message: `Êtes-vous sûr de vouloir supprimer <strong>${rows.length} élément(s)</strong> ?`,
+          confirmText: "Oui, supprimer",
+          cancelText: "Annuler"
+        });
+        
+        if (!confirmed) return; // L'utilisateur a annulé
+
+        const email = getUserEmail();
+        const token = getToken();
+        if (!token) { 
+          showDialog({ 
+            title:'Suppression', 
+            blocks:[{text:'Token non disponible. Réessayez.'}]
+          }); 
+          return; 
+        }
+
+        btn.disabled = true; 
+        btn.setAttribute('aria-busy','true');
+        btn.textContent = 'Suppression...';
+        
+        try { 
+          await bulkDelete(rows, email, token); 
+        } finally { 
+          btn.disabled = false; 
+          btn.removeAttribute('aria-busy');
+          btn.textContent = 'Supprimer'; // Restaurer le texte original
+        }
+      }, { capture:true });
+
+      // RESEND WEBHOOK (délégation + capture) - AVEC CONFIRMATION
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest(SELECTORS.resendWebhookBtn);
+        if (!btn) return;
+        e.preventDefault();
+
+        const rows = getSelectedRows();
+        if (rows.length === 0) { 
+          showDialog({ 
+            title:'Renvoi du webhook', 
+            subtitle:'0 sélection', 
+            blocks:[{text:'Sélectionnez au moins un élément.'}]
+          }); 
+          return; 
+        }
+
+        // ✅ CONFIRMATION DE WEBHOOK
+        const confirmed = await showConfirmation({
+          title: "Confirmer le renvoi du webhook",
+          message: `Êtes-vous sûr de vouloir relancer le webhook pour <strong>${rows.length} audio(s)</strong> sélectionné(s) ?`,
+          confirmText: "Oui, relancer",
+          cancelText: "Annuler"
+        });
+        
+        if (!confirmed) return; // L'utilisateur a annulé
+
+        const email = getUserEmail();
+        const token = getToken();
+        if (!token) { 
+          showDialog({ 
+            title:'Renvoi du webhook', 
+            blocks:[{text:'Token non disponible. Réessayez.'}]
+          }); 
+          return; 
+        }
+
+        const providerInput = document.querySelector(SELECTORS.automationProvider);
+        const automationProvider = providerInput?.value?.trim() || '';
+
+        const tasks = rows.map(row => ({ row, jobId: getJobIdFromRow(row) })).filter(t => !!t.jobId);
+
+        async function readJsonSafe(res) { 
+          const txt = await res.text().catch(()=> ''); 
+          try { return JSON.parse(txt || '{}'); } catch { return { _raw: txt }; } 
+        }
+
+        btn.disabled = true; 
+        btn.setAttribute('aria-busy','true');
+        btn.textContent = 'Envoi en cours...';
+        
+        try {
+          const results = await pMap(tasks, async (t) => {
+            const body = new URLSearchParams({ 
+              username: email, 
+              token: token, 
+              jobId: String(t.jobId), 
+              edition: EDITION 
+            });
+            if (automationProvider) body.set('automationProvider', automationProvider);
+            
+            try {
+              const res = await fetch(ENDPOINTS.webhookResendPost(), { 
+                method:'POST', 
+                headers:{ 
+                  'Accept':'application/json',
+                  'Content-Type':'application/x-www-form-urlencoded' 
+                }, 
+                body: body.toString() 
+              });
+              
+              if (!res.ok) return { 
+                ok:false, 
+                jobId:t.jobId, 
+                code:'http_error_' + res.status, 
+                raw:`HTTP ${res.status}` 
+              };
+              
+              const data = await readJsonSafe(res);
+              if (data.status === 'OK') return { ok:true, jobId:t.jobId };
+              return { 
+                ok:false, 
+                jobId:t.jobId, 
+                code: data.errorMessage || 'unknown', 
+                raw: data.exceptionStackTrace || JSON.stringify(data) 
+              };
+            } catch (e) {
+              return {
+                ok:false, 
+                jobId:t.jobId, 
+                code:'network_error', 
+                raw: e?.message || String(e) 
+              };
+            }
+          }, { concurrency: CONCURRENCY });
+
+          const oks = results.filter(r => r.ok);
+          const kos = results.filter(r => !r.ok);
+          const errorGroups = {};
+          kos.forEach(r => { 
+            const key = r.code || 'unknown'; 
+            (errorGroups[key]||(errorGroups[key]=[])).push(r); 
           });
-        } else setDownloadLink(aS, '#', 'Indisponible.');
-      }
-    });
 
-    // Suppression
-    const delBtn = clone.querySelector('.delete-job-button_to-confirm');
-    if (delBtn) {
-      delBtn.setAttribute('data-job-id', job.jobid);
-      delBtn.addEventListener('click', () => {
-        window.__currentJobIdToDelete = job.jobid;
-        const popup = document.querySelector('.popup-container');
-        if (popup) popup.style.display = 'flex';
-      });
+          const blocks = [];
+          Object.entries(errorGroups).forEach(([code, list]) => {
+            const tr = translateError(code, list[0]?.raw);
+            blocks.push({
+              heading: `${tr.title} (${list.length})`,
+              text: [tr.explain || '', tr.tip ? `<div style="margin-top:6px;color:var(--color--gris)">💡 ${tr.tip}</div>` : ''].join(''),
+              cta: tr.link ? { href: tr.link, label: tr.next || 'Ouvrir' } : null,
+              details: list.slice(0,10).map(r => `• ${r.jobId} : ${r.raw || r.code}`).join('\n') + (list.length>10?'\n…':'')
+            });
+          });
+
+          showDialog({
+            title: "Renvoi du webhook",
+            subtitle: `${oks.length} OK, ${kos.length} échec(s).`,
+            blocks: blocks.length ? blocks : [{ 
+              heading: "Tout est OK ✅", 
+              text: "Le webhook a été renvoyé pour tous les éléments sélectionnés." 
+            }]
+          });
+        } finally { 
+          btn.disabled = false; 
+          btn.removeAttribute('aria-busy');
+          btn.textContent = 'Relancer webhook'; // Restaurer le texte original
+        }
+      }, { capture:true });
+
+      // EXPORT (délégation + capture) - AVEC CONFIRMATION
+      document.addEventListener('click', async (e) => {
+        const btn = e.target.closest(SELECTORS.exportBtn);
+        if (!btn) return;
+        e.preventDefault();
+
+        const rows = getSelectedRows();
+        if (rows.length === 0) { 
+          showDialog({ 
+            title:'Export', 
+            subtitle:'0 sélection', 
+            blocks:[{text:'Sélectionnez au moins un élément.'}]
+          }); 
+          return; 
+        }
+
+        // ✅ CONFIRMATION D'EXPORT
+        const confirmed = await showConfirmation({
+          title: "Confirmer l'export",
+          message: `Générer les liens de téléchargement pour <strong>${rows.length} élément(s)</strong> ?`,
+          confirmText: "Oui, exporter",
+          cancelText: "Annuler"
+        });
+        
+        if (!confirmed) return; // L'utilisateur a annulé
+
+        const email = getUserEmail();
+        const token = getToken();
+        if (!token) { 
+          showDialog({ 
+            title:'Export', 
+            blocks:[{text:'Token non disponible. Réessayez.'}]
+          }); 
+          return; 
+        }
+
+        btn.disabled = true; 
+        btn.setAttribute('aria-busy','true');
+        btn.textContent = 'Génération...';
+        
+        try { 
+          await exportShared(rows, email, token); 
+        } finally { 
+          btn.disabled = false; 
+          btn.removeAttribute('aria-busy');
+          btn.textContent = 'Exporter'; // Restaurer le texte original
+        }
+      }, { capture:true });
+
+      // Compteur initial
+      setSelectAllState();
     }
-    container.appendChild(clone);
-  }
 
-  // --- Orchestration --------------------------------------------------
-  const __GLOBAL = { token: null, email: null, edition: getEdition() };
-
-  document.addEventListener('click', (e) => {
-    if (e.target.classList.contains('delete-job-button_to-confirm')) {
-      window.__currentJobIdToDelete = e.target.closest('.wrapper-content_item-row')?.getAttribute('data-job-id');
-      const popup = document.querySelector('.popup-container');
-      if (popup) popup.style.display = 'flex';
+    // Init immédiat dès que le DOM est prêt (pas d'attente token)
+    function initNow() {
+      injectDialogTheme();
+      bindUI();
     }
-  });
 
-  const confirmBtn = document.querySelector('.delete-job-button_confirmed');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', () => {
-      if (window.__currentJobIdToDelete) {
-        const userEmail = document.querySelector('[name="memberEmail"]')?.value || '';
-        deleteJob(window.__currentJobIdToDelete, userEmail, __GLOBAL.token, __GLOBAL.edition);
-        const popup = document.querySelector('.popup-container'); if (popup) popup.style.display = 'none';
-        window.__currentJobIdToDelete = null;
-      }
-    });
+    return { init: initNow, version: '2.4.0' };
+  })();
+
+  // Démarrage immédiat
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => window.AgilotextBulk.init(), { once:true });
+  } else {
+    window.AgilotextBulk.init();
   }
-
-  function mainScriptExecution(token) {
-    const userEmail = document.querySelector('[name="memberEmail"]')?.value;
-    const edition = __GLOBAL.edition;
-    __GLOBAL.token = token;
-    __GLOBAL.email = userEmail;
-
-    fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=9999&offset=0`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.status !== "OK") return;
-        const container = document.getElementById('jobs-container');
-        const templateEl = document.getElementById('template-row');
-        if (!container || !templateEl) return;
-        const template = templateEl.content;
-        const sortedJobs = (data.jobsInfoDtos || []).slice().sort((a, b) => convertDateStringToDate(b.dtCreation) - convertDateStringToDate(a.dtCreation));
-        const readyCount = sortedJobs.reduce((n, j) => n + (String(j.transcriptStatus).toUpperCase() === 'READY_SUMMARY_READY' ? 1 : 0), 0);
-        const readyCountEl = document.getElementById('readyCount');
-        if (readyCountEl) readyCountEl.textContent = readyCount;
-        container.innerHTML = '';
-        sortedJobs.forEach(job => buildJobRow({ job, userEmail, token, edition, template, container }));
-      }).catch(err => console.error('Erreur data:', err));
-  }
-
-  const tmr = setInterval(() => {
-    if (typeof globalToken !== 'undefined' && globalToken) { clearInterval(tmr); mainScriptExecution(globalToken); }
-  }, 100);
-
 })();
