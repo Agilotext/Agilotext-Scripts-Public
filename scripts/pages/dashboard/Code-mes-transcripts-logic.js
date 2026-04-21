@@ -161,8 +161,14 @@
   }
 
   async function mainScriptExecution(token) {
-    const userEmail = document.querySelector('[name="memberEmail"]')?.value || '';
+    const emailInput = document.querySelector('[name="memberEmail"]');
+    const userEmail = (emailInput?.value || emailInput?.getAttribute('src') || emailInput?.textContent || "").trim();
     let edition = getEdition();
+
+    if (!userEmail) {
+      console.warn("[Agilo] Email utilisateur non trouvé dans le DOM.");
+      return;
+    }
     
     async function getJobs(ed) {
       const r = await fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=2000&offset=0`);
@@ -174,11 +180,11 @@
       
       // FALLBACK LOGIQUE : Si vide en "free", on regarde en "ent" (Business)
       if ((!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) && edition === 'free') {
-        console.log("[Agilo] Aucun job en 'free', tentative de secours en 'ent'...");
+        console.log("[Agilo] Aucun job en 'free', tentative de secours en 'ent' pour :", userEmail);
         const fallbackData = await getJobs('ent');
         if (fallbackData.status === "OK" && fallbackData.jobsInfoDtos?.length > 0) {
           data = fallbackData;
-          edition = 'ent'; // On met à jour l'édition pour les futurs appels (delete/rename)
+          edition = 'ent'; 
         }
       }
 
