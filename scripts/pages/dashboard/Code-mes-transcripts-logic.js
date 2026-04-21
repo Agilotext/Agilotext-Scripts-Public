@@ -19,8 +19,9 @@
   function getEdition() {
     const p = window.location.pathname;
     if (p.includes('/app/free/')) return 'free';
-    if (p.includes('/app/pro/')) return 'pro';
-    return 'ent';
+    if (p.includes('/app/pro/') || p.includes('/app/premium/')) return 'pro';
+    if (p.includes('/app/ent/') || p.includes('/app/business/')) return 'ent';
+    return 'ent'; // Business par défaut si non trouvé
   }
 
   function displayJobTitle(job) {

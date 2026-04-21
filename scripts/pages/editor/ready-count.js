@@ -22,8 +22,14 @@
   /** Aligné token-resolver / rail : query → editorRoot → html → localStorage */
   function resolveEdition() {
     try {
-      const qs = new URLSearchParams(location.search).get('edition');
-      const root = document.getElementById('editorRoot')?.dataset?.edition;
+      const p = window.location.pathname;
+      const qs = new URLSearchParams(window.location.search).get('edition');
+      const root = document.getElementById('editorRoot')?.dataset.edition;
+      
+      if (p.includes('/app/free/')) return 'free';
+      if (p.includes('/app/pro/') || p.includes('/app/premium/')) return 'pro';
+      if (p.includes('/app/ent/') || p.includes('/app/business/')) return 'ent';
+
       const html = document.documentElement.getAttribute('data-edition');
       const ls = localStorage.getItem('agilo:edition');
       return normalizeEdition(qs || root || html || ls || 'ent');

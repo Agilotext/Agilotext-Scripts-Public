@@ -26,11 +26,11 @@
   }
 
   function inferEditionFromLocation() {
-    const path = window.location.pathname.toLowerCase();
-    if (path.includes('/business')) return 'ent';
-    if (path.includes('/premium')) return 'pro';
-    if (path.includes('/free')) return 'free';
-    return '';
+    const p = window.location.pathname;
+    if (p.includes('/app/free/')) return 'free';
+    if (p.includes('/app/pro/') || p.includes('/app/premium/')) return 'pro';
+    if (p.includes('/app/ent/') || p.includes('/app/business/')) return 'ent';
+    return null;
   }
 
   function tokenKey(email, edition) {
@@ -204,15 +204,20 @@
   }
 
   const init = async () => {
-    const edition = normEdition(
+    let edition = normEdition(
       window.AGILO_EDITION
       || new URLSearchParams(location.search).get('edition')
       || document.getElementById('editorRoot')?.dataset.edition
-      || inferEditionFromLocation()
       || localStorage.getItem('agilo:edition')
       || 'free'
     );
-    if (window.AGILO_DEBUG) console.log('[agilo] Édition détectée :', edition);
+    const locationEdition = inferEditionFromLocation();
+    if (locationEdition) {
+      if (window.AGILO_DEBUG) console.log('[agilo] édition forcée par URL:', locationEdition);
+      edition = locationEdition;
+    }
+
+    if (window.AGILO_DEBUG) console.log(`[agilo] init: email=${email}, edition=${edition}`);
     const email = await resolveEmail();
     if (!email) {
       if (window.AGILO_DEBUG) console.warn('[agilo] Email utilisateur non trouvé');
