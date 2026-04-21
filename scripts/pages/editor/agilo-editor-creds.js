@@ -7,19 +7,28 @@
     return;
   }
 
+  function inferEditionFromLocation() {
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes('/business')) return 'ent';
+    if (path.includes('/premium')) return 'pro';
+    if (path.includes('/free')) return 'free';
+    return '';
+  }
+
   function pickEdition() {
     const root = document.querySelector('#editorRoot');
     const raw =
       window.AGILO_EDITION ||
       new URLSearchParams(location.search).get('edition') ||
       root?.dataset.edition ||
+      inferEditionFromLocation() ||
       localStorage.getItem('agilo:edition') ||
       'ent';
     const v = String(raw || '')
       .toLowerCase()
       .trim();
     if (['enterprise', 'entreprise', 'business', 'team', 'ent'].includes(v)) return 'ent';
-    if (v.startsWith('pro')) return 'pro';
+    if (v.startsWith('pro') || v === 'premium') return 'pro';
     if (v.startsWith('free') || v === 'gratuit') return 'free';
     return 'ent';
   }
@@ -53,9 +62,9 @@
     const root = document.querySelector('#editorRoot');
     const k = `agilo:token:${edition}:${String(email || '').toLowerCase()}`;
     return (
-      window.globalToken || // Source de vérité rafraîchie (token-resolver.js)
       root?.dataset.token ||
       window.__agiloOrchestrator?.credentials?.token ||
+      window.globalToken ||
       localStorage.getItem(k) ||
       localStorage.getItem(`agilo:token:${edition}`) ||
       localStorage.getItem('agilo:token') ||

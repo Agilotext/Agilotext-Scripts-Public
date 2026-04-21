@@ -21,7 +21,16 @@
   function normEdition(v) {
     v = String(v || '').toLowerCase().trim();
     if (v === 'business' || v === 'enterprise' || v === 'entreprise' || v === 'biz') return 'ent';
+    if (v === 'premium' || v === 'pro') return 'pro';
     return v || 'free';
+  }
+
+  function inferEditionFromLocation() {
+    const path = window.location.pathname.toLowerCase();
+    if (path.includes('/business')) return 'ent';
+    if (path.includes('/premium')) return 'pro';
+    if (path.includes('/free')) return 'free';
+    return '';
   }
 
   function tokenKey(email, edition) {
@@ -199,9 +208,11 @@
       window.AGILO_EDITION
       || new URLSearchParams(location.search).get('edition')
       || document.getElementById('editorRoot')?.dataset.edition
+      || inferEditionFromLocation()
       || localStorage.getItem('agilo:edition')
       || 'free'
     );
+    if (window.AGILO_DEBUG) console.log('[agilo] Édition détectée :', edition);
     const email = await resolveEmail();
     if (!email) {
       if (window.AGILO_DEBUG) console.warn('[agilo] Email utilisateur non trouvé');
