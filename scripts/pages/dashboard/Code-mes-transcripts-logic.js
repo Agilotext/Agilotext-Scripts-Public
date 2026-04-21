@@ -2,13 +2,13 @@
   'use strict';
 
   // ═══════════════════════════════════════════════════════════════════
-  //  DASHBOARD UNIFIED LOGIC — v1.1.10
-  //  - Autonomous Email Scavenging (MemberStack Fallback)
-  //  - Conflict Cleanup (Wipes container before rendering)
-  //  - Full Business Edition Selector Support
+  //  DASHBOARD UNIFIED LOGIC — v1.1.11
+  //  - Legacy Email Detection ([name="memberEmail"]) RESTORED
+  //  - Conflict Wipe: Clears container to stop v1.1.4 ghosts
+  //  - Full Business Edition Fix (selectors + case-insensitive URL)
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.10';
+  const VERSION = '1.1.11';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
   const __GLOBAL = { 
@@ -29,29 +29,32 @@
   };
 
   (function injectTheme() {
-    if (document.getElementById('agilo-dashboard-v1110-theme')) return;
+    if (document.getElementById('agilo-dashboard-v1111-theme')) return;
     const css = `
       .is-disabled { opacity: .6; cursor: not-allowed; }
-      .agilo-empty-state { text-align: center; padding: 40px 20px; color: #666; font-style: italic; background: rgba(0,0,0,0.02); border-radius: 8px; margin: 10px 0; }
+      .agilo-empty-state { text-align: center; padding: 40px 20px; color: #666; background: rgba(0,0,0,0.02); border-radius: 8px; margin: 10px 0; }
       .agilo-bulk-move-wrap { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid #eee; }
-      .agilo-select-move { padding: 6px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px; outline: none; background: #fff; cursor: pointer; max-width: 160px; color: #333 !important; }
+      .agilo-select-move { padding: 6px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px; outline: none; background: #fff; cursor: pointer; max-width: 160px; color: #333 !important; height: auto !important; }
       .agilo-force-show { display: flex !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; height: auto !important; }
     `;
     const st = document.createElement('style');
-    st.id = 'agilo-dashboard-v1110-theme';
+    st.id = 'agilo-dashboard-v1111-theme';
     st.textContent = css;
     document.head.appendChild(st);
   })();
 
-  // --- Utils ---
   const findUserEmail = () => {
     if (window.globalEmail) return window.globalEmail;
-    // Scavenge from DOM
-    const el = document.querySelector('[data-ms-member="email"], #memberEmail, .memberemail');
-    if (!el) return null;
-    let found = el.getAttribute('src') || el.value || el.textContent || '';
-    found = found.trim();
-    if (found.includes('@')) { window.globalEmail = found; return found; }
+    // v1.1.11 scavenger (includes v1.1.4 legacy names)
+    const selectors = ['[name="memberEmail"]', '[data-ms-member="email"]', '#memberEmail', '.memberemail'];
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        let val = el.getAttribute('src') || el.value || el.textContent || '';
+        val = val.trim();
+        if (val.includes('@')) { window.globalEmail = val; return val; }
+      }
+    }
     return null;
   };
 
@@ -98,15 +101,13 @@
     const wrap = document.createElement('div');
     wrap.className = 'agilo-bulk-move-wrap';
     wrap.innerHTML = `<select id="agilo-bulk-folder-select" class="agilo-select-move"><option value="" disabled selected>Déplacer vers...</option></select>`;
-    
     const countEl = document.querySelector(SELECTORS.selectedCount);
     if (countEl && countEl.nextSibling) bar.insertBefore(wrap, countEl.nextSibling);
     else bar.appendChild(wrap);
 
     const sel = wrap.querySelector('select');
     sel.addEventListener('change', async (e) => {
-        const targetFid = e.target.value;
-        if (targetFid) { await handleBulkMove(targetFid); e.target.value = ''; }
+        if (e.target.value) { await handleBulkMove(e.target.value); e.target.value = ''; }
     });
   }
 
@@ -167,9 +168,8 @@
     const row = clone.querySelector(SELECTORS.row);
     if (!row) return;
     row.dataset.jobId = job.jobid;
-    // Fix Checkbox for this job
     const cb = row.querySelector('.job-select');
-    if (cb) { cb.checked = false; cb.classList.add('job-select-v1110'); }
+    if (cb) { cb.checked = false; cb.classList.add('job-select-v1111'); }
 
     const st = (job.transcriptStatus || '').toUpperCase();
     const icons = { err: clone.querySelector('.icon-error'), prog: clone.querySelector('.icon-inprogress'), ok: clone.querySelector('.icon-ready') };
@@ -207,8 +207,7 @@
         let jobs = data.jobsInfoDtos || [];
         if (fid !== null) jobs = jobs.filter(j => Number(j.folderId ?? j.folderid ?? 0) === fid);
 
-        // CLEANUP GHOSTS
-        container.innerHTML = ''; 
+        container.innerHTML = ''; // KILL GHOSTS
         if (!jobs.length) container.innerHTML = `<div class="agilo-empty-state">Aucun fichier ici.</div>`;
         else {
             jobs.sort((a,b) => new Date(b.dtCreation?.split(/[- :]/).reverse().join('-') || 0) - new Date(a.dtCreation?.split(/[- :]/).reverse().join('-') || 0))
