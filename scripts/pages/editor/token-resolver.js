@@ -54,31 +54,28 @@
   }
 
   async function resolveEmail() {
-    const direct = document.getElementById('memberEmail')?.value
-      || document.querySelector('[name="memberEmail"]')?.value
-      || window.memberEmail
-      || localStorage.getItem('agilo:username')
-      || document.querySelector('[data-ms-member="email"]')?.textContent
-      || '';
-    if (direct) return direct.trim();
+    const findEmail = () => {
+      const input = document.querySelector('[name="memberEmail"]');
+      return (input?.value || input?.getAttribute('src') || input?.textContent || "").trim();
+    };
 
-    if (window.$memberstackDom?.getMember) {
-      try {
-        const r = await window.$memberstackDom.getMember();
-        if (r?.data?.email) return r.data.email.trim();
-      } catch (err) {
-        if (window.AGILO_DEBUG) console.error('[agilo] getMember error:', err);
-      }
-    }
+    let email = findEmail();
+    if (email) return email;
 
+    // Retry loop for Memberstack
     for (let i = 0; i < 30; i++) {
-      const v = document.getElementById('memberEmail')?.value
-        || document.querySelector('[data-ms-member="email"]')?.textContent
-        || '';
-      if (v) return v.trim();
-      await new Promise((r) => setTimeout(r, 100));
+      email = findEmail();
+      if (email) return email;
+      
+      if (window.$memberstackDom) {
+        try {
+          const member = await window.$memberstackDom.getCurrentMember();
+          if (member?.data?.auth?.email) return member.data.auth.email;
+        } catch (e) { /* ignore */ }
+      }
+      await new Promise(r => setTimeout(r, 100));
     }
-    return '';
+    return null;
   }
 
   /**
@@ -217,8 +214,8 @@
       edition = locationEdition;
     }
 
-    if (window.AGILO_DEBUG) console.log(`[agilo] init: email=${email}, edition=${edition}`);
     const email = await resolveEmail();
+    if (window.AGILO_DEBUG) console.log(`[agilo] init: email=${email}, edition=${edition}`);
     if (!email) {
       if (window.AGILO_DEBUG) console.warn('[agilo] Email utilisateur non trouvé');
       return;
