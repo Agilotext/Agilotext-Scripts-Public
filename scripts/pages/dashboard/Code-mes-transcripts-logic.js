@@ -2,17 +2,17 @@
   'use strict';
 
   // ═══════════════════════════════════════════════════════════════════
-  //  DASHBOARD UNIFIED LOGIC — v1.1.9
-  //  - Ultra-compatible Bulk Bar selectors (Business fix)
-  //  - Conflict mitigation for ghost renderers
-  //  - Auto-UI Injection for Move-to-folder
+  //  DASHBOARD UNIFIED LOGIC — v1.1.10
+  //  - Autonomous Email Scavenging (MemberStack Fallback)
+  //  - Conflict Cleanup (Wipes container before rendering)
+  //  - Full Business Edition Selector Support
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.9';
+  const VERSION = '1.1.10';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
   const __GLOBAL = { 
-    token: null, email: null, edition: null, 
+    token: null, email: null, edition: 'ent', 
     folderMap: new Map(), lastApiData: null, version: VERSION
   };
   window.__AGILO_DEBUG = __GLOBAL;
@@ -22,28 +22,38 @@
     row: '.wrapper-content_item-row',
     selectAll: '#select-all',
     selectedCount: '#selected-count',
-    bulkBar: '.code-open-editor-bulk-select', // Legacy
+    bulkBar: '.code-open-editor-bulk-select',
     template: '#template-row',
     bulkDeleteBtn: '#bulkDeleteBtn',
     exportBtn: '#exportBtn'
   };
 
   (function injectTheme() {
-    if (document.getElementById('agilo-dashboard-v119-theme')) return;
+    if (document.getElementById('agilo-dashboard-v1110-theme')) return;
     const css = `
       .is-disabled { opacity: .6; cursor: not-allowed; }
       .agilo-empty-state { text-align: center; padding: 40px 20px; color: #666; font-style: italic; background: rgba(0,0,0,0.02); border-radius: 8px; margin: 10px 0; }
-      .agilo-error-state { text-align: center; padding: 40px 20px; color: #d93025; background: #fce8e6; border-radius: 8px; margin: 10px 0; border: 1px solid #f28b82; }
       .agilo-bulk-move-wrap { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid #eee; }
       .agilo-select-move { padding: 6px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px; outline: none; background: #fff; cursor: pointer; max-width: 160px; color: #333 !important; }
-      /* Force bulk bar visibility */
       .agilo-force-show { display: flex !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; height: auto !important; }
     `;
     const st = document.createElement('style');
-    st.id = 'agilo-dashboard-v119-theme';
+    st.id = 'agilo-dashboard-v1110-theme';
     st.textContent = css;
     document.head.appendChild(st);
   })();
+
+  // --- Utils ---
+  const findUserEmail = () => {
+    if (window.globalEmail) return window.globalEmail;
+    // Scavenge from DOM
+    const el = document.querySelector('[data-ms-member="email"], #memberEmail, .memberemail');
+    if (!el) return null;
+    let found = el.getAttribute('src') || el.value || el.textContent || '';
+    found = found.trim();
+    if (found.includes('@')) { window.globalEmail = found; return found; }
+    return null;
+  };
 
   const getFidFromUrl = () => {
     const p = new URLSearchParams(location.search);
@@ -61,7 +71,9 @@
   };
 
   function updateSelectionUI() {
-    const all = Array.from(document.querySelectorAll(`${SELECTORS.container} .job-select`));
+    const container = document.querySelector(SELECTORS.container);
+    if (!container) return;
+    const all = Array.from(container.querySelectorAll('.job-select'));
     const checked = all.filter(cb => cb.checked);
     const countEl = document.querySelector(SELECTORS.selectedCount);
     const selectAll = document.querySelector(SELECTORS.selectAll);
@@ -72,7 +84,6 @@
         selectAll.checked = (all.length > 0 && checked.length === all.length);
         selectAll.indeterminate = (checked.length > 0 && checked.length < all.length);
     }
-    
     if (bar) {
         if (checked.length > 0) bar.classList.add('agilo-force-show');
         else bar.classList.remove('agilo-force-show');
@@ -99,9 +110,9 @@
     });
   }
 
-  async function fetchFolders(email, token, edition) {
+  async function fetchFolders(email, token) {
     try {
-      const resp = await fetch(`${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`);
+      const resp = await fetch(`${API_BASE}/getTranscriptFolders?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=ent`);
       const j = await resp.json();
       if (j.status === 'OK') {
         const raw = j.folders || j.transcriptFolderDtos || j.transcriptFolders || [];
@@ -140,14 +151,14 @@
   async function handleBulkMove(fid) {
     const ids = Array.from(document.querySelectorAll(`${SELECTORS.container} .job-select:checked`)).map(cb=>cb.closest(SELECTORS.row)?.dataset.jobId).filter(Boolean);
     if (!ids.length || !confirm(`Déplacer ${ids.length} fichier(s) ?`)) return;
-    for (const id of ids) await fetch(`${API_BASE}/moveJob?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&jobId=${id}&folderId=${fid}&edition=${__GLOBAL.edition}`).catch(()=>{});
+    for (const id of ids) await fetch(`${API_BASE}/moveJob?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&jobId=${id}&folderId=${fid}&edition=ent`).catch(()=>{});
     location.reload();
   }
 
   async function handleBulkDelete() {
     const ids = Array.from(document.querySelectorAll(`${SELECTORS.container} .job-select:checked`)).map(cb=>cb.closest(SELECTORS.row)?.dataset.jobId).filter(Boolean);
     if (!ids.length || !confirm(`Supprimer ${ids.length} fichier(s) ?`)) return;
-    for (const id of ids) await fetch(`${API_BASE}/deleteJob?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&jobId=${id}&edition=${__GLOBAL.edition}`).catch(()=>{});
+    for (const id of ids) await fetch(`${API_BASE}/deleteJob?username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&jobId=${id}&edition=ent`).catch(()=>{});
     location.reload();
   }
 
@@ -156,6 +167,10 @@
     const row = clone.querySelector(SELECTORS.row);
     if (!row) return;
     row.dataset.jobId = job.jobid;
+    // Fix Checkbox for this job
+    const cb = row.querySelector('.job-select');
+    if (cb) { cb.checked = false; cb.classList.add('job-select-v1110'); }
+
     const st = (job.transcriptStatus || '').toUpperCase();
     const icons = { err: clone.querySelector('.icon-error'), prog: clone.querySelector('.icon-inprogress'), ok: clone.querySelector('.icon-ready') };
     Object.values(icons).forEach(i => i && (i.style.display = 'none'));
@@ -166,25 +181,25 @@
     const nm = clone.querySelector('.file-name');
     if (nm) { 
       const jt = (job.jobTitle || job.filename || 'Transcript').split('.')[0];
-      nm.textContent = jt; nm.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&edition=${encodeURIComponent(__GLOBAL.edition)}`;
+      nm.textContent = jt; nm.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&edition=ent`;
     }
     
     ['txt', 'rtf', 'docx', 'doc', 'pdf'].forEach(fmt => {
       const b = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
       if (b) {
-        if (st.includes('READY')) { b.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&format=${fmt}&edition=${encodeURIComponent(__GLOBAL.edition)}`; b.classList.remove('is-disabled'); b.target = "_blank"; }
+        if (st.includes('READY')) { b.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(__GLOBAL.email)}&token=${encodeURIComponent(__GLOBAL.token)}&format=${fmt}&edition=ent`; b.classList.remove('is-disabled'); b.target = "_blank"; }
         else { b.classList.add('is-disabled'); b.href = "#"; b.onclick=(e)=>{e.preventDefault();alert("En cours...");}; }
       }
     });
     container.appendChild(clone);
   }
 
-  async function renderDashboard(email, token, edition) {
+  async function renderDashboard(email, token) {
     const container = document.querySelector(SELECTORS.container);
     const template = document.querySelector(SELECTORS.template)?.content;
     if (!container || !template) return;
     try {
-        const resp = await fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=2000&offset=0`);
+        const resp = await fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=ent&limit=2000&offset=0`);
         const data = await resp.json();
         if (data.status !== "OK") return;
         __GLOBAL.lastApiData = data;
@@ -192,21 +207,22 @@
         let jobs = data.jobsInfoDtos || [];
         if (fid !== null) jobs = jobs.filter(j => Number(j.folderId ?? j.folderid ?? 0) === fid);
 
-        container.innerHTML = '';
+        // CLEANUP GHOSTS
+        container.innerHTML = ''; 
         if (!jobs.length) container.innerHTML = `<div class="agilo-empty-state">Aucun fichier ici.</div>`;
         else {
-            jobs.sort((a,b) => new Date(b.dtCreation?.split(/[- :]/).reverse().join('-')) - new Date(a.dtCreation?.split(/[- :]/).reverse().join('-')))
+            jobs.sort((a,b) => new Date(b.dtCreation?.split(/[- :]/).reverse().join('-') || 0) - new Date(a.dtCreation?.split(/[- :]/).reverse().join('-') || 0))
                 .forEach(job => buildJobRow(job, template, container));
         }
         updateSelectionUI();
     } catch (e) { console.error('Render error', e); }
   }
 
-  function onCredentials(creds) {
-    if (!creds || !creds.token || !creds.username) return;
-    __GLOBAL.token = creds.token; __GLOBAL.email = creds.username; __GLOBAL.edition = 'ent';
-    fetchFolders(__GLOBAL.email, __GLOBAL.token, __GLOBAL.edition);
-    renderDashboard(__GLOBAL.email, __GLOBAL.token, __GLOBAL.edition);
+  function start(creds) {
+    __GLOBAL.token = creds.token; __GLOBAL.email = creds.username || findUserEmail();
+    if (!__GLOBAL.token || !__GLOBAL.email) return;
+    fetchFolders(__GLOBAL.email, __GLOBAL.token);
+    renderDashboard(__GLOBAL.email, __GLOBAL.token);
   }
 
   document.addEventListener('change', (e) => {
@@ -218,8 +234,11 @@
   });
   document.addEventListener('click', (e) => { if (e.target.closest(SELECTORS.bulkDeleteBtn)) handleBulkDelete(); });
 
-  window.addEventListener('agilo:credentials:updated', (e) => onCredentials(e.detail));
-  const initTmr = setInterval(() => { if (window.globalToken && window.globalEmail) { clearInterval(initTmr); onCredentials({ token: window.globalToken, username: window.globalEmail }); } }, 250);
+  window.addEventListener('agilo:credentials:updated', (e) => start(e.detail));
+  const initTmr = setInterval(() => { 
+    const email = findUserEmail();
+    if (window.globalToken && email) { clearInterval(initTmr); start({ token: window.globalToken, username: email }); } 
+  }, 250);
 
 })();
 
