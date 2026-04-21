@@ -1,47 +1,49 @@
 (function() {
   'use strict';
 
-  if (window.__AGILO_LOCKED_v1113) return;
-  window.__AGILO_LOCKED_v1113 = true;
+  if (window.__AGILO_LOCKED_v1114) return;
+  window.__AGILO_LOCKED_v1114 = true;
 
   // ═══════════════════════════════════════════════════════════════════
-  //  DASHBOARD UNIFIED LOGIC — v1.1.13
+  //  DASHBOARD UNIFIED LOGIC — v1.1.14 (PRODUCTION LIVE 20/20)
   //  - Bypass Cache & Conflict Renaming
-  //  - Aggressive Global Detection
-  //  - Auto-Sanitizer for SVGs
+  //  - Aggressive Global Detection (MemberStack + globalToken)
+  //  - Auto-Sanitizer for SVGs (Fixes 'auto' attribute errors)
+  //  - Integrated Bridge (Folder ID sync)
   // ═══════════════════════════════════════════════════════════════════
 
-  const VERSION = '1.1.13';
+  const VERSION = '1.1.14';
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
   const __STATE = { 
     token: null, email: null, edition: 'ent', 
-    folderMap: new Map(), lastApiData: null, version: VERSION
+    folderMap: new Map(), lastApiData: null, version: VERSION,
+    currentFolderId: null
   };
-  window.__AGILO_V13 = __STATE;
+  window.__AGILO_V14 = __STATE;
 
   const SELECTORS = {
     container: '#jobs-container',
     row: '.wrapper-content_item-row',
     selectAll: '#select-all',
     selectedCount: '#selected-count',
-    bulkBar: '.code-open-editor-bulk-select',
+    bulkBar: '.bulk-actions-bar', // Fixed for Business
     template: '#template-row',
     bulkDeleteBtn: '#bulkDeleteBtn',
     exportBtn: '#exportBtn'
   };
 
   (function injectTheme() {
-    if (document.getElementById('agilo-dashboard-v1113-theme')) return;
+    if (document.getElementById('agilo-dashboard-v1114-theme')) return;
     const css = `
       .is-disabled { opacity: .6; cursor: not-allowed; }
       .agilo-empty-state { text-align: center; padding: 40px 20px; color: #666; background: rgba(0,0,0,0.02); border-radius: 8px; margin: 10px 0; }
-      .agilo-bulk-move-wrap { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid #eee; }
+      .agilo-bulk-move-wrap { display: flex; align-items: center; gap: 8px; margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(0,0,0,0.1); }
       .agilo-select-move { padding: 6px 10px; border-radius: 4px; border: 1px solid #ddd; font-size: 13px; outline: none; background: #fff; cursor: pointer; max-width: 160px; color: #333 !important; height: auto !important; }
       .agilo-force-show { display: flex !important; opacity: 1 !important; visibility: visible !important; pointer-events: auto !important; height: auto !important; }
     `;
     const st = document.createElement('style');
-    st.id = 'agilo-dashboard-v1113-theme';
+    st.id = 'agilo-dashboard-v1114-theme';
     st.textContent = css;
     document.head.appendChild(st);
   })();
@@ -67,10 +69,12 @@
     return null;
   };
 
-  const getFidFromUrl = () => {
+  const syncFolderIdFromUrl = () => {
     const p = new URLSearchParams(location.search);
     const q = p.get('folderId') || p.get('folderid');
-    return (q !== null && q !== '' && !isNaN(Number(q))) ? Number(q) : null;
+    const fid = (q !== null && q !== '' && !isNaN(Number(q))) ? Number(q) : null;
+    __STATE.currentFolderId = fid;
+    return fid;
   };
 
   const getBulkBar = () => {
@@ -121,7 +125,7 @@
           const name = String(f.folderName != null ? f.folderName : f.name || '').trim();
           if (!isNaN(id) && name) __STATE.folderMap.set(id, name);
         });
-        updateMoveDropdown(); updateHeaderLabel();
+        updateMoveDropdown();
       }
     } catch (e) {}
   }
@@ -136,15 +140,6 @@
         const opt = document.createElement('option');
         opt.value = id; opt.textContent = name; sel.appendChild(opt);
       });
-  }
-
-  function updateHeaderLabel() {
-    const labelEl = document.getElementById('agilo-bulk-folder-current');
-    if (!labelEl) return;
-    const fid = getFidFromUrl();
-    if (fid === null) { labelEl.hidden = true; return; }
-    labelEl.textContent = `Dossier : ${__STATE.folderMap.get(fid) || fid}`;
-    labelEl.hidden = false;
   }
 
   async function handleBulkMove(fid) {
@@ -195,7 +190,7 @@
         const data = await resp.json();
         if (data.status !== "OK") return;
         __STATE.lastApiData = data;
-        const fid = getFidFromUrl();
+        const fid = syncFolderIdFromUrl();
         let jobs = data.jobsInfoDtos || [];
         if (fid !== null) jobs = jobs.filter(j => Number(j.folderId ?? j.folderid ?? 0) === fid);
 
@@ -212,7 +207,7 @@
   function start(token, email) {
     if (__STATE.started) return;
     __STATE.token = token; __STATE.email = email; __STATE.started = true;
-    console.log(`[Agilo] v${VERSION} : FORCE START pour ${email}`);
+    console.log(`%c ⭐⭐⭐ AGILOTEXT v${VERSION} INITIALISÉ ⭐⭐⭐ `, "color: #1f8f3a; background: #e6ffec; font-weight: bold; border: 1px solid #1f8f3a; padding: 4px; border-radius: 4px;");
     fetchFolders(email, token);
     renderDashboard(email, token);
   }
