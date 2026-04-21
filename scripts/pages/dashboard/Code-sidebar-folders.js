@@ -34,7 +34,7 @@
   if (!mount) return;
   if (mount.getAttribute('data-agilo-nav-folders-bound') === '1') return;
 
-  const APP_VERSION = '1.8.0';
+  const APP_VERSION = '1.7.21';
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
 
@@ -895,7 +895,7 @@
       if (useMatchNav) {
         const iconWrapClass = iconExtra
           ? ['agilo-nav-folders__icon-wrap', iconExtra].filter(Boolean).join(' ')
-          : ['agilo-nav-folders__icon-wrap'].join(' ');
+          : ['icon-small', 'w-embed', 'agilo-nav-folders__icon-wrap'].join(' ');
         const nameClasses = ['agilo-nav-folders__name', nameExtra].filter(Boolean).join(' ');
         const countClasses = ['agilo-nav-folders__count', stripConflictingWebflowClasses(countExtra)]
           .filter(Boolean)
@@ -909,7 +909,7 @@
         const middle = isFolderRow
           ? `<div class="agilo-nav-folders__name-block"><div class="${nameClasses}"></div>${renameHtml}${deleteHtml}</div>`
           : `<div class="${nameClasses}"></div>`;
-        a.innerHTML = `<div class="icon-small w-embed ${iconWrapClass}">${iconHtml}</div>${middle}<span class="${countClasses}"></span>`;
+        a.innerHTML = `<div class="${iconWrapClass}">${iconHtml}</div>${middle}<span class="${countClasses}"></span>`;
       } else {
         const renameHtml = isFolderRow
           ? `<button type="button" class="agilo-nav-folders__rename-btn" aria-label="Renommer le dossier" title="Renommer">${PENCIL_SVG}</button>`
