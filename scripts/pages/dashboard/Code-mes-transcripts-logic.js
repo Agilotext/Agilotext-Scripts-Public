@@ -116,23 +116,71 @@
     else if (st.includes('READY')) { if (icons.ok) icons.ok.style.display = 'block'; }
   }
 
+  const FALLBACK_ROW_HTML = `
+    <div class="wrapper-content_item-row responsive items-row">
+      <div class="custom-element select"><input type="checkbox" class="job-checkbox"></div>
+      <div class="custom-element state">
+        <div class="icon-inprogress" style="display:none;font-size:1.2rem;">⏳</div>
+        <div class="icon-error" style="display:none;font-size:1.2rem;">⚠️</div>
+        <div class="icon-ready" style="display:none;font-size:1.2rem;">✅</div>
+      </div>
+      <div class="custom-element titles">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <a href="#" class="file-name" style="text-decoration:none; color:inherit; font-weight:600;"></a>
+          <button class="rename-btn" style="background:none; border:none; cursor:pointer; padding:0; opacity:0.5; font-size:14px;">✏️</button>
+        </div>
+      </div>
+      <div class="custom-element titles"><a href="#" class="open-link" style="color:#174a96; font-weight:600; text-decoration:none;">Éditer</a></div>
+      <div class="custom-element titles transcript-links" style="display:flex; gap:6px; flex-wrap:wrap;">
+        <a href="#" class="download_wrapper-link_transcript_txt" title="Télécharger TXT" style="font-size:11px; padding:3px 6px; background:#f3f4f6; border-radius:4px; text-decoration:none; color:#374151; border:1px solid #d1d5db;">TXT</a>
+        <a href="#" class="download_wrapper-link_transcript_pdf" title="Télécharger PDF" style="font-size:11px; padding:3px 6px; background:#f3f4f6; border-radius:4px; text-decoration:none; color:#374151; border:1px solid #d1d5db;">PDF</a>
+        <a href="#" class="download_wrapper-link_transcript_docx" title="Télécharger DOCX" style="font-size:11px; padding:3px 6px; background:#f3f4f6; border-radius:4px; text-decoration:none; color:#374151; border:1px solid #d1d5db;">DOCX</a>
+      </div>
+      <div class="custom-element titles horizontal"><div class="creation-date" style="font-size:12px; color:#6b7280;"></div></div>
+      <div class="custom-element titles report-links">
+        <a href="#" class="download_wrapper-link_transcript_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
+      </div>
+      <div class="custom-element titles">
+        <button class="delete-job-button" title="Supprimer" style="background:none; border:none; cursor:pointer; color:#991b1b; font-size:16px; padding:4px;">🗑️</button>
+      </div>
+    </div>
+  `;
+
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
-    const clone = document.importNode(template, true);
-    const row = clone.querySelector('.wrapper-content_item-row');
+    let row;
+    let clone;
+
+    // TENTATIVE 1: Utiliser le template de la page
+    if (template && template.querySelector && template.querySelector('.wrapper-content_item-row')) {
+      clone = document.importNode(template, true);
+      row = clone.querySelector('.wrapper-content_item-row');
+    }
+
+    // TENTATIVE 2: Fallback si le template est absent ou vide (cas fréquent sur page Free)
+    if (!row) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = FALLBACK_ROW_HTML;
+      clone = tempDiv;
+      row = tempDiv.querySelector('.wrapper-content_item-row');
+    }
+
     if (!row) return;
 
     row.setAttribute('data-job-id', job.jobid);
     updateIconVisibility(clone, job.transcriptStatus);
 
     const creation = clone.querySelector('.creation-date');
-    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString();
+    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 
     const fileNameAnchor = clone.querySelector('.file-name');
     const renameButton = clone.querySelector('.rename-btn');
+    const openLink = clone.querySelector('.open-link');
+
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
       const tier = location.pathname.match(/^\/app\/([^\/]+)/)?.[1] || "business";
       fileNameAnchor.href = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
+      if (openLink) openLink.href = fileNameAnchor.href;
     }
     setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
 
@@ -140,13 +188,16 @@
     const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
     formats.forEach(fmt => {
       const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
-      if (aT && job.transcriptStatus.includes('READY')) {
+      if (aT && job.transcriptStatus && job.transcriptStatus.includes('READY')) {
         aT.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
         aT.target = "_blank";
+        aT.style.display = 'inline-block';
+      } else if (aT) {
+        aT.style.display = 'none';
       }
     });
 
-    container.appendChild(clone);
+    container.appendChild(row);
   }
 
   // ───────────────────────────────────────────────────────────────────────────
