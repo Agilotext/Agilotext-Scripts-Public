@@ -160,24 +160,43 @@
       }
   }
 
-  function mainScriptExecution(token) {
+  async function mainScriptExecution(token) {
     const userEmail = document.querySelector('[name="memberEmail"]')?.value || '';
-    const edition = getEdition();
-    fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&limit=2000&offset=0`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.status !== "OK") return;
-        const container = document.getElementById('jobs-container');
-        const templateEl = document.getElementById('template-row');
-        if (!container || !templateEl) return;
-        container.innerHTML = '';
-        (data.jobsInfoDtos || []).forEach(job => buildJobRow({ 
-            job, userEmail, token, edition, 
-            template: templateEl.content, 
-            container 
-        }));
-        initializeBulkActions();
-      }).catch(err => console.error('[Agilo] Execution error:', err));
+    let edition = getEdition();
+    
+    async function getJobs(ed) {
+      const r = await fetch(`${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=2000&offset=0`);
+      return await r.json();
+    }
+
+    try {
+      let data = await getJobs(edition);
+      
+      // FALLBACK LOGIQUE : Si vide en "free", on regarde en "ent" (Business)
+      if ((!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) && edition === 'free') {
+        console.log("[Agilo] Aucun job en 'free', tentative de secours en 'ent'...");
+        const fallbackData = await getJobs('ent');
+        if (fallbackData.status === "OK" && fallbackData.jobsInfoDtos?.length > 0) {
+          data = fallbackData;
+          edition = 'ent'; // On met à jour l'édition pour les futurs appels (delete/rename)
+        }
+      }
+
+      if (data.status !== "OK") return;
+      const container = document.getElementById('jobs-container');
+      const templateEl = document.getElementById('template-row');
+      if (!container || !templateEl) return;
+      
+      container.innerHTML = '';
+      (data.jobsInfoDtos || []).forEach(job => buildJobRow({ 
+          job, userEmail, token, edition, 
+          template: templateEl.content, 
+          container 
+      }));
+      initializeBulkActions();
+    } catch (err) {
+      console.error('[Agilo] Execution error:', err);
+    }
   }
 
   const tmr = setInterval(() => {
