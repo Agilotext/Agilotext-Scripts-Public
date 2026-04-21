@@ -178,6 +178,8 @@
 
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
+      // ✅ AJOUT : Tooltip affichant le nom de fichier original au survol
+      fileNameAnchor.title = "Fichier original : " + (job.filename || "Inconnu");
       const tier = location.pathname.match(/^\/app\/([^\/]+)/)?.[1] || "business";
       fileNameAnchor.href = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
       if (openLink) openLink.href = fileNameAnchor.href;
