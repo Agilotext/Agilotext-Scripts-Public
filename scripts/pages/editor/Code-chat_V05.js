@@ -33,15 +33,16 @@ document.addEventListener('DOMContentLoaded', () => {
   let __dictationActive = false;
   let __speechRecognition = null;
   let chatSendBtn = null; // bouton d'envoi créé par ensureChatChrome (remplace div#btnAsk Webflow)
-  /* Édition de message utilisateur (style ChatGPT) : null si pas d'édition en cours */
-  let pendingUserEdit = null; // { jobId, idx, msgId? }
 
   /* ================== DOM ================== */
   const $ = (s, r = document) => r.querySelector(s);
   const byId = (id) => document.getElementById(id);
+  /** #chatPrompt du conteneur embed (évite un doublon d'id Webflow ailleurs sur la page) */
+  function activeChatPrompt() {
+    return byId('agilo-chat-submission')?.querySelector('#chatPrompt') || byId('chatPrompt');
+  }
   const chatView = byId('chatView');
   const form = byId('wf-form-chat');
-  const input = byId('chatPrompt');
   const btnAsk = byId('btnAsk');
   chatView?.setAttribute('contenteditable', 'false');
 
@@ -854,9 +855,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Édition de message utilisateur — style contenteditable inline (V1.08).
-   * La bulle bleue devient éditable sur place ; des boutons Annuler / Enregistrer
-   * apparaissent dessous. Pas de textarea secondaire.
+   * Édition : un seul <textarea> dans la bulle (pas de 2e boîte à côté, pas
+   * de contentEditable qui se duplique visuellement sur certains thèmes).
    */
   function startEditUserMessage(idx) {
     const jobId = ACTIVE_JOB;
@@ -866,66 +866,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initial = stripUserDisplaySuffix(m.text);
 
-    /* Récupérer le noeud DOM de la bulle */
     const domIdx = userBubbleIndexInDom(msgs, idx);
     const msgRow = domIdx >= 0 ? chatView?.querySelectorAll('.msg--user')?.[domIdx] : null;
     if (!msgRow) return;
     const bubble = msgRow.querySelector('.msg-bubble');
     if (!bubble) return;
-    if (bubble.contentEditable === 'true') return; /* déjà en cours d’édition */
+    if (bubble.querySelector('textarea.msg-bubble-edit-ta')) return;
 
-    /* Masquer la barre d’actions (copy/edit) pendant l’édition */
     const actionsDiv = msgRow.querySelector('.msg-user-actions');
     if (actionsDiv) actionsDiv.hidden = true;
 
-    /* Toast d’avertissement si des réponses suivent */
-    const tail = msgs.length - idx - 1;
-    if (tail > 0) {
-      toast("Modifier ce message supprimera les réponses suivantes à l’envoi.", 'info');
+    if (msgs.length - idx - 1 > 0) {
+      toast("Modifier ce message supprimera les réponses suivantes à l'envoi.", 'info');
     }
 
-    /* Rendre la bulle éditable */
-    bubble.contentEditable = 'true';
-    bubble.style.whiteSpace = 'pre-wrap';
-    bubble.focus();
-    try {
-      const range = document.createRange();
-      range.selectNodeContents(bubble);
-      range.collapse(false);
-      const sel = window.getSelection();
-      sel?.removeAllRanges();
-      sel?.addRange(range);
-    } catch (_) { /* ignore */ }
+    const savedHtml = bubble.innerHTML;
+    const savedText = initial;
+    bubble.textContent = '';
+    bubble.classList.add('msg-bubble--editing');
+    const ta = document.createElement('textarea');
+    ta.className = 'msg-bubble-edit-ta';
+    ta.value = savedText;
+    ta.rows = Math.min(12, Math.max(2, (savedText.match(/\n/g) || []).length + 1));
+    ta.setAttribute('aria-label', 'Modifier le message');
+    bubble.appendChild(ta);
+    try { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) { }
 
-    /* Barre Annuler / Enregistrer sous la bulle */
     const editBar = document.createElement('div');
     editBar.className = 'agilo-user-edit-bar';
+
+    const finishRestoreBubble = (textPlain) => {
+      ta.remove();
+      bubble.classList.remove('msg-bubble--editing');
+      if (textPlain != null) {
+        bubble.textContent = textPlain;
+        bubble.style.whiteSpace = 'pre-wrap';
+      } else {
+        bubble.innerHTML = savedHtml;
+        bubble.style.whiteSpace = 'pre-wrap';
+      }
+    };
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'agilo-user-edit-cancel';
     cancelBtn.textContent = 'Annuler';
     cancelBtn.onclick = () => {
-      bubble.contentEditable = 'false';
-      bubble.textContent = initial;
-      bubble.style.whiteSpace = 'pre-wrap';
+      finishRestoreBubble(null);
       editBar.remove();
-      pendingUserEdit = null;
       if (actionsDiv) actionsDiv.hidden = false;
     };
 
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'agilo-user-edit-send';
-    saveBtn.innerHTML = '✓ Enregistrer et renvoyer';
+    saveBtn.innerHTML = String.fromCharCode(0x2713) + ' Enregistrer et renvoyer';
     saveBtn.onclick = () => {
-      const next = (bubble.innerText || bubble.textContent || '').replace(/\n+$/, '').trim();
+      const next = String(ta.value || '').replace(/\n+$/, '').trim();
       if (!next) { toast('Message vide', 'error'); return; }
-
-      bubble.contentEditable = 'false';
-      bubble.style.whiteSpace = 'pre-wrap';
+      finishRestoreBubble(next);
       editBar.remove();
-      pendingUserEdit = null;
       if (actionsDiv) actionsDiv.hidden = false;
 
       const live = getMsgs(jobId);
@@ -937,24 +937,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (SENDING.has(jobId)) {
         enqueueAsk(jobId, next, null);
-        toast('Message en file d’attente', 'success');
+        toast('Message en file d\u2019attente', 'success');
         updateQueueBadge(jobId);
         return;
       }
       void handleAskExecute(jobId, next, null).catch(() => {});
     };
 
-    /* Envoi via Enter (sans Shift) dans la bulle éditable */
-    bubble.addEventListener('keydown', function onKey(e) {
+    ta.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         saveBtn.click();
-        bubble.removeEventListener('keydown', onKey);
       }
-      if (e.key === 'Escape') {
-        cancelBtn.click();
-        bubble.removeEventListener('keydown', onKey);
-      }
+      if (e.key === 'Escape') { e.preventDefault(); cancelBtn.click(); }
     });
 
     editBar.appendChild(cancelBtn);
@@ -996,7 +991,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function setBusy(on) {
     btnAsk?.classList.toggle('is-busy', !!on);
     chatSendBtn?.classList.toggle('is-busy', !!on);
-    if (input) input.disabled = !!on;
+    const ta = activeChatPrompt();
+    if (ta) ta.disabled = !!on;
   }
 
   // === clés & stockage par job ===
@@ -1116,7 +1112,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderAttachmentsList() {
-    const host = byId('chat-attachments-list');
+    const host = byId('agilo-chat-submission')?.querySelector('#chat-attachments-list') || byId('chat-attachments-list');
     if (!host) return;
     host.innerHTML = '';
     PENDING_FILES.forEach((f, i) => {
@@ -1186,24 +1182,52 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Supprime les #chat-attach-btn disabled parasites (ancien Webflow).
-   * Conserve le premier bouton non-disabled.
+   * Supprime les #chat-attach-btn en double dans #agilo-chat-submission
+   * (même #id peut se retrouver dans l'embed + un résidu Webflow).
+   * On garde celui qui appartient à la vraie barre du #chatPrompt.
    */
   function fixDuplicateAttachBtns() {
-    const all = Array.from(document.querySelectorAll('[id="chat-attach-btn"]'));
-    if (all.length <= 1) {
-      if (all[0]) { all[0].removeAttribute('disabled'); all[0].removeAttribute('aria-disabled'); }
+    const sub = byId('agilo-chat-submission');
+    if (!sub) {
+      const b = byId('chat-attach-btn');
+      if (b) { b.removeAttribute('disabled'); b.removeAttribute('aria-disabled'); }
       return;
     }
-    const good = all.find(b => !b.disabled) || all[0];
+    const p = sub.querySelector('#chatPrompt');
+    const goodBar = p?.closest('#chat-compose-bar');
+    const all = Array.from(sub.querySelectorAll('[id="chat-attach-btn"]'));
+    if (!all.length) return;
+    const good = (goodBar && all.find(b => goodBar.contains(b)))
+      || all.find(b => !b.disabled)
+      || all[0];
     good.removeAttribute('disabled');
     good.removeAttribute('aria-disabled');
     all.forEach(b => { if (b !== good) b.remove(); });
   }
 
+  /**
+   * Supprime tout contrôle (attach/mic/envoyer) présent ailleurs que dans
+   * la barre de saisie correcte, ou toute copie d'id orpheline.
+   * Corrige le cas « 2 icônes trombone » dû à 2 nœuds #chat-attach-btn dans l'arbre.
+   */
+  function removeOrphanChatButtons() {
+    const sub = byId('agilo-chat-submission');
+    if (!sub) return;
+    const p = sub.querySelector('#chatPrompt');
+    const goodBar = p?.closest('#chat-compose-bar');
+    if (!goodBar) return;
+    const ids = ['chat-attach-btn', 'chat-dictate-btn', 'chat-send-btn'];
+    ids.forEach((id) => {
+      const allInDoc = sub.querySelectorAll(`[id="${id}"]`);
+      allInDoc.forEach((el) => { if (!goodBar.contains(el)) el.remove(); });
+      const inBar = goodBar.querySelectorAll(`[id="${id}"]`);
+      for (let i = 1; i < inBar.length; i++) inBar[i].remove();
+    });
+  }
+
   /** Formulaire de chat + nœuds, scopés au bon #chatPrompt. */
   function getChatFormScope() {
-    const p = byId('chatPrompt');
+    const p = activeChatPrompt();
     const f = p?.closest('form#wf-form-chat') || form;
     const bar = p?.closest('#chat-compose-bar');
     return {
@@ -1233,10 +1257,9 @@ document.addEventListener('DOMContentLoaded', () => {
     fixDuplicateChatFooters();
     fixDuplicateAttachBtns();
     {
-      const bBar = byId('chatPrompt')?.closest('#chat-compose-bar');
+      const bBar = activeChatPrompt()?.closest('#chat-compose-bar');
       const bTag = byId('chat-queue-badge');
       if (bBar && bTag && !bBar.contains(bTag)) {
-        /* Dans la nouvelle barre inline, le badge est positionné en absolute — pas en firstChild */
         const sub = bBar.closest('#agilo-chat-submission') || bBar.parentElement;
         if (sub && !sub.contains(bTag)) sub.insertBefore(bTag, sub.firstChild);
       }
@@ -1270,7 +1293,7 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.id = 'chat-queue-badge';
       badge.hidden = true;
       badge.setAttribute('aria-live', 'polite');
-      const barEl = byId('chatPrompt')?.closest('#chat-compose-bar') || bar;
+      const barEl = activeChatPrompt()?.closest('#chat-compose-bar') || bar;
       if (barEl) {
         barEl.insertBefore(badge, barEl.firstChild);
       } else if (bar && bar.parentElement) {
@@ -1278,8 +1301,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    /* ---- C. Input file masqué pour phase 2 PJ (si absent) ---- */
-    if (!byId('chat-file-input') && input) {
+    /* ---- C. Input file masqué pour phase 2 PJ (si absent) — scopé à la bar ---- */
+    const _bar = prompt?.closest('#chat-compose-bar') || bar;
+    if (_bar && !_bar.querySelector('#chat-file-input') && activeChatPrompt()) {
       const fileInput = document.createElement('input');
       fileInput.type = 'file';
       fileInput.id = 'chat-file-input';
@@ -1296,72 +1320,83 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput.value = '';
         renderAttachmentsList();
       });
-      (bar || input.parentElement).appendChild(fileInput);
+      _bar.appendChild(fileInput);
     }
 
     /* ---- D. Conteneur liste PJ (si absent) ---- */
-    if (!byId('chat-attachments-list')) {
-      const listHost = document.createElement('div');
-      listHost.id = 'chat-attachments-list';
-      const ftr = footer || byId('chat-compose-footer');
-      if (ftr && ftr.parentElement) ftr.parentElement.insertBefore(listHost, ftr);
+    {
+      const subList = byId('agilo-chat-submission');
+      if (subList && !subList.querySelector('#chat-attachments-list')) {
+        const listHost = document.createElement('div');
+        listHost.id = 'chat-attachments-list';
+        subList.appendChild(listHost);
+      } else if (!subList && !byId('chat-attachments-list')) {
+        const listHost = document.createElement('div');
+        listHost.id = 'chat-attachments-list';
+        const ftr = footer || byId('chat-compose-footer');
+        if (ftr && ftr.parentElement) ftr.parentElement.insertBefore(listHost, ftr);
+        else if (formEl) formEl.appendChild(listHost);
+      }
     }
 
-    /* ---- E. Mic (Web Speech API) — ajouter si absent dans le footer ---- */
-    if (!byId('chat-dictate-btn') && (window.SpeechRecognition || window.webkitSpeechRecognition) && input) {
-      const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
-      const micBtn = document.createElement('button');
-      micBtn.type = 'button';
-      micBtn.id = 'chat-dictate-btn';
-      micBtn.setAttribute('aria-pressed', 'false');
-      micBtn.setAttribute('aria-label', 'Dicter');
-      micBtn.title = 'Dicter (navigateur)';
-      micBtn.innerHTML = SVG_MIC;
-      micBtn.addEventListener('click', () => {
-        if (__dictationActive) { try { __speechRecognition?.stop(); } catch { } return; }
-        const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-        if (!Rec) { toast('Dictée non supportée sur ce navigateur', 'error'); return; }
-        const rec = new Rec();
-        rec.lang = lang; rec.interimResults = true; rec.continuous = true;
-        rec.onresult = (ev) => {
-          let chunk = '';
-          for (let i = ev.resultIndex; i < ev.results.length; i++) { if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript; }
-          if (chunk) { const cur = (input.value || '').trimEnd(); input.value = cur + (cur ? ' ' : '') + chunk.trim() + ' '; }
-        };
-        rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
-        rec.onend = () => {
-          __dictationActive = false; __speechRecognition = null;
-          micBtn.setAttribute('aria-pressed', 'false');
-          micBtn.classList.remove('is-recording');
-          micBtn.innerHTML = SVG_MIC;
-          if (chatSendBtn) chatSendBtn.disabled = false;
-        };
-        try {
-          rec.start(); __dictationActive = true; __speechRecognition = rec;
-          micBtn.setAttribute('aria-pressed', 'true');
-          micBtn.classList.add('is-recording');
-          micBtn.innerHTML = SVG_MIC_STOP;
-          if (chatSendBtn) chatSendBtn.disabled = true;
-        } catch { toast('Impossible de démarrer la dictée', 'error'); }
-      });
-      /* Insérer le mic juste avant le bouton Envoyer, qu'il soit dans un footer ou dans la bar */
-      const sendRef = chatSendBtn || byId('chat-send-btn');
-      if (sendRef) {
-        sendRef.parentNode.insertBefore(micBtn, sendRef);
-      } else {
-        const foot = footer || byId('chat-compose-footer') || bar;
-        if (foot) foot.appendChild(micBtn);
+    /* ---- E. Mic (Web Speech API) : uniquement s'il manque DANS la barre du vrai #chatPrompt ---- */
+    if ((window.SpeechRecognition || window.webkitSpeechRecognition) && _bar) {
+      if (!_bar.querySelector('#chat-dictate-btn') && activeChatPrompt()) {
+        const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
+        const micBtn = document.createElement('button');
+        micBtn.type = 'button';
+        micBtn.id = 'chat-dictate-btn';
+        micBtn.setAttribute('aria-pressed', 'false');
+        micBtn.setAttribute('aria-label', 'Dicter');
+        micBtn.title = 'Dicter (navigateur)';
+        micBtn.innerHTML = SVG_MIC;
+        micBtn.addEventListener('click', () => {
+          if (__dictationActive) { try { __speechRecognition?.stop(); } catch { } return; }
+          const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (!Rec) { toast('Dictée non supportée sur ce navigateur', 'error'); return; }
+          const rec = new Rec();
+          rec.lang = lang; rec.interimResults = true; rec.continuous = true;
+          rec.onresult = (ev) => {
+            let chunk = '';
+            for (let i = ev.resultIndex; i < ev.results.length; i++) { if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript; }
+            if (chunk) {
+              const inp = activeChatPrompt();
+              if (!inp) return;
+              const cur = (inp.value || '').trimEnd();
+              inp.value = cur + (cur ? ' ' : '') + chunk.trim() + ' ';
+            }
+          };
+          rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
+          rec.onend = () => {
+            __dictationActive = false; __speechRecognition = null;
+            micBtn.setAttribute('aria-pressed', 'false');
+            micBtn.classList.remove('is-recording');
+            micBtn.innerHTML = SVG_MIC;
+            if (chatSendBtn) chatSendBtn.disabled = false;
+          };
+          try {
+            rec.start(); __dictationActive = true; __speechRecognition = rec;
+            micBtn.setAttribute('aria-pressed', 'true');
+            micBtn.classList.add('is-recording');
+            micBtn.innerHTML = SVG_MIC_STOP;
+            if (chatSendBtn) chatSendBtn.disabled = true;
+          } catch { toast('Impossible de démarrer la dictée', 'error'); }
+        });
+        const sendRef = _bar.querySelector('#chat-send-btn') || chatSendBtn;
+        if (sendRef) _bar.insertBefore(micBtn, sendRef);
+        else _bar.appendChild(micBtn);
       }
     }
 
     /* ---- F. Mode JS-build complet (data-agilo-compose="auto") — pas si embed déjà en place */
     const paneChat = byId('pane-chat');
-    if (!byId('agilo-chat-submission') && paneChat?.dataset?.agiloCompose === 'auto' && !byId('chat-compose-bar') && input) {
+    const _inpAuto = activeChatPrompt();
+    if (!byId('agilo-chat-submission') && paneChat?.dataset?.agiloCompose === 'auto' && !byId('chat-compose-bar') && _inpAuto) {
       const bar = document.createElement('div'); bar.id = 'chat-compose-bar';
       const footer = document.createElement('div'); footer.id = 'chat-compose-footer';
-      if (input.parentElement) {
-        input.parentElement.insertBefore(bar, input);
-        bar.appendChild(input);
+      if (_inpAuto.parentElement) {
+        _inpAuto.parentElement.insertBefore(bar, _inpAuto);
+        bar.appendChild(_inpAuto);
         bar.appendChild(footer);
       }
       /* PJ stub */
@@ -1382,6 +1417,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (btnAsk) btnAsk.hidden = true;
     }
+
+    removeOrphanChatButtons();
   }
 
   async function uploadPendingAttachments(auth, jobId) {
@@ -2133,8 +2170,9 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== ENVOI (question libre) ================== */
   async function handleAsk() {
     const jobId = refreshActiveJobId();
-    const q = (input?.value || '').trim();
-    if (!q) { input?.focus(); return; }
+    const cp = activeChatPrompt();
+    const q = (cp?.value || '').trim();
+    if (!q) { cp?.focus(); return; }
     if (__dictationActive) { toast('Arrêtez la dictée avant d’envoyer', 'info'); return; }
 
     const intentHint = resolveIntentHintForQuestion(q, null);
@@ -2142,7 +2180,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (SENDING.has(jobId)) {
       enqueueAsk(jobId, q, intentHint);
       toast('Message en file d’attente', 'success');
-      input.value = '';
+      if (cp) cp.value = '';
       updateQueueBadge(jobId);
       return;
     }
@@ -2187,7 +2225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const runId = mkRunId();
     const initialPlaceholder = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
     pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
-    input.value = '';
+    { const _cp = activeChatPrompt(); if (_cp) _cp.value = ''; }
     /* Scroller immédiatement en bas : l'utilisateur voit sa bulle + le thinking */
     scrollChatToBottom('instant');
 
@@ -2318,7 +2356,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
-  input?.addEventListener('keydown', (e) => {
+  form?.addEventListener('keydown', (e) => {
+    if (e.target?.id !== 'chatPrompt') return;
     if (e.key !== 'Enter' || e.shiftKey) return;
     if (__dictationActive) { e.preventDefault(); return; }
     e.preventDefault();

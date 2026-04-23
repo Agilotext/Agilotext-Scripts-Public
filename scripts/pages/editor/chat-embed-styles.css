@@ -407,13 +407,33 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   opacity: 1;
 }
 
-/* Bulle en mode édition inline */
-.msg-bubble[contenteditable="true"] {
-  cursor: text;
-  outline: 2px solid rgba(255,255,255,.7);
-  outline-offset: 3px;
-  border-radius: .5rem;
-  min-width: 4rem;
+/* Zone de saisie d'édition : à l'intérieur de la bulle, même rendu visuel (bleu) */
+.msg--user .msg-bubble.msg-bubble--editing {
+  display: block;
+  padding: .65rem .85rem;
+  min-width: 8ch;
+}
+.msg--user .msg-bubble .msg-bubble-edit-ta {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid rgba(255,255,255,.4);
+  border-radius: .4rem;
+  background: rgba(0,0,0,.1);
+  color: #fff;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 2.5em;
+  padding: .35rem .5rem;
+  outline: none;
+}
+.msg--user .msg-bubble .msg-bubble-edit-ta::placeholder { color: rgba(255,255,255,.55); }
+.msg--user .msg-bubble .msg-bubble-edit-ta:focus {
+  border-color: rgba(255,255,255,.75);
+  background: rgba(0,0,0,.12);
 }
 
 /* Barre Annuler / Enregistrer sous la bulle éditée */
