@@ -32,7 +32,7 @@ check_url() {
   local status=""
 
   while [[ $attempt -le $MAX_RETRIES ]]; do
-    status="$(curl -sI "$url" | sed -n '1s/.* //p')"
+    status="$(curl -sI "$url" | sed -n '1s/.* //p' | tr -d '\r')"
     if [[ "$status" == "200" ]]; then
       echo "jsDelivr OK (${label}) -> HTTP 200"
       return 0
