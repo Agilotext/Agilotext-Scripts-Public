@@ -499,9 +499,15 @@
 }
 
 /* ===== BARRE DE COMPOSITION (V06 refonte) ===== */
+/* !important : Webflow (form, .w-form) impose souvent des boutons full-width et des conteneurs en colonne */
+#pane-chat #chat-compose-bar,
 #chat-compose-bar {
-  display: flex;
-  flex-direction: column;
+  display: flex !important;
+  flex-direction: column !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+  min-width: 0;
   border: 1px solid var(--agilo-border, #cbd5e1);
   border-radius: .75rem;
   background: var(--agilo-surface, var(--color--white, #fff));
@@ -522,18 +528,26 @@
   background: transparent;
   resize: none;
   padding: .75rem 1rem .25rem;
-  width: 100%;
+  width: 100% !important;
+  min-width: 0 !important;
   min-height: 48px;
   max-height: 180px;
   font-size: .9375rem;
   line-height: 1.55;
   color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  box-sizing: border-box !important;
+  flex: 1 1 auto;
 }
 
 /* Footer de la barre : PJ à gauche, mic + send à droite */
 #chat-compose-footer {
-  display: flex;
-  align-items: center;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box;
+  min-width: 0;
   gap: .2rem;
   padding: .3rem .4rem;
 }
@@ -543,20 +557,24 @@
 /* Boutons icon-only dans la barre */
 #chat-attach-btn,
 #chat-dictate-btn,
-#chat-send-btn {
-  display: inline-flex;
+#chat-send-btn,
+#chat-compose-footer .agilo-chat-send {
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2.1rem !important;
+  min-width: 2.1rem !important;
+  max-width: 2.1rem !important;
+  height: 2.1rem !important;
   border-radius: 50%;
   border: none;
-  background: transparent;
+  background: transparent !important;
   cursor: pointer;
   transition: background .14s, color .14s, opacity .14s;
-  flex-shrink: 0;
+  flex: 0 0 2.1rem !important;
   color: var(--agilo-dim, #6b7280);
-  padding: 0;
+  padding: 0 !important;
+  box-sizing: border-box;
 }
 
 /* PJ : positionnée à gauche (avant le spacer) + grisée */
@@ -604,8 +622,9 @@
   pointer-events: none;
 }
 
-/* Le div#btnAsk Webflow est masqué via hidden — s'assure qu'il ne prend aucune place */
+/* Le div#btnAsk Webflow : masqué en JS (hidden) + repli CSS si le vrai envoi #chat-send-btn est présent */
 #btnAsk[hidden] { display: none !important; }
+#chat-compose-footer:has(#chat-send-btn) #btnAsk { display: none !important; }
 
 /* Badge file d'attente (au-dessus de la barre) */
 #chat-queue-badge {
