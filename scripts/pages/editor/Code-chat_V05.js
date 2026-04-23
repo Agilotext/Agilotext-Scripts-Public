@@ -3,7 +3,7 @@
 //      PJ phase 1 (stub noms) + phase 2 (upload optionnel), dictée Web Speech API.
 // V05: message LinkedIn, email block, contexte Memberstack, etc.
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow
-window.__agiloChatVersion = 'V06-queue-pj-dictation';
+window.__agiloChatVersion = 'V07-jobid-LS-priority';
 
 document.addEventListener('DOMContentLoaded', () => {
   /* ================== DEBUG ================== */
@@ -432,30 +432,57 @@ document.addEventListener('DOMContentLoaded', () => {
   /** Aligné sur pickJobId() des autres scripts éditeur — évite le toast "Job ID manquant"
    *  quand le DOM se construit après le chargement du script. */
   function getJobId() {
-    let fromFrameOrTop = '';
+    let fromLs = '';
     try {
-      fromFrameOrTop = jobIdFromWindowLocation(window);
-      if (!fromFrameOrTop && window.top && window.top !== window) {
-        fromFrameOrTop = jobIdFromWindowLocation(window.top);
-      }
-    } catch (e) { /* ignore */ }
-    const sp = new URLSearchParams(location.search);
+      fromLs = (localStorage.getItem('currentJobId') || sessionStorage.getItem('currentJobId') || localStorage.getItem('jobId') || '').trim();
+    } catch (e) { /* stockage refusé / partitionné */ }
+    const fromGlobal = String(
+      window.__agiloCurrentJobId
+      || window.__agiloEditorJobId
+      || ''
+    ).trim();
+
+    let fromUrls = '';
+    const winChain = [window, window.top, window.parent].filter(
+      (w, i, a) => w && a.indexOf(w) === i
+    );
+    for (const w of winChain) {
+      try {
+        fromUrls = jobIdFromWindowLocation(w);
+        if (fromUrls) break;
+      } catch (e) { /* autre origine */ }
+    }
+
+    const sp = new URLSearchParams(typeof location !== 'undefined' ? (location.search || '') : '');
     const rail = document.querySelector('.rail-item.is-active');
+    const parentRoot = (() => {
+      const a = tryParentGetElementById('editorRoot')?.dataset;
+      return (a?.jobId || a?.jobid || '').trim();
+    })();
+    const selfRoot = (byId('editorRoot')?.dataset?.jobId || byId('editorRoot')?.dataset?.jobid || '').trim();
+    const orch = (() => {
+      const pick = (o) => (o && o.currentJobId) || '';
+      try { return String(pick(window.__agiloOrchestrator) || pick(window.top?.__agiloOrchestrator) || pick(window.parent?.__agiloOrchestrator) || ''); } catch (e) { return ''; }
+    })();
     return String(
-      fromFrameOrTop
+      fromLs
+        || fromGlobal
+        || fromUrls
         || sp.get('jobId')
         || tryParentGetElementById('pane-chat')?.dataset?.jobId
         || tryParentGetElementById('pane-chat')?.dataset?.jobid
         || $('#pane-chat')?.dataset?.jobId
         || $('#pane-chat')?.dataset?.jobid
-        || byId('editorRoot')?.dataset?.jobId
-        || byId('editorRoot')?.dataset?.jobid
+        || selfRoot
+        || parentRoot
+        || (tryParentGetElementById('agilo-audio-wrap')?.dataset?.jobId
+          || tryParentGetElementById('agilo-audio-wrap')?.dataset?.jobid
+          || '')
         || byId('agilo-audio-wrap')?.dataset?.jobId
         || byId('agilo-audio-wrap')?.dataset?.jobid
         || rail?.dataset?.jobId
         || rail?.dataset?.jobid
-        || (typeof window.__agiloOrchestrator !== 'undefined' && window.__agiloOrchestrator?.currentJobId)
-        || (() => { try { return localStorage.getItem('currentJobId') || ''; } catch { return ''; } })()
+        || orch
         || $('[name="jobId"]')?.value
         || ''
     ).trim();
