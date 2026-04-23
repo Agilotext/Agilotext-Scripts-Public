@@ -118,10 +118,17 @@
     return out;
   }
 
-  function agiloFindV3StructSourceInIframe(idoc) {
-    if (!idoc || !idoc.body) return null;
+  /** Document iframe ou nœud racine du compte-rendu (ex. #summaryEditor en injection directe). */
+  function agiloFindV3StructInRoot(root) {
+    if (!root) return null;
+    const walkTop = root.nodeType === 9
+      ? (root.body || root.documentElement)
+      : root;
+    if (!walkTop) return null;
+    const doc = root.nodeType === 9 ? root : root.ownerDocument;
+    if (!doc) return null;
     try {
-      const w = idoc.createTreeWalker(idoc.body, NodeFilter.SHOW_COMMENT, null, false);
+      const w = doc.createTreeWalker(walkTop, NodeFilter.SHOW_COMMENT, null, false);
       let n;
       while ((n = w.nextNode())) {
         const d = n.data || '';
@@ -134,13 +141,23 @@
       }
     } catch (e) { /* ignore */ }
     try {
-      const html = idoc.documentElement && idoc.documentElement.innerHTML;
+      const html = root.nodeType === 9
+        ? (root.documentElement && root.documentElement.innerHTML)
+        : (walkTop.innerHTML || (walkTop.textContent && String(root.outerHTML || '')) || '');
       if (html) {
-        const m = html.match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
+        const m = String(html).match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
         if (m) return m[1].trim();
       }
     } catch (e) { /* ignore */ }
     return null;
+  }
+
+  /** Chaîne complète côté API (le round-trip innerHTML de sanitizeHtml efface souvent les commentaires). */
+  function agiloFindV3StructInHtmlString(s) {
+    if (!s || typeof s !== 'string') return null;
+    const m = s.match(/<!--\s*V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT\s*-->/i) ||
+      s.match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
+    return m ? m[1].trim() : null;
   }
 
   function agiloEnsureCompteRenduEmailBlockCss(idoc) {
@@ -217,8 +234,8 @@
     return parts.join('\n');
   }
 
-  function agiloWireCompteRenduEmailBlock(idoc, block, subject, bodyPlain) {
-    if (!idoc || !block) return;
+  function agiloWireCompteRenduEmailBlock(targetDoc, block, subject, bodyPlain) {
+    if (!targetDoc || !block) return;
     const su = String(subject || '').trim();
     const bt = String(bodyPlain || '');
     const copyText = 'Objet : ' + su + '\n\n' + bt;
@@ -272,7 +289,7 @@
       const close = function () {
         dropdown.hidden = true;
         openTrigger.setAttribute('aria-expanded', 'false');
-        idoc.removeEventListener('click', onDoc);
+        targetDoc.removeEventListener('click', onDoc);
       };
       const onDoc = function () { close(); };
       openTrigger.addEventListener('click', function (e) {
@@ -281,7 +298,7 @@
         if (dropdown.hidden) {
           dropdown.hidden = false;
           openTrigger.setAttribute('aria-expanded', 'true');
-          setTimeout(function () { idoc.addEventListener('click', onDoc); }, 0);
+          setTimeout(function () { targetDoc.addEventListener('click', onDoc); }, 0);
         } else {
           close();
         }
@@ -296,32 +313,32 @@
   /**
    * Même présentation que l’e-mail de l’onglet Conversation (carte, copie, menu Gmail/Outlook/mailto).
    */
-  function agiloBuildCompteRenduConversationEmailFromV3(idoc, data, subject, bodyPlain) {
+  function agiloBuildCompteRenduConversationEmailFromV3(targetDoc, data, subject, bodyPlain) {
     const esc = (s) => String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    const block = idoc.createElement('div');
+    const block = targetDoc.createElement('div');
     block.className = 'mail-ready agilo-email-block agilo-email-block--in-summary';
     block.setAttribute('data-agilo-mail-from', 'v3-struct');
     block.setAttribute('data-agilo-v3-compte-rendu-mail', '1');
 
-    const header = idoc.createElement('div');
+    const header = targetDoc.createElement('div');
     header.className = 'agilo-email-block-header';
-    const label = idoc.createElement('span');
+    const label = targetDoc.createElement('span');
     label.className = 'agilo-email-block-label';
     label.textContent = 'Email';
-    const tools = idoc.createElement('div');
+    const tools = targetDoc.createElement('div');
     tools.className = 'agilo-email-block-tools';
-    const copyBtn = idoc.createElement('button');
+    const copyBtn = targetDoc.createElement('button');
     copyBtn.type = 'button';
     copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
     copyBtn.setAttribute('aria-label', 'Copier le mail');
     copyBtn.setAttribute('title', 'Copier le mail');
     copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
-    const openWrap = idoc.createElement('div');
+    const openWrap = targetDoc.createElement('div');
     openWrap.className = 'agilo-email-open-wrap';
-    const openTrigger = idoc.createElement('button');
+    const openTrigger = targetDoc.createElement('button');
     openTrigger.type = 'button';
     openTrigger.className = 'agilo-email-btn agilo-email-btn-open';
     openTrigger.setAttribute('aria-label', 'Ouvrir dans Gmail, Outlook ou l’app mail');
@@ -329,7 +346,7 @@
     openTrigger.setAttribute('aria-haspopup', 'menu');
     openTrigger.setAttribute('aria-expanded', 'false');
     openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="agilo-email-icon agilo-email-send-icon"><path d="M10.3009 13.6949L20.102 3.89742M10.5795 14.1355L12.8019 18.5804C13.339 19.6545 13.6075 20.1916 13.9458 20.3356C14.2394 20.4606 14.575 20.4379 14.8492 20.2747C15.1651 20.0866 15.3591 19.5183 15.7472 18.3818L19.9463 6.08434C20.2845 5.09409 20.4535 4.59896 20.3378 4.27142C20.2371 3.98648 20.013 3.76234 19.7281 3.66167C19.4005 3.54595 18.9054 3.71502 17.9151 4.05315L5.61763 8.2523C4.48114 8.64037 3.91289 8.83441 3.72478 9.15032C3.56153 9.42447 3.53891 9.76007 3.66389 10.0536C3.80791 10.3919 4.34498 10.6605 5.41912 11.1975L9.86397 13.42C10.041 13.5085 10.1295 13.5527 10.2061 13.6118C10.2742 13.6643 10.3352 13.7253 10.3876 13.7933C10.4468 13.87 10.491 13.9585 10.5795 14.1355Z"/></svg>';
-    const dropdown = idoc.createElement('div');
+    const dropdown = targetDoc.createElement('div');
     dropdown.className = 'agilo-email-dropdown';
     dropdown.hidden = true;
     dropdown.setAttribute('role', 'menu');
@@ -341,7 +358,7 @@
       { label: 'Outlook', icon: outlookSvg, href: '#' },
       { label: 'App mail par défaut', icon: defaultMailSvg, href: '#' }
     ].forEach(function (item) {
-      const a = idoc.createElement('a');
+      const a = targetDoc.createElement('a');
       a.href = item.href;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
@@ -356,54 +373,67 @@
     tools.appendChild(openWrap);
     header.appendChild(label);
     header.appendChild(tools);
-    const subjLine = idoc.createElement('div');
+    const subjLine = targetDoc.createElement('div');
     subjLine.className = 'agilo-email-block-subject';
     subjLine.innerHTML = '<span class="agilo-email-block-subject-label">Objet</span> ' + esc(subject);
-    const bodyWrap = idoc.createElement('div');
+    const bodyWrap = targetDoc.createElement('div');
     bodyWrap.className = 'agilo-email-block-body agilo-email-block-body--md';
     bodyWrap.innerHTML = agiloV3DataToBodyDisplayHtml(data);
-    const com = idoc.createElement('div');
+    const com = targetDoc.createElement('div');
     com.className = 'agilo-email-internal-comment';
     com.innerHTML = '<div class="agilo-email-ci-dessous"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Ci-dessous</span></div><div class="agilo-email-internal-comment-text">Détail des notes (faits, points à confirmer, verbatims) : voir le compte-rendu structuré sous ce bloc.</div>';
     block.appendChild(header);
     block.appendChild(subjLine);
     block.appendChild(bodyWrap);
     block.appendChild(com);
-    agiloWireCompteRenduEmailBlock(idoc, block, subject, bodyPlain);
+    agiloWireCompteRenduEmailBlock(targetDoc, block, subject, bodyPlain);
     return block;
   }
 
   /**
-   * Certains comptes rendus n’émettent le mail que dans le commentaire HTML &lt;!--V3_STRUCT--&gt; (invisible).
-   * Construit un bloc type « Conversation » (carte e-mail) à partir des champs clé/valeur.
+   * Comptes rendus avec mail uniquement dans &lt;!--V3_STRUCT--&gt; (souvent effacé par sanitizeHtml) :
+   * construit la carte e-mail (comme l’onglet Conversation).
+   * @param {Document|Element} ctx Document iframe ou conteneur du compte-rendu.
+   * @param {string} [rawHtml] HTML brut reçu (injection directe, pour retrouver le bloc si le DOM a perdu les commentaires).
    */
-  function agiloMaterializeV3StructMailIfMissing(idoc) {
+  function agiloMaterializeV3StructMailIfMissing(ctx, rawHtml) {
     try {
-      if (!idoc || !idoc.body) return;
-      if (idoc.querySelector('.mail-ready')) return;
-      const src = agiloFindV3StructSourceInIframe(idoc);
+      if (!ctx) return;
+      const isDoc = ctx.nodeType === 9;
+      const searchRoot = isDoc ? (ctx.body || ctx.documentElement) : ctx;
+      if (!searchRoot) return;
+      if (searchRoot.querySelector('[data-agilo-v3-compte-rendu-mail]')) return;
+      if (searchRoot.querySelector('.mail-ready .agilo-email-block')) return;
+
+      var shells = searchRoot.querySelectorAll('.mail-ready');
+      for (var si = 0; si < shells.length; si++) {
+        var s = shells[si];
+        if (s.querySelector('.agilo-email-block')) continue;
+        if (s.getAttribute('data-agilo-v3-compte-rendu-mail')) continue;
+        var t = (s.textContent || '').replace(/\s/g, ' ').trim();
+        if (t.length < 2) s.remove();
+      }
+
+      var src = agiloFindV3StructInRoot(isDoc ? ctx : searchRoot);
+      if (!src && rawHtml) src = agiloFindV3StructInHtmlString(rawHtml);
       if (!src) return;
       const data = agiloParseV3StructInner(src);
       if (!data) return;
       if (!data.candidate_name && !data.bullet1_title && !data.bullet1_body) return;
-      const internal = idoc.querySelector('.internal-report');
+      const internal = searchRoot.querySelector('.internal-report');
       if (!internal || !internal.parentNode) return;
-      agiloEnsureCompteRenduEmailBlockCss(idoc);
+      const targetDoc = isDoc ? ctx : (ctx.ownerDocument || document);
+      agiloEnsureCompteRenduEmailBlockCss(targetDoc);
       const subject = agiloV3DataToSubjectLine(data);
       const bodyPlain = agiloV3DataToBodyPlain(data);
-      const block = agiloBuildCompteRenduConversationEmailFromV3(idoc, data, subject, bodyPlain);
+      const block = agiloBuildCompteRenduConversationEmailFromV3(targetDoc, data, subject, bodyPlain);
       internal.parentNode.insertBefore(block, internal);
-      const ab = idoc.querySelector('.report-card > .actions-bar');
+      const ab = searchRoot.querySelector('.report-card > .actions-bar');
       if (ab) ab.style.setProperty('display', 'none');
     } catch (e) {
       if (window.AGILO_DEBUG) console.warn('[agilo] materialize v3 struct mail', e);
     }
   }
-
-  /**
-   * Compte-rendu HTML (document complet) : le bloc .mail-ready doit apparaître tôt
-   * (souvent déplacé sous le long .internal-report par erreur de génération).
-   */
   function agiloReorderCompteRenduMailBlock(idoc) {
     try {
       if (!idoc || !idoc.body) return;
@@ -545,6 +575,7 @@
 
       // ✅ Injection directe (templates simples) - Sanitizer UNIQUEMENT ici
       el.innerHTML = sanitizeHtml(html);
+      agiloMaterializeV3StructMailIfMissing(el, html);
     }
 
     // Appliquer les attributs readonly
