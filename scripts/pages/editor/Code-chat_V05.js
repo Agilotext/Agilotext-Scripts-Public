@@ -3,7 +3,7 @@
 //      PJ phase 1 (stub noms) + phase 2 (upload optionnel), dictée Web Speech API.
 // V05: message LinkedIn, email block, contexte Memberstack, etc.
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow
-window.__agiloChatVersion = 'V09-sync-stub+safe-init';
+window.__agiloChatVersion = 'V10-run-if-doc-already-ready';
 
 /* Toujours exposer AgiloChat dès l’arrivée du script : si l’IIFE du DOMContentLoaded
  * lève avant la fin, l’utilisateur a quand même getJobId (URL/LS) pour le debug. */
@@ -35,7 +35,9 @@ window.__agiloChatVersion = 'V09-sync-stub+safe-init';
   }
 })();
 
-document.addEventListener('DOMContentLoaded', () => {
+/* Le chat-loader s’exécute sur DOMContentLoaded puis charge ce fichier en différé : à l’arrivée ici
+ * document.readyState est souvent déjà "interactive" ou "complete" → l’évènement ne repasse pas. */
+function agiloChatInitFromDom() {
   try {
   /* ================== DEBUG ================== */
   const FORCE_DEBUG = false; // ← laisse à false en prod
@@ -2775,4 +2777,9 @@ document.addEventListener('DOMContentLoaded', () => {
       window.AgiloChat._initError = e;
     } catch (e2) { /* */ }
   }
-});
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', agiloChatInitFromDom, { once: true });
+} else {
+  agiloChatInitFromDom();
+}
