@@ -1,11 +1,4 @@
 /* Bloc e-mail (même look que l’onglet Conversation / chat-embed-styles.css) — chargé dans l’iframe compte-rendu. */
-html.agilo-iframe-compte-rendu,
-html.agilo-iframe-compte-rendu body,
-body.agilo-iframe-compte-rendu {
-  -webkit-user-select: text;
-  user-select: text;
-}
-
 .agilo-email-block--in-summary {
   margin: 0 0 18px;
 }
@@ -43,12 +36,8 @@ body.agilo-iframe-compte-rendu {
 
 .agilo-email-block-tools {
   display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
   align-items: center;
   gap: .25rem;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .agilo-email-btn {
@@ -255,74 +244,40 @@ body.agilo-iframe-compte-rendu {
   color: inherit;
 }
 
-.agilo-email-internal-comment {
-  margin-top: 0;
-  padding: .6rem 1rem .75rem;
-  border-top: 1px solid var(--agilo-border, #343a4040);
-  background: color-mix(in srgb, var(--agilo-text, #0b1222) 3%, var(--agilo-surface-2, #f8f9fa));
-}
-
-.agilo-email-ci-dessous {
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-  font: 600 .75rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
-  color: var(--agilo-dim, var(--color--gris, #525252));
-  margin-bottom: .35rem;
-}
-
-.agilo-email-ci-dessous svg {
-  flex-shrink: 0;
-  color: var(--agilo-dim, #525252);
-}
-
-.agilo-email-internal-comment-text {
-  font-size: .85rem;
-  line-height: 1.5;
-  color: var(--agilo-text, var(--color--gris_foncé, #020202));
-}
-
 .agilo-email-summary-hint {
   margin-top: 0;
-  padding: .6rem 1rem .75rem;
+  padding: .7rem 1rem .85rem;
   border-top: 1px solid var(--agilo-border, #343a4040);
   background: color-mix(in srgb, var(--agilo-text, #0b1222) 3%, var(--agilo-surface-2, #f8f9fa));
 }
 
 .agilo-email-summary-hint__text {
   margin: 0 0 .5rem;
-  font-size: .8rem;
-  line-height: 1.45;
-  color: var(--agilo-dim, #525252);
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  font: 500 .78rem/1.45 system-ui, -apple-system, Segoe UI, Roboto;
 }
 
-.agilo-email-btn--pill,
 .agilo-summary-open-chat-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 2rem;
-  padding: 0 12px;
   width: auto;
+  padding: 0 12px;
   border-radius: 999px;
   font: 600 .8rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
   color: #fff;
-  background: var(--agilo-primary, #174a96);
+  background: var(--agilo-primary, var(--color--blue, #174a96));
   border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 80%, #000 20%);
   box-shadow: 0 1px 2px rgba(0,0,0,.08);
-  cursor: pointer;
-  -webkit-user-select: none;
-  user-select: none;
-  transition: filter .15s, transform .1s;
 }
 
-.agilo-email-btn--pill:hover,
 .agilo-summary-open-chat-btn:hover {
-  filter: brightness(1.05);
+  filter: brightness(1.06);
+  transform: translateY(-1px);
 }
 
-.agilo-email-btn--pill:focus-visible,
 .agilo-summary-open-chat-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--agilo-primary) 50%, #fff 50%);
+  outline: 2px solid color-mix(in srgb, var(--agilo-primary, #174a96) 55%, #fff 45%);
   outline-offset: 2px;
 }
