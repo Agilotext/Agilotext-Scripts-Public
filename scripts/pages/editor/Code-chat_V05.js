@@ -2557,6 +2557,19 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
   ensureChatChrome();
 
+  /** D’autres scripts (auth, rail, orchestre) peuvent ne poser le jobId (URL, dataset, currentJobId) qu’après DOMContentLoaded. Sans ce rattrapage, l’historique se lit sous `agilo:chat:nojob` et paraît vide. */
+  function resyncActiveJobIfChanged() {
+    const was = ACTIVE_JOB;
+    const id = refreshActiveJobId();
+    if (id && id !== was) {
+      loadHistory();
+      render();
+      ensureChatChrome();
+      updateQueueBadge(id);
+    }
+  }
+  [0, 100, 400, 1200].forEach((ms) => { setTimeout(resyncActiveJobIfChanged, ms); });
+
   /* Si un autre script modifie #chatView après nous (ex. opentech), on reprend la main */
   setTimeout(() => {
     if (!chatView) return;
