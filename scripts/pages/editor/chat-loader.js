@@ -4,11 +4,15 @@
 // 3) Code-chat_V05.js
 // Ancien enchaînement Code-chat-css.js + V05 : remplacé par ce loader seul.
 (function () {
-  if (window.__agiloChatLoaderLoaded) return;
-  window.__agiloChatLoaderLoaded = true;
+  if (window.__agiloChatLoaderComplete) return;
+  if (window.__agiloChatLoaderRunning) return;
+  window.__agiloChatLoaderRunning = true;
 
   function getCdnRef() {
-    const current = document.currentScript?.src || '';
+    const currentScript = document.currentScript;
+    const fromData = currentScript && currentScript.getAttribute('data-cdn-ref');
+    if (fromData) return String(fromData).replace(/[^a-zA-Z0-9._-]/g, '');
+    const current = (currentScript && currentScript.src) || '';
     const fromScript = current.match(/Agilotext-Scripts-Public@([^/]+)\/scripts\/pages\/editor\/chat-loader\.js/i)?.[1];
     if (fromScript) return fromScript;
     try {
@@ -20,6 +24,20 @@
 
   const REF = getCdnRef();
   const BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${REF}/scripts/pages/editor`;
+
+  window.__agiloChatLoaderDiag = function () {
+    return {
+      ref: REF,
+      base: BASE,
+      brancheDetectee: REF,
+      complete: !!window.__agiloChatLoaderComplete,
+      running: !!window.__agiloChatLoaderRunning,
+      aSubmission: !!document.getElementById('agilo-chat-submission'),
+      styles: !!document.getElementById('agilo-chat-styles'),
+      v05: Array.from(document.scripts).some((s) => /Code-chat_V05\.js/.test(String(s.src || ''))),
+      srcDesScripts: Array.from(document.scripts).map((s) => s.src).filter(Boolean)
+    };
+  };
 
   /** Optionnel : ?agilo_cdn_bust=20260423-1 sur la page éditeur pour forcer un re-fetch (CDN intermédiaire). */
   function extraBust() {
@@ -85,9 +103,13 @@
       await injectMarkupIfNeeded();
       /* Code-chat_V05 s’exécute après ; il réinitialise si document déjà prêt. */
       await loadScript('Code-chat_V05.js');
-      window.dispatchEvent(new CustomEvent('agilo:chat-loader-ready', { detail: { ref: REF } }));
+      window.__agiloChatLoaderComplete = true;
+      window.__agiloChatLoaderLoaded = true;
+      window.dispatchEvent(new CustomEvent('agilo:chat-loader-ready', { detail: { ref: REF, base: BASE } }));
     } catch (e) {
       console.error('[agilo:chat-loader]', e);
+    } finally {
+      window.__agiloChatLoaderRunning = false;
     }
   }
 

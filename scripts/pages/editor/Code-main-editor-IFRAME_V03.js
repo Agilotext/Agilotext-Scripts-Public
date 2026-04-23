@@ -348,6 +348,25 @@
         a.addEventListener('click', function () { close(); });
       });
     }
+    const openChatBtn = block.querySelector('.agilo-summary-open-chat-btn');
+    if (openChatBtn) {
+      openChatBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        try {
+          if (window.AgiloEditors && typeof window.AgiloEditors.openChatTab === 'function') {
+            window.AgiloEditors.openChatTab();
+            return;
+          }
+        } catch (err) { }
+        try {
+          if (window.parent && window.parent !== window && window.parent.AgiloEditors
+            && typeof window.parent.AgiloEditors.openChatTab === 'function') {
+            window.parent.AgiloEditors.openChatTab();
+          }
+        } catch (err) { }
+      });
+    }
   }
 
   /**
@@ -419,13 +438,23 @@
     const bodyWrap = targetDoc.createElement('div');
     bodyWrap.className = 'agilo-email-block-body agilo-email-block-body--md';
     bodyWrap.innerHTML = agiloV3DataToBodyDisplayHtml(data);
-    const com = targetDoc.createElement('div');
-    com.className = 'agilo-email-internal-comment';
-    com.innerHTML = '<div class="agilo-email-ci-dessous"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg><span>Ci-dessous</span></div><div class="agilo-email-internal-comment-text">Détail des notes (faits, points à confirmer, verbatims) : voir le compte-rendu structuré sous ce bloc.</div>';
+    const hint = targetDoc.createElement('div');
+    hint.className = 'agilo-email-summary-hint';
+    hint.setAttribute('role', 'note');
+    const hintP = targetDoc.createElement('p');
+    hintP.className = 'agilo-email-summary-hint__text';
+    hintP.textContent = 'Pour coller du texte dans le champ d’envoi, utilisez l’onglet Conversation (même zone que le chat).';
+    const openConv = targetDoc.createElement('button');
+    openConv.type = 'button';
+    openConv.className = 'agilo-summary-open-chat-btn agilo-email-btn--pill';
+    openConv.setAttribute('aria-label', 'Ouvrir l’onglet Conversation');
+    openConv.textContent = 'Ouvrir l’onglet Conversation';
+    hint.appendChild(hintP);
+    hint.appendChild(openConv);
     block.appendChild(header);
     block.appendChild(subjLine);
     block.appendChild(bodyWrap);
-    block.appendChild(com);
+    block.appendChild(hint);
     agiloWireCompteRenduEmailBlock(targetDoc, block, subject, bodyPlain);
     return block;
   }
@@ -440,6 +469,10 @@
     try {
       if (!ctx) return;
       const isDoc = ctx.nodeType === 9;
+      if (isDoc && ctx.documentElement) {
+        ctx.documentElement.classList.add('agilo-iframe-compte-rendu');
+        if (ctx.body) ctx.body.classList.add('agilo-iframe-compte-rendu');
+      }
       const searchRoot = isDoc ? (ctx.body || ctx.documentElement) : ctx;
       if (!searchRoot) return;
       if (searchRoot.querySelector('[data-agilo-v3-compte-rendu-mail]')) return;
@@ -2375,6 +2408,22 @@
       
       #summaryEditor.ag-summary-readonly {
         overflow: auto;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      #summaryEditor.ag-summary-readonly * {
+        -webkit-user-select: text;
+        user-select: text;
+      }
+      #summaryEditor.ag-summary-readonly .agilo-email-btn,
+      #summaryEditor.ag-summary-readonly .agilo-summary-open-chat-btn,
+      #summaryEditor.ag-summary-readonly .agilo-email-dropdown a {
+        -webkit-user-select: none;
+        user-select: none;
+        cursor: pointer;
+      }
+      #summaryEditor.ag-summary-readonly .ag-summary-iframe {
+        cursor: auto;
       }
     `;
     document.head.appendChild(style);
@@ -2385,7 +2434,7 @@
     if (jid) loadJob(jid);
   });
   function serializeSmart() { return ''; }
-  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart };
+  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart, openChatTab };
 
   function openChatTab() {
     if (window.AgiloChat?.openConversation) { try { window.AgiloChat.openConversation(); } catch { } }
