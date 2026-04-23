@@ -442,7 +442,7 @@ function mapNicoJsonToSegments(j){
       a.setAttribute('data-agilo-mail-app', item.app);
       a.setAttribute('aria-label', item.label);
       a.setAttribute('title', item.label);
-      a.innerHTML = '<span class="agilo-email-icon">' + item.icon + '</span>';
+      a.innerHTML = '<span class="agilo-email-icon">' + item.icon + '</span><span class="agilo-email-link-label">' + item.label + '</span>';
       directWrap.appendChild(a);
     });
     tools.appendChild(copyBtn);
