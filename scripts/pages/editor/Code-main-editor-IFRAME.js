@@ -217,26 +217,79 @@ function mapNicoJsonToSegments(j){
     return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  function agiloV3DataToBodyDisplayHtml(data) {
-    if (!data) return '';
-    const esc = (s) => String(s == null ? '' : s)
+  function agiloEscHtml(s) {
+    return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-    const parts = ['<p>' + esc('Bonjour,') + '</p>'];
+  }
+
+  function agiloSimpleMdInline(text) {
+    return agiloEscHtml(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  function agiloSimpleMarkdownToHtml(md) {
+    const src = String(md == null ? '' : md).replace(/\r/g, '');
+    if (!src.trim()) return '';
+    const lines = src.split('\n');
+    const out = [];
+    let inUl = false;
+    let inOl = false;
+    const closeLists = function () {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (inOl) { out.push('</ol>'); inOl = false; }
+    };
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i] || '';
+      const line = raw.trim();
+      if (!line) { closeLists(); continue; }
+      const hu = line.match(/^(#{1,6})\s+(.*)$/);
+      if (hu) {
+        closeLists();
+        const lvl = Math.min(6, hu[1].length);
+        out.push('<h' + lvl + '>' + agiloSimpleMdInline(hu[2]) + '</h' + lvl + '>');
+        continue;
+      }
+      const lu = line.match(/^[-*]\s+(.*)$/);
+      if (lu) {
+        if (inOl) { out.push('</ol>'); inOl = false; }
+        if (!inUl) { out.push('<ul>'); inUl = true; }
+        out.push('<li>' + agiloSimpleMdInline(lu[1]) + '</li>');
+        continue;
+      }
+      const lo = line.match(/^\d+\.\s+(.*)$/);
+      if (lo) {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (!inOl) { out.push('<ol>'); inOl = true; }
+        out.push('<li>' + agiloSimpleMdInline(lo[1]) + '</li>');
+        continue;
+      }
+      closeLists();
+      out.push('<p>' + agiloSimpleMdInline(line) + '</p>');
+    }
+    closeLists();
+    return out.join('\n');
+  }
+
+  function agiloV3DataToBodyDisplayHtml(data) {
+    if (!data) return '';
+    const parts = ['<p>' + agiloEscHtml('Bonjour,') + '</p>'];
     for (let i = 1; i <= 3; i++) {
       const t = data['bullet' + i + '_title'];
       const b = data['bullet' + i + '_body'];
-      if (t) parts.push(`<p><strong>${esc(t)}</strong></p>`);
-      if (b) parts.push(`<div class="agilo-v3-mail-bodypre">${esc(b)}</div>`);
+      if (t) parts.push('<p><strong>' + agiloSimpleMdInline(t) + '</strong></p>');
+      if (b) parts.push('<div class="agilo-v3-mail-bodypre">' + agiloSimpleMarkdownToHtml(b) + '</div>');
     }
     const info = [];
     if (data.tjm) info.push('TJM (indicatif) : ' + data.tjm + ' €/jour');
     if (data.dispo_literal || data.dispo) info.push('Disponibilité : ' + (data.dispo_literal || data.dispo));
     if (data.mobility) info.push('Mobilité : ' + data.mobility);
-    if (info.length) parts.push('<p>' + esc(info.join(' · ')) + '</p>');
-    if (data.closing_reco) parts.push('<p>' + esc(data.closing_reco) + '</p>');
-    parts.push('<p>' + esc('Cordialement,') + '</p>');
+    if (info.length) parts.push('<p>' + agiloEscHtml(info.join(' · ')) + '</p>');
+    if (data.closing_reco) parts.push('<div class="agilo-v3-mail-bodypre">' + agiloSimpleMarkdownToHtml(data.closing_reco) + '</div>');
+    parts.push('<p>' + agiloEscHtml('Cordialement,') + '</p>');
     return parts.join('\n');
   }
 
@@ -259,9 +312,11 @@ function mapNicoJsonToSegments(j){
       e.preventDefault();
       (async function () {
         try {
-          if (navigator.clipboard && window.isSecureContext) {
-            await navigator.clipboard.writeText(copyText);
-          } else {
+          const copyPlainText = async function () {
+            if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(copyText);
+              return;
+            }
             const ta = document.createElement('textarea');
             ta.value = copyText;
             ta.style.cssText = 'position:fixed;left:-9999px;';
@@ -269,15 +324,40 @@ function mapNicoJsonToSegments(j){
             ta.select();
             document.execCommand('copy');
             document.body.removeChild(ta);
+          };
+
+          let copyMode = 'text';
+          const bodyNode = block.querySelector('.agilo-email-block-body');
+          const htmlBody = bodyNode ? String(bodyNode.innerHTML || '').trim() : '';
+          const htmlPayload = '<div>'
+            + '<p><strong>Objet :</strong> ' + agiloEscHtml(su) + '</p>'
+            + htmlBody
+            + '</div>';
+
+          if (
+            navigator.clipboard && window.isSecureContext
+            && typeof navigator.clipboard.write === 'function'
+            && typeof window.ClipboardItem !== 'undefined'
+            && htmlBody
+          ) {
+            const item = new ClipboardItem({
+              'text/plain': new Blob([copyText], { type: 'text/plain' }),
+              'text/html': new Blob([htmlPayload], { type: 'text/html' })
+            });
+            await navigator.clipboard.write([item]);
+            copyMode = 'html';
+          } else {
+            await copyPlainText();
           }
+
           try {
             if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ type: 'agilo:summary-mail-copy', ok: true, mode: 'text' }, '*');
+              window.parent.postMessage({ type: 'agilo:summary-mail-copy', ok: true, mode: copyMode }, '*');
             }
           } catch (err) { }
           copyBtn.classList.add('agilo-email-btn-copied');
           copyBtn.innerHTML = copyIconChecked;
-          toastFn('Texte du mail copié');
+          toastFn(copyMode === 'html' ? 'Mail copié (mise en forme conservée)' : 'Texte du mail copié');
           setTimeout(function () {
             copyBtn.classList.remove('agilo-email-btn-copied');
             copyBtn.innerHTML = copyIconDefault;
