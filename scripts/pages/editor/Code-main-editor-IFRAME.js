@@ -172,7 +172,7 @@ function mapNicoJsonToSegments(j){
       const link = idoc.createElement('link');
       link.rel = 'stylesheet';
       link.setAttribute('data-agilo-email-block-css', '1');
-      link.href = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/editor/agilo-iframe-email-block.css?v=2';
+      link.href = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/editor/agilo-iframe-email-block.css?v=3';
       idoc.head.appendChild(link);
     } catch (e) {
       if (window.AGILO_DEBUG) console.warn('[agilo] email block css', e);
@@ -391,6 +391,8 @@ function mapNicoJsonToSegments(j){
       if (links[2]) { links[2].removeAttribute('target'); }
       const close = function () {
         dropdown.hidden = true;
+        dropdown.setAttribute('hidden', '');
+        dropdown.style.display = 'none';
         openTrigger.setAttribute('aria-expanded', 'false');
         targetDoc.removeEventListener('click', onDoc);
       };
@@ -400,6 +402,8 @@ function mapNicoJsonToSegments(j){
         e.stopPropagation();
         if (dropdown.hidden) {
           dropdown.hidden = false;
+          dropdown.removeAttribute('hidden');
+          dropdown.style.display = 'block';
           openTrigger.setAttribute('aria-expanded', 'true');
           setTimeout(function () { targetDoc.addEventListener('click', onDoc); }, 0);
         } else {
@@ -452,6 +456,8 @@ function mapNicoJsonToSegments(j){
     const dropdown = targetDoc.createElement('div');
     dropdown.className = 'agilo-email-dropdown';
     dropdown.hidden = true;
+    dropdown.setAttribute('hidden', '');
+    dropdown.style.display = 'none';
     dropdown.setAttribute('role', 'menu');
     const gmailSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="52 42 88 66" width="20" height="20" class="agilo-email-logo-gmail"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></svg>';
     const outlookSvg = '<img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6995e36911a4849150741ca6_Microsoft_Office_Outlook_(2018%E2%80%932024).svg" width="20" height="20" alt="" class="agilo-email-logo-outlook">';
