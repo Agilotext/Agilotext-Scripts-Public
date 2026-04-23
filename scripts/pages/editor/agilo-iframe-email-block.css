@@ -118,6 +118,30 @@
   width: auto !important;
 }
 
+
+.agilo-email-direct-links {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: .25rem !important;
+}
+
+.agilo-email-btn-link {
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
+}
+
+.agilo-email-btn-link .agilo-email-icon,
+.agilo-email-btn-link .agilo-email-icon svg,
+.agilo-email-btn-link .agilo-email-icon img {
+  width: 18px !important;
+  height: 18px !important;
+  display: block;
+}
+
+.agilo-email-btn-link:hover {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
+
 .agilo-email-btn-open .agilo-email-icon,
 .agilo-email-btn-open .agilo-email-send-icon {
   color: var(--agilo-dim, #6b7280);
@@ -128,7 +152,9 @@
   color: var(--agilo-text, #020202);
 }
 
+/* legacy dropdown no longer used in summary */
 .agilo-email-dropdown {
+  display: none !important;
   position: absolute;
   top: 100%;
   right: 0;
