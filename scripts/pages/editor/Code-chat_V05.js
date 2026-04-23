@@ -387,13 +387,33 @@ document.addEventListener('DOMContentLoaded', () => {
       || 'ent'
     );
   }
+  /** Aligné sur pickJobId() des autres scripts éditeur — évite le toast "Job ID manquant"
+   *  quand le DOM se construit après le chargement du script. */
   function getJobId() {
-    return $('#pane-chat')?.dataset.jobid
-      || new URLSearchParams(location.search).get('jobId')
-      || byId('editorRoot')?.dataset?.jobId
-      || byId('agilo-audio-wrap')?.dataset?.jobId
-      || $('[name="jobId"]')?.value
-      || '';
+    const sp = new URLSearchParams(location.search);
+    const rail = document.querySelector('.rail-item.is-active');
+    return String(
+      sp.get('jobId')
+        || $('#pane-chat')?.dataset?.jobId
+        || $('#pane-chat')?.dataset?.jobid
+        || byId('editorRoot')?.dataset?.jobId
+        || byId('editorRoot')?.dataset?.jobid
+        || byId('agilo-audio-wrap')?.dataset?.jobId
+        || byId('agilo-audio-wrap')?.dataset?.jobid
+        || rail?.dataset?.jobId
+        || rail?.dataset?.jobid
+        || (typeof window.__agiloOrchestrator !== 'undefined' && window.__agiloOrchestrator?.currentJobId)
+        || (() => { try { return localStorage.getItem('currentJobId') || ''; } catch { return ''; } })()
+        || $('[name="jobId"]')?.value
+        || ''
+    ).trim();
+  }
+
+  /** Rafraîchit ACTIVE_JOB depuis le DOM — à appeler juste avant d'utiliser le jobId. */
+  function refreshActiveJobId() {
+    const id = getJobId();
+    if (id) ACTIVE_JOB = id;
+    return id || ACTIVE_JOB || '';
   }
   async function ensureEmail() {
     const attrVal = document.querySelector('[name="memberEmail"]')?.getAttribute('value') || '';
@@ -998,31 +1018,55 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /* SVG icons partagés — inline, pas de dépendance externe */
+  const SVG_PAPERCLIP = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+  const SVG_MIC       = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`;
+  const SVG_MIC_STOP  = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
+  const SVG_SEND      = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
+
   function ensureChatChrome() {
     if (!form || byId('chat-queue-badge')) return;
+
+    /* ---- 1. Badge file d'attente ---- */
     const badge = document.createElement('span');
     badge.id = 'chat-queue-badge';
     badge.hidden = true;
     badge.setAttribute('aria-live', 'polite');
-    badge.style.cssText = 'display:inline-block;min-width:1.25rem;margin-right:8px;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:600;vertical-align:middle';
-    if (btnAsk && btnAsk.parentElement) btnAsk.parentElement.insertBefore(badge, btnAsk);
+
+    /* ---- 2. Compose bar (enveloppe textarea + footer) ---- */
+    const bar = document.createElement('div');
+    bar.id = 'chat-compose-bar';
+
+    const footer = document.createElement('div');
+    footer.id = 'chat-compose-footer';
+
+    /* Reparenter le textarea dans le bar (les event listeners existants restent valides) */
+    if (input && input.parentElement) {
+      input.parentElement.insertBefore(badge, input);
+      input.parentElement.insertBefore(bar, input);
+      bar.appendChild(input);
+      bar.appendChild(footer);
+    }
+
+    /* ---- 3. Bouton PJ — grisé (backend non prêt) ---- */
     const attachBtn = document.createElement('button');
     attachBtn.type = 'button';
     attachBtn.id = 'chat-attach-btn';
-    attachBtn.setAttribute('aria-label', 'Joindre un fichier');
-    attachBtn.title = 'Pièce jointe';
-    attachBtn.style.cssText = 'margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:14px;vertical-align:middle';
-    attachBtn.textContent = '📎';
+    attachBtn.setAttribute('aria-label', 'Pièce jointe (bientôt disponible)');
+    attachBtn.title = 'Pièce jointe (bientôt disponible)';
+    attachBtn.disabled = true;
+    attachBtn.setAttribute('aria-disabled', 'true');
+    attachBtn.innerHTML = SVG_PAPERCLIP;
+    /* Pas d'écouteur clic : disabled + pointer-events:none dans le CSS */
+    footer.appendChild(attachBtn);
+
+    /* Input file masqué — conservé pour la phase 2 (ATTACHMENTS_ENABLED) */
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.id = 'chat-file-input';
     fileInput.multiple = true;
     fileInput.accept = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
     fileInput.style.display = 'none';
-    const listHost = document.createElement('div');
-    listHost.id = 'chat-attachments-list';
-    listHost.style.cssText = 'margin-top:6px;flex-wrap:wrap';
-    attachBtn.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', () => {
       const arr = Array.from(fileInput.files || []);
       for (const f of arr) {
@@ -1039,6 +1083,14 @@ document.addEventListener('DOMContentLoaded', () => {
       fileInput.value = '';
       renderAttachmentsList();
     });
+    bar.appendChild(fileInput);
+
+    /* Liste PJ (entre textarea et footer) */
+    const listHost = document.createElement('div');
+    listHost.id = 'chat-attachments-list';
+    bar.insertBefore(listHost, footer);
+
+    /* ---- 4. Bouton Mic (Web Speech API) ---- */
     /* Phase 2 dictée (option) : alignement Speechmatics / AgiloLiveVoiceController — voir scripts/shared/speechmatics-streaming.js */
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRec && input) {
@@ -1048,8 +1100,7 @@ document.addEventListener('DOMContentLoaded', () => {
       micBtn.setAttribute('aria-pressed', 'false');
       micBtn.setAttribute('aria-label', 'Dicter');
       micBtn.title = 'Dicter (navigateur)';
-      micBtn.style.cssText = 'margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:14px;vertical-align:middle';
-      micBtn.textContent = '🎤';
+      micBtn.innerHTML = SVG_MIC;
       const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
       micBtn.addEventListener('click', () => {
         if (__dictationActive) {
@@ -1078,7 +1129,8 @@ document.addEventListener('DOMContentLoaded', () => {
           __dictationActive = false;
           __speechRecognition = null;
           micBtn.setAttribute('aria-pressed', 'false');
-          micBtn.textContent = '🎤';
+          micBtn.classList.remove('is-recording');
+          micBtn.innerHTML = SVG_MIC;
           if (btnAsk) btnAsk.disabled = false;
         };
         try {
@@ -1086,22 +1138,20 @@ document.addEventListener('DOMContentLoaded', () => {
           __dictationActive = true;
           __speechRecognition = rec;
           micBtn.setAttribute('aria-pressed', 'true');
-          micBtn.textContent = '⏹';
+          micBtn.classList.add('is-recording');
+          micBtn.innerHTML = SVG_MIC_STOP;
           if (btnAsk) btnAsk.disabled = true;
         } catch (e) {
           toast('Impossible de démarrer la dictée', 'error');
         }
       });
-      if (btnAsk && btnAsk.parentElement) {
-        btnAsk.parentElement.insertBefore(micBtn, btnAsk);
-      }
+      footer.appendChild(micBtn);
     }
-    if (btnAsk && btnAsk.parentElement) {
-      btnAsk.parentElement.insertBefore(attachBtn, btnAsk);
-      btnAsk.parentElement.insertBefore(fileInput, btnAsk);
-    }
-    if (input && input.parentElement) {
-      input.parentElement.appendChild(listHost);
+
+    /* ---- 5. Bouton Envoyer — déplacé dans le footer avec icône SVG ---- */
+    if (btnAsk) {
+      btnAsk.innerHTML = SVG_SEND;
+      footer.appendChild(btnAsk);
     }
   }
 
@@ -1849,7 +1899,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ================== ENVOI (question libre) ================== */
   async function handleAsk() {
-    const jobId = ACTIVE_JOB;
+    const jobId = refreshActiveJobId();
     const q = (input?.value || '').trim();
     if (!q) { input?.focus(); return; }
     if (__dictationActive) { toast('Arrêtez la dictée avant d’envoyer', 'info'); return; }
@@ -1885,7 +1935,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const auth = await resolveAuth();
     if (!auth.username || !auth.token) { toast('Authentification manquante', 'error'); releaseSend(jobId); drainAskQueue(jobId); return; }
-    if (!jobId) { toast('Job ID manquant', 'error'); releaseSend(jobId); drainAskQueue(jobId); return; }
+    if (!jobId) { toast('Aucun enregistrement ouvert. Ouvrez un job puis réessayez.', 'error'); releaseSend(jobId); drainAskQueue(jobId); return; }
 
     const attachNames = PENDING_FILES.map(f => f.name);
     const uploadRes = await uploadPendingAttachments(auth, jobId);
@@ -1934,7 +1984,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function handleHiddenAsk(label, hiddenPrompt) {
     // Ouvre l'onglet Conversation automatiquement
     try { openConversation(); } catch { }
-    const jobId = ACTIVE_JOB;
+    const jobId = refreshActiveJobId();
     if (SENDING.has(jobId)) {
       toast('Une requête est déjà en cours — réessayez dans un instant', 'info');
       return;
@@ -1944,7 +1994,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const auth = await resolveAuth();
     if (!auth.username || !auth.token) { toast('Authentification manquante', 'error'); releaseSend(jobId); return; }
-    if (!jobId) { toast('Job ID manquant', 'error'); releaseSend(jobId); return; }
+    if (!jobId) { toast('Aucun enregistrement ouvert. Ouvrez un job puis réessayez.', 'error'); releaseSend(jobId); return; }
 
     const shortLabel = (label || 'Demande envoyée').trim();
 
