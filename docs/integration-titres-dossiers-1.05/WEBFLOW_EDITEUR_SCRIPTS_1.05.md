@@ -126,3 +126,19 @@ Par défaut, le script refuse de tourner si le working tree n’est pas propre. 
 ```bash
 ./scripts/deploy-chat.sh --allow-dirty
 ```
+
+---
+
+## Chat en un seul script (single loader)
+
+Si tu veux éviter le gros bloc HTML/CSS en embed, utilise le loader chat:
+
+```html
+<div id="agilo-chat-mount"></div>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/scripts/pages/editor/chat-loader.js?v=<HASH>"></script>
+```
+
+Comportement:
+- injecte `chat-submission-embed.html` dans `#agilo-chat-mount` (ou fallback sur `data-agilo-chat-mount`, `#pane-chat`, `body`);
+- charge ensuite `Code-chat-css.js` puis `Code-chat_V05.js` dans le bon ordre;
+- évite les doublons si les scripts sont déjà présents.
