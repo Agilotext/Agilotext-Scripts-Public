@@ -9,8 +9,12 @@
    (aucune redéfinition de --color--* ici)
    =========================================================== */
 
-/* Onglets éditeur : l’attribut [hidden] ne doit jamais être “gagné” par un display:flex global */
-section.edtr-pane[hidden] {
+/* Onglets éditeur (main + data-ed-tabs) : un seul volet visible.
+   - [hidden] peut être perdu ou surchargé par un style Webflow (!important sur .edtr-pane, flex, etc.)
+   - Le script des onglets ne met .is-active que sur le volet courant → filet de secours */
+section.edtr-pane[hidden],
+main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
+.ed-main[data-ed-tabs] [role="tabpanel"].edtr-pane:not(.is-active) {
   display: none !important;
 }
 
