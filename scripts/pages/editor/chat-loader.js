@@ -47,6 +47,7 @@
     try {
       await injectMarkupIfNeeded();
       await loadScript('Code-chat-css.js');
+      /* Code-chat_V05 s’exécute après DOMContentLoaded : il doit s’init si document.readyState !== "loading" */
       await loadScript('Code-chat_V05.js');
       window.dispatchEvent(new CustomEvent('agilo:chat-loader-ready', { detail: { ref: REF } }));
     } catch (e) {
