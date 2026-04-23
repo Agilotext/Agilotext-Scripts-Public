@@ -1095,6 +1095,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  /** Deux #chat-compose-footer (id dupliqué) = deux rangées d’icônes. On garde celui de la barre du textarea. */
+  function fixDuplicateChatFooters() {
+    const prompt = byId('chatPrompt');
+    const goodBar = prompt?.closest('#chat-compose-bar');
+    if (!goodBar) return;
+    const goodFooter = goodBar.querySelector('#chat-compose-footer');
+    if (!goodFooter) return;
+    const f = goodBar.closest('form');
+    if (!f) return;
+    f.querySelectorAll('[id="chat-compose-footer"]').forEach((el) => {
+      if (el !== goodFooter) el.remove();
+    });
+  }
+
   /** Formulaire de chat + nœuds associés, toujours scopés au bon #chatPrompt (évite les doublons d’id). */
   function getChatFormScope() {
     const p = byId('chatPrompt');
@@ -1122,6 +1136,14 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   function ensureChatChrome() {
     fixChatComposeNesting();
+    fixDuplicateChatFooters();
+    {
+      const bBar = byId('chatPrompt')?.closest('#chat-compose-bar');
+      const bTag = byId('chat-queue-badge');
+      if (bBar && bTag && !bBar.contains(bTag)) {
+        bBar.insertBefore(bTag, bBar.firstChild);
+      }
+    }
     const { prompt, formEl, bar, footer, sendBtn: scopedSend } = getChatFormScope();
 
     /* ---- A. Résolution du bouton d'envoi (embed OU JS-build) ---- */
@@ -1145,16 +1167,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnAsk) btnAsk.hidden = true;
     }
 
-    /* ---- B. Badge file d'attente (ajouter si absent) ---- */
+    /* ---- B. Badge file d'attente (ajouter si absent) — **dans** #chat-compose-bar, coin haut-droit (CSS), pas un bandeau jaune au-dessus */
     if (!byId('chat-queue-badge')) {
       const badge = document.createElement('span');
       badge.id = 'chat-queue-badge';
       badge.hidden = true;
       badge.setAttribute('aria-live', 'polite');
-      /* Avant la barre qui contient le textarea (jamais le 1er #chat-compose-bar global si id dupliqué) */
-      const anchor = bar || (prompt && prompt.parentElement ? prompt : null);
-      if (anchor && anchor.parentElement) {
-        anchor.parentElement.insertBefore(badge, anchor);
+      const barEl = byId('chatPrompt')?.closest('#chat-compose-bar') || bar;
+      if (barEl) {
+        barEl.insertBefore(badge, barEl.firstChild);
+      } else if (bar && bar.parentElement) {
+        bar.parentElement.insertBefore(badge, bar);
       }
     }
 
