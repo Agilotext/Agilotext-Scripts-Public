@@ -1,9 +1,9 @@
-// Agilotext - Chat IA (V05)
-// Modifs vs V04: message LinkedIn (onglet Conversation), pied de page email explicatif, prompt LinkedIn publiable/valorisation,
-// contexte utilisateur unifié (getUserContextForPrompt + timeout getMember + sanitization), thinking LinkedIn aussi en flux chat, email avec nom complet.
-// ⚠️ Ce fichier est chargé depuis GitHub
-// Correspond à: code-chat dans Webflow
-window.__agiloChatVersion = 'V05-email-block';
+// Agilotext - Chat IA (V06)
+// V06: scroll bulles user/assistant, postProcessEmail markdown, file d'attente messages, édition bulle user,
+//      PJ phase 1 (stub noms) + phase 2 (upload optionnel), dictée Web Speech API.
+// V05: message LinkedIn, email block, contexte Memberstack, etc.
+// ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow
+window.__agiloChatVersion = 'V06-queue-pj-dictation';
 
 document.addEventListener('DOMContentLoaded', () => {
   /* ================== DEBUG ================== */
@@ -25,6 +25,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const RECEIVE_RETRY_DELAY = 900;
   const AGILO_EMAIL_COMMENT_SPLIT = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(?:\(non envoyé\))?\s*:/i;
   const LINKEDIN_THINKING_MSG = 'Je travaille sur la rédaction du post LinkedIn. Je vous le dépose dans un instant dans l\'onglet Conversation.';
+  const ATTACHMENTS_ENABLED = window.__agiloAttachmentsEnabled === true;
+  const MAX_ATTACH_FILES = 3;
+  const MAX_ATTACH_MB = 10;
+  const PENDING_FILES = [];
+  const MSG_QUEUE = new Map();
+  let __dictationActive = false;
+  let __speechRecognition = null;
 
   /* ================== DOM ================== */
   const $ = (s, r = document) => r.querySelector(s);
@@ -524,7 +531,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
-      const head = raw.slice(0, 600);
+      const head = raw.replace(/\*\*/g, '').slice(0, 600);
       const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*(\(non envoyé\))?\s*:/i.test(raw));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
@@ -747,11 +754,105 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       bubbleDiv.textContent = m.text;
       bubbleDiv.style.whiteSpace = 'pre-wrap';
+      if (m.role === 'user') {
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;align-items:flex-start;gap:6px;justify-content:flex-end;width:100%';
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.className = 'agilo-msg-edit-btn';
+        editBtn.setAttribute('aria-label', 'Modifier ce message');
+        editBtn.title = 'Modifier';
+        editBtn.style.cssText = 'flex-shrink:0;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:12px';
+        editBtn.textContent = '✎';
+        editBtn.onclick = () => startEditUserMessage(idx);
+        wrap.appendChild(editBtn);
+        wrap.appendChild(bubbleDiv);
+        msgDiv.appendChild(metaDiv);
+        msgDiv.appendChild(wrap);
+        return msgDiv;
+      }
     }
 
     msgDiv.appendChild(metaDiv);
     msgDiv.appendChild(bubbleDiv);
     return msgDiv;
+  }
+
+  function userBubbleIndexInDom(msgs, targetIdx) {
+    let n = 0;
+    for (let i = 0; i < msgs.length; i++) {
+      if (msgs[i]?.role !== 'user') continue;
+      if (i === targetIdx) return n;
+      n++;
+    }
+    return -1;
+  }
+
+  function stripUserDisplaySuffix(text) {
+    return String(text || '').replace(/\n\n\(📎[\s\S]*\)\s*$/m, '').trim();
+  }
+
+  function startEditUserMessage(idx) {
+    const jobId = ACTIVE_JOB;
+    const msgs = getMsgs(jobId);
+    const m = msgs[idx];
+    if (!m || m.role !== 'user') return;
+    const domIdx = userBubbleIndexInDom(msgs, idx);
+    const msgRow = domIdx >= 0 ? chatView?.querySelectorAll('.msg--user')?.[domIdx] : null;
+    if (!msgRow || !chatView) return;
+
+    const initial = stripUserDisplaySuffix(m.text);
+    msgRow.querySelectorAll('.agilo-user-edit-ui').forEach((el) => el.remove());
+    const host = msgRow.querySelector('.msg-bubble')?.parentElement || msgRow;
+    const box = document.createElement('div');
+    box.className = 'agilo-user-edit-ui';
+    box.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;margin-top:4px';
+    const ta = document.createElement('textarea');
+    ta.value = initial;
+    ta.rows = Math.min(12, Math.max(3, initial.split('\n').length));
+    ta.style.cssText = 'width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #cbd5e1;font:inherit';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Annuler';
+    cancel.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer';
+    cancel.onclick = () => { box.remove(); };
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Enregistrer et renvoyer';
+    save.style.cssText = 'padding:6px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer';
+    save.onclick = () => {
+      const next = stripUserDisplaySuffix(ta.value);
+      if (!next) { toast('Message vide', 'error'); return; }
+      box.remove();
+      const live = getMsgs(jobId);
+      const ii = (m.id != null && String(m.id)) ? live.findIndex((x) => x.id === m.id && x.role === 'user') : idx;
+      const cut = ii >= 0 ? ii : idx;
+      const tail = live.length - cut - 1;
+      if (tail > 0 && !confirm('Cela supprime cette question et toutes les réponses suivantes. Continuer ?')) return;
+      live.splice(cut);
+      saveMsgs(jobId, live);
+      if (jobId === ACTIVE_JOB) {
+        MESSAGES = live;
+        render();
+      } else {
+        renderIfCurrent(jobId);
+      }
+      if (SENDING.has(jobId)) {
+        enqueueAsk(jobId, next, null);
+        toast('Message en file d’attente', 'success');
+        updateQueueBadge(jobId);
+        return;
+      }
+      void handleAskExecute(jobId, next, null).catch(() => {});
+    };
+    actions.appendChild(cancel);
+    actions.appendChild(save);
+    box.appendChild(ta);
+    box.appendChild(actions);
+    host.appendChild(box);
+    ta.focus();
   }
 
   function render() {
@@ -763,7 +864,7 @@ document.addEventListener('DOMContentLoaded', () => {
     MESSAGES.forEach((m, idx) => {
       chatView.appendChild(buildMessageNode(m, idx, lastAssistantIndex));
     });
-    chatView.setAttribute('data-agilo-chat', 'V05-email-block');
+    chatView.setAttribute('data-agilo-chat', 'V06-queue-pj-dictation');
     if (stickToBottom) {
       chatView.scrollTop = chatView.scrollHeight;
     } else {
@@ -822,6 +923,10 @@ document.addEventListener('DOMContentLoaded', () => {
           const lastAssistantIndex = lastAssistantIndexOf(msgs);
           const freshNode = buildMessageNode(msgs[i], i, lastAssistantIndex);
           existing.replaceWith(freshNode);
+          const thinking = typeof newText === 'string' && (newText.includes('thinking-indicator') || /Assistant réfléchit|Je travaille sur la rédaction du post LinkedIn/i.test(newText));
+          if (freshNode.classList.contains('msg--ai') && !thinking) {
+            scrollChatNodeIntoView(freshNode);
+          }
           return;
         }
       }
@@ -840,6 +945,189 @@ document.addEventListener('DOMContentLoaded', () => {
   function releaseSend(jobId) {
     SENDING.delete(jobId);
     if (jobId === ACTIVE_JOB) setBusy(false);
+  }
+
+  function scrollChatNodeIntoView(node) {
+    if (!node || !chatView) return;
+    requestAnimationFrame(() => {
+      try { node.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch { }
+    });
+  }
+
+  function updateQueueBadge(jobId) {
+    const el = byId('chat-queue-badge');
+    if (!el || jobId !== ACTIVE_JOB) return;
+    const n = (MSG_QUEUE.get(jobId) || []).length;
+    el.textContent = n ? String(n) : '';
+    el.hidden = !n;
+    el.setAttribute('aria-label', n ? `${n} message(s) en file d’attente` : '');
+  }
+
+  function enqueueAsk(jobId, q, intentHint) {
+    if (!MSG_QUEUE.has(jobId)) MSG_QUEUE.set(jobId, []);
+    MSG_QUEUE.get(jobId).push({ q, intentHint: intentHint || null });
+    updateQueueBadge(jobId);
+  }
+
+  function drainAskQueue(jobId) {
+    const qList = MSG_QUEUE.get(jobId);
+    if (!qList || !qList.length || SENDING.has(jobId)) return;
+    const next = qList.shift();
+    MSG_QUEUE.set(jobId, qList);
+    updateQueueBadge(jobId);
+    void handleAskExecute(jobId, next.q, next.intentHint).catch((e) => err('drainAskQueue', e));
+  }
+
+  function renderAttachmentsList() {
+    const host = byId('chat-attachments-list');
+    if (!host) return;
+    host.innerHTML = '';
+    PENDING_FILES.forEach((f, i) => {
+      const row = document.createElement('span');
+      row.className = 'agilo-chat-attach-chip';
+      row.style.cssText = 'display:inline-flex;align-items:center;gap:4px;margin:4px 6px 0 0;padding:2px 8px;border-radius:6px;background:#eef2ff;font-size:12px;color:#1e3a5f';
+      row.textContent = f.name;
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.setAttribute('aria-label', 'Retirer ' + f.name);
+      rm.textContent = '×';
+      rm.style.cssText = 'border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:0 2px';
+      rm.onclick = () => { PENDING_FILES.splice(i, 1); renderAttachmentsList(); };
+      row.appendChild(rm);
+      host.appendChild(row);
+    });
+  }
+
+  function ensureChatChrome() {
+    if (!form || byId('chat-queue-badge')) return;
+    const badge = document.createElement('span');
+    badge.id = 'chat-queue-badge';
+    badge.hidden = true;
+    badge.setAttribute('aria-live', 'polite');
+    badge.style.cssText = 'display:inline-block;min-width:1.25rem;margin-right:8px;padding:2px 6px;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;font-weight:600;vertical-align:middle';
+    if (btnAsk && btnAsk.parentElement) btnAsk.parentElement.insertBefore(badge, btnAsk);
+    const attachBtn = document.createElement('button');
+    attachBtn.type = 'button';
+    attachBtn.id = 'chat-attach-btn';
+    attachBtn.setAttribute('aria-label', 'Joindre un fichier');
+    attachBtn.title = 'Pièce jointe';
+    attachBtn.style.cssText = 'margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:14px;vertical-align:middle';
+    attachBtn.textContent = '📎';
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'chat-file-input';
+    fileInput.multiple = true;
+    fileInput.accept = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
+    fileInput.style.display = 'none';
+    const listHost = document.createElement('div');
+    listHost.id = 'chat-attachments-list';
+    listHost.style.cssText = 'margin-top:6px;flex-wrap:wrap';
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      const arr = Array.from(fileInput.files || []);
+      for (const f of arr) {
+        if (PENDING_FILES.length >= MAX_ATTACH_FILES) {
+          toast(`Maximum ${MAX_ATTACH_FILES} fichiers`, 'error');
+          break;
+        }
+        if (f.size > MAX_ATTACH_MB * 1024 * 1024) {
+          toast(`${f.name} : max ${MAX_ATTACH_MB} Mo`, 'error');
+          continue;
+        }
+        PENDING_FILES.push(f);
+      }
+      fileInput.value = '';
+      renderAttachmentsList();
+    });
+    /* Phase 2 dictée (option) : alignement Speechmatics / AgiloLiveVoiceController — voir scripts/shared/speechmatics-streaming.js */
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRec && input) {
+      const micBtn = document.createElement('button');
+      micBtn.type = 'button';
+      micBtn.id = 'chat-dictate-btn';
+      micBtn.setAttribute('aria-pressed', 'false');
+      micBtn.setAttribute('aria-label', 'Dicter');
+      micBtn.title = 'Dicter (navigateur)';
+      micBtn.style.cssText = 'margin-right:8px;padding:6px 10px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:14px;vertical-align:middle';
+      micBtn.textContent = '🎤';
+      const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
+      micBtn.addEventListener('click', () => {
+        if (__dictationActive) {
+          try { __speechRecognition && __speechRecognition.stop(); } catch { }
+          return;
+        }
+        const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!Rec) { toast('Dictée non supportée sur ce navigateur', 'error'); return; }
+        const rec = new Rec();
+        rec.lang = lang;
+        rec.interimResults = true;
+        rec.continuous = true;
+        rec.onresult = (ev) => {
+          let finalChunk = '';
+          for (let i = ev.resultIndex; i < ev.results.length; i++) {
+            const res = ev.results[i];
+            if (res.isFinal) finalChunk += res[0].transcript;
+          }
+          if (finalChunk) {
+            const cur = (input.value || '').trimEnd();
+            input.value = cur + (cur ? ' ' : '') + finalChunk.trim() + ' ';
+          }
+        };
+        rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
+        rec.onend = () => {
+          __dictationActive = false;
+          __speechRecognition = null;
+          micBtn.setAttribute('aria-pressed', 'false');
+          micBtn.textContent = '🎤';
+          if (btnAsk) btnAsk.disabled = false;
+        };
+        try {
+          rec.start();
+          __dictationActive = true;
+          __speechRecognition = rec;
+          micBtn.setAttribute('aria-pressed', 'true');
+          micBtn.textContent = '⏹';
+          if (btnAsk) btnAsk.disabled = true;
+        } catch (e) {
+          toast('Impossible de démarrer la dictée', 'error');
+        }
+      });
+      if (btnAsk && btnAsk.parentElement) {
+        btnAsk.parentElement.insertBefore(micBtn, btnAsk);
+      }
+    }
+    if (btnAsk && btnAsk.parentElement) {
+      btnAsk.parentElement.insertBefore(attachBtn, btnAsk);
+      btnAsk.parentElement.insertBefore(fileInput, btnAsk);
+    }
+    if (input && input.parentElement) {
+      input.parentElement.appendChild(listHost);
+    }
+  }
+
+  async function uploadPendingAttachments(auth, jobId) {
+    if (!ATTACHMENTS_ENABLED || !PENDING_FILES.length) return { attachmentIds: '', ok: true };
+    const fd = new FormData();
+    fd.append('username', auth.username);
+    fd.append('token', auth.token);
+    fd.append('edition', auth.edition);
+    fd.append('jobId', String(jobId));
+    PENDING_FILES.forEach((f) => fd.append('files', f, f.name));
+    try {
+      const r = await fetch(`${API_BASE}/uploadChatAttachment`, { method: 'POST', body: fd, mode: 'cors', credentials: 'omit' });
+      const text = await r.text();
+      let j = null;
+      try { j = JSON.parse(text); } catch { }
+      if (!r.ok || (j && j.status === 'KO')) {
+        warn('uploadChatAttachment fallback noms', r.status, text?.slice(0, 200));
+        return { attachmentIds: '', ok: false };
+      }
+      const ids = (j && (j.attachmentIds || j.ids)) ? String(j.attachmentIds || j.ids) : '';
+      return { attachmentIds: ids, ok: true };
+    } catch (e) {
+      warn('uploadChatAttachment network', e);
+      return { attachmentIds: '', ok: false };
+    }
   }
 
   // ✅ PAR CETTE VERSION AMÉLIORÉE (DYNAMIC THINKING V2)
@@ -1145,7 +1433,25 @@ document.addEventListener('DOMContentLoaded', () => {
   function postProcessEmail(text) {
     if (!text) return text;
     let t = sanitizeEmailModelArtifacts(text);
-    // Remove markdown bold/italics
+    t = t.replace(/^#{1,6}\s+(.*)$/gm, '$1');
+    t = t.replace(/^[-=*]{3,}\s*$/gm, '');
+    const dblStarCount = (t.match(/\*\*/g) || []).length;
+    if (dblStarCount % 2 !== 0) t = t.replace(/\*\*/g, '');
+    let singleStarCount = 0;
+    for (let i = 0; i < t.length; i++) {
+      if (t[i] !== '*') continue;
+      if (t[i + 1] === '*') { i++; continue; }
+      if (i > 0 && t[i - 1] === '*') continue;
+      singleStarCount++;
+    }
+    if (singleStarCount % 2 !== 0) {
+      t = t.split('').filter((c, i, arr) => {
+        if (c !== '*') return true;
+        if (arr[i + 1] === '*') return true;
+        if (i > 0 && arr[i - 1] === '*') return true;
+        return false;
+      }).join('');
+    }
     t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
     // Ensure "Objet:" is on its own line and separated from "Bonjour"
     t = t.replace(/^(Objet\s*:[^\n]*)(\s+Bonjour)/i, '$1\n\nBonjour');
@@ -1426,15 +1732,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function rePromptSubmit(args) {
     const url = `${API_BASE}/rePromptTranscript`;
-    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: enc({ ...args, promptContent: args.prompt }) });
+    const { prompt, attachmentIds, ...rest } = args;
+    const payload = { ...rest, promptContent: prompt };
+    if (attachmentIds) payload.attachmentIds = String(attachmentIds);
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' }, body: enc(payload) });
 
     const text = await resp.text(); let j = null; try { j = JSON.parse(text); } catch { }
     if (resp.status === 405 && !API_BASE.includes('api.agilotext.com')) {
       warn('405 sur', url, '→ retry sur api.agilotext.com');
       const alt = 'https://api.agilotext.com/api/v1';
+      const payload2 = { ...rest, promptContent: prompt };
+      if (attachmentIds) payload2.attachmentIds = String(attachmentIds);
       const r2 = await fetch(`${alt}/rePromptTranscript`, {
         method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: enc({ ...args, promptContent: args.prompt })
+        body: enc(payload2)
       });
       const t2 = await r2.text(); let j2 = null; try { j2 = JSON.parse(t2); } catch { }
       if (!r2.ok || j2?.status !== 'OK') throw new Error(j2?.errorMessage || `rePromptTranscript HTTP ${r2.status}`);
@@ -1501,55 +1812,31 @@ document.addEventListener('DOMContentLoaded', () => {
   function isInvalidTokenMessage(s = '') {
     return /invalid[_-]?token/i.test(String(s)) || /error[_-]?invalid[_-]?token/i.test(String(s));
   }
-  async function runChatFlowOnce(auth, jobId, prompt, onTick) {
-    await rePromptSubmit({ ...auth, jobId, prompt });
+  async function runChatFlowOnce(auth, jobId, prompt, onTick, attachmentIds = '') {
+    await rePromptSubmit({ ...auth, jobId, prompt, attachmentIds });
     await rePromptPoll({ ...auth, jobId, onTick });
     const answer = await rePromptReceive({ ...auth, jobId });
     return (answer || '').trim();
   }
-  async function runChatFlowWithReauth(jobId, prompt, onTick) {
+  async function runChatFlowWithReauth(jobId, prompt, onTick, attachmentIds = '') {
     let auth = await resolveAuth();
     try {
-      return await runChatFlowOnce(auth, jobId, prompt, onTick);
+      return await runChatFlowOnce(auth, jobId, prompt, onTick, attachmentIds);
     } catch (e) {
       if (isInvalidTokenMessage(e?.message)) {
         const fresh = await ensureToken(auth.username, auth.edition);
         if (fresh && fresh !== auth.token) {
           auth.token = fresh;
           try { localStorage.setItem(tokenKey(auth.username, auth.edition), fresh); } catch { }
-          return await runChatFlowOnce(auth, jobId, prompt, onTick);
+          return await runChatFlowOnce(auth, jobId, prompt, onTick, attachmentIds);
         }
       }
       throw e;
     }
   }
 
-  /* ================== ENVOI (question libre) ================== */
-  async function handleAsk() {
-    const jobId = ACTIVE_JOB;
-    if (SENDING.has(jobId)) return;       // garde rapide anti double-clic
-    SENDING.add(jobId);                    // lock immédiat
-    if (jobId === ACTIVE_JOB) setBusy(true);
-
-    // 1) Gate quotas
-    const mode = (Array.isArray(MESSAGES) && MESSAGES.some(m => m.role === 'assistant')) ? 'conversation' : 'quick';
-    const gate = window.AgiloQuota?.canSendChat({ mode }) || { ok: true };
-    if (!gate.ok) {
-      toast(gate.reason || 'Quota atteint', 'error');
-      if (/plan|Pro|Business/i.test(gate.reason || '')) window.AgiloGate?.showUpgrade('pro');
-      releaseSend(jobId);                 // ← libère le lock avant de sortir
-      return;
-    }
-
-    // 2) Auth & job
-    const auth = await resolveAuth();
-    if (!auth.username || !auth.token) { toast('Authentification manquante', 'error'); releaseSend(jobId); return; }
-    if (!jobId) { toast('Job ID manquant', 'error'); releaseSend(jobId); return; }
-
-    const q = (input?.value || '').trim();
-    if (!q) { input?.focus(); releaseSend(jobId); return; }
-
-    // Intent hint avant UI pour afficher le bon placeholder (ex. LinkedIn)
+  function resolveIntentHintForQuestion(q, intentHintPassed) {
+    if (intentHintPassed === 'linkedin' || intentHintPassed === 'email') return intentHintPassed;
     const lastIntent = getLastIntent();
     let intentHint = null;
     if (lastIntent === 'email' && !isExplicitLinkedIn(q)) {
@@ -1557,19 +1844,75 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (isExplicitLinkedIn(q)) intentHint = 'linkedin';
     if (isExplicitEmail(q)) intentHint = 'email';
+    return intentHint;
+  }
 
-    // 3) UI + envoi
-    pushMsg(jobId, { role: 'user', text: q, t: new Date().toISOString() });
+  /* ================== ENVOI (question libre) ================== */
+  async function handleAsk() {
+    const jobId = ACTIVE_JOB;
+    const q = (input?.value || '').trim();
+    if (!q) { input?.focus(); return; }
+    if (__dictationActive) { toast('Arrêtez la dictée avant d’envoyer', 'info'); return; }
+
+    const intentHint = resolveIntentHintForQuestion(q, null);
+
+    if (SENDING.has(jobId)) {
+      enqueueAsk(jobId, q, intentHint);
+      toast('Message en file d’attente', 'success');
+      input.value = '';
+      updateQueueBadge(jobId);
+      return;
+    }
+    await handleAskExecute(jobId, q, intentHint);
+  }
+
+  async function handleAskExecute(jobId, qRaw, intentHint) {
+    const q = String(qRaw || '').replace(/\n\n\(📎[\s\S]*\)\s*$/m, '').trim();
+    const intentResolved = resolveIntentHintForQuestion(q, intentHint);
+
+    SENDING.add(jobId);
+    if (jobId === ACTIVE_JOB) setBusy(true);
+
+    const mode = (Array.isArray(MESSAGES) && MESSAGES.some(m => m.role === 'assistant')) ? 'conversation' : 'quick';
+    const gate = window.AgiloQuota?.canSendChat({ mode }) || { ok: true };
+    if (!gate.ok) {
+      toast(gate.reason || 'Quota atteint', 'error');
+      if (/plan|Pro|Business/i.test(gate.reason || '')) window.AgiloGate?.showUpgrade('pro');
+      releaseSend(jobId);
+      drainAskQueue(jobId);
+      return;
+    }
+
+    const auth = await resolveAuth();
+    if (!auth.username || !auth.token) { toast('Authentification manquante', 'error'); releaseSend(jobId); drainAskQueue(jobId); return; }
+    if (!jobId) { toast('Job ID manquant', 'error'); releaseSend(jobId); drainAskQueue(jobId); return; }
+
+    const attachNames = PENDING_FILES.map(f => f.name);
+    const uploadRes = await uploadPendingAttachments(auth, jobId);
+    const attachmentIds = (uploadRes.ok && uploadRes.attachmentIds) ? String(uploadRes.attachmentIds) : '';
+    let qForPrompt = q;
+    if (attachNames.length && !attachmentIds) {
+      qForPrompt = `[Contexte — pièces jointes (noms) : ${attachNames.join(', ')}]\n\n${q}`;
+    } else if (attachmentIds) {
+      qForPrompt = `[Contexte — pièces jointes référencées côté serveur : ${attachmentIds}]\n\n${q}`;
+    }
+    PENDING_FILES.length = 0;
+    renderAttachmentsList();
+
+    const userDisplay = q + (attachNames.length ? `\n\n(📎 ${attachNames.join(', ')})` : '');
+    pushMsg(jobId, { role: 'user', text: userDisplay, t: new Date().toISOString(), id: mkRunId() });
     const runId = mkRunId();
-    const initialPlaceholder = intentHint === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
+    const initialPlaceholder = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
     pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
     input.value = '';
+    const userNodes = chatView?.querySelectorAll('.msg--user');
+    scrollChatNodeIntoView(userNodes?.[userNodes.length - 1] || null);
 
     try {
-      const prompt = await buildPrompt(q, intentHint);
-      const thinkingMsg = intentHint === 'linkedin' ? LINKEDIN_THINKING_MSG : null;
-      let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3), thinkingMsg));
-      const intentUsed = resolveIntent(q, intentHint);
+      const prompt = await buildPrompt(qForPrompt, intentResolved);
+      const thinkingMsg = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : null;
+      let txt = await runChatFlowWithReauth(jobId, prompt, (cycle) => updateThinking(jobId, runId, Math.floor(cycle / 3), thinkingMsg), attachmentIds);
+      const intentUsed = resolveIntent(q, intentResolved);
       if (intentUsed === 'linkedin') txt = postProcessLinkedIn(txt);
       else if (intentUsed === 'email') txt = postProcessEmail(txt);
       const renderMode = (intentUsed === 'linkedin' || intentUsed === 'email') ? 'plain' : 'md';
@@ -1581,7 +1924,8 @@ document.addEventListener('DOMContentLoaded', () => {
       replaceMsgById(jobId, runId, `Échec de la requête.\n\nErreur: ${e.message}`);
       toast('Erreur: ' + (e.message || 'échec'), 'error');
     } finally {
-      setBusyFor(jobId, false);           // ← remet l'UI et enlève le jobId de SENDING
+      setBusyFor(jobId, false);
+      drainAskQueue(jobId);
     }
   }
 
@@ -1591,7 +1935,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Ouvre l'onglet Conversation automatiquement
     try { openConversation(); } catch { }
     const jobId = ACTIVE_JOB;
-    if (SENDING.has(jobId)) return;       // anti double déclenchement
+    if (SENDING.has(jobId)) {
+      toast('Une requête est déjà en cours — réessayez dans un instant', 'info');
+      return;
+    }
     SENDING.add(jobId);
     if (jobId === ACTIVE_JOB) setBusy(true);
 
@@ -1630,7 +1977,8 @@ document.addEventListener('DOMContentLoaded', () => {
       replaceMsgById(jobId, runId, `Échec de la requête.\n\nErreur: ${e.message}`);
       toast('Erreur: ' + (e.message || 'échec'), 'error');
     } finally {
-      setBusyFor(jobId, false);           // ← remet l'UI et enlève le jobId de SENDING
+      setBusyFor(jobId, false);
+      drainAskQueue(jobId);
     }
   }
 
@@ -1665,6 +2013,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== WIRING ================== */
   loadHistory();
   render();
+  ensureChatChrome();
 
   /* Si un autre script modifie #chatView après nous (ex. opentech), on reprend la main */
   setTimeout(() => {
@@ -1678,13 +2027,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnAsk?.addEventListener('click', (e) => { e.preventDefault(); handleAsk(); });
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
-  input?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAsk(); } });
+  input?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    if (__dictationActive) { e.preventDefault(); return; }
+    e.preventDefault();
+    handleAsk();
+  });
 
   window.addEventListener('agilo:load', (ev) => {
     const newId = (ev.detail?.jobId ?? ev.detail ?? '').toString().trim();
     if (!newId || newId === ACTIVE_JOB) return;
     ACTIVE_JOB = newId;
     loadHistory(); render();
+    ensureChatChrome();
+    updateQueueBadge(newId);
   });
 
   window.addEventListener('popstate', () => {
@@ -1692,6 +2048,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (j !== ACTIVE_JOB) {
       ACTIVE_JOB = j;
       loadHistory(); render();
+      ensureChatChrome();
+      updateQueueBadge(j);
     }
   });
 
