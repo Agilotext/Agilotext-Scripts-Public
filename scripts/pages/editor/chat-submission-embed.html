@@ -125,22 +125,18 @@
   box-sizing: border-box;
 }
 
-/* PJ : gauche (order -1) + grisée */
+/* PJ : gauche (order -1) + légèrement atténuée mais cliquable */
 #agilo-chat-submission #chat-attach-btn {
   order: -1;
   margin-right: auto;
-  opacity: .38;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-#agilo-chat-submission #chat-attach-btn:not([disabled]) {
-  opacity: 1;
+  opacity: .55;
   cursor: pointer;
   pointer-events: auto;
 }
-#agilo-chat-submission #chat-attach-btn:not([disabled]):hover {
+#agilo-chat-submission #chat-attach-btn:hover {
   background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);
   color: var(--agilo-text, #020202);
+  opacity: .8;
 }
 
 /* Mic */
@@ -261,14 +257,12 @@
       <div id="chat-attachments-list"></div>
 
       <div id="chat-compose-footer">
-        <!-- Bouton PJ — disabled, phase 2 backend à venir -->
+        <!-- Bouton PJ — cliquable, affiche toast "bientôt disponible" -->
         <button
           type="button"
           id="chat-attach-btn"
           aria-label="Pièce jointe (bientôt disponible)"
-          title="Pièce jointe (bientôt disponible)"
-          disabled
-          aria-disabled="true"
+          title="Pièces jointes — bientôt disponibles"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
                fill="none" stroke="currentColor" stroke-width="2"
