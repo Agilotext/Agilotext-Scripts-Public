@@ -125,6 +125,123 @@
     });
   }
 
+  /** Clés V3_STRUCT (templates type Valtus) : hors de cette liste, les lignes sont du corps multi-lignes. */
+  const __AGILO_V3_STRUCT_KEYS = new Set([
+    'candidate_name', 'candidate_gender', 'client_name', 'client_company', 'mission_title', 'role_title',
+    'years_exp', 'tjm', 'dispo', 'dispo_literal', 'mobility',
+    'bullet1_title', 'bullet1_body', 'bullet2_title', 'bullet2_body', 'bullet3_title', 'bullet3_body',
+    'closing_reco'
+  ]);
+
+  function agiloParseV3StructInner(raw) {
+    if (!raw || !String(raw).trim()) return null;
+    const lines = String(raw).replace(/\r/g, '').split('\n');
+    const out = {};
+    let curKey = null;
+    const buf = [];
+    const flush = () => {
+      if (curKey) out[curKey] = buf.join('\n').trim();
+      buf.length = 0;
+    };
+    for (const line of lines) {
+      const m = line.match(/^([a-z][a-z0-9_]*)\s*:\s*(.*)$/i);
+      const key = m && m[1] ? m[1].toLowerCase() : '';
+      if (m && __AGILO_V3_STRUCT_KEYS.has(key)) {
+        flush();
+        curKey = key;
+        buf.push(m[2] != null ? m[2] : '');
+      } else if (curKey) {
+        buf.push(line);
+      }
+    }
+    flush();
+    return out;
+  }
+
+  function agiloFindV3StructSourceInIframe(idoc) {
+    if (!idoc || !idoc.body) return null;
+    try {
+      const w = idoc.createTreeWalker(idoc.body, NodeFilter.SHOW_COMMENT, null, false);
+      let n;
+      while ((n = w.nextNode())) {
+        const d = n.data || '';
+        if (d.indexOf('V3_STRUCT') !== -1) {
+          return d
+            .replace(/^\s*V3_STRUCT\s*/i, '')
+            .replace(/\s*END_V3_STRUCT\s*$/i, '')
+            .trim();
+        }
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      const html = idoc.documentElement && idoc.documentElement.innerHTML;
+      if (html) {
+        const m = html.match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
+        if (m) return m[1].trim();
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  function agiloBuildMailReadyHtmlFromV3(data) {
+    if (!data) return '';
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const p = (s) => (s ? `<p>${esc(s).replace(/\n/g, '<br>')}</p>` : '');
+    const block = (s) => (s
+      ? `<div style="white-space:pre-wrap;margin:0 0 12px;">${esc(s)}</div>`
+      : '');
+    const parts = [];
+    parts.push('<h3 class="zone-title">Mail prêt à copier-coller</h3>');
+    const segs = ['Présentation de profil'];
+    if (data.candidate_name) segs.push('— ' + data.candidate_name);
+    if (data.role_title) segs.push('— ' + data.role_title);
+    if (data.client_company) segs.push('— ' + data.client_company);
+    parts.push(`<p><strong>Objet :</strong> ${esc(segs.join(' '))}</p>`);
+    parts.push(p('Bonjour,'));
+    for (let i = 1; i <= 3; i++) {
+      const t = data['bullet' + i + '_title'];
+      const b = data['bullet' + i + '_body'];
+      if (t) parts.push(`<p><strong>${esc(t)}</strong></p>`);
+      if (b) parts.push(block(b));
+    }
+    const info = [];
+    if (data.tjm) info.push('TJM (indicatif) : ' + data.tjm + ' €/jour');
+    if (data.dispo_literal || data.dispo) info.push('Disponibilité : ' + (data.dispo_literal || data.dispo));
+    if (data.mobility) info.push('Mobilité : ' + data.mobility);
+    if (info.length) parts.push(p(info.join(' · ')));
+    if (data.closing_reco) parts.push(p(data.closing_reco));
+    parts.push(p('Cordialement,'));
+    return parts.join('\n');
+  }
+
+  /**
+   * Certains comptes rendus n’émettent le mail que dans le commentaire HTML &lt;!--V3_STRUCT--&gt; (invisible).
+   * Construit un .mail-ready à partir de ces champs clé/valeur.
+   */
+  function agiloMaterializeV3StructMailIfMissing(idoc) {
+    try {
+      if (!idoc || !idoc.body) return;
+      if (idoc.querySelector('.mail-ready')) return;
+      const src = agiloFindV3StructSourceInIframe(idoc);
+      if (!src) return;
+      const data = agiloParseV3StructInner(src);
+      if (!data) return;
+      if (!data.candidate_name && !data.bullet1_title && !data.bullet1_body) return;
+      const internal = idoc.querySelector('.internal-report');
+      if (!internal || !internal.parentNode) return;
+      const el = idoc.createElement('div');
+      el.className = 'mail-ready';
+      el.setAttribute('data-agilo-mail-from', 'v3-struct');
+      el.innerHTML = agiloBuildMailReadyHtmlFromV3(data);
+      internal.parentNode.insertBefore(el, internal);
+    } catch (e) {
+      if (window.AGILO_DEBUG) console.warn('[agilo] materialize v3 struct mail', e);
+    }
+  }
+
   /**
    * Compte-rendu HTML (document complet) : le bloc .mail-ready doit apparaître tôt
    * (souvent déplacé sous le long .internal-report par erreur de génération).
@@ -208,6 +325,7 @@
           idoc.write(html);
           idoc.close();
 
+          agiloMaterializeV3StructMailIfMissing(idoc);
           agiloReorderCompteRenduMailBlock(idoc);
           agiloInjectCompteRenduCopyBridge(idoc);
 
