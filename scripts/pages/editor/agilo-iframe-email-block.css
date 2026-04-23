@@ -1,0 +1,272 @@
+/* Bloc e-mail (même look que l’onglet Conversation / chat-embed-styles.css) — chargé dans l’iframe compte-rendu. */
+.agilo-email-block--in-summary {
+  margin: 0 0 18px;
+}
+
+.msg-bubble--email {
+  padding: 0;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.agilo-email-block {
+  width: 100%;
+  border-radius: var(--0-5_radius, .5rem);
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 12px rgba(0,0,0,.05);
+  overflow: hidden;
+}
+
+.agilo-email-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem .75rem;
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 4%, var(--agilo-surface-2, #f8f9fa));
+  border-bottom: 1px solid var(--agilo-border, #343a4040);
+  flex-wrap: wrap;
+}
+
+.agilo-email-block-label {
+  font: 600 .8rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-dim, var(--color--gris, #525252));
+}
+
+.agilo-email-block-tools {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+
+.agilo-email-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: .375rem;
+  background: transparent;
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
+  cursor: pointer;
+  text-decoration: none;
+  transition: color .15s, background .15s, transform .15s;
+}
+
+.agilo-email-btn:hover {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, transparent);
+}
+
+.agilo-email-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--agilo-primary) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.agilo-email-btn .agilo-email-icon {
+  flex-shrink: 0;
+}
+
+.agilo-email-open-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.agilo-email-btn-open .agilo-email-icon,
+.agilo-email-btn-open .agilo-email-send-icon {
+  color: var(--agilo-dim, #6b7280);
+}
+
+.agilo-email-btn-open:hover .agilo-email-icon,
+.agilo-email-btn-open:hover .agilo-email-send-icon {
+  color: var(--agilo-text, #020202);
+}
+
+.agilo-email-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--agilo-surface, var(--color--white, #fff));
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  z-index: 100;
+  list-style: none;
+}
+
+.agilo-email-dropdown[hidden] {
+  display: none;
+}
+
+.agilo-email-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  font: 500 .8125rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s;
+  text-align: left;
+}
+
+.agilo-email-dropdown-item:hover {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, var(--agilo-surface-2, #f8f9fa));
+  color: var(--agilo-text, #020202);
+}
+
+.agilo-email-dropdown-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.agilo-email-dropdown-icon svg,
+.agilo-email-dropdown-icon img {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: contain;
+}
+
+.agilo-email-dropdown-icon .agilo-email-logo-default {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
+
+.agilo-email-btn-copy.agilo-email-btn-copied {
+  color: var(--agilo-text, #020202);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, transparent);
+  transform: scale(1.05);
+}
+
+.agilo-email-block-subject {
+  padding: .5rem .75rem;
+  font: 600 .85rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  border-bottom: 1px solid var(--agilo-border, #343a4040);
+}
+
+.agilo-email-block-subject-label {
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  font-weight: 500;
+  margin-right: .35rem;
+}
+
+.agilo-email-block-body {
+  padding: 1rem 1.1rem;
+  font-size: .9rem;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  word-break: break-word;
+  line-height: 1.7;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.agilo-email-block-body--md p {
+  margin: .5em 0 .85em;
+  white-space: pre-line;
+}
+.agilo-email-block-body--md p:first-child { margin-top: 0; }
+.agilo-email-block-body--md p:last-child { margin-bottom: 0; }
+.agilo-email-block-body--md h1,
+.agilo-email-block-body--md h2,
+.agilo-email-block-body--md h3,
+.agilo-email-block-body--md h4 {
+  margin: 1em 0 .45em;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--agilo-text, #020202);
+}
+.agilo-email-block-body--md h1 { font-size: 1.2em; }
+.agilo-email-block-body--md h2 { font-size: 1.1em; }
+.agilo-email-block-body--md h3 { font-size: 1.04em; }
+.agilo-email-block-body--md h4 { font-size: 1em; }
+.agilo-email-block-body--md ul,
+.agilo-email-block-body--md ol {
+  margin: .35em 0 .7em 1.2em;
+  padding: 0;
+}
+.agilo-email-block-body--md li { margin: .2em 0; }
+.agilo-email-block-body--md hr {
+  border: 0;
+  margin: .75em 0;
+  border-top: 1px solid var(--agilo-divider, color-mix(in srgb, var(--agilo-text, #0b1222) 14%, transparent));
+}
+.agilo-email-block-body--md .md-table {
+  width: 100%;
+  font-size: .86em;
+  margin: .5em 0 1em;
+}
+.agilo-email-block-body--md strong { font-weight: 600; }
+.agilo-email-block-body--md a {
+  color: var(--agilo-primary, var(--color--blue, #174a96));
+  text-decoration: underline;
+  text-underline-offset: .12em;
+}
+.agilo-email-block-body--md blockquote {
+  margin: .55em 0;
+  padding: .4em .75em;
+  border-left: 3px solid color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 55%, transparent);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 4%, var(--agilo-surface-2, #f8f9fa));
+  border-radius: 0 .35rem .35rem 0;
+}
+
+.agilo-email-block-body .agilo-email-p {
+  margin: 0 0 1.35em;
+}
+.agilo-email-block-body .agilo-email-p:last-child {
+  margin-bottom: 0;
+}
+.agilo-email-block-body .agilo-email-p-first {
+  font-weight: 600;
+  color: var(--agilo-text, #020202);
+}
+
+.agilo-v3-mail-bodypre {
+  white-space: pre-wrap;
+  margin: 0 0 12px;
+  font: inherit;
+  color: inherit;
+}
+
+.agilo-email-internal-comment {
+  margin-top: 0;
+  padding: .6rem 1rem .75rem;
+  border-top: 1px solid var(--agilo-border, #343a4040);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 3%, var(--agilo-surface-2, #f8f9fa));
+}
+
+.agilo-email-ci-dessous {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font: 600 .75rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  margin-bottom: .35rem;
+}
+
+.agilo-email-ci-dessous svg {
+  flex-shrink: 0;
+  color: var(--agilo-dim, #525252);
+}
+
+.agilo-email-internal-comment-text {
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
