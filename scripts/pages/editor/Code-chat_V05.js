@@ -815,6 +815,24 @@ function agiloChatInitFromDom() {
     autosizeChatPrompt(prompt);
     updatePromptCounter(prompt);
     refreshSendReadyState();
+
+    // Le bouton PJ peut être recréé/dupliqué par Webflow ou d'autres scripts.
+    // On câble un handler direct sur l'instance active pour garantir le toast "bientôt disponible".
+    const attachBtn = byId('chat-attach-btn') || bar?.querySelector('#chat-attach-btn');
+    if (attachBtn && attachBtn.dataset.agiloAttachBound !== '1') {
+      attachBtn.dataset.agiloAttachBound = '1';
+      attachBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toast('Pièces jointes — bientôt disponibles. Vous pourrez attacher des PDF, images et autres documents.', 'info');
+      });
+      attachBtn.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toast('Pièces jointes — bientôt disponibles. Vous pourrez attacher des PDF, images et autres documents.', 'info');
+        }
+      });
+    }
   }
 
   function loadHistory() {
@@ -2755,7 +2773,7 @@ function agiloChatInitFromDom() {
       e.preventDefault();
       toast('Pièces jointes — bientôt disponibles. Vous pourrez attacher des PDF, images et autres documents.', 'info');
     }
-  });
+  }, true);
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
   form?.addEventListener('keydown', (e) => {
     if (e.target?.id !== 'chatPrompt') return;
