@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const MSG_QUEUE = new Map();
   let __dictationActive = false;
   let __speechRecognition = null;
+  let chatSendBtn = null; // bouton d'envoi créé par ensureChatChrome (remplace div#btnAsk Webflow)
 
   /* ================== DOM ================== */
   const $ = (s, r = document) => r.querySelector(s);
@@ -903,6 +904,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function setBusy(on) {
     btnAsk?.classList.toggle('is-busy', !!on);
+    chatSendBtn?.classList.toggle('is-busy', !!on);
     if (input) input.disabled = !!on;
   }
 
@@ -1132,6 +1134,7 @@ document.addEventListener('DOMContentLoaded', () => {
           micBtn.classList.remove('is-recording');
           micBtn.innerHTML = SVG_MIC;
           if (btnAsk) btnAsk.disabled = false;
+          if (chatSendBtn) chatSendBtn.disabled = false;
         };
         try {
           rec.start();
@@ -1141,6 +1144,7 @@ document.addEventListener('DOMContentLoaded', () => {
           micBtn.classList.add('is-recording');
           micBtn.innerHTML = SVG_MIC_STOP;
           if (btnAsk) btnAsk.disabled = true;
+          if (chatSendBtn) chatSendBtn.disabled = true;
         } catch (e) {
           toast('Impossible de démarrer la dictée', 'error');
         }
@@ -1148,11 +1152,19 @@ document.addEventListener('DOMContentLoaded', () => {
       footer.appendChild(micBtn);
     }
 
-    /* ---- 5. Bouton Envoyer — déplacé dans le footer avec icône SVG ---- */
-    if (btnAsk) {
-      btnAsk.innerHTML = SVG_SEND;
-      footer.appendChild(btnAsk);
-    }
+    /* ---- 5. Bouton Envoyer — nouveau nœud propre (évite les conflits CSS .button.bleu Webflow) ---- */
+    const sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.id = 'chat-send-btn';
+    sendBtn.setAttribute('aria-label', 'Envoyer');
+    sendBtn.title = 'Envoyer';
+    sendBtn.innerHTML = SVG_SEND;
+    footer.appendChild(sendBtn);
+    chatSendBtn = sendBtn;
+
+    /* Masquer le div#btnAsk Webflow — reste dans le DOM pour compatibilité (AgiloChat.ask etc.) */
+    if (btnAsk) btnAsk.hidden = true;
+
   }
 
   async function uploadPendingAttachments(auth, jobId) {
@@ -2076,6 +2088,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 200);
 
   btnAsk?.addEventListener('click', (e) => { e.preventDefault(); handleAsk(); });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#chat-send-btn')) { e.preventDefault(); handleAsk(); }
+  });
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
   input?.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
