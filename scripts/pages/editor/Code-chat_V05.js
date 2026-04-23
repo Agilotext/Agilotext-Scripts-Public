@@ -528,6 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let ACTIVE_JOB = getJobId();
   const LSKEY = () => `agilo:chat:${ACTIVE_JOB || 'nojob'}`;
   let MESSAGES = [];
+  let ACTIVE_USER_EDIT_IDX = -1;
   const WELCOME_MESSAGE = 'Bienvenue dans l\'assistant IA. Posez vos questions sur le transcript.';
 
   function isLegacyWelcomeMessage(msg) {
@@ -703,6 +704,56 @@ document.addEventListener('DOMContentLoaded', () => {
     return -1;
   };
 
+  function buildAssistantActionsNode(idx, lastAssistantIndex, copyText) {
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'msg-actions';
+    actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'msg-action-btn msg-action-copy';
+    copyBtn.setAttribute('title', 'Copier');
+    copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"/></svg> Copier';
+    const copyBtnDefaultHtml = copyBtn.innerHTML;
+    const copyBtnCheckedHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copié';
+    copyBtn.onclick = async () => {
+      const success = await copyToClipboard(copyText);
+      if (success) {
+        copyBtn.classList.add('msg-action-copy-copied');
+        copyBtn.innerHTML = copyBtnCheckedHtml;
+        setTimeout(() => {
+          copyBtn.classList.remove('msg-action-copy-copied');
+          copyBtn.innerHTML = copyBtnDefaultHtml;
+        }, 2000);
+        toast('Copié dans le presse-papier', 'success');
+      } else {
+        toast('Échec de la copie', 'error');
+      }
+    };
+    actionsDiv.appendChild(copyBtn);
+
+    const allowExport = idx === lastAssistantIndex;
+    if (allowExport) {
+      const sep = document.createElement('div');
+      sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
+      actionsDiv.appendChild(sep);
+
+      ['txt', 'docx', 'pdf', 'rtf'].forEach(fmt => {
+        const btn = document.createElement('button');
+        btn.textContent = fmt.toUpperCase();
+        btn.className = 'msg-action-btn';
+        btn.onclick = async () => {
+          const originalText = btn.textContent;
+          btn.disabled = true; btn.textContent = '...'; btn.style.opacity = '0.5';
+          try { await exportMessage(idx, fmt); toast(`Téléchargé en ${fmt.toUpperCase()}`, 'success'); }
+          catch (e) { toast(`Échec export ${fmt}`, 'error'); err('export failed', e); }
+          finally { btn.disabled = false; btn.textContent = originalText; btn.style.opacity = '1'; }
+        };
+        actionsDiv.appendChild(btn);
+      });
+    }
+    return actionsDiv;
+  }
+
   function buildMessageNode(m, idx, lastAssistantIndex) {
     const msgDiv = document.createElement('div');
     msgDiv.className = m.role === 'user' ? 'msg msg--user' : (m.role === 'assistant' ? 'msg msg--ai' : 'msg msg--sys');
@@ -728,8 +779,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const head3k = rawStripped.slice(0, 3000);
       const hasObjet = /\b(?:Objet|Sujet)\s*:\s*\S/i.test(head3k);
       const hasCommentaire = /Commentaire interne\s*(?:\(non envoyé\))?\s*:/i.test(raw);
+      const hasGreeting = /(^|\n)\s*(bonjour|bonsoir|hello|hi)\b/i.test(rawStripped);
+      const hasSignature = /(^|\n)\s*(cordialement|bien\s+à\s+vous|sinc[eè]res?\s+salutations|best\s+regards)\b/i.test(rawStripped);
       const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
-      const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent));
+      const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent)) || (emailByIntent && (hasGreeting || hasSignature));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -762,7 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const copyIconDefault = copyBtn.innerHTML;
         const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
         copyBtn.onclick = async () => {
-          const toCopy = parsed.body || m.text;
+          const toCopy = formatEmailCopyPayload(displayText);
           const success = await copyToClipboard(toCopy);
           if (success) {
             copyBtn.classList.add('agilo-email-btn-copied');
@@ -892,6 +945,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         bubbleDiv.classList.add('msg-bubble--email');
         bubbleDiv.appendChild(block);
+        bubbleDiv.appendChild(buildAssistantActionsNode(idx, lastAssistantIndex, formatEmailCopyPayload(displayText)));
       } else {
         if (renderMode === 'plain') {
           bubbleDiv.textContent = displayText;
@@ -905,54 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!isThinking && !displayText.includes('réfléchit') && !displayText.includes('⚠️') && displayText.length > 10) {
-          const actionsDiv = document.createElement('div');
-          actionsDiv.className = 'msg-actions';
-          actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
-
-          const copyBtn = document.createElement('button');
-          copyBtn.className = 'msg-action-btn msg-action-copy';
-          copyBtn.setAttribute('title', 'Copier');
-          copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"/></svg> Copier';
-          const copyBtnDefaultHtml = copyBtn.innerHTML;
-          const copyBtnCheckedHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copié';
-          copyBtn.onclick = async () => {
-            const success = await copyToClipboard(m.text);
-            if (success) {
-              copyBtn.classList.add('msg-action-copy-copied');
-              copyBtn.innerHTML = copyBtnCheckedHtml;
-              setTimeout(() => {
-                copyBtn.classList.remove('msg-action-copy-copied');
-                copyBtn.innerHTML = copyBtnDefaultHtml;
-              }, 2000);
-              toast('Copié dans le presse-papier', 'success');
-            } else {
-              toast('Échec de la copie', 'error');
-            }
-          };
-          actionsDiv.appendChild(copyBtn);
-
-          const allowExport = idx === lastAssistantIndex;
-          if (allowExport) {
-            const sep = document.createElement('div');
-            sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
-            actionsDiv.appendChild(sep);
-
-            ['txt', 'docx', 'pdf', 'rtf'].forEach(fmt => {
-              const btn = document.createElement('button');
-              btn.textContent = fmt.toUpperCase();
-              btn.className = 'msg-action-btn';
-              btn.onclick = async () => {
-                const originalText = btn.textContent;
-                btn.disabled = true; btn.textContent = '...'; btn.style.opacity = '0.5';
-                try { await exportMessage(idx, fmt); toast(`Téléchargé en ${fmt.toUpperCase()}`, 'success'); }
-                catch (e) { toast(`Échec export ${fmt}`, 'error'); err('export failed', e); }
-                finally { btn.disabled = false; btn.textContent = originalText; btn.style.opacity = '1'; }
-              };
-              actionsDiv.appendChild(btn);
-            });
-          }
-
-          bubbleDiv.appendChild(actionsDiv);
+          bubbleDiv.appendChild(buildAssistantActionsNode(idx, lastAssistantIndex, displayText));
         }
       }
     } else {
@@ -1024,6 +1031,11 @@ document.addEventListener('DOMContentLoaded', () => {
    * de contentEditable qui se duplique visuellement sur certains thèmes).
    */
   function startEditUserMessage(idx) {
+    if (ACTIVE_USER_EDIT_IDX === idx) return;
+    if (chatView?.querySelector('textarea.msg-bubble-edit-ta')) {
+      /* Réinitialise proprement un éditeur fantôme éventuel avant d'ouvrir un nouvel edit. */
+      render();
+    }
     const jobId = ACTIVE_JOB;
     const msgs = getMsgs(jobId);
     const m = msgs[idx];
@@ -1047,6 +1059,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const savedHtml = bubble.innerHTML;
     const savedText = initial;
+    ACTIVE_USER_EDIT_IDX = idx;
     bubble.textContent = '';
     bubble.classList.add('msg-bubble--editing');
     const ta = document.createElement('textarea');
@@ -1063,6 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const finishRestoreBubble = (textPlain) => {
       ta.remove();
       bubble.classList.remove('msg-bubble--editing');
+      ACTIVE_USER_EDIT_IDX = -1;
       if (textPlain != null) {
         bubble.textContent = textPlain;
         bubble.style.whiteSpace = 'pre-wrap';
@@ -1124,6 +1138,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function render() {
     if (!chatView) return;
+    ACTIVE_USER_EDIT_IDX = -1;
     const stickToBottom = isNearBottom(chatView);
     const prevScrollTop = chatView.scrollTop;
     const lastAssistantIndex = lastAssistantIndexOf(MESSAGES);
@@ -2037,6 +2052,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const body = bodyLines.join('\n').trim();
     return { subject, body };
+  }
+
+  function formatEmailCopyPayload(text) {
+    const parsed = parseEmailForCompose(text);
+    const subject = String(parsed.subject || '').trim();
+    const body = String(parsed.body || '').trim();
+    if (subject && body) return `Objet : ${subject}\n\n${body}`;
+    return body || String(text || '').trim();
   }
 
   function styleToBullets(style, lang) {
