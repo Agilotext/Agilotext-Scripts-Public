@@ -3,9 +3,40 @@
 //      PJ phase 1 (stub noms) + phase 2 (upload optionnel), dictée Web Speech API.
 // V05: message LinkedIn, email block, contexte Memberstack, etc.
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow
-window.__agiloChatVersion = 'V08-url-before-ls+api-first';
+window.__agiloChatVersion = 'V09-sync-stub+safe-init';
+
+/* Toujours exposer AgiloChat dès l’arrivée du script : si l’IIFE du DOMContentLoaded
+ * lève avant la fin, l’utilisateur a quand même getJobId (URL/LS) pour le debug. */
+(function agiloChatSyncBoot() {
+  function readJobIdFromEnv() {
+    try {
+      for (const w of [window, window.top, window.parent]) {
+        if (!w || !w.location) continue;
+        const q = new URLSearchParams(w.location.search || '').get('jobId');
+        if (q) return String(q).trim();
+        const h = w.location.hash || '';
+        const m = h.match(/(?:[?&]|^)jobId=([^&]+)/);
+        if (m) {
+          try { return decodeURIComponent(m[1]).trim(); } catch (e) { return m[1].trim(); }
+        }
+      }
+    } catch (e) { /* cross-origin */ }
+    try {
+      return (localStorage.getItem('currentJobId') || sessionStorage.getItem('currentJobId') || localStorage.getItem('jobId') || '').trim() || '';
+    } catch (e) { return ''; }
+  }
+  window.__agiloReadJobIdSync = readJobIdFromEnv;
+  if (!window.AgiloChat) {
+    window.AgiloChat = {
+      getJobId: readJobIdFromEnv,
+      ask: () => { console.warn('[agilo-chat] init pas terminée (ask indisponible)'); },
+      _agiloStub: true
+    };
+  }
+})();
 
 document.addEventListener('DOMContentLoaded', () => {
+  try {
   /* ================== DEBUG ================== */
   const FORCE_DEBUG = false; // ← laisse à false en prod
   const DEBUG = FORCE_DEBUG || new URLSearchParams(location.search).get('debugChat') === '1';
@@ -432,6 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /** Aligné sur pickJobId() des autres scripts éditeur — évite le toast "Job ID manquant"
    *  quand le DOM se construit après le chargement du script. */
   function getJobId() {
+    try {
     let fromLs = '';
     try {
       fromLs = (localStorage.getItem('currentJobId') || sessionStorage.getItem('currentJobId') || localStorage.getItem('jobId') || '').trim();
@@ -487,6 +519,10 @@ document.addEventListener('DOMContentLoaded', () => {
         || $('[name="jobId"]')?.value
         || ''
     ).trim();
+    } catch (e) {
+      err('getJobId', e);
+      try { return (typeof window.__agiloReadJobIdSync === 'function' ? window.__agiloReadJobIdSync() : '') || ''; } catch (e2) { return ''; }
+    }
   }
 
   /** Rafraîchit ACTIVE_JOB depuis le DOM — à appeler juste avant d'utiliser le jobId. */
@@ -589,7 +625,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ================== STATE ================== */
-  let ACTIVE_JOB = getJobId();
+  let ACTIVE_JOB = '';
+  try {
+    ACTIVE_JOB = getJobId() || '';
+  } catch (e) {
+    err('ACTIVE_JOB init', e);
+    try { ACTIVE_JOB = (typeof window.__agiloReadJobIdSync === 'function' && window.__agiloReadJobIdSync()) || ''; } catch (e2) { ACTIVE_JOB = ''; }
+  }
   const LSKEY = () => `agilo:chat:${ACTIVE_JOB || 'nojob'}`;
   let MESSAGES = [];
   let ACTIVE_USER_EDIT_IDX = -1;
@@ -2617,8 +2659,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 0);
   }
 
-  /* ================== API PUBLIQUE (avant l’init DOM : ensureChatChrome peut lever ; l’objet doit exister) ================== */
-  window.AgiloChat = {
+  /* ================== API PUBLIQUE (fusion sur le stub synchrone ; ne pas remplacer l’objet) ================== */
+  Object.assign(window.AgiloChat || {}, {
     ask: () => handleAsk(),
     hiddenAsk: (label, prompt) => handleHiddenAsk(label, prompt), // ← pour Insights
     openConversation,
@@ -2647,7 +2689,9 @@ document.addEventListener('DOMContentLoaded', () => {
         token: a.token ? a.token.slice(0, 6) + '…' + a.token.slice(-4) : '(none)'
       });
     }
-  };
+  });
+  try { delete window.AgiloChat._agiloStub; } catch (e) { /* */ }
+  window.AgiloChat._agiloReady = true;
 
   /* ================== WIRING ================== */
   try {
@@ -2722,4 +2766,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   log('ready. API_BASE=', API_BASE, 'jobId=', ACTIVE_JOB);
+  } catch (e) {
+    console.error('[agilo-chat] DOMContentLoaded (chat) — init incomplète, stub synchrone / __agiloReadJobIdSync conservés', e);
+    try {
+      if (!window.AgiloChat) {
+        window.AgiloChat = { getJobId: () => (typeof window.__agiloReadJobIdSync === 'function' ? window.__agiloReadJobIdSync() : '') };
+      }
+      window.AgiloChat._initError = e;
+    } catch (e2) { /* */ }
+  }
 });
