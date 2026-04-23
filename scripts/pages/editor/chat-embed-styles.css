@@ -498,135 +498,28 @@
   *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition:none !important; }
 }
 
-/* ===== BARRE DE COMPOSITION (V06 refonte) ===== */
-/* !important : Webflow (form, .w-form) impose souvent des boutons full-width et des conteneurs en colonne */
-#pane-chat #chat-compose-bar,
-#chat-compose-bar {
-  display: flex !important;
-  flex-direction: column !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box;
-  min-width: 0;
-  border: 1px solid var(--agilo-border, #cbd5e1);
-  border-radius: .75rem;
-  background: var(--agilo-surface, var(--color--white, #fff));
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
-  overflow: hidden;
-  transition: box-shadow .15s, border-color .15s;
-}
-#chat-compose-bar:focus-within {
-  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
-}
+/* ===== BARRE DE COMPOSITION (V07 — CSS métier uniquement) =====
+   Le layout visuel (flex, dimensions, boutons) est désormais dans
+   chat-submission-embed.html (copié dans l'Embed Webflow).
+   Ce bloc ne contient que les états fonctionnels partagés :
+   busy, recording, badge, masquage #btnAsk. */
 
-/* Textarea intégré — sans bordure propre */
-#chat-compose-bar #chatPrompt {
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-  background: transparent;
-  resize: none;
-  padding: .75rem 1rem .25rem;
-  width: 100% !important;
-  min-width: 0 !important;
-  min-height: 48px;
-  max-height: 180px;
-  font-size: .9375rem;
-  line-height: 1.55;
-  color: var(--agilo-text, var(--color--gris_foncé, #020202));
-  box-sizing: border-box !important;
-  flex: 1 1 auto;
-}
+/* Busy — bulle grisée pendant l'envoi */
+#chat-send-btn.is-busy,
+.agilo-chat-send.is-busy { opacity: .45; pointer-events: none; }
 
-/* Footer de la barre : PJ à gauche, mic + send à droite */
-#chat-compose-footer {
-  display: flex !important;
-  flex-direction: row !important;
-  flex-wrap: nowrap !important;
-  align-items: center !important;
-  width: 100% !important;
-  box-sizing: border-box;
-  min-width: 0;
-  gap: .2rem;
-  padding: .3rem .4rem;
-}
-/* Spacer — pousse mic + send vers la droite */
-#chat-compose-footer::before { content: ''; flex: 1; }
-
-/* Boutons icon-only dans la barre */
-#chat-attach-btn,
-#chat-dictate-btn,
-#chat-send-btn,
-#chat-compose-footer .agilo-chat-send {
-  display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  width: 2.1rem !important;
-  min-width: 2.1rem !important;
-  max-width: 2.1rem !important;
-  height: 2.1rem !important;
-  border-radius: 50%;
-  border: none;
-  background: transparent !important;
-  cursor: pointer;
-  transition: background .14s, color .14s, opacity .14s;
-  flex: 0 0 2.1rem !important;
-  color: var(--agilo-dim, #6b7280);
-  padding: 0 !important;
-  box-sizing: border-box;
-}
-
-/* PJ : positionnée à gauche (avant le spacer) + grisée */
-#chat-attach-btn {
-  order: -1;
-  margin-right: auto;
-  opacity: .38;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-/* override au cas où ATTACHMENTS_ENABLED serait true en phase 2 */
-#chat-attach-btn:not([disabled]) {
-  opacity: 1;
-  cursor: pointer;
-  pointer-events: auto;
-}
-#chat-attach-btn:not([disabled]):hover {
-  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);
-  color: var(--agilo-text, #020202);
-}
-
-/* Mic */
-#chat-dictate-btn:hover {
-  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);
-  color: var(--agilo-text, #020202);
-}
-#chat-dictate-btn.is-recording {
-  color: #ef4444;
-  animation: mic-pulse 1.2s ease-in-out infinite;
-}
+/* Mic — état enregistrement */
+#chat-dictate-btn.is-recording { color: #ef4444; animation: mic-pulse 1.2s ease-in-out infinite; }
 @keyframes mic-pulse {
   0%, 100% { background: transparent; }
   50%       { background: rgba(239,68,68,.12); }
 }
 
-/* Bouton Envoyer (#chat-send-btn — nœud propre, jamais ciblé par .button.bleu Webflow) */
-#chat-send-btn {
-  color: var(--agilo-primary, #174a96);
-}
-#chat-send-btn:hover {
-  background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent);
-}
-#chat-send-btn.is-busy {
-  opacity: .45;
-  pointer-events: none;
-}
-
-/* Le div#btnAsk Webflow : masqué en JS (hidden) + repli CSS si le vrai envoi #chat-send-btn est présent */
+/* Masquer l'ancien div#btnAsk Webflow en toutes circonstances */
 #btnAsk[hidden] { display: none !important; }
 #chat-compose-footer:has(#chat-send-btn) #btnAsk { display: none !important; }
 
-/* Badge file d'attente (au-dessus de la barre) */
+/* Badge file d'attente */
 #chat-queue-badge {
   display: inline-block;
   min-width: 1.25rem;
@@ -639,8 +532,45 @@
   font-weight: 600;
 }
 
+/* Mode JS-build fallback (data-agilo-compose="auto") — si l'embed n'est pas installé */
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--agilo-border, #cbd5e1);
+  border-radius: .75rem;
+  background: var(--agilo-surface, var(--color--white, #fff));
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar:focus-within {
+  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar #chatPrompt {
+  border: none; outline: none; box-shadow: none; background: transparent; resize: none;
+  padding: .75rem 1rem .25rem; width: 100%; min-height: 48px; max-height: 180px;
+  font-size: .9375rem; line-height: 1.55; color: var(--agilo-text, #020202); box-sizing: border-box;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-footer {
+  display: flex; flex-direction: row; align-items: center; gap: .2rem; padding: .3rem .4rem;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-footer::before { content: ''; flex: 1; }
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn,
+body:not(:has(#agilo-chat-submission)) #chat-dictate-btn,
+body:not(:has(#agilo-chat-submission)) #chat-send-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none; background: transparent;
+  cursor: pointer; flex: 0 0 2.1rem; color: var(--agilo-dim, #6b7280); padding: 0;
+  transition: background .14s, color .14s; box-sizing: border-box;
+}
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn { order: -1; margin-right: auto; opacity: .38; cursor: not-allowed; pointer-events: none; }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, #174a96); }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent); }
+
 @media (max-width: 40rem) {
-  #chat-compose-bar { border-radius: .55rem; }
-  #chat-compose-bar #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }
-  #chat-compose-footer { padding: .25rem .3rem; }
+  body:not(:has(#agilo-chat-submission)) #chat-compose-bar { border-radius: .55rem; }
+  body:not(:has(#agilo-chat-submission)) #chat-compose-bar #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }
 }

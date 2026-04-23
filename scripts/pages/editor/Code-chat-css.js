@@ -1,14 +1,585 @@
-// Agilotext - Chat CSS
-// Synchronisé avec scripts/pages/editor/chat-embed-styles.css
-// Correspond à: code-css-chat dans Webflow
+// Agilotext — CSS chat injecté (généré depuis chat-embed-styles.css)
+// V07 : barre d'envoi via Embed autonome — ne pas éditer à la main
+(function(){
+  if(document.getElementById('agilo-chat-css'))return;
+  const s=document.createElement('style');
+  s.id='agilo-chat-css';
+  s.textContent=`/* ===========================================================
+   CHAT / MESSAGES — Harmonisé avec tes variables globales
+   (aucune redéfinition de --color--* ici)
+   =========================================================== */
 
-(function () {
-  if (document.getElementById('agilo-chat-css')) return;
+/* Conteneur */
+#chatView{
+  display:flex;
+  flex-direction:column;
+  gap: .9rem;
+  padding: .25rem 0;
+  overflow:auto;
+}
 
-  const css = "/* ===========================================================\n   CHAT / MESSAGES — Harmonisé avec tes variables globales\n   (aucune redéfinition de --color--* ici)\n   =========================================================== */\n\n/* Conteneur */\n#chatView{\n  display:flex;\n  flex-direction:column;\n  gap: .9rem;\n  padding: .25rem 0;\n  overflow:auto;\n}\n\n/* Bouton occupé */\n#btnAsk.is-busy{ opacity:.65; pointer-events:none; }\n\n/* Message (conteneur) */\n.msg{\n  display:flex;\n  flex-direction:column;\n  max-width:72ch;\n  animation: chat-slide-in .28s ease-out;\n}\n.msg--user{ align-self:flex-end; }\n.msg--ai{   align-self:flex-start; }\n.msg--sys{  align-self:center; opacity:.85; }\n\n/* Petite meta (auteur/heure) */\n.msg-meta{\n  font:600 .72rem/1.2 system-ui,-apple-system,Segoe UI,Roboto;\n  color: var(--agilo-dim, var(--color--gris, #525252));\n  margin: 0 0 .35rem;\n}\n\n/* Bulle */\n.msg-bubble{\n  padding: .85rem 1rem;\n  border-radius: var(--0-5_radius, .5rem);\n  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n  box-shadow: var(--agilo-shadow, 0 1px 2px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.06));\n  white-space: normal;\n  line-height: 1.6;\n}\n\n/* Bulle “user” en primaire (contraste AA) */\n.msg--user .msg-bubble{\n  background: var(--agilo-primary, var(--color--blue, #174a96));\n  color: var(--color--white, #fff);\n  border-color: transparent;\n}\n\n/* ===== BLOC EMAIL (type ChatGPT) ===== */\n.msg-bubble--email {\n  padding: 0;\n  overflow: hidden;\n  max-width: 100%;\n}\n\n.agilo-email-block {\n  width: 100%;\n  border-radius: var(--0-5_radius, .5rem);\n  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));\n  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 12px rgba(0,0,0,.05);\n  overflow: hidden;\n}\n\n.agilo-email-block-header {\n  display: flex;\n  align-items: center;\n  justify-content: space-between;\n  gap: .5rem;\n  padding: .5rem .75rem;\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 4%, var(--agilo-surface-2, #f8f9fa));\n  border-bottom: 1px solid var(--agilo-border, #343a4040);\n  flex-wrap: wrap;\n}\n\n.agilo-email-block-label {\n  font: 600 .8rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;\n  color: var(--agilo-dim, var(--color--gris, #525252));\n}\n\n.agilo-email-block-tools {\n  display: flex;\n  align-items: center;\n  gap: .25rem;\n}\n\n/* Boutons icon-only style ChatGPT (Copy + Open in app) */\n.agilo-email-btn {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  gap: .25rem;\n  width: 2rem;\n  height: 2rem;\n  padding: 0;\n  border: none;\n  border-radius: .375rem;\n  background: transparent;\n  color: var(--agilo-dim, var(--color--gris, #6b7280));\n  cursor: pointer;\n  text-decoration: none;\n  transition: color .15s, background .15s, transform .15s;\n}\n\n.agilo-email-btn:hover {\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, transparent);\n}\n\n.agilo-email-btn:focus-visible {\n  outline: 2px solid color-mix(in srgb, var(--agilo-primary) 60%, transparent);\n  outline-offset: 2px;\n}\n\n.agilo-email-btn .agilo-email-icon {\n  flex-shrink: 0;\n}\n\n/* Bouton \"Open in app\" + dropdown (style ChatGPT) */\n.agilo-email-open-wrap {\n  position: relative;\n  display: inline-flex;\n}\n\n.agilo-email-btn-open .agilo-email-icon,\n.agilo-email-btn-open .agilo-email-send-icon {\n  color: var(--agilo-dim, #6b7280);\n}\n\n.agilo-email-btn-open:hover .agilo-email-icon,\n.agilo-email-btn-open:hover .agilo-email-send-icon {\n  color: var(--agilo-text, #020202);\n}\n\n.agilo-email-dropdown {\n  position: absolute;\n  top: 100%;\n  right: 0;\n  margin-top: 4px;\n  min-width: 180px;\n  padding: 6px;\n  border-radius: 8px;\n  background: var(--agilo-surface, var(--color--white, #fff));\n  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n  box-shadow: 0 2px 8px rgba(0,0,0,.08);\n  z-index: 100;\n  list-style: none;\n}\n\n.agilo-email-dropdown[hidden] {\n  display: none;\n}\n\n.agilo-email-dropdown-item {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n  width: 100%;\n  padding: 8px 10px;\n  border: none;\n  border-radius: 6px;\n  background: transparent;\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  font: 500 .8125rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;\n  text-decoration: none;\n  cursor: pointer;\n  transition: background .12s;\n  text-align: left;\n}\n\n.agilo-email-dropdown-item:hover {\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, var(--agilo-surface-2, #f8f9fa));\n  color: var(--agilo-text, #020202);\n}\n\n.agilo-email-dropdown-icon {\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  width: 20px;\n  height: 20px;\n  flex-shrink: 0;\n}\n\n.agilo-email-dropdown-icon svg,\n.agilo-email-dropdown-icon img {\n  width: 20px;\n  height: 20px;\n  display: block;\n  object-fit: contain;\n}\n\n.agilo-email-dropdown-icon .agilo-email-logo-default {\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n}\n\n.agilo-email-btn-copy.agilo-email-btn-copied {\n  color: var(--agilo-text, #020202);\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, transparent);\n  transform: scale(1.05);\n}\n\n.agilo-email-block-subject {\n  padding: .5rem .75rem;\n  font: 600 .85rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  border-bottom: 1px solid var(--agilo-border, #343a4040);\n}\n\n.agilo-email-block-subject-label {\n  color: var(--agilo-dim, var(--color--gris, #525252));\n  font-weight: 500;\n  margin-right: .35rem;\n}\n\n.agilo-email-block-body {\n  padding: 1rem 1.1rem;\n  font-size: .9rem;\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  word-break: break-word;\n  line-height: 1.7;\n  max-height: 50vh;\n  overflow-y: auto;\n}\n\n.agilo-email-block-body .agilo-email-p {\n  margin: 0 0 1.35em;\n}\n\n.agilo-email-block-body .agilo-email-p:last-child {\n  margin-bottom: 0;\n}\n\n.agilo-email-block-body .agilo-email-p-first {\n  font-weight: 600;\n  color: var(--agilo-text, #020202);\n}\n\n/* Bloc \"Ci-dessous\" (commentaire interne) */\n.agilo-email-internal-comment {\n  margin-top: 0;\n  padding: .6rem 1rem .75rem;\n  border-top: 1px solid var(--agilo-border, #343a4040);\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 3%, var(--agilo-surface-2, #f8f9fa));\n}\n\n.agilo-email-ci-dessous {\n  display: flex;\n  align-items: center;\n  gap: .4rem;\n  font: 600 .75rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;\n  color: var(--agilo-dim, var(--color--gris, #525252));\n  margin-bottom: .35rem;\n}\n\n.agilo-email-ci-dessous svg {\n  flex-shrink: 0;\n  color: var(--agilo-dim, #525252);\n}\n\n.agilo-email-internal-comment-text {\n  font-size: .85rem;\n  line-height: 1.5;\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n}\n\n/* Typo/rendu Markdown générique (sans wrapper .prose) */\n.msg-bubble h1,.msg-bubble h2,.msg-bubble h3{\n  margin:.8em 0 .4em; font-weight:700; line-height:1.3;\n}\n.msg-bubble h1{ font-size:1.5em; }\n.msg-bubble h2{ font-size:1.25em; }\n.msg-bubble h3{ font-size:1.05em; }\n.msg-bubble p{ margin:.45em 0; }\n.msg-bubble ul,.msg-bubble ol{ margin:.35em 0 .6em 1.25em; padding:0; }\n.msg-bubble li{ margin:.15em 0; }\n.msg-bubble hr{\n  border:0; margin:.6em 0;\n  border-top:1px solid var(--agilo-divider, color-mix(in srgb, var(--agilo-text, #0b1222) 14%, transparent));\n}\n.msg-bubble a{\n  color: var(--agilo-primary, var(--color--blue, #174a96));\n  text-decoration: underline;\n}\n.msg-bubble blockquote{\n  margin:.6em 0; padding:.45em .8em; border-radius:.35rem;\n  border-left:3px solid var(--agilo-primary, var(--color--blue, #174a96));\n  background: color-mix(in srgb,\n              var(--agilo-primary, var(--color--blue, #174a96)) 6%,\n              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));\n}\n.msg-bubble code{\n  font-family: ui-monospace, Menlo, monospace;\n  background: color-mix(in srgb,\n              var(--agilo-text, var(--color--gris_foncé, #020202)) 8%,\n              var(--agilo-surface, var(--color--white, #fff)));\n  padding:.05em .35em; border-radius:.3em;\n}\n.msg-bubble pre{\n  background: color-mix(in srgb,\n              var(--agilo-text, var(--color--gris_foncé, #020202)) 92%,\n              var(--agilo-surface, var(--color--white, #fff)));\n  color: var(--color--white, #fff);\n  padding:.7em .85em; border-radius: var(--0-5_radius, .5rem);\n  overflow:auto;\n}\n.msg-bubble pre code{ background:transparent; padding:0; }\n\n/* Barre d'actions sous la bulle (copier, export…) */\n.msg-actions,\n.msg-tools{\n  display:flex;\n  flex-wrap:wrap;\n  gap:.4rem;\n  margin:.45rem 0 0;\n  padding-top:.55rem;\n  border-top:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n}\n.msg-action-btn{\n  appearance:none;\n  cursor:pointer;\n  user-select:none;\n  display: inline-flex;\n  align-items: center;\n  gap: .35rem;\n  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  padding:.36rem .6rem;\n  border-radius:.45rem;\n  font:600 .78rem/1 system-ui,-apple-system,Segoe UI,Roboto;\n  transition: background .15s, transform .06s, color .15s, border-color .15s;\n}\n.msg-action-btn:hover{\n  background: color-mix(in srgb,\n              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)) 70%,\n              var(--agilo-primary, var(--color--blue, #174a96)) 30%);\n  color: var(--color--white, #fff);\n  border-color: transparent;\n}\n.msg-action-btn:active{ transform: translateY(.0625rem); }\n.msg-action-btn:focus-visible{\n  outline: var(--agilo-focus, 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));\n  outline-offset: 2px;\n}\n.msg-action-btn[disabled]{ opacity:.6; cursor:not-allowed; }\n\n.msg-action-copy-copied {\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, var(--agilo-surface-2, #f8f9fa)) !important;\n  color: var(--agilo-text, #020202) !important;\n  border-color: var(--agilo-border, rgba(0,0,0,.15)) !important;\n}\n\n/* Titres manquants (tu n'as que h1–h3 aujourd'hui) */\n.msg-bubble h4,.msg-bubble h5,.msg-bubble h6{\n  margin:.65em 0 .35em; font-weight:700; line-height:1.3;\n}\n.msg-bubble h4{ font-size:1.0em; }\n.msg-bubble h5{ font-size:.95em; }\n.msg-bubble h6{ font-size:.9em; }\n\n/* Tables Markdown (rend .md-table propre sans toucher le reste) */\n.msg-bubble table.md-table{\n  width:100%; border-collapse:collapse;\n  margin:.55em 0 .85em; font-size:.95em;\n  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n}\n.msg-bubble .md-table th,\n.msg-bubble .md-table td{\n  padding:.45em .6em; vertical-align:top;\n  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n}\n.msg-bubble .md-table thead th{\n  background: color-mix(in srgb,\n              var(--agilo-primary, var(--color--blue, #174a96)) 6%,\n              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));\n  font-weight:700;\n}\n.msg-bubble .md-table tbody tr:nth-child(odd){\n  background: color-mix(in srgb,\n              var(--agilo-text, var(--color--gris_foncé, #020202)) 3%,\n              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));\n}\n\n/* Sous-listes un peu plus compactes (complément, ne remplace rien) */\n.msg-bubble ul ul,\n.msg-bubble ol ol{ margin:.25em 0 .5em 1.25em; }\n\n/* Cases à cocher dans les listes */\n.msg-bubble li input[type=\"checkbox\"]{\n  margin-right:.35em; transform:translateY(2px);\n}\n\n/* (Optionnel) Boutons timecode que tu insères dans le HTML */\n.msg-bubble .agilo-tc{\n  display:inline-flex; align-items:center; gap:.25rem;\n  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));\n  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  padding:.08rem .35rem; border-radius:.35rem;\n  font:600 .78rem/1 system-ui,-apple-system,Segoe UI,Roboto; cursor:pointer;\n}\n.msg-bubble .agilo-tc:hover{\n  background: color-mix(in srgb,\n              var(--agilo-surface-2, #f8f9fa) 70%,\n              var(--agilo-primary, #174a96) 30%);\n  color:#fff; border-color:transparent;\n}\n/* Sous-listes rendues comme imbriquées même si le HTML est \"à plat\" */\n.msg-bubble li + ul,\n.msg-bubble li + ol{\n  margin-top:.25em;\n  margin-bottom:.5em;\n  margin-left:1.25em;\n}\n\n/* Citations : micro-rythme du texte interne */\n.msg-bubble blockquote p{ margin:.25em 0; }\n\n/* ===== INDICATEUR \"THINKING\" CHATGPT-STYLE ===== */\n.thinking-indicator {\n  display: inline-flex;\n  align-items: center;\n  gap: 8px;\n  color: var(--color--gris, #6b7280);\n  font-weight: 500;\n  font-size: 14px;\n}\n\n.thinking-dots {\n  display: inline-flex;\n  gap: 4px;\n}\n\n.thinking-dot {\n  width: 6px;\n  height: 6px;\n  border-radius: 50%;\n  background: var(--color--gris, #6b7280);\n  animation: thinking-pulse 1.4s ease-in-out infinite;\n}\n\n.thinking-dot:nth-child(1) { animation-delay: 0s; }\n.thinking-dot:nth-child(2) { animation-delay: 0.2s; }\n.thinking-dot:nth-child(3) { animation-delay: 0.4s; }\n\n@keyframes thinking-pulse {\n  0%, 60%, 100% {\n    opacity: 0.3;\n    transform: scale(0.8);\n  }\n  30% {\n    opacity: 1;\n    transform: scale(1);\n  }\n}\n\n/* Animation d'apparition */\n.thinking-indicator {\n  animation: thinking-fade-in 0.3s ease-out;\n}\n\n@keyframes thinking-fade-in {\n  from {\n    opacity: 0;\n    transform: translateY(10px);\n  }\n  to {\n    opacity: 1;\n    transform: translateY(0);\n  }\n}\n\n/* Petite animation d'arrivée */\n@keyframes chat-slide-in{\n  from{ opacity:0; transform:translateY(10px); }\n  to{   opacity:1; transform:translateY(0); }\n}\n\n/* Responsive */\n@media (max-width: 40rem){\n  #chatView{ gap: .7rem; }\n  .msg-bubble{ padding:.75rem .85rem; }\n  .msg-bubble--email { padding: 0; }\n  .msg-actions .msg-action-btn{ font-size:.74rem; }\n  .agilo-email-block-header { padding: .45rem .6rem; }\n  .agilo-email-block-body { padding: .6rem .75rem; max-height: 40vh; }\n}\n\n/* Respecte \"réduire les animations\" */\n@media (prefers-reduced-motion: reduce){\n  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition:none !important; }\n}\n\n/* ===== BARRE DE COMPOSITION (V06 refonte) ===== */\n/* !important : Webflow (form, .w-form) impose souvent des boutons full-width et des conteneurs en colonne */\n#pane-chat #chat-compose-bar,\n#chat-compose-bar {\n  display: flex !important;\n  flex-direction: column !important;\n  width: 100% !important;\n  max-width: 100% !important;\n  box-sizing: border-box;\n  min-width: 0;\n  border: 1px solid var(--agilo-border, #cbd5e1);\n  border-radius: .75rem;\n  background: var(--agilo-surface, var(--color--white, #fff));\n  box-shadow: 0 1px 3px rgba(0,0,0,.06);\n  overflow: hidden;\n  transition: box-shadow .15s, border-color .15s;\n}\n#chat-compose-bar:focus-within {\n  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);\n  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);\n}\n\n/* Textarea intégré — sans bordure propre */\n#chat-compose-bar #chatPrompt {\n  border: none !important;\n  outline: none !important;\n  box-shadow: none !important;\n  background: transparent;\n  resize: none;\n  padding: .75rem 1rem .25rem;\n  width: 100% !important;\n  min-width: 0 !important;\n  min-height: 48px;\n  max-height: 180px;\n  font-size: .9375rem;\n  line-height: 1.55;\n  color: var(--agilo-text, var(--color--gris_foncé, #020202));\n  box-sizing: border-box !important;\n  flex: 1 1 auto;\n}\n\n/* Footer de la barre : PJ à gauche, mic + send à droite */\n#chat-compose-footer {\n  display: flex !important;\n  flex-direction: row !important;\n  flex-wrap: nowrap !important;\n  align-items: center !important;\n  width: 100% !important;\n  box-sizing: border-box;\n  min-width: 0;\n  gap: .2rem;\n  padding: .3rem .4rem;\n}\n/* Spacer — pousse mic + send vers la droite */\n#chat-compose-footer::before { content: ''; flex: 1; }\n\n/* Boutons icon-only dans la barre */\n#chat-attach-btn,\n#chat-dictate-btn,\n#chat-send-btn,\n#chat-compose-footer .agilo-chat-send {\n  display: inline-flex !important;\n  align-items: center;\n  justify-content: center;\n  width: 2.1rem !important;\n  min-width: 2.1rem !important;\n  max-width: 2.1rem !important;\n  height: 2.1rem !important;\n  border-radius: 50%;\n  border: none;\n  background: transparent !important;\n  cursor: pointer;\n  transition: background .14s, color .14s, opacity .14s;\n  flex: 0 0 2.1rem !important;\n  color: var(--agilo-dim, #6b7280);\n  padding: 0 !important;\n  box-sizing: border-box;\n}\n\n/* PJ : positionnée à gauche (avant le spacer) + grisée */\n#chat-attach-btn {\n  order: -1;\n  margin-right: auto;\n  opacity: .38;\n  cursor: not-allowed;\n  pointer-events: none;\n}\n/* override au cas où ATTACHMENTS_ENABLED serait true en phase 2 */\n#chat-attach-btn:not([disabled]) {\n  opacity: 1;\n  cursor: pointer;\n  pointer-events: auto;\n}\n#chat-attach-btn:not([disabled]):hover {\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);\n  color: var(--agilo-text, #020202);\n}\n\n/* Mic */\n#chat-dictate-btn:hover {\n  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);\n  color: var(--agilo-text, #020202);\n}\n#chat-dictate-btn.is-recording {\n  color: #ef4444;\n  animation: mic-pulse 1.2s ease-in-out infinite;\n}\n@keyframes mic-pulse {\n  0%, 100% { background: transparent; }\n  50%       { background: rgba(239,68,68,.12); }\n}\n\n/* Bouton Envoyer (#chat-send-btn — nœud propre, jamais ciblé par .button.bleu Webflow) */\n#chat-send-btn {\n  color: var(--agilo-primary, #174a96);\n}\n#chat-send-btn:hover {\n  background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent);\n}\n#chat-send-btn.is-busy {\n  opacity: .45;\n  pointer-events: none;\n}\n\n/* Le div#btnAsk Webflow : masqué en JS (hidden) + repli CSS si le vrai envoi #chat-send-btn est présent */\n#btnAsk[hidden] { display: none !important; }\n#chat-compose-footer:has(#chat-send-btn) #btnAsk { display: none !important; }\n\n/* Badge file d'attente (au-dessus de la barre) */\n#chat-queue-badge {\n  display: inline-block;\n  min-width: 1.25rem;\n  margin-bottom: 4px;\n  padding: 2px 8px;\n  border-radius: 6px;\n  background: #fef3c7;\n  color: #92400e;\n  font-size: .75rem;\n  font-weight: 600;\n}\n\n@media (max-width: 40rem) {\n  #chat-compose-bar { border-radius: .55rem; }\n  #chat-compose-bar #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }\n  #chat-compose-footer { padding: .25rem .3rem; }\n}\n";
+/* Bouton occupé */
+#btnAsk.is-busy{ opacity:.65; pointer-events:none; }
 
-  const style = document.createElement('style');
-  style.id = 'agilo-chat-css';
-  style.textContent = css;
-  document.head.appendChild(style);
+/* Message (conteneur) */
+.msg{
+  display:flex;
+  flex-direction:column;
+  max-width:72ch;
+  animation: chat-slide-in .28s ease-out;
+}
+.msg--user{ align-self:flex-end; }
+.msg--ai{   align-self:flex-start; }
+.msg--sys{  align-self:center; opacity:.85; }
+
+/* Petite meta (auteur/heure) */
+.msg-meta{
+  font:600 .72rem/1.2 system-ui,-apple-system,Segoe UI,Roboto;
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  margin: 0 0 .35rem;
+}
+
+/* Bulle */
+.msg-bubble{
+  padding: .85rem 1rem;
+  border-radius: var(--0-5_radius, .5rem);
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  box-shadow: var(--agilo-shadow, 0 1px 2px rgba(0,0,0,.08), 0 4px 10px rgba(0,0,0,.06));
+  white-space: normal;
+  line-height: 1.6;
+}
+
+/* Bulle “user” en primaire (contraste AA) */
+.msg--user .msg-bubble{
+  background: var(--agilo-primary, var(--color--blue, #174a96));
+  color: var(--color--white, #fff);
+  border-color: transparent;
+}
+
+/* ===== BLOC EMAIL (type ChatGPT) ===== */
+.msg-bubble--email {
+  padding: 0;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.agilo-email-block {
+  width: 100%;
+  border-radius: var(--0-5_radius, .5rem);
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  box-shadow: 0 1px 3px rgba(0,0,0,.07), 0 4px 12px rgba(0,0,0,.05);
+  overflow: hidden;
+}
+
+.agilo-email-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem .75rem;
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 4%, var(--agilo-surface-2, #f8f9fa));
+  border-bottom: 1px solid var(--agilo-border, #343a4040);
+  flex-wrap: wrap;
+}
+
+.agilo-email-block-label {
+  font: 600 .8rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-dim, var(--color--gris, #525252));
+}
+
+.agilo-email-block-tools {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+}
+
+/* Boutons icon-only style ChatGPT (Copy + Open in app) */
+.agilo-email-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: .375rem;
+  background: transparent;
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
+  cursor: pointer;
+  text-decoration: none;
+  transition: color .15s, background .15s, transform .15s;
+}
+
+.agilo-email-btn:hover {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, transparent);
+}
+
+.agilo-email-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--agilo-primary) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.agilo-email-btn .agilo-email-icon {
+  flex-shrink: 0;
+}
+
+/* Bouton "Open in app" + dropdown (style ChatGPT) */
+.agilo-email-open-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.agilo-email-btn-open .agilo-email-icon,
+.agilo-email-btn-open .agilo-email-send-icon {
+  color: var(--agilo-dim, #6b7280);
+}
+
+.agilo-email-btn-open:hover .agilo-email-icon,
+.agilo-email-btn-open:hover .agilo-email-send-icon {
+  color: var(--agilo-text, #020202);
+}
+
+.agilo-email-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--agilo-surface, var(--color--white, #fff));
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  box-shadow: 0 2px 8px rgba(0,0,0,.08);
+  z-index: 100;
+  list-style: none;
+}
+
+.agilo-email-dropdown[hidden] {
+  display: none;
+}
+
+.agilo-email-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  font: 500 .8125rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background .12s;
+  text-align: left;
+}
+
+.agilo-email-dropdown-item:hover {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 6%, var(--agilo-surface-2, #f8f9fa));
+  color: var(--agilo-text, #020202);
+}
+
+.agilo-email-dropdown-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.agilo-email-dropdown-icon svg,
+.agilo-email-dropdown-icon img {
+  width: 20px;
+  height: 20px;
+  display: block;
+  object-fit: contain;
+}
+
+.agilo-email-dropdown-icon .agilo-email-logo-default {
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
+
+.agilo-email-btn-copy.agilo-email-btn-copied {
+  color: var(--agilo-text, #020202);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, transparent);
+  transform: scale(1.05);
+}
+
+.agilo-email-block-subject {
+  padding: .5rem .75rem;
+  font: 600 .85rem/1.3 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  border-bottom: 1px solid var(--agilo-border, #343a4040);
+}
+
+.agilo-email-block-subject-label {
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  font-weight: 500;
+  margin-right: .35rem;
+}
+
+.agilo-email-block-body {
+  padding: 1rem 1.1rem;
+  font-size: .9rem;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  word-break: break-word;
+  line-height: 1.7;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.agilo-email-block-body .agilo-email-p {
+  margin: 0 0 1.35em;
+}
+
+.agilo-email-block-body .agilo-email-p:last-child {
+  margin-bottom: 0;
+}
+
+.agilo-email-block-body .agilo-email-p-first {
+  font-weight: 600;
+  color: var(--agilo-text, #020202);
+}
+
+/* Bloc "Ci-dessous" (commentaire interne) */
+.agilo-email-internal-comment {
+  margin-top: 0;
+  padding: .6rem 1rem .75rem;
+  border-top: 1px solid var(--agilo-border, #343a4040);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 3%, var(--agilo-surface-2, #f8f9fa));
+}
+
+.agilo-email-ci-dessous {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  font: 600 .75rem/1.2 system-ui, -apple-system, Segoe UI, Roboto;
+  color: var(--agilo-dim, var(--color--gris, #525252));
+  margin-bottom: .35rem;
+}
+
+.agilo-email-ci-dessous svg {
+  flex-shrink: 0;
+  color: var(--agilo-dim, #525252);
+}
+
+.agilo-email-internal-comment-text {
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
+
+/* Typo/rendu Markdown générique (sans wrapper .prose) */
+.msg-bubble h1,.msg-bubble h2,.msg-bubble h3{
+  margin:.8em 0 .4em; font-weight:700; line-height:1.3;
+}
+.msg-bubble h1{ font-size:1.5em; }
+.msg-bubble h2{ font-size:1.25em; }
+.msg-bubble h3{ font-size:1.05em; }
+.msg-bubble p{ margin:.45em 0; }
+.msg-bubble ul,.msg-bubble ol{ margin:.35em 0 .6em 1.25em; padding:0; }
+.msg-bubble li{ margin:.15em 0; }
+.msg-bubble hr{
+  border:0; margin:.6em 0;
+  border-top:1px solid var(--agilo-divider, color-mix(in srgb, var(--agilo-text, #0b1222) 14%, transparent));
+}
+.msg-bubble a{
+  color: var(--agilo-primary, var(--color--blue, #174a96));
+  text-decoration: underline;
+}
+.msg-bubble blockquote{
+  margin:.6em 0; padding:.45em .8em; border-radius:.35rem;
+  border-left:3px solid var(--agilo-primary, var(--color--blue, #174a96));
+  background: color-mix(in srgb,
+              var(--agilo-primary, var(--color--blue, #174a96)) 6%,
+              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));
+}
+.msg-bubble code{
+  font-family: ui-monospace, Menlo, monospace;
+  background: color-mix(in srgb,
+              var(--agilo-text, var(--color--gris_foncé, #020202)) 8%,
+              var(--agilo-surface, var(--color--white, #fff)));
+  padding:.05em .35em; border-radius:.3em;
+}
+.msg-bubble pre{
+  background: color-mix(in srgb,
+              var(--agilo-text, var(--color--gris_foncé, #020202)) 92%,
+              var(--agilo-surface, var(--color--white, #fff)));
+  color: var(--color--white, #fff);
+  padding:.7em .85em; border-radius: var(--0-5_radius, .5rem);
+  overflow:auto;
+}
+.msg-bubble pre code{ background:transparent; padding:0; }
+
+/* Barre d'actions sous la bulle (copier, export…) */
+.msg-actions,
+.msg-tools{
+  display:flex;
+  flex-wrap:wrap;
+  gap:.4rem;
+  margin:.45rem 0 0;
+  padding-top:.55rem;
+  border-top:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+}
+.msg-action-btn{
+  appearance:none;
+  cursor:pointer;
+  user-select:none;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  padding:.36rem .6rem;
+  border-radius:.45rem;
+  font:600 .78rem/1 system-ui,-apple-system,Segoe UI,Roboto;
+  transition: background .15s, transform .06s, color .15s, border-color .15s;
+}
+.msg-action-btn:hover{
+  background: color-mix(in srgb,
+              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)) 70%,
+              var(--agilo-primary, var(--color--blue, #174a96)) 30%);
+  color: var(--color--white, #fff);
+  border-color: transparent;
+}
+.msg-action-btn:active{ transform: translateY(.0625rem); }
+.msg-action-btn:focus-visible{
+  outline: var(--agilo-focus, 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent));
+  outline-offset: 2px;
+}
+.msg-action-btn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+.msg-action-copy-copied {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, var(--agilo-surface-2, #f8f9fa)) !important;
+  color: var(--agilo-text, #020202) !important;
+  border-color: var(--agilo-border, rgba(0,0,0,.15)) !important;
+}
+
+/* Titres manquants (tu n'as que h1–h3 aujourd'hui) */
+.msg-bubble h4,.msg-bubble h5,.msg-bubble h6{
+  margin:.65em 0 .35em; font-weight:700; line-height:1.3;
+}
+.msg-bubble h4{ font-size:1.0em; }
+.msg-bubble h5{ font-size:.95em; }
+.msg-bubble h6{ font-size:.9em; }
+
+/* Tables Markdown (rend .md-table propre sans toucher le reste) */
+.msg-bubble table.md-table{
+  width:100%; border-collapse:collapse;
+  margin:.55em 0 .85em; font-size:.95em;
+  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+}
+.msg-bubble .md-table th,
+.msg-bubble .md-table td{
+  padding:.45em .6em; vertical-align:top;
+  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+}
+.msg-bubble .md-table thead th{
+  background: color-mix(in srgb,
+              var(--agilo-primary, var(--color--blue, #174a96)) 6%,
+              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));
+  font-weight:700;
+}
+.msg-bubble .md-table tbody tr:nth-child(odd){
+  background: color-mix(in srgb,
+              var(--agilo-text, var(--color--gris_foncé, #020202)) 3%,
+              var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa)));
+}
+
+/* Sous-listes un peu plus compactes (complément, ne remplace rien) */
+.msg-bubble ul ul,
+.msg-bubble ol ol{ margin:.25em 0 .5em 1.25em; }
+
+/* Cases à cocher dans les listes */
+.msg-bubble li input[type="checkbox"]{
+  margin-right:.35em; transform:translateY(2px);
+}
+
+/* (Optionnel) Boutons timecode que tu insères dans le HTML */
+.msg-bubble .agilo-tc{
+  display:inline-flex; align-items:center; gap:.25rem;
+  border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  padding:.08rem .35rem; border-radius:.35rem;
+  font:600 .78rem/1 system-ui,-apple-system,Segoe UI,Roboto; cursor:pointer;
+}
+.msg-bubble .agilo-tc:hover{
+  background: color-mix(in srgb,
+              var(--agilo-surface-2, #f8f9fa) 70%,
+              var(--agilo-primary, #174a96) 30%);
+  color:#fff; border-color:transparent;
+}
+/* Sous-listes rendues comme imbriquées même si le HTML est "à plat" */
+.msg-bubble li + ul,
+.msg-bubble li + ol{
+  margin-top:.25em;
+  margin-bottom:.5em;
+  margin-left:1.25em;
+}
+
+/* Citations : micro-rythme du texte interne */
+.msg-bubble blockquote p{ margin:.25em 0; }
+
+/* ===== INDICATEUR "THINKING" CHATGPT-STYLE ===== */
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color--gris, #6b7280);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.thinking-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color--gris, #6b7280);
+  animation: thinking-pulse 1.4s ease-in-out infinite;
+}
+
+.thinking-dot:nth-child(1) { animation-delay: 0s; }
+.thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes thinking-pulse {
+  0%, 60%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Animation d'apparition */
+.thinking-indicator {
+  animation: thinking-fade-in 0.3s ease-out;
+}
+
+@keyframes thinking-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Petite animation d'arrivée */
+@keyframes chat-slide-in{
+  from{ opacity:0; transform:translateY(10px); }
+  to{   opacity:1; transform:translateY(0); }
+}
+
+/* Responsive */
+@media (max-width: 40rem){
+  #chatView{ gap: .7rem; }
+  .msg-bubble{ padding:.75rem .85rem; }
+  .msg-bubble--email { padding: 0; }
+  .msg-actions .msg-action-btn{ font-size:.74rem; }
+  .agilo-email-block-header { padding: .45rem .6rem; }
+  .agilo-email-block-body { padding: .6rem .75rem; max-height: 40vh; }
+}
+
+/* Respecte "réduire les animations" */
+@media (prefers-reduced-motion: reduce){
+  *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition:none !important; }
+}
+
+/* ===== BARRE DE COMPOSITION (V07 — CSS métier uniquement) =====
+   Le layout visuel (flex, dimensions, boutons) est désormais dans
+   chat-submission-embed.html (copié dans l'Embed Webflow).
+   Ce bloc ne contient que les états fonctionnels partagés :
+   busy, recording, badge, masquage #btnAsk. */
+
+/* Busy — bulle grisée pendant l'envoi */
+#chat-send-btn.is-busy,
+.agilo-chat-send.is-busy { opacity: .45; pointer-events: none; }
+
+/* Mic — état enregistrement */
+#chat-dictate-btn.is-recording { color: #ef4444; animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse {
+  0%, 100% { background: transparent; }
+  50%       { background: rgba(239,68,68,.12); }
+}
+
+/* Masquer l'ancien div#btnAsk Webflow en toutes circonstances */
+#btnAsk[hidden] { display: none !important; }
+#chat-compose-footer:has(#chat-send-btn) #btnAsk { display: none !important; }
+
+/* Badge file d'attente */
+#chat-queue-badge {
+  display: inline-block;
+  min-width: 1.25rem;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+/* Mode JS-build fallback (data-agilo-compose="auto") — si l'embed n'est pas installé */
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--agilo-border, #cbd5e1);
+  border-radius: .75rem;
+  background: var(--agilo-surface, var(--color--white, #fff));
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar:focus-within {
+  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar #chatPrompt {
+  border: none; outline: none; box-shadow: none; background: transparent; resize: none;
+  padding: .75rem 1rem .25rem; width: 100%; min-height: 48px; max-height: 180px;
+  font-size: .9375rem; line-height: 1.55; color: var(--agilo-text, #020202); box-sizing: border-box;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-footer {
+  display: flex; flex-direction: row; align-items: center; gap: .2rem; padding: .3rem .4rem;
+}
+body:not(:has(#agilo-chat-submission)) #chat-compose-footer::before { content: ''; flex: 1; }
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn,
+body:not(:has(#agilo-chat-submission)) #chat-dictate-btn,
+body:not(:has(#agilo-chat-submission)) #chat-send-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2.1rem; height: 2.1rem; border-radius: 50%; border: none; background: transparent;
+  cursor: pointer; flex: 0 0 2.1rem; color: var(--agilo-dim, #6b7280); padding: 0;
+  transition: background .14s, color .14s; box-sizing: border-box;
+}
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn { order: -1; margin-right: auto; opacity: .38; cursor: not-allowed; pointer-events: none; }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, #174a96); }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent); }
+
+@media (max-width: 40rem) {
+  body:not(:has(#agilo-chat-submission)) #chat-compose-bar { border-radius: .55rem; }
+  body:not(:has(#agilo-chat-submission)) #chat-compose-bar #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }
+}
+`;
+  document.head.appendChild(s);
 })();

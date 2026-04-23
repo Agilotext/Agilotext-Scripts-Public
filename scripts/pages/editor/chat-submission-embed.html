@@ -1,0 +1,273 @@
+<!--
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║  AGILOTEXT — Zone d'envoi chat (Embed Webflow)                  ║
+  ║  Remplace : wrapper-chat-submission → Embed                      ║
+  ║                                                                  ║
+  ║  Instructions :                                                  ║
+  ║  1. Dans Webflow Navigator, supprimer wrapper-chat-submission    ║
+  ║  2. À sa place, ajouter un élément "Embed"                       ║
+  ║  3. Copier-coller tout le contenu de ce fichier dedans           ║
+  ║  4. Publier                                                      ║
+  ║                                                                  ║
+  ║  Contrat DOM (attendu par Code-chat_V05.js) :                    ║
+  ║    #wf-form-chat   → form (le script cible byId('wf-form-chat')) ║
+  ║    #chatPrompt     → textarea                                    ║
+  ║    #chat-compose-bar   → wrapper flex colonne                    ║
+  ║    #chat-compose-footer → footer flex ligne (icônes + bouton)   ║
+  ║    #chat-send-btn  → bouton d'envoi (chatSendBtn JS)             ║
+  ║    #chat-queue-badge   → badge file d'attente (créé par JS)      ║
+  ║    #chat-attachments-list → zone PJ phase 2 (créé par JS)        ║
+  ║                                                                  ║
+  ║  Version : 1.07-editor-chat-ux                                   ║
+  ╚══════════════════════════════════════════════════════════════════╝
+-->
+
+<style>
+/* ── Scope strict : tout sous #agilo-chat-submission ─────────────── */
+#agilo-chat-submission {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+/* Barre de composition */
+#agilo-chat-submission #chat-compose-bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--agilo-border, #cbd5e1);
+  border-radius: .75rem;
+  background: var(--agilo-surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  overflow: hidden;
+  transition: box-shadow .15s, border-color .15s;
+}
+#agilo-chat-submission #chat-compose-bar:focus-within {
+  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+}
+
+/* Textarea */
+#agilo-chat-submission #chatPrompt {
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  resize: none;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 48px;
+  max-height: 180px;
+  padding: .75rem 1rem .25rem;
+  font-size: .9375rem;
+  line-height: 1.55;
+  color: var(--agilo-text, #020202);
+  font-family: inherit;
+}
+#agilo-chat-submission #chatPrompt::placeholder {
+  color: var(--agilo-dim, #9ca3af);
+}
+
+/* Footer icônes */
+#agilo-chat-submission #chat-compose-footer {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: .2rem;
+  padding: .3rem .4rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Pousse mic+send vers la droite */
+#agilo-chat-submission #chat-compose-footer::before {
+  content: '';
+  flex: 1;
+}
+
+/* Boutons icon-only */
+#agilo-chat-submission #chat-attach-btn,
+#agilo-chat-submission #chat-dictate-btn,
+#agilo-chat-submission #chat-send-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  min-width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 2.1rem;
+  color: var(--agilo-dim, #6b7280);
+  padding: 0;
+  transition: background .14s, color .14s, opacity .14s;
+  font-size: 0; /* masque tout texte résiduel */
+  box-sizing: border-box;
+}
+
+/* PJ : gauche (order -1) + grisée */
+#agilo-chat-submission #chat-attach-btn {
+  order: -1;
+  margin-right: auto;
+  opacity: .38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+#agilo-chat-submission #chat-attach-btn:not([disabled]) {
+  opacity: 1;
+  cursor: pointer;
+  pointer-events: auto;
+}
+#agilo-chat-submission #chat-attach-btn:not([disabled]):hover {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);
+  color: var(--agilo-text, #020202);
+}
+
+/* Mic */
+#agilo-chat-submission #chat-dictate-btn:hover {
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent);
+  color: var(--agilo-text, #020202);
+}
+#agilo-chat-submission #chat-dictate-btn.is-recording {
+  color: #ef4444;
+  animation: agilo-mic-pulse 1.2s ease-in-out infinite;
+}
+@keyframes agilo-mic-pulse {
+  0%, 100% { background: transparent; }
+  50%       { background: rgba(239,68,68,.12); }
+}
+
+/* Bouton Envoyer */
+#agilo-chat-submission #chat-send-btn {
+  color: var(--agilo-primary, #174a96);
+}
+#agilo-chat-submission #chat-send-btn:hover {
+  background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent);
+}
+#agilo-chat-submission #chat-send-btn.is-busy {
+  opacity: .45;
+  pointer-events: none;
+}
+#agilo-chat-submission #chat-send-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--agilo-primary, #174a96) 60%, transparent);
+  outline-offset: 2px;
+}
+
+/* Div#btnAsk Webflow (si encore présent lors de la migration) */
+#agilo-chat-submission #btnAsk[hidden],
+#btnAsk[hidden] {
+  display: none !important;
+}
+
+/* Badge file d'attente (injecté par JS) */
+#agilo-chat-submission #chat-queue-badge {
+  display: inline-block;
+  min-width: 1.25rem;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: .75rem;
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 40rem) {
+  #agilo-chat-submission #chat-compose-bar { border-radius: .55rem; }
+  #agilo-chat-submission #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }
+  #agilo-chat-submission #chat-compose-footer { padding: .25rem .3rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #agilo-chat-submission * { animation-duration: .001ms !important; transition: none !important; }
+}
+</style>
+
+<div id="agilo-chat-submission">
+    <!--
+    FORM CONTRACT — validation Turnstile/hCaptcha :
+
+    ✅ Pas besoin de Turnstile ici.
+       Le chat Agilotext appelle directement son API (resolveAuth / Memberstack JWT).
+       Webflow Forms (w-form) n'est PAS utilisé : le script empêche tout POST natif
+       via onsubmit="return false" et les listeners JS (handleAsk).
+
+    ✅ Blocs w-form-done / w-form-fail supprimés.
+       Le feedback utilisateur passe exclusivement par le système de toasts JS
+       (toast() dans Code-chat_V05.js) et les bulles du chat.
+
+    ✅ Aucun champ caché Turnstile/CSRF n'est attendu par l'API.
+       Si à l'avenir une protection anti-spam est ajoutée côté backend,
+       le champ sera injecté dynamiquement par JS (pas besoin de modifier ce HTML).
+
+    RISQUE résiduel à vérifier lors de la mise en prod :
+    - S'assurer qu'un autre embed ou script Webflow ne tente pas d'initialiser
+      Turnstile globalement sur la page (vérifier les Custom Code de page/site).
+    - Confirmer que la suppression de wrapper-chat-submission n'a pas retiré
+      un #wf-form-chat utilisé par un AUTRE composant de la page.
+  -->
+  <form id="wf-form-chat" action="#" onsubmit="return false;" novalidate aria-label="Envoyer un message à l'IA">
+
+    <div id="chat-compose-bar">
+      <textarea
+        id="chatPrompt"
+        name="chatPrompt"
+        class="input-chat"
+        rows="2"
+        placeholder="Posez votre question…"
+        lang="fr"
+        autocomplete="off"
+        spellcheck="true"
+        aria-label="Message à l'IA"
+      ></textarea>
+
+      <!-- Zone PJ (remplie par JS en phase 2) -->
+      <div id="chat-attachments-list"></div>
+
+      <div id="chat-compose-footer">
+        <!-- Bouton PJ — disabled, phase 2 backend à venir -->
+        <button
+          type="button"
+          id="chat-attach-btn"
+          aria-label="Pièce jointe (bientôt disponible)"
+          title="Pièce jointe (bientôt disponible)"
+          disabled
+          aria-disabled="true"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+
+        <!--
+          Bouton mic — injecté par JS si SpeechRecognition disponible.
+          On laisse un placeholder vide ici ; le JS y attachera #chat-dictate-btn.
+        -->
+
+        <!-- Bouton Envoyer -->
+        <button
+          type="button"
+          id="chat-send-btn"
+          class="agilo-chat-send"
+          aria-label="Envoyer"
+          title="Envoyer"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="22" y1="2" x2="11" y2="13"/>
+            <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </form>
+</div>
