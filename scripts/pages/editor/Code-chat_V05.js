@@ -33,6 +33,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let __dictationActive = false;
   let __speechRecognition = null;
   let chatSendBtn = null; // bouton d'envoi créé par ensureChatChrome (remplace div#btnAsk Webflow)
+  /* Édition de message utilisateur (style ChatGPT) : null si pas d'édition en cours */
+  let pendingUserEdit = null; // { jobId, idx, msgId? }
 
   /* ================== DOM ================== */
   const $ = (s, r = document) => r.querySelector(s);
@@ -791,20 +793,43 @@ document.addEventListener('DOMContentLoaded', () => {
       bubbleDiv.textContent = m.text;
       bubbleDiv.style.whiteSpace = 'pre-wrap';
       if (m.role === 'user') {
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'display:flex;align-items:flex-start;gap:6px;justify-content:flex-end;width:100%';
-        const editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.className = 'agilo-msg-edit-btn';
-        editBtn.setAttribute('aria-label', 'Modifier ce message');
-        editBtn.title = 'Modifier';
-        editBtn.style.cssText = 'flex-shrink:0;padding:4px 8px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:12px';
-        editBtn.textContent = '✎';
-        editBtn.onclick = () => startEditUserMessage(idx);
-        wrap.appendChild(editBtn);
-        wrap.appendChild(bubbleDiv);
+        /* ─── Barre d'actions bas-droite (copy + éditer) ─── */
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'msg-user-actions';
+
+        const SVG_COPY_U = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path fill="none" d="M0 0h24v24H0z"/><rect fill="none" height="24" width="24"/><path d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"/></svg>`;
+        const SVG_COPY_CHECK_U = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+        const SVG_EDIT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+
+        const copyUBtn = document.createElement('button');
+        copyUBtn.type = 'button';
+        copyUBtn.className = 'msg-user-action-btn';
+        copyUBtn.setAttribute('aria-label', 'Copier ce message');
+        copyUBtn.title = 'Copier';
+        copyUBtn.innerHTML = SVG_COPY_U;
+        copyUBtn.onclick = async () => {
+          const ok = await copyToClipboard(stripUserDisplaySuffix(m.text));
+          if (ok) {
+            copyUBtn.innerHTML = SVG_COPY_CHECK_U;
+            toast('Copié', 'success');
+            setTimeout(() => { copyUBtn.innerHTML = SVG_COPY_U; }, 1800);
+          } else toast('Échec de la copie', 'error');
+        };
+
+        const editUBtn = document.createElement('button');
+        editUBtn.type = 'button';
+        editUBtn.className = 'msg-user-action-btn';
+        editUBtn.setAttribute('aria-label', 'Modifier ce message');
+        editUBtn.title = 'Modifier';
+        editUBtn.innerHTML = SVG_EDIT;
+        editUBtn.onclick = () => startEditUserMessage(idx);
+
+        actionsDiv.appendChild(copyUBtn);
+        actionsDiv.appendChild(editUBtn);
+
         msgDiv.appendChild(metaDiv);
-        msgDiv.appendChild(wrap);
+        msgDiv.appendChild(bubbleDiv);
+        msgDiv.appendChild(actionsDiv);
         return msgDiv;
       }
     }
@@ -828,67 +853,37 @@ document.addEventListener('DOMContentLoaded', () => {
     return String(text || '').replace(/\n\n\(📎[\s\S]*\)\s*$/m, '').trim();
   }
 
+  /**
+   * Édition de message utilisateur — style ChatGPT.
+   * Remplit le textarea principal et pose pendingUserEdit.
+   * Le prochain envoi (handleAsk) tronquera l'historique et renverra.
+   */
   function startEditUserMessage(idx) {
     const jobId = ACTIVE_JOB;
     const msgs = getMsgs(jobId);
     const m = msgs[idx];
     if (!m || m.role !== 'user') return;
-    const domIdx = userBubbleIndexInDom(msgs, idx);
-    const msgRow = domIdx >= 0 ? chatView?.querySelectorAll('.msg--user')?.[domIdx] : null;
-    if (!msgRow || !chatView) return;
 
     const initial = stripUserDisplaySuffix(m.text);
-    msgRow.querySelectorAll('.agilo-user-edit-ui').forEach((el) => el.remove());
-    const host = msgRow.querySelector('.msg-bubble')?.parentElement || msgRow;
-    const box = document.createElement('div');
-    box.className = 'agilo-user-edit-ui';
-    box.style.cssText = 'display:flex;flex-direction:column;gap:8px;width:100%;max-width:100%;margin-top:4px';
-    const ta = document.createElement('textarea');
-    ta.value = initial;
-    ta.rows = Math.min(12, Math.max(3, initial.split('\n').length));
-    ta.style.cssText = 'width:100%;box-sizing:border-box;padding:8px;border-radius:8px;border:1px solid #cbd5e1;font:inherit';
-    const actions = document.createElement('div');
-    actions.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.textContent = 'Annuler';
-    cancel.style.cssText = 'padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer';
-    cancel.onclick = () => { box.remove(); };
-    const save = document.createElement('button');
-    save.type = 'button';
-    save.textContent = 'Enregistrer et renvoyer';
-    save.style.cssText = 'padding:6px 12px;border-radius:8px;border:none;background:#2563eb;color:#fff;cursor:pointer';
-    save.onclick = () => {
-      const next = stripUserDisplaySuffix(ta.value);
-      if (!next) { toast('Message vide', 'error'); return; }
-      box.remove();
-      const live = getMsgs(jobId);
-      const ii = (m.id != null && String(m.id)) ? live.findIndex((x) => x.id === m.id && x.role === 'user') : idx;
-      const cut = ii >= 0 ? ii : idx;
-      const tail = live.length - cut - 1;
-      if (tail > 0 && !confirm('Cela supprime cette question et toutes les réponses suivantes. Continuer ?')) return;
-      live.splice(cut);
-      saveMsgs(jobId, live);
-      if (jobId === ACTIVE_JOB) {
-        MESSAGES = live;
-        render();
-      } else {
-        renderIfCurrent(jobId);
-      }
-      if (SENDING.has(jobId)) {
-        enqueueAsk(jobId, next, null);
-        toast('Message en file d’attente', 'success');
-        updateQueueBadge(jobId);
-        return;
-      }
-      void handleAskExecute(jobId, next, null).catch(() => {});
-    };
-    actions.appendChild(cancel);
-    actions.appendChild(save);
-    box.appendChild(ta);
-    box.appendChild(actions);
-    host.appendChild(box);
-    ta.focus();
+    const tail = msgs.length - idx - 1;
+    if (tail > 0) {
+      toast("Modification : les réponses suivantes seront supprimées à l'envoi.", 'info');
+    }
+
+    const promptEl = byId('chatPrompt');
+    if (!promptEl) return;
+    promptEl.value = initial;
+    promptEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+    pendingUserEdit = { jobId, idx, msgId: m.id || null };
+
+    try {
+      const composeEl = byId('agilo-chat-submission') || byId('chat-compose-bar') || promptEl;
+      composeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      promptEl.focus({ preventScroll: true });
+      const len = promptEl.value.length;
+      promptEl.setSelectionRange(len, len);
+    } catch (_) { /* ignore scroll errors */ }
   }
 
   function render() {
@@ -1266,8 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const attachBtn = document.createElement('button');
       attachBtn.type = 'button'; attachBtn.id = 'chat-attach-btn';
       attachBtn.setAttribute('aria-label', 'Pièce jointe (bientôt disponible)');
-      attachBtn.title = 'Pièce jointe (bientôt disponible)';
-      attachBtn.disabled = true; attachBtn.setAttribute('aria-disabled', 'true');
+      attachBtn.title = 'Pièces jointes — bientôt disponibles';
       attachBtn.innerHTML = SVG_PAPERCLIP;
       footer.appendChild(attachBtn);
       /* Bouton envoi */
@@ -2036,6 +2030,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!q) { input?.focus(); return; }
     if (__dictationActive) { toast('Arrêtez la dictée avant d’envoyer', 'info'); return; }
 
+    /* —— Édition de message utilisateur (style ChatGPT) ——
+       Si pendingUserEdit est actif et concerne le même job, on tronque l'historique
+       avant de lancer l'envoi normal. */
+    if (pendingUserEdit && pendingUserEdit.jobId === jobId) {
+      const { idx, msgId } = pendingUserEdit;
+      pendingUserEdit = null;
+      const live = getMsgs(jobId);
+      const cut = (msgId != null) ? live.findIndex((x) => x.id === msgId && x.role === 'user') : idx;
+      const cutIdx = cut >= 0 ? cut : idx;
+      if (cutIdx >= 0 && cutIdx < live.length) {
+        live.splice(cutIdx);
+        saveMsgs(jobId, live);
+        if (jobId === ACTIVE_JOB) { MESSAGES = live; render(); }
+      }
+    }
+
     const intentHint = resolveIntentHintForQuestion(q, null);
 
     if (SENDING.has(jobId)) {
@@ -2210,6 +2220,11 @@ document.addEventListener('DOMContentLoaded', () => {
   btnAsk?.addEventListener('click', (e) => { e.preventDefault(); handleAsk(); });
   document.addEventListener('click', (e) => {
     if (e.target.closest('#chat-send-btn')) { e.preventDefault(); handleAsk(); }
+    /* Bouton PJ — cliquable mais fonctionnellement bloqué : toast informatif */
+    if (e.target.closest('#chat-attach-btn')) {
+      e.preventDefault();
+      toast('Pièces jointes — bientôt disponibles. Vous pourrez attacher des PDF, images et autres documents.', 'info');
+    }
   });
   form?.addEventListener('submit', (e) => { e.preventDefault(); handleAsk(); });
   input?.addEventListener('keydown', (e) => {

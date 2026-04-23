@@ -366,6 +366,49 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   border-color: var(--agilo-border, rgba(0,0,0,.15)) !important;
 }
 
+/* Barre d'actions bas-droite sur les bulles utilisateur (copy + éditer) */
+.msg-user-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: .35rem;
+  margin: .3rem 0 0;
+  padding-top: .4rem;
+  border-top: 1px solid var(--agilo-border, rgba(0,0,0,.08));
+}
+.msg-user-action-btn {
+  appearance: none;
+  cursor: pointer;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--agilo-border, rgba(0,0,0,.12));
+  background: transparent;
+  color: var(--agilo-text-muted, #64748b);
+  border-radius: .45rem;
+  padding: 0;
+  transition: background .15s, color .15s, border-color .15s, transform .06s;
+  opacity: 0;
+}
+/* Révéler au survol de la bulle */
+.msg--user:hover .msg-user-action-btn,
+.msg--user:focus-within .msg-user-action-btn {
+  opacity: 1;
+}
+.msg-user-action-btn:hover {
+  background: var(--agilo-surface-2, #f1f5f9);
+  color: var(--agilo-primary, #174a96);
+  border-color: var(--agilo-primary, #174a96);
+}
+.msg-user-action-btn:active { transform: translateY(1px); }
+.msg-user-action-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--agilo-primary, #174a96) 70%, transparent);
+  outline-offset: 2px;
+  opacity: 1;
+}
+
 /* Titres manquants (tu n'as que h1–h3 aujourd'hui) */
 .msg-bubble h4,.msg-bubble h5,.msg-bubble h6{
   margin:.65em 0 .35em; font-weight:700; line-height:1.3;
@@ -622,7 +665,7 @@ body:not(:has(#agilo-chat-submission)) #chat-send-btn {
   cursor: pointer; flex: 0 0 2.1rem; color: var(--agilo-dim, #6b7280); padding: 0;
   transition: background .14s, color .14s; box-sizing: border-box;
 }
-body:not(:has(#agilo-chat-submission)) #chat-attach-btn { order: -1; margin-right: auto; opacity: .38; cursor: not-allowed; pointer-events: none; }
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn { order: -1; margin-right: auto; opacity: .55; cursor: pointer; pointer-events: auto; }
 body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, #174a96); }
 body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent); }
 
