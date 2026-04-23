@@ -34,28 +34,6 @@
     step(Math.max(1, n));
   });
 
-  /** Webflow: certains w-embed icon ont &lt;svg width="auto" height="auto"&gt; (invalide pour le parseur). On nettoie dès que possible. */
-  function agiloStripInvalidSvgLayoutAttrs(root) {
-    const scope = root || document;
-    if (!scope.querySelectorAll) return;
-    try {
-      scope.querySelectorAll('svg').forEach((svg) => {
-        ['width', 'height'].forEach((a) => {
-          const v = svg.getAttribute(a);
-          if (v && String(v).trim().toLowerCase() === 'auto') svg.removeAttribute(a);
-        });
-      });
-    } catch (e) { /* ignore */ }
-  }
-  function agiloRunSvgLayoutFixes() {
-    agiloStripInvalidSvgLayoutAttrs(document);
-  }
-  agiloRunSvgLayoutFixes();
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', agiloRunSvgLayoutFixes, { once: true });
-  }
-  [0, 100, 2000].forEach((ms) => setTimeout(agiloRunSvgLayoutFixes, ms));
-
   // JSON Nico -> UI
   const msToSec = ms => Math.max(0, Math.floor((+ms || 0) / 1000));
   const decodeNL = s => String(s || '')
@@ -99,9 +77,15 @@
     window.addEventListener('message', (ev) => {
       try {
         const d = ev.data;
-        if (!d || d.type !== 'agilo:summary-mail-copy' || !d.ok) return;
-        if (typeof window.toast === 'function') {
-          window.toast(d.mode === 'html' ? 'HTML du mail copié dans le presse-papier' : 'Texte du mail copié');
+        if (!d || typeof d !== 'object') return;
+        if (d.type === 'agilo:summary-mail-copy' && d.ok) {
+          if (typeof window.toast === 'function') {
+            window.toast(d.mode === 'html' ? 'HTML du mail copié dans le presse-papier' : 'Texte du mail copié');
+          }
+          return;
+        }
+        if (d.type === 'agilo:summary-open-chat') {
+          if (typeof openChatTab === 'function') openChatTab();
         }
       } catch (_) { }
     });
@@ -266,6 +250,7 @@
     const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
     const copyBtn = block.querySelector('.agilo-email-btn-copy');
     const openTrigger = block.querySelector('.agilo-email-btn-open');
+    const openConversationBtn = block.querySelector('.agilo-summary-open-chat-btn');
     const dropdown = block.querySelector('.agilo-email-dropdown');
     const copyIconDefault = copyBtn ? copyBtn.innerHTML : '';
     const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
@@ -302,6 +287,22 @@
         }
       })();
     });
+    if (openConversationBtn) {
+      openConversationBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        try {
+          if (typeof openChatTab === 'function') {
+            openChatTab();
+            return;
+          }
+        } catch (_) { }
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'agilo:summary-open-chat' }, '*');
+          }
+        } catch (_) { }
+      });
+    }
     if (openTrigger && dropdown) {
       const links = dropdown.querySelectorAll('a.agilo-email-dropdown-item');
       if (links[0]) links[0].href = gmailUrl;
@@ -328,25 +329,6 @@
       dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
       [].forEach.call(dropdown.querySelectorAll('a[href]'), function (a) {
         a.addEventListener('click', function () { close(); });
-      });
-    }
-    const openChatBtn = block.querySelector('.agilo-summary-open-chat-btn');
-    if (openChatBtn) {
-      openChatBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          if (window.AgiloEditors && typeof window.AgiloEditors.openChatTab === 'function') {
-            window.AgiloEditors.openChatTab();
-            return;
-          }
-        } catch (err) { }
-        try {
-          if (window.parent && window.parent !== window && window.parent.AgiloEditors
-            && typeof window.parent.AgiloEditors.openChatTab === 'function') {
-            window.parent.AgiloEditors.openChatTab();
-          }
-        } catch (err) { }
       });
     }
   }
@@ -422,17 +404,13 @@
     bodyWrap.innerHTML = agiloV3DataToBodyDisplayHtml(data);
     const hint = targetDoc.createElement('div');
     hint.className = 'agilo-email-summary-hint';
-    hint.setAttribute('role', 'note');
-    const hintP = targetDoc.createElement('p');
-    hintP.className = 'agilo-email-summary-hint__text';
-    hintP.textContent = 'Pour coller du texte dans le champ d’envoi, utilisez l’onglet Conversation (même zone que le chat).';
-    const openConv = targetDoc.createElement('button');
-    openConv.type = 'button';
-    openConv.className = 'agilo-summary-open-chat-btn agilo-email-btn--pill';
-    openConv.setAttribute('aria-label', 'Ouvrir l’onglet Conversation');
-    openConv.textContent = 'Ouvrir l’onglet Conversation';
-    hint.appendChild(hintP);
-    hint.appendChild(openConv);
+    hint.innerHTML = '<p class="agilo-email-summary-hint__text">Pour modifier / copier-coller avant envoi, ouvrez l\'onglet Conversation.</p>';
+    const openConversationBtn = targetDoc.createElement('button');
+    openConversationBtn.type = 'button';
+    openConversationBtn.className = 'agilo-email-btn agilo-summary-open-chat-btn';
+    openConversationBtn.setAttribute('aria-label', 'Ouvrir la conversation');
+    openConversationBtn.textContent = 'Ouvrir Conversation';
+    hint.appendChild(openConversationBtn);
     block.appendChild(header);
     block.appendChild(subjLine);
     block.appendChild(bodyWrap);
@@ -451,10 +429,6 @@
     try {
       if (!ctx) return;
       const isDoc = ctx.nodeType === 9;
-      if (isDoc && ctx.documentElement) {
-        ctx.documentElement.classList.add('agilo-iframe-compte-rendu');
-        if (ctx.body) ctx.body.classList.add('agilo-iframe-compte-rendu');
-      }
       const searchRoot = isDoc ? (ctx.body || ctx.documentElement) : ctx;
       if (!searchRoot) return;
       if (searchRoot.querySelector('[data-agilo-v3-compte-rendu-mail]')) return;
@@ -489,6 +463,11 @@
       if (window.AGILO_DEBUG) console.warn('[agilo] materialize v3 struct mail', e);
     }
   }
+
+  /**
+   * Compte-rendu HTML (document complet) : le bloc .mail-ready doit apparaître tôt
+   * (souvent déplacé sous le long .internal-report par erreur de génération).
+   */
   function agiloReorderCompteRenduMailBlock(idoc) {
     try {
       if (!idoc || !idoc.body) return;
@@ -2384,22 +2363,6 @@
       
       #summaryEditor.ag-summary-readonly {
         overflow: auto;
-        -webkit-user-select: text;
-        user-select: text;
-      }
-      #summaryEditor.ag-summary-readonly * {
-        -webkit-user-select: text;
-        user-select: text;
-      }
-      #summaryEditor.ag-summary-readonly .agilo-email-btn,
-      #summaryEditor.ag-summary-readonly .agilo-summary-open-chat-btn,
-      #summaryEditor.ag-summary-readonly .agilo-email-dropdown a {
-        -webkit-user-select: none;
-        user-select: none;
-        cursor: pointer;
-      }
-      #summaryEditor.ag-summary-readonly .ag-summary-iframe {
-        cursor: auto;
       }
     `;
     document.head.appendChild(style);
@@ -2410,7 +2373,7 @@
     if (jid) loadJob(jid);
   });
   function serializeSmart() { return ''; }
-  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart, openChatTab };
+  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart };
 
   function openChatTab() {
     if (window.AgiloChat?.openConversation) { try { window.AgiloChat.openConversation(); } catch { } }
