@@ -1026,8 +1026,37 @@ document.addEventListener('DOMContentLoaded', () => {
   const SVG_MIC_STOP  = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`;
   const SVG_SEND      = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
+  /**
+   * Crée #chat-send-btn si absent, masque div#btnAsk Webflow, met à jour chatSendBtn.
+   * (Migration : les anciennes exécutions avaient le badge+barre mais gardaient le gros .button.bleu
+   *  car ensureChatChrome() s'arrêtait dès que #chat-queue-badge existait — voir V06 hotfix.) */
+  function ensureChatSendNode() {
+    const footer = byId('chat-compose-footer');
+    if (!footer) return;
+    if (!byId('chat-send-btn')) {
+      const sendBtn = document.createElement('button');
+      sendBtn.type = 'button';
+      sendBtn.id = 'chat-send-btn';
+      sendBtn.className = 'agilo-chat-send';
+      sendBtn.setAttribute('aria-label', 'Envoyer');
+      sendBtn.title = 'Envoyer';
+      sendBtn.innerHTML = SVG_SEND;
+      footer.appendChild(sendBtn);
+    }
+    chatSendBtn = byId('chat-send-btn');
+    if (btnAsk) btnAsk.hidden = true;
+  }
+
   function ensureChatChrome() {
-    if (!form || byId('chat-queue-badge')) return;
+    if (!form) return;
+
+    /* Barre déjà injectée (y compris par une version antérieure) : compléter, ne pas recréer. */
+    if (byId('chat-compose-bar')) {
+      ensureChatSendNode();
+      return;
+    }
+
+    if (byId('chat-queue-badge')) return;
 
     /* ---- 1. Badge file d'attente ---- */
     const badge = document.createElement('span');
@@ -1152,18 +1181,8 @@ document.addEventListener('DOMContentLoaded', () => {
       footer.appendChild(micBtn);
     }
 
-    /* ---- 5. Bouton Envoyer — nouveau nœud propre (évite les conflits CSS .button.bleu Webflow) ---- */
-    const sendBtn = document.createElement('button');
-    sendBtn.type = 'button';
-    sendBtn.id = 'chat-send-btn';
-    sendBtn.setAttribute('aria-label', 'Envoyer');
-    sendBtn.title = 'Envoyer';
-    sendBtn.innerHTML = SVG_SEND;
-    footer.appendChild(sendBtn);
-    chatSendBtn = sendBtn;
-
-    /* Masquer le div#btnAsk Webflow — reste dans le DOM pour compatibilité (AgiloChat.ask etc.) */
-    if (btnAsk) btnAsk.hidden = true;
+    /* ---- 5. Bouton Envoyer — créé ici + helper partagé (évite conflit .button.bleu Webflow) ---- */
+    ensureChatSendNode();
 
   }
 
