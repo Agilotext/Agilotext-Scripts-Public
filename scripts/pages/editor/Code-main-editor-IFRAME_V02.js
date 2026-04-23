@@ -72,6 +72,68 @@
     conversation: byId('conversationEditor') || byId('ag-conversation') || null
   };
 
+  if (!window.__agiloSummaryMailCopyListener) {
+    window.__agiloSummaryMailCopyListener = true;
+    window.addEventListener('message', (ev) => {
+      try {
+        const d = ev.data;
+        if (!d || d.type !== 'agilo:summary-mail-copy' || !d.ok) return;
+        if (typeof window.toast === 'function') {
+          window.toast(d.mode === 'html' ? 'HTML du mail copié dans le presse-papier' : 'Texte du mail copié');
+        }
+      } catch (_) { }
+    });
+  }
+
+  /**
+   * Compte-rendu HTML (document complet) : le bloc .mail-ready doit apparaître tôt
+   * (souvent déplacé sous le long .internal-report par erreur de génération).
+   */
+  function agiloReorderCompteRenduMailBlock(idoc) {
+    try {
+      if (!idoc || !idoc.body) return;
+      const mail = idoc.querySelector('.mail-ready');
+      const internal = idoc.querySelector('.internal-report');
+      if (!mail || !internal) return;
+      if (internal.compareDocumentPosition(mail) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        internal.parentNode.insertBefore(mail, internal);
+      }
+    } catch (e) {
+      if (window.AGILO_DEBUG) console.warn('[agilo] reorder mail block', e);
+    }
+  }
+
+  /**
+   * Surcharge copyMailText / copyMailHtml (templates Valtus & co.) : sélecteur élargi + feedback.
+   * S’exécute dans le document de l’iframe.
+   */
+  function agiloInjectCompteRenduCopyBridge(idoc) {
+    if (!idoc || !idoc.body) return;
+    const s = idoc.createElement('script');
+    s.setAttribute('data-agilo', 'compte-rendu-copy-bridge');
+    s.textContent = [
+      '(function(){',
+      'function _find(){',
+      '  var a=document.querySelector(".mail-ready"); if(a) return a;',
+      '  a=document.querySelector("[data-agilo-summary-mail]"); if(a) return a;',
+      '  var q=document.querySelectorAll(".zone-title, .report-card h2, .report-card h3, .v3-notes h2, .v3-notes h3");',
+      '  for(var i=0;i<q.length;i++){ var tx=(q[i].textContent||"").toLowerCase();',
+      '    if(/mail|e-?mail|courrier|message|objet\\s*:/.test(tx)&&/pr[eê]t|cop|adress|cher\\s+/.test(tx)){',
+      '      var p=q[i].closest("section,article,div"); if(p) return p; } }',
+      '  return null;',
+      '}',
+      'function _ok(mode){ try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"agilo:summary-mail-copy",ok:true,mode:mode||"text"},"*");}catch(e){} }',
+      'function _fail(){ try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"agilo:summary-mail-copy",ok:false,mode:"text"},"*");}catch(e){} }',
+      'function _cb(t,mode){ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(t).then(function(){_ok(mode);}).catch(function(){_legacy(t,mode);}); _legacy(t,mode); }',
+      'function _legacy(t,mode){ var ta=document.createElement("textarea"); ta.value=t; ta.style.cssText="position:fixed;left:-9999px;"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); _ok(mode);}catch(e){} document.body.removeChild(ta); }',
+      'window.copyMailText=function(){ var el=_find(); if(!el){ alert("Aucun bloc « mail prêt à copier » détecté (souvent la classe .mail-ready manque dans le HTML généré).\\nSélectionnez le texte à la main, ou corrigez le modèle côté serveur."); _fail(); return; }',
+      '  try{ el.scrollIntoView({block:"nearest",behavior:"smooth"});}catch(x){} var t=(el.innerText||el.textContent||"").replace(/\\r\\n/g,"\\n").trim(); _cb(t,"text"); };',
+      'window.copyMailHtml=function(){ var el=_find(); if(!el){ window.copyMailText(); return; } try{ el.scrollIntoView({block:"nearest",behavior:"smooth"});}catch(x){} var h=(el.outerHTML||"").trim(); _cb(h,"html"); };',
+      '})();'
+    ].join('');
+    idoc.body.appendChild(s);
+  }
+
   // ✅ ISOLATION : Fonction pour injecter le summary dans un iframe si contient des styles globaux
   // ⚠️ IMPORTANT : Placée APRÈS la déclaration de editors et pickSummaryEl()
   function injectSummaryContent(html) {
@@ -105,6 +167,9 @@
           idoc.open();
           idoc.write(html);
           idoc.close();
+
+          agiloReorderCompteRenduMailBlock(idoc);
+          agiloInjectCompteRenduCopyBridge(idoc);
 
           const ifr = this;
           const resolveSummarySvhFloorPx = () => {

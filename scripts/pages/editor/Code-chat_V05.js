@@ -346,6 +346,21 @@ function agiloChatInitFromDom() {
     return html;
   }
 
+  /** Aère le markdown du corps d’e-mail (titres ##, règles ---) pour mdToHtml. */
+  function preProcessEmailBodyForMd(s) {
+    let t = String(s || '').replace(/\r\n/g, '\n');
+    /* Rubriques souvent seules en ligne sans « ## » côté modèle → titres visibles */
+    t = t.replace(
+      /^(Parcours global|Points forts|Points clés|Plus en d[ée]tails?|Points additionnels|R[ée]f[ée]rences temporelles|Actions recommand[ée]es|Conclusion|Clarifications? n[ée]cessaires?)\s*$/gim,
+      '## $1'
+    );
+    return t
+      .replace(/\n(#{1,6}\s)/g, '\n\n$1')
+      .replace(/\n(\s*[-=*]{3,}\s*)\n/g, '\n\n$1\n\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
   /* ================== EXPORT LOCAL PDF (beau rendu) ================== */
   function buildPrintHtml(md, title = 'Export') {
     const html = mdToHtml(md || '');
@@ -822,11 +837,14 @@ function agiloChatInitFromDom() {
   function buildAssistantActionsNode(idx, lastAssistantIndex, copyText) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'msg-actions';
-    actionsDiv.style.cssText = 'display:flex;gap:6px;margin-top:12px;padding-top:10px;border-top:1px solid rgba(0,0,0,0.08);flex-wrap:wrap';
+    actionsDiv.setAttribute('role', 'group');
+    actionsDiv.setAttribute('aria-label', 'Actions sur ce message');
 
     const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
     copyBtn.className = 'msg-action-btn msg-action-copy';
-    copyBtn.setAttribute('title', 'Copier');
+    copyBtn.setAttribute('title', 'Copier le contenu de la réponse');
+    copyBtn.setAttribute('aria-label', 'Copier le texte de la réponse');
     copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"/></svg> Copier';
     const copyBtnDefaultHtml = copyBtn.innerHTML;
     const copyBtnCheckedHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copié';
@@ -848,14 +866,18 @@ function agiloChatInitFromDom() {
 
     const allowExport = idx === lastAssistantIndex;
     if (allowExport) {
-      const sep = document.createElement('div');
-      sep.style.cssText = 'width:1px;background:rgba(0,0,0,0.1);margin:0 2px';
+      const sep = document.createElement('span');
+      sep.className = 'msg-actions-sep';
+      sep.setAttribute('aria-hidden', 'true');
       actionsDiv.appendChild(sep);
 
       ['txt', 'docx', 'pdf', 'rtf'].forEach(fmt => {
         const btn = document.createElement('button');
+        btn.type = 'button';
         btn.textContent = fmt.toUpperCase();
         btn.className = 'msg-action-btn';
+        btn.setAttribute('title', `Télécharger en ${fmt.toUpperCase()}`);
+        btn.setAttribute('aria-label', `Exporter la réponse en ${fmt.toUpperCase()}`);
         btn.onclick = async () => {
           const originalText = btn.textContent;
           btn.disabled = true; btn.textContent = '...'; btn.style.opacity = '0.5';
@@ -899,6 +921,7 @@ function agiloChatInitFromDom() {
       const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
       const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent)) || (emailByIntent && (hasGreeting || hasSignature));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
+      const displayTextRich = looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
@@ -1004,7 +1027,8 @@ function agiloChatInitFromDom() {
         }
 
         // Séparer corps email et commentaire (accepter "---" ou "Commentaire interne :" / "Commentaire interne (non envoyé) :")
-        const rawBody = String(displayText).trim();
+        // Corps riche (markdown) pour l’affichage ; displayText (plain) sert copie, mailto, sujet
+        const rawBody = String(displayTextRich).trim();
         const bodyParts = rawBody.split(AGILO_EMAIL_COMMENT_SPLIT);
         let emailBodyText = (bodyParts[0] || rawBody).trim().replace(/\n\s*---\s*$/m, '').trim();
         let commentBodyText = (bodyParts[1] || '').trim().replace(/^Commentaire interne\s*(\(non envoyé\))?\s*:\s*/i, '').trim();
@@ -1022,32 +1046,8 @@ function agiloChatInitFromDom() {
           .trim();
 
         const bodyWrap = document.createElement('div');
-        bodyWrap.className = 'agilo-email-block-body';
-        const paragraphs = String(emailBodyText)
-          .split(/\n\n+/)
-          .map((p) => p.trim())
-          .filter(Boolean)
-          .filter((p) => {
-            if (/^`{3,}[^\n]*$/.test(p)) return false;
-            if (/^\*{1,3}$/.test(p)) return false;
-            return true;
-          });
-        /* nettoyage final du paragraphe : résidus **gras** ou ###titre après postProcessEmail */
-        const cleanParagraph = (p) =>
-          p.replace(/\*\*(.+?)\*\*/g, '$1')
-           .replace(/\*(.+?)\*/g, '$1')
-           .replace(/^#{1,6}\s+/gm, '')
-           .replace(/^[-*•▪]\s+/gm, '');
-        if (paragraphs.length > 0) {
-          bodyWrap.innerHTML = paragraphs.map(function (p, i) {
-            const cleaned = cleanParagraph(p);
-            const escaped = String(cleaned).replace(/</g, '&lt;').replace(/\n/g, '<br>');
-            const cls = i === 0 && /^Objet\s*:/i.test(p.trim()) ? 'agilo-email-p agilo-email-p-first' : 'agilo-email-p';
-            return '<p class="' + cls + '">' + escaped + '</p>';
-          }).join('');
-        } else {
-          bodyWrap.textContent = cleanParagraph(emailBodyText);
-        }
+        bodyWrap.className = 'agilo-email-block-body agilo-email-block-body--md';
+        bodyWrap.innerHTML = mdToHtml(preProcessEmailBodyForMd(emailBodyText)) || '<p class="agilo-email-p"></p>';
         block.appendChild(bodyWrap);
 
         // Toujours afficher l'encadré Ci-dessous (texte par défaut si le modèle n'a pas inclus le commentaire)
@@ -2064,29 +2064,38 @@ function agiloChatInitFromDom() {
     return t.replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  function postProcessEmail(text) {
+  /**
+   * @param {string} text
+   * @param {{ preserveMarkdown?: boolean }} [opts] — si true, ne pas retirer ** # ni puces (rendu riche via mdToHtml) ; le mailto/copie utilise toujours la version sans opts.
+   */
+  function postProcessEmail(text, opts) {
     if (!text) return text;
+    const preserveMd = Boolean(opts && opts.preserveMarkdown);
     let t = sanitizeEmailModelArtifacts(text);
-    t = t.replace(/^#{1,6}\s+(.*)$/gm, '$1');
-    t = t.replace(/^[-=*]{3,}\s*$/gm, '');
-    const dblStarCount = (t.match(/\*\*/g) || []).length;
-    if (dblStarCount % 2 !== 0) t = t.replace(/\*\*/g, '');
-    let singleStarCount = 0;
-    for (let i = 0; i < t.length; i++) {
-      if (t[i] !== '*') continue;
-      if (t[i + 1] === '*') { i++; continue; }
-      if (i > 0 && t[i - 1] === '*') continue;
-      singleStarCount++;
+    if (!preserveMd) {
+      t = t.replace(/^#{1,6}\s+(.*)$/gm, '$1');
+      t = t.replace(/^[-=*]{3,}\s*$/gm, '');
     }
-    if (singleStarCount % 2 !== 0) {
-      t = t.split('').filter((c, i, arr) => {
-        if (c !== '*') return true;
-        if (arr[i + 1] === '*') return true;
-        if (i > 0 && arr[i - 1] === '*') return true;
-        return false;
-      }).join('');
+    if (!preserveMd) {
+      const dblStarCount = (t.match(/\*\*/g) || []).length;
+      if (dblStarCount % 2 !== 0) t = t.replace(/\*\*/g, '');
+      let singleStarCount = 0;
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] !== '*') continue;
+        if (t[i + 1] === '*') { i++; continue; }
+        if (i > 0 && t[i - 1] === '*') continue;
+        singleStarCount++;
+      }
+      if (singleStarCount % 2 !== 0) {
+        t = t.split('').filter((c, i, arr) => {
+          if (c !== '*') return true;
+          if (arr[i + 1] === '*') return true;
+          if (i > 0 && arr[i - 1] === '*') return true;
+          return false;
+        }).join('');
+      }
+      t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
     }
-    t = t.replace(/\*\*(.+?)\*\*/g, '$1').replace(/\*(.+?)\*/g, '$1');
     // Ensure "Objet:" is on its own line and separated from "Bonjour"
     t = t.replace(/^(Objet\s*:[^\n]*)(\s+Bonjour)/i, '$1\n\nBonjour');
     // If "Objet:" appears later in the text, pull it to the top
@@ -2095,10 +2104,11 @@ function agiloChatInitFromDom() {
       t = t.replace(objInline[0], '').trim();
       t = `${objInline[0]}\n\n${t}`;
     }
-    // Remove bullets/arrows entirely (emails should read like natural sentences)
-    t = t.replace(/^\s*[-*•▪]\s+/gm, '');
-    // Remove common arrow bullets (→ ➜ ➔ ➤ ➡ ▶ ► ▸ ▹ »)
-    t = t.replace(/\s*[→➜➔➤➡▶►▸▹»]\s*/g, '\n');
+    if (!preserveMd) {
+      // Version « lettre lisse » (mailto, copie) : pas de puces ni flèches de liste
+      t = t.replace(/^\s*[-*•▪]\s+/gm, '');
+      t = t.replace(/\s*[→➜➔➤➡▶►▸▹»]\s*/g, '\n');
+    }
     // Force blank lines between key sections
     t = t.replace(/\b(Bonjour[^,\n]*,)/i, '$1\n');
     // Ensure sections are separated
