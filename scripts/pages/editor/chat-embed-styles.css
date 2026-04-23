@@ -29,6 +29,72 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   overflow:auto;
 }
 
+/* Séparateur de date dans le fil */
+.msg-date-sep {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: .35rem 0;
+}
+.msg-date-sep::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid color-mix(in srgb, var(--agilo-border, var(--color--noir_25, #343a4040)) 70%, transparent);
+}
+.msg-date-sep-label {
+  position: relative;
+  z-index: 1;
+  padding: .15rem .6rem;
+  border-radius: 999px;
+  font: 600 .72rem/1.25 system-ui,-apple-system,Segoe UI,Roboto;
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
+  background: var(--agilo-surface, var(--color--white, #fff));
+  border: 1px solid color-mix(in srgb, var(--agilo-border, var(--color--noir_25, #343a4040)) 70%, transparent);
+}
+
+/* Empty state + prompts */
+.msg-empty-state {
+  align-self: center;
+  max-width: 48rem;
+  width: 100%;
+  padding: .95rem .25rem .3rem;
+  text-align: center;
+}
+.msg-empty-title {
+  margin: 0 0 .75rem;
+  font: 600 .9rem/1.4 system-ui,-apple-system,Segoe UI,Roboto;
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
+.msg-empty-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: .45rem;
+}
+.msg-empty-prompt {
+  appearance: none;
+  cursor: pointer;
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  background: var(--agilo-surface, var(--color--white, #fff));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  border-radius: 999px;
+  padding: .42rem .75rem;
+  font: 500 .8rem/1.2 system-ui,-apple-system,Segoe UI,Roboto;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.msg-empty-prompt:hover {
+  background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 12%, var(--agilo-surface, var(--color--white, #fff)));
+  border-color: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 30%, var(--agilo-border, var(--color--noir_25, #343a4040)));
+}
+.msg-empty-prompt:focus-visible {
+  outline: var(--agilo-focus, 2px solid color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 65%, transparent));
+  outline-offset: 2px;
+}
+
 /* Bouton occupé */
 #btnAsk.is-busy{ opacity:.65; pointer-events:none; }
 
@@ -695,6 +761,30 @@ div.w-embed:has(#agilo-chat-submission) {
   background: color-mix(in srgb, var(--agilo-surface, var(--color--white, #fff)) 96%, var(--agilo-surface-2, var(--color--blanc_gris, #f6f6f6)));
   flex-wrap: nowrap;
 }
+#agilo-chat-submission #chatPrompt {
+  overflow-y: hidden;
+}
+#agilo-chat-submission #chat-compose-bar.is-ready-to-send #chat-send-btn,
+#agilo-chat-submission #chat-send-btn.is-ready-to-send {
+  background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 22%, transparent);
+}
+.chat-compose-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  margin-top: .3rem;
+  padding: 0 .1rem;
+  font: 500 .72rem/1.3 system-ui,-apple-system,Segoe UI,Roboto;
+  color: var(--agilo-dim, var(--color--gris, #6b7280));
+}
+.chat-char-counter {
+  font-variant-numeric: tabular-nums;
+}
+.chat-char-counter.is-near-limit {
+  color: color-mix(in srgb, #b45309 78%, var(--agilo-dim, var(--color--gris, #6b7280)));
+}
 /* Badge file : pas de bandeau jaune; dans la barre, coin haut-droit (voir aussi embed) */
 #agilo-chat-submission #chat-queue-badge[hidden],
 #agilo-chat-submission #chat-queue-badge:empty {
@@ -753,6 +843,7 @@ body:not(:has(#agilo-chat-submission)) #chatPrompt {
   min-height: 36px; max-height: 180px; padding: .45rem .3rem;
   font-size: .9375rem; line-height: 1.5; color: var(--agilo-text, #020202);
   align-self: center;
+  overflow-y: hidden;
 }
 body:not(:has(#agilo-chat-submission)) #chat-attach-btn,
 body:not(:has(#agilo-chat-submission)) #chat-dictate-btn,
@@ -766,6 +857,11 @@ body:not(:has(#agilo-chat-submission)) #chat-attach-btn { opacity: .5; }
 body:not(:has(#agilo-chat-submission)) #chat-attach-btn:hover { background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent); opacity: .8; }
 body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, var(--color--blue, #174a96)); }
 body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 10%, transparent); }
+body:not(:has(#agilo-chat-submission)) #chat-compose-bar.is-ready-to-send #chat-send-btn,
+body:not(:has(#agilo-chat-submission)) #chat-send-btn.is-ready-to-send {
+  background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 22%, transparent);
+}
 
 @media (max-width: 40rem) {
   body:not(:has(#agilo-chat-submission)) #chat-compose-bar { border-radius: var(--0-5_radius, .55rem); padding: .3rem .35rem; }

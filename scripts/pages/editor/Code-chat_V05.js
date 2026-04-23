@@ -28,6 +28,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const ATTACHMENTS_ENABLED = window.__agiloAttachmentsEnabled === true;
   const MAX_ATTACH_FILES = 3;
   const MAX_ATTACH_MB = 10;
+  const CHAT_MAX_CHARS = Number(
+    document.getElementById('pane-chat')?.dataset.chatMaxChars
+    || document.getElementById('pane-chat')?.dataset.maxChars
+    || document.getElementById('agilo-chat-submission')?.dataset.chatMaxChars
+    || 0
+  ) || 0;
+  const EMPTY_STATE_PROMPTS = [
+    'Résumer les points clés du transcript',
+    'Proposer un plan de compte-rendu structuré',
+    'Extraire les décisions et actions'
+  ];
+  const EMPTY_STATE_WELCOME = 'Comment puis-je vous aider avec ce transcript ?';
   const PENDING_FILES = [];
   const MSG_QUEUE = new Map();
   let __dictationActive = false;
@@ -516,14 +528,167 @@ document.addEventListener('DOMContentLoaded', () => {
   let ACTIVE_JOB = getJobId();
   const LSKEY = () => `agilo:chat:${ACTIVE_JOB || 'nojob'}`;
   let MESSAGES = [];
+  const WELCOME_MESSAGE = 'Bienvenue dans l\'assistant IA. Posez vos questions sur le transcript.';
+
+  function isLegacyWelcomeMessage(msg) {
+    if (!msg || msg.role !== 'system') return false;
+    return String(msg.text || '').trim() === WELCOME_MESSAGE;
+  }
+  function shouldRenderEmptyState(msgs) {
+    if (!Array.isArray(msgs) || msgs.length === 0) return true;
+    return msgs.every(isLegacyWelcomeMessage);
+  }
+
+  function dayKey(isoOrDate) {
+    const d = isoOrDate ? new Date(isoOrDate) : new Date();
+    if (Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function formatDateSeparatorLabel(isoOrDate) {
+    const d = new Date(isoOrDate);
+    if (Number.isNaN(d.getTime())) return '';
+    const now = new Date();
+    const today = dayKey(now);
+    const target = dayKey(d);
+    if (target === today) return 'Aujourd\'hui';
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (target === dayKey(yesterday)) return 'Hier';
+    return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  }
+
+  function autosizeChatPrompt(inputEl) {
+    const ta = inputEl || activeChatPrompt();
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const h = Math.min(ta.scrollHeight || 0, 180);
+    ta.style.height = `${Math.max(h, 36)}px`;
+    ta.style.overflowY = (ta.scrollHeight > 180) ? 'auto' : 'hidden';
+  }
+
+  function updatePromptCounter(inputEl) {
+    const ta = inputEl || activeChatPrompt();
+    const counter = byId('chat-char-counter');
+    if (!counter || !ta) return;
+    if (!CHAT_MAX_CHARS || CHAT_MAX_CHARS <= 0) {
+      counter.hidden = true;
+      return;
+    }
+    const len = (ta.value || '').length;
+    counter.hidden = false;
+    counter.textContent = `${len}/${CHAT_MAX_CHARS}`;
+    counter.classList.toggle('is-near-limit', len >= Math.floor(CHAT_MAX_CHARS * 0.9));
+  }
+
+  function refreshSendReadyState() {
+    const { prompt, bar } = getChatFormScope();
+    const hasText = !!String(prompt?.value || '').trim();
+    bar?.classList.toggle('is-ready-to-send', hasText);
+    chatSendBtn?.classList.toggle('is-ready-to-send', hasText);
+  }
+
+  function setPromptText(text, focus = true) {
+    const cp = activeChatPrompt();
+    if (!cp) return;
+    const next = String(text || '');
+    cp.value = (CHAT_MAX_CHARS > 0) ? next.slice(0, CHAT_MAX_CHARS) : next;
+    if (focus) {
+      try { cp.focus({ preventScroll: true }); } catch { }
+      try { cp.setSelectionRange(cp.value.length, cp.value.length); } catch { }
+    }
+    autosizeChatPrompt(cp);
+    updatePromptCounter(cp);
+    refreshSendReadyState();
+  }
+
+  function buildDateSeparatorNode(label) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-date-sep';
+    const pill = document.createElement('span');
+    pill.className = 'msg-date-sep-label';
+    pill.textContent = label;
+    wrap.appendChild(pill);
+    return wrap;
+  }
+
+  function buildEmptyStateNode() {
+    const box = document.createElement('div');
+    box.className = 'msg-empty-state';
+    const title = document.createElement('p');
+    title.className = 'msg-empty-title';
+    title.textContent = EMPTY_STATE_WELCOME;
+    box.appendChild(title);
+
+    const promptList = document.createElement('div');
+    promptList.className = 'msg-empty-prompts';
+    EMPTY_STATE_PROMPTS.forEach((p) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'msg-empty-prompt';
+      btn.textContent = p;
+      btn.addEventListener('click', () => setPromptText(p, true));
+      promptList.appendChild(btn);
+    });
+    box.appendChild(promptList);
+    return box;
+  }
+
+  function ensurePromptAccessibilityHint(barEl, promptEl) {
+    if (!barEl || !promptEl) return;
+    let hint = barEl.parentElement?.querySelector('#chat-compose-hint') || byId('chat-compose-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.id = 'chat-compose-hint';
+      hint.className = 'chat-compose-hint';
+      barEl.insertAdjacentElement('afterend', hint);
+    }
+    let text = hint.querySelector('.chat-compose-hint-text');
+    if (!text) {
+      text = document.createElement('span');
+      text.className = 'chat-compose-hint-text';
+      hint.appendChild(text);
+    }
+    text.textContent = 'Entrée pour envoyer, Maj+Entrée pour nouvelle ligne';
+    let counter = hint.querySelector('#chat-char-counter');
+    if (!counter) {
+      counter = document.createElement('span');
+      counter.id = 'chat-char-counter';
+      counter.className = 'chat-char-counter';
+      hint.appendChild(counter);
+    }
+    if (CHAT_MAX_CHARS <= 0) counter.hidden = true;
+    promptEl.setAttribute('aria-describedby', 'chat-compose-hint');
+  }
+
+  function bindPromptUiEvents() {
+    const { prompt, bar } = getChatFormScope();
+    if (!prompt) return;
+    ensurePromptAccessibilityHint(bar, prompt);
+    if (prompt.dataset.agiloPromptBound === '1') {
+      autosizeChatPrompt(prompt);
+      updatePromptCounter(prompt);
+      refreshSendReadyState();
+      return;
+    }
+    prompt.dataset.agiloPromptBound = '1';
+    prompt.addEventListener('input', () => {
+      if (CHAT_MAX_CHARS > 0 && prompt.value.length > CHAT_MAX_CHARS) {
+        prompt.value = prompt.value.slice(0, CHAT_MAX_CHARS);
+      }
+      autosizeChatPrompt(prompt);
+      updatePromptCounter(prompt);
+      refreshSendReadyState();
+    });
+    prompt.addEventListener('focus', refreshSendReadyState);
+    prompt.addEventListener('blur', refreshSendReadyState);
+    autosizeChatPrompt(prompt);
+    updatePromptCounter(prompt);
+    refreshSendReadyState();
+  }
 
   function loadHistory() {
     try { MESSAGES = JSON.parse(localStorage.getItem(LSKEY()) || '[]') || []; } catch { MESSAGES = []; }
-    if (!MESSAGES.length) {
-      MESSAGES.push({
-        role: 'system', text: 'Bienvenue dans l\'assistant IA. Posez vos questions sur le transcript.', t: new Date().toISOString()
-      });
-    }
+    if (shouldRenderEmptyState(MESSAGES)) MESSAGES = [];
   }
   function saveHistory() { try { localStorage.setItem(LSKEY(), JSON.stringify(MESSAGES)); } catch { } }
 
@@ -963,7 +1128,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const prevScrollTop = chatView.scrollTop;
     const lastAssistantIndex = lastAssistantIndexOf(MESSAGES);
     chatView.innerHTML = '';
+    if (shouldRenderEmptyState(MESSAGES)) {
+      chatView.appendChild(buildEmptyStateNode());
+      chatView.setAttribute('data-agilo-chat', 'V07-embed');
+      chatView.scrollTop = 0;
+      return;
+    }
+    let previousDay = '';
     MESSAGES.forEach((m, idx) => {
+      if (m.role !== 'system') {
+        const currentDay = dayKey(m.t);
+        if (currentDay && currentDay !== previousDay) {
+          const label = formatDateSeparatorLabel(m.t);
+          if (label) chatView.appendChild(buildDateSeparatorNode(label));
+          previousDay = currentDay;
+        }
+      }
       chatView.appendChild(buildMessageNode(m, idx, lastAssistantIndex));
     });
     chatView.setAttribute('data-agilo-chat', 'V07-embed');
@@ -993,6 +1173,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatSendBtn?.classList.toggle('is-busy', !!on);
     const ta = activeChatPrompt();
     if (ta) ta.disabled = !!on;
+    refreshSendReadyState();
   }
 
   // === clés & stockage par job ===
@@ -1364,6 +1545,9 @@ document.addEventListener('DOMContentLoaded', () => {
               if (!inp) return;
               const cur = (inp.value || '').trimEnd();
               inp.value = cur + (cur ? ' ' : '') + chunk.trim() + ' ';
+              autosizeChatPrompt(inp);
+              updatePromptCounter(inp);
+              refreshSendReadyState();
             }
           };
           rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
@@ -1419,6 +1603,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     removeOrphanChatButtons();
+    bindPromptUiEvents();
   }
 
   async function uploadPendingAttachments(auth, jobId) {
@@ -2180,7 +2365,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (SENDING.has(jobId)) {
       enqueueAsk(jobId, q, intentHint);
       toast('Message en file d’attente', 'success');
-      if (cp) cp.value = '';
+      if (cp) {
+        cp.value = '';
+        autosizeChatPrompt(cp);
+        updatePromptCounter(cp);
+      }
+      refreshSendReadyState();
       updateQueueBadge(jobId);
       return;
     }
@@ -2225,7 +2415,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const runId = mkRunId();
     const initialPlaceholder = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
     pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
-    { const _cp = activeChatPrompt(); if (_cp) _cp.value = ''; }
+    {
+      const _cp = activeChatPrompt();
+      if (_cp) {
+        _cp.value = '';
+        autosizeChatPrompt(_cp);
+        updatePromptCounter(_cp);
+      }
+      refreshSendReadyState();
+    }
     /* Scroller immédiatement en bas : l'utilisateur voit sa bulle + le thinking */
     scrollChatToBottom('instant');
 
