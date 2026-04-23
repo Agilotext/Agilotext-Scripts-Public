@@ -312,6 +312,56 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   overflow-y: auto;
 }
 
+/* Corps rendu via mdToHtml (titres, listes, gras) — mêmes bulles .msg-bubble, mais lisibilité carte e-mail */
+.agilo-email-block-body--md p {
+  margin: .5em 0 .85em;
+  white-space: pre-line;
+}
+.agilo-email-block-body--md p:first-child { margin-top: 0; }
+.agilo-email-block-body--md p:last-child { margin-bottom: 0; }
+.agilo-email-block-body--md h1,
+.agilo-email-block-body--md h2,
+.agilo-email-block-body--md h3,
+.agilo-email-block-body--md h4 {
+  margin: 1em 0 .45em;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--agilo-text, #020202);
+}
+.agilo-email-block-body--md h1 { font-size: 1.2em; }
+.agilo-email-block-body--md h2 { font-size: 1.1em; }
+.agilo-email-block-body--md h3 { font-size: 1.04em; }
+.agilo-email-block-body--md h4 { font-size: 1em; }
+.agilo-email-block-body--md ul,
+.agilo-email-block-body--md ol {
+  margin: .35em 0 .7em 1.2em;
+  padding: 0;
+}
+.agilo-email-block-body--md li { margin: .2em 0; }
+.agilo-email-block-body--md hr {
+  border: 0;
+  margin: .75em 0;
+  border-top: 1px solid var(--agilo-divider, color-mix(in srgb, var(--agilo-text, #0b1222) 14%, transparent));
+}
+.agilo-email-block-body--md .md-table {
+  width: 100%;
+  font-size: .86em;
+  margin: .5em 0 1em;
+}
+.agilo-email-block-body--md strong { font-weight: 600; }
+.agilo-email-block-body--md a {
+  color: var(--agilo-primary, var(--color--blue, #174a96));
+  text-decoration: underline;
+  text-underline-offset: .12em;
+}
+.agilo-email-block-body--md blockquote {
+  margin: .55em 0;
+  padding: .4em .75em;
+  border-left: 3px solid color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 55%, transparent);
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 4%, var(--agilo-surface-2, #f8f9fa));
+  border-radius: 0 .35rem .35rem 0;
+}
+
 .agilo-email-block-body .agilo-email-p {
   margin: 0 0 1.35em;
 }
@@ -433,6 +483,16 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   outline-offset: 2px;
 }
 .msg-action-btn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+.msg-actions-sep {
+  display: inline-block;
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.1rem;
+  margin: 0 .15rem;
+  background: color-mix(in srgb, var(--agilo-text, #0b1222) 12%, transparent);
+  flex-shrink: 0;
+}
 
 .msg-action-copy-copied {
   background: color-mix(in srgb, var(--agilo-text, #0b1222) 8%, var(--agilo-surface-2, #f8f9fa)) !important;
