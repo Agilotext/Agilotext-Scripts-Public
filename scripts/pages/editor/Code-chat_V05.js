@@ -854,9 +854,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
-   * Édition de message utilisateur — style ChatGPT.
-   * Remplit le textarea principal et pose pendingUserEdit.
-   * Le prochain envoi (handleAsk) tronquera l'historique et renverra.
+   * Édition de message utilisateur — style contenteditable inline (V1.08).
+   * La bulle bleue devient éditable sur place ; des boutons Annuler / Enregistrer
+   * apparaissent dessous. Pas de textarea secondaire.
    */
   function startEditUserMessage(idx) {
     const jobId = ACTIVE_JOB;
@@ -865,25 +865,101 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!m || m.role !== 'user') return;
 
     const initial = stripUserDisplaySuffix(m.text);
+
+    /* Récupérer le noeud DOM de la bulle */
+    const domIdx = userBubbleIndexInDom(msgs, idx);
+    const msgRow = domIdx >= 0 ? chatView?.querySelectorAll('.msg--user')?.[domIdx] : null;
+    if (!msgRow) return;
+    const bubble = msgRow.querySelector('.msg-bubble');
+    if (!bubble) return;
+    if (bubble.contentEditable === 'true') return; /* déjà en cours d’édition */
+
+    /* Masquer la barre d’actions (copy/edit) pendant l’édition */
+    const actionsDiv = msgRow.querySelector('.msg-user-actions');
+    if (actionsDiv) actionsDiv.hidden = true;
+
+    /* Toast d’avertissement si des réponses suivent */
     const tail = msgs.length - idx - 1;
     if (tail > 0) {
-      toast("Modification : les réponses suivantes seront supprimées à l'envoi.", 'info');
+      toast("Modifier ce message supprimera les réponses suivantes à l’envoi.", 'info');
     }
 
-    const promptEl = byId('chatPrompt');
-    if (!promptEl) return;
-    promptEl.value = initial;
-    promptEl.dispatchEvent(new Event('input', { bubbles: true }));
-
-    pendingUserEdit = { jobId, idx, msgId: m.id || null };
-
+    /* Rendre la bulle éditable */
+    bubble.contentEditable = 'true';
+    bubble.style.whiteSpace = 'pre-wrap';
+    bubble.focus();
     try {
-      const composeEl = byId('agilo-chat-submission') || byId('chat-compose-bar') || promptEl;
-      composeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      promptEl.focus({ preventScroll: true });
-      const len = promptEl.value.length;
-      promptEl.setSelectionRange(len, len);
-    } catch (_) { /* ignore scroll errors */ }
+      const range = document.createRange();
+      range.selectNodeContents(bubble);
+      range.collapse(false);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+    } catch (_) { /* ignore */ }
+
+    /* Barre Annuler / Enregistrer sous la bulle */
+    const editBar = document.createElement('div');
+    editBar.className = 'agilo-user-edit-bar';
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'agilo-user-edit-cancel';
+    cancelBtn.textContent = 'Annuler';
+    cancelBtn.onclick = () => {
+      bubble.contentEditable = 'false';
+      bubble.textContent = initial;
+      bubble.style.whiteSpace = 'pre-wrap';
+      editBar.remove();
+      pendingUserEdit = null;
+      if (actionsDiv) actionsDiv.hidden = false;
+    };
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'agilo-user-edit-send';
+    saveBtn.innerHTML = '✓ Enregistrer et renvoyer';
+    saveBtn.onclick = () => {
+      const next = (bubble.innerText || bubble.textContent || '').replace(/\n+$/, '').trim();
+      if (!next) { toast('Message vide', 'error'); return; }
+
+      bubble.contentEditable = 'false';
+      bubble.style.whiteSpace = 'pre-wrap';
+      editBar.remove();
+      pendingUserEdit = null;
+      if (actionsDiv) actionsDiv.hidden = false;
+
+      const live = getMsgs(jobId);
+      const cut = (m.id != null) ? live.findIndex((x) => x.id === m.id && x.role === 'user') : idx;
+      const cutIdx = cut >= 0 ? cut : idx;
+      live.splice(cutIdx);
+      saveMsgs(jobId, live);
+      if (jobId === ACTIVE_JOB) { MESSAGES = live; render(); }
+
+      if (SENDING.has(jobId)) {
+        enqueueAsk(jobId, next, null);
+        toast('Message en file d’attente', 'success');
+        updateQueueBadge(jobId);
+        return;
+      }
+      void handleAskExecute(jobId, next, null).catch(() => {});
+    };
+
+    /* Envoi via Enter (sans Shift) dans la bulle éditable */
+    bubble.addEventListener('keydown', function onKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        saveBtn.click();
+        bubble.removeEventListener('keydown', onKey);
+      }
+      if (e.key === 'Escape') {
+        cancelBtn.click();
+        bubble.removeEventListener('keydown', onKey);
+      }
+    });
+
+    editBar.appendChild(cancelBtn);
+    editBar.appendChild(saveBtn);
+    msgRow.appendChild(editBar);
   }
 
   function render() {
@@ -1070,50 +1146,73 @@ document.addEventListener('DOMContentLoaded', () => {
    * « en sandwich » : deux bandeaux, deux trombones, mic décalé.
    * On garde seulement la barre qui contient réellement #chatPrompt.
    */
+  /**
+   * Aplatit les #chat-compose-bar imbriqués en gardant celui qui contient #chatPrompt.
+   * Situation typique : Webflow a un div#chat-compose-bar parent qui entoure l'embed.
+   */
   function fixChatComposeNesting() {
     const sub = byId('agilo-chat-submission');
     if (!sub) return;
     const prompt = byId('chatPrompt');
     if (!prompt || !sub.contains(prompt)) return;
-    const bars = sub.querySelectorAll('[id="chat-compose-bar"]');
+    const bars = Array.from(sub.querySelectorAll('[id="chat-compose-bar"]'));
     if (bars.length <= 1) return;
     const keeper = prompt.closest('#chat-compose-bar');
     if (!keeper || !sub.contains(keeper)) return;
-    for (const el of Array.from(bars)) {
+    for (const el of bars) {
       if (el === keeper) continue;
-      if (el.contains(keeper)) {
-        const parent = el.parentNode;
-        if (!parent) continue;
+      const parent = el.parentNode;
+      if (!parent) continue;
+      if (el.contains(keeper) || keeper.contains(el)) {
+        /* Wrapper parasite : hisser ses enfants et supprimer */
         while (el.firstChild) parent.insertBefore(el.firstChild, el);
         el.remove();
       }
     }
   }
 
-  /** Deux #chat-compose-footer (id dupliqué) = deux rangées d’icônes. On garde celui de la barre du textarea. */
+  /**
+   * Supprime les footers dupliqués (#chat-compose-footer).
+   * Garde le footer qui contient #chat-send-btn (embed V1.08).
+   * Si aucun n'a le send btn, garde le premier.
+   */
   function fixDuplicateChatFooters() {
-    const prompt = byId('chatPrompt');
-    const goodBar = prompt?.closest('#chat-compose-bar');
-    if (!goodBar) return;
-    const goodFooter = goodBar.querySelector('#chat-compose-footer');
-    if (!goodFooter) return;
-    const f = goodBar.closest('form');
-    if (!f) return;
-    f.querySelectorAll('[id="chat-compose-footer"]').forEach((el) => {
-      if (el !== goodFooter) el.remove();
-    });
+    const root = byId('agilo-chat-submission') || document;
+    const all = Array.from(root.querySelectorAll('[id="chat-compose-footer"]'));
+    if (all.length <= 1) return;
+    const withSend = all.find(f => f.querySelector('#chat-send-btn'));
+    const good = withSend || all[0];
+    all.forEach(f => { if (f !== good) f.remove(); });
   }
 
-  /** Formulaire de chat + nœuds associés, toujours scopés au bon #chatPrompt (évite les doublons d’id). */
+  /**
+   * Supprime les #chat-attach-btn disabled parasites (ancien Webflow).
+   * Conserve le premier bouton non-disabled.
+   */
+  function fixDuplicateAttachBtns() {
+    const all = Array.from(document.querySelectorAll('[id="chat-attach-btn"]'));
+    if (all.length <= 1) {
+      if (all[0]) { all[0].removeAttribute('disabled'); all[0].removeAttribute('aria-disabled'); }
+      return;
+    }
+    const good = all.find(b => !b.disabled) || all[0];
+    good.removeAttribute('disabled');
+    good.removeAttribute('aria-disabled');
+    all.forEach(b => { if (b !== good) b.remove(); });
+  }
+
+  /** Formulaire de chat + nœuds, scopés au bon #chatPrompt. */
   function getChatFormScope() {
     const p = byId('chatPrompt');
     const f = p?.closest('form#wf-form-chat') || form;
+    const bar = p?.closest('#chat-compose-bar');
     return {
       prompt: p,
       formEl: f,
-      bar: p?.closest('#chat-compose-bar'),
-      footer: f?.querySelector('#chat-compose-footer') || p?.closest('#chat-compose-bar')?.querySelector('#chat-compose-footer'),
-      sendBtn: f?.querySelector('#chat-send-btn') || byId('chat-send-btn')
+      bar,
+      /* footer optionnel : absent dans le layout inline V1.08 */
+      footer: bar?.querySelector('[id="chat-compose-footer"]') || f?.querySelector('[id="chat-compose-footer"]') || null,
+      sendBtn: bar?.querySelector('#chat-send-btn') || f?.querySelector('#chat-send-btn') || byId('chat-send-btn')
     };
   }
 
@@ -1132,11 +1231,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function ensureChatChrome() {
     fixChatComposeNesting();
     fixDuplicateChatFooters();
+    fixDuplicateAttachBtns();
     {
       const bBar = byId('chatPrompt')?.closest('#chat-compose-bar');
       const bTag = byId('chat-queue-badge');
       if (bBar && bTag && !bBar.contains(bTag)) {
-        bBar.insertBefore(bTag, bBar.firstChild);
+        /* Dans la nouvelle barre inline, le badge est positionné en absolute — pas en firstChild */
+        const sub = bBar.closest('#agilo-chat-submission') || bBar.parentElement;
+        if (sub && !sub.contains(bTag)) sub.insertBefore(bTag, sub.firstChild);
       }
     }
     const { prompt, formEl, bar, footer, sendBtn: scopedSend } = getChatFormScope();
@@ -1242,9 +1344,14 @@ document.addEventListener('DOMContentLoaded', () => {
           if (chatSendBtn) chatSendBtn.disabled = true;
         } catch { toast('Impossible de démarrer la dictée', 'error'); }
       });
-      const foot = footer || byId('chat-compose-footer');
-      if (foot && chatSendBtn) foot.insertBefore(micBtn, chatSendBtn);
-      else if (foot) foot.appendChild(micBtn);
+      /* Insérer le mic juste avant le bouton Envoyer, qu'il soit dans un footer ou dans la bar */
+      const sendRef = chatSendBtn || byId('chat-send-btn');
+      if (sendRef) {
+        sendRef.parentNode.insertBefore(micBtn, sendRef);
+      } else {
+        const foot = footer || byId('chat-compose-footer') || bar;
+        if (foot) foot.appendChild(micBtn);
+      }
     }
 
     /* ---- F. Mode JS-build complet (data-agilo-compose="auto") — pas si embed déjà en place */
@@ -2029,22 +2136,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const q = (input?.value || '').trim();
     if (!q) { input?.focus(); return; }
     if (__dictationActive) { toast('Arrêtez la dictée avant d’envoyer', 'info'); return; }
-
-    /* —— Édition de message utilisateur (style ChatGPT) ——
-       Si pendingUserEdit est actif et concerne le même job, on tronque l'historique
-       avant de lancer l'envoi normal. */
-    if (pendingUserEdit && pendingUserEdit.jobId === jobId) {
-      const { idx, msgId } = pendingUserEdit;
-      pendingUserEdit = null;
-      const live = getMsgs(jobId);
-      const cut = (msgId != null) ? live.findIndex((x) => x.id === msgId && x.role === 'user') : idx;
-      const cutIdx = cut >= 0 ? cut : idx;
-      if (cutIdx >= 0 && cutIdx < live.length) {
-        live.splice(cutIdx);
-        saveMsgs(jobId, live);
-        if (jobId === ACTIVE_JOB) { MESSAGES = live; render(); }
-      }
-    }
 
     const intentHint = resolveIntentHintForQuestion(q, null);
 
