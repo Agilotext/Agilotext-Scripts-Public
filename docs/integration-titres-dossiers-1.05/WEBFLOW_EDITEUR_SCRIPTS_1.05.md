@@ -88,3 +88,41 @@ Les autres scripts de ton export (ex. `Code-modeles-compte-rendu.js`, variante `
 ## Après publication Webflow
 
 Purge cache navigateur ou ajoute `?v=` sur la première URL de script si jsDelivr met du temps à rafraîchir.
+
+---
+
+## Chat `Code-chat_V05` + `Code-chat-css` (ordre obligatoire)
+
+Si en console `window.__agiloChatVersion` est **`undefined`** et `document.getElementById('agilo-chat-styles')` est **`null`**, les deux fichiers **ne se sont pas exécutés** (souvent **404** jsDelivr, **faute de frappe** dans le nom du dépôt, ou script **bloqué**). Vérifier dans l’onglet **Network** que chaque URL répond **200** et un contenu **JavaScript** (pas une page HTML d’erreur).
+
+Le dépôt CDN doit s’écrire exactement : **`Agilotext/Agilotext-Scripts-Public`** (avec un **s** à *Scripts*).
+
+**Ordre dans Webflow :** charger **`Code-chat-css.js` avant `Code-chat_V05.js`**, même commit et même `?v=` sur les deux.
+
+Exemple (commit `7b8f1dc` — remplacer par `git rev-parse --short HEAD` après chaque release) :
+
+```text
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7b8f1dc/scripts/pages/editor/Code-chat-css.js?v=7b8f1dc
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7b8f1dc/scripts/pages/editor/Code-chat_V05.js?v=7b8f1dc
+```
+
+Test rapide : ouvrir chaque URL dans un nouvel onglet — tu dois voir le **code source** du script, pas un message d’erreur jsDelivr.
+
+## Déploiement chat sans erreur de hash (automatisé)
+
+Script recommandé dans le repo :
+
+```bash
+./scripts/deploy-chat.sh
+```
+
+Le script :
+- pousse la branche courante (`git push origin HEAD`) ;
+- vérifie que `Code-chat-css.js` et `Code-chat_V05.js` sont disponibles sur jsDelivr en HTTP 200 ;
+- affiche les 2 balises `<script>` prêtes à coller dans Webflow avec `@<hash>` + `?v=<hash>`.
+
+Par défaut, le script refuse de tourner si le working tree n’est pas propre. Si tu assumes l’état local, ajoute :
+
+```bash
+./scripts/deploy-chat.sh --allow-dirty
+```
