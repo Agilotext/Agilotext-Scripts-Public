@@ -342,9 +342,10 @@
     const outlookUrl = 'https://outlook.office.com/mail/deeplink/compose?subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
     const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
     const copyBtn = block.querySelector('.agilo-email-btn-copy');
-    const openTrigger = block.querySelector('.agilo-email-btn-open');
     const openConversationBtn = block.querySelector('.agilo-summary-open-chat-btn');
-    const dropdown = block.querySelector('.agilo-email-dropdown');
+    const directGmail = block.querySelector('a[data-agilo-mail-app="gmail"]');
+    const directOutlook = block.querySelector('a[data-agilo-mail-app="outlook"]');
+    const directDefault = block.querySelector('a[data-agilo-mail-app="default"]');
     const copyIconDefault = copyBtn ? copyBtn.innerHTML : '';
     const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
     const toastFn = typeof window.toast === 'function' ? window.toast : function () { };
@@ -423,37 +424,19 @@
         } catch (_) { }
       });
     }
-    if (openTrigger && dropdown) {
-      const links = dropdown.querySelectorAll('a.agilo-email-dropdown-item');
-      if (links[0]) links[0].href = gmailUrl;
-      if (links[1]) links[1].href = outlookUrl;
-      if (links[2]) links[2].href = mailtoUrl;
-      if (links[2]) { links[2].removeAttribute('target'); }
-      const close = function () {
-        dropdown.hidden = true;
-        dropdown.setAttribute('hidden', '');
-        dropdown.style.display = 'none';
-        openTrigger.setAttribute('aria-expanded', 'false');
-        targetDoc.removeEventListener('click', onDoc);
-      };
-      const onDoc = function () { close(); };
-      openTrigger.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (dropdown.hidden) {
-          dropdown.hidden = false;
-          dropdown.removeAttribute('hidden');
-          dropdown.style.display = 'block';
-          openTrigger.setAttribute('aria-expanded', 'true');
-          setTimeout(function () { targetDoc.addEventListener('click', onDoc); }, 0);
-        } else {
-          close();
-        }
-      });
-      dropdown.addEventListener('click', function (e) { e.stopPropagation(); });
-      [].forEach.call(dropdown.querySelectorAll('a[href]'), function (a) {
-        a.addEventListener('click', function () { close(); });
-      });
+    if (directGmail) {
+      directGmail.href = gmailUrl;
+      directGmail.target = '_blank';
+      directGmail.rel = 'noopener noreferrer';
+    }
+    if (directOutlook) {
+      directOutlook.href = outlookUrl;
+      directOutlook.target = '_blank';
+      directOutlook.rel = 'noopener noreferrer';
+    }
+    if (directDefault) {
+      directDefault.href = mailtoUrl;
+      directDefault.removeAttribute('target');
     }
   }
 
@@ -483,43 +466,27 @@
     copyBtn.setAttribute('aria-label', 'Copier le mail');
     copyBtn.setAttribute('title', 'Copier le mail');
     copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
-    const openWrap = targetDoc.createElement('div');
-    openWrap.className = 'agilo-email-open-wrap';
-    const openTrigger = targetDoc.createElement('button');
-    openTrigger.type = 'button';
-    openTrigger.className = 'agilo-email-btn agilo-email-btn-open';
-    openTrigger.setAttribute('aria-label', 'Ouvrir dans Gmail, Outlook ou l’app mail');
-    openTrigger.setAttribute('title', 'Ouvrir dans Gmail, Outlook ou l’app mail');
-    openTrigger.setAttribute('aria-haspopup', 'menu');
-    openTrigger.setAttribute('aria-expanded', 'false');
-    openTrigger.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="agilo-email-icon agilo-email-send-icon"><path d="M10.3009 13.6949L20.102 3.89742M10.5795 14.1355L12.8019 18.5804C13.339 19.6545 13.6075 20.1916 13.9458 20.3356C14.2394 20.4606 14.575 20.4379 14.8492 20.2747C15.1651 20.0866 15.3591 19.5183 15.7472 18.3818L19.9463 6.08434C20.2845 5.09409 20.4535 4.59896 20.3378 4.27142C20.2371 3.98648 20.013 3.76234 19.7281 3.66167C19.4005 3.54595 18.9054 3.71502 17.9151 4.05315L5.61763 8.2523C4.48114 8.64037 3.91289 8.83441 3.72478 9.15032C3.56153 9.42447 3.53891 9.76007 3.66389 10.0536C3.80791 10.3919 4.34498 10.6605 5.41912 11.1975L9.86397 13.42C10.041 13.5085 10.1295 13.5527 10.2061 13.6118C10.2742 13.6643 10.3352 13.7253 10.3876 13.7933C10.4468 13.87 10.491 13.9585 10.5795 14.1355Z"/></svg>';
-    const dropdown = targetDoc.createElement('div');
-    dropdown.className = 'agilo-email-dropdown';
-    dropdown.hidden = true;
-    dropdown.setAttribute('hidden', '');
-    dropdown.style.display = 'none';
-    dropdown.setAttribute('role', 'menu');
+    const directWrap = targetDoc.createElement('div');
+    directWrap.className = 'agilo-email-direct-links';
     const gmailSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="52 42 88 66" width="20" height="20" class="agilo-email-logo-gmail"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></svg>';
     const outlookSvg = '<img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6995e36911a4849150741ca6_Microsoft_Office_Outlook_(2018%E2%80%932024).svg" width="20" height="20" alt="" class="agilo-email-logo-outlook">';
     const defaultMailSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" class="agilo-email-logo-default"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M3.75 5.25L3 6V18L3.75 18.75H20.25L21 18V6L20.25 5.25H3.75ZM4.5 7.6955V17.25H19.5V7.69525L11.9999 14.5136L4.5 7.6955ZM18.3099 6.75H5.68986L11.9999 12.4864L18.3099 6.75Z"/></svg>';
     [
-      { label: 'Gmail', icon: gmailSvg, href: '#' },
-      { label: 'Outlook', icon: outlookSvg, href: '#' },
-      { label: 'App mail par défaut', icon: defaultMailSvg, href: '#' }
+      { app: 'gmail', label: 'Gmail', icon: gmailSvg },
+      { app: 'outlook', label: 'Outlook', icon: outlookSvg },
+      { app: 'default', label: 'Mail', icon: defaultMailSvg }
     ].forEach(function (item) {
       const a = targetDoc.createElement('a');
-      a.href = item.href;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.className = 'agilo-email-dropdown-item';
-      a.setAttribute('role', 'menuitem');
-      a.innerHTML = '<span class="agilo-email-dropdown-icon">' + item.icon + '</span><span>' + item.label + '</span>';
-      dropdown.appendChild(a);
+      a.href = '#';
+      a.className = 'agilo-email-btn agilo-email-btn-link';
+      a.setAttribute('data-agilo-mail-app', item.app);
+      a.setAttribute('aria-label', item.label);
+      a.setAttribute('title', item.label);
+      a.innerHTML = '<span class="agilo-email-icon">' + item.icon + '</span>';
+      directWrap.appendChild(a);
     });
-    openWrap.appendChild(openTrigger);
-    openWrap.appendChild(dropdown);
     tools.appendChild(copyBtn);
-    tools.appendChild(openWrap);
+    tools.appendChild(directWrap);
     header.appendChild(label);
     header.appendChild(tools);
     const subjLine = targetDoc.createElement('div');
