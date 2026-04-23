@@ -1,6 +1,14 @@
 /* ===========================================================
-   CHAT / MESSAGES — Harmonisé avec tes variables globales
-   (aucune redéfinition de --color--* ici)
+   CHAT / MESSAGES — Design system Agilotext + Webflow
+   ------------------------------------------------------------
+   · Jetons côté page (Webflow) : --color--blue, --color--gris,
+     --color--gris_foncé, --color--blanc_gris, --color--noir_25,
+     --color--white, --0-5_radius, etc.
+   · Jetons d’enrichissement (optionnels) : --agilo-primary, --agilo-surface,
+     --agilo-text, --agilo-dim, --agilo-border, --agilo-shadow, --agilo-focus
+   · Inspiration patterns (awesome-design / Intercom, Linear) : espacement
+     4–8px sur les contrôles, focus :focus-visible, ombre légère sur cartes.
+   Toute couleur de secours (fallback hex) s’applique si la variable absente.
    =========================================================== */
 
 /* Onglets éditeur (main + data-ed-tabs) : un seul volet visible.
@@ -383,10 +391,11 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: none;             /* pas de contour */
+  border: none;
   background: transparent;
-  color: var(--agilo-text-muted, #94a3b8);
-  border-radius: .4rem;
+  /* Sur bulle bleue : icônes lisibles (ne pas utiliser gris "muted" du thème clair) */
+  color: color-mix(in srgb, var(--color--white, #fff) 70%, transparent);
+  border-radius: var(--0-5_radius, .4rem);
   padding: 0;
   transition: background .12s, color .12s, transform .06s;
   opacity: 0;
@@ -397,12 +406,12 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   opacity: 1;
 }
 .msg-user-action-btn:hover {
-  background: rgba(255,255,255,.55);
-  color: var(--agilo-primary, #174a96);
+  background: color-mix(in srgb, var(--color--white, #fff) 18%, transparent);
+  color: var(--color--white, #fff);
 }
 .msg-user-action-btn:active { transform: translateY(1px); }
 .msg-user-action-btn:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--agilo-primary, #174a96) 70%, transparent);
+  outline: 2px solid var(--agilo-focus, color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 55%, #fff));
   outline-offset: 2px;
   opacity: 1;
 }
@@ -447,30 +456,42 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 .agilo-user-edit-cancel {
   appearance: none;
   cursor: pointer;
-  padding: .32rem .75rem;
-  border-radius: .5rem;
-  border: 1px solid rgba(0,0,0,.12);
-  background: transparent;
-  color: var(--agilo-text-muted, #64748b);
+  padding: .35rem .75rem;
+  border-radius: var(--0-5_radius, .5rem);
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  background: var(--agilo-surface, var(--color--white, #fff));
+  color: var(--agilo-dim, var(--color--gris, #525252));
   font-size: .82rem;
   font-family: inherit;
-  transition: background .12s;
+  font-weight: 500;
+  transition: background .12s, border-color .12s, color .12s;
 }
-.agilo-user-edit-cancel:hover { background: rgba(0,0,0,.05); }
+.agilo-user-edit-cancel:hover {
+  background: var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+}
 .agilo-user-edit-send {
   appearance: none;
   cursor: pointer;
-  padding: .32rem .8rem;
-  border-radius: .5rem;
+  padding: .35rem .85rem;
+  border-radius: var(--0-5_radius, .5rem);
   border: none;
-  background: var(--agilo-primary, #174a96);
-  color: #fff;
+  background: var(--agilo-primary, var(--color--blue, #174a96));
+  color: var(--color--white, #fff);
   font-size: .82rem;
   font-weight: 600;
   font-family: inherit;
-  transition: background .12s;
+  transition: background .12s, filter .12s;
 }
-.agilo-user-edit-send:hover { background: #1e3a8a; }
+.agilo-user-edit-send:hover {
+  background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 88%, #000);
+  filter: contrast(1.02);
+}
+.agilo-user-edit-send:focus-visible,
+.agilo-user-edit-cancel:focus-visible {
+  outline: 2px solid var(--agilo-focus, color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 50%, transparent));
+  outline-offset: 2px;
+}
 
 /* Titres manquants (tu n'as que h1–h3 aujourd'hui) */
 .msg-bubble h4,.msg-bubble h5,.msg-bubble h6{
@@ -645,15 +666,22 @@ div.w-embed:has(#agilo-chat-submission) {
   display: block !important;
 }
 
-/* Bordure unique sur #agilo-chat-submission (aligné sur chat-submission-embed.html) */
+/* Bordure unique sur #agilo-chat-submission (même chaine que l’embed inline) */
 #agilo-chat-submission {
   position: relative;
   box-sizing: border-box;
-  border: 1px solid var(--agilo-border, #cbd5e1);
-  border-radius: .75rem;
-  background: var(--agilo-surface, #fff);
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  font-family: inherit; /* hérite Montserrat/Inter de la page Webflow */
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  border-radius: var(--0-5_radius, .75rem);
+  background: var(--agilo-surface, var(--color--white, #fff));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  box-shadow: var(--agilo-shadow, 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04));
   overflow: hidden;
+  transition: box-shadow .2s, border-color .2s;
+}
+#agilo-chat-submission:focus-within {
+  border-color: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 40%, var(--agilo-border, var(--color--noir_25, #343a4040)));
+  box-shadow: var(--agilo-shadow, 0 1px 3px rgba(0,0,0,.07)), 0 0 0 3px color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 14%, transparent);
 }
 #agilo-chat-submission #chat-compose-bar {
   border: none;
@@ -663,8 +691,8 @@ div.w-embed:has(#agilo-chat-submission) {
 }
 #agilo-chat-submission #chat-compose-footer {
   border: none;
-  border-top: 1px solid color-mix(in srgb, var(--agilo-border, #cbd5e1) 55%, transparent);
-  background: color-mix(in srgb, var(--agilo-surface, #fff) 97%, #f1f5f9);
+  border-top: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  background: color-mix(in srgb, var(--agilo-surface, var(--color--white, #fff)) 96%, var(--agilo-surface-2, var(--color--blanc_gris, #f6f6f6)));
   flex-wrap: nowrap;
 }
 /* Badge file : pas de bandeau jaune; dans la barre, coin haut-droit (voir aussi embed) */
@@ -684,17 +712,19 @@ div.w-embed:has(#agilo-chat-submission) {
   margin: 0;
   padding: 2px 7px;
   min-width: 1.1rem;
-  border-radius: 6px;
-  background: #fef3c7;
+  border-radius: var(--0-5_radius, 6px);
+  /* file d'attente : teinte chaude, texte ambre fonce (fallback) */
+  background: color-mix(in srgb, #b45309 11%, var(--agilo-surface, var(--color--white, #fff)));
   color: #92400e;
   font-size: .7rem;
   font-weight: 600;
   line-height: 1.2;
   pointer-events: none;
-  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--agilo-text, #0b1222) 6%, transparent);
+  border: 1px solid color-mix(in srgb, #b45309 25%, var(--agilo-surface, var(--color--white, #fff)));
 }
 
-/* Mode JS-build fallback — barre inline unique (même layout que l'embed V1.08) */
+/* Mode JS-build fallback — barre inline unique (même jetons que l’embed Webflow) */
 body:not(:has(#agilo-chat-submission)) #chat-compose-bar {
   display: flex;
   flex-direction: row;
@@ -703,17 +733,19 @@ body:not(:has(#agilo-chat-submission)) #chat-compose-bar {
   padding: .4rem .45rem;
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid var(--agilo-border, #cbd5e1);
-  border-radius: .75rem;
-  background: var(--agilo-surface, #fff);
-  box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  font-family: inherit;
+  border: 1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+  border-radius: var(--0-5_radius, .75rem);
+  background: var(--agilo-surface, var(--color--white, #fff));
+  color: var(--agilo-text, var(--color--gris_foncé, #020202));
+  box-shadow: var(--agilo-shadow, 0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.04));
   overflow: hidden;
-  transition: box-shadow .15s, border-color .15s;
+  transition: box-shadow .2s, border-color .2s;
   position: relative;
 }
 body:not(:has(#agilo-chat-submission)) #chat-compose-bar:focus-within {
-  border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 45%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+  border-color: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 40%, var(--agilo-border, var(--color--noir_25, #343a4040)));
+  box-shadow: var(--agilo-shadow, 0 1px 3px rgba(0,0,0,.07)), 0 0 0 3px color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 14%, transparent);
 }
 body:not(:has(#agilo-chat-submission)) #chatPrompt {
   flex: 1 1 0; min-width: 0;
@@ -731,11 +763,11 @@ body:not(:has(#agilo-chat-submission)) #chat-send-btn {
   transition: background .14s, color .14s; box-sizing: border-box; font-size: 0;
 }
 body:not(:has(#agilo-chat-submission)) #chat-attach-btn { opacity: .5; }
-body:not(:has(#agilo-chat-submission)) #chat-attach-btn:hover { background: rgba(0,0,0,.07); opacity: .8; }
-body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, #174a96); }
-body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent); }
+body:not(:has(#agilo-chat-submission)) #chat-attach-btn:hover { background: color-mix(in srgb, var(--agilo-text, #0b1222) 7%, transparent); opacity: .8; }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn { color: var(--agilo-primary, var(--color--blue, #174a96)); }
+body:not(:has(#agilo-chat-submission)) #chat-send-btn:hover { background: color-mix(in srgb, var(--agilo-primary, var(--color--blue, #174a96)) 10%, transparent); }
 
 @media (max-width: 40rem) {
-  body:not(:has(#agilo-chat-submission)) #chat-compose-bar { border-radius: .55rem; padding: .3rem .35rem; }
+  body:not(:has(#agilo-chat-submission)) #chat-compose-bar { border-radius: var(--0-5_radius, .55rem); padding: .3rem .35rem; }
   body:not(:has(#agilo-chat-submission)) #chatPrompt { font-size: .9rem; }
 }
