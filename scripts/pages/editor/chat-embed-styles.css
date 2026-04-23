@@ -543,7 +543,7 @@
 /* Boutons icon-only dans la barre */
 #chat-attach-btn,
 #chat-dictate-btn,
-#chat-compose-footer #btnAsk {
+#chat-send-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -592,17 +592,20 @@
   50%       { background: rgba(239,68,68,.12); }
 }
 
-/* Bouton Envoyer */
-#chat-compose-footer #btnAsk {
+/* Bouton Envoyer (#chat-send-btn — nœud propre, jamais ciblé par .button.bleu Webflow) */
+#chat-send-btn {
   color: var(--agilo-primary, #174a96);
 }
-#chat-compose-footer #btnAsk:hover {
+#chat-send-btn:hover {
   background: color-mix(in srgb, var(--agilo-primary, #174a96) 10%, transparent);
 }
-#chat-compose-footer #btnAsk.is-busy {
+#chat-send-btn.is-busy {
   opacity: .45;
   pointer-events: none;
 }
+
+/* Le div#btnAsk Webflow est masqué via hidden — s'assure qu'il ne prend aucune place */
+#btnAsk[hidden] { display: none !important; }
 
 /* Badge file d'attente (au-dessus de la barre) */
 #chat-queue-badge {
@@ -616,9 +619,6 @@
   font-size: .75rem;
   font-weight: 600;
 }
-
-/* Annule l'ancien style global qui griserait aussi le nœud déplacé */
-#btnAsk.is-busy { opacity: .45; pointer-events: none; }
 
 @media (max-width: 40rem) {
   #chat-compose-bar { border-radius: .55rem; }
