@@ -3,6 +3,7 @@
    - Rendering & Rename (v1.1.4 FIXED for Extension issue)
    - Bulk Actions Module (v2.4.0)
    - v1.06: receiveSummary pour download_wrapper-link_summary_* (compte rendu)
+   - v1.06.1: ne pas forcer display:inline-block sur les liens (laisser le flex Webflow)
    ============================================================================= */
 
 (function() {
@@ -198,7 +199,7 @@
       if (aT && job.transcriptStatus && job.transcriptStatus.includes('READY')) {
         aT.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
         aT.target = "_blank";
-        aT.style.display = 'inline-block';
+        aT.style.removeProperty('display');
       } else if (aT) {
         aT.style.display = 'none';
       }
@@ -216,7 +217,7 @@
       if (aS && isSummaryReadyForDownload(job.transcriptStatus)) {
         aS.href = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFormat}&edition=${encodeURIComponent(edition)}`;
         aS.target = '_blank';
-        aS.style.display = 'inline-block';
+        aS.style.removeProperty('display');
       } else if (aS) {
         aS.style.display = 'none';
       }
