@@ -1,5 +1,5 @@
 // Agilotext — CSS chat injecté (généré depuis chat-embed-styles.css)
-// V07 : barre d'envoi via Embed autonome — ne pas éditer à la main
+// Ne pas éditer à la main
 (function(){
   if(document.getElementById('agilo-chat-css'))return;
   const s=document.createElement('style');
@@ -8,6 +8,11 @@
    CHAT / MESSAGES — Harmonisé avec tes variables globales
    (aucune redéfinition de --color--* ici)
    =========================================================== */
+
+/* Onglets éditeur : l’attribut [hidden] ne doit jamais être “gagné” par un display:flex global */
+section.edtr-pane[hidden] {
+  display: none !important;
+}
 
 /* Conteneur */
 #chatView{

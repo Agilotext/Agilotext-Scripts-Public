@@ -3,6 +3,11 @@
    (aucune redéfinition de --color--* ici)
    =========================================================== */
 
+/* Onglets éditeur : l’attribut [hidden] ne doit jamais être “gagné” par un display:flex global */
+section.edtr-pane[hidden] {
+  display: none !important;
+}
+
 /* Conteneur */
 #chatView{
   display:flex;
