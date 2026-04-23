@@ -49,11 +49,22 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ================== DOM ================== */
   const $ = (s, r = document) => r.querySelector(s);
   const byId = (id) => document.getElementById(id);
+  function tryParentGetElementById(id) {
+    try {
+      if (window.parent && window.parent !== window) {
+        return window.parent.document.getElementById(id);
+      }
+    } catch (e) { /* parent cross-origin */ }
+    return null;
+  }
+  function resolveChatView() {
+    return byId('chatView') || tryParentGetElementById('chatView');
+  }
   /** #chatPrompt du conteneur embed (évite un doublon d'id Webflow ailleurs sur la page) */
   function activeChatPrompt() {
     return byId('agilo-chat-submission')?.querySelector('#chatPrompt') || byId('chatPrompt');
   }
-  const chatView = byId('chatView');
+  let chatView = resolveChatView();
   const form = byId('wf-form-chat');
   const btnAsk = byId('btnAsk');
   chatView?.setAttribute('contenteditable', 'false');
@@ -403,13 +414,38 @@ document.addEventListener('DOMContentLoaded', () => {
       || 'ent'
     );
   }
+  function jobIdFromWindowLocation(win) {
+    try {
+      if (!win?.location) return '';
+      const s = new URLSearchParams(win.location.search || '');
+      const fromQ = s.get('jobId') || '';
+      if (fromQ) return String(fromQ).trim();
+      const h = win.location.hash || '';
+      const m = h.match(/(?:[?&]|^)jobId=([^&]+)/);
+      if (m) {
+        try { return decodeURIComponent(m[1]).trim(); } catch { return m[1].trim(); }
+      }
+    } catch (e) { /* accès interdit (cross-origin) */ }
+    return '';
+  }
+
   /** Aligné sur pickJobId() des autres scripts éditeur — évite le toast "Job ID manquant"
    *  quand le DOM se construit après le chargement du script. */
   function getJobId() {
+    let fromFrameOrTop = '';
+    try {
+      fromFrameOrTop = jobIdFromWindowLocation(window);
+      if (!fromFrameOrTop && window.top && window.top !== window) {
+        fromFrameOrTop = jobIdFromWindowLocation(window.top);
+      }
+    } catch (e) { /* ignore */ }
     const sp = new URLSearchParams(location.search);
     const rail = document.querySelector('.rail-item.is-active');
     return String(
-      sp.get('jobId')
+      fromFrameOrTop
+        || sp.get('jobId')
+        || tryParentGetElementById('pane-chat')?.dataset?.jobId
+        || tryParentGetElementById('pane-chat')?.dataset?.jobid
         || $('#pane-chat')?.dataset?.jobId
         || $('#pane-chat')?.dataset?.jobid
         || byId('editorRoot')?.dataset?.jobId
@@ -1137,6 +1173,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function render() {
+    if (!chatView || (typeof chatView.isConnected === 'boolean' && !chatView.isConnected)) {
+      chatView = resolveChatView();
+    }
     if (!chatView) return;
     ACTIVE_USER_EDIT_IDX = -1;
     const stickToBottom = isNearBottom(chatView);
@@ -2572,6 +2611,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* Si un autre script modifie #chatView après nous (ex. opentech), on reprend la main */
   setTimeout(() => {
+    if (!chatView || (typeof chatView.isConnected === 'boolean' && !chatView.isConnected)) {
+      chatView = resolveChatView();
+    }
     if (!chatView) return;
     const hasEmailBlock = chatView.querySelector('.agilo-email-block');
     const hasClassicBubbleWithObjet = chatView.querySelector('.msg-bubble:not(.msg-bubble--email)') && /Objet\s*:/i.test(chatView.textContent || '');
@@ -2624,7 +2666,7 @@ document.addEventListener('DOMContentLoaded', () => {
     openConversation,
 
     creds: () => resolveAuth(),
-    getJobId: () => (ACTIVE_JOB || getJobId()),
+    getJobId: () => refreshActiveJobId(),
     export: (msgIdx, fmt) => exportMessage(msgIdx, fmt),
     copy: async (msgIdx) => {
       if (MESSAGES[msgIdx]) {
