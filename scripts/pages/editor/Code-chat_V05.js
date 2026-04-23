@@ -1071,6 +1071,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const SVG_SEND      = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
   /**
+   * Même `id` dupliqué (ex. deux `#chat-compose-bar` imbriqués) = une barre
+   * « en sandwich » : deux bandeaux, deux trombones, mic décalé.
+   * On garde seulement la barre qui contient réellement #chatPrompt.
+   */
+  function fixChatComposeNesting() {
+    const sub = byId('agilo-chat-submission');
+    if (!sub) return;
+    const prompt = byId('chatPrompt');
+    if (!prompt || !sub.contains(prompt)) return;
+    const bars = sub.querySelectorAll('[id="chat-compose-bar"]');
+    if (bars.length <= 1) return;
+    const keeper = prompt.closest('#chat-compose-bar');
+    if (!keeper || !sub.contains(keeper)) return;
+    for (const el of Array.from(bars)) {
+      if (el === keeper) continue;
+      if (el.contains(keeper)) {
+        const parent = el.parentNode;
+        if (!parent) continue;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        el.remove();
+      }
+    }
+  }
+
+  /** Formulaire de chat + nœuds associés, toujours scopés au bon #chatPrompt (évite les doublons d’id). */
+  function getChatFormScope() {
+    const p = byId('chatPrompt');
+    const f = p?.closest('form#wf-form-chat') || form;
+    return {
+      prompt: p,
+      formEl: f,
+      bar: p?.closest('#chat-compose-bar'),
+      footer: f?.querySelector('#chat-compose-footer') || p?.closest('#chat-compose-bar')?.querySelector('#chat-compose-footer'),
+      sendBtn: f?.querySelector('#chat-send-btn') || byId('chat-send-btn')
+    };
+  }
+
+  /**
    * ensureChatChrome — V07 (embed autonome)
    *
    * Stratégie : si l'Embed Webflow a été copié-collé, les nœuds
@@ -1083,14 +1121,17 @@ document.addEventListener('DOMContentLoaded', () => {
    *   sur #pane-chat.
    */
   function ensureChatChrome() {
+    fixChatComposeNesting();
+    const { prompt, formEl, bar, footer, sendBtn: scopedSend } = getChatFormScope();
+
     /* ---- A. Résolution du bouton d'envoi (embed OU JS-build) ---- */
-    const existingSendBtn = byId('chat-send-btn');
+    const existingSendBtn = scopedSend;
     if (existingSendBtn) {
       /* L'Embed fournit #chat-send-btn (contrat DOM stable) */
       chatSendBtn = existingSendBtn;
       /* S'assurer que l'ancien div Webflow #btnAsk est bien caché */
       if (btnAsk) btnAsk.hidden = true;
-    } else if (byId('chat-compose-footer')) {
+    } else if (footer) {
       /* Barre injectée par ancienne version JS, sans #chat-send-btn */
       const sendBtn = document.createElement('button');
       sendBtn.type = 'button';
@@ -1099,7 +1140,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sendBtn.setAttribute('aria-label', 'Envoyer');
       sendBtn.title = 'Envoyer';
       sendBtn.innerHTML = SVG_SEND;
-      byId('chat-compose-footer').appendChild(sendBtn);
+      footer.appendChild(sendBtn);
       chatSendBtn = sendBtn;
       if (btnAsk) btnAsk.hidden = true;
     }
@@ -1110,8 +1151,8 @@ document.addEventListener('DOMContentLoaded', () => {
       badge.id = 'chat-queue-badge';
       badge.hidden = true;
       badge.setAttribute('aria-live', 'polite');
-      /* Insérer avant #chat-compose-bar s'il existe, sinon avant l'input */
-      const anchor = byId('chat-compose-bar') || (input && input.parentElement ? input : null);
+      /* Avant la barre qui contient le textarea (jamais le 1er #chat-compose-bar global si id dupliqué) */
+      const anchor = bar || (prompt && prompt.parentElement ? prompt : null);
       if (anchor && anchor.parentElement) {
         anchor.parentElement.insertBefore(badge, anchor);
       }
@@ -1135,15 +1176,15 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInput.value = '';
         renderAttachmentsList();
       });
-      (byId('chat-compose-bar') || input.parentElement).appendChild(fileInput);
+      (bar || input.parentElement).appendChild(fileInput);
     }
 
     /* ---- D. Conteneur liste PJ (si absent) ---- */
     if (!byId('chat-attachments-list')) {
       const listHost = document.createElement('div');
       listHost.id = 'chat-attachments-list';
-      const footer = byId('chat-compose-footer');
-      if (footer && footer.parentElement) footer.parentElement.insertBefore(listHost, footer);
+      const ftr = footer || byId('chat-compose-footer');
+      if (ftr && ftr.parentElement) ftr.parentElement.insertBefore(listHost, ftr);
     }
 
     /* ---- E. Mic (Web Speech API) — ajouter si absent dans le footer ---- */
@@ -1183,16 +1224,14 @@ document.addEventListener('DOMContentLoaded', () => {
           if (chatSendBtn) chatSendBtn.disabled = true;
         } catch { toast('Impossible de démarrer la dictée', 'error'); }
       });
-      /* Insérer avant #chat-send-btn dans le footer */
-      const footer = byId('chat-compose-footer');
-      if (footer && chatSendBtn) footer.insertBefore(micBtn, chatSendBtn);
-      else if (footer) footer.appendChild(micBtn);
+      const foot = footer || byId('chat-compose-footer');
+      if (foot && chatSendBtn) foot.insertBefore(micBtn, chatSendBtn);
+      else if (foot) foot.appendChild(micBtn);
     }
 
-    /* ---- F. Mode JS-build complet (data-agilo-compose="auto") ---- */
-    /* Déclenché uniquement si #pane-chat a data-agilo-compose="auto" ET qu'il n'y a toujours pas d'input */
+    /* ---- F. Mode JS-build complet (data-agilo-compose="auto") — pas si embed déjà en place */
     const paneChat = byId('pane-chat');
-    if (paneChat?.dataset?.agiloCompose === 'auto' && !byId('chat-compose-bar') && input) {
+    if (!byId('agilo-chat-submission') && paneChat?.dataset?.agiloCompose === 'auto' && !byId('chat-compose-bar') && input) {
       const bar = document.createElement('div'); bar.id = 'chat-compose-bar';
       const footer = document.createElement('div'); footer.id = 'chat-compose-footer';
       if (input.parentElement) {
