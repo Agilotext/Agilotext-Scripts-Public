@@ -552,8 +552,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (m.role === 'assistant') {
       const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
-      const head = raw.replace(/\*\*/g, '').slice(0, 600);
-      const looksLikeEmail = /\bObjet\s*:\s*\S/i.test(head) || (/\bObjet\b/i.test(head) && /Commentaire interne\s*(\(non envoyé\))?\s*:/i.test(raw));
+      /* Détection e-mail élargie :
+         1. "Objet :" ou "Sujet :" dans les 3000 premiers caractères (au lieu de 600)
+         2. Ou context d'intent e-mail établi dans la session (relances "modifie", "plus court", etc.)
+         3. Ou "Commentaire interne" sans "Objet" (blocs partiels de suivi) */
+      const rawStripped = raw.replace(/\*\*/g, '').replace(/^#{1,6}\s+/gm, '');
+      const head3k = rawStripped.slice(0, 3000);
+      const hasObjet = /\b(?:Objet|Sujet)\s*:\s*\S/i.test(head3k);
+      const hasCommentaire = /Commentaire interne\s*(?:\(non envoyé\))?\s*:/i.test(raw);
+      const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
+      const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent));
       const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
@@ -688,14 +696,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (/^\*{1,3}$/.test(p)) return false;
             return true;
           });
+        /* nettoyage final du paragraphe : résidus **gras** ou ###titre après postProcessEmail */
+        const cleanParagraph = (p) =>
+          p.replace(/\*\*(.+?)\*\*/g, '$1')
+           .replace(/\*(.+?)\*/g, '$1')
+           .replace(/^#{1,6}\s+/gm, '')
+           .replace(/^[-*•▪]\s+/gm, '');
         if (paragraphs.length > 0) {
           bodyWrap.innerHTML = paragraphs.map(function (p, i) {
-            const escaped = String(p).replace(/</g, '&lt;').replace(/\n/g, '<br>');
+            const cleaned = cleanParagraph(p);
+            const escaped = String(cleaned).replace(/</g, '&lt;').replace(/\n/g, '<br>');
             const cls = i === 0 && /^Objet\s*:/i.test(p.trim()) ? 'agilo-email-p agilo-email-p-first' : 'agilo-email-p';
             return '<p class="' + cls + '">' + escaped + '</p>';
           }).join('');
         } else {
-          bodyWrap.textContent = emailBodyText;
+          bodyWrap.textContent = cleanParagraph(emailBodyText);
         }
         block.appendChild(bodyWrap);
 
@@ -885,8 +900,13 @@ document.addEventListener('DOMContentLoaded', () => {
     MESSAGES.forEach((m, idx) => {
       chatView.appendChild(buildMessageNode(m, idx, lastAssistantIndex));
     });
-    chatView.setAttribute('data-agilo-chat', 'V06-queue-pj-dictation');
-    if (stickToBottom) {
+    chatView.setAttribute('data-agilo-chat', 'V07-embed');
+    /* Si l'utilisateur était en bas OU si le dernier message est une réponse assistante
+       fraîche (et non un thinking), on recolle en bas. */
+    const lastMsg = MESSAGES[MESSAGES.length - 1];
+    const lastIsAssistant = lastMsg?.role === 'assistant';
+    const lastIsThinking = lastIsAssistant && /thinking-indicator|Assistant réfléchit|Je travaille sur la rédaction/i.test(lastMsg?.text || '');
+    if (stickToBottom || (lastIsAssistant && !lastIsThinking)) {
       chatView.scrollTop = chatView.scrollHeight;
     } else {
       chatView.scrollTop = prevScrollTop;
@@ -947,7 +967,8 @@ document.addEventListener('DOMContentLoaded', () => {
           existing.replaceWith(freshNode);
           const thinking = typeof newText === 'string' && (newText.includes('thinking-indicator') || /Assistant réfléchit|Je travaille sur la rédaction du post LinkedIn/i.test(newText));
           if (freshNode.classList.contains('msg--ai') && !thinking) {
-            scrollChatNodeIntoView(freshNode);
+            /* Réponse finale : scroller en bas pour que l'utilisateur la voie sans action */
+            scrollChatToBottom();
           }
           return;
         }
@@ -969,10 +990,33 @@ document.addEventListener('DOMContentLoaded', () => {
     if (jobId === ACTIVE_JOB) setBusy(false);
   }
 
+  /**
+   * Fait défiler chatView pour rendre le nœud visible.
+   * Pour les bulles assistantes (longues), on préfère aligner en bas
+   * plutôt qu'en haut : l'utilisateur voit la fin du message, pas le début.
+   * Si le nœud est très court (< 120px), on aligne en 'start' (comportement classique).
+   */
   function scrollChatNodeIntoView(node) {
     if (!node || !chatView) return;
     requestAnimationFrame(() => {
-      try { node.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch { }
+      try {
+        const isAI = node.classList.contains('msg--ai');
+        const nodeH = node.offsetHeight || 0;
+        if (isAI && nodeH > 120) {
+          /* Réponse longue : scroller le conteneur tout en bas */
+          chatView.scrollTop = chatView.scrollHeight;
+        } else {
+          node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      } catch { }
+    });
+  }
+
+  /** Force chatView en bas — appelée après ajout / remplacement d'un message assistant. */
+  function scrollChatToBottom(behavior = 'smooth') {
+    if (!chatView) return;
+    requestAnimationFrame(() => {
+      try { chatView.scrollTo({ top: chatView.scrollHeight, behavior }); } catch { chatView.scrollTop = chatView.scrollHeight; }
     });
   }
 
@@ -1027,13 +1071,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const SVG_SEND      = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`;
 
   /**
-   * Crée #chat-send-btn si absent, masque div#btnAsk Webflow, met à jour chatSendBtn.
-   * (Migration : les anciennes exécutions avaient le badge+barre mais gardaient le gros .button.bleu
-   *  car ensureChatChrome() s'arrêtait dès que #chat-queue-badge existait — voir V06 hotfix.) */
-  function ensureChatSendNode() {
-    const footer = byId('chat-compose-footer');
-    if (!footer) return;
-    if (!byId('chat-send-btn')) {
+   * ensureChatChrome — V07 (embed autonome)
+   *
+   * Stratégie : si l'Embed Webflow a été copié-collé, les nœuds
+   *   #chat-compose-bar, #chat-compose-footer, #chatPrompt, #chat-send-btn
+   *   existent DÉJÀ dans le DOM statique.
+   *   → Le script n'attache que les listeners et adapte le badge de file.
+   *
+   * Si la page utilise encore l'ancien form Webflow (mode de compatibilité),
+   *   la construction JS complète reste disponible via data-agilo-compose="auto"
+   *   sur #pane-chat.
+   */
+  function ensureChatChrome() {
+    /* ---- A. Résolution du bouton d'envoi (embed OU JS-build) ---- */
+    const existingSendBtn = byId('chat-send-btn');
+    if (existingSendBtn) {
+      /* L'Embed fournit #chat-send-btn (contrat DOM stable) */
+      chatSendBtn = existingSendBtn;
+      /* S'assurer que l'ancien div Webflow #btnAsk est bien caché */
+      if (btnAsk) btnAsk.hidden = true;
+    } else if (byId('chat-compose-footer')) {
+      /* Barre injectée par ancienne version JS, sans #chat-send-btn */
       const sendBtn = document.createElement('button');
       sendBtn.type = 'button';
       sendBtn.id = 'chat-send-btn';
@@ -1041,90 +1099,56 @@ document.addEventListener('DOMContentLoaded', () => {
       sendBtn.setAttribute('aria-label', 'Envoyer');
       sendBtn.title = 'Envoyer';
       sendBtn.innerHTML = SVG_SEND;
-      footer.appendChild(sendBtn);
-    }
-    chatSendBtn = byId('chat-send-btn');
-    if (btnAsk) btnAsk.hidden = true;
-  }
-
-  function ensureChatChrome() {
-    if (!form) return;
-
-    /* Barre déjà injectée (y compris par une version antérieure) : compléter, ne pas recréer. */
-    if (byId('chat-compose-bar')) {
-      ensureChatSendNode();
-      return;
+      byId('chat-compose-footer').appendChild(sendBtn);
+      chatSendBtn = sendBtn;
+      if (btnAsk) btnAsk.hidden = true;
     }
 
-    if (byId('chat-queue-badge')) return;
-
-    /* ---- 1. Badge file d'attente ---- */
-    const badge = document.createElement('span');
-    badge.id = 'chat-queue-badge';
-    badge.hidden = true;
-    badge.setAttribute('aria-live', 'polite');
-
-    /* ---- 2. Compose bar (enveloppe textarea + footer) ---- */
-    const bar = document.createElement('div');
-    bar.id = 'chat-compose-bar';
-
-    const footer = document.createElement('div');
-    footer.id = 'chat-compose-footer';
-
-    /* Reparenter le textarea dans le bar (les event listeners existants restent valides) */
-    if (input && input.parentElement) {
-      input.parentElement.insertBefore(badge, input);
-      input.parentElement.insertBefore(bar, input);
-      bar.appendChild(input);
-      bar.appendChild(footer);
-    }
-
-    /* ---- 3. Bouton PJ — grisé (backend non prêt) ---- */
-    const attachBtn = document.createElement('button');
-    attachBtn.type = 'button';
-    attachBtn.id = 'chat-attach-btn';
-    attachBtn.setAttribute('aria-label', 'Pièce jointe (bientôt disponible)');
-    attachBtn.title = 'Pièce jointe (bientôt disponible)';
-    attachBtn.disabled = true;
-    attachBtn.setAttribute('aria-disabled', 'true');
-    attachBtn.innerHTML = SVG_PAPERCLIP;
-    /* Pas d'écouteur clic : disabled + pointer-events:none dans le CSS */
-    footer.appendChild(attachBtn);
-
-    /* Input file masqué — conservé pour la phase 2 (ATTACHMENTS_ENABLED) */
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.id = 'chat-file-input';
-    fileInput.multiple = true;
-    fileInput.accept = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
-    fileInput.style.display = 'none';
-    fileInput.addEventListener('change', () => {
-      const arr = Array.from(fileInput.files || []);
-      for (const f of arr) {
-        if (PENDING_FILES.length >= MAX_ATTACH_FILES) {
-          toast(`Maximum ${MAX_ATTACH_FILES} fichiers`, 'error');
-          break;
-        }
-        if (f.size > MAX_ATTACH_MB * 1024 * 1024) {
-          toast(`${f.name} : max ${MAX_ATTACH_MB} Mo`, 'error');
-          continue;
-        }
-        PENDING_FILES.push(f);
+    /* ---- B. Badge file d'attente (ajouter si absent) ---- */
+    if (!byId('chat-queue-badge')) {
+      const badge = document.createElement('span');
+      badge.id = 'chat-queue-badge';
+      badge.hidden = true;
+      badge.setAttribute('aria-live', 'polite');
+      /* Insérer avant #chat-compose-bar s'il existe, sinon avant l'input */
+      const anchor = byId('chat-compose-bar') || (input && input.parentElement ? input : null);
+      if (anchor && anchor.parentElement) {
+        anchor.parentElement.insertBefore(badge, anchor);
       }
-      fileInput.value = '';
-      renderAttachmentsList();
-    });
-    bar.appendChild(fileInput);
+    }
 
-    /* Liste PJ (entre textarea et footer) */
-    const listHost = document.createElement('div');
-    listHost.id = 'chat-attachments-list';
-    bar.insertBefore(listHost, footer);
+    /* ---- C. Input file masqué pour phase 2 PJ (si absent) ---- */
+    if (!byId('chat-file-input') && input) {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.id = 'chat-file-input';
+      fileInput.multiple = true;
+      fileInput.accept = '.pdf,.jpg,.jpeg,.png,.webp,.txt,.doc,.docx';
+      fileInput.style.display = 'none';
+      fileInput.addEventListener('change', () => {
+        const arr = Array.from(fileInput.files || []);
+        for (const f of arr) {
+          if (PENDING_FILES.length >= MAX_ATTACH_FILES) { toast(`Maximum ${MAX_ATTACH_FILES} fichiers`, 'error'); break; }
+          if (f.size > MAX_ATTACH_MB * 1024 * 1024) { toast(`${f.name} : max ${MAX_ATTACH_MB} Mo`, 'error'); continue; }
+          PENDING_FILES.push(f);
+        }
+        fileInput.value = '';
+        renderAttachmentsList();
+      });
+      (byId('chat-compose-bar') || input.parentElement).appendChild(fileInput);
+    }
 
-    /* ---- 4. Bouton Mic (Web Speech API) ---- */
-    /* Phase 2 dictée (option) : alignement Speechmatics / AgiloLiveVoiceController — voir scripts/shared/speechmatics-streaming.js */
-    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRec && input) {
+    /* ---- D. Conteneur liste PJ (si absent) ---- */
+    if (!byId('chat-attachments-list')) {
+      const listHost = document.createElement('div');
+      listHost.id = 'chat-attachments-list';
+      const footer = byId('chat-compose-footer');
+      if (footer && footer.parentElement) footer.parentElement.insertBefore(listHost, footer);
+    }
+
+    /* ---- E. Mic (Web Speech API) — ajouter si absent dans le footer ---- */
+    if (!byId('chat-dictate-btn') && (window.SpeechRecognition || window.webkitSpeechRecognition) && input) {
+      const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
       const micBtn = document.createElement('button');
       micBtn.type = 'button';
       micBtn.id = 'chat-dictate-btn';
@@ -1132,58 +1156,69 @@ document.addEventListener('DOMContentLoaded', () => {
       micBtn.setAttribute('aria-label', 'Dicter');
       micBtn.title = 'Dicter (navigateur)';
       micBtn.innerHTML = SVG_MIC;
-      const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
       micBtn.addEventListener('click', () => {
-        if (__dictationActive) {
-          try { __speechRecognition && __speechRecognition.stop(); } catch { }
-          return;
-        }
+        if (__dictationActive) { try { __speechRecognition?.stop(); } catch { } return; }
         const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!Rec) { toast('Dictée non supportée sur ce navigateur', 'error'); return; }
         const rec = new Rec();
-        rec.lang = lang;
-        rec.interimResults = true;
-        rec.continuous = true;
+        rec.lang = lang; rec.interimResults = true; rec.continuous = true;
         rec.onresult = (ev) => {
-          let finalChunk = '';
-          for (let i = ev.resultIndex; i < ev.results.length; i++) {
-            const res = ev.results[i];
-            if (res.isFinal) finalChunk += res[0].transcript;
-          }
-          if (finalChunk) {
-            const cur = (input.value || '').trimEnd();
-            input.value = cur + (cur ? ' ' : '') + finalChunk.trim() + ' ';
-          }
+          let chunk = '';
+          for (let i = ev.resultIndex; i < ev.results.length; i++) { if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript; }
+          if (chunk) { const cur = (input.value || '').trimEnd(); input.value = cur + (cur ? ' ' : '') + chunk.trim() + ' '; }
         };
         rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
         rec.onend = () => {
-          __dictationActive = false;
-          __speechRecognition = null;
+          __dictationActive = false; __speechRecognition = null;
           micBtn.setAttribute('aria-pressed', 'false');
           micBtn.classList.remove('is-recording');
           micBtn.innerHTML = SVG_MIC;
-          if (btnAsk) btnAsk.disabled = false;
           if (chatSendBtn) chatSendBtn.disabled = false;
         };
         try {
-          rec.start();
-          __dictationActive = true;
-          __speechRecognition = rec;
+          rec.start(); __dictationActive = true; __speechRecognition = rec;
           micBtn.setAttribute('aria-pressed', 'true');
           micBtn.classList.add('is-recording');
           micBtn.innerHTML = SVG_MIC_STOP;
-          if (btnAsk) btnAsk.disabled = true;
           if (chatSendBtn) chatSendBtn.disabled = true;
-        } catch (e) {
-          toast('Impossible de démarrer la dictée', 'error');
-        }
+        } catch { toast('Impossible de démarrer la dictée', 'error'); }
       });
-      footer.appendChild(micBtn);
+      /* Insérer avant #chat-send-btn dans le footer */
+      const footer = byId('chat-compose-footer');
+      if (footer && chatSendBtn) footer.insertBefore(micBtn, chatSendBtn);
+      else if (footer) footer.appendChild(micBtn);
     }
 
-    /* ---- 5. Bouton Envoyer — créé ici + helper partagé (évite conflit .button.bleu Webflow) ---- */
-    ensureChatSendNode();
-
+    /* ---- F. Mode JS-build complet (data-agilo-compose="auto") ---- */
+    /* Déclenché uniquement si #pane-chat a data-agilo-compose="auto" ET qu'il n'y a toujours pas d'input */
+    const paneChat = byId('pane-chat');
+    if (paneChat?.dataset?.agiloCompose === 'auto' && !byId('chat-compose-bar') && input) {
+      const bar = document.createElement('div'); bar.id = 'chat-compose-bar';
+      const footer = document.createElement('div'); footer.id = 'chat-compose-footer';
+      if (input.parentElement) {
+        input.parentElement.insertBefore(bar, input);
+        bar.appendChild(input);
+        bar.appendChild(footer);
+      }
+      /* PJ stub */
+      const attachBtn = document.createElement('button');
+      attachBtn.type = 'button'; attachBtn.id = 'chat-attach-btn';
+      attachBtn.setAttribute('aria-label', 'Pièce jointe (bientôt disponible)');
+      attachBtn.title = 'Pièce jointe (bientôt disponible)';
+      attachBtn.disabled = true; attachBtn.setAttribute('aria-disabled', 'true');
+      attachBtn.innerHTML = SVG_PAPERCLIP;
+      footer.appendChild(attachBtn);
+      /* Bouton envoi */
+      if (!byId('chat-send-btn')) {
+        const sendBtn = document.createElement('button');
+        sendBtn.type = 'button'; sendBtn.id = 'chat-send-btn'; sendBtn.className = 'agilo-chat-send';
+        sendBtn.setAttribute('aria-label', 'Envoyer'); sendBtn.title = 'Envoyer';
+        sendBtn.innerHTML = SVG_SEND;
+        footer.appendChild(sendBtn);
+        chatSendBtn = sendBtn;
+      }
+      if (btnAsk) btnAsk.hidden = true;
+    }
   }
 
   async function uploadPendingAttachments(auth, jobId) {
@@ -1921,7 +1956,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastIntent = getLastIntent();
     let intentHint = null;
     if (lastIntent === 'email' && !isExplicitLinkedIn(q)) {
-      if (/^oui\b|voici\b|ci[-\s]?dessous\b|voilà\b/i.test(q) || looksLikeEmailThread(q)) intentHint = 'email';
+      /* Relances courtes dans un contexte e-mail : "oui", "raccourcis", "plus formel", etc. */
+      const isShortFollowUp = q.length < 120;
+      const isEmailRelance = /^(oui|ok|non|voici|ci[-\s]?dessous|voilà|super|parfait|modifi|raccourci|plus\s+(court|long|formel|simple|direct)|enlève|ajoute|change|remplace|refais|reformule|send|envoie)/i.test(q.trim());
+      if (isShortFollowUp && isEmailRelance) intentHint = 'email';
+      if (looksLikeEmailThread(q)) intentHint = 'email';
     }
     if (isExplicitLinkedIn(q)) intentHint = 'linkedin';
     if (isExplicitEmail(q)) intentHint = 'email';
@@ -1986,8 +2025,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialPlaceholder = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
     pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
     input.value = '';
-    const userNodes = chatView?.querySelectorAll('.msg--user');
-    scrollChatNodeIntoView(userNodes?.[userNodes.length - 1] || null);
+    /* Scroller immédiatement en bas : l'utilisateur voit sa bulle + le thinking */
+    scrollChatToBottom('instant');
 
     try {
       const prompt = await buildPrompt(qForPrompt, intentResolved);
