@@ -34,6 +34,26 @@
     step(Math.max(1,n));
   });
   
+  /** Webflow: certains w-embed icon ont <svg width="auto" height="auto"> (invalide). On nettoie dès que possible. */
+  function agiloStripInvalidSvgLayoutAttrs(root){
+    const scope = root || document;
+    if (!scope.querySelectorAll) return;
+    try {
+      scope.querySelectorAll('svg').forEach((svg) => {
+        ['width', 'height'].forEach((a) => {
+          const v = svg.getAttribute(a);
+          if (v && String(v).trim().toLowerCase() === 'auto') svg.removeAttribute(a);
+        });
+      });
+    } catch (e) { /* ignore */ }
+  }
+  function agiloRunSvgLayoutFixes(){ agiloStripInvalidSvgLayoutAttrs(document); }
+  agiloRunSvgLayoutFixes();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', agiloRunSvgLayoutFixes, { once: true });
+  }
+  [0, 100, 2000].forEach((ms) => setTimeout(agiloRunSvgLayoutFixes, ms));
+  
   // JSON Nico -> UI
 const msToSec = ms => Math.max(0, Math.floor((+ms || 0) / 1000));
 const decodeNL = s => String(s||'')
