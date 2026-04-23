@@ -534,17 +534,64 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 #btnAsk[hidden] { display: none !important; }
 #chat-compose-footer:has(#chat-send-btn) #btnAsk { display: none !important; }
 
-/* Badge file d'attente */
-#chat-queue-badge {
-  display: inline-block;
-  min-width: 1.25rem;
-  margin-bottom: 4px;
-  padding: 2px 8px;
+/* Zone embed Webflow : pas de 2e cadre autour du HTML injecté */
+.w-embed:has(#agilo-chat-submission),
+div.w-embed:has(#agilo-chat-submission) {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: block !important;
+}
+
+/* Bordure unique sur #agilo-chat-submission (aligné sur chat-submission-embed.html) */
+#agilo-chat-submission {
+  position: relative;
+  box-sizing: border-box;
+  border: 1px solid var(--agilo-border, #cbd5e1);
+  border-radius: .75rem;
+  background: var(--agilo-surface, #fff);
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  overflow: hidden;
+}
+#agilo-chat-submission #chat-compose-bar {
+  border: none;
+  box-shadow: none;
+  position: relative;
+  background: transparent;
+}
+#agilo-chat-submission #chat-compose-footer {
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--agilo-border, #cbd5e1) 55%, transparent);
+  background: color-mix(in srgb, var(--agilo-surface, #fff) 97%, #f1f5f9);
+  flex-wrap: nowrap;
+}
+/* Badge file : pas de bandeau jaune; dans la barre, coin haut-droit (voir aussi embed) */
+#agilo-chat-submission #chat-queue-badge[hidden],
+#agilo-chat-submission #chat-queue-badge:empty {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  background: transparent !important;
+}
+#agilo-chat-submission #chat-queue-badge:not([hidden]) {
+  position: absolute;
+  z-index: 2;
+  top: .4rem;
+  right: .55rem;
+  margin: 0;
+  padding: 2px 7px;
+  min-width: 1.1rem;
   border-radius: 6px;
   background: #fef3c7;
   color: #92400e;
-  font-size: .75rem;
+  font-size: .7rem;
   font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
 }
 
 /* Mode JS-build fallback (data-agilo-compose="auto") — si l'embed n'est pas installé */

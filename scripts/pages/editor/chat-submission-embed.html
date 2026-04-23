@@ -25,20 +25,14 @@
 
 <style>
 /* ── Scope strict : tout sous #agilo-chat-submission ─────────────── */
+/* Un seul encadré : bordure sur le conteneur Webflow, pas 2e cadre + sur #chat-compose-bar */
 #agilo-chat-submission {
   display: flex;
   flex-direction: column;
   width: 100%;
   box-sizing: border-box;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-}
-
-/* Barre de composition */
-#agilo-chat-submission #chat-compose-bar {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  box-sizing: border-box;
+  position: relative;
   border: 1px solid var(--agilo-border, #cbd5e1);
   border-radius: .75rem;
   background: var(--agilo-surface, #ffffff);
@@ -46,9 +40,24 @@
   overflow: hidden;
   transition: box-shadow .15s, border-color .15s;
 }
-#agilo-chat-submission #chat-compose-bar:focus-within {
+#agilo-chat-submission:focus-within {
   border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+}
+
+/* Le bloc interne = pas de 2e bordure (évite “double boîte”) */
+#agilo-chat-submission #chat-compose-bar {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  min-width: 0;
 }
 
 /* Textarea */
@@ -63,7 +72,7 @@
   box-sizing: border-box;
   min-height: 48px;
   max-height: 180px;
-  padding: .75rem 1rem .25rem;
+  padding: .75rem 2.5rem .25rem 1rem;
   font-size: .9375rem;
   line-height: 1.55;
   color: var(--agilo-text, #020202);
@@ -73,15 +82,20 @@
   color: var(--agilo-dim, #9ca3af);
 }
 
-/* Footer icônes */
+/* Footer : une seule rangée, séparée du textarea par un filet (pas un 2e “carton”) */
 #agilo-chat-submission #chat-compose-footer {
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   gap: .2rem;
-  padding: .3rem .4rem;
+  padding: .35rem .45rem;
   width: 100%;
   box-sizing: border-box;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--agilo-border, #cbd5e1) 55%, transparent);
+  background: color-mix(in srgb, var(--agilo-surface, #fff) 97%, #f1f5f9);
+  margin: 0;
 }
 /* Pousse mic+send vers la droite */
 #agilo-chat-submission #chat-compose-footer::before {
@@ -165,24 +179,40 @@
   display: none !important;
 }
 
-/* Badge file d'attente (injecté par JS) */
-#agilo-chat-submission #chat-queue-badge {
+/* Badge file (injecté par JS dans la barre) : pas de bandeau jaune au-dessus du chat */
+#agilo-chat-submission #chat-queue-badge[hidden],
+#agilo-chat-submission #chat-queue-badge:empty {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  background: transparent !important;
+}
+#agilo-chat-submission #chat-queue-badge:not([hidden]) {
+  position: absolute;
+  z-index: 2;
+  top: .4rem;
+  right: .55rem;
   display: inline-block;
-  min-width: 1.25rem;
-  margin-bottom: 4px;
-  padding: 2px 8px;
+  min-width: 1.1rem;
+  margin: 0;
+  padding: 2px 7px;
   border-radius: 6px;
   background: #fef3c7;
   color: #92400e;
-  font-size: .75rem;
+  font-size: .7rem;
   font-weight: 600;
+  line-height: 1.2;
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  pointer-events: none;
 }
 
 /* Responsive */
 @media (max-width: 40rem) {
-  #agilo-chat-submission #chat-compose-bar { border-radius: .55rem; }
+  #agilo-chat-submission { border-radius: .55rem; }
   #agilo-chat-submission #chatPrompt { padding: .6rem .75rem .2rem; font-size: .9rem; }
-  #agilo-chat-submission #chat-compose-footer { padding: .25rem .3rem; }
+  #agilo-chat-submission #chat-compose-footer { padding: .28rem .35rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   #agilo-chat-submission * { animation-duration: .001ms !important; transition: none !important; }
