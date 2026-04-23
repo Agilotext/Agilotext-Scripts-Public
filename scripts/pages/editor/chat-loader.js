@@ -1,5 +1,8 @@
-// Agilotext - Chat Loader (single script for Webflow)
-// Injecte le markup de composition + charge Code-chat-css.js puis Code-chat_V05.js.
+// Agilotext - Chat Loader (un seul script Webflow)
+// 1) Styles (fetch chat-embed-styles.css, même contenu qu’avant via Code-chat-css.js)
+// 2) Markup (chat-submission-embed.html)
+// 3) Code-chat_V05.js
+// Ancien enchaînement Code-chat-css.js + V05 : remplacé par ce loader seul.
 (function () {
   if (window.__agiloChatLoaderLoaded) return;
   window.__agiloChatLoaderLoaded = true;
@@ -43,6 +46,28 @@
     });
   }
 
+  /** Même rôle que l’ancien Code-chat-css.js : #agilo-chat-styles pour ne pas dupliquer si déjà présent. */
+  async function injectChatStylesIfNeeded() {
+    if (document.getElementById('agilo-chat-styles')) return;
+    const url = `${BASE}/chat-embed-styles.css?v=${REF}${BUSTQ}`;
+    try {
+      const res = await fetch(url, { credentials: 'omit' });
+      if (!res.ok) throw new Error(String(res.status));
+      const s = document.createElement('style');
+      s.id = 'agilo-chat-styles';
+      s.setAttribute('data-agilo-injected', 'chat-loader');
+      s.textContent = await res.text();
+      document.head.appendChild(s);
+    } catch (e) {
+      const link = document.createElement('link');
+      link.id = 'agilo-chat-styles';
+      link.rel = 'stylesheet';
+      link.href = url;
+      link.setAttribute('data-agilo-fallback', 'link');
+      document.head.appendChild(link);
+    }
+  }
+
   async function injectMarkupIfNeeded() {
     if (document.getElementById('agilo-chat-submission')) return;
     const target = document.getElementById('agilo-chat-mount') || document.querySelector('[data-agilo-chat-mount]') || document.getElementById('pane-chat') || document.body;
@@ -56,9 +81,9 @@
 
   async function start() {
     try {
+      await injectChatStylesIfNeeded();
       await injectMarkupIfNeeded();
-      await loadScript('Code-chat-css.js');
-      /* Code-chat_V05 s’exécute après DOMContentLoaded : il doit s’init si document.readyState !== "loading" */
+      /* Code-chat_V05 s’exécute après ; il réinitialise si document déjà prêt. */
       await loadScript('Code-chat_V05.js');
       window.dispatchEvent(new CustomEvent('agilo:chat-loader-ready', { detail: { ref: REF } }));
     } catch (e) {
