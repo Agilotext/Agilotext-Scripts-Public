@@ -3,7 +3,7 @@
 //      PJ phase 1 (stub noms) + phase 2 (upload optionnel), dictée Web Speech API.
 // V05: message LinkedIn, email block, contexte Memberstack, etc.
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow
-window.__agiloChatVersion = 'V07-jobid-LS-priority';
+window.__agiloChatVersion = 'V08-url-before-ls+api-first';
 
 document.addEventListener('DOMContentLoaded', () => {
   /* ================== DEBUG ================== */
@@ -464,11 +464,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const pick = (o) => (o && o.currentJobId) || '';
       try { return String(pick(window.__agiloOrchestrator) || pick(window.top?.__agiloOrchestrator) || pick(window.parent?.__agiloOrchestrator) || ''); } catch (e) { return ''; }
     })();
+    /* URL / vues d’abord : évite d’écraser le transcript affiché avec un currentJobId resté d’un autre onglet ou d’une nav précédente. */
     return String(
-      fromLs
+      fromUrls
+        || (sp.get('jobId') || '').trim()
         || fromGlobal
-        || fromUrls
-        || sp.get('jobId')
+        || fromLs
         || tryParentGetElementById('pane-chat')?.dataset?.jobId
         || tryParentGetElementById('pane-chat')?.dataset?.jobid
         || $('#pane-chat')?.dataset?.jobId
@@ -2616,12 +2617,46 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 0);
   }
 
+  /* ================== API PUBLIQUE (avant l’init DOM : ensureChatChrome peut lever ; l’objet doit exister) ================== */
+  window.AgiloChat = {
+    ask: () => handleAsk(),
+    hiddenAsk: (label, prompt) => handleHiddenAsk(label, prompt), // ← pour Insights
+    openConversation,
 
+    creds: () => resolveAuth(),
+    getJobId: () => refreshActiveJobId(),
+    export: (msgIdx, fmt) => exportMessage(msgIdx, fmt),
+    copy: async (msgIdx) => {
+      if (MESSAGES[msgIdx]) {
+        const success = await copyToClipboard(MESSAGES[msgIdx].text);
+        toast(success ? 'Copié' : 'Échec copie', success ? 'success' : 'error');
+      }
+    },
+    clear: () => {
+      if (confirm('Effacer tout l\'historique du chat ? ')) {
+        localStorage.removeItem(LSKEY()); MESSAGES = []; render();
+        toast('Historique effacé', 'success');
+      }
+    },
+    toast,
+    debugAuth: async () => {
+      const a = await resolveAuth();
+      console.log('[auth]', {
+        edition: a.edition,
+        username: a.username,
+        token: a.token ? a.token.slice(0, 6) + '…' + a.token.slice(-4) : '(none)'
+      });
+    }
+  };
 
   /* ================== WIRING ================== */
-  loadHistory();
-  render();
-  ensureChatChrome();
+  try {
+    loadHistory();
+    render();
+    ensureChatChrome();
+  } catch (e) {
+    err('initialisation panneau chat (hors bloquant, API prête)', e);
+  }
 
   /** D’autres scripts (auth, rail, orchestre) peuvent ne poser le jobId (URL, dataset, currentJobId) qu’après DOMContentLoaded. Sans ce rattrapage, l’historique se lit sous `agilo:chat:nojob` et paraît vide. */
   function resyncActiveJobIfChanged() {
@@ -2630,7 +2665,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (id && id !== was) {
       loadHistory();
       render();
-      ensureChatChrome();
+      try { ensureChatChrome(); } catch (e) { err('ensureChatChrome resync', e); }
       updateQueueBadge(id);
     }
   }
@@ -2672,7 +2707,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!newId || newId === ACTIVE_JOB) return;
     ACTIVE_JOB = newId;
     loadHistory(); render();
-    ensureChatChrome();
+    try { ensureChatChrome(); } catch (e) { err('ensureChatChrome agilo:load', e); }
     updateQueueBadge(newId);
   });
 
@@ -2681,43 +2716,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (j !== ACTIVE_JOB) {
       ACTIVE_JOB = j;
       loadHistory(); render();
-      ensureChatChrome();
+      try { ensureChatChrome(); } catch (e) { err('ensureChatChrome popstate', e); }
       updateQueueBadge(j);
     }
   });
-
-  /* ================== API PUBLIQUE ================== */
-  window.AgiloChat = {
-    ask: () => handleAsk(),
-    hiddenAsk: (label, prompt) => handleHiddenAsk(label, prompt), // ← pour Insights
-    openConversation,
-
-    creds: () => resolveAuth(),
-    getJobId: () => refreshActiveJobId(),
-    export: (msgIdx, fmt) => exportMessage(msgIdx, fmt),
-    copy: async (msgIdx) => {
-      if (MESSAGES[msgIdx]) {
-        const success = await copyToClipboard(MESSAGES[msgIdx].text);
-        toast(success ? 'Copié' : 'Échec copie', success ? 'success' : 'error');
-      }
-    },
-    clear: () => {
-      if (confirm('Effacer tout l\'historique du chat ? ')) {
-        localStorage.removeItem(LSKEY()); MESSAGES = []; render();
-        toast('Historique effacé', 'success');
-      }
-    },
-    toast,
-    // petit utilitaire de debug
-    debugAuth: async () => {
-      const a = await resolveAuth();
-      console.log('[auth]', {
-        edition: a.edition,
-        username: a.username,
-        token: a.token ? a.token.slice(0, 6) + '…' + a.token.slice(-4) : '(none)'
-      });
-    }
-  };
 
   log('ready. API_BASE=', API_BASE, 'jobId=', ACTIVE_JOB);
 });
