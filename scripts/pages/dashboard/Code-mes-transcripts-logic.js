@@ -2,6 +2,7 @@
    AGILOTEXT DASHBOARD LOGIC (UNIFIED NICKEL VERSION)
    - Rendering & Rename (v1.1.4 FIXED for Extension issue)
    - Bulk Actions Module (v2.4.0)
+   - v1.06: receiveSummary pour download_wrapper-link_summary_* (compte rendu)
    ============================================================================= */
 
 (function() {
@@ -103,6 +104,10 @@
     });
   }
 
+  function isSummaryReadyForDownload(transcriptStatus) {
+    return String(transcriptStatus || '').toUpperCase() === 'READY_SUMMARY_READY';
+  }
+
   function updateIconVisibility(clone, status) {
     const st = (status || '').toUpperCase();
     const icons = {
@@ -138,7 +143,7 @@
       </div>
       <div class="custom-element titles horizontal"><div class="creation-date" style="font-size:12px; color:#6b7280;"></div></div>
       <div class="custom-element titles report-links">
-        <a href="#" class="download_wrapper-link_transcript_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
+        <a href="#" class="download_wrapper-link_summary_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
       </div>
       <div class="custom-element titles">
         <button class="delete-job-button" title="Supprimer" style="background:none; border:none; cursor:pointer; color:#991b1b; font-size:16px; padding:4px;">🗑️</button>
@@ -196,6 +201,24 @@
         aT.style.display = 'inline-block';
       } else if (aT) {
         aT.style.display = 'none';
+      }
+    });
+
+    const summaryFormats = [
+      { slot: 'txt', apiFormat: 'html' },
+      { slot: 'rtf', apiFormat: 'rtf' },
+      { slot: 'doc', apiFormat: 'doc' },
+      { slot: 'docx', apiFormat: 'docx' },
+      { slot: 'pdf', apiFormat: 'pdf' }
+    ];
+    summaryFormats.forEach(({ slot, apiFormat }) => {
+      const aS = clone.querySelector(`.download_wrapper-link_summary_${slot}`);
+      if (aS && isSummaryReadyForDownload(job.transcriptStatus)) {
+        aS.href = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFormat}&edition=${encodeURIComponent(edition)}`;
+        aS.target = '_blank';
+        aS.style.display = 'inline-block';
+      } else if (aS) {
+        aS.style.display = 'none';
       }
     });
 
