@@ -18,9 +18,20 @@
   const REF = getCdnRef();
   const BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${REF}/scripts/pages/editor`;
 
+  /** Optionnel : ?agilo_cdn_bust=20260423-1 sur la page éditeur pour forcer un re-fetch (CDN intermédiaire). */
+  function extraBust() {
+    try {
+      return new URLSearchParams(location.search).get('agilo_cdn_bust') || '';
+    } catch { return ''; }
+  }
+  const BUSTQ = (() => {
+    const b = extraBust();
+    return b ? `&bust=${encodeURIComponent(b)}` : '';
+  })();
+
   function loadScript(file) {
     return new Promise((resolve, reject) => {
-      const src = `${BASE}/${file}?v=${REF}`;
+      const src = `${BASE}/${file}?v=${REF}${BUSTQ}`;
       const already = Array.from(document.scripts).some((s) => String(s.src || '').includes(`/scripts/pages/editor/${file}`));
       if (already) return resolve();
       const s = document.createElement('script');
@@ -36,7 +47,7 @@
     if (document.getElementById('agilo-chat-submission')) return;
     const target = document.getElementById('agilo-chat-mount') || document.querySelector('[data-agilo-chat-mount]') || document.getElementById('pane-chat') || document.body;
     if (!target) return;
-    const url = `${BASE}/chat-submission-embed.html?v=${REF}`;
+    const url = `${BASE}/chat-submission-embed.html?v=${REF}${BUSTQ}`;
     const res = await fetch(url, { credentials: 'omit' });
     if (!res.ok) throw new Error(`Echec de chargement markup chat (${res.status})`);
     const html = await res.text();

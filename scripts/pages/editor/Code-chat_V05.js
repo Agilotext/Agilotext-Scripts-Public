@@ -744,11 +744,18 @@ function agiloChatInitFromDom() {
 
   function ensurePromptAccessibilityHint(barEl, promptEl) {
     if (!barEl || !promptEl) return;
-    let hint = barEl.parentElement?.querySelector('#chat-compose-hint') || byId('chat-compose-hint');
+    let hint = byId('chat-compose-hint') || barEl.parentElement?.querySelector('#chat-compose-hint');
     if (!hint) {
       hint = document.createElement('div');
       hint.id = 'chat-compose-hint';
       hint.className = 'chat-compose-hint';
+    }
+    /* Sous la zone de saisie (après le <form>), bandeau aligné au cadre — pas entre barre et bord du form */
+    const formEl = barEl.closest('#wf-form-chat') || barEl.closest('form');
+    const submission = barEl.closest('#agilo-chat-submission');
+    if (formEl && submission && formEl.parentElement === submission) {
+      formEl.insertAdjacentElement('afterend', hint);
+    } else {
       barEl.insertAdjacentElement('afterend', hint);
     }
     let text = hint.querySelector('.chat-compose-hint-text');
