@@ -1,5 +1,5 @@
 // Agilotext BUSINESS – Upload & Dashboard logic
-// v1.06 — compte-rendu : iframe si styles globaux (agilo-summary-dashboard-embed.js) + onglet CR vs transcription
+// v1.06 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR vs transcription
 // v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
 // v1.01+ : jeton sur actions longues — refresh avant upload post-dictée, retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min)
 // ⚠️ Ce fichier est chargé depuis GitHub
@@ -40,6 +40,19 @@ function fetchWithTimeout(url, options = {}) {
 
 // Main logic
 document.addEventListener('DOMContentLoaded', () => {
+  (function agiloEnsureDashboardSummaryEmbedV106() {
+    if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
+    const url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      xhr.send(null);
+      if (xhr.status === 200 && xhr.responseText) (0, eval)(xhr.responseText);
+    } catch (e) {
+      console.warn('[Agilotext] Chargement synchrone du module compte-rendu (iframe) impossible — fallback innerHTML.', e);
+    }
+  })();
   /* ---------------- FilePond init ---------------- */
   FilePond.registerPlugin(FilePondPluginFileValidateSize, FilePondPluginFileValidateType);
   document.querySelectorAll('form[ms-code-file-upload="form"]').forEach(f => f.setAttribute('enctype', 'multipart/form-data'));

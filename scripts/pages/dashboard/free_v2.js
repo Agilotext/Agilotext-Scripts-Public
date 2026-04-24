@@ -1,6 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
- * v1.06 — compte-rendu : iframe (agilo-summary-dashboard-embed.js) + onglet CR ; charger l’embed AVANT ce script
+ * v1.06 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Free.
@@ -37,6 +37,19 @@ function fetchWithTimeout(url, options = {}) {
 
 /* ====================== Main logic ====================== */
 document.addEventListener('DOMContentLoaded', () => {
+  (function agiloEnsureDashboardSummaryEmbedV106() {
+    if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
+    const url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      xhr.send(null);
+      if (xhr.status === 200 && xhr.responseText) (0, eval)(xhr.responseText);
+    } catch (e) {
+      console.warn('[Agilotext] Chargement synchrone du module compte-rendu (iframe) impossible — fallback innerHTML.', e);
+    }
+  })();
 
   /* ─── Source tabs (Fichier / YouTube / Dictée) ─────────────── */
   const sourceTabs = document.querySelectorAll('.source-tab[data-tab]');
