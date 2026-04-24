@@ -1,5 +1,5 @@
 
-<!-- Agilotext PRO – Upload & Dashboard logic (offline / timeout / unreachable ready) -->
+<!-- Agilotext PRO – Upload & Dashboard logic (offline / timeout / unreachable ready) v1.06 : ajouter agilo-summary-dashboard-embed.js avant ce bloc si iframe CR -->
 <!-- 1) FilePond & plugins -->
 <script src="https://unpkg.com/filepond@4.30.1/dist/filepond.js"></script>
 <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
@@ -229,8 +229,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* -------------- Fetch helpers -------------- */
-  function fetchTranscriptText(jobId, email) {
+  function fetchTranscriptText(jobId, email, fetchOpts) {
     if (!globalToken) { console.error('Token manquant'); return; }
+    const focusTranscription = !fetchOpts || fetchOpts.focusTranscription !== false;
     fetchWithTimeout(
       `https://api.agilotext.com/api/v1/receiveText?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(globalToken)}&edition=${edition}&format=txt`,
       { timeout: 2 * 60 * 1000 }
@@ -242,7 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
         if (transcriptContainer) transcriptContainer.style.display = 'block';
         if (submitBtn) submitBtn.style.display = 'none';
-        if (transcriptionTabLink) transcriptionTabLink.click();
+        if (focusTranscription && transcriptionTabLink) transcriptionTabLink.click();
       })
       .catch(err => {
         console.error('receiveText:', err);
@@ -261,7 +262,14 @@ document.addEventListener('DOMContentLoaded', () => {
     )
       .then(r => r.text())
       .then(html => {
-        if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
+        const adjusted = adjustHtmlContent(html);
+        if (summaryText) {
+          if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') {
+            window.AgilotextDashboardSummary.inject(summaryText, adjusted);
+          } else {
+            summaryText.innerHTML = adjusted;
+          }
+        }
         setSummaryUI('ready');
         if (summaryContainer) summaryContainer.style.display = 'block';
         if (newFormBtn) newFormBtn.style.display = 'flex';
@@ -342,11 +350,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadingAnimDiv.querySelector('.progress-status')?.remove();
               }
               if (readyAnimDiv) readyAnimDiv.style.display = 'block';
-              fetchTranscriptText(jobId, email);
+              fetchTranscriptText(
+                jobId,
+                email,
+                summaryCheckbox && summaryCheckbox.checked ? { focusTranscription: false } : undefined
+              );
               if (summaryCheckbox && summaryCheckbox.checked) {
-                setSummaryUI('ready'); fetchSummaryText(jobId, email); summaryTabLink && summaryTabLink.click();
+                setSummaryUI('ready');
+                fetchSummaryText(jobId, email);
               } else {
-                setSummaryUI('hidden'); transcriptionTabLink && transcriptionTabLink.click();
+                setSummaryUI('hidden');
+                transcriptionTabLink && transcriptionTabLink.click();
               }
               break;
             }
