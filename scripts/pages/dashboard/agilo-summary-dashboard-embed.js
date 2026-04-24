@@ -1,7 +1,8 @@
 /**
  * Agilotext — injection compte-rendu HTML (dashboard Webflow)
  * Même heuristique d’isolation que l’éditeur (Code-main-editor-IFRAME) : iframe si styles globaux.
- * Charger ce script AVANT free.js / pro.js / ent.js (et variantes v2) dans l’embed Webflow.
+ * Chargé automatiquement par free.js / pro.js / ent.js (et variantes) via XHR synchrone si absent.
+ * Surcharge possible : window.AGILO_DASHBOARD_SUMMARY_EMBED_URL
  * @version 1.06
  */
 (function () {

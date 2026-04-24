@@ -1,5 +1,5 @@
 
-<!-- Agilotext PRO – Upload & Dashboard logic (offline / timeout / unreachable ready) v1.06 : ajouter agilo-summary-dashboard-embed.js avant ce bloc si iframe CR -->
+<!-- Agilotext PRO – Upload v1.06 : compte-rendu iframe via XHR sync dans le .js (pas d’embed séparé obligatoire) -->
 <!-- 1) FilePond & plugins -->
 <script src="https://unpkg.com/filepond@4.30.1/dist/filepond.js"></script>
 <script src="https://unpkg.com/filepond-plugin-file-validate-type/dist/filepond-plugin-file-validate-type.js"></script>
@@ -46,6 +46,19 @@ function fetchWithTimeout(url, options = {}) {
 
 /* ====================== Main logic ====================== */
 document.addEventListener('DOMContentLoaded', () => {
+  (function agiloEnsureDashboardSummaryEmbedV106() {
+    if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
+    const url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      xhr.send(null);
+      if (xhr.status === 200 && xhr.responseText) (0, eval)(xhr.responseText);
+    } catch (e) {
+      console.warn('[Agilotext] Chargement synchrone du module compte-rendu (iframe) impossible — fallback innerHTML.', e);
+    }
+  })();
   /* ---------------- FilePond init ---------------- */
   FilePond.registerPlugin(FilePondPluginFileValidateSize, FilePondPluginFileValidateType);
   document.querySelectorAll('form[ms-code-file-upload="form"]').forEach(f => f.setAttribute('enctype', 'multipart/form-data'));

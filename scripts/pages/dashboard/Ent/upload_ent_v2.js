@@ -15,7 +15,7 @@
  *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
- *   - v1.06 : agilo-summary-dashboard-embed.js (iframe CR) — charger avant ce script
+ *   - v1.06 : compte-rendu iframe via XHR sync (même branche) — pas d’embed séparé obligatoire
  *
  * Après ce script, charger (optionnel, streaming) :
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
@@ -64,6 +64,19 @@ function fetchWithTimeout(url, options) {
 
 /* ====================== Main logic ====================== */
 document.addEventListener('DOMContentLoaded', function () {
+  (function agiloEnsureDashboardSummaryEmbedV106() {
+    if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
+    var url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      xhr.send(null);
+      if (xhr.status === 200 && xhr.responseText) (0, eval)(xhr.responseText);
+    } catch (e) {
+      console.warn('[Agilotext] Chargement synchrone du module compte-rendu (iframe) impossible — fallback innerHTML.', e);
+    }
+  })();
 
   /* ─── Source tabs (Fichier / YouTube / Dictée) ─────────────── */
   var sourceTabs = document.querySelectorAll('.source-tab[data-tab]');
