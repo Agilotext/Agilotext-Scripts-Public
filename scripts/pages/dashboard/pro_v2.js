@@ -1,5 +1,6 @@
 /**
  * pro_v2.js — Agilotext PRO dashboard (fichier externe)
+ * v1.06 — compte-rendu : iframe (agilo-summary-dashboard-embed.js) + onglet CR ; charger l’embed AVANT ce script
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Pro.
@@ -285,16 +286,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* -------------- Fetch helpers (retry 1× si token expiré pendant job long) -------------- */
-  function applyTranscriptTextUI(txt) {
+  /** @param {{ focusTranscription?: boolean }} [opts] */
+  function applyTranscriptTextUI(txt, opts) {
+    const focusTranscription = !opts || opts.focusTranscription !== false;
     const ta = document.getElementById('transcriptText');
     if (ta) ta.value = txt;
     window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
     if (transcriptContainer) transcriptContainer.style.display = 'block';
     if (submitBtn) submitBtn.style.display = 'none';
-    if (transcriptionTabLink) transcriptionTabLink.click();
+    if (focusTranscription && transcriptionTabLink) transcriptionTabLink.click();
   }
 
-  async function fetchTranscriptText(jobId, email) {
+  async function fetchTranscriptText(jobId, email, fetchOpts) {
     if (!email) return;
     const url = () =>
       `https://api.agilotext.com/api/v1/receiveText?jobId=${jobId}&username=${email}&token=${globalToken}&edition=${edition}&format=txt`;
@@ -305,12 +308,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     try {
       const txt = await run();
-      applyTranscriptTextUI(txt);
+      applyTranscriptTextUI(txt, fetchOpts);
     } catch (err) {
       if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
         try {
           const txt2 = await run();
-          applyTranscriptTextUI(txt2);
+          applyTranscriptTextUI(txt2, fetchOpts);
           return;
         } catch (err2) {
           console.error('receiveText (après refresh):', err2);
@@ -324,7 +327,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function applySummaryTextUI(html) {
-    if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
+    const adjusted = adjustHtmlContent(html);
+    if (summaryText) {
+      if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') {
+        window.AgilotextDashboardSummary.inject(summaryText, adjusted);
+      } else {
+        summaryText.innerHTML = adjusted;
+      }
+    }
     setSummaryUI('ready');
     if (summaryContainer) summaryContainer.style.display = 'block';
     if (newFormBtn) newFormBtn.style.display = 'flex';
@@ -433,11 +443,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadingAnimDiv.querySelector('.progress-status')?.remove();
               }
               if (readyAnimDiv) readyAnimDiv.style.display = 'block';
-              fetchTranscriptText(jobId, email);
+              fetchTranscriptText(
+                jobId,
+                email,
+                summaryCheckbox && summaryCheckbox.checked ? { focusTranscription: false } : undefined
+              );
               if (summaryCheckbox && summaryCheckbox.checked) {
-                setSummaryUI('ready'); fetchSummaryText(jobId, email); summaryTabLink && summaryTabLink.click();
+                setSummaryUI('ready');
+                fetchSummaryText(jobId, email);
               } else {
-                setSummaryUI('hidden'); transcriptionTabLink && transcriptionTabLink.click();
+                setSummaryUI('hidden');
+                transcriptionTabLink && transcriptionTabLink.click();
               }
               break;
             }

@@ -15,6 +15,7 @@
  *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
+ *   - v1.06 : agilo-summary-dashboard-embed.js (iframe CR) — charger avant ce script
  *
  * Après ce script, charger (optionnel, streaming) :
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
@@ -328,16 +329,17 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /* ─── Fetch transcript / summary (retry 1× si token expiré) ─ */
-  function applyTranscriptTextUI(txt) {
+  function applyTranscriptTextUI(txt, opts) {
+    var focusTranscription = !opts || opts.focusTranscription !== false;
     var ta = document.getElementById('transcriptText');
     if (ta) ta.value = txt;
     window.dispatchEvent(new CustomEvent('agilo:transcript-ready', { detail: { text: txt } }));
     if (transcriptContainer) transcriptContainer.style.display = 'block';
     if (submitBtn) submitBtn.style.display = 'none';
-    if (transcriptionTabLink) transcriptionTabLink.click();
+    if (focusTranscription && transcriptionTabLink) transcriptionTabLink.click();
   }
 
-  async function fetchTranscriptText(jobId, email) {
+  async function fetchTranscriptText(jobId, email, fetchOpts) {
     if (!email) return;
     var url = function () {
       return 'https://api.agilotext.com/api/v1/receiveText?jobId=' + encodeURIComponent(jobId) + '&username=' + encodeURIComponent(email) + '&token=' + encodeURIComponent(globalToken) + '&edition=' + edition + '&format=txt';
@@ -349,12 +351,12 @@ document.addEventListener('DOMContentLoaded', function () {
     };
     try {
       var txt = await run();
-      applyTranscriptTextUI(txt);
+      applyTranscriptTextUI(txt, fetchOpts);
     } catch (err) {
       if (err && err.type === 'invalidToken' && (await refreshAgiloTokenFromApi(String(email).trim()))) {
         try {
           var txt2 = await run();
-          applyTranscriptTextUI(txt2);
+          applyTranscriptTextUI(txt2, fetchOpts);
           return;
         } catch (err2) {
           console.error('receiveText (après refresh):', err2);
@@ -369,7 +371,14 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function applySummaryTextUI(html) {
-    if (summaryText) summaryText.innerHTML = adjustHtmlContent(html);
+    var adjusted = adjustHtmlContent(html);
+    if (summaryText) {
+      if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') {
+        window.AgilotextDashboardSummary.inject(summaryText, adjusted);
+      } else {
+        summaryText.innerHTML = adjusted;
+      }
+    }
     setSummaryUI('ready');
     if (summaryContainer) summaryContainer.style.display = 'block';
     if (newFormBtn) newFormBtn.style.display = 'flex';
@@ -474,9 +483,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 clearInterval(intId); window._agiloStatusInt = null;
                 if (loadingAnimDiv) { loadingAnimDiv.style.display = 'none'; var ps = loadingAnimDiv.querySelector('.progress-status'); if (ps) ps.remove(); }
                 if (readyAnimDiv) readyAnimDiv.style.display = 'block';
-                fetchTranscriptText(jobId, email);
-                if (summaryCheckbox && summaryCheckbox.checked) { setSummaryUI('ready'); fetchSummaryText(jobId, email); if (summaryTabLink) summaryTabLink.click(); }
-                else { setSummaryUI('hidden'); if (transcriptionTabLink) transcriptionTabLink.click(); }
+                fetchTranscriptText(
+                  jobId,
+                  email,
+                  summaryCheckbox && summaryCheckbox.checked ? { focusTranscription: false } : undefined
+                );
+                if (summaryCheckbox && summaryCheckbox.checked) {
+                  setSummaryUI('ready');
+                  fetchSummaryText(jobId, email);
+                } else {
+                  setSummaryUI('hidden');
+                  if (transcriptionTabLink) transcriptionTabLink.click();
+                }
                 break;
 
               case 'ON_ERROR':
