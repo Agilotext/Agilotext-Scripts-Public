@@ -108,25 +108,34 @@
     return null;
   }
 
-  function readNumericField(member, fieldName) {
+  function readFieldValue(member, fieldNames) {
     if (!member) return null;
-    if (member[fieldName] !== undefined && member[fieldName] !== null) return toSafeInt(member[fieldName], 0);
-
+    for (var i = 0; i < fieldNames.length; i += 1) {
+      var name = fieldNames[i];
+      if (member[name] !== undefined && member[name] !== null) return member[name];
+    }
     var customFields = member.customFields || member.custom_fields || {};
-    if (customFields[fieldName] !== undefined && customFields[fieldName] !== null) return toSafeInt(customFields[fieldName], 0);
-
+    for (var j = 0; j < fieldNames.length; j += 1) {
+      var cfName = fieldNames[j];
+      if (customFields[cfName] !== undefined && customFields[cfName] !== null) return customFields[cfName];
+    }
     var metaData = member.metaData || member.metadata || {};
-    if (metaData[fieldName] !== undefined && metaData[fieldName] !== null) return toSafeInt(metaData[fieldName], 0);
-
+    for (var k = 0; k < fieldNames.length; k += 1) {
+      var mdName = fieldNames[k];
+      if (metaData[mdName] !== undefined && metaData[mdName] !== null) return metaData[mdName];
+    }
     return null;
   }
 
-  function readDomBoundValue(fieldName) {
-    var node = q('[data-ms-member="' + fieldName + '"]');
-    if (!node) return null;
-    var value = asText(node.value || node.textContent);
-    if (!value) return null;
-    return toSafeInt(value, 0);
+  function readDomBoundValue(fieldNames) {
+    for (var i = 0; i < fieldNames.length; i += 1) {
+      var node = q('[data-ms-member="' + fieldNames[i] + '"]');
+      if (!node) continue;
+      var value = asText(node.value || node.textContent);
+      if (!value) continue;
+      return value;
+    }
+    return null;
   }
 
   function emitState(state) {
@@ -154,22 +163,17 @@
     var memberIdFromDom = readMemberIdFromDom();
     var currentMemberId = asText((memberFromApi && memberFromApi.id) || memberIdFromDom);
 
-    var referralsTotal = readNumericField(memberFromApi, 'referrals_total');
-    if (referralsTotal === null) referralsTotal = readDomBoundValue('referrals_total');
+    var referralsTotal = readFieldValue(memberFromApi, ['referrals-total', 'referrals_total']);
+    if (referralsTotal === null) referralsTotal = readDomBoundValue(['referrals-total', 'referrals_total']);
     if (referralsTotal === null) referralsTotal = 0;
+    referralsTotal = toSafeInt(referralsTotal, 0);
 
-    var referralsMonth = readNumericField(memberFromApi, 'referrals_month');
-    if (referralsMonth === null) referralsMonth = readDomBoundValue('referrals_month');
+    var referralsMonth = readFieldValue(memberFromApi, ['referrals-month', 'referrals_month']);
+    if (referralsMonth === null) referralsMonth = readDomBoundValue(['referrals-month', 'referrals_month']);
     if (referralsMonth === null) referralsMonth = 0;
+    referralsMonth = toSafeInt(referralsMonth, 0);
 
-    var referralsLastAt = asText(
-      (memberFromApi && (
-        memberFromApi.referrals_last_at ||
-        (memberFromApi.customFields && memberFromApi.customFields.referrals_last_at) ||
-        (memberFromApi.custom_fields && memberFromApi.custom_fields.referrals_last_at) ||
-        (memberFromApi.metaData && memberFromApi.metaData.referrals_last_at)
-      )) || ''
-    );
+    var referralsLastAt = asText(readFieldValue(memberFromApi, ['referrals-last-at', 'referrals_last_at']) || readDomBoundValue(['referrals-last-at', 'referrals_last_at']) || '');
 
     return {
       version: VERSION,
