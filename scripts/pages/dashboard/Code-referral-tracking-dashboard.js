@@ -26,6 +26,15 @@
     });
   }
 
+  function setNodeTextIn(root, selectors, value) {
+    if (!root || !selectors || !selectors.length) return;
+    selectors.forEach(function (selector) {
+      qa(selector, root).forEach(function (node) {
+        node.textContent = String(value);
+      });
+    });
+  }
+
   function toSafeInt(value, fallback) {
     var n = Number(value);
     if (!Number.isFinite(n)) return fallback;
@@ -265,6 +274,7 @@
     var modal = ensureModal();
     var total = toSafeInt(state.referralsTotal, 0);
     var month = toSafeInt(state.referralsMonth, 0);
+    var lastAt = state.referralsLastAt || '-';
     var goal = toSafeInt((document.body && document.body.getAttribute('data-agilo-referrals-month-goal')) || 5, 5);
     if (goal < 1) goal = 5;
     var pct = Math.max(0, Math.min(100, Math.round((month / goal) * 100)));
@@ -274,10 +284,11 @@
     var hint = total > 0 ? 'Excellent : vous avez deja ' + total + ' parrainage(s).' : 'Aucun parrainage detecte pour le moment.';
     if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
     if (gaugePct) gaugePct.textContent = String(pct) + '%';
-    q('[data-agilo-ref-total]', modal).textContent = String(total);
-    q('[data-agilo-ref-month]', modal).textContent = String(month);
-    q('[data-agilo-ref-status]', modal).textContent = status;
-    q('[data-agilo-ref-hint]', modal).textContent = hint;
+    setNodeTextIn(modal, ['[data-agilo-ref-total]', '[data-agilo-referrals-total]'], String(total));
+    setNodeTextIn(modal, ['[data-agilo-ref-month]', '[data-agilo-referrals-month]'], String(month));
+    setNodeTextIn(modal, ['[data-agilo-ref-status]'], status);
+    setNodeTextIn(modal, ['[data-agilo-ref-hint]', '[data-agilo-referral-status-label]'], hint);
+    setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
   }
 
   function openModal() {
@@ -289,6 +300,14 @@
     var modal = q('#agiloReferralStatsModal');
     if (!modal) return;
     modal.hidden = true;
+  }
+
+  function bindEmbedOpenButtons() {
+    qa('[data-agilo-referral-open]').forEach(function (button) {
+      if (button.__agiloReferralBound) return;
+      button.__agiloReferralBound = true;
+      button.addEventListener('click', openModal);
+    });
   }
 
   function renderSidebarWidget(state) {
@@ -373,6 +392,8 @@
 
   function boot() {
     ensureUiStyles();
+    ensureModal();
+    bindEmbedOpenButtons();
     refresh();
     window.setInterval(refresh, REFRESH_INTERVAL_MS);
     document.addEventListener('visibilitychange', function () {
