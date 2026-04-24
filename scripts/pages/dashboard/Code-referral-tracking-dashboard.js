@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.1.2';
+  var VERSION = '1.1.3';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -206,6 +206,7 @@
             '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>');
         }
       }
+      wireModalEvents(modal);
       return modal;
     }
     modal = document.createElement('div');
@@ -233,16 +234,31 @@
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint>Partagez votre lien pour augmenter vos statistiques.</p>' +
       '</section>';
     document.body.appendChild(modal);
-    if (!window.__agiloReferralModalWired) {
-      window.__agiloReferralModalWired = true;
-      modal.addEventListener('click', function (ev) {
-        if (ev.target && ev.target.hasAttribute('data-agilo-ref-close')) closeModal();
-      });
+    wireModalEvents(modal);
+    return modal;
+  }
+
+  function wireModalEvents(modal) {
+    if (!modal || modal.__agiloReferralWired) return;
+    modal.__agiloReferralWired = true;
+    modal.addEventListener('click', function (ev) {
+      var target = ev.target;
+      var backdrop = q('.agilo-referral-modal__backdrop', modal);
+      if (
+        target === modal ||
+        target === backdrop ||
+        (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-close')) ||
+        (target && target.closest && target.closest('[data-agilo-ref-close]'))
+      ) {
+        closeModal();
+      }
+    });
+    if (!window.__agiloReferralEscWired) {
+      window.__agiloReferralEscWired = true;
       document.addEventListener('keydown', function (ev) {
         if (ev.key === 'Escape') closeModal();
       });
     }
-    return modal;
   }
 
   function setModalData(state) {
