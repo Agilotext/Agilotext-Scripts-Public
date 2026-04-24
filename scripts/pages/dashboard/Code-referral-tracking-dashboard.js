@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.0.0';
+  var VERSION = '1.1.0';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -157,6 +157,124 @@
     setNodeText('[data-agilo-referral-invite-code]', state.inviteCode || '-');
   }
 
+  function ensureUiStyles() {
+    if (q('#agilo-referral-stats-modal-style')) return;
+    var style = document.createElement('style');
+    style.id = 'agilo-referral-stats-modal-style';
+    style.textContent = '' +
+      '.agilo-referral-cta{margin-top:10px;display:inline-flex;align-items:center;justify-content:center;}' +
+      '.agilo-referral-cta.is-primary{background:#174a96;color:#fff;}' +
+      '.agilo-referral-cta.is-secondary{background:#eff4fb;color:#174a96;border:1px solid rgba(23,74,150,.18);}' +
+      '.agilo-referral-modal[hidden]{display:none!important;}' +
+      '.agilo-referral-modal{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:16px;}' +
+      '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.58);backdrop-filter:blur(4px);}' +
+      '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(460px,100%);border-radius:14px;background:#fff;padding:16px 16px 14px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
+      '.agilo-referral-modal__close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#526076;}' +
+      '.agilo-referral-modal__title{margin:0 30px 4px 0;font-size:18px;font-weight:700;letter-spacing:-.01em;}' +
+      '.agilo-referral-modal__desc{margin:0 0 12px;font-size:13px;color:#5b677a;line-height:1.4;}' +
+      '.agilo-referral-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}' +
+      '.agilo-referral-kpi{border:1px solid #e7edf8;border-radius:10px;padding:8px 6px;text-align:center;background:linear-gradient(180deg,#f8fbff 0,#fff 100%);}' +
+      '.agilo-referral-kpi__label{font-size:11px;color:#6c7890;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em;font-weight:600;}' +
+      '.agilo-referral-kpi__value{margin:0;font-size:20px;color:#174a96;font-weight:700;line-height:1.1;}' +
+      '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
+      'body.agilo-referral-modal-open{overflow:hidden;}' +
+      '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}}';
+    document.head.appendChild(style);
+  }
+
+  function ensureModal() {
+    var modal = q('#agiloReferralStatsModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'agiloReferralStatsModal';
+    modal.className = 'agilo-referral-modal';
+    modal.hidden = true;
+    modal.innerHTML = '' +
+      '<div class="agilo-referral-modal__backdrop" data-agilo-ref-close></div>' +
+      '<section class="agilo-referral-modal__panel" role="dialog" aria-modal="true" aria-labelledby="agiloReferralStatsTitle">' +
+      '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
+      '<h3 class="agilo-referral-modal__title" id="agiloReferralStatsTitle">Mes statistiques ambassadeur</h3>' +
+      '<p class="agilo-referral-modal__desc">Suivez vos performances de parrainage en direct.</p>' +
+      '<div class="agilo-referral-kpis">' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Total</p><p class="agilo-referral-kpi__value" data-agilo-ref-total>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Ce mois</p><p class="agilo-referral-kpi__value" data-agilo-ref-month>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Statut</p><p class="agilo-referral-kpi__value" data-agilo-ref-status>Nouveau</p></article>' +
+      '</div>' +
+      '<p class="agilo-referral-modal__hint" data-agilo-ref-hint>Partagez votre lien pour augmenter vos statistiques.</p>' +
+      '</section>';
+    document.body.appendChild(modal);
+    if (!window.__agiloReferralModalWired) {
+      window.__agiloReferralModalWired = true;
+      modal.addEventListener('click', function (ev) {
+        if (ev.target && ev.target.hasAttribute('data-agilo-ref-close')) closeModal();
+      });
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape') closeModal();
+      });
+    }
+    return modal;
+  }
+
+  function setModalData(state) {
+    var modal = ensureModal();
+    var total = toSafeInt(state.referralsTotal, 0);
+    var month = toSafeInt(state.referralsMonth, 0);
+    var status = total > 0 ? 'Actif' : 'Nouveau';
+    var hint = total > 0 ? 'Excellent : vous avez deja ' + total + ' parrainage(s).' : 'Aucun parrainage detecte pour le moment.';
+    q('[data-agilo-ref-total]', modal).textContent = String(total);
+    q('[data-agilo-ref-month]', modal).textContent = String(month);
+    q('[data-agilo-ref-status]', modal).textContent = status;
+    q('[data-agilo-ref-hint]', modal).textContent = hint;
+  }
+
+  function openModal() {
+    var modal = ensureModal();
+    modal.hidden = false;
+    document.body.classList.add('agilo-referral-modal-open');
+  }
+
+  function closeModal() {
+    var modal = q('#agiloReferralStatsModal');
+    if (!modal) return;
+    modal.hidden = true;
+    document.body.classList.remove('agilo-referral-modal-open');
+  }
+
+  function renderSidebarWidget(state) {
+    var card = q('.modal_small');
+    if (!card) return;
+    var ambassadorBtn = q('a.button.ambassador', card) || q('a.button.ambassador');
+    if (!ambassadorBtn) return;
+    var scope = ambassadorBtn.parentElement || card;
+    var ambassadorText = q('p.text-size-xsmall.text-align-center', scope) || ambassadorBtn.nextElementSibling;
+    var statsBtn = q('.agilo-referral-cta', scope);
+    if (!statsBtn) {
+      statsBtn = document.createElement('button');
+      statsBtn.type = 'button';
+      statsBtn.className = 'button agilo-referral-cta is-secondary';
+      statsBtn.textContent = 'Suivre mes statistiques';
+      ambassadorBtn.insertAdjacentElement('afterend', statsBtn);
+    }
+    if (!statsBtn.__agiloReferralBound) {
+      statsBtn.__agiloReferralBound = true;
+      statsBtn.addEventListener('click', openModal);
+    }
+    if (state.referralsTotal > 0) {
+      ambassadorBtn.style.display = 'none';
+      if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = 'none';
+      statsBtn.classList.remove('is-secondary');
+      statsBtn.classList.add('is-primary');
+      statsBtn.textContent = 'Voir mes stats ambassadeur';
+    } else {
+      ambassadorBtn.style.display = '';
+      if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = '';
+      statsBtn.classList.remove('is-primary');
+      statsBtn.classList.add('is-secondary');
+      statsBtn.textContent = 'Suivre mes statistiques';
+    }
+    setModalData(state);
+  }
+
   async function computeState() {
     var invite = readInviteFromDom();
     var memberFromApi = await readMemberFromMemberstack();
@@ -193,6 +311,7 @@
       var state = await computeState();
       renderCounters(state);
       renderStatus(state);
+      renderSidebarWidget(state);
       emitState(state);
     } catch (error) {
       if (window.agiloDashboardDebug) {
@@ -202,6 +321,7 @@
   }
 
   function boot() {
+    ensureUiStyles();
     refresh();
     window.setInterval(refresh, REFRESH_INTERVAL_MS);
     document.addEventListener('visibilitychange', function () {
