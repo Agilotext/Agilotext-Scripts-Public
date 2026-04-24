@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.1.1';
+  var VERSION = '1.1.2';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -131,7 +131,7 @@
     for (var i = 0; i < fieldNames.length; i += 1) {
       var node = q('[data-ms-member="' + fieldNames[i] + '"]');
       if (!node) continue;
-      var value = asText(node.value || node.textContent);
+      var value = asText(node.value || node.textContent || node.getAttribute('src'));
       if (!value) continue;
       return value;
     }
@@ -166,7 +166,7 @@
       '.agilo-referral-cta.is-primary{background:#174a96;color:#fff;}' +
       '.agilo-referral-cta.is-secondary{background:#eff4fb;color:#174a96;border:1px solid rgba(23,74,150,.18);}' +
       '.agilo-referral-modal[hidden]{display:none!important;}' +
-      '.agilo-referral-modal{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:16px;}' +
+      '.agilo-referral-modal{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:16px;}' +
       '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.28);}' +
       '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(460px,100%);border-radius:14px;background:#fff;padding:16px 16px 14px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
       '.agilo-referral-modal__close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#526076;}' +
@@ -189,6 +189,9 @@
   function ensureModal() {
     var modal = q('#agiloReferralStatsModal');
     if (modal) {
+      if (modal.parentNode !== document.body) {
+        document.body.appendChild(modal);
+      }
       var existingFill = q('[data-agilo-ref-gauge-fill]', modal);
       if (!existingFill) {
         var descNode = q('.agilo-referral-modal__desc', modal);
