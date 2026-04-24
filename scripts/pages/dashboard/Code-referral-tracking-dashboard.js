@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.1.0';
+  var VERSION = '1.1.1';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -167,24 +167,44 @@
       '.agilo-referral-cta.is-secondary{background:#eff4fb;color:#174a96;border:1px solid rgba(23,74,150,.18);}' +
       '.agilo-referral-modal[hidden]{display:none!important;}' +
       '.agilo-referral-modal{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:16px;}' +
-      '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.58);backdrop-filter:blur(4px);}' +
+      '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.28);}' +
       '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(460px,100%);border-radius:14px;background:#fff;padding:16px 16px 14px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
       '.agilo-referral-modal__close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#526076;}' +
       '.agilo-referral-modal__title{margin:0 30px 4px 0;font-size:18px;font-weight:700;letter-spacing:-.01em;}' +
       '.agilo-referral-modal__desc{margin:0 0 12px;font-size:13px;color:#5b677a;line-height:1.4;}' +
+      '.agilo-referral-gauge{width:160px;height:82px;margin:0 auto 6px;position:relative;}' +
+      '.agilo-referral-gauge svg{width:100%;height:100%;display:block;}' +
+      '.agilo-referral-gauge .track{stroke:#dfe8f8;stroke-width:8;fill:none;stroke-linecap:round;}' +
+      '.agilo-referral-gauge .fill{stroke:#174a96;stroke-width:8;fill:none;stroke-linecap:round;stroke-dasharray:126;stroke-dashoffset:126;transition:stroke-dashoffset .55s ease;}' +
+      '.agilo-referral-gauge__pct{text-align:center;margin:-6px 0 8px;font-weight:700;color:#174a96;}' +
       '.agilo-referral-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}' +
       '.agilo-referral-kpi{border:1px solid #e7edf8;border-radius:10px;padding:8px 6px;text-align:center;background:linear-gradient(180deg,#f8fbff 0,#fff 100%);}' +
       '.agilo-referral-kpi__label{font-size:11px;color:#6c7890;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em;font-weight:600;}' +
       '.agilo-referral-kpi__value{margin:0;font-size:20px;color:#174a96;font-weight:700;line-height:1.1;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
-      'body.agilo-referral-modal-open{overflow:hidden;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}}';
     document.head.appendChild(style);
   }
 
   function ensureModal() {
     var modal = q('#agiloReferralStatsModal');
-    if (modal) return modal;
+    if (modal) {
+      var existingFill = q('[data-agilo-ref-gauge-fill]', modal);
+      if (!existingFill) {
+        var descNode = q('.agilo-referral-modal__desc', modal);
+        if (descNode) {
+          descNode.insertAdjacentHTML('afterend', '' +
+            '<div class="agilo-referral-gauge">' +
+            '<svg viewBox="0 0 100 55" aria-hidden="true">' +
+            '<path class="track" d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
+            '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
+            '</svg>' +
+            '</div>' +
+            '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>');
+        }
+      }
+      return modal;
+    }
     modal = document.createElement('div');
     modal.id = 'agiloReferralStatsModal';
     modal.className = 'agilo-referral-modal';
@@ -195,6 +215,13 @@
       '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
       '<h3 class="agilo-referral-modal__title" id="agiloReferralStatsTitle">Mes statistiques ambassadeur</h3>' +
       '<p class="agilo-referral-modal__desc">Suivez vos performances de parrainage en direct.</p>' +
+      '<div class="agilo-referral-gauge">' +
+      '<svg viewBox="0 0 100 55" aria-hidden="true">' +
+      '<path class="track" d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
+      '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
+      '</svg>' +
+      '</div>' +
+      '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>' +
       '<div class="agilo-referral-kpis">' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Total</p><p class="agilo-referral-kpi__value" data-agilo-ref-total>0</p></article>' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Ce mois</p><p class="agilo-referral-kpi__value" data-agilo-ref-month>0</p></article>' +
@@ -219,8 +246,15 @@
     var modal = ensureModal();
     var total = toSafeInt(state.referralsTotal, 0);
     var month = toSafeInt(state.referralsMonth, 0);
+    var goal = toSafeInt((document.body && document.body.getAttribute('data-agilo-referrals-month-goal')) || 5, 5);
+    if (goal < 1) goal = 5;
+    var pct = Math.max(0, Math.min(100, Math.round((month / goal) * 100)));
+    var gaugeFill = q('[data-agilo-ref-gauge-fill]', modal);
+    var gaugePct = q('[data-agilo-ref-gauge-pct]', modal);
     var status = total > 0 ? 'Actif' : 'Nouveau';
     var hint = total > 0 ? 'Excellent : vous avez deja ' + total + ' parrainage(s).' : 'Aucun parrainage detecte pour le moment.';
+    if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
+    if (gaugePct) gaugePct.textContent = String(pct) + '%';
     q('[data-agilo-ref-total]', modal).textContent = String(total);
     q('[data-agilo-ref-month]', modal).textContent = String(month);
     q('[data-agilo-ref-status]', modal).textContent = status;
@@ -230,14 +264,12 @@
   function openModal() {
     var modal = ensureModal();
     modal.hidden = false;
-    document.body.classList.add('agilo-referral-modal-open');
   }
 
   function closeModal() {
     var modal = q('#agiloReferralStatsModal');
     if (!modal) return;
     modal.hidden = true;
-    document.body.classList.remove('agilo-referral-modal-open');
   }
 
   function renderSidebarWidget(state) {
