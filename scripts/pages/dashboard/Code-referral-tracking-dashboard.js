@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -35,14 +35,76 @@
     });
   }
 
-  function computeReferralHint(registered, paid) {
-    if (registered <= 0) {
-      return 'Partagez votre lien pour demarrer vos premiers parrainages.';
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function toSafeInt(value, fallback) {
+    var n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(0, Math.floor(n));
+  }
+
+  function readBodyConfig(name, fallback) {
+    var value = asText(document.body && document.body.getAttribute(name));
+    return value || fallback;
+  }
+
+  function readBodyConfigInt(name, fallback) {
+    return toSafeInt(readBodyConfig(name, String(fallback)), fallback);
+  }
+
+  function computeRewardState(registered, paid, target) {
+    var safeTarget = Math.max(1, toSafeInt(target, 3));
+    var progress = clamp(toSafeInt(paid, 0), 0, safeTarget);
+    var conversionPct = registered > 0 ? Math.round((paid / registered) * 100) : 0;
+    var rewardPct = Math.round((progress / safeTarget) * 100);
+    var status;
+
+    if (progress >= safeTarget) {
+      status = 'unlocked';
+    } else if (progress === safeTarget - 1) {
+      status = 'almost';
+    } else if (progress > 0) {
+      status = 'started';
+    } else {
+      status = 'empty';
     }
-    if (paid <= 0) {
-      return 'Bonne nouvelle : vous avez deja des inscrits. Prochaine etape : les aider a passer PRO/Biz.';
+
+    return {
+      target: safeTarget,
+      progress: progress,
+      rewardPct: clamp(rewardPct, 0, 100),
+      conversionPct: clamp(conversionPct, 0, 100),
+      status: status
+    };
+  }
+
+  function computeRewardHint(rewardState, registered, paid) {
+    if (!rewardState || rewardState.status === 'empty') {
+      if (registered > 0) {
+        return 'Vous avez deja des inscrits. Prochaine etape : les accompagner vers PRO/Biz pour debloquer la recompense.';
+      }
+      return 'Partagez votre lien pour obtenir vos premiers inscrits et demarrer la progression vers 1 mois offert.';
     }
-    return 'Excellent : votre programme ambassadeur convertit deja en abonnements PRO/Biz.';
+
+    if (rewardState.status === 'started') {
+      return 'Bon rythme : continuez a accompagner vos filleuls jusqu au plan PRO/Biz pour accelerer la progression.';
+    }
+
+    if (rewardState.status === 'almost') {
+      return 'Vous etes a une etape du mois offert. Un filleul payant supplementaire debloque la recompense.';
+    }
+
+    if (rewardState.status === 'unlocked') {
+      return 'Bravo, objectif atteint. Votre recompense est debloquee et en cours de validation.';
+    }
+
+    if (paid > 0) {
+      return 'Excellent : votre programme ambassadeur convertit deja en abonnements PRO/Biz.';
+    }
+
+    return 'Partagez votre lien pour demarrer vos premiers parrainages.';
   }
 
   async function copyToClipboard(text) {
@@ -71,12 +133,6 @@
     } catch (_errExec) {
       return false;
     }
-  }
-
-  function toSafeInt(value, fallback) {
-    var n = Number(value);
-    if (!Number.isFinite(n)) return fallback;
-    return Math.max(0, Math.floor(n));
   }
 
   function extractInviteCodeFromUrl(urlLike) {
@@ -191,7 +247,7 @@
 
   function renderStatus(state) {
     var status = state.inviteOwnerMatchesCurrentMember ? 'ok' : 'needs_check';
-    var statusLabel = status === 'ok' ? 'Lien invitation valide' : 'Vérification manuelle requise';
+    var statusLabel = status === 'ok' ? 'Lien invitation valide' : 'Verification manuelle requise';
     setNodeText('[data-agilo-referral-status-label]', statusLabel);
     setNodeText('[data-agilo-referral-status-code]', status);
   }
@@ -218,79 +274,99 @@
       '.agilo-referral-modal[hidden]{display:none!important;}' +
       '.agilo-referral-modal{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:16px;}' +
       '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.28);}' +
-      '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(460px,100%);border-radius:14px;background:#fff;padding:16px 16px 14px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
+      '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(480px,100%);border-radius:16px;background:#fff;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
       '.agilo-referral-modal__close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#526076;}' +
-      '.agilo-referral-modal__title{margin:0 30px 4px 0;font-size:18px;font-weight:700;letter-spacing:-.01em;}' +
+      '.agilo-referral-modal__title{margin:0 30px 4px 0;font-size:19px;font-weight:700;letter-spacing:-.01em;}' +
       '.agilo-referral-modal__desc{margin:0 0 12px;font-size:13px;color:#5b677a;line-height:1.4;}' +
-      '.agilo-referral-gauge{width:160px;height:82px;margin:0 auto 6px;position:relative;}' +
-      '.agilo-referral-gauge svg{width:100%;height:100%;display:block;}' +
-      '.agilo-referral-gauge .track{stroke:#dfe8f8;stroke-width:8;fill:none;stroke-linecap:round;}' +
-      '.agilo-referral-gauge .fill{stroke:#174a96;stroke-width:8;fill:none;stroke-linecap:round;stroke-dasharray:126;stroke-dashoffset:126;transition:stroke-dashoffset .55s ease;}' +
-      '.agilo-referral-gauge__label{text-align:center;margin:0 0 2px;font-size:11px;font-weight:600;color:#6c7890;text-transform:uppercase;letter-spacing:.04em;}' +
-      '.agilo-referral-gauge__pct{text-align:center;margin:-6px 0 8px;font-weight:700;color:#174a96;}' +
+      '.agilo-referral-hero{padding:12px;border-radius:12px;border:1px solid #dbe7ff;background:linear-gradient(180deg,#f6f9ff 0,#ffffff 100%);}' +
+      '.agilo-referral-hero__meta{margin:0 0 6px;font-size:12px;color:#5b677a;font-weight:600;text-align:center;}' +
+      '.agilo-referral-hero__progress{margin:0;text-align:center;font-size:30px;line-height:1.05;font-weight:800;color:#174a96;}' +
+      '.agilo-referral-hero__suffix{font-size:14px;color:#5b677a;font-weight:600;}' +
+      '.agilo-referral-reward-bar{margin-top:10px;height:10px;border-radius:999px;background:#dfe8f8;overflow:hidden;}' +
+      '.agilo-referral-reward-bar__fill{height:100%;width:0;background:linear-gradient(90deg,#174a96 0,#2f64bd 100%);transition:width .45s ease;}' +
+      '.agilo-referral-reward-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:8px;}' +
+      '.agilo-referral-reward-step{padding:5px 0;border:1px solid #d8e3fa;border-radius:8px;text-align:center;font-size:11px;font-weight:700;color:#6b7890;background:#fff;}' +
+      '.agilo-referral-reward-step.is-active{border-color:#174a96;color:#174a96;background:#eaf1ff;}' +
+      '.agilo-referral-hero__status{margin:10px 0 0;font-size:12px;color:#2f3f57;line-height:1.45;text-align:center;font-weight:600;}' +
+      '.agilo-referral-secondary{margin-top:12px;padding-top:10px;border-top:1px solid #edf2fb;}' +
       '.agilo-referral-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}' +
       '.agilo-referral-kpi{border:1px solid #e7edf8;border-radius:10px;padding:8px 6px;text-align:center;background:linear-gradient(180deg,#f8fbff 0,#fff 100%);}' +
       '.agilo-referral-kpi__label{font-size:11px;color:#6c7890;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em;font-weight:600;}' +
       '.agilo-referral-kpi__value{margin:0;font-size:20px;color:#174a96;font-weight:700;line-height:1.1;}' +
+      '.agilo-referral-conversion{margin:8px 0 0;text-align:center;font-size:12px;color:#5b677a;font-weight:600;}' +
       '.agilo-referral-copy{margin-top:12px;display:flex;justify-content:center;}' +
       '.agilo-referral-copy__btn{border:1px solid rgba(23,74,150,.2);background:#f3f7ff;color:#174a96;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer;}' +
       '.agilo-referral-copy__btn:disabled{opacity:.7;cursor:default;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
-      '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}}';
+      '.agilo-referral-gauge{display:none;}' +
+      '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
     document.head.appendChild(style);
+  }
+
+  function buildModalPanelHtml() {
+    return '' +
+      '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
+      '<h3 class="agilo-referral-modal__title" id="agiloReferralStatsTitle">Mes stats ambassadeur</h3>' +
+      '<p class="agilo-referral-modal__desc">Objectif : 3 filleuls payants = 1 mois offert.</p>' +
+      '<section class="agilo-referral-hero" data-agilo-ref-reward-status="empty">' +
+      '<p class="agilo-referral-hero__meta" data-agilo-ref-reward-label-line>Objectif : 3 filleuls payants = 1 mois offert</p>' +
+      '<p class="agilo-referral-hero__progress"><span data-agilo-ref-reward-progress>0</span> <span class="agilo-referral-hero__suffix">/ <span data-agilo-ref-reward-target>3</span> payants</span></p>' +
+      '<div class="agilo-referral-reward-bar" role="progressbar" aria-valuemin="0" aria-valuemax="3" aria-valuenow="0">' +
+      '<div class="agilo-referral-reward-bar__fill" data-agilo-ref-reward-fill></div>' +
+      '</div>' +
+      '<div class="agilo-referral-reward-steps">' +
+      '<div class="agilo-referral-reward-step" data-agilo-ref-reward-step="1">1</div>' +
+      '<div class="agilo-referral-reward-step" data-agilo-ref-reward-step="2">2</div>' +
+      '<div class="agilo-referral-reward-step" data-agilo-ref-reward-step="3">3</div>' +
+      '</div>' +
+      '<p class="agilo-referral-hero__status" data-agilo-ref-reward-status-label>Partagez votre lien pour demarrer vos premiers parrainages.</p>' +
+      '</section>' +
+      '<section class="agilo-referral-secondary">' +
+      '<div class="agilo-referral-kpis">' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Inscrits</p><p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Payants comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">En attente</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
+      '</div>' +
+      '<p class="agilo-referral-conversion" data-agilo-ref-conversion-secondary>Conversion : 0%</p>' +
+      '<p class="agilo-referral-modal__hint" data-agilo-ref-hint-business>Partagez votre lien pour augmenter vos statistiques.</p>' +
+      '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Verification manuelle requise</p>' +
+      '</section>' +
+      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button></div>';
   }
 
   function ensureModal() {
     var modal = q('#agiloReferralStatsModal');
-    if (modal) {
-      if (modal.parentNode !== document.body) {
-        document.body.appendChild(modal);
-      }
-      var existingFill = q('[data-agilo-ref-gauge-fill]', modal);
-      if (!existingFill) {
-        var descNode = q('.agilo-referral-modal__desc', modal);
-        if (descNode) {
-          descNode.insertAdjacentHTML('afterend', '' +
-            '<div class="agilo-referral-gauge">' +
-            '<svg viewBox="0 0 100 55" aria-hidden="true">' +
-            '<path class="track" d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
-            '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
-            '</svg>' +
-            '</div>' +
-            '<p class="agilo-referral-gauge__label" data-agilo-ref-gauge-label>Taux de conversion</p>' +
-            '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>');
-        }
-      }
-      wireModalEvents(modal);
-      return modal;
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'agiloReferralStatsModal';
+      modal.className = 'agilo-referral-modal';
+      modal.hidden = true;
+      modal.innerHTML = '' +
+        '<div class="agilo-referral-modal__backdrop" data-agilo-ref-close></div>' +
+        '<section class="agilo-referral-modal__panel" role="dialog" aria-modal="true" aria-labelledby="agiloReferralStatsTitle"></section>';
+      document.body.appendChild(modal);
+    } else if (modal.parentNode !== document.body) {
+      document.body.appendChild(modal);
     }
-    modal = document.createElement('div');
-    modal.id = 'agiloReferralStatsModal';
-    modal.className = 'agilo-referral-modal';
-    modal.hidden = true;
-    modal.innerHTML = '' +
-      '<div class="agilo-referral-modal__backdrop" data-agilo-ref-close></div>' +
-      '<section class="agilo-referral-modal__panel" role="dialog" aria-modal="true" aria-labelledby="agiloReferralStatsTitle">' +
-      '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
-      '<h3 class="agilo-referral-modal__title" id="agiloReferralStatsTitle">Mes statistiques ambassadeur</h3>' +
-      '<p class="agilo-referral-modal__desc">Suivez vos inscrits, vos abonnements PRO/Biz et les conversions en temps reel.</p>' +
-      '<div class="agilo-referral-gauge">' +
-      '<svg viewBox="0 0 100 55" aria-hidden="true">' +
-      '<path class="track" d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
-      '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
-      '</svg>' +
-      '</div>' +
-      '<p class="agilo-referral-gauge__label" data-agilo-ref-gauge-label>Taux de conversion</p>' +
-      '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>' +
-      '<div class="agilo-referral-kpis">' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Inscrits</p><p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">PRO/Biz comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">En attente</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
-      '</div>' +
-      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d\'invitation</button></div>' +
-      '<p class="agilo-referral-modal__hint" data-agilo-ref-hint>Partagez votre lien pour augmenter vos statistiques.</p>' +
-      '</section>';
-    document.body.appendChild(modal);
+
+    if (!q('.agilo-referral-modal__backdrop', modal)) {
+      modal.insertAdjacentHTML('afterbegin', '<div class="agilo-referral-modal__backdrop" data-agilo-ref-close></div>');
+    }
+
+    var panel = q('.agilo-referral-modal__panel', modal);
+    if (!panel) {
+      panel = document.createElement('section');
+      panel.className = 'agilo-referral-modal__panel';
+      panel.setAttribute('role', 'dialog');
+      panel.setAttribute('aria-modal', 'true');
+      panel.setAttribute('aria-labelledby', 'agiloReferralStatsTitle');
+      modal.appendChild(panel);
+    }
+
+    if (!q('[data-agilo-ref-reward-progress]', panel)) {
+      panel.innerHTML = buildModalPanelHtml();
+    }
+
     wireModalEvents(modal);
     return modal;
   }
@@ -310,7 +386,7 @@
           button.textContent = ok ? 'Lien copie' : 'Copie impossible';
         }).finally(function () {
           window.setTimeout(function () {
-            button.textContent = 'Copier mon lien d\'invitation';
+            button.textContent = 'Copier mon lien d invitation';
             button.disabled = false;
           }, 1500);
         });
@@ -333,6 +409,28 @@
     }
   }
 
+  function setLegacyGauge(modal, state) {
+    var gaugeFill = q('[data-agilo-ref-gauge-fill]', modal);
+    var gaugePct = q('[data-agilo-ref-gauge-pct]', modal);
+    var gaugeLabelNode = q('[data-agilo-ref-gauge-label]', modal);
+    if (!gaugeFill && !gaugePct && !gaugeLabelNode) return;
+
+    var gaugeMode = asText(readBodyConfig('data-agilo-referrals-gauge-mode', 'conversion')).toLowerCase();
+    var monthlyGoal = Math.max(1, readBodyConfigInt('data-agilo-referrals-month-goal', 5));
+    var pct = state.referralsRegistered > 0 ? Math.round((state.referralsPaid / state.referralsRegistered) * 100) : 0;
+    var label = 'Taux de conversion';
+
+    if (gaugeMode === 'monthly') {
+      pct = Math.round((state.referralsMonth / monthlyGoal) * 100);
+      label = 'Objectif mensuel';
+    }
+
+    pct = clamp(pct, 0, 100);
+    if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
+    if (gaugePct) gaugePct.textContent = String(pct) + '%';
+    if (gaugeLabelNode) gaugeLabelNode.textContent = label;
+  }
+
   function setModalData(state) {
     var modal = ensureModal();
     var registered = toSafeInt(state.referralsRegistered, 0);
@@ -341,34 +439,59 @@
     var total = toSafeInt(state.referralsTotal, 0);
     var month = toSafeInt(state.referralsMonth, 0);
     var lastAt = state.referralsLastAt || '-';
-    var gaugeMode = asText((document.body && document.body.getAttribute('data-agilo-referrals-gauge-mode')) || 'conversion').toLowerCase();
-    var goal = toSafeInt((document.body && document.body.getAttribute('data-agilo-referrals-month-goal')) || 5, 5);
-    if (goal < 1) goal = 5;
-    var pct;
-    var gaugeLabel;
-    if (gaugeMode === 'monthly') {
-      pct = Math.max(0, Math.min(100, Math.round((month / goal) * 100)));
-      gaugeLabel = 'Objectif mensuel';
-    } else {
-      pct = registered > 0 ? Math.max(0, Math.min(100, Math.round((paid / registered) * 100))) : 0;
-      gaugeLabel = 'Taux de conversion';
-    }
-    var gaugeFill = q('[data-agilo-ref-gauge-fill]', modal);
-    var gaugePct = q('[data-agilo-ref-gauge-pct]', modal);
-    var gaugeLabelNode = q('[data-agilo-ref-gauge-label]', modal);
-    var hint = computeReferralHint(registered, paid);
+
+    var rewardTarget = Math.max(1, readBodyConfigInt('data-agilo-ref-reward-target', 3));
+    var rewardLabel = readBodyConfig('data-agilo-ref-reward-label', '1 mois offert');
+    var rewardState = computeRewardState(registered, paid, rewardTarget);
+    var rewardHint = computeRewardHint(rewardState, registered, paid);
+
+    var panel = q('.agilo-referral-modal__panel', modal);
     var copyButton = q('[data-agilo-ref-copy-link]', modal);
-    if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
-    if (gaugePct) gaugePct.textContent = String(pct) + '%';
-    if (gaugeLabelNode) gaugeLabelNode.textContent = gaugeLabel;
+    var rewardFill = q('[data-agilo-ref-reward-fill]', modal);
+    var rewardBar = q('.agilo-referral-reward-bar', modal);
+
     if (copyButton) copyButton.setAttribute('data-invite-url', state.inviteUrl || '');
+    if (rewardFill) rewardFill.style.width = String(rewardState.rewardPct) + '%';
+    if (rewardBar) {
+      rewardBar.setAttribute('aria-valuemin', '0');
+      rewardBar.setAttribute('aria-valuemax', String(rewardState.target));
+      rewardBar.setAttribute('aria-valuenow', String(rewardState.progress));
+    }
+
+    setNodeTextIn(modal, ['[data-agilo-ref-reward-progress]'], String(rewardState.progress));
+    setNodeTextIn(modal, ['[data-agilo-ref-reward-target]'], String(rewardState.target));
+    setNodeTextIn(modal, ['[data-agilo-ref-reward-label-line]'], 'Objectif : ' + String(rewardState.target) + ' filleuls payants = ' + rewardLabel);
+    setNodeTextIn(modal, ['[data-agilo-ref-reward-status-label]'], rewardHint);
+    setNodeTextIn(modal, ['[data-agilo-ref-conversion-secondary]'], 'Conversion : ' + String(rewardState.conversionPct) + '% (' + String(paid) + '/' + String(registered) + ')');
+
+    var hero = q('.agilo-referral-hero', modal);
+    if (hero) hero.setAttribute('data-agilo-ref-reward-status', rewardState.status);
+
+    qa('[data-agilo-ref-reward-step]', modal).forEach(function (stepNode) {
+      var stepValue = toSafeInt(stepNode.getAttribute('data-agilo-ref-reward-step'), 0);
+      if (stepValue > 0 && rewardState.progress >= stepValue) {
+        stepNode.classList.add('is-active');
+      } else {
+        stepNode.classList.remove('is-active');
+      }
+    });
+
     setNodeTextIn(modal, ['[data-agilo-ref-total]', '[data-agilo-referrals-total]'], String(total));
     setNodeTextIn(modal, ['[data-agilo-ref-month]', '[data-agilo-referrals-month]'], String(month));
     setNodeTextIn(modal, ['[data-agilo-ref-registered]', '[data-agilo-referrals-registered]'], String(registered));
     setNodeTextIn(modal, ['[data-agilo-ref-paid]', '[data-agilo-referrals-paid]'], String(paid));
     setNodeTextIn(modal, ['[data-agilo-ref-pending]', '[data-agilo-referrals-pending]'], String(pending));
-    setNodeTextIn(modal, ['[data-agilo-ref-hint]', '[data-agilo-referral-status-label]'], hint);
+    setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], rewardHint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
+
+    if (panel) {
+      panel.setAttribute('data-agilo-ref-reward-target', String(rewardState.target));
+      panel.setAttribute('data-agilo-ref-reward-progress', String(rewardState.progress));
+      panel.setAttribute('data-agilo-ref-reward-status', rewardState.status);
+      panel.setAttribute('data-agilo-ref-conversion-secondary', String(rewardState.conversionPct));
+    }
+
+    setLegacyGauge(modal, state);
   }
 
   function openModal() {
@@ -414,7 +537,7 @@
       if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = 'none';
       statsBtn.classList.remove('is-secondary');
       statsBtn.classList.add('is-primary');
-      statsBtn.textContent = 'Voir mes stats ambassadeur';
+      statsBtn.textContent = 'Voir ma progression ambassadeur';
     } else {
       ambassadorBtn.style.display = '';
       if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = '';
