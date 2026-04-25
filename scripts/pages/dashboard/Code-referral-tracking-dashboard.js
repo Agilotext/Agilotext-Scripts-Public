@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.1.3';
+  var VERSION = '1.2.0';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -33,6 +33,44 @@
         node.textContent = String(value);
       });
     });
+  }
+
+  function computeReferralHint(registered, paid) {
+    if (registered <= 0) {
+      return 'Partagez votre lien pour demarrer vos premiers parrainages.';
+    }
+    if (paid <= 0) {
+      return 'Bonne nouvelle : vous avez deja des inscrits. Prochaine etape : les aider a passer PRO/Biz.';
+    }
+    return 'Excellent : votre programme ambassadeur convertit deja en abonnements PRO/Biz.';
+  }
+
+  async function copyToClipboard(text) {
+    var value = asText(text);
+    if (!value) return false;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(value);
+        return true;
+      } catch (_errClipboard) {
+        // Fallback below.
+      }
+    }
+    try {
+      var input = document.createElement('input');
+      input.value = value;
+      input.setAttribute('readonly', 'readonly');
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      input.setSelectionRange(0, value.length);
+      var ok = document.execCommand('copy');
+      document.body.removeChild(input);
+      return Boolean(ok);
+    } catch (_errExec) {
+      return false;
+    }
   }
 
   function toSafeInt(value, fallback) {
@@ -161,6 +199,9 @@
   function renderCounters(state) {
     setNodeText('[data-agilo-referrals-total]', state.referralsTotal);
     setNodeText('[data-agilo-referrals-month]', state.referralsMonth);
+    setNodeText('[data-agilo-referrals-registered]', state.referralsRegistered);
+    setNodeText('[data-agilo-referrals-paid]', state.referralsPaid);
+    setNodeText('[data-agilo-referrals-pending]', state.referralsPending);
     setNodeText('[data-agilo-referrals-last-at]', state.referralsLastAt || '-');
     setNodeText('[data-agilo-referral-parent-id]', state.currentMemberId || '-');
     setNodeText('[data-agilo-referral-invite-code]', state.inviteCode || '-');
@@ -185,11 +226,15 @@
       '.agilo-referral-gauge svg{width:100%;height:100%;display:block;}' +
       '.agilo-referral-gauge .track{stroke:#dfe8f8;stroke-width:8;fill:none;stroke-linecap:round;}' +
       '.agilo-referral-gauge .fill{stroke:#174a96;stroke-width:8;fill:none;stroke-linecap:round;stroke-dasharray:126;stroke-dashoffset:126;transition:stroke-dashoffset .55s ease;}' +
+      '.agilo-referral-gauge__label{text-align:center;margin:0 0 2px;font-size:11px;font-weight:600;color:#6c7890;text-transform:uppercase;letter-spacing:.04em;}' +
       '.agilo-referral-gauge__pct{text-align:center;margin:-6px 0 8px;font-weight:700;color:#174a96;}' +
       '.agilo-referral-kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;}' +
       '.agilo-referral-kpi{border:1px solid #e7edf8;border-radius:10px;padding:8px 6px;text-align:center;background:linear-gradient(180deg,#f8fbff 0,#fff 100%);}' +
       '.agilo-referral-kpi__label{font-size:11px;color:#6c7890;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em;font-weight:600;}' +
       '.agilo-referral-kpi__value{margin:0;font-size:20px;color:#174a96;font-weight:700;line-height:1.1;}' +
+      '.agilo-referral-copy{margin-top:12px;display:flex;justify-content:center;}' +
+      '.agilo-referral-copy__btn{border:1px solid rgba(23,74,150,.2);background:#f3f7ff;color:#174a96;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer;}' +
+      '.agilo-referral-copy__btn:disabled{opacity:.7;cursor:default;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}}';
     document.head.appendChild(style);
@@ -212,6 +257,7 @@
             '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
             '</svg>' +
             '</div>' +
+            '<p class="agilo-referral-gauge__label" data-agilo-ref-gauge-label>Taux de conversion</p>' +
             '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>');
         }
       }
@@ -227,19 +273,21 @@
       '<section class="agilo-referral-modal__panel" role="dialog" aria-modal="true" aria-labelledby="agiloReferralStatsTitle">' +
       '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
       '<h3 class="agilo-referral-modal__title" id="agiloReferralStatsTitle">Mes statistiques ambassadeur</h3>' +
-      '<p class="agilo-referral-modal__desc">Suivez vos performances de parrainage en direct.</p>' +
+      '<p class="agilo-referral-modal__desc">Suivez vos inscrits, vos abonnements PRO/Biz et les conversions en temps reel.</p>' +
       '<div class="agilo-referral-gauge">' +
       '<svg viewBox="0 0 100 55" aria-hidden="true">' +
       '<path class="track" d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
       '<path class="fill" data-agilo-ref-gauge-fill d="M 10 50 A 40 40 0 0 1 90 50"></path>' +
       '</svg>' +
       '</div>' +
+      '<p class="agilo-referral-gauge__label" data-agilo-ref-gauge-label>Taux de conversion</p>' +
       '<p class="agilo-referral-gauge__pct" data-agilo-ref-gauge-pct>0%</p>' +
       '<div class="agilo-referral-kpis">' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Total</p><p class="agilo-referral-kpi__value" data-agilo-ref-total>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Ce mois</p><p class="agilo-referral-kpi__value" data-agilo-ref-month>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Statut</p><p class="agilo-referral-kpi__value" data-agilo-ref-status>Nouveau</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Inscrits</p><p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">PRO/Biz comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">En attente</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
       '</div>' +
+      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d\'invitation</button></div>' +
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint>Partagez votre lien pour augmenter vos statistiques.</p>' +
       '</section>';
     document.body.appendChild(modal);
@@ -253,6 +301,21 @@
     modal.addEventListener('click', function (ev) {
       var target = ev.target;
       var backdrop = q('.agilo-referral-modal__backdrop', modal);
+      if (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-copy-link')) {
+        var button = target;
+        if (button.disabled) return;
+        var inviteUrl = asText(button.getAttribute('data-invite-url'));
+        button.disabled = true;
+        copyToClipboard(inviteUrl).then(function (ok) {
+          button.textContent = ok ? 'Lien copie' : 'Copie impossible';
+        }).finally(function () {
+          window.setTimeout(function () {
+            button.textContent = 'Copier mon lien d\'invitation';
+            button.disabled = false;
+          }, 1500);
+        });
+        return;
+      }
       if (
         target === modal ||
         target === backdrop ||
@@ -272,21 +335,38 @@
 
   function setModalData(state) {
     var modal = ensureModal();
+    var registered = toSafeInt(state.referralsRegistered, 0);
+    var paid = toSafeInt(state.referralsPaid, 0);
+    var pending = toSafeInt(state.referralsPending, 0);
     var total = toSafeInt(state.referralsTotal, 0);
     var month = toSafeInt(state.referralsMonth, 0);
     var lastAt = state.referralsLastAt || '-';
+    var gaugeMode = asText((document.body && document.body.getAttribute('data-agilo-referrals-gauge-mode')) || 'conversion').toLowerCase();
     var goal = toSafeInt((document.body && document.body.getAttribute('data-agilo-referrals-month-goal')) || 5, 5);
     if (goal < 1) goal = 5;
-    var pct = Math.max(0, Math.min(100, Math.round((month / goal) * 100)));
+    var pct;
+    var gaugeLabel;
+    if (gaugeMode === 'monthly') {
+      pct = Math.max(0, Math.min(100, Math.round((month / goal) * 100)));
+      gaugeLabel = 'Objectif mensuel';
+    } else {
+      pct = registered > 0 ? Math.max(0, Math.min(100, Math.round((paid / registered) * 100))) : 0;
+      gaugeLabel = 'Taux de conversion';
+    }
     var gaugeFill = q('[data-agilo-ref-gauge-fill]', modal);
     var gaugePct = q('[data-agilo-ref-gauge-pct]', modal);
-    var status = total > 0 ? 'Actif' : 'Nouveau';
-    var hint = total > 0 ? 'Excellent : vous avez deja ' + total + ' parrainage(s).' : 'Aucun parrainage detecte pour le moment.';
+    var gaugeLabelNode = q('[data-agilo-ref-gauge-label]', modal);
+    var hint = computeReferralHint(registered, paid);
+    var copyButton = q('[data-agilo-ref-copy-link]', modal);
     if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
     if (gaugePct) gaugePct.textContent = String(pct) + '%';
+    if (gaugeLabelNode) gaugeLabelNode.textContent = gaugeLabel;
+    if (copyButton) copyButton.setAttribute('data-invite-url', state.inviteUrl || '');
     setNodeTextIn(modal, ['[data-agilo-ref-total]', '[data-agilo-referrals-total]'], String(total));
     setNodeTextIn(modal, ['[data-agilo-ref-month]', '[data-agilo-referrals-month]'], String(month));
-    setNodeTextIn(modal, ['[data-agilo-ref-status]'], status);
+    setNodeTextIn(modal, ['[data-agilo-ref-registered]', '[data-agilo-referrals-registered]'], String(registered));
+    setNodeTextIn(modal, ['[data-agilo-ref-paid]', '[data-agilo-referrals-paid]'], String(paid));
+    setNodeTextIn(modal, ['[data-agilo-ref-pending]', '[data-agilo-referrals-pending]'], String(pending));
     setNodeTextIn(modal, ['[data-agilo-ref-hint]', '[data-agilo-referral-status-label]'], hint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
   }
@@ -329,7 +409,7 @@
       statsBtn.__agiloReferralBound = true;
       statsBtn.addEventListener('click', openModal);
     }
-    if (state.referralsTotal > 0) {
+    if (state.referralsRegistered > 0 || state.referralsPaid > 0 || state.referralsTotal > 0) {
       ambassadorBtn.style.display = 'none';
       if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = 'none';
       statsBtn.classList.remove('is-secondary');
@@ -363,6 +443,19 @@
 
     var referralsLastAt = asText(readFieldValue(memberFromApi, ['referrals-last-at', 'referrals_last_at']) || readDomBoundValue(['referrals-last-at', 'referrals_last_at']) || '');
 
+    var referralsRegistered = readFieldValue(memberFromApi, ['referrals-registered', 'referrals_registered']);
+    if (referralsRegistered === null) referralsRegistered = readDomBoundValue(['referrals-registered', 'referrals_registered']);
+    referralsRegistered = toSafeInt(referralsRegistered === null ? referralsTotal : referralsRegistered, 0);
+
+    var referralsPaid = readFieldValue(memberFromApi, ['referrals-paid', 'referrals_paid']);
+    if (referralsPaid === null) referralsPaid = readDomBoundValue(['referrals-paid', 'referrals_paid']);
+    referralsPaid = toSafeInt(referralsPaid === null ? referralsTotal : referralsPaid, 0);
+
+    var referralsPending = readFieldValue(memberFromApi, ['referrals-pending', 'referrals_pending']);
+    if (referralsPending === null) referralsPending = readDomBoundValue(['referrals-pending', 'referrals_pending']);
+    if (referralsPending === null) referralsPending = Math.max(0, referralsRegistered - referralsPaid);
+    referralsPending = toSafeInt(referralsPending, 0);
+
     return {
       version: VERSION,
       currentMemberId: currentMemberId,
@@ -371,6 +464,9 @@
       inviteOwnerMatchesCurrentMember: Boolean(invite.inviteCode && currentMemberId && invite.inviteCode === currentMemberId),
       referralsTotal: toSafeInt(referralsTotal, 0),
       referralsMonth: toSafeInt(referralsMonth, 0),
+      referralsRegistered: toSafeInt(referralsRegistered, 0),
+      referralsPaid: toSafeInt(referralsPaid, 0),
+      referralsPending: toSafeInt(referralsPending, 0),
       referralsLastAt: referralsLastAt,
       computedAt: new Date().toISOString()
     };
