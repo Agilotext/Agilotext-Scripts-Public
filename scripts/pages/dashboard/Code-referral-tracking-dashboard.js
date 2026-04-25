@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.0';
+  var VERSION = '1.3.1';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -566,7 +566,11 @@
 
     var referralsLastAt = asText(readFieldValue(memberFromApi, ['referrals-last-at', 'referrals_last_at']) || readDomBoundValue(['referrals-last-at', 'referrals_last_at']) || '');
 
-    var referralsRegistered = readFieldValue(memberFromApi, ['referrals-registered', 'referrals_registered']);
+    // Preferred model: referrals-total = total invites (registered), referrals-paid = paid invites.
+    // Keep legacy fallbacks for old members that may still use referrals-registered or total-as-paid.
+    var referralsRegistered = readFieldValue(memberFromApi, ['referrals-total', 'referrals_total']);
+    if (referralsRegistered === null) referralsRegistered = readDomBoundValue(['referrals-total', 'referrals_total']);
+    if (referralsRegistered === null) referralsRegistered = readFieldValue(memberFromApi, ['referrals-registered', 'referrals_registered']);
     if (referralsRegistered === null) referralsRegistered = readDomBoundValue(['referrals-registered', 'referrals_registered']);
     referralsRegistered = toSafeInt(referralsRegistered === null ? referralsTotal : referralsRegistered, 0);
 
