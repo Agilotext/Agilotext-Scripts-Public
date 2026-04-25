@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.1';
+  var VERSION = '1.3.2';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -268,7 +268,7 @@
     var style = document.createElement('style');
     style.id = 'agilo-referral-stats-modal-style';
     style.textContent = '' +
-      '.agilo-referral-cta{margin-top:10px;display:inline-flex;align-items:center;justify-content:center;}' +
+      '.agilo-referral-cta{margin-top:8px;display:inline-flex;align-items:center;justify-content:center;width:auto!important;min-height:34px;padding:7px 12px!important;border-radius:9px;font-size:13px!important;line-height:1.2;max-width:260px;}' +
       '.agilo-referral-cta.is-primary{background:#174a96;color:#fff;}' +
       '.agilo-referral-cta.is-secondary{background:#eff4fb;color:#174a96;border:1px solid rgba(23,74,150,.18);}' +
       '.agilo-referral-modal[hidden]{display:none!important;}' +
@@ -293,7 +293,7 @@
       '.agilo-referral-kpi{border:1px solid #e7edf8;border-radius:10px;padding:8px 6px;text-align:center;background:linear-gradient(180deg,#f8fbff 0,#fff 100%);}' +
       '.agilo-referral-kpi__label{font-size:11px;color:#6c7890;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em;font-weight:600;}' +
       '.agilo-referral-kpi__value{margin:0;font-size:20px;color:#174a96;font-weight:700;line-height:1.1;}' +
-      '.agilo-referral-conversion{margin:8px 0 0;text-align:center;font-size:12px;color:#5b677a;font-weight:600;}' +
+      '.agilo-referral-conversion-secondary{margin:8px 0 0;text-align:center;font-size:12px;color:#5b677a;font-weight:600;}' +
       '.agilo-referral-copy{margin-top:12px;display:flex;justify-content:center;}' +
       '.agilo-referral-copy__btn{border:1px solid rgba(23,74,150,.2);background:#f3f7ff;color:#174a96;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer;}' +
       '.agilo-referral-copy__btn:disabled{opacity:.7;cursor:default;}' +
@@ -327,7 +327,7 @@
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Payants comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">En attente</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
       '</div>' +
-      '<p class="agilo-referral-conversion" data-agilo-ref-conversion-secondary>Conversion : 0%</p>' +
+      '<p class="agilo-referral-conversion-secondary" id="agiloReferralConversionSecondary" data-agilo-ref-conversion-secondary>Conversion : 0%</p>' +
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint-business>Partagez votre lien pour augmenter vos statistiques.</p>' +
       '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Verification manuelle requise</p>' +
       '</section>' +
@@ -462,7 +462,8 @@
     setNodeTextIn(modal, ['[data-agilo-ref-reward-target]'], String(rewardState.target));
     setNodeTextIn(modal, ['[data-agilo-ref-reward-label-line]'], 'Objectif : ' + String(rewardState.target) + ' filleuls payants = ' + rewardLabel);
     setNodeTextIn(modal, ['[data-agilo-ref-reward-status-label]'], rewardHint);
-    setNodeTextIn(modal, ['[data-agilo-ref-conversion-secondary]'], 'Conversion : ' + String(rewardState.conversionPct) + '% (' + String(paid) + '/' + String(registered) + ')');
+    var conversionNode = q('#agiloReferralConversionSecondary', modal) || q('[data-agilo-ref-conversion-secondary]', modal);
+    if (conversionNode) conversionNode.textContent = 'Conversion : ' + String(rewardState.conversionPct) + '% (' + String(paid) + '/' + String(registered) + ')';
 
     var hero = q('.agilo-referral-hero', modal);
     if (hero) hero.setAttribute('data-agilo-ref-reward-status', rewardState.status);
@@ -525,7 +526,7 @@
       statsBtn = document.createElement('button');
       statsBtn.type = 'button';
       statsBtn.className = 'button agilo-referral-cta is-secondary';
-      statsBtn.textContent = 'Suivre mes statistiques';
+      statsBtn.textContent = 'Voir le suivi parrainage';
       ambassadorBtn.insertAdjacentElement('afterend', statsBtn);
     }
     if (!statsBtn.__agiloReferralBound) {
@@ -537,13 +538,13 @@
       if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = 'none';
       statsBtn.classList.remove('is-secondary');
       statsBtn.classList.add('is-primary');
-      statsBtn.textContent = 'Voir ma progression ambassadeur';
+      statsBtn.textContent = 'Voir mes stats parrainage';
     } else {
       ambassadorBtn.style.display = '';
       if (ambassadorText && ambassadorText.tagName) ambassadorText.style.display = '';
       statsBtn.classList.remove('is-primary');
       statsBtn.classList.add('is-secondary');
-      statsBtn.textContent = 'Suivre mes statistiques';
+      statsBtn.textContent = 'Voir le suivi parrainage';
     }
     setModalData(state);
   }
