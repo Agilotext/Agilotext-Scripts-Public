@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.2';
+  var VERSION = '1.3.3';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -367,6 +367,10 @@
       panel.innerHTML = buildModalPanelHtml();
     }
 
+    if (isModalWantedOpen()) {
+      modal.hidden = false;
+    }
+
     wireModalEvents(modal);
     return modal;
   }
@@ -393,7 +397,6 @@
         return;
       }
       if (
-        target === modal ||
         target === backdrop ||
         (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-close')) ||
         (target && target.closest && target.closest('[data-agilo-ref-close]'))
@@ -429,6 +432,11 @@
     if (gaugeFill) gaugeFill.style.strokeDashoffset = String(126 - (126 * pct / 100));
     if (gaugePct) gaugePct.textContent = String(pct) + '%';
     if (gaugeLabelNode) gaugeLabelNode.textContent = label;
+  }
+
+
+  function isModalWantedOpen() {
+    return window.__agiloReferralModalWantedOpen === true;
   }
 
   function setModalData(state) {
@@ -492,15 +500,21 @@
       panel.setAttribute('data-agilo-ref-conversion-secondary', String(rewardState.conversionPct));
     }
 
+    if (isModalWantedOpen()) {
+      modal.hidden = false;
+    }
+
     setLegacyGauge(modal, state);
   }
 
   function openModal() {
+    window.__agiloReferralModalWantedOpen = true;
     var modal = ensureModal();
     modal.hidden = false;
   }
 
   function closeModal() {
+    window.__agiloReferralModalWantedOpen = false;
     var modal = q('#agiloReferralStatsModal');
     if (!modal) return;
     modal.hidden = true;
