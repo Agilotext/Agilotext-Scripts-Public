@@ -376,11 +376,18 @@
 #pane-transcript .ag-seg__head .rename-btn{
   background:none;
   border:0;
-  padding:0;
+  padding:0.15em;
   line-height:1;
   vertical-align:middle;
   opacity:.55;
   cursor:pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.75em;
+  height:1.75em;
+  box-sizing:border-box;
+  border-radius:50%;
 }
 #pane-transcript .ag-seg__head .rename-btn:hover,
 #pane-transcript .ag-seg__head .rename-btn:focus-visible{
@@ -401,13 +408,20 @@
 #pane-transcript .ag-seg__head .delete-seg-btn{
   background:none;
   border:0;
-  padding:0;
+  padding:0.15em;
   line-height:1;
   vertical-align:middle;
   opacity:0;
   cursor:pointer;
   transition: opacity .15s ease, color .15s ease;
   color: var(--agilo-dim);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:1.75em;
+  height:1.75em;
+  box-sizing:border-box;
+  border-radius:50%;
 }
 #pane-transcript .ag-seg:hover .delete-seg-btn,
 #pane-transcript .ag-seg__head .delete-seg-btn:focus-visible{
