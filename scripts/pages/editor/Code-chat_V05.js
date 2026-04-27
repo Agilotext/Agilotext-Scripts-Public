@@ -420,6 +420,33 @@ function agiloChatInitFromDom() {
     } catch (e) { err('Copy failed:', e); return false; }
   }
 
+  /** Copie en format riche (text/html) pour coller avec mise en forme dans Gmail/Outlook/Word.
+   *  Repli automatique sur text/plain si ClipboardItem n'est pas disponible (HTTP ou ancien navigateur). */
+  async function copyHtmlToClipboard(plainText, htmlInner) {
+    const frag =
+      '<div style="font-family:system-ui,-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;font-size:14px;line-height:1.55;color:#111">' +
+      htmlInner +
+      '</div>';
+    const fullHtml =
+      '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><!--StartFragment-->' +
+      frag +
+      '<!--EndFragment--></body></html>';
+    try {
+      if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html': new Blob([fullHtml], { type: 'text/html' }),
+            'text/plain': new Blob([String(plainText || '')], { type: 'text/plain' })
+          })
+        ]);
+        return true;
+      }
+    } catch (e) {
+      warn('Copie riche indisponible, repli texte brut :', e);
+    }
+    return copyToClipboard(plainText);
+  }
+
   /* ================== UI helpers ================== */
   const nowHHMM = () => new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const mask = t => !t ? '' : String(t).slice(0, 6) + '…' + String(t).slice(-4);
@@ -852,7 +879,7 @@ function agiloChatInitFromDom() {
     return -1;
   };
 
-  function buildAssistantActionsNode(idx, lastAssistantIndex, copyText) {
+  function buildAssistantActionsNode(idx, lastAssistantIndex, copyText, htmlPayload) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'msg-actions';
     actionsDiv.setAttribute('role', 'group');
@@ -867,7 +894,9 @@ function agiloChatInitFromDom() {
     const copyBtnDefaultHtml = copyBtn.innerHTML;
     const copyBtnCheckedHtml = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="flex-shrink:0"><path fill="none" d="M0 0h24v24H0z"/><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg> Copié';
     copyBtn.onclick = async () => {
-      const success = await copyToClipboard(copyText);
+      const success = htmlPayload
+        ? await copyHtmlToClipboard(copyText, htmlPayload)
+        : await copyToClipboard(copyText);
       if (success) {
         copyBtn.classList.add('msg-action-copy-copied');
         copyBtn.innerHTML = copyBtnCheckedHtml;
@@ -875,7 +904,7 @@ function agiloChatInitFromDom() {
           copyBtn.classList.remove('msg-action-copy-copied');
           copyBtn.innerHTML = copyBtnDefaultHtml;
         }, 2000);
-        toast('Copié dans le presse-papier', 'success');
+        toast(htmlPayload ? 'Copié avec mise en forme' : 'Copié dans le presse-papier', 'success');
       } else {
         toast('Échec de la copie', 'error');
       }
@@ -1092,7 +1121,8 @@ function agiloChatInitFromDom() {
         }
 
         if (!isThinking && !displayText.includes('réfléchit') && !displayText.includes('⚠️') && displayText.length > 10) {
-          bubbleDiv.appendChild(buildAssistantActionsNode(idx, lastAssistantIndex, displayText));
+          const richHtml = renderMode === 'md' ? mdToHtml(displayText) : null;
+          bubbleDiv.appendChild(buildAssistantActionsNode(idx, lastAssistantIndex, displayText, richHtml));
         }
       }
     } else {
@@ -2707,8 +2737,10 @@ function agiloChatInitFromDom() {
     export: (msgIdx, fmt) => exportMessage(msgIdx, fmt),
     copy: async (msgIdx) => {
       if (MESSAGES[msgIdx]) {
-        const success = await copyToClipboard(MESSAGES[msgIdx].text);
-        toast(success ? 'Copié' : 'Échec copie', success ? 'success' : 'error');
+        const txt = MESSAGES[msgIdx].text;
+        const htmlInner = mdToHtml(txt);
+        const success = await copyHtmlToClipboard(txt, htmlInner);
+        toast(success ? 'Copié avec mise en forme' : 'Échec copie', success ? 'success' : 'error');
       }
     },
     clear: () => {
