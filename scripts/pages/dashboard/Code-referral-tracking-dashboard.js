@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.5';
+  var VERSION = '1.3.6';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -105,6 +105,32 @@
     }
 
     return 'Partagez votre lien pour demarrer vos premiers parrainages.';
+  }
+
+  function buildClaimMailto(state, rewardState, rewardLabel) {
+    var toEmail = readBodyConfig('data-agilo-ref-reward-claim-email', 'contact@agilotext.com');
+    var subjectBase = readBodyConfig('data-agilo-ref-reward-claim-subject', 'Reclamation mois offert ambassadeur');
+    var memberId = asText(state && state.currentMemberId) || '-';
+    var inviteCode = asText(state && state.inviteCode) || '-';
+    var paid = toSafeInt(state && state.referralsPaid, 0);
+    var registered = toSafeInt(state && state.referralsRegistered, 0);
+    var target = toSafeInt(rewardState && rewardState.target, 3);
+    var rewardName = asText(rewardLabel) || '1 mois offert';
+    var subject = subjectBase + ' - ' + memberId;
+    var body = [
+      'Bonjour equipe Agilotext,',
+      '',
+      'Je souhaite reclamer ma recompense ambassadeur : ' + rewardName + '.',
+      '',
+      'Infos:',
+      '- Member ID: ' + memberId,
+      '- Invite code: ' + inviteCode,
+      '- Progression payants: ' + String(paid) + '/' + String(target),
+      '- Conversion: ' + String(registered > 0 ? Math.round((paid / registered) * 100) : 0) + '% (' + String(paid) + '/' + String(registered) + ')',
+      '',
+      'Merci !'
+    ].join('\n');
+    return 'mailto:' + encodeURIComponent(toEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
   }
 
   async function copyToClipboard(text) {
@@ -297,6 +323,10 @@
       '.agilo-referral-copy{margin-top:12px;display:flex;justify-content:center;}' +
       '.agilo-referral-copy__btn{border:1px solid rgba(23,74,150,.2);background:#f3f7ff;color:#174a96;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer;}' +
       '.agilo-referral-copy__btn:disabled{opacity:.7;cursor:default;}' +
+      '.agilo-referral-claim{margin-top:8px;display:flex;justify-content:center;}' +
+      '.agilo-referral-claim[hidden]{display:none!important;}' +
+      '.agilo-referral-claim__link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;line-height:1.2;background:#174a96;color:#fff;border:1px solid rgba(23,74,150,.24);}' +
+      '.agilo-referral-claim__link:hover{background:#123a75;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
       '.agilo-referral-gauge{display:none;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
@@ -331,7 +361,8 @@
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint-business>Partagez votre lien pour augmenter vos statistiques.</p>' +
       '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Verification manuelle requise</p>' +
       '</section>' +
-      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button></div>';
+      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button></div>' +
+      '<div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden><a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Reclamer mon mois offert</a></div>';
   }
 
   function ensureModal() {
@@ -454,6 +485,8 @@
 
     var panel = q('.agilo-referral-modal__panel', modal);
     var copyButton = q('[data-agilo-ref-copy-link]', modal);
+    var claimWrap = q('[data-agilo-ref-claim-wrap]', modal);
+    var claimLink = q('[data-agilo-ref-claim-link]', modal);
     var rewardFill = q('[data-agilo-ref-reward-fill]', modal);
     var rewardBar = q('.agilo-referral-reward-bar', modal);
 
@@ -491,6 +524,16 @@
     setNodeTextIn(modal, ['[data-agilo-ref-pending]', '[data-agilo-referrals-pending]'], String(pending));
     setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], rewardHint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
+
+    if (claimWrap && claimLink) {
+      var unlocked = rewardState.status === 'unlocked';
+      claimWrap.hidden = !unlocked;
+      if (unlocked) {
+        claimLink.setAttribute('href', buildClaimMailto(state, rewardState, rewardLabel));
+      } else {
+        claimLink.setAttribute('href', '#');
+      }
+    }
 
     if (isModalWantedOpen()) {
       modal.hidden = false;
