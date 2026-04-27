@@ -397,7 +397,10 @@
 
     const loadingText = document.createElement('p');
     loadingText.className = 'loading-text';
-    loadingText.textContent = 'Génération du compte-rendu en cours...';
+    loadingText.textContent =
+      window.__agiloSummaryRegenHelpers && window.__agiloSummaryRegenHelpers.POLL_STATUS_USER_TEXT
+        ? window.__agiloSummaryRegenHelpers.POLL_STATUS_USER_TEXT
+        : 'Génération du compte-rendu en cours…';
     const loadingSubtitle = document.createElement('p');
     loadingSubtitle.className = 'loading-subtitle';
     if (modelName) {
@@ -409,7 +412,10 @@
 
     const statusEl = document.createElement('p');
     statusEl.className = 'loading-status-hint';
-    statusEl.textContent = 'Surveillance du statut serveur…';
+    statusEl.textContent =
+      window.__agiloSummaryRegenHelpers && window.__agiloSummaryRegenHelpers.POLL_STATUS_USER_TEXT
+        ? window.__agiloSummaryRegenHelpers.POLL_STATUS_USER_TEXT
+        : 'Génération du compte-rendu en cours…';
 
     summaryEditor.appendChild(loaderContainer);
     loaderContainer.appendChild(lottieElement);
@@ -468,12 +474,27 @@
 
     const modelName = model.promptModelName || 'Modèle ' + model.promptModelId;
     const confirmed = confirm(
-      'Cela remplace le compte-rendu actuel.\n\n' +
-      'Modèle : ' + modelName + '\n\n' +
-      canRegen.remaining + '/' + canRegen.limit + ' régénération(s) restante(s).\n\n' +
-      'L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu dans l’éditeur.'
+      'Remplacer le compte-rendu actuel ?\n\n' +
+        'Modèle : ' +
+        modelName +
+        '\n\n' +
+        canRegen.remaining +
+        '/' +
+        canRegen.limit +
+        ' régénération(s) restante(s).\n\n' +
+        'L’interface se mettra à jour automatiquement dès que la génération est terminée.'
     );
     if (!confirmed) return;
+
+    const H0 = window.__agiloSummaryRegenHelpers;
+    var priorSummaryContentHash = '';
+    if (H0 && typeof H0.fetchPriorSummaryContentHash === 'function') {
+      try {
+        priorSummaryContentHash = await H0.fetchPriorSummaryContentHash(jobId, email, token, edition);
+      } catch (e) {
+        log('fetchPriorSummaryContentHash', e);
+      }
+    }
 
     isGenerating = true;
     try {
@@ -512,30 +533,106 @@
           if (typeof H.formatPollStatusLabel === 'function') {
             ui.statusEl.textContent = H.formatPollStatusLabel(null);
           }
-          H.waitForSummaryTerminalState(jobId, email, token, edition, ui.statusEl, function () {
-            return false;
-          })
-            .then(function (outcome) {
+          H.waitForSummaryTerminalState(
+            jobId,
+            email,
+            token,
+            edition,
+            ui.statusEl,
+            function () {
+              return false;
+            },
+            priorSummaryContentHash
+          )
+            .then(async function (outcome) {
               if (outcome === 'cancelled') {
                 if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
                 else hideSummaryRegenLoader();
                 isGenerating = false;
                 return;
               }
+              if (outcome === 'error' && typeof H.tryRecoverSummaryFromLateReady === 'function') {
+                const recovered = await H.tryRecoverSummaryFromLateReady(
+                  jobId,
+                  email,
+                  token,
+                  edition,
+                  ui.statusEl,
+                  priorSummaryContentHash
+                );
+                if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+                else hideSummaryRegenLoader();
+                if (recovered) {
+                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
+                    H.refreshSummaryInEditorWithFallback(jobId, function () {
+                      return false;
+                    });
+                  }
+                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
+                  isGenerating = false;
+                  try {
+                    isPopulated = false;
+                    cachedModels = null;
+                    populateContainer(true);
+                  } catch (e) {}
+                  return;
+                }
+                var finalOk =
+                  typeof H.tryFinalSummaryRecover === 'function'
+                    ? await H.tryFinalSummaryRecover(jobId, email, token, edition, priorSummaryContentHash)
+                    : false;
+                if (finalOk) {
+                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
+                    H.refreshSummaryInEditorWithFallback(jobId, function () {
+                      return false;
+                    });
+                  }
+                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
+                } else if (typeof H.showSummaryStalledToast === 'function') {
+                  H.showSummaryStalledToast(
+                    jobId,
+                    'régénération en cours sur le serveur — actualisez si besoin (job ' + jobId + ').'
+                  );
+                } else {
+                  if (typeof window.toast === 'function') {
+                    window.toast('Compte-rendu : actualisez la page si rien ne s’affiche (job ' + jobId + ').');
+                  }
+                }
+                isGenerating = false;
+                try {
+                  isPopulated = false;
+                  cachedModels = null;
+                  populateContainer(true);
+                } catch (e) {}
+                return;
+              }
               if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
               else hideSummaryRegenLoader();
               if (outcome === 'ready') {
                 if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
-                  H.refreshSummaryInEditorWithFallback(jobId, function () { return false; });
+                  H.refreshSummaryInEditorWithFallback(jobId, function () {
+                    return false;
+                  });
                 }
                 if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
               } else if (outcome === 'error') {
-                alert(
-                  'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
-                  'Rechargez la page : le compte-rendu est peut‑être déjà là.'
-                );
+                if (typeof H.showSummaryStalledToast === 'function') {
+                  H.showSummaryStalledToast(
+                    jobId,
+                    'régénération en cours sur le serveur — actualisez si besoin (job ' + jobId + ').'
+                  );
+                } else if (typeof window.toast === 'function') {
+                  window.toast('Actualisez la page si le compte-rendu n’apparaît pas (job ' + jobId + ').');
+                }
               } else {
-                alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+                if (typeof H.showSummaryStalledToast === 'function') {
+                  H.showSummaryStalledToast(
+                    jobId,
+                    'délai d’attente atteint — actualisez la page (job ' + jobId + ').'
+                  );
+                } else if (typeof window.toast === 'function') {
+                  window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
+                }
               }
               isGenerating = false;
               try {
@@ -549,7 +646,16 @@
               if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
               else hideSummaryRegenLoader();
               isGenerating = false;
-              alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+              if (typeof H.showSummaryStalledToast === 'function') {
+                H.showSummaryStalledToast(
+                  jobId,
+                  'impossible de vérifier le statut — actualisez (job ' + jobId + ').'
+                );
+              } else {
+                if (typeof window.toast === 'function') {
+                  window.toast('Impossible de vérifier le statut. Actualisez la page.');
+                }
+              }
             });
         } else {
           ui.statusEl.textContent =
