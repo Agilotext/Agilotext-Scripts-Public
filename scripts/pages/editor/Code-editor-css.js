@@ -394,6 +394,66 @@
   display:block;
 }
 
+#pane-transcript .ag-seg__head .delete-seg-btn.absolute{
+  position:static !important;
+  inset:auto !important;
+}
+#pane-transcript .ag-seg__head .delete-seg-btn{
+  background:none;
+  border:0;
+  padding:0;
+  line-height:1;
+  vertical-align:middle;
+  opacity:0;
+  cursor:pointer;
+  transition: opacity .15s ease, color .15s ease;
+  color: var(--agilo-dim);
+}
+#pane-transcript .ag-seg:hover .delete-seg-btn,
+#pane-transcript .ag-seg__head .delete-seg-btn:focus-visible{
+  opacity:.55;
+}
+#pane-transcript .ag-seg__head .delete-seg-btn:hover,
+#pane-transcript .ag-seg__head .delete-seg-btn:focus-visible{
+  opacity:1;
+  color: #c0392b;
+  outline:var(--agilo-focus);
+  outline-offset:2px;
+}
+#pane-transcript .ag-seg__head .delete-seg-btn svg{
+  width:1em;
+  height:1em;
+  display:block;
+}
+
+.toast--undo{
+  display:flex;
+  align-items:center;
+  gap:.6rem;
+}
+.toast__undo-btn{
+  background:none;
+  border:1px solid currentColor;
+  border-radius:.3rem;
+  padding:.15rem .5rem;
+  font-size:.8em;
+  cursor:pointer;
+  color:inherit;
+  opacity:.85;
+  flex-shrink:0;
+}
+.toast__undo-btn:hover{ opacity:1; }
+
+.ag-rename-menu__row--danger{
+  color: #c0392b;
+  border-top: 1px solid var(--agilo-divider);
+  margin-top:.25rem;
+  padding-top:.25rem;
+}
+.ag-rename-menu__row--danger:hover{
+  background: color-mix(in srgb, #c0392b 10%, var(--agilo-surface) 90%);
+}
+
 .search-hit{
   background: color-mix(in srgb, var(--color--orange,#fd7e14) 35%, var(--agilo-surface) 65%);
   border-radius:.2rem;
