@@ -61,12 +61,39 @@
     return agiloEditorCredsRoot().querySummaryEditor();
   }
 
-  async function fetchTranscriptStatus(jobId, email, token, edition) {
+  async function fetchTranscriptStatusFull(jobId, email, token, edition) {
     const url = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
     const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
     const j = await r.json().catch(() => ({}));
-    if (j && j.status === 'OK' && j.transcriptStatus) return String(j.transcriptStatus).trim();
-    return null;
+    const ts = j && j.status === 'OK' && j.transcriptStatus ? String(j.transcriptStatus).trim() : null;
+    return { transcriptStatus: ts, raw: j || null };
+  }
+
+  async function fetchTranscriptStatus(jobId, email, token, edition) {
+    const r = await fetchTranscriptStatusFull(jobId, email, token, edition);
+    return r.transcriptStatus;
+  }
+
+  /**
+   * Port mobile (utils/transcriptStatusApi.ts) :
+   * l'API renvoie parfois un payload « incident serveur » alors que la génération
+   * va aboutir. Tant que ce message phantom n'est pas confirmé par un statut terminal
+   * pur, l'app mobile l'ignore et continue à attendre.
+   */
+  const PHANTOM_INCIDENT_RE = /killed by a backend|backend incident|incident.{0,40}backend|job was killed/i;
+  function isPhantomIncidentPayload(raw) {
+    if (!raw) return false;
+    const blob = [
+      raw.javaException,
+      raw.userErrorMessage,
+      raw.exceptionName,
+      raw.javaStackTrace,
+      raw.exceptionStackTrace,
+      raw.errorMessage
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return PHANTOM_INCIDENT_RE.test(blob);
   }
 
   /** Empêche de confondre l’ancien compte-rendu avec le nouveau pendant la génération. */
@@ -274,64 +301,77 @@
     shouldCancel,
     priorContentHash
   ) {
+    // ✅ Pattern mobile (AgilotextMobile/src/screens/JobDetailScreen.tsx) :
+    // tant que le statut métier n'est pas terminal-pur, on continue à poller.
+    // Cette fonction ne retourne JAMAIS 'error' — uniquement 'ready', 'cancelled'
+    // ou 'timeout' (très rare, ~25 min). Tout ON_ERROR pendant l'attente est
+    // soit résiduel, soit phantom-incident, soit transitoire — comme sur mobile.
     const t0 = Date.now();
     let firstLoopAfterRedo = true;
-    /** True dès qu'on a observé un READY_SUMMARY_PENDING : on sait alors que le moteur
-     *  a réellement démarré la génération. Tout ON_ERROR ultérieur devient « post-génération »
-     *  et mérite un recheck/contenu, contrairement à un ON_ERROR résiduel pré-démarrage. */
+    /** Garde la trace : au moins un PENDING observé → le moteur a vraiment démarré. */
     let sawPending = false;
-    /** Compte les tours consécutifs où on observe ON_ERROR sans avoir jamais vu PENDING.
-     *  Tant que le compteur reste sous le seuil, on continue à poller silencieusement. */
-    let onErrorWithoutPendingRounds = 0;
     await new Promise((r) => setTimeout(r, SUMMARY_INITIAL_DELAY_MS));
     while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
       if (shouldCancel && shouldCancel()) return 'cancelled';
       let st = null;
+      let raw = null;
       try {
-        st = await fetchTranscriptStatus(jobId, email, token, edition);
+        const full = await fetchTranscriptStatusFull(jobId, email, token, edition);
+        st = full.transcriptStatus;
+        raw = full.raw;
       } catch (e) {
         logError('poll getTranscriptStatus', e);
       }
       if (statusEl) {
         statusEl.textContent = formatPollStatusLabel(st);
       }
-      if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st === 'READY_SUMMARY_READY') {
+        // ✅ Stub-detect (mobile : isAgilotextSummaryHtmlLikelyPendingStub) :
+        // l'API peut annoncer READY mais servir un corps trop court ou un statut KO
+        // pendant la matérialisation du HTML. Si receiveSummary ne montre pas un
+        // nouveau contenu valide, on continue à poller au lieu de remonter ready.
+        const ready = await receiveSummaryIndicatesCrReady(
+          jobId, email, token, edition, priorContentHash
+        );
+        if (ready) return 'ready';
+        sawPending = true;
+        if (DEBUG) log('READY_SUMMARY_READY mais stub HTML — poll continue');
+        await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
+        continue;
+      }
       if (st === 'READY_SUMMARY_PENDING') {
         sawPending = true;
-        onErrorWithoutPendingRounds = 0;
         firstLoopAfterRedo = false;
         await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
         continue;
       }
       if (st === 'READY_SUMMARY_ON_ERROR') {
-        if (firstLoopAfterRedo) {
+        // ✅ Phantom incident (mobile : shouldAutoRedoAfterPhantomIncident) :
+        // payload contient « killed by a backend » / « backend incident » / etc.
+        // → on ignore, le moteur va finir.
+        if (isPhantomIncidentPayload(raw)) {
+          if (DEBUG) log('ON_ERROR phantom incident — ignoré');
           firstLoopAfterRedo = false;
-          if (DEBUG) log('Premier statut ON_ERROR ignoré (résiduel possible) — pause poll');
           await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
           continue;
         }
-        // ✅ ON_ERROR pré-démarrage (jamais vu PENDING) : très probablement résiduel
-        // (backend en transition). On continue à poller avant de tomber dans le recheck.
-        if (!sawPending) {
-          onErrorWithoutPendingRounds += 1;
-          if (onErrorWithoutPendingRounds < SUMMARY_ON_ERROR_RESIDUAL_TOLERANCE_ROUNDS) {
-            if (DEBUG) log('ON_ERROR résiduel (pas encore de PENDING) — tolérance', onErrorWithoutPendingRounds);
-            await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
-            continue;
-          }
+        if (firstLoopAfterRedo) {
+          firstLoopAfterRedo = false;
+          if (DEBUG) log('Premier statut ON_ERROR ignoré (résiduel possible)');
+          await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
+          continue;
         }
-        const sub = await recheckAfterSummaryOnError(
-          jobId,
-          email,
-          token,
-          edition,
-          statusEl,
-          shouldCancel,
-          priorContentHash
+        // Tentative rapide de récupération via receiveSummary :
+        // si l'HTML est nouveau et complet, on rend la main.
+        const ready = await receiveSummaryIndicatesCrReady(
+          jobId, email, token, edition, priorContentHash
         );
-        if (sub === 'ready') return 'ready';
-        if (sub === 'error') return 'error';
-        if (sub === 'cancelled') return 'cancelled';
+        if (ready) return 'ready';
+        // ✅ Sinon on continue à poller (même comportement que mobile :
+        //    pas de toast, pas d'erreur, le user voit le loader).
+        if (DEBUG) log(sawPending
+          ? 'ON_ERROR post-PENDING transitoire — poll continue'
+          : 'ON_ERROR pré-PENDING (résiduel) — poll continue');
         await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
         continue;
       }
@@ -1005,6 +1045,56 @@
     if (!summaryEditor) return;
     const loader = summaryEditor.querySelector('.summary-loading-indicator');
     if (loader) loader.remove();
+    stopSummaryLoaderPersistence();
+  }
+
+  /**
+   * ✅ Mobile-style anti-écran-blanc :
+   * pendant la régénération, l'orchestrateur Code-main-editor-IFRAME.js
+   * (loadJob → clearAll, beforeload, ou polling pendant un fetch) peut vider
+   * `summaryEditor`. On surveille via MutationObserver et on ré-injecte le
+   * loader tant que la régénération est en cours (window.__agiloSummaryRegenInProgress).
+   * Idempotent : start() est sûr à rappeler ; stop() coupe le watcher.
+   */
+  let __summaryLoaderObserver = null;
+  let __summaryLoaderRetryRaf = null;
+  function startSummaryLoaderPersistence() {
+    const summaryEditor = querySummaryEditor();
+    if (!summaryEditor) return;
+    if (__summaryLoaderObserver) return;
+    const ensure = () => {
+      if (!window.__agiloSummaryRegenInProgress) return;
+      const el = querySummaryEditor();
+      if (!el) return;
+      if (!el.querySelector('.summary-loading-indicator')) {
+        try {
+          showSummaryLoading();
+        } catch (e) { logError('persistLoader:showSummaryLoading', e); }
+      }
+    };
+    __summaryLoaderObserver = new MutationObserver(() => {
+      if (__summaryLoaderRetryRaf) return;
+      __summaryLoaderRetryRaf = requestAnimationFrame(() => {
+        __summaryLoaderRetryRaf = null;
+        ensure();
+      });
+    });
+    try {
+      __summaryLoaderObserver.observe(summaryEditor, { childList: true, subtree: true });
+    } catch (e) {
+      logError('persistLoader:observe', e);
+    }
+    ensure();
+  }
+  function stopSummaryLoaderPersistence() {
+    if (__summaryLoaderObserver) {
+      try { __summaryLoaderObserver.disconnect(); } catch {}
+      __summaryLoaderObserver = null;
+    }
+    if (__summaryLoaderRetryRaf) {
+      try { cancelAnimationFrame(__summaryLoaderRetryRaf); } catch {}
+      __summaryLoaderRetryRaf = null;
+    }
   }
 
   function showSuccessMessage(message) {
@@ -1138,7 +1228,12 @@
         openSummaryTab();
         const summaryEditorClear = querySummaryEditor();
         if (summaryEditorClear) summaryEditorClear.innerHTML = '';
+        // ✅ Anti-écran-blanc : un flag global + un MutationObserver maintiennent
+        // le loader visible même si l'orchestrateur écrase summaryEditor (clearAll,
+        // beforeload, polling pendant un fetch). Désactivé dès qu'on rend la main.
+        window.__agiloSummaryRegenInProgress = true;
         showSummaryLoading();
+        startSummaryLoaderPersistence();
         updateButtonVisibility();
 
         const loaderContainer = document.querySelector('.summary-loading-indicator');
@@ -1160,55 +1255,34 @@
             priorSummaryContentHash
           )
             .then(async (outcome) => {
+              // ✅ Mobile-style : 'error' n'est plus retourné par waitForSummaryTerminalState.
+              // Les seuls outcomes possibles sont 'ready', 'cancelled', 'timeout'.
               if (outcome === 'cancelled') {
+                window.__agiloSummaryRegenInProgress = false;
                 hideSummaryLoading();
                 isGenerating = false;
                 updateButtonVisibility();
                 return;
               }
-              if (outcome === 'error') {
-                const recovered = await tryRecoverSummaryFromLateReady(
-                  jobId,
-                  email,
-                  token,
-                  edition,
-                  statusEl,
-                  priorSummaryContentHash
-                );
-                hideSummaryLoading();
-                if (recovered) {
-                  refreshSummaryInEditorWithFallback(jobId, function () {
-                    return false;
-                  });
-                  showSuccessMessage('Compte-rendu prêt');
-                  isGenerating = false;
-                  updateButtonVisibility();
-                  return;
-                }
-                const finalOk = await tryFinalSummaryRecover(
-                  jobId,
-                  email,
-                  token,
-                  edition,
-                  priorSummaryContentHash
-                );
-                if (finalOk) {
-                  refreshSummaryInEditorWithFallback(jobId, function () {
-                    return false;
-                  });
-                  showSuccessMessage('Compte-rendu prêt');
-                } else {
-                  showSummaryStalledToast(
-                    jobId,
-                    'régénération en cours sur le serveur — si l’écran ne change pas, actualisez (job ' + jobId + ').'
-                  );
-                }
-                isGenerating = false;
-                updateButtonVisibility();
-                return;
-              }
-              hideSummaryLoading();
               if (outcome === 'ready') {
+                window.__agiloSummaryRegenInProgress = false;
+                hideSummaryLoading();
+                refreshSummaryInEditorWithFallback(jobId, function () {
+                  return false;
+                });
+                showSuccessMessage('Compte-rendu prêt');
+                isGenerating = false;
+                updateButtonVisibility();
+                return;
+              }
+              // outcome === 'timeout' : très rare (≈ 25 min). Dernière chance via
+              // tryFinalSummaryRecover avant d'afficher un toast non bloquant.
+              const finalOk = await tryFinalSummaryRecover(
+                jobId, email, token, edition, priorSummaryContentHash
+              );
+              window.__agiloSummaryRegenInProgress = false;
+              hideSummaryLoading();
+              if (finalOk) {
                 refreshSummaryInEditorWithFallback(jobId, function () {
                   return false;
                 });
@@ -1226,6 +1300,7 @@
             })
             .catch((e) => {
               logError('waitForSummaryTerminalState', e);
+              window.__agiloSummaryRegenInProgress = false;
               hideSummaryLoading();
               isGenerating = false;
               showSummaryStalledToast(
@@ -1657,7 +1732,11 @@
     getSummaryContentHash,
     fetchPriorSummaryContentHash,
     POLL_STATUS_USER_TEXT,
-    RECEIVE_SUMMARY_MIN_READY_LEN
+    RECEIVE_SUMMARY_MIN_READY_LEN,
+    startSummaryLoaderPersistence,
+    stopSummaryLoaderPersistence,
+    isPhantomIncidentPayload,
+    fetchTranscriptStatusFull
   };
 
   /**
@@ -1696,7 +1775,15 @@
         try {
           const u = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
           const r = await fetch(u, { cache: 'no-store' });
-          out.transcriptStatus = { httpStatus: r.status, json: await r.json().catch(() => null) };
+          const json = await r.json().catch(() => null);
+          out.transcriptStatus = {
+            httpStatus: r.status,
+            transcriptStatus: json?.transcriptStatus || null,
+            isPhantomIncident: isPhantomIncidentPayload(json),
+            javaException: json?.javaException || null,
+            userErrorMessage: json?.userErrorMessage || null,
+            json
+          };
         } catch (e) {
           out.transcriptStatus = { error: String(e?.message || e) };
         }
@@ -1720,7 +1807,8 @@
       out.helpers = Object.keys(window.__agiloSummaryRegenHelpers || {});
       out.flags = {
         AGILO_DEBUG: !!window.AGILO_DEBUG,
-        cacheCheckDone: !!window.__agiloCacheCheckDone
+        cacheCheckDone: !!window.__agiloCacheCheckDone,
+        regenInProgress: !!window.__agiloSummaryRegenInProgress
       };
     } catch (e) {
       out.fatal = String(e?.message || e);

@@ -524,8 +524,16 @@
         const summaryEditorClear = querySummaryEditor();
         if (summaryEditorClear) summaryEditorClear.innerHTML = '';
 
+        // ✅ Anti-écran-blanc : flag global piloté par relance-compte-rendu.js
+        // (un MutationObserver y réinjecte le loader si l'orchestrateur écrase
+        //  summaryEditor pendant la régénération).
+        window.__agiloSummaryRegenInProgress = true;
+
         const ui = showSummaryRegenLoader(modelName);
         const H = window.__agiloSummaryRegenHelpers;
+        if (H && typeof H.startSummaryLoaderPersistence === 'function') {
+          try { H.startSummaryLoaderPersistence(); } catch (_) {}
+        }
 
         if (!ui || !ui.statusEl) {
           isGenerating = false;
@@ -545,59 +553,22 @@
             priorSummaryContentHash
           )
             .then(async function (outcome) {
+              // ✅ Mobile-style : depuis la branche 1.06, waitForSummaryTerminalState ne
+              // retourne JAMAIS 'error' — uniquement 'ready', 'cancelled' ou 'timeout'.
+              window.__agiloSummaryRegenInProgress = false;
+              if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
+              else hideSummaryRegenLoader();
               if (outcome === 'cancelled') {
-                if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-                else hideSummaryRegenLoader();
                 isGenerating = false;
                 return;
               }
-              if (outcome === 'error' && typeof H.tryRecoverSummaryFromLateReady === 'function') {
-                const recovered = await H.tryRecoverSummaryFromLateReady(
-                  jobId,
-                  email,
-                  token,
-                  edition,
-                  ui.statusEl,
-                  priorSummaryContentHash
-                );
-                if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-                else hideSummaryRegenLoader();
-                if (recovered) {
-                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
-                    H.refreshSummaryInEditorWithFallback(jobId, function () {
-                      return false;
-                    });
-                  }
-                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
-                  isGenerating = false;
-                  try {
-                    isPopulated = false;
-                    cachedModels = null;
-                    populateContainer(true);
-                  } catch (e) {}
-                  return;
+              if (outcome === 'ready') {
+                if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
+                  H.refreshSummaryInEditorWithFallback(jobId, function () {
+                    return false;
+                  });
                 }
-                var finalOk =
-                  typeof H.tryFinalSummaryRecover === 'function'
-                    ? await H.tryFinalSummaryRecover(jobId, email, token, edition, priorSummaryContentHash)
-                    : false;
-                if (finalOk) {
-                  if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
-                    H.refreshSummaryInEditorWithFallback(jobId, function () {
-                      return false;
-                    });
-                  }
-                  if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
-                } else if (typeof H.showSummaryStalledToast === 'function') {
-                  H.showSummaryStalledToast(
-                    jobId,
-                    'régénération en cours sur le serveur — actualisez si besoin (job ' + jobId + ').'
-                  );
-                } else {
-                  if (typeof window.toast === 'function') {
-                    window.toast('Compte-rendu : actualisez la page si rien ne s’affiche (job ' + jobId + ').');
-                  }
-                }
+                if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
                 isGenerating = false;
                 try {
                   isPopulated = false;
@@ -606,33 +577,25 @@
                 } catch (e) {}
                 return;
               }
-              if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
-              else hideSummaryRegenLoader();
-              if (outcome === 'ready') {
+              // outcome === 'timeout' (~25 min) ou outcome === 'error' (mort code, défensif).
+              var finalOk =
+                typeof H.tryFinalSummaryRecover === 'function'
+                  ? await H.tryFinalSummaryRecover(jobId, email, token, edition, priorSummaryContentHash)
+                  : false;
+              if (finalOk) {
                 if (typeof H.refreshSummaryInEditorWithFallback === 'function') {
                   H.refreshSummaryInEditorWithFallback(jobId, function () {
                     return false;
                   });
                 }
                 if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
-              } else if (outcome === 'error') {
-                if (typeof H.showSummaryStalledToast === 'function') {
-                  H.showSummaryStalledToast(
-                    jobId,
-                    'régénération en cours sur le serveur — actualisez si besoin (job ' + jobId + ').'
-                  );
-                } else if (typeof window.toast === 'function') {
-                  window.toast('Actualisez la page si le compte-rendu n’apparaît pas (job ' + jobId + ').');
-                }
-              } else {
-                if (typeof H.showSummaryStalledToast === 'function') {
-                  H.showSummaryStalledToast(
-                    jobId,
-                    'délai d’attente atteint — actualisez la page (job ' + jobId + ').'
-                  );
-                } else if (typeof window.toast === 'function') {
-                  window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
-                }
+              } else if (typeof H.showSummaryStalledToast === 'function') {
+                H.showSummaryStalledToast(
+                  jobId,
+                  'délai d’attente atteint — actualisez la page (job ' + jobId + ').'
+                );
+              } else if (typeof window.toast === 'function') {
+                window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
               }
               isGenerating = false;
               try {
@@ -643,6 +606,7 @@
             })
             .catch(function (e) {
               log('waitForSummaryTerminalState', e);
+              window.__agiloSummaryRegenInProgress = false;
               if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
               else hideSummaryRegenLoader();
               isGenerating = false;
