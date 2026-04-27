@@ -12,14 +12,20 @@
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
   const API_V1 = 'https://api.agilotext.com/api/v1';
+  /** Premier poll getTranscriptStatus après redo (laisse l’API sortir d’un ON_ERROR résiduel). */
+  const SUMMARY_INITIAL_DELAY_MS = 4000;
   /** Intervalle entre deux getTranscriptStatus (réduit la charge côté API). */
   const SUMMARY_POLL_MS = 10000;
   const SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
   /** Délai avant rechargement si le CR ne remonte pas après loadJob (orchestrateur / timing). */
   const SUMMARY_RELOAD_FALLBACK_MS = 3200;
+  /** Recevoir un HTML de CR assez long (CR courts = transcripts très épurés). */
+  const RECEIVE_SUMMARY_MIN_READY_LEN = 80;
   /** L’API peut renvoyer READY_SUMMARY_ON_ERROR de façon transitoire alors que le CR finit par être prêt. */
   const SUMMARY_ON_ERROR_RECHECK_MS = 4000;
   const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
+  /** Après un « error » côté poll, on attend encore ce délai : le statut API peut rester en retard sur le HTML déjà généré. */
+  const SUMMARY_ERROR_LATE_RECOVER_MS = 12000;
 
   // Credentials & panneau CR : charger agilo-editor-creds.js avant ce script.
   function agiloEditorCredsRoot() {
@@ -55,11 +61,21 @@
     return null;
   }
 
+  /** Empêche de confondre l’ancien compte-rendu avec le nouveau pendant la génération. */
+  function getSummaryContentHash(text) {
+    const s = String(text || '');
+    if (s.length < 60) return 'len:' + s.length;
+    const head = s.slice(0, 180).replace(/\s+/g, '');
+    const tail = s.slice(-180).replace(/\s+/g, '');
+    return s.length + ':' + head.slice(0, 40) + ':' + tail.slice(-40);
+  }
+
   /**
    * L’API peut renvoyer transcriptStatus=READY_SUMMARY_ON_ERROR alors que receiveSummary
    * sert déjà un HTML de CR valide (ex. métadonnées javaException « incident » obsolètes).
+   * @param {string} [priorContentHash] — si défini, le contenu doit différer (nouveau CR), sinon faux positif.
    */
-  async function receiveSummaryIndicatesCrReady(jobId, email, token, edition) {
+  async function receiveSummaryIndicatesCrReady(jobId, email, token, edition, priorContentHash) {
     try {
       const url = `${API_V1}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
@@ -68,10 +84,38 @@
       const lower = text.toLowerCase();
       if (lower.includes('error_summary_transcript_file_not_exists')) return false;
       if (lower.includes('"status":"ko"') || lower.includes('"status": "ko"')) return false;
-      return text.length >= 400;
+      if (text.length < RECEIVE_SUMMARY_MIN_READY_LEN) return false;
+      if (priorContentHash) {
+        const h = getSummaryContentHash(text);
+        if (h === priorContentHash) {
+          if (DEBUG) log('receiveSummary: même contenu qu’avant redo — pas encore prêt');
+          return false;
+        }
+      }
+      return true;
     } catch (e) {
       logError('receiveSummaryIndicatesCrReady', e);
       return false;
+    }
+  }
+
+  /**
+   * Hash du compte-rendu actuellement servi (avant redo), pour comparaison après génération.
+   * @returns {Promise<string>} chaîne vide si indisponible
+   */
+  async function fetchPriorSummaryContentHash(jobId, email, token, edition) {
+    try {
+      const url = `${API_V1}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      const r = await fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+      const text = await r.text();
+      if (!r.ok || !text) return '';
+      const lower = text.toLowerCase();
+      if (lower.includes('error_summary_transcript_file_not_exists')) return '';
+      if (lower.includes('"status":"ko"') || lower.includes('"status": "ko"')) return '';
+      if (text.length < 40) return '';
+      return getSummaryContentHash(text);
+    } catch (e) {
+      return '';
     }
   }
 
@@ -102,19 +146,19 @@
     window.location.href = newUrl.toString();
   }
 
-  /** Libellé lisible pour l’utilisateur (évite « PENDING » en majuscules géantes). */
+  const POLL_STATUS_USER_TEXT = 'Génération du compte-rendu en cours…';
+
+  /**
+   * Un seul message côté utilisateur ; le statut exact est réservé à DEBUG.
+   * @param {string|null|undefined} st
+   */
   function formatPollStatusLabel(st) {
-    if (!st) return 'Vérification du statut…';
-    if (st === 'READY_SUMMARY_PENDING') return 'Génération du compte-rendu en cours sur le serveur…';
-    if (st === 'READY_SUMMARY_READY') return 'Finalisation, récupération du texte…';
-    if (st === 'READY_SUMMARY_ON_ERROR') {
-      return 'Statut « erreur » côté API — vérification (souvent incohérent avec le contenu réel)…';
+    if (st && DEBUG) {
+      try {
+        log('poll getTranscriptStatus', st);
+      } catch (e) {}
     }
-    if (String(st).startsWith('READY_SUMMARY_')) {
-      const tail = String(st).replace(/^READY_SUMMARY_/, '').replace(/_/g, ' ').toLowerCase();
-      return 'Étape : ' + tail;
-    }
-    return 'Traitement en cours…';
+    return POLL_STATUS_USER_TEXT;
   }
 
   function summaryPaneLooksEmptyOrPlaceholder() {
@@ -153,12 +197,20 @@
 
   /**
    * Si READY_SUMMARY_ON_ERROR : re-vérifie plusieurs fois (statut souvent transitoire pendant la génération).
+   * @param {string} [priorContentHash] — hachage du CR avant redo (évite l’ancien contenu)
    * @returns {'ready'|'error'|'cancelled'|'continue'}
    */
-  async function recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel) {
-    if (statusEl) statusEl.textContent = 'Vérification du statut (parfois transitoire après génération)…';
+  async function recheckAfterSummaryOnError(
+    jobId,
+    email,
+    token,
+    edition,
+    statusEl,
+    shouldCancel,
+    priorContentHash
+  ) {
     for (let i = 0; i < SUMMARY_ON_ERROR_RECHECK_TIMES; i++) {
-      await new Promise(r => setTimeout(r, SUMMARY_ON_ERROR_RECHECK_MS));
+      await new Promise((r) => setTimeout(r, SUMMARY_ON_ERROR_RECHECK_MS));
       if (shouldCancel && shouldCancel()) return 'cancelled';
       let st = null;
       try {
@@ -170,8 +222,8 @@
       if (st === 'READY_SUMMARY_READY') return 'ready';
       if (st !== 'READY_SUMMARY_ON_ERROR') return 'continue';
     }
-    if (statusEl) statusEl.textContent = 'Dernier contrôle : contenu du compte-rendu…';
-    if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition)) {
+    if (statusEl) statusEl.textContent = formatPollStatusLabel('READY_SUMMARY_ON_ERROR');
+    if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition, priorContentHash)) {
       log('receiveSummary OK malgré READY_SUMMARY_ON_ERROR — traité comme prêt');
       return 'ready';
     }
@@ -180,11 +232,21 @@
 
   /**
    * Attend READY_SUMMARY_READY ou READY_SUMMARY_ON_ERROR confirmé via getTranscriptStatus.
+   * @param {string} [priorContentHash] — hachage du CR avant redo
    * @returns {'ready'|'error'|'timeout'|'cancelled'}
    */
-  async function waitForSummaryTerminalState(jobId, email, token, edition, statusEl, shouldCancel) {
+  async function waitForSummaryTerminalState(
+    jobId,
+    email,
+    token,
+    edition,
+    statusEl,
+    shouldCancel,
+    priorContentHash
+  ) {
     const t0 = Date.now();
-    await new Promise(r => setTimeout(r, 800));
+    let firstLoopAfterRedo = true;
+    await new Promise((r) => setTimeout(r, SUMMARY_INITIAL_DELAY_MS));
     while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
       if (shouldCancel && shouldCancel()) return 'cancelled';
       let st = null;
@@ -198,16 +260,138 @@
       }
       if (st === 'READY_SUMMARY_READY') return 'ready';
       if (st === 'READY_SUMMARY_ON_ERROR') {
-        const sub = await recheckAfterSummaryOnError(jobId, email, token, edition, statusEl, shouldCancel);
+        if (firstLoopAfterRedo) {
+          firstLoopAfterRedo = false;
+          if (DEBUG) log('Premier statut ON_ERROR ignoré (résiduel possible) — pause poll');
+          await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
+          continue;
+        }
+        const sub = await recheckAfterSummaryOnError(
+          jobId,
+          email,
+          token,
+          edition,
+          statusEl,
+          shouldCancel,
+          priorContentHash
+        );
         if (sub === 'ready') return 'ready';
         if (sub === 'error') return 'error';
         if (sub === 'cancelled') return 'cancelled';
-        await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+        await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
         continue;
       }
-      await new Promise(r => setTimeout(r, SUMMARY_POLL_MS));
+      firstLoopAfterRedo = false;
+      await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
     }
     return 'timeout';
+  }
+
+  /**
+   * Dernière chance avant toast : propagation retardée (READY / receiveSummary) alors que
+   * le poll a déjà conclu à « error ».
+   * @param {string} [priorContentHash]
+   * @returns {Promise<boolean>} true si le compte-rendu est en fait disponible
+   */
+  async function tryRecoverSummaryFromLateReady(
+    jobId,
+    email,
+    token,
+    edition,
+    statusEl,
+    priorContentHash
+  ) {
+    for (let round = 0; round < 2; round++) {
+      if (statusEl) statusEl.textContent = formatPollStatusLabel(null);
+      await new Promise((r) => setTimeout(r, SUMMARY_ERROR_LATE_RECOVER_MS));
+      let st = null;
+      try {
+        st = await fetchTranscriptStatus(jobId, email, token, edition);
+      } catch (e) {
+        logError('late recover getTranscriptStatus', e);
+      }
+      if (statusEl && st) {
+        statusEl.textContent = formatPollStatusLabel(st);
+      }
+      if (st === 'READY_SUMMARY_READY') {
+        return true;
+      }
+      if (st === 'READY_SUMMARY_PENDING') {
+        await new Promise((r) => setTimeout(r, SUMMARY_ERROR_LATE_RECOVER_MS));
+        try {
+          st = await fetchTranscriptStatus(jobId, email, token, edition);
+        } catch (e) {
+          logError('late recover PENDING getTranscriptStatus', e);
+        }
+        if (statusEl && st) statusEl.textContent = formatPollStatusLabel(st);
+        if (st === 'READY_SUMMARY_READY') return true;
+      }
+      if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition, priorContentHash)) {
+        log('Contenu reçu après attente (statut API encore en retard) — traité comme prêt');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Dernier contrôle avant message bloquant : statut READY ou HTML recevable et différent d’avant redo.
+   * @param {string} [priorContentHash]
+   * @returns {Promise<boolean>}
+   */
+  async function tryFinalSummaryRecover(jobId, email, token, edition, priorContentHash) {
+    let st = null;
+    try {
+      st = await fetchTranscriptStatus(jobId, email, token, edition);
+    } catch (e) {
+      logError('tryFinalSummaryRecover getTranscriptStatus', e);
+    }
+    if (st === 'READY_SUMMARY_READY') return true;
+    if (await receiveSummaryIndicatesCrReady(jobId, email, token, edition, priorContentHash)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Toast non bloquant si le CR est lent ou douteux (au lieu d’alert()).
+   * @param {string} jobId
+   * @param {string} [extra]
+   */
+  function showSummaryStalledToast(jobId, extra) {
+    const msg = extra
+      ? 'Compte-rendu : ' + extra
+      : 'Le compte-rendu peut mettre un peu plus de temps. Cliquez sur Actualiser si rien ne s’affiche.';
+    if (typeof window.toast === 'function') {
+      try {
+        window.toast(msg);
+      } catch (e) {}
+    }
+    const wrap = document.createElement('div');
+    wrap.setAttribute('role', 'status');
+    wrap.className = 'agilo-toast-stalled';
+    wrap.style.cssText =
+      'position:fixed;bottom:1.25rem;right:1.25rem;left:1.25rem;max-width:24rem;margin-left:auto;z-index:10001;' +
+      'background:#1a1a1a;color:#fff;padding:0.9rem 1rem;border-radius:0.5rem;box-shadow:0 0.25rem 1rem rgba(0,0,0,.2);' +
+      'font:500 0.875rem/1.4 system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;gap:0.5rem;';
+    const p = document.createElement('p');
+    p.textContent = msg;
+    p.style.cssText = 'margin:0;';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = 'Actualiser';
+    b.style.cssText =
+      'align-self:flex-start;cursor:pointer;padding:0.4rem 0.85rem;border-radius:0.35rem;border:none;background:#fff;color:#1a1a1a;font-weight:600;';
+    b.addEventListener('click', function () {
+      refreshSummaryInEditorWithFallback(jobId, function () { return false; });
+      wrap.remove();
+    });
+    wrap.appendChild(p);
+    wrap.appendChild(b);
+    document.body.appendChild(wrap);
+    setTimeout(function () {
+      if (wrap.parentNode) wrap.remove();
+    }, 20000);
   }
 
   // ============================================
@@ -727,7 +911,7 @@
       
       const loadingText = document.createElement('p');
       loadingText.className = 'loading-text';
-      loadingText.textContent = 'Génération du compte-rendu en cours...';
+      loadingText.textContent = POLL_STATUS_USER_TEXT;
       const loadingSubtitle = document.createElement('p');
       loadingSubtitle.className = 'loading-subtitle';
       loadingSubtitle.textContent = 'Mise à jour automatique dès que le compte-rendu est prêt.';
@@ -851,34 +1035,40 @@
       }
     }
 
-    var confirmed = false;
+    var confirmMsg = '';
     if (firstGen) {
-      confirmed = confirm(
-        'Générer un compte-rendu pour cette transcription ?\n\n' +
-          'Le modèle par défaut de votre compte sera utilisé (comme sur l’app mobile).\n\n' +
-          'L’interface attendra la fin de la génération puis actualisera le compte-rendu.'
-      );
-    } else if (skipRegenCharge) {
-      confirmed = confirm(
-        `Relancer la génération du compte-rendu ?\n\n` +
-          `Suite à un incident serveur, cette relance ne compte pas comme une régénération.\n\n` +
-          `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu.`
-      );
+      confirmMsg =
+        'Générer le compte-rendu pour cette transcription ?\n\n' +
+        'L’interface se met à jour automatiquement dès qu’il est prêt (modèle par défaut de votre compte, comme sur l’app mobile).';
     } else {
-      confirmed = confirm(
-        `Remplacer le compte-rendu actuel ?\n\n` +
-          `${canRegen.remaining}/${canRegen.limit} régénération${canRegen.remaining > 1 ? 's' : ''} restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
-          `L’interface attendra la fin de la génération (statut serveur) puis actualisera le compte-rendu dans l’éditeur.`
-      );
+      confirmMsg =
+        'Remplacer le compte-rendu actuel ?\n\n' +
+        `${canRegen.remaining}/${canRegen.limit} régénération${
+          canRegen.remaining > 1 ? 's' : ''
+        } restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
+        'L’interface se mettra à jour automatiquement dès que la génération est terminée.';
     }
+    const confirmed = confirm(confirmMsg);
 
     if (!confirmed) {
       isGenerating = false;
       updateButtonVisibility();
       return;
     }
-    
+
+    let priorSummaryContentHash = '';
+    if (!firstGen) {
+      try {
+        priorSummaryContentHash = await fetchPriorSummaryContentHash(jobId, email, token, edition);
+      } catch (e) {
+        logError('fetchPriorSummaryContentHash', e);
+      }
+    }
+
     try {
+      if (skipRegenCharge) {
+        log('Relance incident : quota de régénération non décompté');
+      }
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
       log('Appel redoSummary...');
       const response = await fetchRedoSummaryWithRetry(url, 3);
@@ -901,29 +1091,81 @@
         if (loaderContainer) {
           const statusEl = document.createElement('p');
           statusEl.className = 'loading-status-hint';
-          statusEl.textContent = 'Connexion au statut serveur…';
+          statusEl.textContent = POLL_STATUS_USER_TEXT;
           loaderContainer.appendChild(statusEl);
 
-          waitForSummaryTerminalState(jobId, email, token, edition, statusEl, () => false)
-            .then((outcome) => {
+          waitForSummaryTerminalState(
+            jobId,
+            email,
+            token,
+            edition,
+            statusEl,
+            function () {
+              return false;
+            },
+            priorSummaryContentHash
+          )
+            .then(async (outcome) => {
               if (outcome === 'cancelled') {
                 hideSummaryLoading();
                 isGenerating = false;
                 updateButtonVisibility();
                 return;
               }
+              if (outcome === 'error') {
+                const recovered = await tryRecoverSummaryFromLateReady(
+                  jobId,
+                  email,
+                  token,
+                  edition,
+                  statusEl,
+                  priorSummaryContentHash
+                );
+                hideSummaryLoading();
+                if (recovered) {
+                  refreshSummaryInEditorWithFallback(jobId, function () {
+                    return false;
+                  });
+                  showSuccessMessage('Compte-rendu prêt');
+                  isGenerating = false;
+                  updateButtonVisibility();
+                  return;
+                }
+                const finalOk = await tryFinalSummaryRecover(
+                  jobId,
+                  email,
+                  token,
+                  edition,
+                  priorSummaryContentHash
+                );
+                if (finalOk) {
+                  refreshSummaryInEditorWithFallback(jobId, function () {
+                    return false;
+                  });
+                  showSuccessMessage('Compte-rendu prêt');
+                } else {
+                  showSummaryStalledToast(
+                    jobId,
+                    'régénération en cours sur le serveur — si l’écran ne change pas, actualisez (job ' + jobId + ').'
+                  );
+                }
+                isGenerating = false;
+                updateButtonVisibility();
+                return;
+              }
               hideSummaryLoading();
               if (outcome === 'ready') {
-                refreshSummaryInEditorWithFallback(jobId, () => false);
+                refreshSummaryInEditorWithFallback(jobId, function () {
+                  return false;
+                });
                 showSuccessMessage('Compte-rendu prêt');
-              } else if (outcome === 'error') {
-                alert(
-                  'Le serveur indique encore une erreur sur le compte-rendu après plusieurs vérifications.\n\n' +
-                    'Si vous avez reçu un e-mail de succès, rechargez la page : le compte-rendu est peut‑être déjà là.\n\n' +
-                    'Sinon, réessayez ou contactez le support avec le numéro de job.'
-                );
               } else {
-                alert('Délai d’attente dépassé. Rechargez la page pour vérifier le compte-rendu.');
+                showSummaryStalledToast(
+                  jobId,
+                  'délai d’attente atteint — le compte-rendu a peut-être quand même fini. Actualisez si besoin (job ' +
+                    jobId +
+                    ').'
+                );
               }
               isGenerating = false;
               updateButtonVisibility();
@@ -932,7 +1174,10 @@
               logError('waitForSummaryTerminalState', e);
               hideSummaryLoading();
               isGenerating = false;
-              alert('Erreur lors de la surveillance du statut. Rechargez la page.');
+              showSummaryStalledToast(
+                jobId,
+                'impossible de vérifier le statut. Actualisez la page ou contactez le support (job ' + jobId + ').'
+              );
               updateButtonVisibility();
             });
         } else {
@@ -1349,9 +1594,16 @@
   /** Partagé avec Code-modeles-compte-rendu.js (polling statut, pas décompte 2:30). */
   window.__agiloSummaryRegenHelpers = {
     waitForSummaryTerminalState,
+    tryRecoverSummaryFromLateReady,
     refreshSummaryInEditorWithFallback,
     formatPollStatusLabel,
-    hideSummaryLoading
+    hideSummaryLoading,
+    tryFinalSummaryRecover,
+    showSummaryStalledToast,
+    getSummaryContentHash,
+    fetchPriorSummaryContentHash,
+    POLL_STATUS_USER_TEXT,
+    RECEIVE_SUMMARY_MIN_READY_LEN
   };
 
   if (DEBUG) {
