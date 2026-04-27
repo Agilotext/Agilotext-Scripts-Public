@@ -1226,6 +1226,10 @@
   window._segments = Array.isArray(window._segments) ? window._segments : [];
   let _activeSeg = -1;
   let _undoSaveTimer = null;
+  let _selectedSegs = new Set();
+  const _undoStack = [];
+  const UNDO_MAX = 3;
+  let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
 
   function syncDomToModel() {
@@ -1259,11 +1263,160 @@
   function buildDeleteBtn() {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.setAttribute('aria-label', 'Supprimer ce segment');
+    btn.setAttribute('aria-label', 'Supprimer ce segment (annulable 4 s)');
+    btn.setAttribute('aria-keyshortcuts', 'Control+Shift+Backspace');
     btn.className = 'delete-seg-btn absolute';
     btn.dataset.action = 'delete-seg';
+    btn.title = 'Supprimer ce segment — annulable pendant 4 s\nRaccourci : Ctrl+Maj+Retour Arrière';
     btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="none"/><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>';
     return btn;
+  }
+
+  function getSegList(root) {
+    if (!root) return [];
+    return root.querySelectorAll(':scope > .ag-seg');
+  }
+  function getSegIndex(root, segEl) {
+    return Array.prototype.indexOf.call(getSegList(root), segEl);
+  }
+  function hideUndoToasts() {
+    const tRoot = byId('toaster') || byId('ag-toasts');
+    if (tRoot) tRoot.querySelectorAll('.toast--undo').forEach(n => n.remove());
+  }
+  function hideUndoBar() { hideUndoToasts(); }
+
+  function scheduleUndoExpiry() {
+    clearTimeout(_undoSaveTimer);
+    if (_undoStack.length === 0) return;
+    _undoSaveTimer = setTimeout(() => {
+      _undoStack.length = 0;
+      hideUndoBar();
+      if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+    }, 4500);
+  }
+  function pushUndo(entry) {
+    _undoStack.push(entry);
+    if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+    scheduleUndoExpiry();
+    showUndoBar();
+  }
+  function applyUndo() {
+    const entry = _undoStack.pop();
+    if (!entry) return;
+    if (entry.type === 'one') {
+      window._segments.splice(entry.indices[0], 0, entry.snapshots[0]);
+    } else {
+      for (let k = entry.indices.length - 1; k >= 0; k--) {
+        window._segments.splice(entry.indices[k], 0, entry.snapshots[k]);
+      }
+    }
+    _activeSeg = -1;
+    clearSegSelection();
+    renderSegments(window._segments);
+    hideUndoToasts();
+    toast(entry.label ? `Annulé : ${entry.label}` : 'Action annulée');
+    if (_undoStack.length === 0) {
+      clearTimeout(_undoSaveTimer);
+      if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+    } else {
+      scheduleUndoExpiry();
+      showUndoBar();
+    }
+  }
+  function showUndoBar() {
+    hideUndoToasts();
+    const last = _undoStack[_undoStack.length - 1];
+    if (!last) return;
+    const label = _undoStack.length > 1
+      ? `${last.label} — ${_undoStack.length} actions annulables`
+      : (last.label || 'Annuler la dernière action');
+    toastWithUndo(label, () => { applyUndo(); }, 4500);
+  }
+  function syncSelectedClasses() {
+    const root = editors.transcript; if (!root) return;
+    const segs = getSegList(root);
+    segs.forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.forEach((i) => { if (segs[i]) segs[i].classList.add('is-selected'); });
+  }
+  function clearSegSelection() {
+    const root = editors.transcript;
+    if (root) root.querySelectorAll('.ag-seg.is-selected').forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.clear();
+    if (_bulkBar) { _bulkBar.setAttribute('hidden', ''); }
+  }
+  function updateBulkBar() {
+    if (!_bulkBar) ensureBulkBar();
+    if (!_bulkBar) return;
+    if (_selectedSegs.size === 0) {
+      _bulkBar.setAttribute('hidden', '');
+      return;
+    }
+    if (_bulkBarCount) {
+      _bulkBarCount.textContent = `${_selectedSegs.size} segment(s) sélectionné(s)`;
+    }
+    _bulkBar.removeAttribute('hidden');
+  }
+  function ensureBulkBar() {
+    if (_bulkBar) return;
+    const root = editors.transcript; if (!root) return;
+    const host = root.closest('#pane-transcript, .edtr-pane, [id$="transcript"]') || document.body;
+    _bulkBar = document.createElement('div');
+    _bulkBar.id = 'agilo-bulk-bar';
+    _bulkBar.setAttribute('hidden', '');
+    _bulkBar.setAttribute('role', 'status');
+    _bulkBar.setAttribute('aria-live', 'polite');
+    _bulkBarCount = document.createElement('span');
+    _bulkBarCount.className = 'agilo-bulk-bar__count';
+    _bulkDelBtn = document.createElement('button');
+    _bulkDelBtn.type = 'button';
+    _bulkDelBtn.className = 'agilo-bulk-bar__btn';
+    _bulkDelBtn.textContent = 'Supprimer la sélection';
+    _bulkDelBtn.addEventListener('click', onBulkDeleteClick);
+    _bulkBar.appendChild(_bulkBarCount);
+    _bulkBar.appendChild(_bulkDelBtn);
+    host.appendChild(_bulkBar);
+  }
+  function onBulkDeleteClick() {
+    const root = editors.transcript; if (!root) return;
+    if (_selectedSegs.size === 0) return;
+    const asc = Array.from(_selectedSegs).sort((a, b) => a - b);
+    const nSel = asc.length;
+    if (window._segments.length - nSel < 1) {
+      toast('Impossible : suppression vide le transcript.');
+      return;
+    }
+    if (!confirm(`Supprimer ${nSel} segment(s) ?`)) return;
+    const snapshots = asc.map((i) => Object.assign({}, window._segments[i]));
+    for (let k = asc.length - 1; k >= 0; k--) {
+      window._segments.splice(asc[k], 1);
+    }
+    clearSegSelection();
+    pushUndo({ type: 'bulk', snapshots, indices: asc, label: `${nSel} segment(s) supprimés` });
+    _activeSeg = -1;
+    renderSegments(window._segments);
+  }
+  function deleteSegEl(segEl) {
+    const root = editors.transcript; if (!root) return;
+    if (!window._segments || window._segments.length <= 1) {
+      toast('Impossible de supprimer le dernier segment.');
+      return;
+    }
+    const idx = getSegIndex(root, segEl);
+    if (idx < 0) return;
+    const snapshot = Object.assign({}, window._segments[idx]);
+    window._segments.splice(idx, 1);
+    segEl.remove();
+    if (_activeSeg === idx) _activeSeg = -1;
+    else if (_activeSeg > idx) _activeSeg--;
+    const next = new Set();
+    _selectedSegs.forEach((i) => {
+      if (i === idx) return;
+      next.add(i > idx ? i - 1 : i);
+    });
+    _selectedSegs = next;
+    updateBulkBar();
+    pushUndo({ type: 'one', snapshots: [snapshot], indices: [idx], label: 'Segment supprimé' });
+    syncSelectedClasses();
   }
 
   /* --- COULEURS AUTOMATIQUES LOCUTEURS (Palette Agilotext Extended) --- */
@@ -1307,6 +1460,8 @@
       box.textContent = '';
       root.appendChild(box);
       root.setAttribute('contenteditable', 'false');
+      _selectedSegs.clear();
+      if (_bulkBar) _bulkBar.setAttribute('hidden', '');
       return;
     }
 
@@ -1362,8 +1517,23 @@
 
     root.appendChild(frag);
     root.setAttribute('contenteditable', 'false');
+    _selectedSegs.clear();
+    if (_bulkBar) _bulkBar.setAttribute('hidden', '');
 
     if (!root.__bound) {
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured' || !e.shiftKey) return;
+        const art = e.target.closest('.ag-seg');
+        if (!art || e.target.closest('button, .speaker')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = editors.transcript; if (!r) return;
+        const idx = getSegIndex(r, art);
+        if (idx < 0) return;
+        if (_selectedSegs.has(idx)) { _selectedSegs.delete(idx); art.classList.remove('is-selected'); }
+        else { _selectedSegs.add(idx); art.classList.add('is-selected'); }
+        updateBulkBar();
+      });
       root.addEventListener('click', (e) => {
         const btn = e.target.closest('button.time[data-action="seek"]');
         if (!btn || __mode !== 'structured') return;
@@ -1394,29 +1564,9 @@
         const btn = e.target.closest('[data-action="delete-seg"]');
         if (!btn) return;
         e.preventDefault(); e.stopPropagation();
-        if (!window._segments || window._segments.length <= 1) {
-          toast('Impossible de supprimer le dernier segment.');
-          return;
-        }
         const segEl = btn.closest('.ag-seg');
         if (!segEl) return;
-        const idx = Array.prototype.indexOf.call(root.children, segEl);
-        if (idx < 0) return;
-        const snapshot = Object.assign({}, window._segments[idx]);
-        window._segments.splice(idx, 1);
-        segEl.remove();
-        if (_activeSeg === idx) _activeSeg = -1;
-        else if (_activeSeg > idx) _activeSeg--;
-        clearTimeout(_undoSaveTimer);
-        toastWithUndo('Segment supprimé', () => {
-          clearTimeout(_undoSaveTimer);
-          window._segments.splice(idx, 0, snapshot);
-          renderSegments(window._segments);
-          toast('Suppression annulée');
-        }, 4000);
-        _undoSaveTimer = setTimeout(() => {
-          if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
-        }, 4200);
+        deleteSegEl(segEl);
       });
 
       root.addEventListener('dblclick', (e) => {
@@ -1430,11 +1580,38 @@
       root.addEventListener('input', (e) => {
         const node = e.target.closest('.ag-seg__text'); if (!node) return;
         const segEl = node.closest('.ag-seg');
-        const idx = Array.prototype.indexOf.call(root.children, segEl);
+        const idx = getSegIndex(root, segEl);
         if (idx > -1 && window._segments[idx]) {
           window._segments[idx].text = window.visibleTextFromBox(node);
         }
       });
+
+      if (!root.__agiloDocKeys) {
+        root.__agiloDocKeys = true;
+        document.addEventListener('keydown', (e) => {
+          const tr = editors.transcript;
+          if (!tr) return;
+          if (__mode !== 'structured') return;
+          if (e.key === 'Escape' && _selectedSegs.size > 0) {
+            e.preventDefault();
+            clearSegSelection();
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Backspace') {
+            const segEl = e.target && e.target.closest && e.target.closest('.ag-seg');
+            if (!segEl || !tr.contains(segEl)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSegEl(segEl);
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && _undoStack.length > 0) {
+            if (!e.target || !tr.contains(e.target)) return;
+            e.preventDefault();
+            applyUndo();
+          }
+        }, true);
+      }
 
       // ✅ PROTECTION CRITIQUE : Empêcher la suppression accidentelle de segments entiers
       root.addEventListener('keydown', (e) => {
@@ -1658,12 +1835,13 @@
     } else if (scope === 'empty') {
       window._segments.forEach((s, i) => { if (!String(s.speaker || '').trim()) targets.push(i); });
     }
-    const max = root.children.length;
+    const segsList = getSegList(root);
+    const max = segsList.length;
     const unique = Array.from(new Set(targets)).filter(i => i >= 0 && i < max);
     unique.forEach(i => {
       (window._segments || (window._segments = []))[i] = (window._segments[i] || {});
       window._segments[i].speaker = newName;
-      const el = root.children[i];
+      const el = segsList[i];
       if (!el) return;
       el.dataset.speaker = newName;
       const sp = el.querySelector('.speaker');
@@ -1701,11 +1879,13 @@
         if (!confirm(`Supprimer les ${total} intervention(s) de "${oldName}" ?`)) return;
         const toRemove = [];
         window._segments.forEach((s, i) => { if ((s.speaker || '').trim() === oldName) toRemove.push(i); });
-        toRemove.reverse().forEach(i => window._segments.splice(i, 1));
+        const asc = toRemove.sort((a, b) => a - b);
+        const snapshots = asc.map((i) => Object.assign({}, window._segments[i]));
+        for (let k = asc.length - 1; k >= 0; k--) { window._segments.splice(asc[k], 1); }
         _activeSeg = -1;
+        clearSegSelection();
+        pushUndo({ type: 'bulk', snapshots, indices: asc, label: `Interventions « ${oldName} » supprimées` });
         renderSegments(window._segments);
-        toast(`${toRemove.length} segment(s) supprimé(s)`);
-        if (typeof window.agiloSaveNow === 'function') setTimeout(() => window.agiloSaveNow(), 300);
       });
       rows.push(bDel);
     }
@@ -1729,7 +1909,7 @@
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
     const root = editors.transcript; if (!root) return;
     try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
-    const idx = Array.prototype.indexOf.call(root.children, segEl); if (idx < 0) return;
+    const idx = getSegIndex(root, segEl); if (idx < 0) return;
 
     const oldName = String(segEl.dataset.speaker || '').trim();
     const proposed = oldName || 'Intervenant';
@@ -1788,9 +1968,10 @@
       const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
       if (k < 0 || !inSeg(window._segments[k])) k = window._segments.findIndex(inSeg);
       if (k !== _activeSeg) {
-        if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+        const segsL = getSegList(root);
+        if (_activeSeg >= 0) segsL[_activeSeg]?.classList.remove('is-active');
         _activeSeg = k;
-        const el = root.children[k];
+        const el = segsL[k];
         if (el) {
           el.classList.add('is-active');
           // ⚡️ SAFE SCROLL: Utiliser le helper qui gère le conteneur
@@ -2695,4 +2876,38 @@
       if (wantsChat) openChatTab();
     }, { passive: true });
   }
+
+  (function watchSaveIndicator() {
+    function attach() {
+      const ind = document.getElementById('agilo-status-indicator');
+      if (!ind) { setTimeout(attach, 500); return; }
+      if (ind.__agiloObserved) return;
+      ind.__agiloObserved = true;
+      if (!document.getElementById('ag-save-status')) {
+        const status = document.createElement('span');
+        status.id = 'ag-save-status';
+        status.className = 'ag-save-status';
+        ind.insertAdjacentElement('afterend', status);
+        const upd = () => {
+          const st = document.getElementById('ag-save-status');
+          if (!st) return;
+          const bg = ind.style.background || '';
+          if (bg.includes('28a745')) {
+            st.textContent = 'Sauvegardé';
+            st.className = 'ag-save-status ag-save-status--saved';
+            setTimeout(() => { if (st.classList.contains('ag-save-status--saved')) st.textContent = ''; }, 3000);
+          } else if (bg.includes('ffc107')) {
+            st.textContent = 'Sauvegarde…';
+            st.className = 'ag-save-status ag-save-status--saving';
+          } else if (bg.includes('dc3545')) {
+            st.textContent = 'Erreur';
+            st.className = 'ag-save-status ag-save-status--error';
+          }
+        };
+        new MutationObserver(upd).observe(ind, { attributes: true, attributeFilter: ['style'] });
+        upd();
+      }
+    }
+    attach();
+  })();
 });
