@@ -80,6 +80,35 @@ function mapNicoJsonToSegments(j){
   }
 window.toast = window.toast || toast;
 
+  function toastWithUndo(msg, onUndo, duration) {
+    duration = duration || 4000;
+    let tRoot = byId('toaster') || byId('ag-toasts');
+    if (!tRoot) { tRoot = document.createElement('div'); tRoot.id='toaster'; tRoot.className='toaster ag-toasts'; document.body.appendChild(tRoot); }
+    const div = document.createElement('div');
+    div.className = 'toast toast--undo';
+    const span = document.createElement('span');
+    span.textContent = msg;
+    const undoBtn = document.createElement('button');
+    undoBtn.type = 'button';
+    undoBtn.className = 'toast__undo-btn';
+    undoBtn.textContent = 'Annuler';
+    let used = false;
+    let tid = 0;
+    undoBtn.addEventListener('click', () => {
+      if (used) return;
+      used = true;
+      clearTimeout(tid);
+      div.remove();
+      if (typeof onUndo === 'function') onUndo();
+    });
+    div.appendChild(span);
+    div.appendChild(undoBtn);
+    tRoot.appendChild(div);
+    tid = setTimeout(() => {
+      if (!used) { div.style.opacity = 0; setTimeout(() => div.remove(), 220); }
+    }, duration);
+  }
+
 
   const fmtHMS = (s)=>{
     s = Math.max(0, Math.floor(Number(s)||0));
@@ -452,6 +481,7 @@ async function apiGetWithRetry(kind, jobId, auth, retryCount=0, signal){
 
 window._segments = Array.isArray(window._segments) ? window._segments : [];
   let _activeSeg = -1;
+  let _undoSaveTimer = null;
   let __mode = 'plain';
 
 
@@ -461,6 +491,16 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
     btn.setAttribute('aria-label','Renommer');
     btn.className = 'rename-btn absolute';
     btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small-5"><path d="M0 0h24v24H0z" fill="none"></path><path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path></svg>';
+    return btn;
+  }
+
+  function buildDeleteBtn(){
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('aria-label','Supprimer ce segment');
+    btn.className = 'delete-seg-btn absolute';
+    btn.dataset.action = 'delete-seg';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="none"/><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>';
     return btn;
   }
 
@@ -514,6 +554,8 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
 
       const rename = buildRenameBtn();
       header.appendChild(rename);
+      const delBtn = buildDeleteBtn();
+      header.appendChild(delBtn);
       art.appendChild(header);
     }
 
@@ -554,6 +596,36 @@ window._segments = Array.isArray(window._segments) ? window._segments : [];
         renameAllEmpty: !!(e.shiftKey || e.altKey),
         keyState: { shift: e.shiftKey, alt: e.altKey }
       });
+    });
+
+    root.addEventListener('click', (e)=>{
+      if (__mode !== 'structured') return;
+      const btn = e.target.closest('[data-action="delete-seg"]');
+      if (!btn) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!window._segments || window._segments.length <= 1) {
+        toast('Impossible de supprimer le dernier segment.');
+        return;
+      }
+      const segEl = btn.closest('.ag-seg');
+      if (!segEl) return;
+      const idx = Array.prototype.indexOf.call(root.children, segEl);
+      if (idx < 0) return;
+      const snapshot = Object.assign({}, window._segments[idx]);
+      window._segments.splice(idx, 1);
+      segEl.remove();
+      if (_activeSeg === idx) _activeSeg = -1;
+      else if (_activeSeg > idx) _activeSeg--;
+      clearTimeout(_undoSaveTimer);
+      toastWithUndo('Segment supprimé', () => {
+        clearTimeout(_undoSaveTimer);
+        window._segments.splice(idx, 0, snapshot);
+        renderSegments(window._segments);
+        toast('Suppression annulée');
+      }, 4000);
+      _undoSaveTimer = setTimeout(() => {
+        if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+      }, 4200);
     });
 
     root.addEventListener('dblclick', (e)=>{
@@ -778,6 +850,29 @@ window.renderSegments = renderSegments;
     if (!forEmpty && counts.total  > 1) rows.push(mk(`Toutes les occurrences de "${oldName}"`, 'all', `${counts.total} seg.`));
     if (forEmpty   && counts.empty  > 1) rows.push(mk('Tous les segments sans nom', 'empty', `${counts.empty} seg.`));
     if (rows.length === 1) rows.push(mk(forEmpty ? 'Tous les segments sans nom' : 'Toutes les occurrences', forEmpty ? 'empty' : 'all'));
+    if (!forEmpty && counts.total > 0) {
+      const bDel = document.createElement('button');
+      bDel.type = 'button';
+      bDel.className = 'ag-rename-menu__row ag-rename-menu__row--danger';
+      bDel.innerHTML = `Supprimer toutes les interventions de "${oldName}" <span class="ag-rename-menu__muted">${counts.total} seg.</span>`;
+      bDel.addEventListener('click', () => {
+        close();
+        const total = window._segments.filter(s => (s.speaker || '').trim() === oldName).length;
+        if (window._segments.length - total < 1) {
+          toast('Impossible : la suppression viderait le transcript.');
+          return;
+        }
+        if (!confirm(`Supprimer les ${total} intervention(s) de "${oldName}" ?`)) return;
+        const toRemove = [];
+        window._segments.forEach((s, i) => { if ((s.speaker || '').trim() === oldName) toRemove.push(i); });
+        toRemove.reverse().forEach(i => window._segments.splice(i, 1));
+        _activeSeg = -1;
+        renderSegments(window._segments);
+        toast(`${toRemove.length} segment(s) supprimé(s)`);
+        if (typeof window.agiloSaveNow === 'function') setTimeout(() => window.agiloSaveNow(), 300);
+      });
+      rows.push(bDel);
+    }
     const backdrop = document.createElement('div'); backdrop.className = 'ag-rename-backdrop';
     const off=[]; const on=(t,ev,fn,opt)=>{ t.addEventListener(ev,fn,opt||false); off.push(()=>t.removeEventListener(ev,fn,opt||false)); };
     function close(){ off.forEach(fn=>fn()); menu.remove(); backdrop.remove(); }
