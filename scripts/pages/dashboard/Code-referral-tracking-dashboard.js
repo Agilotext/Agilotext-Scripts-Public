@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.6';
+  var VERSION = '1.3.7';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -131,6 +131,22 @@
       'Merci !'
     ].join('\n');
     return 'mailto:' + encodeURIComponent(toEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+
+  function computeSecondaryHint(rewardState, registered, paid, pending) {
+    if (rewardState && rewardState.status === 'unlocked') {
+      return 'Recompense debloquee : utilisez le bouton ci-dessous pour envoyer votre demande a notre equipe.';
+    }
+    if (registered <= 0) {
+      return 'Partagez votre lien d invitation pour lancer vos premiers parrainages.';
+    }
+    if (pending > 0) {
+      return String(pending) + ' filleul(s) en attente de passage PRO/Biz. Accompagnez-les pour debloquer votre recompense.';
+    }
+    if (paid > 0) {
+      return 'Votre base convertit deja. Continuez pour atteindre le seuil de 3 payants.';
+    }
+    return 'Vous avez des inscrits. Prochaine etape : les aider a activer un abonnement PRO/Biz.';
   }
 
   async function copyToClipboard(text) {
@@ -482,6 +498,7 @@
     var rewardLabel = readBodyConfig('data-agilo-ref-reward-label', '1 mois offert');
     var rewardState = computeRewardState(registered, paid, rewardTarget);
     var rewardHint = computeRewardHint(rewardState, registered, paid);
+    var secondaryHint = computeSecondaryHint(rewardState, registered, paid, pending);
 
     var panel = q('.agilo-referral-modal__panel', modal);
     var copyButton = q('[data-agilo-ref-copy-link]', modal);
@@ -522,7 +539,7 @@
     setNodeTextIn(modal, ['[data-agilo-ref-registered]', '[data-agilo-referrals-registered]'], String(registered));
     setNodeTextIn(modal, ['[data-agilo-ref-paid]', '[data-agilo-referrals-paid]'], String(paid));
     setNodeTextIn(modal, ['[data-agilo-ref-pending]', '[data-agilo-referrals-pending]'], String(pending));
-    setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], rewardHint);
+    setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], secondaryHint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
 
     if (claimWrap && claimLink) {
