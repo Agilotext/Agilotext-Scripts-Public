@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.8';
+  var VERSION = '1.3.9';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -130,11 +130,13 @@
       '',
       'Merci !'
     ].join('\n');
-    return 'mailto:' + encodeURIComponent(toEmail) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    var safeTo = asText(toEmail) || 'contact@agilotext.com';
+    return 'mailto:' + safeTo + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
   }
 
-  function computeSecondaryHint(rewardState, registered, paid, pending) {
-    if (rewardState && rewardState.status === 'unlocked') {
+  function computeSecondaryHint(rewardState, registered, paid, pending, rewardTarget) {
+    var target = Math.max(1, toSafeInt(rewardTarget, 3));
+    if ((rewardState && rewardState.status === 'unlocked') || paid >= target) {
       return 'Recompense debloquee : utilisez le bouton ci-dessous pour envoyer votre demande a notre equipe.';
     }
     if (registered <= 0) {
@@ -514,7 +516,7 @@
     var rewardLabel = readBodyConfig('data-agilo-ref-reward-label', '1 mois offert');
     var rewardState = computeRewardState(registered, paid, rewardTarget);
     var rewardHint = computeRewardHint(rewardState, registered, paid);
-    var secondaryHint = computeSecondaryHint(rewardState, registered, paid, pending);
+    var secondaryHint = computeSecondaryHint(rewardState, registered, paid, pending, rewardTarget);
 
     var panel = q('.agilo-referral-modal__panel', modal);
     var copyButton = q('[data-agilo-ref-copy-link]', modal);
