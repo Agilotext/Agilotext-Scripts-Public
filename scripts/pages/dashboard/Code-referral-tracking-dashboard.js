@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.4';
+  var VERSION = '1.3.5';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -491,12 +491,6 @@
     setNodeTextIn(modal, ['[data-agilo-ref-pending]', '[data-agilo-referrals-pending]'], String(pending));
     setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], rewardHint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
-
-    if (panel) {
-      panel.setAttribute('data-agilo-ref-reward-target', String(rewardState.target));
-      panel.setAttribute('data-agilo-ref-reward-progress', String(rewardState.progress));
-      panel.setAttribute('data-agilo-ref-reward-status', rewardState.status);
-    }
 
     if (isModalWantedOpen()) {
       modal.hidden = false;
