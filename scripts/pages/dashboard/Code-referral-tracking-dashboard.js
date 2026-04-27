@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.3';
+  var VERSION = '1.3.4';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -397,9 +397,8 @@
         return;
       }
       if (
-        target === backdrop ||
-        (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-close')) ||
-        (target && target.closest && target.closest('[data-agilo-ref-close]'))
+        (target && target.classList && target.classList.contains('agilo-referral-modal__close')) ||
+        (target && target.closest && target.closest('.agilo-referral-modal__close'))
       ) {
         closeModal();
       }
@@ -407,7 +406,7 @@
     if (!window.__agiloReferralEscWired) {
       window.__agiloReferralEscWired = true;
       document.addEventListener('keydown', function (ev) {
-        if (ev.key === 'Escape') closeModal();
+        if (ev.key === 'Escape') return;
       });
     }
   }
@@ -470,7 +469,7 @@
     setNodeTextIn(modal, ['[data-agilo-ref-reward-target]'], String(rewardState.target));
     setNodeTextIn(modal, ['[data-agilo-ref-reward-label-line]'], 'Objectif : ' + String(rewardState.target) + ' filleuls payants = ' + rewardLabel);
     setNodeTextIn(modal, ['[data-agilo-ref-reward-status-label]'], rewardHint);
-    var conversionNode = q('#agiloReferralConversionSecondary', modal) || q('[data-agilo-ref-conversion-secondary]', modal);
+    var conversionNode = q('#agiloReferralConversionSecondary', modal);
     if (conversionNode) conversionNode.textContent = 'Conversion : ' + String(rewardState.conversionPct) + '% (' + String(paid) + '/' + String(registered) + ')';
 
     var hero = q('.agilo-referral-hero', modal);
@@ -497,7 +496,6 @@
       panel.setAttribute('data-agilo-ref-reward-target', String(rewardState.target));
       panel.setAttribute('data-agilo-ref-reward-progress', String(rewardState.progress));
       panel.setAttribute('data-agilo-ref-reward-status', rewardState.status);
-      panel.setAttribute('data-agilo-ref-conversion-secondary', String(rewardState.conversionPct));
     }
 
     if (isModalWantedOpen()) {
