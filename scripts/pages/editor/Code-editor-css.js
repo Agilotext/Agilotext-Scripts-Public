@@ -388,12 +388,16 @@
   height:1.75em;
   box-sizing:border-box;
   border-radius:50%;
+  outline:none;
+  -webkit-appearance:none;
+  appearance:none;
+  box-shadow:none;
 }
 #pane-transcript .ag-seg__head .rename-btn:hover,
 #pane-transcript .ag-seg__head .rename-btn:focus-visible{
   opacity:1;
-  outline:var(--agilo-focus);
-  outline-offset:2px;
+  /* box-shadow suit le border-radius; outline reste souvent carré (Safari / Webflow) */
+  box-shadow:0 0 0 2px color-mix(in srgb, var(--agilo-primary, #174a96) 65%, transparent);
 }
 #pane-transcript .ag-seg__head .rename-btn svg{
   width:1em;
@@ -413,7 +417,7 @@
   vertical-align:middle;
   opacity:0;
   cursor:pointer;
-  transition: opacity .15s ease, color .15s ease;
+  transition: opacity .15s ease, color .15s ease, box-shadow .15s ease;
   color: var(--agilo-dim);
   display:inline-flex;
   align-items:center;
@@ -422,6 +426,10 @@
   height:1.75em;
   box-sizing:border-box;
   border-radius:50%;
+  outline:none;
+  -webkit-appearance:none;
+  appearance:none;
+  box-shadow:none;
 }
 #pane-transcript .ag-seg:hover .delete-seg-btn,
 #pane-transcript .ag-seg__head .delete-seg-btn:focus-visible{
@@ -431,8 +439,8 @@
 #pane-transcript .ag-seg__head .delete-seg-btn:focus-visible{
   opacity:1;
   color: #c0392b;
-  outline:var(--agilo-focus);
-  outline-offset:2px;
+  /* Anneau rond (même logique que le crayon) — évite l’outline rectangulaire */
+  box-shadow:0 0 0 2px color-mix(in srgb, #c0392b 45%, var(--agilo-primary, #174a96) 55%);
 }
 #pane-transcript .ag-seg__head .delete-seg-btn svg{
   width:1em;
