@@ -26,6 +26,14 @@
   const SUMMARY_ON_ERROR_RECHECK_TIMES = 4;
   /** Après un « error » côté poll, on attend encore ce délai : le statut API peut rester en retard sur le HTML déjà généré. */
   const SUMMARY_ERROR_LATE_RECOVER_MS = 12000;
+  /**
+   * Tolérance de READY_SUMMARY_ON_ERROR en début de génération (avant qu'on n'ait jamais
+   * vu un READY_SUMMARY_PENDING). Le backend peut rester plusieurs minutes en ON_ERROR
+   * résiduel avant de basculer en PENDING. Tant qu'on n'a pas vu PENDING, on continue
+   * simplement à poller : un faux toast d'erreur est bien pire qu'un loader prolongé.
+   * Valeur en nombre de tours du loop principal (chaque tour = SUMMARY_POLL_MS = 10s).
+   */
+  const SUMMARY_ON_ERROR_RESIDUAL_TOLERANCE_ROUNDS = 18; // ≈ 3 minutes
 
   // Credentials & panneau CR : charger agilo-editor-creds.js avant ce script.
   function agiloEditorCredsRoot() {
@@ -124,11 +132,33 @@
     try {
       const audio = document.getElementById('agilo-audio');
       const wantAutoplay = audio ? !audio.paused : false;
-      window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId } }));
+
+      // ✅ FIX écran blanc / iframe pas mis à jour :
+      // L'orchestrateur Code-main-editor-IFRAME.js skippe loadJob(id) si
+      // editorRoot.dataset.jobId === id (« uiReadySameJob »). En régénération,
+      // le jobId est inchangé : on doit forcer un vrai re-fetch de receiveSummary
+      // sinon le summaryEditor reste tel qu'on l'a vidé pour le loader → blanc.
+      try {
+        const editorRoot =
+          document.getElementById('editorRoot') ||
+          document.querySelector('[data-editor-root]') ||
+          document.querySelector('main, [role="main"]');
+        if (editorRoot && editorRoot.dataset && editorRoot.dataset.jobId) {
+          editorRoot.dataset.jobId = '';
+        }
+        // Reset aussi un éventuel flag interne d'orchestrateur si présent
+        if (window.__agiloOrchestrator) {
+          try { window.__agiloOrchestrator.__lastLoadJobId = ''; } catch {}
+        }
+      } catch (errReset) {
+        logError('refreshSummaryInEditor:reset', errReset);
+      }
+
+      window.dispatchEvent(new CustomEvent('agilo:beforeload', { detail: { jobId, force: true } }));
       if (window.__agiloOrchestrator && typeof window.__agiloOrchestrator.loadJob === 'function') {
-        window.__agiloOrchestrator.loadJob(jobId, { autoplay: wantAutoplay });
+        window.__agiloOrchestrator.loadJob(jobId, { autoplay: wantAutoplay, force: true });
       } else {
-        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId, autoplay: wantAutoplay } }));
+        window.dispatchEvent(new CustomEvent('agilo:load', { detail: { jobId, autoplay: wantAutoplay, force: true } }));
       }
     } catch (e) {
       logError('refreshSummaryInEditor', e);
@@ -246,6 +276,13 @@
   ) {
     const t0 = Date.now();
     let firstLoopAfterRedo = true;
+    /** True dès qu'on a observé un READY_SUMMARY_PENDING : on sait alors que le moteur
+     *  a réellement démarré la génération. Tout ON_ERROR ultérieur devient « post-génération »
+     *  et mérite un recheck/contenu, contrairement à un ON_ERROR résiduel pré-démarrage. */
+    let sawPending = false;
+    /** Compte les tours consécutifs où on observe ON_ERROR sans avoir jamais vu PENDING.
+     *  Tant que le compteur reste sous le seuil, on continue à poller silencieusement. */
+    let onErrorWithoutPendingRounds = 0;
     await new Promise((r) => setTimeout(r, SUMMARY_INITIAL_DELAY_MS));
     while (Date.now() - t0 < SUMMARY_MAX_WAIT_MS) {
       if (shouldCancel && shouldCancel()) return 'cancelled';
@@ -259,12 +296,29 @@
         statusEl.textContent = formatPollStatusLabel(st);
       }
       if (st === 'READY_SUMMARY_READY') return 'ready';
+      if (st === 'READY_SUMMARY_PENDING') {
+        sawPending = true;
+        onErrorWithoutPendingRounds = 0;
+        firstLoopAfterRedo = false;
+        await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
+        continue;
+      }
       if (st === 'READY_SUMMARY_ON_ERROR') {
         if (firstLoopAfterRedo) {
           firstLoopAfterRedo = false;
           if (DEBUG) log('Premier statut ON_ERROR ignoré (résiduel possible) — pause poll');
           await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
           continue;
+        }
+        // ✅ ON_ERROR pré-démarrage (jamais vu PENDING) : très probablement résiduel
+        // (backend en transition). On continue à poller avant de tomber dans le recheck.
+        if (!sawPending) {
+          onErrorWithoutPendingRounds += 1;
+          if (onErrorWithoutPendingRounds < SUMMARY_ON_ERROR_RESIDUAL_TOLERANCE_ROUNDS) {
+            if (DEBUG) log('ON_ERROR résiduel (pas encore de PENDING) — tolérance', onErrorWithoutPendingRounds);
+            await new Promise((r) => setTimeout(r, SUMMARY_POLL_MS));
+            continue;
+          }
         }
         const sub = await recheckAfterSummaryOnError(
           jobId,
@@ -1604,6 +1658,75 @@
     fetchPriorSummaryContentHash,
     POLL_STATUS_USER_TEXT,
     RECEIVE_SUMMARY_MIN_READY_LEN
+  };
+
+  /**
+   * Helper console (à appeler depuis l'inspecteur) : `await __agiloDebugCR()`.
+   * Retourne un objet récapitulatif (statut backend + état UI) pour diagnostiquer
+   * les cas « écran blanc » ou « compte-rendu en erreur » signalés par l'utilisateur.
+   * Aucun side-effect, aucune écriture.
+   */
+  window.__agiloDebugCR = async function __agiloDebugCR() {
+    const out = { ts: new Date().toISOString() };
+    try {
+      const c = window.__agiloEditorCreds || {};
+      const edition = c.pickEdition?.();
+      const email = c.pickEmail?.();
+      const token = c.pickToken?.(edition, email);
+      const jobId = c.pickJobId?.();
+      out.creds = { edition, email, jobId, hasToken: !!token, tokenLen: token?.length || 0 };
+
+      const editorRoot =
+        document.getElementById('editorRoot') ||
+        document.querySelector('[data-editor-root]') ||
+        document.querySelector('main, [role="main"]');
+      const summaryEl = c.querySummaryEditor?.() || document.getElementById('summaryEditor');
+      out.dom = {
+        editorRoot_jobId: editorRoot?.dataset?.jobId || null,
+        editorRoot_summaryEmpty: editorRoot?.dataset?.summaryEmpty || null,
+        summary_isIframe: summaryEl?.getAttribute('data-is-iframe') || null,
+        summary_hasIframeEl: !!summaryEl?.querySelector?.('iframe.ag-summary-iframe'),
+        summary_hasLoader: !!document.querySelector('.summary-loading-indicator'),
+        summary_innerHTMLLen: (summaryEl?.innerHTML || '').length,
+        summary_dataRawHtmlLen: (summaryEl?.getAttribute?.('data-raw-html') || '').length,
+        summary_ariaBusy: summaryEl?.getAttribute?.('aria-busy') || null
+      };
+
+      if (jobId && email && token && edition) {
+        try {
+          const u = `${API_V1}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+          const r = await fetch(u, { cache: 'no-store' });
+          out.transcriptStatus = { httpStatus: r.status, json: await r.json().catch(() => null) };
+        } catch (e) {
+          out.transcriptStatus = { error: String(e?.message || e) };
+        }
+        try {
+          const u = `${API_V1}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}&format=html`;
+          const r = await fetch(u, { cache: 'no-store' });
+          const txt = await r.text();
+          out.receiveSummary = {
+            httpStatus: r.status,
+            ok: r.ok,
+            len: txt.length,
+            head: txt.slice(0, 200),
+            tail: txt.slice(-120),
+            contentHash: getSummaryContentHash(txt)
+          };
+        } catch (e) {
+          out.receiveSummary = { error: String(e?.message || e) };
+        }
+      }
+
+      out.helpers = Object.keys(window.__agiloSummaryRegenHelpers || {});
+      out.flags = {
+        AGILO_DEBUG: !!window.AGILO_DEBUG,
+        cacheCheckDone: !!window.__agiloCacheCheckDone
+      };
+    } catch (e) {
+      out.fatal = String(e?.message || e);
+    }
+    console.log('[AGILO:DEBUG-CR]', out);
+    return out;
   };
 
   if (DEBUG) {
