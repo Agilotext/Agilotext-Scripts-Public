@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.7';
+  var VERSION = '1.3.8';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -349,6 +349,20 @@
     document.head.appendChild(style);
   }
 
+  function buildClaimBlockHtml() {
+    return '<div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden><a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Reclamer mon mois offert</a></div>';
+  }
+
+  function ensureClaimBlock(panel) {
+    if (!panel || q('[data-agilo-ref-claim-wrap]', panel)) return;
+    var copyWrap = q('.agilo-referral-copy', panel);
+    if (copyWrap) {
+      copyWrap.insertAdjacentHTML('afterend', buildClaimBlockHtml());
+    } else {
+      panel.insertAdjacentHTML('beforeend', buildClaimBlockHtml());
+    }
+  }
+
   function buildModalPanelHtml() {
     return '' +
       '<button class="agilo-referral-modal__close" type="button" aria-label="Fermer" data-agilo-ref-close>&times;</button>' +
@@ -378,7 +392,7 @@
       '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Verification manuelle requise</p>' +
       '</section>' +
       '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button></div>' +
-      '<div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden><a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Reclamer mon mois offert</a></div>';
+      buildClaimBlockHtml();
   }
 
   function ensureModal() {
@@ -413,6 +427,8 @@
     if (!q('[data-agilo-ref-reward-progress]', panel)) {
       panel.innerHTML = buildModalPanelHtml();
     }
+
+    ensureClaimBlock(panel);
 
     if (isModalWantedOpen()) {
       modal.hidden = false;
@@ -543,7 +559,7 @@
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
 
     if (claimWrap && claimLink) {
-      var unlocked = rewardState.status === 'unlocked';
+      var unlocked = rewardState.status === 'unlocked' || paid >= rewardTarget;
       claimWrap.hidden = !unlocked;
       if (unlocked) {
         claimLink.setAttribute('href', buildClaimMailto(state, rewardState, rewardLabel));
