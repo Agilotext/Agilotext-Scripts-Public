@@ -6,12 +6,12 @@
  *   formSelector, rootSelector, fieldSelector, defaultFieldNames,
  *   restrictToKnownNames, lang
  * };
- * @version 1.0.0
+ * @version 1.0.1
  */
 (function () {
   "use strict";
 
-  var NS_STYLE = "agilo-wizard-dictate-style-v1";
+  var NS_STYLE = "agilo-wizard-dictate-style-v2";
   var DEBOUNCE_MS = 120;
 
   var DEFAULT_NAMES = [
@@ -142,18 +142,27 @@
   }
 
   function injectCss() {
+    var legacy = document.getElementById("agilo-wizard-dictate-style-v1");
+    if (legacy && legacy.parentNode) legacy.parentNode.removeChild(legacy);
     if (document.getElementById(NS_STYLE)) return;
     var s = document.createElement("style");
     s.id = NS_STYLE;
     s.textContent =
       ".agilo-wizard-dictate__wrap{display:flex;flex-direction:column;gap:6px;width:100%;box-sizing:border-box}" +
+      ".agilo-wizard-dictate__wrap--inline{position:relative}" +
       ".agilo-wizard-dictate__bar{display:flex;justify-content:flex-end;align-items:center;gap:8px;min-height:36px}" +
-      ".agilo-wizard-dictate__btn.agilo-wizard-dictate__btn--standalone{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:36px;padding:6px 10px;border-radius:10px;border:1px solid #c8d0dc;background:#fff;color:#1b2430;cursor:pointer;transition:background .15s,border-color .15s}" +
+      ".agilo-wizard-dictate__wrap:not(.agilo-wizard-dictate__wrap--inline) .agilo-wizard-dictate__bar{flex-shrink:0}" +
+      ".agilo-wizard-dictate__bar--floating{position:absolute;z-index:2;right:10px;bottom:10px;margin:0;min-height:0;min-width:0;align-items:center;justify-content:center;pointer-events:auto}" +
+      ".agilo-wizard-dictate__wrap--singleline .agilo-wizard-dictate__bar--floating{bottom:auto;top:50%;transform:translateY(-50%);right:10px}" +
+      "textarea.agilo-wizard-dictate__field--withMic{padding-inline-end:48px!important;padding-bottom:10px!important;box-sizing:border-box}" +
+      "input.agilo-wizard-dictate__field--withMic{padding-inline-end:44px!important;box-sizing:border-box}" +
+      ".agilo-wizard-dictate__btn.agilo-wizard-dictate__btn--standalone{display:inline-flex;align-items:center;justify-content:center;min-width:36px;min-height:32px;padding:4px 8px;border-radius:8px;border:1px solid #c8d0dc;background:#fff;color:#1b2430;cursor:pointer;transition:background .15s,border-color .15s;box-shadow:0 1px 2px rgba(15,23,42,.06)}" +
       ".agilo-wizard-dictate__btn.agilo-wizard-dictate__btn--standalone:hover:not([disabled]){background:#f4f7fb;border-color:#9aa7b8}" +
       ".agilo-wizard-dictate__btn.agilo-wizard-dictate__btn--standalone:focus-visible{outline:2px solid #2563eb;outline-offset:2px}" +
       ".agilo-wizard-dictate__btn.agilo-wizard-dictate__btn--standalone[disabled]{opacity:.45;cursor:not-allowed}" +
       ".agilo-wizard-dictate__btn.is-recording{background:#e8f0fe;border-color:#2563eb;color:#142c66;box-shadow:0 0 0 1px rgba(37,99,235,.25)}" +
-      ".agilo-wizard-dictate__unsupported{margin:4px 0 0;font-size:12px;line-height:1.4;color:#475569}";
+      ".agilo-wizard-dictate__unsupported{margin:4px 0 0;font-size:12px;line-height:1.4;color:#475569}" +
+      ".agilo-wizard-dictate__wrap--inline .agilo-wizard-dictate__unsupported{position:relative;z-index:0}";
     (document.head || document.documentElement).appendChild(s);
   }
 
@@ -188,6 +197,7 @@
     fields.forEach(function (field) {
       if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
         D.mountButtonAdjacent(field, {
+          layout: "inline",
           lang: c.lang || "fr-FR",
           ariaLabel: ariaFor(field),
           announceUnsupportedOnce: true,

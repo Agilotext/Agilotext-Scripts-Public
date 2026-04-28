@@ -1,7 +1,7 @@
 /**
  * Dictée locale (Web Speech API) réutilisable : une seule reconnaissance à la fois.
  * Contrat navigateur comme l’onglet Conversation (Code-chat_V05) : segments finaux appendus.
- * @version 1.0.0
+ * @version 1.0.1
  */
 (function (global) {
   "use strict";
@@ -171,6 +171,7 @@
    *   lang?: string,
    *   ariaLabel?: string,
    *   titleHint?: string,
+   *   layout?: "inline"|"stack",
    *   onError?: (e: SpeechRecognitionErrorEvent|Error|null, message?: string) => void,
    *   announceUnsupportedOnce?: boolean
    * }} options
@@ -244,7 +245,30 @@
     return el;
   }
 
+  /**
+   * @param {'inline'|'stack'} layout
+   */
+  function applyLayoutUi(wrap, bar, input, layout) {
+    if (!wrap || !bar || !input) return;
+    if (layout === "inline") {
+      wrap.classList.add("agilo-wizard-dictate__wrap--inline");
+      input.classList.add("agilo-wizard-dictate__field--withMic");
+      bar.classList.add("agilo-wizard-dictate__bar--floating");
+      if (input.tagName === "INPUT") {
+        wrap.classList.add("agilo-wizard-dictate__wrap--singleline");
+      }
+    }
+  }
+
+  /** @returns {'inline'|'stack'} */
+  function resolveLayout(options) {
+    if (options && options.layout === "stack") return "stack";
+    return "inline";
+  }
+
   function finalizeMount(input, btn, announceEl, options, unsupported) {
+    options = options || {};
+    var layout = resolveLayout(options);
     var parent = input.parentNode;
     if (!parent) return;
 
@@ -256,9 +280,20 @@
         : null;
     if (!wrap) {
       wrap = global.document.createElement("div");
-      wrap.className = "agilo-wizard-dictate__wrap";
+      wrap.className =
+        layout === "inline"
+          ? "agilo-wizard-dictate__wrap agilo-wizard-dictate__wrap--inline"
+          : "agilo-wizard-dictate__wrap";
       parent.insertBefore(wrap, input);
       wrap.appendChild(input);
+      if (layout === "inline") {
+        input.classList.add("agilo-wizard-dictate__field--withMic");
+        if (input.tagName === "INPUT") wrap.classList.add("agilo-wizard-dictate__wrap--singleline");
+      }
+    } else if (layout === "inline") {
+      wrap.classList.add("agilo-wizard-dictate__wrap--inline");
+      input.classList.add("agilo-wizard-dictate__field--withMic");
+      if (input.tagName === "INPUT") wrap.classList.add("agilo-wizard-dictate__wrap--singleline");
     }
 
     if (unsupported) {
@@ -267,6 +302,9 @@
         barDisabled = global.document.createElement("div");
         barDisabled.className = "agilo-wizard-dictate__bar";
         wrap.appendChild(barDisabled);
+      }
+      if (layout === "inline") {
+        applyLayoutUi(wrap, barDisabled, input, "inline");
       }
       barDisabled.appendChild(btn);
       if (
@@ -289,10 +327,18 @@
 
     var bar = wrap.querySelector(".agilo-wizard-dictate__bar") || global.document.createElement("div");
     if (!bar.parentNode) {
-      bar.className = "agilo-wizard-dictate__bar";
+      bar.className =
+        layout === "inline"
+          ? "agilo-wizard-dictate__bar agilo-wizard-dictate__bar--floating"
+          : "agilo-wizard-dictate__bar";
       wrap.appendChild(bar);
-    } else if (!bar.classList.contains("agilo-wizard-dictate__bar")) {
-      bar.className = (bar.className || "") + " agilo-wizard-dictate__bar";
+    } else {
+      if (!bar.classList.contains("agilo-wizard-dictate__bar")) {
+        bar.className = (bar.className || "") + " agilo-wizard-dictate__bar";
+      }
+      if (layout === "inline") {
+        applyLayoutUi(wrap, bar, input, "inline");
+      }
     }
     bar.appendChild(btn);
 
