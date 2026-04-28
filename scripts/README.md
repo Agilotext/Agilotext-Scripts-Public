@@ -15,6 +15,7 @@ scripts/
 │   │   ├── ent.js         # Version ENT (Business/Enterprise)
 │   │   ├── teams-oauth-embed.html  # Embed Webflow : liaison Microsoft Teams / OAuth (Mon compte Business)
 │   │   ├── pro.js         # Version PRO
+│   │   ├── prompt-model-wizard-dictate.js  # Popup « nouveau modèle personnalisé » : dicter dans les champs
 │   │   └── free.js        # Version FREE
 │   │
 │   └── editor/             # Scripts de la page Éditeur
@@ -25,6 +26,7 @@ scripts/
 │       └── agilo-prompt-studio.css
 │
 └── shared/                 # Scripts et styles partagés (dictée, bannière app, etc.)
+    ├── agilo-speech-dictate.js       # Dictée inline Web Speech (réutilisable, micro par champ)
     ├── agilo-live-transcribe.js      # WebSocket Speechmatics temps réel
     ├── speechmatics-streaming.js
     ├── pcm-audio-worklet.js
@@ -127,6 +129,31 @@ Ajouter en **Footer code** site (ou après `ent.js` / `pro.js` / `free.js` sur l
 ```
 
 QA bureau : ajouter `?agilo_banner_test=1` sur n’importe quelle page autorisée (ex. `/` ou `/auth/login`).
+
+### Popup « Configurer votre modèle personnalisé » — dictée (Web Speech)
+
+À placer sur la **page où s’affiche le wizard** (ex. accueil ou flux de création de modèle), dans le **Footer** ou juste après le formulaire Webflow. **Ordre** : d’abord le module partagé, puis le montage wizard (le second attend `window.AgiloSpeechDictate`).
+
+```html
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-speech-dictate.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/dashboard/prompt-model-wizard-dictate.js"></script>
+```
+
+Optionnel (avant les scripts) :
+
+```html
+<script>
+  window.__AGILO_WIZARD_DICTATE__ = {
+    formSelector: "#wf-form-Global-form",
+    rootSelector: '[data-agilo-wizard-root]',
+    lang: "fr-FR",
+    defaultFieldNames: ["template-name", "objective-2", "specific-info-2", "structure-2", "first-name", "last-name"],
+    restrictToKnownNames: true,
+  };
+</script>
+```
+
+Champs ciblés : attribut **`data-agilo-dictate`** sur un conteneur ou le contrôle, **ou** noms/`id` listés ci-dessus, **sinon tous les `<textarea>`** du formulaire. Prévoir **HTTPS** ; Chrome / Edge conseillés.
 
 ### Footer — QR App Store / Play (CSS global)
 
