@@ -1,0 +1,3 @@
+<!-- Webflow : remplacer l’ancien embed par cette ligne (branche 1.06).
+     Après push GitHub, jsDelivr peut mettre quelques minutes à invalider le cache. -->
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/profile/profile-prompt-models-table.js"></script>
