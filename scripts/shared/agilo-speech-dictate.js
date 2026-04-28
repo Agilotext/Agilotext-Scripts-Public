@@ -1,7 +1,7 @@
 /**
  * Dictée locale (Web Speech API) réutilisable : une seule reconnaissance à la fois.
  * Contrat navigateur comme l’onglet Conversation (Code-chat_V05) : segments finaux appendus.
- * @version 1.0.1
+ * @version 1.0.2
  */
 (function (global) {
   "use strict";
