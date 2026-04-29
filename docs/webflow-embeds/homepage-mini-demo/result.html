@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agilotext — Démo résultat (embed)</title>
+  <style>
+    :root {
+      --agilo-blue: #174a96;
+      --agilo-blue-soft: rgba(23, 74, 150, 0.1);
+      --agilo-blue-border: rgba(23, 74, 150, 0.28);
+      --bg-cream: #e7e0da;
+      --bg-card: #f2ede5;
+      --text: #1a1a1a;
+      --muted: #5c5c5c;
+      --border: #d4caba;
+      --radius: 12px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 56px rgba(0, 20, 39, 0.09);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 420px;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .brand img { height: 22px; width: auto; display: block; }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 8px;
+      background: #ebe4dc;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 11px 10px;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); background: var(--agilo-blue-soft); }
+    .tab:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: -2px;
+    }
+    .tab[aria-selected="true"] {
+      color: var(--agilo-blue);
+      border-bottom-color: var(--agilo-blue);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .panel-wrap {
+      flex: 1;
+      padding: 14px;
+      background: var(--bg-cream);
+      overflow: auto;
+      min-height: 0;
+    }
+    .panel {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    .panel.is-active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .panel { animation: none; }
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    /* Lecteur audio compact */
+    .player-card {
+      margin-bottom: 12px;
+    }
+    .player-caption {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    audio.visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .player-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-play {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: var(--agilo-blue);
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: box-shadow 0.15s;
+    }
+    .btn-play:hover {
+      box-shadow: 0 4px 12px rgba(23, 74, 150, 0.35);
+    }
+    .btn-play:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: 2px;
+    }
+    .btn-play svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+    .times {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .times strong { color: var(--text); }
+
+    .seg {
+      font-size: 12px;
+      padding: 10px 11px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      border-left: 3px solid transparent;
+      background: #fdfcfa;
+      line-height: 1.48;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .seg.is-active {
+      border-left-color: var(--agilo-blue);
+      background: rgba(23, 74, 150, 0.06);
+    }
+    .seg-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .seg strong { font-weight: 700; color: #0e1e33; }
+    button.time-btn {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--agilo-blue);
+      font-weight: 600;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    button.time-btn:hover {
+      color: #0f3466;
+    }
+
+    .cr-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ico-doc {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--agilo-blue-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--agilo-blue);
+    }
+    .ico-doc svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+    }
+    .cr-doc-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 2px;
+      color: #0e1e33;
+    }
+    .cr-doc-meta { font-size: 10px; color: var(--muted); }
+
+    .cr-section {
+      margin-bottom: 12px;
+    }
+    .cr-section:last-child { margin-bottom: 0; }
+    .cr-section h4 {
+      margin: 0 0 5px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .cr-section p,
+    .cr-section ul {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .cr-section ul { padding-left: 16px; }
+    .cr-section li { margin-bottom: 3px; }
+    .cr-actions {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .cr-actions th {
+      text-align: left;
+      padding: 6px 8px;
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 10px;
+      color: #0e1e33;
+    }
+    .cr-actions td {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    /* Agent IA — empty state */
+    .ia-empty {
+      text-align: center;
+      padding: 18px 12px 8px;
+    }
+    .ia-empty-title {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
+      color: #0e1e33;
+      line-height: 1.35;
+    }
+    .ia-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .chip {
+      appearance: none;
+      border: 1px solid var(--agilo-blue-border);
+      background: #fff;
+      color: var(--agilo-blue);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 9px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      max-width: 100%;
+      text-align: center;
+    }
+    .chip:hover:not(:disabled) {
+      background: var(--agilo-blue-soft);
+      border-color: var(--agilo-blue);
+    }
+    .chip:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .chat {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chat-msg {
+      max-width: 94%;
+      padding: 9px 11px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.48;
+    }
+    .chat-msg--user {
+      align-self: flex-end;
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--agilo-blue-border);
+      color: var(--text);
+    }
+    .chat-msg--bot {
+      align-self: flex-start;
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .chat-msg-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .ia-note {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .footnote {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="mac" role="application" aria-label="Démonstration résultat Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.com — éditeur (démo)</div>
+        <div class="brand">
+          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Contenus générés">
+        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">Transcription</button>
+        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
+        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
+      </div>
+
+      <div class="panel-wrap">
+        <div id="panel-tr" class="panel is-active" role="tabpanel" aria-labelledby="tab-tr">
+          <div class="card player-card">
+            <p class="player-caption">Extrait audio de démonstration (30&nbsp;s) — fichier factice, aucune donnée client</p>
+            <audio id="demo-audio" preload="metadata" aria-label="Extrait audio de démonstration trente secondes">
+              <source src="demo.mp3" type="audio/mpeg" />
+            </audio>
+            <div class="player-bar">
+              <button type="button" class="btn-play" id="btn-play" aria-label="Lecture ou pause">
+                <svg id="ico-play" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <svg id="ico-pause" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              </button>
+              <span class="times"><strong id="cur-time">0:00</strong> / <span id="dur-time">0:30</span></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <article class="seg" id="seg-1" data-start="0" data-end="10">
+              <div class="seg-top">
+                <strong>Claire Dubois</strong>
+                <button type="button" class="time-btn" data-seek="0">00:00</button>
+              </div>
+              Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.
+            </article>
+            <article class="seg" id="seg-2" data-start="10" data-end="20">
+              <div class="seg-top">
+                <strong>Thomas Meyer</strong>
+                <button type="button" class="time-btn" data-seek="10">00:10</button>
+              </div>
+              Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur après la réunion.
+            </article>
+            <article class="seg" id="seg-3" data-start="20" data-end="30">
+              <div class="seg-top">
+                <strong>Sarah Nielsen</strong>
+                <button type="button" class="time-btn" data-seek="20">00:20</button>
+              </div>
+              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.
+            </article>
+          </div>
+        </div>
+
+        <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
+          <div class="card">
+            <div class="cr-toolbar">
+              <div class="ico-doc" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+              </div>
+              <div>
+                <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
+                <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
+              </div>
+            </div>
+            <div class="cr-section">
+              <h4>Synthèse</h4>
+              <p>
+                Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+              </p>
+            </div>
+            <div class="cr-section">
+              <h4>Décisions</h4>
+              <ul>
+                <li>Harmoniser le référentiel « preuves » pour les audits.</li>
+                <li>Valider le calendrier de reporting régional de mars.</li>
+              </ul>
+            </div>
+            <div class="cr-section">
+              <h4>Actions</h4>
+              <table class="cr-actions">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Échéance</th>
+                    <th>Resp.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Publier la grille contrôle fournisseurs v2</td>
+                    <td>15 mars</td>
+                    <td>Qualité</td>
+                  </tr>
+                  <tr>
+                    <td>Diffuser le récap COPIL aux régions</td>
+                    <td>21 mars</td>
+                    <td>Ops</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
+          <div class="card">
+            <div class="ia-empty" id="ia-empty-block">
+              <p class="ia-empty-title">Comment puis-je vous aider avec ce transcript&nbsp;?</p>
+              <div class="ia-chips">
+                <button type="button" class="chip" id="chip-sum">Résumer les points clés du transcript</button>
+                <button type="button" class="chip" id="chip-actions">Extraire les décisions et actions</button>
+              </div>
+            </div>
+            <div class="chat" id="ia-chat" aria-live="polite"></div>
+            <p class="ia-note">
+              Démo statique — aucune requête envoyée. Dans l’application, l’assistant lit votre document.
+            </p>
+          </div>
+        </div>
+
+        <p class="footnote">Audio synchronisé avec segments fictifs · durée fichier demo.mp3&nbsp;: 30&nbsp;s</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var panels = {
+        tr: document.getElementById("panel-tr"),
+        cr: document.getElementById("panel-cr"),
+        ia: document.getElementById("panel-ia")
+      };
+      var ids = ["tr", "cr", "ia"];
+
+      function show(which) {
+        ids.forEach(function (id) {
+          var active = id === which;
+          var tabEl = document.getElementById("tab-" + id);
+          var panelEl = panels[id];
+          if (tabEl) {
+            tabEl.setAttribute("aria-selected", active ? "true" : "false");
+            tabEl.setAttribute("tabindex", active ? "0" : "-1");
+          }
+          if (panelEl) panelEl.classList.toggle("is-active", active);
+        });
+      }
+
+      document.querySelectorAll(".tab").forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          show(tab.id.replace("tab-", ""));
+        });
+      });
+
+      document.querySelector(".tabs").addEventListener("keydown", function (e) {
+        var el = document.activeElement;
+        if (!el || el.id.indexOf("tab-") !== 0) return;
+        var delta = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+        if (e.key === "Home") {
+          e.preventDefault();
+          show(ids[0]);
+          document.getElementById("tab-" + ids[0]).focus();
+          return;
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          show(ids[ids.length - 1]);
+          document.getElementById("tab-" + ids[ids.length - 1]).focus();
+          return;
+        }
+        if (delta === undefined) return;
+        e.preventDefault();
+        var i = ids.indexOf(el.id.replace("tab-", ""));
+        if (i < 0) return;
+        var next = (i + delta + ids.length) % ids.length;
+        show(ids[next]);
+        document.getElementById("tab-" + ids[next]).focus();
+      });
+
+      /* Audio */
+      var audio = document.getElementById("demo-audio");
+      var btnPlay = document.getElementById("btn-play");
+      var icoPlay = document.getElementById("ico-play");
+      var icoPause = document.getElementById("ico-pause");
+      var curEl = document.getElementById("cur-time");
+      var durEl = document.getElementById("dur-time");
+
+      function fmt(t) {
+        if (!isFinite(t)) return "0:00";
+        var m = Math.floor(t / 60);
+        var s = Math.floor(t % 60);
+        return m + ":" + (s < 10 ? "0" : "") + s;
+      }
+
+      audio.addEventListener("loadedmetadata", function () {
+        durEl.textContent = fmt(audio.duration);
+      });
+
+      function syncPlayIcon() {
+        var playing = !audio.paused && !audio.ended;
+        icoPlay.style.display = playing ? "none" : "block";
+        icoPause.style.display = playing ? "block" : "none";
+        btnPlay.setAttribute("aria-pressed", playing ? "true" : "false");
+      }
+
+      btnPlay.addEventListener("click", function () {
+        if (audio.paused) audio.play().catch(function () {});
+        else audio.pause();
+      });
+      audio.addEventListener("play", syncPlayIcon);
+      audio.addEventListener("pause", syncPlayIcon);
+      audio.addEventListener("ended", syncPlayIcon);
+
+      audio.addEventListener("timeupdate", function () {
+        curEl.textContent = fmt(audio.currentTime);
+        var t = audio.currentTime;
+        var segs = document.querySelectorAll(".seg");
+        segs.forEach(function (seg) {
+          var start = parseFloat(seg.getAttribute("data-start"), 10);
+          var end = parseFloat(seg.getAttribute("data-end"), 10);
+          var last = seg.id === "seg-3";
+          var active = t >= start && (last ? t <= end + 0.01 : t < end);
+          seg.classList.toggle("is-active", active);
+        });
+      });
+
+      document.querySelectorAll(".time-btn").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var s = parseFloat(b.getAttribute("data-seek"), 10);
+          audio.currentTime = s;
+          audio.play().catch(function () {});
+        });
+      });
+
+      syncPlayIcon();
+
+      /* IA chips */
+      function appendMsg(role, html) {
+        var wrap = document.createElement("div");
+        wrap.className =
+          "chat-msg " + (role === "user" ? "chat-msg--user" : "chat-msg--bot");
+        wrap.innerHTML =
+          '<div class="chat-msg-label">' +
+          (role === "user" ? "Vous" : "Agent IA") +
+          "</div>" +
+          html;
+        document.getElementById("ia-chat").appendChild(wrap);
+      }
+
+      document.getElementById("chip-sum").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Résume les points clés du transcript.");
+        appendMsg(
+          "bot",
+          "Points clés : arbitrage budget sécurité et conformité fournisseurs ; décisions attendues sur le reporting régional ; validation des actions COPIL sous une semaine."
+        );
+      });
+
+      document.getElementById("chip-actions").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Extrais les décisions et actions.");
+        appendMsg(
+          "bot",
+          "<strong>Décisions :</strong> harmoniser le référentiel preuves ; calendrier mars.<br /><strong>Actions :</strong> grille fournisseurs v2 (Qualité, 15 mars) ; récap COPIL (Ops, 21 mars)."
+        );
+      });
+    })();
+  </script>
+</body>
+</html>

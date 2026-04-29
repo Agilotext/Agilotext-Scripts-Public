@@ -3,879 +3,144 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Agilotext — Démo homepage (embed)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet" />
+  <title>Agilotext — Démos embed homepage (hub)</title>
   <style>
     :root {
-      --orange: #fd7e14;
-      --orange-soft: #ffe7d1;
-      --bg-cream: #e7e0da;
-      --bg-card: #f2ede5;
+      --agilo-blue: #174a96;
+      --bg: #e7e0da;
       --text: #1a1a1a;
       --muted: #5c5c5c;
-      --deep: #001427;
       --border: #d4caba;
-      --accent-app: #5d2de6;
-      --radius: 12px;
-      --font: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
-    html, body {
+    body {
       margin: 0;
-      min-height: 100%;
-      font-family: var(--font);
+      padding: 24px clamp(16px, 4vw, 40px) 48px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       color: var(--text);
-      background: var(--bg-cream);
+      background: var(--bg);
+      line-height: 1.5;
       -webkit-font-smoothing: antialiased;
     }
-    .shell {
-      padding: clamp(12px, 2vw, 20px);
-      min-height: 100vh;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-    }
-    .mac {
+    h1 { font-size: 1.35rem; margin: 0 0 8px; }
+    .lead { color: var(--muted); margin: 0 0 24px; max-width: 56rem; font-size: 0.95rem; }
+    h2 { font-size: 1rem; margin: 28px 0 10px; color: #0e1e33; }
+    a { color: var(--agilo-blue); font-weight: 600; }
+    table {
       width: 100%;
-      max-width: 920px;
-      margin: 0 auto;
-      background: var(--bg-card);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow:
-        0 4px 6px rgba(0, 20, 39, 0.06),
-        0 24px 56px rgba(0, 20, 39, 0.09);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      min-height: 480px;
+      max-width: 42rem;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 12px 0;
     }
-    .titlebar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
-      border-bottom: 1px solid var(--border);
+    th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+    th { background: rgba(23, 74, 150, 0.08); }
+    code, pre {
+      font-family: ui-monospace, Menlo, Monaco, monospace;
+      font-size: 0.78rem;
     }
-    .dots { display: flex; gap: 6px; flex-shrink: 0; }
-    .dots span {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-    .dots span:nth-child(1) { background: #ff5f56; }
-    .dots span:nth-child(2) { background: #febc2e; }
-    .dots span:nth-child(3) { background: #28c840; }
-    .urlfake {
-      flex: 1;
-      font-size: 11px;
-      color: var(--muted);
+    pre {
       background: #fff;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 10px;
-      text-align: center;
-      font-variant-numeric: tabular-nums;
+      border-radius: 8px;
+      padding: 12px;
+      overflow: auto;
+      max-width: 56rem;
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .brand img { height: 22px; width: auto; display: block; }
-
-    /* Stepper — parcours 1 · 2 · 3 */
-    .stepper {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 6px;
-      padding: 12px 14px 10px;
-      background: #ebe4dc;
-      border-bottom: 1px solid var(--border);
-    }
-    .stepper-step {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      gap: 6px;
-      position: relative;
-    }
-    .stepper-step:not(:last-child)::after {
-      content: "";
-      position: absolute;
-      top: 14px;
-      left: calc(50% + 22px);
-      right: calc(-50% + 22px);
-      height: 2px;
-      background: var(--border);
-      z-index: 0;
-    }
-    .stepper-step.is-done:not(:last-child)::after,
-    .stepper-step.is-current:not(:last-child)::after {
-      background: linear-gradient(90deg, var(--orange), rgba(253, 126, 20, 0.35));
-    }
-    .step-num {
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
-      background: #fff;
-      border: 2px solid var(--border);
-      color: var(--muted);
-      position: relative;
-      z-index: 1;
-      transition: border-color 0.2s, background 0.2s, color 0.2s;
-    }
-    .stepper-step.is-current .step-num {
-      border-color: var(--orange);
-      background: var(--orange-soft);
-      color: var(--deep);
-      box-shadow: 0 0 0 3px rgba(253, 126, 20, 0.15);
-    }
-    .stepper-step.is-done .step-num {
-      border-color: rgba(253, 126, 20, 0.55);
-      background: #fff;
-      color: var(--orange);
-    }
-    .step-label {
-      font-size: 10px;
-      font-weight: 600;
-      line-height: 1.25;
-      color: var(--muted);
-      letter-spacing: 0.02em;
-    }
-    .stepper-step.is-current .step-label { color: var(--deep); }
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      padding: 0 8px;
-      background: #ebe4dc;
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-    }
-    .tab {
-      flex: 1 1 0;
-      min-width: 0;
-      padding: 11px 10px;
-      border: none;
-      background: transparent;
-      font: inherit;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-      white-space: nowrap;
-    }
-    .tab:hover { color: var(--text); background: rgba(253, 126, 20, 0.06); }
-    .tab:focus-visible {
-      outline: 2px solid var(--orange);
-      outline-offset: -2px;
-    }
-    .tab[aria-selected="true"] {
-      color: var(--deep);
-      border-bottom-color: var(--orange);
-      background: rgba(255, 255, 255, 0.65);
-    }
-
-    .panel-wrap {
-      flex: 1;
-      padding: 14px;
-      background: var(--bg-cream);
-    }
-    .panel {
-      display: none;
-      animation: fadeIn 0.22s ease;
-    }
-    .panel.is-active { display: block; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .panel { animation: none; }
-    }
-
-    .card {
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 12px;
-      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
-    }
-    .trust-one-line {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--muted);
-      margin: 0 0 12px;
-      letter-spacing: 0.02em;
-      line-height: 1.35;
-    }
-    .trust-one-line span {
-      opacity: 0.85;
-    }
-    .trust-one-line .sep {
-      margin: 0 0.35em;
-      opacity: 0.45;
-    }
-    .hero-title {
-      margin: 0 0 8px;
-      font-size: 17px;
-      font-weight: 700;
-      color: var(--deep);
-      letter-spacing: -0.03em;
-      line-height: 1.25;
-    }
-    .hero-line {
-      margin: 0 0 14px;
-      font-size: 13px;
-      color: var(--muted);
-      line-height: 1.45;
-    }
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: flex-start;
-    }
-    .pill {
-      display: inline-block;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 4px 9px;
-      border-radius: 999px;
-      background: var(--orange-soft);
-      color: #7a4214;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-    }
-    .btn {
+    ul { margin: 8px 0; padding-left: 1.2rem; }
+    li { margin: 4px 0; }
+    .links { margin: 16px 0; display: flex; flex-wrap: wrap; gap: 12px; }
+    .links a {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 8px;
       padding: 10px 16px;
-      border-radius: 8px;
-      border: none;
-      font: inherit;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-      text-decoration: none;
-      transition: transform 0.08s ease, box-shadow 0.15s ease;
-    }
-    .btn-primary {
-      background: var(--orange);
+      background: var(--agilo-blue);
       color: #fff;
-    }
-    .btn-primary:hover {
-      box-shadow: 0 4px 14px rgba(253, 126, 20, 0.38);
-    }
-    .btn-secondary {
-      background: #fff;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    .btn-secondary:hover {
-      border-color: var(--orange);
-      box-shadow: 0 0 0 1px rgba(253, 126, 20, 0.18);
-    }
-    .btn:active { transform: scale(0.98); }
-    .btn:focus-visible {
-      outline: 2px solid var(--deep);
-      outline-offset: 2px;
-    }
-
-    .section-label {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--muted);
-      margin: 0 0 10px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-    .capture-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-top: 4px;
-    }
-    @media (max-width: 520px) {
-      .capture-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-    .capture-tile {
-      border: 1px solid rgba(212, 202, 186, 0.95);
-      border-radius: 10px;
-      padding: 12px 10px;
-      text-align: center;
-      background: #fdfcfa;
-      transition: border-color 0.15s, box-shadow 0.15s;
-      cursor: default;
-    }
-    .capture-tile:hover {
-      border-color: rgba(93, 45, 230, 0.35);
-      box-shadow: 0 0 0 2px rgba(93, 45, 230, 0.08);
-    }
-    .capture-tile .ico {
-      width: 36px;
-      height: 36px;
-      margin: 0 auto 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 10px;
-      background: linear-gradient(145deg, #faf8ff 0%, #f5f2eb 100%);
-      border: 1px solid rgba(0, 0, 0, 0.06);
-      color: var(--accent-app);
-    }
-    .capture-tile .ico svg {
-      width: 22px;
-      height: 22px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.75;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-    .capture-tile strong {
-      display: block;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--deep);
-      margin-bottom: 2px;
-    }
-    .capture-tile small {
-      font-size: 11px;
-      color: var(--muted);
-      line-height: 1.3;
-    }
-
-    .meta-strip {
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px dashed var(--border);
-    }
-    .seg {
-      font-size: 12px;
-      padding: 9px 11px;
-      margin-bottom: 7px;
+      text-decoration: none;
       border-radius: 8px;
-      border-left: 3px solid var(--orange);
-      background: linear-gradient(90deg, #fffefb 0%, #faf8f5 100%);
-      line-height: 1.48;
+      font-size: 0.9rem;
     }
-    .seg-top {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 8px;
-      margin-bottom: 4px;
-    }
-    .seg strong { color: var(--deep); font-weight: 700; }
-    .seg time {
-      font-family: ui-monospace, Menlo, monospace;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .cr-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding-bottom: 10px;
-      margin-bottom: 10px;
-      border-bottom: 1px solid var(--border);
-    }
-    .cr-toolbar .ico-doc {
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      background: #f5f5f5;
-      border: 1px solid var(--border);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      color: var(--accent-app);
-    }
-    .cr-toolbar .ico-doc svg {
-      width: 20px;
-      height: 20px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 1.75;
-    }
-    .cr-doc-title {
-      font-size: 14px;
-      font-weight: 700;
-      margin: 0 0 2px;
-      color: var(--deep);
-    }
-    .cr-doc-meta { font-size: 10px; color: var(--muted); line-height: 1.35; }
-    .cr-section {
-      margin-bottom: 12px;
-    }
-    .cr-section:last-child { margin-bottom: 0; }
-    .cr-section h4 {
-      margin: 0 0 5px;
-      font-size: 10px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-    }
-    .cr-section p,
-    .cr-section ul {
-      margin: 0;
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--text);
-    }
-    .cr-section ul { padding-left: 16px; }
-    .cr-section li { margin-bottom: 3px; }
-    .cr-actions {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 11px;
-      margin-top: 4px;
-    }
-    .cr-actions th {
-      text-align: left;
-      padding: 5px 7px;
-      background: var(--orange-soft);
-      border: 1px solid var(--border);
-      font-weight: 700;
-      color: var(--deep);
-      font-size: 10px;
-    }
-    .cr-actions td {
-      padding: 5px 7px;
-      border: 1px solid var(--border);
-      vertical-align: top;
-    }
-
-    .ia-intro {
-      font-size: 12px;
-      color: var(--muted);
-      margin: 0 0 12px;
-      line-height: 1.45;
-    }
-    .ia-chips {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .chip {
-      appearance: none;
-      border: 1px solid rgba(93, 45, 230, 0.35);
-      background: #faf8ff;
-      color: #432f8a;
-      font: inherit;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 8px 12px;
-      border-radius: 999px;
-      cursor: pointer;
-      text-align: left;
-      transition: background 0.15s, border-color 0.15s;
-      max-width: 100%;
-    }
-    .chip:hover:not(:disabled) {
-      background: #f0ebff;
-      border-color: var(--accent-app);
-    }
-    .chip:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-    .chip svg {
-      width: 14px;
-      height: 14px;
-      vertical-align: -2px;
-      margin-right: 6px;
-      stroke: currentColor;
-      fill: none;
-      stroke-width: 2;
-    }
-    .chat {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      min-height: 0;
-    }
-    .chat-msg {
-      max-width: 94%;
-      padding: 9px 11px;
-      border-radius: 12px;
-      font-size: 12px;
-      line-height: 1.48;
-    }
-    .chat-msg--user {
-      align-self: flex-end;
-      background: var(--orange-soft);
-      border: 1px solid #e8bc94;
-      color: var(--text);
-    }
-    .chat-msg--bot {
-      align-self: flex-start;
+    .links a.secondary {
       background: #fff;
+      color: var(--agilo-blue);
       border: 1px solid var(--border);
-      color: var(--text);
-    }
-    .chat-msg-label {
-      font-size: 9px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.07em;
-      color: var(--muted);
-      margin-bottom: 3px;
-    }
-    .chat-note {
-      margin-top: 8px;
-      font-size: 10px;
-      color: var(--muted);
-      line-height: 1.4;
-    }
-
-    .footnote {
-      margin-top: 10px;
-      font-size: 10px;
-      color: var(--muted);
-      text-align: center;
-      opacity: 0.92;
-    }
-
-    @media (max-width: 560px) {
-      .tab { font-size: 11px; padding: 10px 6px; }
-      .step-label { font-size: 9px; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <div class="mac" role="application" aria-label="Démonstration produit Agilotext">
-      <div class="titlebar">
-        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="urlfake">app.agilotext.com — espace sécurisé (démo)</div>
-        <div class="brand">
-          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
-        </div>
-      </div>
+  <h1>Démos embed — homepage Agilotext</h1>
+  <p class="lead">
+    Deux iframes distinctes : <strong>Capture</strong> (entrée audio) et <strong>Résultat</strong> (transcription, compte rendu, assistant IA).
+    Utilisez les pages ci-dessous en embed Webflow ou ouvrez-les pour prévisualisation.
+  </p>
 
-      <div class="stepper" id="stepper" aria-label="Étapes du parcours">
-        <div class="stepper-step is-current" id="step-1" data-step="1">
-          <span class="step-num">1</span>
-          <span class="step-label">Capturer</span>
-        </div>
-        <div class="stepper-step" id="step-2" data-step="2">
-          <span class="step-num">2</span>
-          <span class="step-label">Transcrire</span>
-        </div>
-        <div class="stepper-step" id="step-3" data-step="3">
-          <span class="step-num">3</span>
-          <span class="step-label">Compte rendu</span>
-        </div>
-      </div>
-
-      <div class="panel-wrap">
-        <div class="card">
-          <p class="trust-one-line">
-            <span>Sans robot dans la réunion</span><span class="sep">·</span>
-            <span>Données hébergées en France</span><span class="sep">·</span>
-            <span>Conforme RGPD</span>
-          </p>
-          <h1 class="hero-title">Transformez vos réunions en livrables exploitables</h1>
-          <p class="hero-line">Audio, fichier ou dictée : Agilotext transcrit et structure votre contenu dans un éditeur clair.</p>
-          <div class="row" style="margin-bottom:14px;">
-            <a class="btn btn-primary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
-            <button type="button" class="btn btn-secondary" id="btn-simulate-tr">Simuler une transcription</button>
-          </div>
-          <p class="section-label">Sources de capture</p>
-          <div class="capture-grid" aria-hidden="true">
-            <div class="capture-tile">
-              <div class="ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="23"/><path d="M8 23h8"/></svg>
-              </div>
-              <strong>Enregistrer</strong>
-              <small>Visio ou téléphone</small>
-            </div>
-            <div class="capture-tile">
-              <div class="ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-              </div>
-              <strong>Importer</strong>
-              <small>Fichier audio ou vidéo</small>
-            </div>
-            <div class="capture-tile">
-              <div class="ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M13 8H7"/><path d="M17 12H7"/></svg>
-              </div>
-              <strong>Dicter</strong>
-              <small>Prise de notes rapide</small>
-            </div>
-          </div>
-        </div>
-
-        <div class="tabs" role="tablist" aria-label="Résultats">
-          <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">Transcription</button>
-          <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
-          <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
-        </div>
-
-        <div id="panel-tr" class="panel is-active" role="tabpanel" aria-labelledby="tab-tr">
-          <div class="card">
-            <div class="row" style="justify-content:space-between;">
-              <span class="pill">Extrait fictif</span>
-              <button type="button" class="btn btn-secondary" disabled title="Export désactivé en démo">Exporter</button>
-            </div>
-            <p class="meta-strip">Comité pilotage Q1 · exemple statique</p>
-            <article class="seg">
-              <div class="seg-top"><strong>Claire Dubois</strong> <time>00:00</time></div>
-              Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.
-            </article>
-            <article class="seg">
-              <div class="seg-top"><strong>Thomas Meyer</strong> <time>02:14</time></div>
-              Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur Agilotext après la réunion.
-            </article>
-            <article class="seg">
-              <div class="seg-top"><strong>Sarah Nielsen</strong> <time>05:02</time></div>
-              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.
-            </article>
-          </div>
-        </div>
-
-        <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
-          <div class="card">
-            <div class="cr-toolbar">
-              <div class="ico-doc" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
-              </div>
-              <div>
-                <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
-                <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
-              </div>
-              <span class="pill" style="margin-left:auto;">Éditeur</span>
-            </div>
-            <div class="cr-section">
-              <h4>Synthèse</h4>
-              <p>
-                Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
-              </p>
-            </div>
-            <div class="cr-section">
-              <h4>Décisions</h4>
-              <ul>
-                <li>Harmoniser le référentiel « preuves » pour les audits.</li>
-                <li>Valider le calendrier de reporting régional de mars.</li>
-              </ul>
-            </div>
-            <div class="cr-section">
-              <h4>Actions</h4>
-              <table class="cr-actions">
-                <thead>
-                  <tr>
-                    <th>Action</th>
-                    <th>Échéance</th>
-                    <th>Resp.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Publier la grille contrôle fournisseurs v2</td>
-                    <td>15 mars</td>
-                    <td>Qualité</td>
-                  </tr>
-                  <tr>
-                    <td>Diffuser le récap COPIL aux régions</td>
-                    <td>21 mars</td>
-                    <td>Ops</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
-          <div class="card">
-            <div class="row" style="justify-content:space-between;">
-              <span class="pill">Assistant document</span>
-            </div>
-            <p class="ia-intro">
-              Réponses illustrées à partir du transcript et du compte rendu — aucune requête envoyée depuis cette page.
-            </p>
-            <div class="ia-chips" id="ia-chips">
-              <button type="button" class="chip" id="chip-prio" data-role="suggestion">
-                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
-                Quelles décisions prioriser&nbsp;?
-              </button>
-              <button type="button" class="chip" id="chip-risk" data-role="suggestion">
-                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
-                Risques en trois bullets
-              </button>
-            </div>
-            <div class="chat" id="ia-chat" aria-live="polite"></div>
-            <p class="chat-note">Dans l’application, l’agent s’appuie sur vos contenus et paramètres.</p>
-          </div>
-        </div>
-
-        <p class="footnote">Démo statique — aucune donnée envoyée · iframe Webflow</p>
-      </div>
-    </div>
+  <div class="links">
+    <a href="capture.html">capture.html — INPUT</a>
+    <a href="result.html" class="secondary">result.html — OUTPUT</a>
   </div>
-  <script>
-    (function () {
-      var panels = {
-        tr: document.getElementById("panel-tr"),
-        cr: document.getElementById("panel-cr"),
-        ia: document.getElementById("panel-ia")
-      };
-      var ids = ["tr", "cr", "ia"];
 
-      function setStepper(step) {
-        var n = parseInt(step, 10);
-        if (n < 1 || n > 3) return;
-        for (var s = 1; s <= 3; s++) {
-          var el = document.getElementById("step-" + s);
-          if (!el) continue;
-          el.classList.remove("is-current", "is-done");
-          if (s < n) el.classList.add("is-done");
-          else if (s === n) el.classList.add("is-current");
-        }
-      }
+  <h2>Narratif homepage (recommandé)</h2>
+  <ol>
+    <li>Bloc titre + courte phrase valeur.</li>
+    <li><strong>Iframe Capture</strong> — « Comment vous nous envoyez l’audio ».</li>
+    <li>Phrase de liaison du type : <em>Une fois le fichier traité, voici ce que vous obtenez dans Agilotext.</em></li>
+    <li><strong>Iframe Résultat</strong> — transcription audio + livrables.</li>
+  </ol>
 
-      var simulated = false;
+  <h2>Migration (anciens embeds)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Avant</th>
+        <th>Après</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Un seul <code>index.html</code> tout-en-un (démo monolithique)</td>
+        <td>Deux URLs : <code>capture.html</code> et <code>result.html</code>. Cette page hub remplace l’ancienne démo combinée.</td>
+      </tr>
+      <tr>
+        <td>Iframe pointant vers <code>…/homepage-mini-demo/</code></td>
+        <td>Pointer explicitement vers <code>capture.html</code> ou <code>result.html</code> selon la section.</td>
+      </tr>
+    </tbody>
+  </table>
 
-      function syncStepperFromTab(which) {
-        if (which === "cr" || which === "ia") setStepper(3);
-        else setStepper(simulated ? 2 : 1);
-      }
+  <h2>Snippet iframe — Capture</h2>
+  <pre>&lt;iframe
+  src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/capture.html"
+  title="Agilotext — démo capture"
+  width="100%"
+  height="460"
+  style="display:block;border:0;width:100%;min-height:440px;"
+  loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
+&gt;&lt;/iframe&gt;</pre>
 
-      function show(which) {
-        ids.forEach(function (id) {
-          var active = id === which;
-          var tabEl = document.getElementById("tab-" + id);
-          var panelEl = panels[id];
-          if (tabEl) {
-            tabEl.setAttribute("aria-selected", active ? "true" : "false");
-            tabEl.setAttribute("tabindex", active ? "0" : "-1");
-          }
-          if (panelEl) {
-            panelEl.classList.toggle("is-active", active);
-          }
-        });
-        syncStepperFromTab(which);
-      }
+  <h2>Snippet iframe — Résultat</h2>
+  <pre>&lt;iframe
+  src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/result.html"
+  title="Agilotext — démo résultat"
+  width="100%"
+  height="620"
+  style="display:block;border:0;width:100%;min-height:560px;"
+  loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
+&gt;&lt;/iframe&gt;</pre>
 
-      document.querySelectorAll(".tab").forEach(function (tab) {
-        tab.addEventListener("click", function () {
-          show(tab.id.replace("tab-", ""));
-        });
-      });
+  <h2>Checklist QA avant mise en ligne</h2>
+  <ul>
+    <li>Lecture audio OK ; durée affichée ~30&nbsp;s ; segments surlignés pendant la lecture.</li>
+    <li>Clic sur les horodatages du transcript → saut dans l’audio.</li>
+    <li>Onglets accessibles au clavier (<kbd>←</kbd> / <kbd>→</kbd>, Home / End).</li>
+    <li>Puces Assistant IA : deux interactions statiques, pas de requête réseau.</li>
+    <li>Pas de scroll involontaire sur Capture en desktop (hauteur iframe suffisante).</li>
+    <li>Grep sécurité : pas de token, jobId, api interne dans les fichiers embed.</li>
+  </ul>
 
-      document.querySelector(".tabs").addEventListener("keydown", function (e) {
-        var el = document.activeElement;
-        if (!el || !el.id || el.id.indexOf("tab-") !== 0) return;
-        var keys = { ArrowLeft: -1, ArrowRight: 1 };
-        if (e.key === "Home") {
-          e.preventDefault();
-          show(ids[0]);
-          document.getElementById("tab-" + ids[0]).focus();
-          return;
-        }
-        if (e.key === "End") {
-          e.preventDefault();
-          show(ids[ids.length - 1]);
-          document.getElementById("tab-" + ids[ids.length - 1]).focus();
-          return;
-        }
-        var delta = keys[e.key];
-        if (delta === undefined) return;
-        e.preventDefault();
-        var i = ids.indexOf(el.id.replace("tab-", ""));
-        if (i < 0) return;
-        var next = (i + delta + ids.length) % ids.length;
-        show(ids[next]);
-        document.getElementById("tab-" + ids[next]).focus();
-      });
-
-      var sim = document.getElementById("btn-simulate-tr");
-      if (sim) {
-        sim.addEventListener("click", function () {
-          simulated = true;
-          sim.style.opacity = "0.72";
-          setTimeout(function () {
-            sim.style.opacity = "1";
-          }, 120);
-          show("tr");
-          document.getElementById("tab-tr").focus();
-        });
-      }
-
-      function appendMsg(role, htmlInner) {
-        var wrap = document.createElement("div");
-        wrap.className =
-          "chat-msg " + (role === "user" ? "chat-msg--user" : "chat-msg--bot");
-        wrap.innerHTML =
-          '<div class="chat-msg-label">' +
-          (role === "user" ? "Vous" : "Agent IA") +
-          "</div>" +
-          htmlInner;
-        document.getElementById("ia-chat").appendChild(wrap);
-      }
-
-      var prioDone = false;
-      var riskDone = false;
-
-      document.getElementById("chip-prio").addEventListener("click", function () {
-        if (prioDone) return;
-        prioDone = true;
-        this.disabled = true;
-        appendMsg(
-          "user",
-          "Quelles décisions dois-je communiquer en priorité à ma direction&nbsp;?"
-        );
-        appendMsg(
-          "bot",
-          "Priorisez la grille fournisseurs v2 et le calendrier de reporting mars — ce sont les deux leviers qui débloquent les filiales."
-        );
-      });
-
-      document.getElementById("chip-risk").addEventListener("click", function () {
-        if (riskDone) return;
-        riskDone = true;
-        this.disabled = true;
-        appendMsg("user", "Résume les risques en trois bullets pour un email court.");
-        appendMsg(
-          "bot",
-          "• Deux fournisseurs encore sous surveillance.<br />• Preuves à finaliser avant audit.<br />• Communication régionale à caler avant clôture."
-        );
-      });
-
-      show("tr");
-    })();
-  </script>
+  <p style="font-size:0.85rem;color:var(--muted);margin-top:32px;">
+    Hub statique — voir <code>README.md</code> pour jsDelivr, régénération <code>demo.mp3</code> et détails techniques.
+  </p>
 </body>
 </html>
