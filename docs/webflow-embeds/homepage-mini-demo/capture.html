@@ -128,36 +128,56 @@
         0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    /* Fil d’Ariane aligné à gauche (comme le produit) */
+    /* Fil d’Ariane : une seule entrée, alignée à gauche (le reste de la carte peut rester centré) */
     .crumb {
       display: flex;
       align-items: center;
+      justify-content: flex-start;
       flex-wrap: wrap;
       gap: 6px 8px;
       font-size: 0.72rem;
       color: var(--agilo-dim);
       margin: 0 0 14px;
+      padding: 0;
       text-align: left;
       width: 100%;
+      align-self: flex-start;
       letter-spacing: 0.01em;
-    }
-    .crumb a {
-      color: var(--agilo-primary);
-      font-weight: 600;
-      text-decoration: none;
-      opacity: 0.92;
-    }
-    .crumb a:hover {
-      text-decoration: underline;
-    }
-    .crumb-sep {
-      color: rgba(82, 82, 82, 0.45);
-      font-weight: 600;
-      user-select: none;
     }
     .crumb-current {
       color: var(--agilo-text);
       font-weight: 600;
+    }
+
+    /* Mise en avant douce pendant la démo auto-inactivité (désactivée si prefers-reduced-motion) */
+    .idle-demo-spotlight {
+      position: relative;
+      z-index: 2;
+      border-radius: 10px;
+      transition: box-shadow 0.35s ease;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.98),
+        0 0 0 4px rgba(23, 74, 150, 0.5),
+        0 12px 36px rgba(23, 74, 150, 0.16);
+    }
+    .process-toggle-line.idle-demo-spotlight {
+      padding: 8px 10px;
+      margin: -4px -6px 12px;
+      border-radius: 10px;
+    }
+    .lang-select-block.idle-demo-spotlight {
+      padding: 8px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .select-template.idle-demo-spotlight {
+      border-radius: var(--radius-base);
+    }
+    .upload-zone-placeholder.idle-demo-spotlight {
+      border-radius: var(--radius-base);
+    }
+    .source-tab.idle-demo-spotlight {
+      border-radius: 8px;
     }
 
     .dash-title-row {
@@ -765,8 +785,6 @@
       <div class="inner">
         <div class="dashboard-card">
           <nav class="crumb" aria-label="Fil d’Ariane">
-            <a href="#" onclick="return false;" tabindex="-1">Accueil</a>
-            <span class="crumb-sep" aria-hidden="true">›</span>
             <span class="crumb-current">Tableau de bord</span>
           </nav>
 
@@ -920,6 +938,7 @@
 
   <script>
     (function () {
+      var mac = document.querySelector(".mac");
       var tabs = document.querySelectorAll(".source-tab");
       var panels = {
         file: document.getElementById("panel-file"),
@@ -962,39 +981,205 @@
         document.querySelector('[data-tab="' + order[next] + '"]').focus();
       });
 
+      function setPressed(el, on) {
+        if (!el) return;
+        el.classList.toggle("on", on);
+        el.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+
+      var langBlock = document.getElementById("lang-select-block");
+      var tplBlock = document.getElementById("template-cr-block");
+      var toggleEnvoi = document.getElementById("toggle-envoi");
+      var toggleSpeaker = document.getElementById("toggle-speaker");
+      var toggleTranslate = document.getElementById("toggle-translate");
+      var toggleCr = document.getElementById("toggle-cr");
+      var selectLang = document.getElementById("select-lang");
+      var selectTemplate = document.querySelector(".select-template");
+
+      function setTranslate(on) {
+        setPressed(toggleTranslate, on);
+        if (langBlock) {
+          langBlock.classList.toggle("is-hidden", !on);
+          langBlock.setAttribute("aria-hidden", on ? "false" : "true");
+        }
+      }
+
+      function setCr(on) {
+        setPressed(toggleCr, on);
+        if (tplBlock) {
+          tplBlock.classList.toggle("is-hidden", !on);
+        }
+      }
+
       function bindToggle(el) {
         if (!el) return;
         el.addEventListener("click", function () {
-          var on = el.classList.toggle("on");
-          el.setAttribute("aria-pressed", on ? "true" : "false");
-          return on;
+          setPressed(el, !el.classList.contains("on"));
         });
       }
 
-      bindToggle(document.getElementById("toggle-envoi"));
+      bindToggle(toggleEnvoi);
+      bindToggle(toggleSpeaker);
 
-      bindToggle(document.getElementById("toggle-speaker"));
-
-      var langBlock = document.getElementById("lang-select-block");
-      var toggleTranslate = document.getElementById("toggle-translate");
-      if (toggleTranslate && langBlock) {
+      if (toggleTranslate) {
         toggleTranslate.addEventListener("click", function () {
-          var on = toggleTranslate.classList.toggle("on");
-          toggleTranslate.setAttribute("aria-pressed", on ? "true" : "false");
-          langBlock.classList.toggle("is-hidden", !on);
-          langBlock.setAttribute("aria-hidden", on ? "false" : "true");
+          setTranslate(!toggleTranslate.classList.contains("on"));
         });
       }
 
-      var tplBlock = document.getElementById("template-cr-block");
-      var toggleCr = document.getElementById("toggle-cr");
-      if (toggleCr && tplBlock) {
+      if (toggleCr) {
         toggleCr.addEventListener("click", function () {
-          var on = toggleCr.classList.toggle("on");
-          toggleCr.setAttribute("aria-pressed", on ? "true" : "false");
-          tplBlock.classList.toggle("is-hidden", !on);
+          setCr(!toggleCr.classList.contains("on"));
         });
       }
+
+      /* ---------- Démo automatique après inactivité (invite à explorer les contrôles) ---------- */
+      var prefersReducedMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      var userEngaged = false;
+      var loopTimer = null;
+      var tourTimers = [];
+      var spotlightEl = null;
+
+      function clearTourTimers() {
+        tourTimers.forEach(clearTimeout);
+        tourTimers = [];
+      }
+
+      function after(ms, fn) {
+        var id = setTimeout(function () {
+          var ix = tourTimers.indexOf(id);
+          if (ix >= 0) tourTimers.splice(ix, 1);
+          if (!userEngaged && fn) fn();
+        }, ms);
+        tourTimers.push(id);
+      }
+
+      function clearSpotlight() {
+        if (spotlightEl) {
+          spotlightEl.classList.remove("idle-demo-spotlight");
+          spotlightEl = null;
+        }
+      }
+
+      function setSpotlight(el) {
+        clearSpotlight();
+        if (!el || userEngaged || prefersReducedMotion) return;
+        spotlightEl = el;
+        el.classList.add("idle-demo-spotlight");
+        try {
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (e) {
+          el.scrollIntoView(false);
+        }
+      }
+
+      function resetDemoState() {
+        activate("file");
+        setPressed(toggleSpeaker, true);
+        setTranslate(false);
+        setCr(true);
+        setPressed(toggleEnvoi, true);
+        if (selectLang) selectLang.selectedIndex = 0;
+        if (selectTemplate) selectTemplate.selectedIndex = 0;
+      }
+
+      function stopIdleDemo() {
+        if (userEngaged) return;
+        userEngaged = true;
+        clearTimeout(loopTimer);
+        loopTimer = null;
+        clearTourTimers();
+        clearSpotlight();
+        resetDemoState();
+      }
+
+      if (mac) {
+        mac.addEventListener("pointerdown", stopIdleDemo, true);
+        mac.addEventListener("keydown", stopIdleDemo, true);
+      }
+
+      var IDLE_BEFORE_MS = 5500;
+      var STEP_MS = 1700;
+      var PAUSE_BETWEEN_LOOPS_MS = 9000;
+
+      function lineForToggle(id) {
+        var t = document.getElementById(id);
+        return t ? t.closest(".process-toggle-line") : null;
+      }
+
+      function runIdleTour(done) {
+        if (userEngaged || prefersReducedMotion || !mac) {
+          if (done) done();
+          return;
+        }
+
+        after(0, function () {
+          setSpotlight(lineForToggle("toggle-speaker"));
+          after(STEP_MS, function () {
+            clearSpotlight();
+            setTranslate(true);
+            setSpotlight(lineForToggle("toggle-translate"));
+            after(STEP_MS, function () {
+              clearSpotlight();
+              if (selectLang) {
+                selectLang.selectedIndex =
+                  (selectLang.selectedIndex + 1) % selectLang.options.length;
+              }
+              if (langBlock) setSpotlight(langBlock);
+              after(Math.round(STEP_MS * 0.85), function () {
+                clearSpotlight();
+                setTranslate(false);
+                if (selectTemplate) {
+                  selectTemplate.selectedIndex =
+                    (selectTemplate.selectedIndex + 1) % selectTemplate.options.length;
+                  setSpotlight(selectTemplate);
+                }
+                after(STEP_MS, function () {
+                  clearSpotlight();
+                  activate("youtube");
+                  var yt = document.querySelector('.source-tab[data-tab="youtube"]');
+                  if (yt) setSpotlight(yt);
+                  after(Math.round(STEP_MS * 1.15), function () {
+                    clearSpotlight();
+                    activate("file");
+                    var uz = document.querySelector(".upload-zone-placeholder");
+                    if (uz) setSpotlight(uz);
+                    after(STEP_MS, function () {
+                      clearSpotlight();
+                      var wasOn = toggleEnvoi && toggleEnvoi.classList.contains("on");
+                      if (toggleEnvoi) setPressed(toggleEnvoi, !wasOn);
+                      after(900, function () {
+                        if (toggleEnvoi) setPressed(toggleEnvoi, wasOn);
+                        clearSpotlight();
+                        resetDemoState();
+                        if (done) done();
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      }
+
+      function scheduleIdleLoop(isFirst) {
+        if (prefersReducedMotion || userEngaged) return;
+        clearTimeout(loopTimer);
+        var wait = isFirst ? IDLE_BEFORE_MS : PAUSE_BETWEEN_LOOPS_MS;
+        loopTimer = setTimeout(function () {
+          loopTimer = null;
+          if (userEngaged) return;
+          runIdleTour(function () {
+            if (!userEngaged) scheduleIdleLoop(false);
+          });
+        }, wait);
+      }
+
+      scheduleIdleLoop(true);
     })();
   </script>
 </body>
