@@ -41,6 +41,7 @@
       color: var(--agilo-text);
       background: var(--shell-bg);
       -webkit-font-smoothing: antialiased;
+      text-align: start;
     }
 
     .shell {
@@ -97,12 +98,13 @@
       overflow: auto;
       flex: 1;
       min-height: 0;
+      /* Ancrage gauche pour tout le contenu scrollable (évite l’héritage d’un parent iframe centré) */
+      text-align: start;
     }
-    /* Colonne flex : pas de text-align sur la carte entière (sinon le nav du fil d’Ariane hérite du centrage). */
+
+    /* Carte tableau de bord : flux bloc — pas de flex ici (évite les interactions layout sur le fil d’Ariane) */
     .dashboard-card {
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
+      display: block;
       margin: 12px;
       padding: 20px 16px 20px;
       background: var(--agilo-surface);
@@ -112,10 +114,36 @@
       transition: box-shadow 0.35s ease, transform 0.35s ease;
     }
 
-    /* Tout le bloc titre / upload / options reste centré, séparé du fil d’Ariane */
+    /* Tout le bloc titre / upload / options reste centré */
     .dashboard-card-main {
       width: 100%;
       text-align: center;
+    }
+
+    .dashboard-crumb-bar {
+      display: block;
+      width: 100%;
+      margin: 0 0 14px;
+      padding: 0;
+      border: none;
+      font: inherit;
+      text-align: left !important;
+      direction: ltr;
+      unicode-bidi: isolate;
+      box-sizing: border-box;
+    }
+    .dashboard-crumb-text {
+      display: block;
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 !important;
+      padding: 0;
+      font-size: 0.72rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--agilo-text);
+      letter-spacing: 0.01em;
+      text-align: left !important;
     }
     @media (prefers-reduced-motion: no-preference) {
       .dashboard-card {
@@ -136,30 +164,6 @@
       box-shadow:
         0 4px 14px rgba(23, 74, 150, 0.07),
         0 1px 3px rgba(0, 0, 0, 0.06);
-    }
-
-    /* Fil d’Ariane : bloc calé à gauche (flex-start sur la colonne + pas d’héritage text-align:center) */
-    .crumb {
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-      gap: 6px 8px;
-      font-size: 0.72rem;
-      color: var(--agilo-dim);
-      margin: 0 0 14px;
-      padding: 0;
-      text-align: left;
-      align-self: flex-start;
-      width: auto;
-      max-width: 100%;
-      flex: 0 0 auto;
-      letter-spacing: 0.01em;
-      box-sizing: border-box;
-    }
-    .crumb-current {
-      color: var(--agilo-text);
-      font-weight: 600;
     }
 
     /* Mise en avant douce pendant la démo auto-inactivité (désactivée si prefers-reduced-motion) */
@@ -797,9 +801,9 @@
 
       <div class="inner">
         <div class="dashboard-card">
-          <nav class="crumb" aria-label="Fil d’Ariane">
-            <span class="crumb-current">Tableau de bord</span>
-          </nav>
+          <header class="dashboard-crumb-bar" aria-label="Fil d’Ariane">
+            <span class="dashboard-crumb-text">Tableau de bord</span>
+          </header>
 
           <div class="dashboard-card-main">
           <div class="dash-title-row">
