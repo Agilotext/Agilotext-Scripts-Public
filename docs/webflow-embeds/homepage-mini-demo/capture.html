@@ -505,6 +505,47 @@
       margin-bottom: 8px;
       color: var(--agilo-text);
     }
+    .template-cr-hint {
+      font-weight: 600;
+      color: var(--agilo-dim);
+      font-size: 0.92em;
+    }
+
+    /* Liste langues — double liséré orange / bleu comme le produit */
+    .lang-select-block {
+      margin: 2px auto 16px;
+      max-width: 380px;
+      text-align: center;
+    }
+    .lang-select-block.is-hidden {
+      display: none;
+    }
+    .select-lang-double-border {
+      padding: 2px;
+      border-radius: 11px;
+      background: var(--agilo-primary);
+      box-shadow: inset 0 0 0 2px var(--agilo-accent);
+    }
+    .select-lang-pro {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 11px 12px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--agilo-text);
+      border: none;
+      border-radius: 9px;
+      background: #fff;
+      cursor: default;
+      text-align: left;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23525252'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
     .select-template {
       width: 100%;
       max-width: 100%;
@@ -732,25 +773,37 @@
             </div>
 
             <div class="process-toggle-line">
+              <label for="toggle-translate">Traduire le compte rendu</label>
+              <button type="button" class="toggle-fake" id="toggle-translate" aria-label="Traduire le compte rendu" aria-pressed="false"></button>
+            </div>
+
+            <div id="lang-select-block" class="lang-select-block is-hidden" aria-hidden="true">
+              <div class="select-lang-double-border">
+                <select id="select-lang" class="select-lang-pro" aria-label="Langue de traduction du compte rendu (démo)" tabindex="-1">
+                  <option>Français</option>
+                  <option>Anglais</option>
+                  <option>Espagnol</option>
+                  <option>Allemand</option>
+                  <option>Italien</option>
+                  <option>Portugais</option>
+                  <option>Néerlandais</option>
+                  <option>Polonais</option>
+                  <option>Arabe</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="process-toggle-line">
               <label for="toggle-cr">Générer le compte rendu</label>
               <button type="button" class="toggle-fake on" id="toggle-cr" aria-label="Générer le compte rendu" aria-pressed="true"></button>
             </div>
 
             <div id="template-cr-block" class="template-cr-block">
-              <span class="template-cr-label">Sélectionnez un modèle de compte rendu :</span>
-              <select class="select-template" aria-label="Modèle (démo)" tabindex="-1">
+              <span class="template-cr-label">Choisissez le modèle pour votre rendu <span class="template-cr-hint">(PVC · CS)</span></span>
+              <select class="select-template" aria-label="Modèle de rendu (démo)" tabindex="-1">
                 <option>Démo HP — CR interne Agilotext V4</option>
               </select>
               <a href="#" class="link-create-template" tabindex="-1" onclick="return false;" aria-disabled="true">+ Créer un modèle</a>
-            </div>
-
-            <div class="process-toggle-line">
-              <label for="toggle-format">Formater la transcription</label>
-              <button type="button" class="toggle-fake" id="toggle-format" aria-label="Formater la transcription" aria-pressed="false"></button>
-            </div>
-            <div class="process-toggle-line">
-              <label for="toggle-translate">Traduire le(s) contenu(s)</label>
-              <button type="button" class="toggle-fake" id="toggle-translate" aria-label="Traduire les contenus" aria-pressed="false"></button>
             </div>
           </div>
 
@@ -831,8 +884,17 @@
       bindToggle(document.getElementById("toggle-envoi"));
 
       bindToggle(document.getElementById("toggle-speaker"));
-      bindToggle(document.getElementById("toggle-format"));
-      bindToggle(document.getElementById("toggle-translate"));
+
+      var langBlock = document.getElementById("lang-select-block");
+      var toggleTranslate = document.getElementById("toggle-translate");
+      if (toggleTranslate && langBlock) {
+        toggleTranslate.addEventListener("click", function () {
+          var on = toggleTranslate.classList.toggle("on");
+          toggleTranslate.setAttribute("aria-pressed", on ? "true" : "false");
+          langBlock.classList.toggle("is-hidden", !on);
+          langBlock.setAttribute("aria-hidden", on ? "false" : "true");
+        });
+      }
 
       var tplBlock = document.getElementById("template-cr-block");
       var toggleCr = document.getElementById("toggle-cr");

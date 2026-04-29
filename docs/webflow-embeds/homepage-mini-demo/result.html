@@ -223,7 +223,152 @@
       gap: 8px;
       margin-bottom: 4px;
     }
-    .seg strong { font-weight: 700; color: #0e1e33; }
+    .seg-speaker-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .speaker-name {
+      font-weight: 700;
+      color: var(--agilo-blue);
+      font-size: 13px;
+    }
+    .seg-tool-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+      transition: background 0.15s, color 0.15s;
+    }
+    .seg-tool-btn:hover {
+      background: var(--agilo-blue-soft);
+      color: var(--agilo-blue);
+    }
+    .seg-tool-btn svg {
+      width: 15px;
+      height: 15px;
+      fill: currentColor;
+      stroke: none;
+    }
+    .seg-tool-btn--danger:hover {
+      color: #b91c1c !important;
+      background: rgba(185, 28, 28, 0.08) !important;
+    }
+    .seg-text {
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text);
+      outline: none;
+      border-radius: 6px;
+      padding: 6px 4px;
+      margin: 0 -4px;
+      min-height: 2.8em;
+      transition: box-shadow 0.15s;
+    }
+    .seg-text:focus {
+      box-shadow: 0 0 0 2px rgba(23, 74, 150, 0.2);
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Barre type éditeur Pro */
+    .editor-top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 10px;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .editor-search-wrap {
+      flex: 1 1 180px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .editor-search-input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .editor-search-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .editor-search-arrows {
+      font-size: 10px;
+      color: var(--border);
+      letter-spacing: 2px;
+    }
+    .editor-top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .btn-toolbar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: default;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .btn-toolbar--save {
+      background: #05381a;
+      color: #fff;
+      border-color: #05381a;
+    }
+    .btn-toolbar--muted {
+      background: #ebebeb;
+      color: #262626;
+      border-color: #d4d4d4;
+    }
+    .editor-regen-note {
+      margin: 0 0 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .tab-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 7px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #fff;
+      background: var(--agilo-blue);
+      border-radius: 5px;
+      vertical-align: middle;
+    }
     button.time-btn {
       font-family: ui-monospace, Menlo, monospace;
       font-size: 11px;
@@ -336,6 +481,11 @@
       justify-content: center;
       margin-bottom: 14px;
     }
+    .ia-chips-row2 {
+      flex-basis: 100%;
+      display: flex;
+      justify-content: center;
+    }
     .chip {
       appearance: none;
       border: 1px solid var(--agilo-blue-border);
@@ -401,6 +551,99 @@
       text-align: center;
     }
 
+    .ia-search-row {
+      margin-bottom: 14px;
+    }
+    .ia-composer-wrap {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .ia-composer-inner {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    .ia-composer-input {
+      display: block;
+      width: 100%;
+      border: none;
+      padding: 12px 14px;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+      resize: vertical;
+      min-height: 72px;
+      box-sizing: border-box;
+      color: var(--text);
+      background: #fff;
+    }
+    .ia-composer-input:focus {
+      outline: none;
+    }
+    .ia-composer-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-top: 1px solid var(--border);
+      background: #fafafa;
+    }
+    .ia-composer-icons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ia-composer-icons button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+    }
+    .ia-composer-icons button.ia-send-btn {
+      background: var(--agilo-blue);
+      color: #fff;
+    }
+    .ia-composer-icons svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.5;
+    }
+    .ia-composer-icons .ia-send-btn svg {
+      fill: currentColor;
+      stroke: none;
+    }
+    .ia-composer-icons svg.mic-fill {
+      stroke: none;
+      fill: currentColor;
+    }
+    .ia-composer-hint {
+      margin: 8px 4px 0;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .cr-actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
     .footnote {
       margin-top: 10px;
       font-size: 10px;
@@ -423,7 +666,7 @@
       <div class="tabs" role="tablist" aria-label="Contenus générés">
         <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">Transcription</button>
         <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
-        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
+        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Assistant IA <span class="tab-badge" aria-hidden="true">IA</span></button>
       </div>
 
       <div class="panel-wrap">
@@ -443,32 +686,68 @@
           </div>
 
           <div class="card">
-            <article class="seg" id="seg-1" data-start="0" data-end="10">
-              <div class="seg-top">
-                <strong>Claire Dubois</strong>
-                <button type="button" class="time-btn" data-seek="0">00:00</button>
+            <div class="editor-top-bar">
+              <div class="editor-search-wrap">
+                <input type="search" class="editor-search-input" readonly tabindex="-1" placeholder="Rechercher (Ctrl/Cmd+F)" aria-label="Rechercher dans la transcription (démo)" />
+                <span class="editor-search-count">0</span>
+                <span class="editor-search-arrows" aria-hidden="true">↑↓</span>
               </div>
-              Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.
+              <div class="editor-top-actions">
+                <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
+                <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
+              </div>
+            </div>
+            <p class="editor-regen-note">2/2 régénérations restantes</p>
+
+            <article class="seg" id="seg-1" data-start="0" data-end="10">
+              <div class="seg-speaker-row">
+                <button type="button" class="time-btn" data-seek="0">00:00</button>
+                <span class="speaker-name">Claire Dubois</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                </button>
+              </div>
+              <div class="seg-text" contenteditable="true" spellcheck="false">Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.</div>
             </article>
             <article class="seg" id="seg-2" data-start="10" data-end="20">
-              <div class="seg-top">
-                <strong>Thomas Meyer</strong>
+              <div class="seg-speaker-row">
                 <button type="button" class="time-btn" data-seek="10">00:10</button>
+                <span class="speaker-name">Thomas Meyer</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                </button>
               </div>
-              Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur après la réunion.
+              <div class="seg-text" contenteditable="true" spellcheck="false">Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur après la réunion.</div>
             </article>
             <article class="seg" id="seg-3" data-start="20" data-end="30">
-              <div class="seg-top">
-                <strong>Sarah Nielsen</strong>
+              <div class="seg-speaker-row">
                 <button type="button" class="time-btn" data-seek="20">00:20</button>
+                <span class="speaker-name">Sarah Nielsen</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                </button>
               </div>
-              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.
+              <div class="seg-text" contenteditable="true" spellcheck="false">On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.</div>
             </article>
           </div>
         </div>
 
         <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
           <div class="card">
+            <div class="cr-actions-row">
+              <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
+              <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
+            </div>
+            <p class="editor-regen-note">2/2 régénérations restantes</p>
             <div class="cr-toolbar">
               <div class="ico-doc" aria-hidden="true">
                 <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
@@ -520,14 +799,43 @@
 
         <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
           <div class="card">
+            <div class="editor-search-wrap ia-search-row">
+              <input type="search" class="editor-search-input" readonly tabindex="-1" placeholder="Rechercher (Ctrl/Cmd+F)" aria-label="Rechercher (démo)" />
+              <span class="editor-search-count">0</span>
+              <span class="editor-search-arrows" aria-hidden="true">↑↓</span>
+            </div>
             <div class="ia-empty" id="ia-empty-block">
               <p class="ia-empty-title">Comment puis-je vous aider avec ce transcript&nbsp;?</p>
               <div class="ia-chips">
                 <button type="button" class="chip" id="chip-sum">Résumer les points clés du transcript</button>
-                <button type="button" class="chip" id="chip-actions">Extraire les décisions et actions</button>
+                <button type="button" class="chip" id="chip-plan">Proposer un plan de compte-rendu structuré</button>
+                <div class="ia-chips-row2">
+                  <button type="button" class="chip" id="chip-actions">Extraire les décisions et actions</button>
+                </div>
               </div>
             </div>
             <div class="chat" id="ia-chat" aria-live="polite"></div>
+            <div class="ia-composer-wrap">
+              <div class="ia-composer-inner">
+                <textarea class="ia-composer-input" readonly placeholder="Posez votre question…" aria-label="Saisie du message (démo)"></textarea>
+                <div class="ia-composer-bar">
+                  <div class="ia-composer-icons">
+                    <button type="button" aria-label="Pièce jointe (démo)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    </button>
+                  </div>
+                  <div class="ia-composer-icons">
+                    <button type="button" aria-label="Dicter (démo)">
+                      <svg class="mic-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3h-2c0 3.53-2.61 6.43-6 6.92V21h-2v-3.08C8.61 17.43 6 14.53 6 11H4c0 4.97 4.03 9 9 9s9-4.03 9-9z"/></svg>
+                    </button>
+                    <button type="button" class="ia-send-btn" aria-label="Envoyer (démo)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p class="ia-composer-hint">Entrée pour envoyer, Maj+Entrée pour nouvelle ligne</p>
+            </div>
             <p class="ia-note">
               Démo statique — aucune requête envoyée. Dans l’application, l’assistant lit votre document.
             </p>
@@ -669,6 +977,16 @@
         appendMsg(
           "bot",
           "Points clés : arbitrage budget sécurité et conformité fournisseurs ; décisions attendues sur le reporting régional ; validation des actions COPIL sous une semaine."
+        );
+      });
+
+      document.getElementById("chip-plan").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Propose un plan de compte-rendu structuré.");
+        appendMsg(
+          "bot",
+          "<strong>Plan suggéré :</strong><br />1) Contexte · 2) Synthèse · 3) Décisions · 4) Actions et responsables · 5) Prochaines étapes."
         );
       });
 
