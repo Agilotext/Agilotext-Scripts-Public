@@ -23,23 +23,24 @@ Sans cette étape, **`commit + push ne créent pas de site`** — vous obtiendre
 
 ---
 
-#### Méthode automatique (recommandée — workflow inclus dans ce repo)
+#### Méthode recommandée — **GitHub Actions** (sparse checkout, sans sous-modules)
 
-Un workflow **[Deploy docs to GitHub Pages](https://github.com/Agilotext/Agilotext-Scripts-Public/actions)** copie le dossier `docs/` sur la branche **`gh-pages`** à chaque push sur **`1.06`** (ou déclenchement manuel *Run workflow*).
+Le dépôt contient des sous-modules pointant vers des dépôts **privés ou inaccessibles** au runner anonyme. Le workflow officiel « Deploy from branch » tente de tout cloner → échec.
 
-1. Après le **premier run réussi** de ce workflow (onglet **Actions** du repo), ouvrir **Settings** → **Pages**.
-2. **Build and deployment** → Source : **Deploy from a branch**.
-3. Branch : **`gh-pages`** → Folder : **`/(root)`** → **Save**.
-4. Attendre 1–3 minutes ; tester l’URL ci-dessous.
+Le workflow **[Deploy GitHub Pages (docs only)](https://github.com/Agilotext/Agilotext-Scripts-Public/actions/workflows/deploy-docs-gh-pages.yml)** ne télécharge que le dossier **`docs/`** (pas les sous-modules).
 
-Si le workflow est bloqué : **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write**.
+1. **Settings** → **Pages** → **Build and deployment**.
+2. Source : **GitHub Actions** (pas « Deploy from a branch » — désactive le build qui clone les sous-modules).
+3. Pousser sur **`1.06`** ou lancer **Run workflow** sur ce fichier ; attendre un run **vert**.
+4. L’URL ci-dessus doit répondre après 1–3 minutes.
+
+Si besoin : **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write** (souvent déjà OK avec `permissions:` dans le YAML).
 
 ---
 
-#### Méthode sans Actions (alternative)
+#### Méthode déconseillée — « Deploy from branch » + `/docs`
 
-1. **Settings** → **Pages** → Source : **Deploy from a branch**.
-2. Branch : **`1.06`** → Folder : **`/docs`** → **Save**.
+Peut échouer sur ce repo à cause des **sous-modules** (erreurs `repository … not found` sur Actions).
 
 ---
 
