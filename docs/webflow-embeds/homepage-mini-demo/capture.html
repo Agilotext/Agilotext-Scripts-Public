@@ -102,7 +102,7 @@
       text-align: start;
     }
 
-    /* Carte tableau de bord : flux bloc — pas de flex ici (évite les interactions layout sur le fil d’Ariane) */
+    /* Carte tableau de bord */
     .dashboard-card {
       display: block;
       margin: 12px;
@@ -120,31 +120,6 @@
       text-align: center;
     }
 
-    .dashboard-crumb-bar {
-      display: block;
-      width: 100%;
-      margin: 0 0 14px;
-      padding: 0;
-      border: none;
-      font: inherit;
-      text-align: left !important;
-      direction: ltr;
-      unicode-bidi: isolate;
-      box-sizing: border-box;
-    }
-    .dashboard-crumb-text {
-      display: block;
-      width: fit-content;
-      max-width: 100%;
-      margin: 0 !important;
-      padding: 0;
-      font-size: 0.72rem;
-      font-weight: 600;
-      line-height: 1.35;
-      color: var(--agilo-text);
-      letter-spacing: 0.01em;
-      text-align: left !important;
-    }
     @media (prefers-reduced-motion: no-preference) {
       .dashboard-card {
         animation: demo-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -801,10 +776,6 @@
 
       <div class="inner">
         <div class="dashboard-card">
-          <header class="dashboard-crumb-bar" aria-label="Fil d’Ariane">
-            <span class="dashboard-crumb-text">Tableau de bord</span>
-          </header>
-
           <div class="dashboard-card-main">
           <div class="dash-title-row">
             <h1 class="dash-title">Capturez l’audio de votre réunion ou visio</h1>
@@ -1052,7 +1023,7 @@
         });
       }
 
-      /* ---------- Démo automatique après inactivité (invite à explorer les contrôles) ---------- */
+      /* ---------- Démo automatique après inactivité ---------- */
       var prefersReducedMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1085,7 +1056,9 @@
 
       function setSpotlight(el) {
         clearSpotlight();
-        if (!el || userEngaged || prefersReducedMotion) return;
+        if (!el || userEngaged) return;
+        /* Halo désactivé si « Réduire les mouvements » — la séquence continue quand même */
+        if (prefersReducedMotion) return;
         spotlightEl = el;
         el.classList.add("idle-demo-spotlight");
         try {
@@ -1115,13 +1088,35 @@
         resetDemoState();
       }
 
-      /* Clic (pas pointerdown) : évite d’annuler la démo en faisant défiler l’iframe */
-      if (mac) {
-        mac.addEventListener("click", stopIdleDemo, true);
-        mac.addEventListener("keydown", stopIdleDemo, true);
+      /* Arrêt seulement si clic / interaction sur un contrôle réel (pas la zone vide de la fenêtre) */
+      function isDemoInteractiveTarget(el) {
+        return !!(
+          el &&
+          el.closest &&
+          el.closest(
+            'button, a[href], select, .toggle-fake, [role="tab"], input, textarea'
+          )
+        );
       }
 
-      var IDLE_BEFORE_MS = 5500;
+      if (mac) {
+        mac.addEventListener(
+          "click",
+          function (e) {
+            if (isDemoInteractiveTarget(e.target)) stopIdleDemo();
+          },
+          true
+        );
+        mac.addEventListener(
+          "keydown",
+          function (e) {
+            if (isDemoInteractiveTarget(e.target)) stopIdleDemo();
+          },
+          true
+        );
+      }
+
+      var IDLE_BEFORE_MS = 4000;
       var STEP_MS = 1700;
       var PAUSE_BETWEEN_LOOPS_MS = 9000;
 
@@ -1131,7 +1126,7 @@
       }
 
       function runIdleTour(done) {
-        if (userEngaged || prefersReducedMotion || !mac) {
+        if (userEngaged || !mac) {
           if (done) done();
           return;
         }
@@ -1187,7 +1182,7 @@
       }
 
       function scheduleIdleLoop(isFirst) {
-        if (prefersReducedMotion || userEngaged) return;
+        if (userEngaged) return;
         clearTimeout(loopTimer);
         var wait = isFirst ? IDLE_BEFORE_MS : PAUSE_BETWEEN_LOOPS_MS;
         loopTimer = setTimeout(function () {
@@ -1199,7 +1194,47 @@
         }, wait);
       }
 
-      scheduleIdleLoop(true);
+      /* Démarre quand la carte est visible dans l’iframe (scroll homepage) ; repli après 2 s sinon */
+      function scheduleIdleWhenVisible() {
+        var card = document.querySelector(".dashboard-card");
+        var obsTarget = card || mac;
+        var started = false;
+
+        function kickoff() {
+          if (started) return;
+          started = true;
+          scheduleIdleLoop(true);
+        }
+
+        if (!obsTarget || !("IntersectionObserver" in window)) {
+          kickoff();
+          return;
+        }
+
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
+                io.disconnect();
+                kickoff();
+              }
+            });
+          },
+          { threshold: [0, 0.08, 0.25] }
+        );
+        io.observe(obsTarget);
+
+        setTimeout(function () {
+          io.disconnect();
+          kickoff();
+        }, 2500);
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisible);
+      } else {
+        scheduleIdleWhenVisible();
+      }
     })();
   </script>
 </body>
