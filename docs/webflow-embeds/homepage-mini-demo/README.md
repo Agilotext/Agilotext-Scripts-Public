@@ -19,10 +19,39 @@ https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-min
 
 ### Activer GitHub Pages (une fois)
 
-1. Repo [Agilotext-Scripts-Public](https://github.com/Agilotext/Agilotext-Scripts-Public) → **Settings** → **Pages**.
+Sans cette étape, **`commit + push ne créent pas de site`** — vous obtiendrez une erreur **404 « There isn't a GitHub Pages site here »**.
+
+---
+
+#### Méthode automatique (recommandée — workflow inclus dans ce repo)
+
+Un workflow **[Deploy docs to GitHub Pages](https://github.com/Agilotext/Agilotext-Scripts-Public/actions)** copie le dossier `docs/` sur la branche **`gh-pages`** à chaque push sur **`1.06`** (ou déclenchement manuel *Run workflow*).
+
+1. Après le **premier run réussi** de ce workflow (onglet **Actions** du repo), ouvrir **Settings** → **Pages**.
 2. **Build and deployment** → Source : **Deploy from a branch**.
-3. Branch : **`1.06`** → Folder : **`/docs`** → Save.
-4. Attendre 1–3 minutes ; l’URL ci-dessus devient active.
+3. Branch : **`gh-pages`** → Folder : **`/(root)`** → **Save**.
+4. Attendre 1–3 minutes ; tester l’URL ci-dessous.
+
+Si le workflow est bloqué : **Settings** → **Actions** → **General** → *Workflow permissions* → **Read and write**.
+
+---
+
+#### Méthode sans Actions (alternative)
+
+1. **Settings** → **Pages** → Source : **Deploy from a branch**.
+2. Branch : **`1.06`** → Folder : **`/docs`** → **Save**.
+
+---
+
+#### URL à vérifier
+
+Adresse attendue (organization **`Agilotext`**) :
+
+```
+https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/
+```
+
+Si votre organisation GitHub utilise un **slug différent**, remplacez `agilotext` dans l’URL par le slug exact (`https://<org>.github.io/<repo>/…`).
 
 Fichier `docs/.nojekyll` présent pour désactiver Jekyll (HTML brut servi tel quel).
 
