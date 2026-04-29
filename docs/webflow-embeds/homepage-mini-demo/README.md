@@ -4,7 +4,7 @@ Pages HTML **autonomes** (CSS inline, JS vanilla) pour embeds Webflow en **deux 
 
 | Fichier | Rôle | Contenu |
 |---------|------|---------|
-| **[`capture.html`](capture.html)** | INPUT | Fenêtre Mac, 4 sources (Enregistrer, Importer, YouTube, Dictée), **Simuler une transcription** (loading factice). Pas de transcript. |
+| **[`capture.html`](capture.html)** | INPUT | Fenêtre Mac + carte blanche type **tableau de bord** (Enregistrer, Fichier / YouTube / Dictée en direct, options). **Simuler une transcription** (loading factice). Statique. |
 | **[`result.html`](result.html)** | OUTPUT | Lecteur audio + **3 segments** synchronisés, onglets Transcription / Compte rendu / Agent IA, CR structuré, 2 suggestions IA. |
 | **[`index.html`](index.html)** | Hub | Liens, snippets iframe, migration, checklist QA (prévisualisation / doc interne). |
 
