@@ -70,13 +70,14 @@
 <body>
   <h1>Démos embed — homepage Agilotext</h1>
   <p class="lead">
-    Deux iframes distinctes : <strong>Capture</strong> (entrée audio) et <strong>Résultat</strong> (transcription, compte rendu, assistant IA).
+    <strong>Capture</strong> (entrée audio) et <strong>Résultat</strong> (transcription, compte rendu, assistant IA) ; optionnellement <strong>Espace travail</strong> (liste des transcriptions / pipeline) pour montrer la continuité après ingestion.
     Utilisez les pages ci-dessous en embed Webflow ou ouvrez-les pour prévisualisation.
   </p>
 
   <div class="links">
     <a href="capture.html">capture.html — INPUT</a>
     <a href="result.html" class="secondary">result.html — OUTPUT</a>
+    <a href="workspace-demo.html" class="secondary">workspace-demo.html — liste</a>
   </div>
 
   <h2>Narratif homepage (recommandé)</h2>
@@ -85,6 +86,7 @@
     <li><strong>Iframe Capture</strong> — « Comment vous nous envoyez l’audio ».</li>
     <li>Phrase de liaison du type : <em>Une fois le fichier traité, voici ce que vous obtenez dans Agilotext.</em></li>
     <li><strong>Iframe Résultat</strong> — transcription audio + livrables.</li>
+    <li>(Optionnel) <strong>Iframe Espace travail</strong> — file d’attente / historique pour souligner que rien ne se perd après upload.</li>
   </ol>
 
   <h2>Migration (anciens embeds)</h2>
@@ -129,6 +131,17 @@
   referrerpolicy="strict-origin-when-cross-origin"
 &gt;&lt;/iframe&gt;</pre>
 
+  <h2>Snippet iframe — Espace travail (optionnel)</h2>
+  <pre>&lt;iframe
+  src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/workspace-demo.html"
+  title="Agilotext — démo espace travail"
+  width="100%"
+  height="520"
+  style="display:block;border:0;width:100%;min-height:480px;"
+  loading="lazy"
+  referrerpolicy="strict-origin-when-cross-origin"
+&gt;&lt;/iframe&gt;</pre>
+
   <h2>Checklist QA avant mise en ligne</h2>
   <ul>
     <li>Lecture audio OK ; durée affichée ~30&nbsp;s ; segments surlignés pendant la lecture.</li>
@@ -136,6 +149,7 @@
     <li>Onglets accessibles au clavier (<kbd>←</kbd> / <kbd>→</kbd>, Home / End).</li>
     <li>Puces Assistant IA : deux interactions statiques, pas de requête réseau.</li>
     <li>Pas de scroll involontaire sur Capture en desktop (hauteur iframe suffisante).</li>
+    <li>Espace travail : liste lisible en mobile (pile sidebar / contenu).</li>
     <li>Grep sécurité : pas de token, jobId, api interne dans les fichiers embed.</li>
   </ul>
 
