@@ -105,15 +105,60 @@
       border-radius: var(--radius-base);
       border: 1px solid var(--agilo-border);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.35s ease, transform 0.35s ease;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .dashboard-card {
+        animation: demo-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+    }
+    @keyframes demo-card-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .dashboard-card:hover {
+      box-shadow:
+        0 4px 14px rgba(23, 74, 150, 0.07),
+        0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
+    /* Fil d’Ariane aligné à gauche (comme le produit) */
     .crumb {
-      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      font-size: 0.72rem;
       color: var(--agilo-dim);
-      margin: 0 0 12px;
-      text-align: center;
+      margin: 0 0 14px;
+      text-align: left;
+      width: 100%;
+      letter-spacing: 0.01em;
     }
-    .crumb span { opacity: 0.85; }
+    .crumb a {
+      color: var(--agilo-primary);
+      font-weight: 600;
+      text-decoration: none;
+      opacity: 0.92;
+    }
+    .crumb a:hover {
+      text-decoration: underline;
+    }
+    .crumb-sep {
+      color: rgba(82, 82, 82, 0.45);
+      font-weight: 600;
+      user-select: none;
+    }
+    .crumb-current {
+      color: var(--agilo-text);
+      font-weight: 600;
+    }
 
     .dash-title-row {
       display: flex;
@@ -353,6 +398,19 @@
     .upload-zone-placeholder:hover {
       border-color: var(--agilo-primary);
       background: rgba(23, 74, 150, 0.03);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .upload-zone-placeholder {
+        transition:
+          border-color 0.25s ease,
+          background 0.25s ease,
+          transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 0.35s ease;
+      }
+      .upload-zone-placeholder:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(23, 74, 150, 0.08);
+      }
     }
     .upload-zone-placeholder .browse {
       color: var(--agilo-primary);
@@ -706,7 +764,11 @@
 
       <div class="inner">
         <div class="dashboard-card">
-          <p class="crumb"><span>Tableau de bord</span> ›</p>
+          <nav class="crumb" aria-label="Fil d’Ariane">
+            <a href="#" onclick="return false;" tabindex="-1">Accueil</a>
+            <span class="crumb-sep" aria-hidden="true">›</span>
+            <span class="crumb-current">Tableau de bord</span>
+          </nav>
 
           <div class="dash-title-row">
             <h1 class="dash-title">Capturez l’audio de votre réunion ou visio</h1>
