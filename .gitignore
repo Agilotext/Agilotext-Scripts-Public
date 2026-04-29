@@ -24,6 +24,7 @@ upload-to-github.js
 !scripts/pages/dashboard/Code-sidebar-folders-embed.html
 
 # Embeds Webflow — pages statiques (iframe GitHub Pages ou jsDelivr ; sans build)
+!docs/index.html
 !docs/webflow-embeds/**/*.html
 !docs/webflow-embeds/**/*.md
 
