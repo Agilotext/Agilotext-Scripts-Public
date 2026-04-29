@@ -1,72 +1,127 @@
 /**
- * Patch démo iframe — alignement éditeur Business (Option A violet).
- * Complète la feuille Webflow CDN ; lecteur + transcript calqués sur scripts/pages/editor/Code-editor-css.js.
- * Snapshot CSS Webflow lié dans README — date de référence : avril 2026.
+ * Patch démo iframe — V2 fenêtre Mac centrée, tokens éditeur Agilotext (bleu #174a96).
+ * Aligné sur scripts/pages/editor/Code-editor-css.js · Webflow CDN inchangé.
  */
 .homepage-mini-demo-root {
-  --agilo-primary: #5d2de6;
+  --ag-brand-orange: #fd7e14;
+  --agilo-primary: #174a96;
   --agilo-primary-soft: color-mix(in srgb, var(--agilo-primary) 18%, transparent);
-  --color--blue: #5d2de6;
+  --color--blue: #174a96;
   --agilo-text: #020202;
   --agilo-dim: #525252;
   --agilo-surface: #ffffff;
   --agilo-surface-2: #f8f9fa;
   --agilo-border: color-mix(in srgb, var(--agilo-text) 18%, transparent);
   --agilo-divider: color-mix(in srgb, var(--agilo-text) 14%, transparent);
+  --agilo-card-tint: #f2ede5;
+  --agilo-shell-bg: #e7e0da;
   --agilo-shadow:
     0 1px 2px color-mix(in srgb, var(--agilo-text) 8%, transparent),
     0 4px 10px color-mix(in srgb, var(--agilo-text) 6%, transparent);
+  --agilo-mac-shadow:
+    0 4px 6px rgba(0, 20, 39, 0.06),
+    0 24px 48px rgba(0, 20, 39, 0.08);
   --agilo-radius: 0.5rem;
   --agilo-gap: 0.625rem;
   --agilo-focus: 2px solid color-mix(in srgb, var(--agilo-primary) 70%, transparent);
 }
 
-.homepage-mini-demo-root .demo-mini-shell {
-  min-height: 100vh;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--agilo-primary) 6%, #f5f5f7) 0%,
-    #ececf1 40%,
-    #e8e8ee 100%
-  );
+.homepage-mini-demo-root {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: var(--agilo-text);
+  -webkit-font-smoothing: antialiased;
 }
 
-.homepage-mini-demo-root .dashboard.mes-transcript {
+.homepage-mini-demo-root .demo-mini-shell {
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: clamp(12px, 2vw, 20px);
+  background: var(--agilo-shell-bg);
+}
+
+.homepage-mini-demo-root .demo-shell-inner {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.homepage-mini-demo-root .demo-mac-window {
+  background: var(--agilo-card-tint);
+  border-radius: 12px;
+  border: 1px solid #d4caba;
+  box-shadow: var(--agilo-mac-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   min-height: min(560px, calc(100vh - 48px));
 }
 
-.homepage-mini-demo-root .demo-sidebar-meta {
+.homepage-mini-demo-root .demo-mac-titlebar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 8px 16px;
-  border-bottom: 1px solid var(--agilo-divider);
-  margin-bottom: 8px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, #faf8f5 0%, var(--agilo-card-tint) 100%);
+  border-bottom: 1px solid #d4caba;
+  flex-shrink: 0;
 }
 
-.homepage-mini-demo-root .demo-plan-badge {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--agilo-primary) 12%, transparent);
-  color: var(--agilo-primary);
+.homepage-mini-demo-root .demo-mac-dots {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.homepage-mini-demo-root .demo-avatar {
-  width: 36px;
-  height: 36px;
+.homepage-mini-demo-root .demo-mac-dots span {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--agilo-surface-2);
-  border: 1px solid var(--agilo-border);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+}
+
+.homepage-mini-demo-root .demo-mac-dots span:nth-child(1) {
+  background: #ff5f56;
+}
+.homepage-mini-demo-root .demo-mac-dots span:nth-child(2) {
+  background: #febc2e;
+}
+.homepage-mini-demo-root .demo-mac-dots span:nth-child(3) {
+  background: #28c840;
+}
+
+.homepage-mini-demo-root .demo-mac-urlfake {
+  flex: 1;
   font-size: 11px;
-  font-weight: 700;
   color: var(--agilo-dim);
+  background: #fff;
+  border: 1px solid #d4caba;
+  border-radius: 6px;
+  padding: 6px 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.homepage-mini-demo-root .demo-mac-brand {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.homepage-mini-demo-root .demo-mac-brand img {
+  display: block;
+  height: 22px;
+  width: auto;
+}
+
+.homepage-mini-demo-root .demo-mac-body {
+  flex: 1;
+  padding: 0 16px 16px;
+  background: var(--agilo-shell-bg);
+  min-width: 0;
+}
+
+.homepage-mini-demo-root .demo-mac-body .wrapper-dashboard {
+  padding-top: 12px;
 }
 
 .homepage-mini-demo-root .demo-dashboard-editor-stack {
@@ -76,7 +131,7 @@
   min-width: 0;
 }
 
-/* Lecteur audio (statique) */
+/* Lecteur audio */
 .homepage-mini-demo-root .agilo-player {
   display: grid;
   gap: var(--agilo-gap);
@@ -113,9 +168,23 @@
   border: 1px solid var(--agilo-border);
   background: var(--agilo-surface-2);
   color: inherit;
-  cursor: default;
+  cursor: pointer;
   user-select: none;
   font: inherit;
+  transition: background 0.15s ease, transform 0.06s ease;
+}
+
+.homepage-mini-demo-root .agilo-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--agilo-surface-2) 86%, var(--agilo-primary) 14%);
+}
+
+.homepage-mini-demo-root .agilo-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.homepage-mini-demo-root .agilo-btn:focus-visible {
+  outline: var(--agilo-focus);
+  outline-offset: 2px;
 }
 
 .homepage-mini-demo-root .agilo-btn.is-primary {
@@ -126,7 +195,7 @@
 
 .homepage-mini-demo-root .agilo-btn[disabled],
 .homepage-mini-demo-root .agilo-btn:disabled {
-  opacity: 0.65;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -167,6 +236,7 @@
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--agilo-text) 10%, var(--agilo-surface-2) 90%);
+  cursor: pointer;
 }
 
 .homepage-mini-demo-root .agilo-buffered {
@@ -186,13 +256,13 @@
   border-radius: inherit;
   pointer-events: none;
   background: var(--agilo-primary-soft);
-  width: 38%;
+  width: 0%;
 }
 
 .homepage-mini-demo-root .agilo-thumb {
   position: absolute;
   top: 50%;
-  left: 38%;
+  left: 0%;
   transform: translate(-50%, -50%);
   width: 14px;
   height: 14px;
@@ -217,12 +287,25 @@
   height: 0.44rem;
   border-radius: 999px;
   outline: none;
-  cursor: default;
+  cursor: pointer;
   background: color-mix(in srgb, var(--agilo-text) 10%, var(--agilo-surface-2) 90%);
 }
 
-.homepage-mini-demo-root .agilo-preload {
-  display: none !important;
+.homepage-mini-demo-root .agilo-vol input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--agilo-primary);
+  border: 2px solid var(--agilo-surface);
+}
+
+.homepage-mini-demo-root .agilo-vol input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--agilo-primary);
+  border: 2px solid var(--agilo-surface);
 }
 
 /* Transcription */
@@ -242,7 +325,7 @@
   outline: 0 !important;
   border-bottom: 1px solid var(--agilo-divider);
   cursor: default;
-  transition: border-color 0.12s ease, background 0.12s ease;
+  transition: border-color 0.12s ease, background 0.18s ease;
 }
 
 .homepage-mini-demo-root .ag-seg:last-child {
@@ -258,8 +341,8 @@
   color: var(--agilo-text) !important;
   background: linear-gradient(
       90deg,
-      color-mix(in srgb, var(--agilo-primary) 6%, transparent),
-      color-mix(in srgb, var(--agilo-primary) 2%, transparent)
+      color-mix(in srgb, var(--agilo-primary) 8%, transparent),
+      color-mix(in srgb, var(--agilo-primary) 3%, transparent)
     )
     !important;
   border-left: 3px solid var(--agilo-primary);
@@ -274,8 +357,22 @@
   background: none;
   border: 0;
   padding: 0;
-  cursor: default;
+  cursor: pointer;
   font-size: inherit;
+}
+
+.homepage-mini-demo-root .ag-seg .time:hover {
+  color: var(--agilo-primary);
+}
+
+.homepage-mini-demo-root .ag-seg .speaker.demo-spk-a {
+  color: #174a96;
+}
+.homepage-mini-demo-root .ag-seg .speaker.demo-spk-b {
+  color: #1d4ed8;
+}
+.homepage-mini-demo-root .ag-seg .speaker.demo-spk-c {
+  color: #0f766e;
 }
 
 .homepage-mini-demo-root .ag-seg .speaker {
@@ -297,7 +394,7 @@
   font-size: 0.95rem;
 }
 
-/* Onglets éditeur */
+/* Onglets */
 .homepage-mini-demo-root .ed-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -323,7 +420,10 @@
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--agilo-dim);
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .homepage-mini-demo-root .ed-tab:hover {
@@ -334,6 +434,11 @@
 .homepage-mini-demo-root .ed-tab.is-active {
   color: var(--agilo-primary);
   border-bottom-color: var(--agilo-primary);
+}
+
+.homepage-mini-demo-root .ed-tab:focus-visible {
+  outline: var(--agilo-focus);
+  outline-offset: 2px;
 }
 
 .homepage-mini-demo-root .ed-tab .icon-small {
@@ -356,7 +461,6 @@
   min-height: 220px;
 }
 
-/* Chat vide */
 .homepage-mini-demo-root .msg-empty-state {
   padding: 2rem 1rem 1rem;
   text-align: center;
@@ -426,7 +530,7 @@
   border: 1px solid var(--agilo-border);
 }
 
-/* Compte rendu statique (dérivé gabarit interne) */
+/* Compte rendu statique */
 .homepage-mini-demo-root .demo-cr-static {
   --cr-blue: #174a96;
   --cr-blue-soft: #e9eef9;
@@ -435,7 +539,6 @@
   --cr-orange-soft: #fff1e3;
   --cr-text: #020202;
   --cr-muted: #525252;
-  --cr-bg: #f8f9fa;
   --cr-card: #ffffff;
   --cr-border: #dde3ee;
   --cr-hairline: #eef1f6;
@@ -443,6 +546,13 @@
   font-size: 12px;
   line-height: 1.45;
   color: var(--cr-text);
+}
+
+.homepage-mini-demo-root .demo-cr-static .cr-inline-code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cr-blue-deep);
 }
 
 .homepage-mini-demo-root .demo-cr-static .cr-page {
@@ -591,20 +701,13 @@
 }
 
 @media (max-width: 767px) {
-  .homepage-mini-demo-root .dashboard.mes-transcript {
-    flex-direction: column;
-    min-height: auto;
-  }
-
-  .homepage-mini-demo-root .dashboard-left {
-    width: 100% !important;
-    max-width: none !important;
-    border-right: none !important;
-    border-bottom: 1px solid var(--agilo-divider);
-  }
-
   .homepage-mini-demo-root .ed-tab {
     font-size: 0.75rem;
     padding: 0.55rem 0.35rem;
+  }
+
+  .homepage-mini-demo-root .demo-mac-urlfake {
+    font-size: 10px;
+    padding: 5px 8px;
   }
 }
