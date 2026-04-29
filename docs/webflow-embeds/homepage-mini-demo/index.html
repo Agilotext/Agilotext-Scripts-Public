@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agilotext — Démo homepage (embed)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
       --orange: #fd7e14;
@@ -14,8 +17,9 @@
       --muted: #5c5c5c;
       --deep: #001427;
       --border: #d4caba;
+      --accent-app: #5d2de6;
       --radius: 12px;
-      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     * { box-sizing: border-box; }
     html, body {
@@ -46,7 +50,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      min-height: 520px;
+      min-height: 480px;
     }
     .titlebar {
       display: flex;
@@ -83,9 +87,79 @@
       flex-shrink: 0;
     }
     .brand img { height: 22px; width: auto; display: block; }
+
+    /* Stepper — parcours 1 · 2 · 3 */
+    .stepper {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 12px 14px 10px;
+      background: #ebe4dc;
+      border-bottom: 1px solid var(--border);
+    }
+    .stepper-step {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 6px;
+      position: relative;
+    }
+    .stepper-step:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      top: 14px;
+      left: calc(50% + 22px);
+      right: calc(-50% + 22px);
+      height: 2px;
+      background: var(--border);
+      z-index: 0;
+    }
+    .stepper-step.is-done:not(:last-child)::after,
+    .stepper-step.is-current:not(:last-child)::after {
+      background: linear-gradient(90deg, var(--orange), rgba(253, 126, 20, 0.35));
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
+      border: 2px solid var(--border);
+      color: var(--muted);
+      position: relative;
+      z-index: 1;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+    .stepper-step.is-current .step-num {
+      border-color: var(--orange);
+      background: var(--orange-soft);
+      color: var(--deep);
+      box-shadow: 0 0 0 3px rgba(253, 126, 20, 0.15);
+    }
+    .stepper-step.is-done .step-num {
+      border-color: rgba(253, 126, 20, 0.55);
+      background: #fff;
+      color: var(--orange);
+    }
+    .step-label {
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1.25;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    .stepper-step.is-current .step-label { color: var(--deep); }
+
     .tabs {
       display: flex;
-      flex-wrap: nowrap;
       gap: 0;
       padding: 0 8px;
       background: #ebe4dc;
@@ -96,7 +170,7 @@
     .tab {
       flex: 1 1 0;
       min-width: 0;
-      padding: 11px 8px;
+      padding: 11px 10px;
       border: none;
       background: transparent;
       font: inherit;
@@ -118,40 +192,61 @@
       border-bottom-color: var(--orange);
       background: rgba(255, 255, 255, 0.65);
     }
+
     .panel-wrap {
       flex: 1;
-      padding: 16px;
+      padding: 14px;
       background: var(--bg-cream);
     }
     .panel {
       display: none;
-      animation: fadeIn 0.24s ease;
+      animation: fadeIn 0.22s ease;
     }
     .panel.is-active { display: block; }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(5px); }
+      from { opacity: 0; transform: translateY(4px); }
       to { opacity: 1; transform: translateY(0); }
     }
+    @media (prefers-reduced-motion: reduce) {
+      .panel { animation: none; }
+    }
+
     .card {
       background: #fff;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 18px;
+      padding: 16px;
       margin-bottom: 12px;
       box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
     }
-    .lead {
-      margin: 0 0 10px;
-      font-size: 15px;
+    .trust-one-line {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--muted);
+      margin: 0 0 12px;
+      letter-spacing: 0.02em;
+      line-height: 1.35;
+    }
+    .trust-one-line span {
+      opacity: 0.85;
+    }
+    .trust-one-line .sep {
+      margin: 0 0.35em;
+      opacity: 0.45;
+    }
+    .hero-title {
+      margin: 0 0 8px;
+      font-size: 17px;
       font-weight: 700;
       color: var(--deep);
-      letter-spacing: -0.02em;
+      letter-spacing: -0.03em;
+      line-height: 1.25;
     }
-    .sublead {
+    .hero-line {
       margin: 0 0 14px;
       font-size: 13px;
       color: var(--muted);
-      line-height: 1.55;
+      line-height: 1.45;
     }
     .row {
       display: flex;
@@ -160,88 +255,135 @@
       align-items: center;
       justify-content: flex-start;
     }
-    .row-between {
-      justify-content: space-between;
-      align-items: flex-start;
-    }
     .pill {
       display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 4px 10px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 9px;
       border-radius: 999px;
       background: var(--orange-soft);
-      color: #8b4510;
+      color: #7a4214;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
     }
     .btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 6px;
-      padding: 9px 16px;
+      gap: 8px;
+      padding: 10px 16px;
       border-radius: 8px;
       border: none;
       font: inherit;
       font-weight: 600;
       font-size: 13px;
       cursor: pointer;
-      background: var(--orange);
-      color: #fff;
       text-decoration: none;
       transition: transform 0.08s ease, box-shadow 0.15s ease;
     }
-    .btn:hover { box-shadow: 0 4px 14px rgba(253, 126, 20, 0.35); }
-    .btn:active { transform: scale(0.98); }
-    .btn:focus-visible {
-      outline: 2px solid var(--deep);
-      outline-offset: 2px;
+    .btn-primary {
+      background: var(--orange);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      box-shadow: 0 4px 14px rgba(253, 126, 20, 0.38);
     }
     .btn-secondary {
       background: #fff;
       color: var(--text);
       border: 1px solid var(--border);
-      box-shadow: none;
     }
     .btn-secondary:hover {
       border-color: var(--orange);
-      box-shadow: 0 0 0 1px rgba(253, 126, 20, 0.2);
+      box-shadow: 0 0 0 1px rgba(253, 126, 20, 0.18);
     }
-    .grid2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-      gap: 10px;
-      margin-top: 14px;
+    .btn:active { transform: scale(0.98); }
+    .btn:focus-visible {
+      outline: 2px solid var(--deep);
+      outline-offset: 2px;
     }
-    .tile {
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      padding: 12px 10px;
-      font-size: 12px;
-      text-align: center;
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
       color: var(--muted);
-      transition: border-color 0.15s, box-shadow 0.15s;
+      margin: 0 0 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .capture-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 4px;
+    }
+    @media (max-width: 520px) {
+      .capture-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    .capture-tile {
+      border: 1px solid rgba(212, 202, 186, 0.95);
+      border-radius: 10px;
+      padding: 12px 10px;
+      text-align: center;
       background: #fdfcfa;
+      transition: border-color 0.15s, box-shadow 0.15s;
+      cursor: default;
     }
-    .tile:hover {
-      border-style: solid;
-      border-color: var(--orange);
-      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.12);
+    .capture-tile:hover {
+      border-color: rgba(93, 45, 230, 0.35);
+      box-shadow: 0 0 0 2px rgba(93, 45, 230, 0.08);
     }
+    .capture-tile .ico {
+      width: 36px;
+      height: 36px;
+      margin: 0 auto 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #faf8ff 0%, #f5f2eb 100%);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      color: var(--accent-app);
+    }
+    .capture-tile .ico svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .capture-tile strong {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--deep);
+      margin-bottom: 2px;
+    }
+    .capture-tile small {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+
     .meta-strip {
       font-size: 11px;
       color: var(--muted);
-      margin-bottom: 12px;
-      padding-bottom: 10px;
+      margin-bottom: 10px;
+      padding-bottom: 8px;
       border-bottom: 1px dashed var(--border);
     }
     .seg {
       font-size: 12px;
-      padding: 10px 12px;
-      margin-bottom: 8px;
+      padding: 9px 11px;
+      margin-bottom: 7px;
       border-radius: 8px;
       border-left: 3px solid var(--orange);
       background: linear-gradient(90deg, #fffefb 0%, #faf8f5 100%);
-      line-height: 1.5;
+      line-height: 1.48;
     }
     .seg-top {
       display: flex;
@@ -256,79 +398,139 @@
       font-size: 11px;
       color: var(--muted);
     }
-    .cr-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      margin-bottom: 14px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .cr-brand {
+
+    .cr-toolbar {
       display: flex;
       align-items: center;
       gap: 10px;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
     }
-    .cr-brand img { height: 28px; width: auto; }
+    .cr-toolbar .ico-doc {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #f5f5f5;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--accent-app);
+    }
+    .cr-toolbar .ico-doc svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+    }
     .cr-doc-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
-      margin: 0 0 4px;
+      margin: 0 0 2px;
       color: var(--deep);
     }
-    .cr-doc-meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .cr-doc-meta { font-size: 10px; color: var(--muted); line-height: 1.35; }
     .cr-section {
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .cr-section:last-child { margin-bottom: 0; }
     .cr-section h4 {
-      margin: 0 0 6px;
-      font-size: 11px;
+      margin: 0 0 5px;
+      font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.07em;
       color: var(--muted);
     }
     .cr-section p,
     .cr-section ul {
       margin: 0;
       font-size: 12px;
-      line-height: 1.55;
+      line-height: 1.5;
       color: var(--text);
     }
-    .cr-section ul { padding-left: 18px; }
-    .cr-section li { margin-bottom: 4px; }
+    .cr-section ul { padding-left: 16px; }
+    .cr-section li { margin-bottom: 3px; }
     .cr-actions {
       width: 100%;
       border-collapse: collapse;
       font-size: 11px;
-      margin-top: 6px;
+      margin-top: 4px;
     }
     .cr-actions th {
       text-align: left;
-      padding: 6px 8px;
+      padding: 5px 7px;
       background: var(--orange-soft);
       border: 1px solid var(--border);
       font-weight: 700;
       color: var(--deep);
+      font-size: 10px;
     }
     .cr-actions td {
-      padding: 6px 8px;
+      padding: 5px 7px;
       border: 1px solid var(--border);
       vertical-align: top;
+    }
+
+    .ia-intro {
+      font-size: 12px;
+      color: var(--muted);
+      margin: 0 0 12px;
+      line-height: 1.45;
+    }
+    .ia-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .chip {
+      appearance: none;
+      border: 1px solid rgba(93, 45, 230, 0.35);
+      background: #faf8ff;
+      color: #432f8a;
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 8px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s;
+      max-width: 100%;
+    }
+    .chip:hover:not(:disabled) {
+      background: #f0ebff;
+      border-color: var(--accent-app);
+    }
+    .chip:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+    .chip svg {
+      width: 14px;
+      height: 14px;
+      vertical-align: -2px;
+      margin-right: 6px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
     }
     .chat {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
+      min-height: 0;
     }
     .chat-msg {
-      max-width: 92%;
-      padding: 10px 12px;
+      max-width: 94%;
+      padding: 9px 11px;
       border-radius: 12px;
       font-size: 12px;
-      line-height: 1.5;
+      line-height: 1.48;
     }
     .chat-msg--user {
       align-self: flex-end;
@@ -343,27 +545,31 @@
       color: var(--text);
     }
     .chat-msg-label {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.07em;
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: 3px;
     }
     .chat-note {
-      margin-top: 12px;
-      font-size: 11px;
+      margin-top: 8px;
+      font-size: 10px;
       color: var(--muted);
-      line-height: 1.45;
+      line-height: 1.4;
     }
+
     .footnote {
-      margin-top: 14px;
-      font-size: 11px;
+      margin-top: 10px;
+      font-size: 10px;
       color: var(--muted);
       text-align: center;
+      opacity: 0.92;
     }
+
     @media (max-width: 560px) {
-      .tab { font-size: 11px; padding: 10px 5px; }
+      .tab { font-size: 11px; padding: 10px 6px; }
+      .step-label { font-size: 9px; }
     }
   </style>
 </head>
@@ -377,81 +583,112 @@
           <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
         </div>
       </div>
-      <div class="tabs" role="tablist" aria-label="Fonctionnalités Agilotext">
-        <button type="button" class="tab" role="tab" id="tab-cap" aria-selected="true" aria-controls="panel-cap" tabindex="0">Capturer</button>
-        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="false" aria-controls="panel-tr" tabindex="-1">Transcription</button>
-        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
-        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
+
+      <div class="stepper" id="stepper" aria-label="Étapes du parcours">
+        <div class="stepper-step is-current" id="step-1" data-step="1">
+          <span class="step-num">1</span>
+          <span class="step-label">Capturer</span>
+        </div>
+        <div class="stepper-step" id="step-2" data-step="2">
+          <span class="step-num">2</span>
+          <span class="step-label">Transcrire</span>
+        </div>
+        <div class="stepper-step" id="step-3" data-step="3">
+          <span class="step-num">3</span>
+          <span class="step-label">Compte rendu</span>
+        </div>
       </div>
+
       <div class="panel-wrap">
-        <div id="panel-cap" class="panel is-active" role="tabpanel" aria-labelledby="tab-cap">
-          <div class="card">
-            <div class="row-between row">
-              <span class="pill">Sans robot dans la réunion</span>
+        <div class="card">
+          <p class="trust-one-line">
+            <span>Sans robot dans la réunion</span><span class="sep">·</span>
+            <span>Données hébergées en France</span><span class="sep">·</span>
+            <span>Conforme RGPD</span>
+          </p>
+          <h1 class="hero-title">Transformez vos réunions en livrables exploitables</h1>
+          <p class="hero-line">Audio, fichier ou dictée : Agilotext transcrit et structure votre contenu dans un éditeur clair.</p>
+          <div class="row" style="margin-bottom:14px;">
+            <a class="btn btn-primary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+            <button type="button" class="btn btn-secondary" id="btn-simulate-tr">Simuler une transcription</button>
+          </div>
+          <p class="section-label">Sources de capture</p>
+          <div class="capture-grid" aria-hidden="true">
+            <div class="capture-tile">
+              <div class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="23"/><path d="M8 23h8"/></svg>
+              </div>
+              <strong>Enregistrer</strong>
+              <small>Visio ou téléphone</small>
             </div>
-            <p class="lead">Transformez vos échanges en texte exploitable</p>
-            <p class="sublead">
-              Importez un fichier audio ou vidéo, collez un lien ou enregistrez depuis votre navigateur — Agilotext transcrit, structure et prépare vos livrables, sans connecteur calendrier intrusif.
-            </p>
-            <div class="row">
-              <button type="button" class="btn" id="btn-simulate-tr">Simuler une transcription</button>
-              <a class="btn btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+            <div class="capture-tile">
+              <div class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+              </div>
+              <strong>Importer</strong>
+              <small>Fichier audio ou vidéo</small>
             </div>
-            <div class="grid2" aria-hidden="true">
-              <div class="tile">Enregistrer<br /><small>visio / téléphone</small></div>
-              <div class="tile">Importer<br /><small>fichier média</small></div>
-              <div class="tile">Coller<br /><small>lien YouTube</small></div>
-              <div class="tile">Dicter<br /><small>prise de notes</small></div>
+            <div class="capture-tile">
+              <div class="ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M13 8H7"/><path d="M17 12H7"/></svg>
+              </div>
+              <strong>Dicter</strong>
+              <small>Prise de notes rapide</small>
             </div>
           </div>
         </div>
 
-        <div id="panel-tr" class="panel" role="tabpanel" aria-labelledby="tab-tr">
+        <div class="tabs" role="tablist" aria-label="Résultats">
+          <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">Transcription</button>
+          <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
+          <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
+        </div>
+
+        <div id="panel-tr" class="panel is-active" role="tabpanel" aria-labelledby="tab-tr">
           <div class="card">
-            <div class="row-between row">
-              <span class="pill">Diarisation &amp; horodatage</span>
+            <div class="row" style="justify-content:space-between;">
+              <span class="pill">Extrait fictif</span>
               <button type="button" class="btn btn-secondary" disabled title="Export désactivé en démo">Exporter</button>
             </div>
-            <p class="meta-strip">Exemple fictif — Comité pilotage Q1 · entreprise générique · audio illustratif ~8 min</p>
+            <p class="meta-strip">Comité pilotage Q1 · exemple statique</p>
             <article class="seg">
               <div class="seg-top"><strong>Claire Dubois</strong> <time>00:00</time></div>
-              Ordre du jour : bilan conformité fournisseurs et arbitrage budget formation sécurité. Je propose qu’on valide trois décisions aujourd’hui pour débloquer le reporting régional de mars.
+              Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.
             </article>
             <article class="seg">
               <div class="seg-top"><strong>Thomas Meyer</strong> <time>02:14</time></div>
-              Les écarts sur deux prestataires sont sous contrôle si on harmonise le référentiel preuves dans Agilotext — tout est déjà dans la transcription que vous recevez après la réunion.
+              Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur Agilotext après la réunion.
             </article>
             <article class="seg">
               <div class="seg-top"><strong>Sarah Nielsen</strong> <time>05:02</time></div>
-              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi. Merci de garder les durées de rétention alignées sur ce qu’on avait acté la semaine dernière.
+              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.
             </article>
           </div>
         </div>
 
         <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
           <div class="card">
-            <div class="cr-head">
-              <div class="cr-brand">
-                <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="28" />
-                <div>
-                  <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
-                  <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
-                </div>
+            <div class="cr-toolbar">
+              <div class="ico-doc" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
               </div>
-              <span class="pill">Structuré</span>
+              <div>
+                <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
+                <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
+              </div>
+              <span class="pill" style="margin-left:auto;">Éditeur</span>
             </div>
             <div class="cr-section">
               <h4>Synthèse</h4>
               <p>
-                Réunion de pilotage centrée sur la conformité fournisseurs et le budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+                Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
               </p>
             </div>
             <div class="cr-section">
               <h4>Décisions</h4>
               <ul>
-                <li>Harmonisation du référentiel « preuves » pour les audits externes.</li>
-                <li>Validation du calendrier de reporting régional mars avec arbitrage budgétaire minimal.</li>
-                <li>Communication standardisée aux filiales pour les durées de rétention documentaire.</li>
+                <li>Harmoniser le référentiel « preuves » pour les audits.</li>
+                <li>Valider le calendrier de reporting régional de mars.</li>
               </ul>
             </div>
             <div class="cr-section">
@@ -461,81 +698,80 @@
                   <tr>
                     <th>Action</th>
                     <th>Échéance</th>
-                    <th>Responsable</th>
+                    <th>Resp.</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Publier la grille de contrôle fournisseurs v2</td>
+                    <td>Publier la grille contrôle fournisseurs v2</td>
                     <td>15 mars</td>
                     <td>Qualité</td>
                   </tr>
                   <tr>
-                    <td>Diffuser le récap COPIL aux équipes régionales</td>
+                    <td>Diffuser le récap COPIL aux régions</td>
                     <td>21 mars</td>
                     <td>Ops</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div class="cr-section">
-              <h4>Points de vigilance</h4>
-              <p>
-                Suivre deux prestataires encore en observation ; aucune donnée nominative client réelle n’est utilisée dans cette démo marketing.
-              </p>
-            </div>
           </div>
         </div>
 
         <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
           <div class="card">
-            <div class="row-between row">
-              <span class="pill">Questions sur ce document</span>
+            <div class="row" style="justify-content:space-between;">
+              <span class="pill">Assistant document</span>
             </div>
-            <p class="sublead" style="margin-bottom:12px;">
-              L’assistant travaille à partir du transcript et du compte rendu du fichier — pas sur Internet ouvert dans cette démo statique.
+            <p class="ia-intro">
+              Réponses illustrées à partir du transcript et du compte rendu — aucune requête envoyée depuis cette page.
             </p>
-            <div class="chat">
-              <div class="chat-msg chat-msg--user">
-                <div class="chat-msg-label">Vous</div>
-                Quelles décisions dois-je communiquer en priorité à ma direction ?
-              </div>
-              <div class="chat-msg chat-msg--bot">
-                <div class="chat-msg-label">Agent IA</div>
-                Priorisez les trois décisions listées dans la section « Décisions » : référentiel preuves, calendrier de reporting mars et cadre de communication sur la rétention — ce sont les éléments qui débloquent les prochaines étapes opérationnelles.
-              </div>
-              <div class="chat-msg chat-msg--user">
-                <div class="chat-msg-label">Vous</div>
-                Résume les risques en trois bullets pour un email court.
-              </div>
-              <div class="chat-msg chat-msg--bot">
-                <div class="chat-msg-label">Agent IA</div>
-                • Deux fournisseurs encore sous surveillance.<br />
-                • Alignement des preuves à finaliser avant audit externe.<br />
-                • Communication aux filiales à caler avant clôture mensuelle.
-              </div>
+            <div class="ia-chips" id="ia-chips">
+              <button type="button" class="chip" id="chip-prio" data-role="suggestion">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+                Quelles décisions prioriser&nbsp;?
+              </button>
+              <button type="button" class="chip" id="chip-risk" data-role="suggestion">
+                <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>
+                Risques en trois bullets
+              </button>
             </div>
-            <p class="chat-note">
-              Exemple illustratif — dans l’application, les réponses sont générées à partir de vos contenus et paramètres ; aucune requête n’est envoyée depuis cette page embed.
-            </p>
+            <div class="chat" id="ia-chat" aria-live="polite"></div>
+            <p class="chat-note">Dans l’application, l’agent s’appuie sur vos contenus et paramètres.</p>
           </div>
         </div>
 
-        <p class="footnote">
-          Démo statique — aucune donnée envoyée · Palette orange <code>#FD7E14</code> · beige <code>#E7E0DA</code>
-        </p>
+        <p class="footnote">Démo statique — aucune donnée envoyée · iframe Webflow</p>
       </div>
     </div>
   </div>
   <script>
     (function () {
       var panels = {
-        cap: document.getElementById("panel-cap"),
         tr: document.getElementById("panel-tr"),
         cr: document.getElementById("panel-cr"),
         ia: document.getElementById("panel-ia")
       };
-      var ids = ["cap", "tr", "cr", "ia"];
+      var ids = ["tr", "cr", "ia"];
+
+      function setStepper(step) {
+        var n = parseInt(step, 10);
+        if (n < 1 || n > 3) return;
+        for (var s = 1; s <= 3; s++) {
+          var el = document.getElementById("step-" + s);
+          if (!el) continue;
+          el.classList.remove("is-current", "is-done");
+          if (s < n) el.classList.add("is-done");
+          else if (s === n) el.classList.add("is-current");
+        }
+      }
+
+      var simulated = false;
+
+      function syncStepperFromTab(which) {
+        if (which === "cr" || which === "ia") setStepper(3);
+        else setStepper(simulated ? 2 : 1);
+      }
 
       function show(which) {
         ids.forEach(function (id) {
@@ -550,6 +786,7 @@
             panelEl.classList.toggle("is-active", active);
           }
         });
+        syncStepperFromTab(which);
       }
 
       document.querySelectorAll(".tab").forEach(function (tab) {
@@ -587,14 +824,57 @@
       var sim = document.getElementById("btn-simulate-tr");
       if (sim) {
         sim.addEventListener("click", function () {
-          sim.style.opacity = "0.75";
+          simulated = true;
+          sim.style.opacity = "0.72";
           setTimeout(function () {
             sim.style.opacity = "1";
-          }, 140);
+          }, 120);
           show("tr");
           document.getElementById("tab-tr").focus();
         });
       }
+
+      function appendMsg(role, htmlInner) {
+        var wrap = document.createElement("div");
+        wrap.className =
+          "chat-msg " + (role === "user" ? "chat-msg--user" : "chat-msg--bot");
+        wrap.innerHTML =
+          '<div class="chat-msg-label">' +
+          (role === "user" ? "Vous" : "Agent IA") +
+          "</div>" +
+          htmlInner;
+        document.getElementById("ia-chat").appendChild(wrap);
+      }
+
+      var prioDone = false;
+      var riskDone = false;
+
+      document.getElementById("chip-prio").addEventListener("click", function () {
+        if (prioDone) return;
+        prioDone = true;
+        this.disabled = true;
+        appendMsg(
+          "user",
+          "Quelles décisions dois-je communiquer en priorité à ma direction&nbsp;?"
+        );
+        appendMsg(
+          "bot",
+          "Priorisez la grille fournisseurs v2 et le calendrier de reporting mars — ce sont les deux leviers qui débloquent les filiales."
+        );
+      });
+
+      document.getElementById("chip-risk").addEventListener("click", function () {
+        if (riskDone) return;
+        riskDone = true;
+        this.disabled = true;
+        appendMsg("user", "Résume les risques en trois bullets pour un email court.");
+        appendMsg(
+          "bot",
+          "• Deux fournisseurs encore sous surveillance.<br />• Preuves à finaliser avant audit.<br />• Communication régionale à caler avant clôture."
+        );
+      });
+
+      show("tr");
     })();
   </script>
 </body>

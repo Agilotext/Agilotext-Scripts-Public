@@ -1,12 +1,14 @@
-# Démo iframe homepage — fenêtre Mac orange/beige + 4 vues produit
+# Démo iframe homepage — minimalisme premium (Mac orange/beige)
 
-Page HTML **autonome** (CSS inline) pour un embed Webflow (`<iframe src="…">`).
+Page HTML **autonome** (CSS inline + Google Fonts Montserrat) pour un embed Webflow (`<iframe src="…">`).
 
 **Emplacement :** `docs/webflow-embeds/homepage-mini-demo/index.html`
 
-- Logo SVG Agilotext (CDN Webflow) dans la titlebar uniquement.
-- **Quatre onglets** : Capturer · Transcription · Compte rendu · Agent IA — tout est statique, sans API.
-- **Palette** : orange `#FD7E14`, beige `#E7E0DA` — voir la note en bas de la démo.
+- Logo SVG Agilotext (CDN Webflow) dans la titlebar.
+- **Stepper** visible : (1) Capturer → (2) Transcrire → (3) Compte rendu — synchronisé avec les onglets et « Simuler une transcription ».
+- Bloc **héros + tuiles de capture** (SVG style lucide, accent violet discret aligné app) **restent visibles** au changement d’onglet.
+- **Trois onglets résultat** : Transcription · Compte rendu · Agent IA — contenus courts, statiques, sans API.
+- **Palette** : orange `#FD7E14`, beige `#E7E0DA`, accent éditeur `#5D2DE6` sur icônes/chips.
 
 ---
 
@@ -43,15 +45,27 @@ Tester l’iframe avant mise en prod (certains CDN peuvent affecter le `Content-
     src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/"
     title="Démonstration Agilotext"
     width="100%"
-    height="580"
-    style="display:block;border:0;width:100%;min-height:520px;"
+    height="620"
+    style="display:block;border:0;width:100%;min-height:560px;"
     loading="lazy"
     referrerpolicy="strict-origin-when-cross-origin"
   ></iframe>
 </div>
 ```
 
-Ajuster `height` / `min-height` selon la section (souvent **560–620px** avec quatre onglets et les panneaux enrichis).
+Ajuster `height` / `min-height` selon la section (**≈ 600–680px** avec stepper + héros + onglets).
+
+---
+
+## Multi-iframes (option marketing)
+
+| Iframe | Objectif UX | Contenu minimal | À masquer |
+|--------|-------------|-----------------|-----------|
+| **Capture** | Acquisition : entrées audio | Tuiles Enregistrer / Importer / Dicter + CTA | Onglets résultat ou versions réduites |
+| **Éditeur** | Valeur produit : transcript + CR | Transcription + mini toolbar document | Agent IA, pricing |
+| **Agent IA** | Différenciation | 2 suggestions + réponses statiques | Dashboard, imports |
+
+Réutiliser la même page ou des variantes HTML dérivées en copiant uniquement les blocs nécessaires pour limiter la maintenance.
 
 ---
 
