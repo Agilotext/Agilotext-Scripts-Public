@@ -6,6 +6,33 @@
   if (window.__agiloEditorHeader_v5) return;
   window.__agiloEditorHeader_v5 = true;
 
+  /** @returns {typeof window.agiloJobErrorParts} */
+  function ensureJobErrorFmt() {
+    if (typeof window.agiloJobErrorParts === 'function') return window.agiloJobErrorParts;
+    /** @param {{ userErrorMessage?: string, javaException?: string, javaStackTrace?: string, exceptionStackTrace?: string }} data */
+    function jobErr(data, fb) {
+      function ts(x) { return x == null ? '' : String(x).trim(); }
+      function tr(s, mx) {
+        if (!s || !mx || s.length <= mx) return s || '';
+        return String(s).slice(0, mx - 3) + '...';
+      }
+      const primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
+      const chunks = [];
+      const ex = ts(data && data.javaException);
+      if (ex) chunks.push(ex);
+      const stk = ts(data && (data.javaStackTrace || data.exceptionStackTrace));
+      if (stk) chunks.push(stk);
+      let tech = chunks.filter(Boolean).join('\n\n');
+      if (tech && primary && tech.indexOf(primary) === 0) tech = ts(tech.slice(primary.length)).replace(/^[\s:]+/, '');
+      if (!ts(tech)) tech = '';
+      const alertText = tech ? `${primary}\n\n— Détails techniques —\n${tr(tech, 2000)}` : primary;
+      return { primary, technical: tech, alertText };
+    }
+    window.agiloJobErrorParts = jobErr;
+    return jobErr;
+  }
+  const agiloFmt = ensureJobErrorFmt();
+
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_DEFAULT = 'ent';
 
@@ -167,7 +194,9 @@
       folderId: j.folderId != null ? Number(j.folderId) : 0,
       folderName: (j.folderName != null ? String(j.folderName) : '').trim(),
       transcriptStatus: j.transcriptStatus || j.status || '',
-      javaException: j.javaException || ''
+      userErrorMessage: (j.userErrorMessage != null ? String(j.userErrorMessage) : '').trim(),
+      javaException: j.javaException || '',
+      javaStackTrace: j.javaStackTrace || j.exceptionStackTrace || ''
     });
 
     try {
@@ -406,8 +435,9 @@
 
   function statusGuardMessages(job) {
     const st = String(job?.transcriptStatus || '').toUpperCase();
-    const err = job?.javaException || 'Erreur inconnue';
-    const msgErr = `Le traitement a échoué : ${err}`;
+    const eb = agiloFmt(job || {}, '');
+    const line1 = `Le traitement a échoué : ${eb.primary}`;
+    const msgErr = eb.technical ? `${line1}\n— ${eb.technical}` : line1;
     const msgWaitT = 'Le transcript est en cours, merci de patienter.';
     const msgWaitS = 'Le résumé n’est pas encore disponible, merci de patienter.';
     return { st, msgErr, msgWaitT, msgWaitS };
@@ -525,7 +555,9 @@
         const guard = statusGuardMessages(job);
 
         if (['READY_SUMMARY_ON_ERROR', 'ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'].includes(guard.st)) {
-          setDownloadLink(a, '#', `Le résumé n'est pas disponible${job?.javaException ? ` : ${job.javaException}` : ''}`);
+          const seb = agiloFmt(job || {}, '');
+          const sumMsg = seb.primary + (seb.technical ? `\n${seb.technical}` : '');
+          setDownloadLink(a, '#', sumMsg.trim() ? `Le résumé n'est pas disponible :\n${sumMsg.trim()}` : `Le résumé n'est pas disponible`);
           return;
         }
 

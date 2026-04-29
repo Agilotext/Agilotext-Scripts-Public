@@ -1,9 +1,33 @@
 // Agilotext FREE – Upload & Dashboard logic
-// v1.06 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR vs transcription
+// v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR vs transcription — erreurs : userErrorMessage prioritaire
 // v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
 // v1.01+ : jeton sur actions longues — refresh avant upload post-dictée, retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min)
 // ⚠️ Ce fichier est chargé depuis GitHub
 // Les CDN FilePond doivent être chargés AVANT ce script dans Webflow
+
+// erreurs API job : userMessage d’abord — mirror scripts/shared/agilo-api-error-format.js
+(function (w) {
+  'use strict';
+  if (w.agiloJobErrorParts) return;
+  function ts(s) { return s == null ? '' : String(s).trim(); }
+  function tr(s, mx) {
+    if (!s || !mx || s.length <= mx) return s || '';
+    return String(s).slice(0, mx - 3) + '...';
+  }
+  w.agiloJobErrorParts = function (data, fb) {
+    var primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
+    var chunks = [];
+    var ex = ts(data && data.javaException);
+    if (ex) chunks.push(ex);
+    var stk = ts(data && (data.javaStackTrace || data.exceptionStackTrace));
+    if (stk) chunks.push(stk);
+    var tech = chunks.filter(Boolean).join('\n\n');
+    if (tech && primary && tech.indexOf(primary) === 0) tech = ts(tech.slice(primary.length)).replace(/^[\s:]+/, '');
+    if (!ts(tech)) tech = '';
+    var alertText = tech ? primary + '\n\n— Détails techniques —\n' + tr(tech, 2000) : primary;
+    return { primary: primary, technical: tech, alertText: alertText };
+  };
+})(typeof window !== 'undefined' ? window : this);
 
 // Helper: fetch with timeout + smart network errors
 function fetchWithTimeout(url, options = {}) {
@@ -40,10 +64,10 @@ function fetchWithTimeout(url, options = {}) {
 
 // Main logic
 document.addEventListener('DOMContentLoaded', () => {
-  (function agiloEnsureDashboardSummaryEmbedV106() {
+  (function agiloEnsureDashboardSummaryEmbedV107() {
     if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
     const url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
-      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.07/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
     try {
       const xhr = new XMLHttpRequest();
       xhr.open('GET', url, false);
@@ -499,7 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
               if (progressStatusErr) progressStatusErr.remove();
               if (summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
               showError('default');
-              alert(data.javaException||'Erreur inconnue');
+              alert(window.agiloJobErrorParts(data, 'Erreur inconnue').alertText);
               break;
           }
         })

@@ -2476,7 +2476,7 @@ function agiloChatInitFromDom() {
       if (cycle % 3 === 0 && typeof onTick === 'function') onTick(cycle);
       if (j.status === 'OK') {
         if (statusField === 'READY') return 'READY';
-        if (statusField === 'ON_ERROR') throw new Error(j.javaException || j.userErrorMessage || 'RePrompt ON_ERROR');
+        if (statusField === 'ON_ERROR') throw new Error((j.userErrorMessage && String(j.userErrorMessage).trim()) || j.javaException || 'RePrompt ON_ERROR');
         if (statusField === 'UNKNOWN') throw new Error('Job ID inconnu (UNKNOWN)');
       }
       await new Promise(res => setTimeout(res, POLL_INTERVAL_MS));

@@ -15,7 +15,7 @@
  *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
- *   - v1.06 : compte-rendu iframe via XHR sync (même branche) — pas d’embed séparé obligatoire
+ *   - v1.07 : compte-rendu iframe via XHR sync (même branche) — erreurs userErrorMessage prioritaire
  *
  * Après ce script, charger (optionnel, streaming) :
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
@@ -24,6 +24,30 @@
  * après invalidToken, refresh proactif pendant poll (~10 min), sendWithRetry si error_invalid_token.
  * ──────────────────────────────────────────────────────────────────
  */
+
+// erreurs API job — mirror scripts/shared/agilo-api-error-format.js
+(function (w) {
+  'use strict';
+  if (w.agiloJobErrorParts) return;
+  function ts(s) { return s == null ? '' : String(s).trim(); }
+  function tr(s, mx) {
+    if (!s || !mx || s.length <= mx) return s || '';
+    return String(s).slice(0, mx - 3) + '...';
+  }
+  w.agiloJobErrorParts = function (data, fb) {
+    var primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
+    var chunks = [];
+    var ex = ts(data && data.javaException);
+    if (ex) chunks.push(ex);
+    var stk = ts(data && (data.javaStackTrace || data.exceptionStackTrace));
+    if (stk) chunks.push(stk);
+    var tech = chunks.filter(Boolean).join('\n\n');
+    if (tech && primary && tech.indexOf(primary) === 0) tech = ts(tech.slice(primary.length)).replace(/^[\s:]+/, '');
+    if (!ts(tech)) tech = '';
+    var alertText = tech ? primary + '\n\n— Détails techniques —\n' + tr(tech, 2000) : primary;
+    return { primary: primary, technical: tech, alertText: alertText };
+  };
+})(typeof window !== 'undefined' ? window : this);
 
 /* ====================== Helpers réseau ====================== */
 function fetchWithTimeout(url, options) {
@@ -64,10 +88,10 @@ function fetchWithTimeout(url, options) {
 
 /* ====================== Main logic ====================== */
 document.addEventListener('DOMContentLoaded', function () {
-  (function agiloEnsureDashboardSummaryEmbedV106() {
+  (function agiloEnsureDashboardSummaryEmbedV107() {
     if (window.AgilotextDashboardSummary && typeof window.AgilotextDashboardSummary.inject === 'function') return;
     var url = (typeof window.AGILO_DASHBOARD_SUMMARY_EMBED_URL === 'string' && window.AGILO_DASHBOARD_SUMMARY_EMBED_URL) ||
-      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
+      'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.07/scripts/pages/dashboard/agilo-summary-dashboard-embed.js';
     try {
       var xhr = new XMLHttpRequest();
       xhr.open('GET', url, false);
@@ -516,7 +540,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (loadingAnimDiv) { var ps2 = loadingAnimDiv.querySelector('.progress-status'); if (ps2) ps2.remove(); loadingAnimDiv.style.display = 'none'; }
                 if (summaryCheckbox && summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
                 showError('default');
-                alert(data.javaException || 'Erreur inconnue');
+                alert(window.agiloJobErrorParts(data, 'Erreur inconnue').alertText);
                 break;
 
               default:

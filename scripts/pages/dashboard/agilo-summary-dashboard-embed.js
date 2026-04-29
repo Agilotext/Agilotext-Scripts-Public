@@ -3,7 +3,7 @@
  * Même heuristique d’isolation que l’éditeur (Code-main-editor-IFRAME) : iframe si styles globaux.
  * Chargé automatiquement par free.js / pro.js / ent.js (et variantes) via XHR synchrone si absent.
  * Surcharge possible : window.AGILO_DASHBOARD_SUMMARY_EMBED_URL
- * @version 1.06
+ * @version 1.07
  */
 (function () {
   'use strict';

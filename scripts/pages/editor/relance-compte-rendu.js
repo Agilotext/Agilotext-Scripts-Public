@@ -11,6 +11,29 @@
   const log = (...args) => { if (DEBUG) console.log('[AGILO:RELANCE]', ...args); };
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
+  /** redoSummary KO : même logique que le reste du site — userErrorMessage puis détails Java. */
+  function formatRedoSummaryApiError(result) {
+    const synth = {
+      userErrorMessage:
+        String((result && result.userErrorMessage) || '').trim() ||
+        String((result && (result.message || result.error)) || '').trim(),
+      javaException: result && result.javaException,
+      javaStackTrace: (result && (result.javaStackTrace || result.exceptionStackTrace)) || ''
+    };
+    if (typeof window.agiloJobErrorParts === 'function') {
+      return window.agiloJobErrorParts(synth, 'Une erreur est survenue.');
+    }
+    const u = synth.userErrorMessage || 'Une erreur est survenue.';
+    var techParts = [];
+    var je = String(synth.javaException || '').trim();
+    var st = String(synth.javaStackTrace || '').trim();
+    if (je) techParts.push(je);
+    if (st) techParts.push(st);
+    var tech = techParts.join('\n\n');
+    var alertText = tech ? u + '\n\n— Détails techniques —\n' + tech : u;
+    return { alertText: alertText };
+  }
+
   const API_V1 = 'https://api.agilotext.com/api/v1';
   /** Premier poll getTranscriptStatus après redo (laisse l’API sortir d’un ON_ERROR résiduel). */
   const SUMMARY_INITIAL_DELAY_MS = 4000;
@@ -1320,7 +1343,7 @@
       } else {
         isGenerating = false;
         logError('Erreur redoSummary', result);
-        alert('❌ Erreur: ' + (result.message || result.error || 'Une erreur est survenue. Veuillez réessayer.'));
+        alert('❌ Erreur: ' + formatRedoSummaryApiError(result).alertText);
         updateButtonVisibility();
       }
     } catch (err) {
