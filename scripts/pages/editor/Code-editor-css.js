@@ -476,9 +476,13 @@
   background: color-mix(in srgb, #c0392b 10%, var(--agilo-surface) 90%);
 }
 
+/* .ag-seg impose background/outline en !important : la sélection doit aussi. */
 #pane-transcript .ag-seg.is-selected {
-  outline: 2px solid var(--agilo-primary, #174a96);
-  background: color-mix(in srgb, var(--agilo-primary, #174a96) 8%, transparent);
+  outline: 2px solid var(--agilo-primary, #174a96) !important;
+  outline-offset: 0 !important;
+  background: color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent) !important;
+  border-left: 3px solid color-mix(in srgb, var(--agilo-primary, #174a96) 45%, transparent) !important;
+  padding-left: 0.5rem !important;
 }
 
 #agilo-bulk-bar {
