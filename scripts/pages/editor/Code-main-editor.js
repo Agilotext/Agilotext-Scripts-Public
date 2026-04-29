@@ -179,6 +179,7 @@ function humanizeError({ where = 'summary', code = '', json = null, httpStatus =
     READY_SUMMARY_PENDING:                   "Résumé en préparation…",
     NOT_READY:                               "Résumé en préparation…",
     READY_SUMMARY_ON_ERROR:                  "La génération du compte-rendu a échoué.",
+    ERROR_SUMMARY_ON_ERROR:                  "La génération du compte-rendu a échoué.", // receiveSummary: error_summary_on_error
     ERROR_TRANSCRIPT_NOT_READY:              "Le transcript n'est pas encore prêt.",
     ON_ERROR:                                "Le serveur a signalé une erreur.",
     ERROR_INVALID_TOKEN:                     "Session expirée ou invalide. Veuillez vous reconnecter.",
