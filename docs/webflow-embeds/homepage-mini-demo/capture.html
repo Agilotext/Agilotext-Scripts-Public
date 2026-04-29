@@ -1117,8 +1117,9 @@
       }
 
       var IDLE_BEFORE_MS = 4000;
-      var STEP_MS = 1700;
-      var PAUSE_BETWEEN_LOOPS_MS = 9000;
+      /* Rythme narration : sources d’abord, puis traitement (comme la lecture du formulaire) */
+      var STEP_MS = 1450;
+      var PAUSE_BETWEEN_LOOPS_MS = 9500;
 
       function lineForToggle(id) {
         var t = document.getElementById(id);
@@ -1131,46 +1132,71 @@
           return;
         }
 
+        activate("file");
+
+        /* 1 — Zone d’upload (action principale panneau Fichier) */
         after(0, function () {
-          setSpotlight(lineForToggle("toggle-speaker"));
+          var uz = document.querySelector(".upload-zone-placeholder");
+          if (uz) setSpotlight(uz);
           after(STEP_MS, function () {
             clearSpotlight();
-            setTranslate(true);
-            setSpotlight(lineForToggle("toggle-translate"));
-            after(STEP_MS, function () {
-              clearSpotlight();
-              if (selectLang) {
-                selectLang.selectedIndex =
-                  (selectLang.selectedIndex + 1) % selectLang.options.length;
-              }
-              if (langBlock) setSpotlight(langBlock);
-              after(Math.round(STEP_MS * 0.85), function () {
-                clearSpotlight();
-                setTranslate(false);
-                if (selectTemplate) {
-                  selectTemplate.selectedIndex =
-                    (selectTemplate.selectedIndex + 1) % selectTemplate.options.length;
-                  setSpotlight(selectTemplate);
-                }
-                after(STEP_MS, function () {
+
+            /* 2 — Envoi multiple / unique (option sur le même panneau) */
+            var wasOn = toggleEnvoi && toggleEnvoi.classList.contains("on");
+            if (toggleEnvoi) setPressed(toggleEnvoi, !wasOn);
+            after(650, function () {
+              if (toggleEnvoi) setPressed(toggleEnvoi, wasOn);
+              after(350, function () {
+                /* 3 — Autre source : YouTube */
+                activate("youtube");
+                var yt = document.querySelector('.source-tab[data-tab="youtube"]');
+                if (yt) setSpotlight(yt);
+                after(Math.round(STEP_MS * 1.05), function () {
                   clearSpotlight();
-                  activate("youtube");
-                  var yt = document.querySelector('.source-tab[data-tab="youtube"]');
-                  if (yt) setSpotlight(yt);
-                  after(Math.round(STEP_MS * 1.15), function () {
+
+                  /* 4 — Dictée en direct (badge Nouveau) */
+                  activate("dictee");
+                  var dic = document.querySelector('.source-tab[data-tab="dictee"]');
+                  if (dic) setSpotlight(dic);
+                  after(Math.round(STEP_MS * 0.95), function () {
                     clearSpotlight();
+
+                    /* 5 — Retour Fichier : onglet actif */
                     activate("file");
-                    var uz = document.querySelector(".upload-zone-placeholder");
-                    if (uz) setSpotlight(uz);
-                    after(STEP_MS, function () {
+                    var tabFile = document.querySelector('.source-tab[data-tab="file"]');
+                    if (tabFile) setSpotlight(tabFile);
+                    after(Math.round(STEP_MS * 0.75), function () {
                       clearSpotlight();
-                      var wasOn = toggleEnvoi && toggleEnvoi.classList.contains("on");
-                      if (toggleEnvoi) setPressed(toggleEnvoi, !wasOn);
-                      after(900, function () {
-                        if (toggleEnvoi) setPressed(toggleEnvoi, wasOn);
+
+                      /* 6–9 — Traitement dans l’ordre du bloc (intervenants → traduction → modèle CR) */
+                      setSpotlight(lineForToggle("toggle-speaker"));
+                      after(STEP_MS, function () {
                         clearSpotlight();
-                        resetDemoState();
-                        if (done) done();
+                        setTranslate(true);
+                        setSpotlight(lineForToggle("toggle-translate"));
+                        after(STEP_MS, function () {
+                          clearSpotlight();
+                          if (selectLang) {
+                            selectLang.selectedIndex =
+                              (selectLang.selectedIndex + 1) % selectLang.options.length;
+                          }
+                          if (langBlock) setSpotlight(langBlock);
+                          after(Math.round(STEP_MS * 0.88), function () {
+                            clearSpotlight();
+                            setTranslate(false);
+                            if (selectTemplate) {
+                              selectTemplate.selectedIndex =
+                                (selectTemplate.selectedIndex + 1) %
+                                selectTemplate.options.length;
+                              setSpotlight(selectTemplate);
+                            }
+                            after(STEP_MS, function () {
+                              clearSpotlight();
+                              resetDemoState();
+                              if (done) done();
+                            });
+                          });
+                        });
                       });
                     });
                   });
