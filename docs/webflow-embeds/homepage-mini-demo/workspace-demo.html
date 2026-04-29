@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agilotext — Démo espace travail (embed)</title>
+  <style>
+    :root {
+      --color-white: #ffffff;
+      --color-orange: #fd7e14;
+      --color-vert: #1c661a;
+      --color-blue: #174a96;
+      --color-gris-fonce: #020202;
+      --color-blanc-gris: #f8f9fa;
+      --color-noir-25: rgba(52, 58, 64, 0.25);
+      --color-gris: #525252;
+      --radius-base: 0.5rem;
+      --agilo-blue: var(--color-blue);
+      --agilo-blue-soft: rgba(23, 74, 150, 0.1);
+      --bg-cream: #f8f9fa;
+      --text: var(--color-gris-fonce);
+      --muted: var(--color-gris);
+      --border: var(--color-noir-25);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--color-blanc-gris);
+      border-radius: calc(var(--radius-base) + 0.35rem);
+      border: 1px solid var(--border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 56px rgba(0, 20, 39, 0.09);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 440px;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, var(--color-white) 0%, var(--bg-cream) 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--color-white);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+
+    .inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--bg-cream);
+    }
+
+    .crumb {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin: 0;
+      padding: 14px 16px 10px;
+      text-align: left;
+      width: 100%;
+      letter-spacing: 0.01em;
+      border-bottom: 1px solid rgba(52, 58, 64, 0.08);
+      background: rgba(255, 255, 255, 0.5);
+    }
+    .crumb a {
+      color: var(--agilo-blue);
+      font-weight: 600;
+      text-decoration: none;
+      opacity: 0.92;
+    }
+    .crumb a:hover { text-decoration: underline; }
+    .crumb-sep {
+      color: rgba(82, 82, 82, 0.45);
+      font-weight: 600;
+      user-select: none;
+    }
+    .crumb-current {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .workspace-layout {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: min(260px, 38%);
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--color-white);
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-head {
+      padding: 12px 14px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .job-list {
+      list-style: none;
+      margin: 0;
+      padding: 0 0 12px;
+      overflow-y: auto;
+    }
+    .job-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      cursor: default;
+      border-left: 3px solid transparent;
+      transition: background 0.2s ease;
+    }
+    .job-item:hover {
+      background: var(--agilo-blue-soft);
+    }
+    .job-item.is-active {
+      background: rgba(23, 74, 150, 0.08);
+      border-left-color: var(--agilo-blue);
+    }
+    .job-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .job-dot.processing {
+      background: var(--color-orange);
+      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.25);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .job-dot.processing {
+        animation: pulse-dot 2s ease-in-out infinite;
+      }
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.75; transform: scale(0.92); }
+    }
+    .job-dot.done { background: var(--color-vert); }
+
+    .job-body { min-width: 0; flex: 1; }
+    .job-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.35;
+      margin: 0 0 4px;
+    }
+    .job-meta {
+      font-size: 10.5px;
+      color: var(--muted);
+      margin: 0;
+    }
+    .job-status {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+    .job-status.wait {
+      color: #b45309;
+      background: rgba(253, 126, 20, 0.12);
+    }
+    .job-status.ok {
+      color: var(--color-vert);
+      background: rgba(28, 102, 26, 0.1);
+    }
+
+    .main-area {
+      flex: 1;
+      min-width: 0;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.35) 0%, var(--bg-cream) 100%);
+    }
+    .preview-card {
+      background: var(--color-white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-base);
+      padding: 18px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .preview-card h2 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .preview-card .hint {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .preview-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--agilo-blue-soft);
+      color: var(--agilo-blue);
+    }
+    .demo-note {
+      margin-top: 14px;
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.9;
+    }
+
+    @media (max-width: 560px) {
+      .workspace-layout { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        max-height: 200px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="mac" role="img" aria-label="Fenêtre fictive du navigateur Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.fr/transcriptions</div>
+      </div>
+
+      <div class="inner">
+        <nav class="crumb" aria-label="Fil d’Ariane">
+          <a href="#" onclick="return false;" tabindex="-1">Accueil</a>
+          <span class="crumb-sep" aria-hidden="true">›</span>
+          <span class="crumb-current">Mes transcriptions</span>
+        </nav>
+
+        <div class="workspace-layout">
+          <aside class="sidebar" aria-label="Liste des transcriptions">
+            <div class="sidebar-head">Récent</div>
+            <ul class="job-list">
+              <li class="job-item is-active">
+                <span class="job-dot processing" aria-hidden="true"></span>
+                <div class="job-body">
+                  <p class="job-title">Réunion produit — roadmap Q2</p>
+                  <p class="job-meta">Il y a 12 min · FR</p>
+                  <span class="job-status wait">Traitement</span>
+                </div>
+              </li>
+              <li class="job-item">
+                <span class="job-dot done" aria-hidden="true"></span>
+                <div class="job-body">
+                  <p class="job-title">Point équipe — support client</p>
+                  <p class="job-meta">Hier · FR → EN</p>
+                  <span class="job-status ok">Prêt</span>
+                </div>
+              </li>
+              <li class="job-item">
+                <span class="job-dot done" aria-hidden="true"></span>
+                <div class="job-body">
+                  <p class="job-title">Visio — bilan trimestriel</p>
+                  <p class="job-meta">27 avr. · FR</p>
+                  <span class="job-status ok">Prêt</span>
+                </div>
+              </li>
+            </ul>
+          </aside>
+
+          <main class="main-area">
+            <div class="preview-card">
+              <h2>Réunion produit — roadmap Q2</h2>
+              <p class="hint">
+                Vue synthétique : une fois le fichier ingéré (capture), tout votre historique et vos livrables restent accessibles ici — transcription, compte rendu, exports et assistant IA.
+              </p>
+              <div class="preview-tags" aria-hidden="true">
+                <span class="tag">Transcription</span>
+                <span class="tag">Compte rendu</span>
+                <span class="tag">Assistant IA</span>
+                <span class="tag">Export</span>
+              </div>
+              <p class="demo-note">Démo statique — aucune donnée réelle.</p>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
