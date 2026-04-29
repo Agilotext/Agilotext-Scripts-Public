@@ -3,428 +3,377 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Agilotext — Démo éditeur (embed)</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link href="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/css/agilotext-test.webflow.shared.e5b39dcfe.min.css" rel="stylesheet" type="text/css" />
-  <link href="./demo-agilo-editor-patch.css" rel="stylesheet" type="text/css" />
+  <title>Agilotext — Démo homepage (embed)</title>
+  <style>
+    :root {
+      --orange: #fd7e14;
+      --orange-soft: #ffe7d1;
+      --bg-cream: #e7e0da;
+      --bg-card: #f2ede5;
+      --text: #1a1a1a;
+      --muted: #5c5c5c;
+      --deep: #001427;
+      --border: #d4caba;
+      --radius: 12px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      padding: clamp(12px, 2vw, 20px);
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 48px rgba(0, 20, 39, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 480px;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .brand img { height: 22px; width: auto; display: block; }
+    .tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 12px;
+      background: #ebe4dc;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab {
+      flex: 1;
+      padding: 12px 10px;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .tab:hover { color: var(--text); background: rgba(253, 126, 20, 0.06); }
+    .tab:focus-visible {
+      outline: 2px solid var(--orange);
+      outline-offset: -2px;
+    }
+    .tab[aria-selected="true"] {
+      color: var(--deep);
+      border-bottom-color: var(--orange);
+      background: rgba(255, 255, 255, 0.6);
+    }
+    .panel-wrap {
+      flex: 1;
+      padding: 16px;
+      background: var(--bg-cream);
+    }
+    .panel {
+      display: none;
+      animation: fadeIn 0.22s ease;
+    }
+    .panel.is-active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--orange-soft);
+      color: #8b4510;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      border: none;
+      font: inherit;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      background: var(--orange);
+      color: #fff;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:focus-visible {
+      outline: 2px solid var(--deep);
+      outline-offset: 2px;
+    }
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .grid2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .tile {
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 12px;
+      text-align: center;
+      color: var(--muted);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .tile:hover {
+      border-style: solid;
+      border-color: var(--orange);
+      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.15);
+    }
+    .speaker {
+      font-size: 12px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      border-left: 3px solid var(--orange);
+      background: #faf8f5;
+    }
+    .speaker strong { color: var(--deep); }
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .report-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .report-logo img { height: 28px; }
+    .report-meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .report-h {
+      font-size: 15px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: var(--deep);
+    }
+    .report-lines {
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text);
+    }
+    .report-lines li { margin-bottom: 6px; }
+    .footnote {
+      margin-top: 14px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
 </head>
-<body class="agilo-a11y-app homepage-mini-demo-root">
-  <div class="demo-mini-shell">
-    <div class="demo-shell-inner">
-      <div class="demo-mac-window" role="application" aria-label="Aperçu éditeur Agilotext">
-        <div class="demo-mac-titlebar">
-          <div class="demo-mac-dots" aria-hidden="true"><span></span><span></span><span></span></div>
-          <div class="demo-mac-urlfake">app.agilotext.com — éditeur</div>
-          <div class="demo-mac-brand">
-            <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="104" height="22" />
-          </div>
-        </div>
-        <div class="demo-mac-body">
-          <div class="wrapper-dashboard">
-            <div class="breadcrumb profile">
-              <a href="#" class="breadcrumb_text-link demo-nav-fake">← Tous les fichiers</a>
-              <div class="breadcrumb-icon w-icon-dropdown-toggle" aria-hidden="true"></div>
-              <span class="breadcrumb_text-link w--current">Éditeur</span>
-            </div>
-            <div class="wrapper-title_compte">
-              <h2 class="h1-small">Éditeur de transcription &amp; compte rendu</h2>
-            </div>
-          </div>
-
-          <div class="wrapper-dashboard flex">
-            <div class="dashboard-content demo-dashboard-editor-stack">
-              <div class="ed-header">
-                <div class="ed-wrap">
-                  <div class="ed-title-wrap">
-                    <span class="ed-title" contenteditable="false">Réunion produit — jalons Q2 (aperçu)</span>
-                    <button type="button" class="ed-rename" aria-label="Renommer (démo inactive)" disabled>
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small" aria-hidden="true">
-                        <path d="M0 0h24v24H0z" fill="none"></path>
-                        <path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div class="ed-wrap vertical">
-                  <button type="button" class="button-secondary black" disabled>Exporter</button>
-                </div>
-              </div>
-
-              <div class="wrapper-audio-api w-embed">
-                <div id="agilo-audio-wrap" class="agilo-player">
-                  <audio id="agilo-audio" preload="metadata" src="./assets/demo-audio.mp3"></audio>
-                  <div class="agilo-bar">
-                    <button type="button" id="agilo-skip-back" class="agilo-btn" title="Reculer de 15 s" aria-label="Reculer de 15 secondes">15s</button>
-                    <button type="button" id="agilo-play" class="agilo-btn is-primary" aria-pressed="false" aria-controls="agilo-audio" data-state="paused">▶︎ Lire</button>
-                    <button type="button" id="agilo-skip-fwd" class="agilo-btn" title="Avancer de 30 s" aria-label="Avancer de 30 secondes">30s</button>
-                    <button type="button" id="agilo-speed" class="agilo-btn agilo-speed" title="Vitesse de lecture">1×</button>
-                    <button type="button" class="agilo-btn" disabled aria-label="Téléchargement non disponible en démo" title="Téléchargement (démo)">
-                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                      </svg>
-                    </button>
-                    <div class="agilo-spacer"></div>
-                    <div class="agilo-vol">
-                      <span class="icon-small --grey" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="1em" height="1em" focusable="false">
-                          <path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"></path>
-                        </svg>
-                      </span>
-                      <input id="agilo-volume" type="range" min="0" max="1" step="0.01" value="0.85" aria-label="Volume" />
-                    </div>
-                  </div>
-                  <div class="agilo-timeline">
-                    <div id="agilo-track" class="agilo-track" role="slider" aria-valuemin="0" tabindex="0" aria-valuemax="100" aria-valuenow="0" aria-label="Position dans l’audio">
-                      <div class="agilo-buffered" id="agilo-buffered"></div>
-                      <div class="agilo-progress" id="agilo-progress"></div>
-                      <div class="agilo-thumb" id="agilo-thumb"></div>
-                    </div>
-                    <div class="agilo-times">
-                      <div id="ag-current" class="ag-time ag-time--left">0:00</div>
-                      <div id="ag-remaining" class="ag-time ag-time--right">–0:00</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <nav role="tablist" aria-label="Onglets éditeur" class="ed-tabs" data-tour="ed-tabs">
-                <button
-                  role="tab"
-                  aria-selected="true"
-                  aria-controls="pane-transcript"
-                  id="tab-transcript"
-                  data-tab="transcript"
-                  class="ed-tab summary is-active"
-                  tabindex="0"
-                  type="button"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" class="icon-small" aria-hidden="true">
-                    <path fill="currentColor" d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h14v2H4v-2zm0 4h8v2H4v-2z" />
-                  </svg>
-                  Transcription
-                </button>
-                <button
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="pane-summary"
-                  id="tab-summary"
-                  data-tab="summary"
-                  class="ed-tab cr"
-                  tabindex="-1"
-                  type="button"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 15 15" fill="none" class="icon-small" aria-hidden="true">
-                    <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M1 1.5C1 .672 1.672 0 2.5 0h8.207L14 3.293V13.5c0 .828-.672 1.5-1.5 1.5h-10A1.5 1.5 0 011 13.5V1.5zm3 2.5h7v1H4v-1zm7 3H4v1h7v-1zm0 3H4v1h7v-1z" />
-                  </svg>
-                  Compte rendu
-                </button>
-                <button
-                  role="tab"
-                  aria-selected="false"
-                  aria-controls="pane-chat"
-                  id="tab-chat"
-                  data-tab="chat"
-                  class="ed-tab"
-                  tabindex="-1"
-                  type="button"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="icon-small" aria-hidden="true">
-                    <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
-                  </svg>
-                  Conversation IA
-                </button>
-              </nav>
-
-              <div id="pane-transcript" role="tabpanel" aria-labelledby="tab-transcript" class="edtr-pane is-active">
-                <div id="transcriptEditor" contenteditable="false" spellcheck="false" class="edtr-editor" data-placeholder="Tapez ici…" data-mode="structured">
-                  <article class="ag-seg is-active" lang="fr" data-start="0" data-end="18">
-                    <header class="ag-seg__head">
-                      <button class="time" type="button" data-seek="0" title="Aller à ce segment">00:00</button>
-                      <span class="speaker demo-spk demo-spk-a">Camille</span>
-                    </header>
-                    <div class="ag-seg__text">
-                      Bonjour — pour cette démo homepage, on centre l’éditeur dans une fenêtre claire : transcription fidèle à la prod, compte rendu structuré, assistant sur le document — sans rien envoyer au serveur.
-                    </div>
-                  </article>
-                  <article class="ag-seg" lang="fr" data-start="18" data-end="42">
-                    <header class="ag-seg__head">
-                      <button class="time" type="button" data-seek="18" title="Aller à ce segment">00:18</button>
-                      <span class="speaker demo-spk demo-spk-b">Ibrahim</span>
-                    </header>
-                    <div class="ag-seg__text">
-                      Les trois onglets montrent le workflow réel : écouter, relire la transcription enrichie, passer au compte rendu exportable, puis poser des questions cadrées à l’IA sur ce fichier — comme dans l’application.
-                    </div>
-                  </article>
-                  <article class="ag-seg" lang="fr" data-start="42" data-end="60">
-                    <header class="ag-seg__head">
-                      <button class="time" type="button" data-seek="42" title="Aller à ce segment">00:42</button>
-                      <span class="speaker demo-spk demo-spk-c">Lucie</span>
-                    </header>
-                    <div class="ag-seg__text">
-                      Parfait : charte bleue Agilotext, typo Inter, lecteur synchronisé avec les segments — le message est « produit sérieux » et prêt à convertir sur la page publique.
-                    </div>
-                  </article>
-                </div>
-              </div>
-
-              <div id="pane-summary" role="tabpanel" aria-labelledby="tab-summary" class="edtr-pane" hidden>
-                <div class="demo-cr-static">
-                  <div class="cr-page">
-                    <header class="cr-header">
-                      <div class="cr-header-left">
-                        <img class="cr-logo" src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="24" />
-                        <div>
-                          <div class="cr-header-meta__title">Compte rendu structuré</div>
-                          <div class="cr-header-meta__sub">Exemple statique — équipe produit</div>
-                        </div>
-                      </div>
-                      <span class="cr-badge">Démo</span>
-                    </header>
-                    <section class="cr-title">
-                      <h2>Démo homepage — éditeur centré</h2>
-                      <p>Réunion interne marketing &amp; produit</p>
-                      <div class="cr-meta">
-                        <div class="cr-meta-item"><b>Date</b><span>29 avril 2026</span></div>
-                        <div class="cr-meta-item"><b>Durée</b><span>~1 min</span></div>
-                        <div class="cr-meta-item"><b>Lieu</b><span>Visio</span></div>
-                        <div class="cr-meta-item"><b>Réf.</b><span>DEMO-IFRAME</span></div>
-                      </div>
-                    </section>
-                    <section class="cr-body">
-                      <div class="cr-card accent">
-                        <h3>Synthèse</h3>
-                        <p>
-                          Présenter l’éditeur dans une fenêtre unique, avec lecteur audio et synchro transcript, pour que le visiteur comprenne immédiatement la valeur : qualité pro, respect de la marque, pas de donnée sensible dans le dépôt public.
-                        </p>
-                      </div>
-                      <div class="cr-card">
-                        <h3>Décisions</h3>
-                        <ul>
-                          <li>Retirer la barre latérale applicative de la démo ; garder fil d’Ariane et titre fichier pour le contexte.</li>
-                          <li>Tokens couleur alignés sur l’éditeur (<span class="cr-inline-code">#174a96</span>) et patch CSS documenté.</li>
-                          <li>Pas d’URL API ni identifiants réels ; audio statique dans le repo ou URL maîtrisée.</li>
-                        </ul>
-                      </div>
-                      <div class="cr-card">
-                        <h3>Prochaines étapes</h3>
-                        <p>
-                          Ajuster la hauteur d’iframe Webflow après publication ; optionnel : remplacer l’audio silencieux par une prise de son réelle alignée sur le script marketing.
-                        </p>
-                      </div>
-                    </section>
-                  </div>
-                </div>
-              </div>
-
-              <div id="pane-chat" role="tabpanel" aria-labelledby="tab-chat" class="edtr-pane" hidden>
-                <div id="chatView" contenteditable="false" spellcheck="false" class="edtr-chatlog">
-                  <div class="msg-empty-state" lang="fr">
-                    <p class="msg-empty-title">Comment puis-je vous aider avec ce transcript&nbsp;?</p>
-                    <div class="msg-empty-prompts">
-                      <button type="button" class="msg-empty-prompt" disabled>Résumer les points clés du transcript</button>
-                      <button type="button" class="msg-empty-prompt" disabled>Proposer un plan de compte rendu structuré</button>
-                      <button type="button" class="msg-empty-prompt" disabled>Extraire les décisions et actions</button>
-                    </div>
-                    <div class="demo-chat-faux" aria-hidden="true">
-                      <div class="demo-chat-bubble demo-chat-bubble--user">
-                        Quels sont les risques mentionnés pour la mise en ligne de la démo&nbsp;?
-                      </div>
-                      <div class="demo-chat-bubble demo-chat-bubble--bot">
-                        En production, l’assistant s’appuie sur votre transcription et vos réglages — ici la réponse est illustrative ; aucune donnée n’est transmise hors de cette page statique.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+<body>
+  <div class="shell">
+    <div class="mac" role="application" aria-label="Démonstration produit Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.com — démo interactive</div>
+        <div class="brand">
+          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
         </div>
       </div>
+      <div class="tabs" role="tablist" aria-label="Vues démo">
+        <button type="button" class="tab" role="tab" id="tab-cap" aria-selected="true" aria-controls="panel-cap" tabindex="0">Capturer</button>
+        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="false" aria-controls="panel-tr" tabindex="-1">Transcription</button>
+        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
+      </div>
+      <div class="panel-wrap">
+        <div id="panel-cap" class="panel is-active" role="tabpanel" aria-labelledby="tab-cap">
+          <div class="card">
+            <div class="row">
+              <span class="pill">Zéro bot dans vos réunions</span>
+              <button type="button" class="btn" id="demo-pulse">Simuler « Démarrer »</button>
+            </div>
+            <p style="margin:12px 0 0;font-size:13px;color:var(--muted);line-height:1.5;">
+              Choisissez comment alimenter Agilotext : enregistrement, import, lien YouTube ou dictée — sans connexion calendrier intrusive.
+            </p>
+            <div class="grid2">
+              <div class="tile">Enregistrer<br /><small>réunion</small></div>
+              <div class="tile">Importer<br /><small>audio / vidéo</small></div>
+              <div class="tile">Coller<br /><small>lien YouTube</small></div>
+              <div class="tile">Dicter<br /><small>micro</small></div>
+            </div>
+          </div>
+        </div>
+        <div id="panel-tr" class="panel" role="tabpanel" aria-labelledby="tab-tr">
+          <div class="card">
+            <div class="row">
+              <span class="pill">Diarisation</span>
+              <button type="button" class="btn btn-secondary">Exporter</button>
+            </div>
+            <div style="margin-top:14px;">
+              <div class="speaker"><strong>Alice</strong> — On valide la dictée sur la popup homepage pour demain.</div>
+              <div class="speaker"><strong>Marc</strong> — OK, même micro que l’éditeur pour rester cohérent.</div>
+              <div class="speaker"><strong>Sophie</strong> — Et on garde le message « pas de bot Teams » au-dessus de la ligne de flottaison.</div>
+            </div>
+          </div>
+        </div>
+        <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
+          <div class="card">
+            <div class="report-header">
+              <div class="report-logo">
+                <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="24" />
+                <div>
+                  <div class="report-h">Compte rendu — Sprint homepage</div>
+                  <div class="report-meta">Interne — Direction produit · 29 avril 2026</div>
+                </div>
+              </div>
+              <span class="pill">HTML + charte</span>
+            </div>
+            <ul class="report-lines">
+              <li><strong>Décisions :</strong> démo iframe GitHub Pages ; branche <code style="background:#f4f4f4;padding:2px 6px;border-radius:4px;font-size:11px;">1.06</code>.</li>
+              <li><strong>Actions :</strong> coller le bloc Webflow ci-dessous ; ajuster la hauteur d’iframe selon la section.</li>
+              <li><strong>Risques :</strong> cache CDN jsDelivr (quelques minutes après push).</li>
+            </ul>
+          </div>
+        </div>
+        <p class="footnote">Démo statique — aucune donnée envoyée. Palette : orange <code>#FD7E14</code>, beige <code>#E7E0DA</code>.</p>
+      </div>
     </div>
-    <p class="demo-footnote">
-      Démo statique — aucune donnée envoyée. Primaire éditeur <code>#174A96</code> · CSS Webflow + patch · Audio&nbsp;: <code>assets/demo-audio.mp3</code> (remplaçable).
-    </p>
   </div>
   <script>
     (function () {
-      document.querySelectorAll(".demo-nav-fake").forEach(function (el) {
-        el.addEventListener("click", function (e) {
-          e.preventDefault();
-        });
-      });
+      var tabs = document.querySelectorAll(".tab");
+      var panels = {
+        cap: document.getElementById("panel-cap"),
+        tr: document.getElementById("panel-tr"),
+        cr: document.getElementById("panel-cr")
+      };
+      var ids = ["cap", "tr", "cr"];
 
-      var order = ["tab-transcript", "tab-summary", "tab-chat"];
-      function activate(tabId) {
-        order.forEach(function (id) {
-          var btn = document.getElementById(id);
-          if (!btn) return;
-          var panelId = btn.getAttribute("aria-controls");
-          var panel = panelId ? document.getElementById(panelId) : null;
-          var on = id === tabId;
-          btn.setAttribute("aria-selected", on ? "true" : "false");
-          btn.classList.toggle("is-active", on);
-          btn.setAttribute("tabindex", on ? "0" : "-1");
-          if (panel) {
-            panel.hidden = !on;
-            panel.classList.toggle("is-active", on);
+      function show(which) {
+        ids.forEach(function (id) {
+          var active = id === which;
+          var tabEl = document.getElementById("tab-" + id);
+          var panelEl = panels[id];
+          if (tabEl) {
+            tabEl.setAttribute("aria-selected", active ? "true" : "false");
+            tabEl.setAttribute("tabindex", active ? "0" : "-1");
+          }
+          if (panelEl) {
+            panelEl.classList.toggle("is-active", active);
           }
         });
       }
 
-      order.forEach(function (id) {
-        var btn = document.getElementById(id);
-        if (!btn) return;
-        btn.addEventListener("click", function () {
-          activate(id);
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var id = tab.id.replace("tab-", "");
+          show(id);
         });
       });
 
-      document.addEventListener("keydown", function (e) {
-        var active = document.activeElement;
-        if (!active || order.indexOf(active.id) < 0) return;
-        var i = order.indexOf(active.id);
-        if (e.key === "ArrowRight") {
+      document.querySelector(".tabs").addEventListener("keydown", function (e) {
+        var el = document.activeElement;
+        if (!el || !el.id || el.id.indexOf("tab-") !== 0) return;
+        var keys = { ArrowLeft: -1, ArrowRight: 1 };
+        if (e.key === "Home") {
           e.preventDefault();
-          var next = order[(i + 1) % order.length];
-          activate(next);
-          document.getElementById(next).focus();
-        } else if (e.key === "ArrowLeft") {
-          e.preventDefault();
-          var prev = order[(i + order.length - 1) % order.length];
-          activate(prev);
-          document.getElementById(prev).focus();
-        }
-      });
-
-      var audio = document.getElementById("agilo-audio");
-      var playBtn = document.getElementById("agilo-play");
-      var skipBack = document.getElementById("agilo-skip-back");
-      var skipFwd = document.getElementById("agilo-skip-fwd");
-      var speedBtn = document.getElementById("agilo-speed");
-      var vol = document.getElementById("agilo-volume");
-      var track = document.getElementById("agilo-track");
-      var progressEl = document.getElementById("agilo-progress");
-      var thumbEl = document.getElementById("agilo-thumb");
-      var curEl = document.getElementById("ag-current");
-      var remEl = document.getElementById("ag-remaining");
-      var segments = document.querySelectorAll("#transcriptEditor .ag-seg");
-      var speeds = [1, 1.25, 1.5, 2];
-      var speedIdx = 0;
-
-      function fmt(sec) {
-        if (!isFinite(sec) || sec < 0) sec = 0;
-        var m = Math.floor(sec / 60);
-        var s = Math.floor(sec % 60);
-        return m + ":" + (s < 10 ? "0" : "") + s;
-      }
-
-      function updateSegments(t) {
-        segments.forEach(function (seg) {
-          var s = parseFloat(seg.getAttribute("data-start")) || 0;
-          var e = parseFloat(seg.getAttribute("data-end")) || Infinity;
-          seg.classList.toggle("is-active", t >= s && t < e);
-        });
-      }
-
-      function updateTimeline() {
-        var d = audio.duration;
-        var t = audio.currentTime;
-        if (!isFinite(d) || d <= 0) {
-          if (curEl) curEl.textContent = "0:00";
-          if (remEl) remEl.textContent = "–0:00";
+          show(ids[0]);
+          document.getElementById("tab-" + ids[0]).focus();
           return;
         }
-        var ratio = t / d;
-        if (progressEl) progressEl.style.width = ratio * 100 + "%";
-        if (thumbEl) thumbEl.style.left = ratio * 100 + "%";
-        if (track) {
-          track.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
-          track.setAttribute("aria-valuemax", "100");
+        if (e.key === "End") {
+          e.preventDefault();
+          show(ids[ids.length - 1]);
+          document.getElementById("tab-" + ids[ids.length - 1]).focus();
+          return;
         }
-        if (curEl) curEl.textContent = fmt(t);
-        var left = Math.max(0, d - t);
-        if (remEl) remEl.textContent = "–" + fmt(left);
-        updateSegments(t);
-      }
+        var delta = keys[e.key];
+        if (delta === undefined) return;
+        e.preventDefault();
+        var i = ids.indexOf(el.id.replace("tab-", ""));
+        if (i < 0) return;
+        var next = (i + delta + ids.length) % ids.length;
+        show(ids[next]);
+        document.getElementById("tab-" + ids[next]).focus();
+      });
 
-      function setPlayingUI(playing) {
-        if (!playBtn) return;
-        playBtn.setAttribute("aria-pressed", playing ? "true" : "false");
-        playBtn.setAttribute("data-state", playing ? "playing" : "paused");
-        playBtn.textContent = playing ? "❚❚ Pause" : "▶︎ Lire";
-      }
-
-      if (audio && playBtn) {
-        playBtn.addEventListener("click", function () {
-          if (audio.paused) {
-            audio.play().catch(function () {});
-          } else {
-            audio.pause();
-          }
+      var pulse = document.getElementById("demo-pulse");
+      if (pulse) {
+        pulse.addEventListener("click", function () {
+          pulse.style.opacity = "0.7";
+          setTimeout(function () { pulse.style.opacity = "1"; }, 120);
+          show("tr");
+          document.getElementById("tab-tr").focus();
         });
-
-        audio.addEventListener("play", function () {
-          setPlayingUI(true);
-        });
-        audio.addEventListener("pause", function () {
-          setPlayingUI(false);
-        });
-        audio.addEventListener("ended", function () {
-          setPlayingUI(false);
-          updateTimeline();
-        });
-        audio.addEventListener("timeupdate", updateTimeline);
-        audio.addEventListener("loadedmetadata", updateTimeline);
-
-        if (skipBack)
-          skipBack.addEventListener("click", function () {
-            audio.currentTime = Math.max(0, audio.currentTime - 15);
-          });
-        if (skipFwd)
-          skipFwd.addEventListener("click", function () {
-            var d = audio.duration;
-            var t = audio.currentTime + 30;
-            audio.currentTime = isFinite(d) ? Math.min(d, t) : t;
-          });
-
-        if (speedBtn) {
-          speedBtn.addEventListener("click", function () {
-            speedIdx = (speedIdx + 1) % speeds.length;
-            audio.playbackRate = speeds[speedIdx];
-            speedBtn.textContent = speeds[speedIdx] + "×";
-          });
-        }
-
-        if (vol) {
-          vol.addEventListener("input", function () {
-            audio.volume = parseFloat(vol.value);
-          });
-          audio.volume = parseFloat(vol.value);
-        }
-
-        if (track) {
-          track.addEventListener("click", function (ev) {
-            var d = audio.duration;
-            if (!isFinite(d) || d <= 0) return;
-            var rect = track.getBoundingClientRect();
-            var ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
-            audio.currentTime = ratio * d;
-          });
-        }
-
-        document.querySelectorAll('.time[data-seek]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var s = parseFloat(btn.getAttribute('data-seek'));
-            if (!isNaN(s)) audio.currentTime = s;
-          });
-        });
-
-        updateTimeline();
-        updateSegments(0);
       }
     })();
   </script>

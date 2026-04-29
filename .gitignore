@@ -27,7 +27,6 @@ upload-to-github.js
 !docs/index.html
 !docs/webflow-embeds/**/*.html
 !docs/webflow-embeds/**/*.css
-!docs/webflow-embeds/**/*.mp3
 !docs/webflow-embeds/**/*.md
 
 # Fichiers JavaScript de test/développement
