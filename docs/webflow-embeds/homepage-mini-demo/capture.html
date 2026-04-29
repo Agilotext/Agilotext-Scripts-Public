@@ -98,7 +98,11 @@
       flex: 1;
       min-height: 0;
     }
+    /* Colonne stretch pour que le fil d’Ariane reste aligné à gauche même si du contenu est centré plus bas */
     .dashboard-card {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
       margin: 12px;
       padding: 20px 16px 20px;
       background: var(--agilo-surface);
@@ -106,6 +110,7 @@
       border: 1px solid var(--agilo-border);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       transition: box-shadow 0.35s ease, transform 0.35s ease;
+      text-align: center;
     }
     @media (prefers-reduced-motion: no-preference) {
       .dashboard-card {
@@ -128,7 +133,7 @@
         0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    /* Fil d’Ariane : une seule entrée, alignée à gauche (le reste de la carte peut rester centré) */
+    /* Fil d’Ariane : une seule entrée, toujours à gauche (override text-align:center du parent .dashboard-card) */
     .crumb {
       display: flex;
       align-items: center;
@@ -141,8 +146,11 @@
       padding: 0;
       text-align: left;
       width: 100%;
-      align-self: flex-start;
+      max-width: 100%;
+      align-self: stretch;
+      flex: 0 0 auto;
       letter-spacing: 0.01em;
+      box-sizing: border-box;
     }
     .crumb-current {
       color: var(--agilo-text);
@@ -1096,8 +1104,9 @@
         resetDemoState();
       }
 
+      /* Clic (pas pointerdown) : évite d’annuler la démo en faisant défiler l’iframe */
       if (mac) {
-        mac.addEventListener("pointerdown", stopIdleDemo, true);
+        mac.addEventListener("click", stopIdleDemo, true);
         mac.addEventListener("keydown", stopIdleDemo, true);
       }
 
