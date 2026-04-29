@@ -137,11 +137,31 @@ function normCode(code = '') {
   return s || 'UNKNOWN_ERROR';
 }
 
+function technicalDetailsFromJson(json, rawFallback = '') {
+  if (!json || typeof json !== 'object')
+    return String(rawFallback || '').trim();
+  const chunks = [];
+  const ex = String(json.javaException || '').trim();
+  const en = String(json.exceptionName || '').trim();
+  if (ex) chunks.push(ex);
+  else if (en) chunks.push(en);
+  const st = String(json.javaStackTrace || json.exceptionStackTrace || '').trim();
+  if (st) chunks.push(st);
+  let s = chunks.filter(Boolean).join('\n\n').trim();
+  const um = String(json.userErrorMessage || '').trim();
+  if (um && s.startsWith(um)) s = s.slice(um.length).replace(/^[\s:]+/, '').trim();
+  if (!s && rawFallback) s = String(rawFallback).trim();
+  return s;
+}
+
 function humanizeError({ where = 'summary', code = '', json = null, httpStatus = 0 }) {
+  const um = String(json?.userErrorMessage || '').trim();
+  if (um) return um;
+
   const C = normCode(code);
   const isSummary = where === 'summary';
 
-  const tech = `${json?.exceptionName || json?.javaException || ''} ${json?.exceptionStackTrace || ''}`;
+  const tech = `${json?.exceptionName || json?.javaException || ''} ${json?.exceptionStackTrace || json?.javaStackTrace || ''}`;
 
   if (/CLIENTABORTEXCEPTION|BROKEN PIPE/i.test(tech)) {
     return "La connexion a été interrompue pendant le téléchargement. Réessayez.";
@@ -377,7 +397,7 @@ async function apiGetWithRetry(kind, jobId, auth, retryCount=0, signal){
 
   if (json && (json.status === 'KO' || json.errorMessage)) {
     const code = String(json.errorMessage || json.status || '').toLowerCase();
-    const tech = (json?.exceptionName || json?.javaException || '') + ' ' + (json?.exceptionStackTrace || '');
+        const tech = (json?.exceptionName || json?.javaException || '') + ' ' + (json?.exceptionStackTrace || json?.javaStackTrace || '');
     if (retryCount < 3) {
       if (/invalid[_-]?token/.test(code)) {
         const nt = await refreshToken(auth);
@@ -1587,7 +1607,7 @@ try {
 			                  : "Chargement du transcript annulé (veuillez recharger la page)";
 			  if (editors.transcript) {
 			    editors.transcript.innerHTML = '';
-			    editors.transcript.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || val?.raw || ''));
+			    editors.transcript.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, val?.raw || '') || ''));
 			  }
 			 window._segments = []
 			}
@@ -1735,14 +1755,14 @@ if (sRes.status === 'fulfilled' && sRes.value.ok) {
         editors.summary.style.userSelect = '';
         editors.summary.style.cursor = '';
         editors.summary.classList.remove('ag-summary-readonly');
-        editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
+        editors.summary.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, '') || ''));
       }
     }
   } else if (editors.summary) {
     hideSummaryLoading(); // Cacher le loader en cas d'erreur
     const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
     editors.summary.innerHTML = '';
-    editors.summary.appendChild(renderAlert(msg, val?.json?.exceptionStackTrace || ''));
+    editors.summary.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, '') || ''));
   }
 }
       updateDownloadLinks(id, auth, { summaryEmpty });

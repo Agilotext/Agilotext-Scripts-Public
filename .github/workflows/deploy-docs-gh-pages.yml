@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - "1.06"
+      - "1.07"
     paths:
       - "docs/**"
       - ".github/workflows/deploy-docs-gh-pages.yml"
@@ -30,7 +31,7 @@ jobs:
       - name: Checkout sparse (docs uniquement — pas de sous-modules)
         uses: actions/checkout@v4
         with:
-          ref: "1.06"
+          ref: ${{ github.ref }}
           sparse-checkout: |
             docs
           sparse-checkout-cone-mode: true
