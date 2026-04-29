@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agilotext — Démo capture (embed)</title>
+  <style>
+    :root {
+      --agilo-blue: #174a96;
+      --agilo-blue-soft: rgba(23, 74, 150, 0.09);
+      --bg-cream: #e7e0da;
+      --bg-card: #f2ede5;
+      --text: #1a1a1a;
+      --muted: #5c5c5c;
+      --border: #d4caba;
+      --radius: 12px;
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 720px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 56px rgba(0, 20, 39, 0.09);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: min(520px, calc(100vh - 24px));
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .brand img { height: 22px; width: auto; display: block; }
+
+    .inner {
+      padding: 16px 18px 14px;
+      background: var(--bg-cream);
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+    }
+    .eyebrow {
+      margin: 0 0 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      letter-spacing: 0.02em;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(17px, 2.8vw, 19px);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.25;
+      color: #0e1e33;
+    }
+    .lead {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 560px) {
+      .tiles { grid-template-columns: repeat(2, 1fr); }
+      .mac { max-height: none; }
+    }
+    .tile {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 8px;
+      text-align: center;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .tile:hover {
+      border-color: rgba(23, 74, 150, 0.35);
+      box-shadow: 0 0 0 2px var(--agilo-blue-soft);
+    }
+    .tile .ico {
+      width: 34px;
+      height: 34px;
+      margin: 0 auto 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      background: var(--agilo-blue-soft);
+      color: var(--agilo-blue);
+    }
+    .tile .ico svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .tile strong {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0e1e33;
+      margin-bottom: 2px;
+    }
+    .tile small {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.25;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 18px;
+      border-radius: 8px;
+      border: none;
+      font: inherit;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      background: var(--agilo-blue);
+      color: #fff;
+      transition: box-shadow 0.15s, transform 0.08s;
+    }
+    .btn:hover:not(:disabled) {
+      box-shadow: 0 4px 14px rgba(23, 74, 150, 0.35);
+    }
+    .btn:active:not(:disabled) { transform: scale(0.98); }
+    .btn:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: 2px;
+    }
+    .btn:disabled {
+      opacity: 0.85;
+      cursor: wait;
+    }
+    .btn-secondary {
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      border-color: var(--agilo-blue);
+      color: var(--agilo-blue);
+    }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; border-top-color: rgba(255, 255, 255, 0.8); }
+    }
+
+    .bridge {
+      margin: 0;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+    .bridge a {
+      color: var(--agilo-blue);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .bridge a:hover { text-decoration: underline; }
+
+    .fineprint {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="mac" role="application" aria-label="Démonstration capture Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.com — espace sécurisé (démo)</div>
+        <div class="brand">
+          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
+        </div>
+      </div>
+      <div class="inner">
+        <p class="eyebrow">Sans robot dans la réunion · Données hébergées en France · RGPD</p>
+        <h1>Capturez votre audio en quelques secondes</h1>
+        <p class="lead">
+          Visio, fichier ou lien : tout arrive dans Agilotext sans installation lourde — vous gardez le contrôle de vos sources.
+        </p>
+
+        <div class="tiles" aria-hidden="true">
+          <div class="tile">
+            <div class="ico">
+              <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" x2="12" y1="19" y2="23"/><path d="M8 23h8"/></svg>
+            </div>
+            <strong>Enregistrer</strong>
+            <small>Sans robot dans la salle</small>
+          </div>
+          <div class="tile">
+            <div class="ico">
+              <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+            </div>
+            <strong>Importer</strong>
+            <small>MP3, MP4…</small>
+          </div>
+          <div class="tile">
+            <div class="ico">
+              <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </div>
+            <strong>Coller un lien</strong>
+            <small>YouTube…</small>
+          </div>
+          <div class="tile">
+            <div class="ico">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M13 8H7"/><path d="M17 12H7"/></svg>
+            </div>
+            <strong>Dictée</strong>
+            <small>Prise de notes</small>
+          </div>
+        </div>
+
+        <div class="cta-row">
+          <button type="button" class="btn" id="btn-simulate">
+            Simuler une transcription
+          </button>
+          <a class="btn btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+        </div>
+
+        <p class="bridge">
+          Ensuite : découvrez la valeur produit — transcription synchronisée, compte rendu structuré et assistant IA sur la démo
+          <a href="result.html">« Résultat »</a> (à placer sous cette iframe sur la homepage).
+        </p>
+
+        <p class="fineprint">Démo statique — aucune donnée envoyée · Bleu #174a96</p>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var btn = document.getElementById("btn-simulate");
+      var label = "Simuler une transcription";
+      btn.addEventListener("click", function () {
+        if (btn.getAttribute("aria-busy") === "true") return;
+        btn.setAttribute("aria-busy", "true");
+        btn.disabled = true;
+        btn.innerHTML =
+          '<span class="spinner" aria-hidden="true"></span><span>Préparation…</span>';
+        window.setTimeout(function () {
+          btn.removeAttribute("aria-busy");
+          btn.disabled = false;
+          btn.textContent = label;
+        }, 1800);
+      });
+    })();
+  </script>
+</body>
+</html>
