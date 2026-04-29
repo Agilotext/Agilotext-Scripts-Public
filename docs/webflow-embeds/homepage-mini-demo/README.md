@@ -4,21 +4,27 @@ Pages HTML **autonomes** (CSS inline, JS vanilla) pour embeds Webflow en **deux 
 
 | Fichier | Rôle | Contenu |
 |---------|------|---------|
-| **[`capture.html`](capture.html)** | INPUT | Fenêtre Mac + carte blanche type **tableau de bord** (Enregistrer, Fichier / YouTube / Dictée en direct, options). **Simuler une transcription** (loading factice). Statique. |
+| **[`capture.html`](capture.html)** | INPUT | Fenêtre Mac + carte type **tableau de bord** (Enregistrer, onglets, options, **Envoyer mon fichier**). Statique. |
 | **[`result.html`](result.html)** | OUTPUT | Lecteur audio + **3 segments** synchronisés, onglets Transcription / Compte rendu / Agent IA, CR structuré, 2 suggestions IA. |
 | **[`index.html`](index.html)** | Hub | Liens, snippets iframe, migration, checklist QA (prévisualisation / doc interne). |
 
 **Palette** : fond beige `#E7E0DA`, accent produit **bleu `#174a96`** (plus de violet). Orange réservé au marketing hors ces embeds si besoin.
 
-**Audio** : [`demo.mp3`](demo.mp3) — **durée 30 s** (ton pur généré par ffmpeg), utilisé uniquement pour la démo.
+**Audio** : [`demo.mp3`](demo.mp3) — **30 s** de **silence** (fichier généré ; aucun bruit désagréable à l’écoute). Vous pouvez remplacer par votre propre extrait **en gardant la même durée (30 s)** pour que la synchro transcript reste exacte.
 
-### Régénérer `demo.mp3` (ffmpeg)
+### Régénérer ou remplacer `demo.mp3`
 
-À exécuter depuis ce dossier :
+Silence 30 s (défaut embarqué) :
+
+```bash
+ffmpeg -y -f lavfi -i anullsrc=r=44100:cl=stereo -t 30 -c:a libmp3lame -q:a 9 demo.mp3
+ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 demo.mp3
+```
+
+Alternative tonalité (peut être désagréable à l’écoute) :
 
 ```bash
 ffmpeg -y -f lavfi -i "sine=frequency=330:duration=30" -c:a libmp3lame -q:a 5 demo.mp3
-ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 demo.mp3
 ```
 
 La durée doit rester **30 s** pour que les `data-start` / `data-end` dans `result.html` restent valides.

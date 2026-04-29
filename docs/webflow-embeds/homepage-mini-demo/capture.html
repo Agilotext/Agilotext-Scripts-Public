@@ -5,14 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Agilotext — Démo capture (embed)</title>
   <style>
-    /* Shell iframe (inchangé : Mac + beige) */
     :root {
       --shell-bg: #e7e0da;
       --shell-border: #d4caba;
       --shell-card: #f2ede5;
-    }
-    /* ── Variables Agilotext (alignées produit) ───────────────────────── */
-    :root {
       --agilo-primary: #174a96;
       --agilo-primary-soft: rgba(23, 74, 150, 0.14);
       --agilo-text: #020202;
@@ -21,8 +17,7 @@
       --agilo-surface-2: #f8f9fa;
       --agilo-border: rgba(52, 58, 64, 0.25);
       --agilo-accent: #fd7e14;
-      --agilo-green: #1c661a;
-      --agilo-radius: 0.5rem;
+      --btn-radius: 8px;
     }
 
     * { box-sizing: border-box; }
@@ -55,7 +50,7 @@
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      max-height: min(900px, calc(100vh - 20px));
+      max-height: min(920px, calc(100vh - 20px));
     }
     .titlebar {
       display: flex;
@@ -83,7 +78,6 @@
     }
     .brand img { height: 22px; width: auto; display: block; }
 
-    /* Zone blanche type tableau de bord */
     .inner {
       padding: 0;
       background: var(--shell-bg);
@@ -93,7 +87,7 @@
     }
     .dashboard-card {
       margin: 12px;
-      padding: 20px 18px 18px;
+      padding: 20px 16px 20px;
       background: var(--agilo-surface);
       border-radius: 10px;
       border: 1px solid var(--agilo-border);
@@ -104,6 +98,7 @@
       font-size: 0.75rem;
       color: var(--agilo-dim);
       margin: 0 0 12px;
+      text-align: center;
     }
     .crumb span { opacity: 0.85; }
 
@@ -113,7 +108,7 @@
       justify-content: center;
       gap: 8px;
       text-align: center;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .dash-title {
       margin: 0;
@@ -139,36 +134,38 @@
       margin-top: 2px;
     }
 
+    /* Bouton Enregistrer : plus compact, rebords carrés comme « Tester gratuitement » */
     .btn-record {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      gap: 0.5rem;
-      width: 100%;
-      max-width: 280px;
+      gap: 0.45rem;
+      padding: 0.48rem 1rem;
       margin: 0 auto 8px;
-      padding: 0.85rem 1.25rem;
       font-family: inherit;
-      font-size: 0.95rem;
+      font-size: 0.875rem;
       font-weight: 600;
       color: #fff;
       background: var(--agilo-primary);
       border: none;
-      border-radius: 999px;
+      border-radius: var(--btn-radius);
       cursor: default;
-      box-shadow: 0 2px 10px rgba(23, 74, 150, 0.22);
+      box-shadow: 0 2px 8px rgba(23, 74, 150, 0.2);
     }
     .btn-record svg {
-      width: 22px;
-      height: 22px;
+      width: 18px;
+      height: 18px;
       fill: currentColor;
+    }
+    .btn-record-wrap {
+      text-align: center;
     }
 
     .rgpd-note {
       text-align: center;
       font-size: 0.72rem;
       color: var(--agilo-dim);
-      margin: 0 0 18px;
+      margin: 0 0 16px;
       line-height: 1.45;
     }
 
@@ -176,7 +173,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      margin: 8px 0 18px;
+      margin: 4px 0 14px;
       color: var(--agilo-dim);
       font-size: 0.8rem;
       font-weight: 600;
@@ -189,20 +186,10 @@
       background: rgba(52, 58, 64, 0.18);
     }
 
-    /* ── Carte sources (extrait du dashboard) ──────────────────────────── */
-    .source-card {
-      background: transparent;
-      border: none;
-      border-radius: 0;
-      overflow: visible;
-    }
-
     .agilo-source-wrap {
       width: 100%;
       max-width: 1100px;
       margin: 0 auto;
-      padding: 0;
-      box-sizing: border-box;
     }
 
     .source-tabs {
@@ -216,7 +203,7 @@
       align-items: center;
       justify-content: center;
       gap: 0.45rem;
-      padding: 0.85rem 0.4rem;
+      padding: 0.85rem 0.35rem;
       font-family: inherit;
       font-size: 0.8125rem;
       font-weight: 500;
@@ -262,10 +249,8 @@
       letter-spacing: 0.02em;
     }
 
-    .source-panels { padding: 1.25rem 0 0; }
-    .source-panel {
-      display: none;
-    }
+    .source-panels { padding: 1.1rem 0 0; }
+    .source-panel { display: none; }
     .source-panel.active {
       display: block;
       animation: panelFadeIn 0.22s ease;
@@ -278,6 +263,12 @@
       .source-panel.active { animation: none; }
     }
 
+    /* Zone fichier centrée */
+    .panel-file-centered {
+      max-width: 440px;
+      margin: 0 auto;
+      text-align: center;
+    }
     .panel-file-title {
       font-size: 0.95rem;
       font-weight: 600;
@@ -287,12 +278,15 @@
     .checkbox-component.multiple-audios {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 0.65rem;
       margin-top: 0.25rem;
       font-size: 0.8125rem;
       flex-wrap: wrap;
     }
     .checkbox-component.multiple-audios .text-size-small { color: var(--agilo-dim); }
+
+    /* Toggle unique (même style partout) */
     .toggle-fake {
       position: relative;
       width: 38px;
@@ -312,7 +306,8 @@
       width: 16px;
       height: 16px;
       border-radius: 50%;
-      background: #fff;
+      background: #ffffff;
+      border: 1px solid rgba(0, 0, 0, 0.06);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
       transition: transform 0.25s;
     }
@@ -345,6 +340,11 @@
       cursor: default;
     }
 
+    .youtube-panel-inner {
+      text-align: center;
+      max-width: 440px;
+      margin: 0 auto;
+    }
     .youtube-panel-inner h5 {
       font-size: 0.95rem;
       font-weight: 600;
@@ -366,12 +366,10 @@
       font-size: 0.75rem;
       color: var(--agilo-dim);
       margin-top: 0.45rem;
+      text-align: center;
     }
 
-    .dictee-inner-card {
-      text-align: center;
-      padding: 0.5rem 0 0;
-    }
+    .dictee-inner-card { text-align: center; padding: 0.5rem 0 0; }
     .dictee-status-row {
       display: inline-flex;
       align-items: center;
@@ -396,7 +394,6 @@
       color: var(--agilo-dim);
     }
     .dictee-timer .sep { opacity: 0.85; }
-
     .dictee-preview-label {
       display: flex;
       align-items: center;
@@ -412,7 +409,6 @@
       fill: currentColor;
       flex-shrink: 0;
     }
-
     .dictee-textarea-static {
       width: 100%;
       min-height: 140px;
@@ -428,14 +424,10 @@
       box-sizing: border-box;
       pointer-events: none;
     }
-
     .dictee-actions {
       display: flex;
       justify-content: center;
-      align-items: center;
-      gap: 0.55rem;
       margin-top: 0.85rem;
-      flex-wrap: wrap;
     }
     .dictee-btn {
       display: inline-flex;
@@ -457,118 +449,152 @@
       background: var(--agilo-primary);
       color: #fff;
     }
-
     .dictee-note {
       font-size: 0.65rem;
       color: var(--agilo-dim);
       margin-top: 0.85rem;
       line-height: 1.45;
-      text-align: left;
+      text-align: center;
     }
 
-    /* Options type dashboard (aperçu statique) */
-    .process-row {
-      margin-top: 1.25rem;
+    /* Bloc options : même ligne label + toggle, groupe centré comme Envoi multiple */
+    .process-stack {
+      margin-top: 1.15rem;
       padding-top: 1rem;
       border-top: 1px solid rgba(52, 58, 64, 0.12);
+      max-width: 440px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
     }
     .process-toggle-line {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-bottom: 10px;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 11px;
       font-size: 0.78rem;
       color: var(--agilo-text);
+      flex-wrap: wrap;
+      width: 100%;
     }
-    .process-toggle-line label { font-weight: 500; }
-    .pill-toggle {
-      width: 38px;
-      height: 22px;
-      border-radius: 12px;
-      flex-shrink: 0;
+    .process-toggle-line label {
+      font-weight: 500;
+      text-align: center;
+      flex: 0 1 auto;
+      max-width: min(280px, 88vw);
+      margin: 0;
       cursor: default;
     }
-    .pill-toggle.on { background: var(--agilo-accent); }
-    .pill-toggle.off { background: #cdd5df; }
 
-    .select-fake {
+    .template-cr-block {
+      margin: 0 auto 14px;
+      padding: 12px 0 4px;
+      max-width: 380px;
+      text-align: center;
+      border-bottom: 1px solid rgba(52, 58, 64, 0.08);
+      padding-bottom: 14px;
+    }
+    .template-cr-block.is-hidden {
+      display: none;
+    }
+    .template-cr-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--agilo-text);
+    }
+    .select-template {
       width: 100%;
-      max-width: 280px;
-      padding: 8px 10px;
+      max-width: 100%;
+      padding: 9px 11px;
       font-size: 0.78rem;
       border: 1px solid var(--agilo-border);
       border-radius: 8px;
       background: var(--agilo-surface-2);
-      color: var(--agilo-dim);
+      color: var(--agilo-text);
       pointer-events: none;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .link-create-template {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--agilo-accent);
+      text-decoration: none;
+      cursor: default;
+    }
+    .link-create-template:hover {
+      text-decoration: underline;
     }
 
-    /* CTAs embed */
-    .cta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: center;
-      margin-top: 1.15rem;
+    /* Envoyer mon fichier */
+    .send-block {
+      margin-top: 1.25rem;
       padding-top: 1rem;
       border-top: 1px dashed rgba(52, 58, 64, 0.15);
+      text-align: center;
     }
-    .btn {
+    /* Comme capture produit : CTA orange lisible, coins arrondis marqués (pas pilule bleue) */
+    .btn-send-orange {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 340px;
+      padding: 13px 22px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      background: var(--agilo-accent);
+      border: none;
+      border-radius: 14px;
+      cursor: default;
+      box-shadow: 0 3px 14px rgba(253, 126, 20, 0.28);
+      transition: box-shadow 0.15s;
+    }
+    .send-disclaimer {
+      margin: 14px auto 0;
+      max-width: 380px;
+      font-size: 0.72rem;
+      color: var(--agilo-dim);
+      line-height: 1.45;
+      text-align: center;
+    }
+    .send-disclaimer p {
+      margin: 0 0 6px;
+    }
+
+    .btn-secondary {
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
+      margin-top: 14px;
       padding: 11px 18px;
-      border-radius: 8px;
-      border: none;
+      border-radius: var(--btn-radius);
+      border: 1px solid var(--agilo-border);
       font: inherit;
       font-weight: 600;
       font-size: 13px;
       cursor: pointer;
       text-decoration: none;
-      background: var(--agilo-primary);
-      color: #fff;
-      transition: box-shadow 0.15s, transform 0.08s;
-    }
-    .btn:hover:not(:disabled) {
-      box-shadow: 0 4px 14px rgba(23, 74, 150, 0.35);
-    }
-    .btn:active:not(:disabled) { transform: scale(0.98); }
-    .btn:focus-visible {
-      outline: 2px solid var(--agilo-primary);
-      outline-offset: 2px;
-    }
-    .btn:disabled {
-      opacity: 0.85;
-      cursor: wait;
-    }
-    .btn-secondary {
       background: #fff;
       color: var(--agilo-text);
-      border: 1px solid var(--agilo-border);
-      box-shadow: none;
+      transition: border-color 0.15s, color 0.15s;
     }
     .btn-secondary:hover {
       border-color: var(--agilo-primary);
       color: var(--agilo-primary);
     }
-
-    .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid rgba(255, 255, 255, 0.35);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      flex-shrink: 0;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .spinner { animation: none; border-top-color: rgba(255, 255, 255, 0.8); }
+    .btn-secondary:focus-visible {
+      outline: 2px solid var(--agilo-primary);
+      outline-offset: 2px;
     }
 
     .bridge {
@@ -596,7 +622,8 @@
 
     @media (max-width: 560px) {
       .mac { max-height: none; }
-      .source-tab { font-size: 0.72rem; padding: 0.75rem 0.25rem; }
+      .source-tab { font-size: 0.72rem; padding: 0.75rem 0.2rem; }
+      .process-toggle-line label { max-width: 100%; }
     }
   </style>
 </head>
@@ -620,10 +647,12 @@
             <span class="help-ico" title="Démo statique" aria-hidden="true">?</span>
           </div>
 
-          <button type="button" class="btn-record" disabled aria-disabled="true" title="Démo — aucun enregistrement réel">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-            Enregistrer
-          </button>
+          <div class="btn-record-wrap">
+            <button type="button" class="btn-record" disabled aria-disabled="true" title="Démo — aucun enregistrement réel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+              Enregistrer
+            </button>
+          </div>
           <p class="rgpd-note">Conforme au RGPD. L’audio reste en local jusqu’à l’envoi.</p>
 
           <div class="or-rule" role="presentation"><span>Ou</span></div>
@@ -648,14 +677,16 @@
 
               <div class="source-panels">
                 <div class="source-panel active" id="panel-file" role="tabpanel" aria-labelledby="tab-file">
-                  <div class="panel-file-title">Uploadez votre fichier audio ou vidéo ici :</div>
-                  <div class="checkbox-component multiple-audios">
-                    <span class="text-size-small">Envoi multiple</span>
-                    <button type="button" class="toggle-fake on" id="toggle-envoi" aria-label="Basculer envoi multiple ou envoi unique (démo)" aria-pressed="true"></button>
-                    <span class="text-size-small">Envoi unique</span>
-                  </div>
-                  <div class="upload-zone-placeholder">
-                    Glissez-déposez votre fichier audio (M4A, MP3, MP4, WAV) ou <span class="browse">Parcourir</span>
+                  <div class="panel-file-centered">
+                    <div class="panel-file-title">Uploadez votre fichier audio ou vidéo ici :</div>
+                    <div class="checkbox-component multiple-audios">
+                      <span class="text-size-small">Envoi multiple</span>
+                      <button type="button" class="toggle-fake on" id="toggle-envoi" aria-label="Basculer envoi multiple ou envoi unique (démo)" aria-pressed="true"></button>
+                      <span class="text-size-small">Envoi unique</span>
+                    </div>
+                    <div class="upload-zone-placeholder">
+                      Glissez-déposez votre fichier audio (M4A, MP3, MP4, WAV) ou <span class="browse">Parcourir</span>
+                    </div>
                   </div>
                 </div>
 
@@ -694,34 +725,44 @@
             </section>
           </div>
 
-          <div class="process-row">
+          <div class="process-stack">
             <div class="process-toggle-line">
-              <label>Activer la reconnaissance des intervenants</label>
-              <span class="pill-toggle on" role="presentation" aria-hidden="true"></span>
+              <label for="toggle-speaker">Activer la reconnaissance des intervenants</label>
+              <button type="button" class="toggle-fake on" id="toggle-speaker" aria-label="Reconnaissance des intervenants" aria-pressed="true"></button>
             </div>
-            <div class="process-toggle-line" style="flex-wrap: wrap;">
-              <label>Nombre d’intervenants</label>
-              <select class="select-fake" aria-label="Exemple (démo)" tabindex="-1">
-                <option>Déduire de la réunion</option>
+
+            <div class="process-toggle-line">
+              <label for="toggle-cr">Générer le compte rendu</label>
+              <button type="button" class="toggle-fake on" id="toggle-cr" aria-label="Générer le compte rendu" aria-pressed="true"></button>
+            </div>
+
+            <div id="template-cr-block" class="template-cr-block">
+              <span class="template-cr-label">Sélectionnez un modèle de compte rendu :</span>
+              <select class="select-template" aria-label="Modèle (démo)" tabindex="-1">
+                <option>Démo HP — CR interne Agilotext V4</option>
               </select>
+              <a href="#" class="link-create-template" tabindex="-1" onclick="return false;" aria-disabled="true">+ Créer un modèle</a>
+            </div>
+
+            <div class="process-toggle-line">
+              <label for="toggle-format">Formater la transcription</label>
+              <button type="button" class="toggle-fake" id="toggle-format" aria-label="Formater la transcription" aria-pressed="false"></button>
             </div>
             <div class="process-toggle-line">
-              <label>Générer le compte rendu</label>
-              <span class="pill-toggle on" role="presentation" aria-hidden="true"></span>
-            </div>
-            <div class="process-toggle-line">
-              <label>Formater la transcription</label>
-              <span class="pill-toggle off" role="presentation" aria-hidden="true"></span>
-            </div>
-            <div class="process-toggle-line">
-              <label>Traduire le(s) contenu(s)</label>
-              <span class="pill-toggle off" role="presentation" aria-hidden="true"></span>
+              <label for="toggle-translate">Traduire le(s) contenu(s)</label>
+              <button type="button" class="toggle-fake" id="toggle-translate" aria-label="Traduire les contenus" aria-pressed="false"></button>
             </div>
           </div>
 
-          <div class="cta-row">
-            <button type="button" class="btn" id="btn-simulate">Simuler une transcription</button>
-            <a class="btn btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+          <div class="send-block">
+            <button type="button" class="btn-send-orange" disabled title="Démo statique">
+              Envoyer mon fichier
+            </button>
+            <div class="send-disclaimer">
+              <p>Les transcriptions et comptes rendus peuvent comporter des erreurs.</p>
+              <p>Vérifiez attentivement vos résultats avant de les partager ou de les utiliser.</p>
+            </div>
+            <a class="btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
           </div>
         </div>
 
@@ -778,28 +819,30 @@
         document.querySelector('[data-tab="' + order[next] + '"]').focus();
       });
 
-      var toggle = document.getElementById("toggle-envoi");
-      if (toggle) {
-        toggle.addEventListener("click", function () {
-          var on = toggle.classList.toggle("on");
-          toggle.setAttribute("aria-pressed", on ? "true" : "false");
+      function bindToggle(el) {
+        if (!el) return;
+        el.addEventListener("click", function () {
+          var on = el.classList.toggle("on");
+          el.setAttribute("aria-pressed", on ? "true" : "false");
+          return on;
         });
       }
 
-      var btn = document.getElementById("btn-simulate");
-      var label = "Simuler une transcription";
-      btn.addEventListener("click", function () {
-        if (btn.getAttribute("aria-busy") === "true") return;
-        btn.setAttribute("aria-busy", "true");
-        btn.disabled = true;
-        btn.innerHTML =
-          '<span class="spinner" aria-hidden="true"></span><span>Préparation…</span>';
-        window.setTimeout(function () {
-          btn.removeAttribute("aria-busy");
-          btn.disabled = false;
-          btn.textContent = label;
-        }, 1800);
-      });
+      bindToggle(document.getElementById("toggle-envoi"));
+
+      bindToggle(document.getElementById("toggle-speaker"));
+      bindToggle(document.getElementById("toggle-format"));
+      bindToggle(document.getElementById("toggle-translate"));
+
+      var tplBlock = document.getElementById("template-cr-block");
+      var toggleCr = document.getElementById("toggle-cr");
+      if (toggleCr && tplBlock) {
+        toggleCr.addEventListener("click", function () {
+          var on = toggleCr.classList.toggle("on");
+          toggleCr.setAttribute("aria-pressed", on ? "true" : "false");
+          tplBlock.classList.toggle("is-hidden", !on);
+        });
+      }
     })();
   </script>
 </body>
