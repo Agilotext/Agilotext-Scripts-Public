@@ -98,7 +98,7 @@
       flex: 1;
       min-height: 0;
     }
-    /* Colonne stretch pour que le fil d’Ariane reste aligné à gauche même si du contenu est centré plus bas */
+    /* Colonne flex : pas de text-align sur la carte entière (sinon le nav du fil d’Ariane hérite du centrage). */
     .dashboard-card {
       display: flex;
       flex-direction: column;
@@ -110,6 +110,11 @@
       border: 1px solid var(--agilo-border);
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
       transition: box-shadow 0.35s ease, transform 0.35s ease;
+    }
+
+    /* Tout le bloc titre / upload / options reste centré, séparé du fil d’Ariane */
+    .dashboard-card-main {
+      width: 100%;
       text-align: center;
     }
     @media (prefers-reduced-motion: no-preference) {
@@ -133,7 +138,7 @@
         0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    /* Fil d’Ariane : une seule entrée, toujours à gauche (override text-align:center du parent .dashboard-card) */
+    /* Fil d’Ariane : bloc calé à gauche (flex-start sur la colonne + pas d’héritage text-align:center) */
     .crumb {
       display: flex;
       align-items: center;
@@ -145,9 +150,9 @@
       margin: 0 0 14px;
       padding: 0;
       text-align: left;
-      width: 100%;
+      align-self: flex-start;
+      width: auto;
       max-width: 100%;
-      align-self: stretch;
       flex: 0 0 auto;
       letter-spacing: 0.01em;
       box-sizing: border-box;
@@ -796,6 +801,7 @@
             <span class="crumb-current">Tableau de bord</span>
           </nav>
 
+          <div class="dashboard-card-main">
           <div class="dash-title-row">
             <h1 class="dash-title">Capturez l’audio de votre réunion ou visio</h1>
             <span class="help-ico" title="Démo statique" aria-hidden="true">?</span>
@@ -932,6 +938,7 @@
               <p>Vérifiez attentivement vos résultats avant de les partager ou de les utiliser.</p>
             </div>
             <a class="btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+          </div>
           </div>
         </div>
 
