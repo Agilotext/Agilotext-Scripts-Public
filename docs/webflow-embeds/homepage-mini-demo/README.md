@@ -1,12 +1,12 @@
-# Démo iframe homepage (mini-app statique — version « fenêtre Mac »)
+# Démo iframe homepage — fenêtre Mac orange/beige + 4 vues produit
 
-Page HTML **autonome** (CSS inline) destinée à être chargée dans un **élément Embed** Webflow via `<iframe src="…">`.
+Page HTML **autonome** (CSS inline) pour un embed Webflow (`<iframe src="…">`).
 
-**Emplacement dans le repo :** `docs/webflow-embeds/homepage-mini-demo/index.html`
+**Emplacement :** `docs/webflow-embeds/homepage-mini-demo/index.html`
 
-- **Une seule dépendance externe** : logo SVG Agilotext sur le CDN Webflow (affichage dans la barre de titre).
-- **Pas** de feuille Webflow CSS obligatoire pour le rendu ; **pas** de fichier `demo-agilo-editor-patch.css`.
-- **Palette** : orange `#FD7E14`, beige `#E7E0DA` — voir note en bas de page dans la démo.
+- Logo SVG Agilotext (CDN Webflow) dans la titlebar uniquement.
+- **Quatre onglets** : Capturer · Transcription · Compte rendu · Agent IA — tout est statique, sans API.
+- **Palette** : orange `#FD7E14`, beige `#E7E0DA` — voir la note en bas de la démo.
 
 ---
 
@@ -43,15 +43,15 @@ Tester l’iframe avant mise en prod (certains CDN peuvent affecter le `Content-
     src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/"
     title="Démonstration Agilotext"
     width="100%"
-    height="520"
-    style="display:block;border:0;width:100%;min-height:480px;"
+    height="580"
+    style="display:block;border:0;width:100%;min-height:520px;"
     loading="lazy"
     referrerpolicy="strict-origin-when-cross-origin"
   ></iframe>
 </div>
 ```
 
-Ajuster `height` / `min-height` selon la section (la démo V1 est relativement compacte).
+Ajuster `height` / `min-height` selon la section (souvent **560–620px** avec quatre onglets et les panneaux enrichis).
 
 ---
 

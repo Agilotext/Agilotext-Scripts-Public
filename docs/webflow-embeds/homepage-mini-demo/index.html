@@ -42,11 +42,11 @@
       border: 1px solid var(--border);
       box-shadow:
         0 4px 6px rgba(0, 20, 39, 0.06),
-        0 24px 48px rgba(0, 20, 39, 0.08);
+        0 24px 56px rgba(0, 20, 39, 0.09);
       overflow: hidden;
       display: flex;
       flex-direction: column;
-      min-height: 480px;
+      min-height: 520px;
     }
     .titlebar {
       display: flex;
@@ -85,23 +85,28 @@
     .brand img { height: 22px; width: auto; display: block; }
     .tabs {
       display: flex;
+      flex-wrap: nowrap;
       gap: 0;
-      padding: 0 12px;
+      padding: 0 8px;
       background: #ebe4dc;
       border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .tab {
-      flex: 1;
-      padding: 12px 10px;
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 11px 8px;
       border: none;
       background: transparent;
       font: inherit;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--muted);
       cursor: pointer;
       border-bottom: 3px solid transparent;
       transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
     }
     .tab:hover { color: var(--text); background: rgba(253, 126, 20, 0.06); }
     .tab:focus-visible {
@@ -111,7 +116,7 @@
     .tab[aria-selected="true"] {
       color: var(--deep);
       border-bottom-color: var(--orange);
-      background: rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.65);
     }
     .panel-wrap {
       flex: 1;
@@ -120,26 +125,44 @@
     }
     .panel {
       display: none;
-      animation: fadeIn 0.22s ease;
+      animation: fadeIn 0.24s ease;
     }
     .panel.is-active { display: block; }
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
+      from { opacity: 0; transform: translateY(5px); }
       to { opacity: 1; transform: translateY(0); }
     }
     .card {
       background: #fff;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 16px;
+      padding: 18px;
       margin-bottom: 12px;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+    }
+    .lead {
+      margin: 0 0 10px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--deep);
+      letter-spacing: -0.02em;
+    }
+    .sublead {
+      margin: 0 0 14px;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.55;
     }
     .row {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
+      justify-content: flex-start;
+    }
+    .row-between {
       justify-content: space-between;
+      align-items: flex-start;
     }
     .pill {
       display: inline-block;
@@ -153,8 +176,9 @@
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
-      padding: 8px 14px;
+      padding: 9px 16px;
       border-radius: 8px;
       border: none;
       font: inherit;
@@ -163,7 +187,10 @@
       cursor: pointer;
       background: var(--orange);
       color: #fff;
+      text-decoration: none;
+      transition: transform 0.08s ease, box-shadow 0.15s ease;
     }
+    .btn:hover { box-shadow: 0 4px 14px rgba(253, 126, 20, 0.35); }
     .btn:active { transform: scale(0.98); }
     .btn:focus-visible {
       outline: 2px solid var(--deep);
@@ -173,37 +200,63 @@
       background: #fff;
       color: var(--text);
       border: 1px solid var(--border);
+      box-shadow: none;
+    }
+    .btn-secondary:hover {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 1px rgba(253, 126, 20, 0.2);
     }
     .grid2 {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
       gap: 10px;
-      margin-top: 12px;
+      margin-top: 14px;
     }
     .tile {
       border: 1px dashed var(--border);
       border-radius: 8px;
-      padding: 12px;
+      padding: 12px 10px;
       font-size: 12px;
       text-align: center;
       color: var(--muted);
       transition: border-color 0.15s, box-shadow 0.15s;
+      background: #fdfcfa;
     }
     .tile:hover {
       border-style: solid;
       border-color: var(--orange);
-      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.15);
+      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.12);
     }
-    .speaker {
+    .meta-strip {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px dashed var(--border);
+    }
+    .seg {
       font-size: 12px;
-      padding: 8px 10px;
+      padding: 10px 12px;
       margin-bottom: 8px;
       border-radius: 8px;
       border-left: 3px solid var(--orange);
-      background: #faf8f5;
+      background: linear-gradient(90deg, #fffefb 0%, #faf8f5 100%);
+      line-height: 1.5;
     }
-    .speaker strong { color: var(--deep); }
-    .report-header {
+    .seg-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .seg strong { color: var(--deep); font-weight: 700; }
+    .seg time {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .cr-head {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
@@ -212,30 +265,105 @@
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
-    .report-logo {
+    .cr-brand {
       display: flex;
       align-items: center;
       gap: 10px;
     }
-    .report-logo img { height: 28px; }
-    .report-meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
-    .report-h {
+    .cr-brand img { height: 28px; width: auto; }
+    .cr-doc-title {
       font-size: 15px;
       font-weight: 700;
-      margin: 0 0 8px;
+      margin: 0 0 4px;
       color: var(--deep);
     }
-    .report-lines {
+    .cr-doc-meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .cr-section {
+      margin-bottom: 14px;
+    }
+    .cr-section:last-child { margin-bottom: 0; }
+    .cr-section h4 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .cr-section p,
+    .cr-section ul {
+      margin: 0;
       font-size: 12px;
       line-height: 1.55;
       color: var(--text);
     }
-    .report-lines li { margin-bottom: 6px; }
+    .cr-section ul { padding-left: 18px; }
+    .cr-section li { margin-bottom: 4px; }
+    .cr-actions {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 6px;
+    }
+    .cr-actions th {
+      text-align: left;
+      padding: 6px 8px;
+      background: var(--orange-soft);
+      border: 1px solid var(--border);
+      font-weight: 700;
+      color: var(--deep);
+    }
+    .cr-actions td {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .chat {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .chat-msg {
+      max-width: 92%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .chat-msg--user {
+      align-self: flex-end;
+      background: var(--orange-soft);
+      border: 1px solid #e8bc94;
+      color: var(--text);
+    }
+    .chat-msg--bot {
+      align-self: flex-start;
+      background: #fff;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .chat-msg-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .chat-note {
+      margin-top: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
     .footnote {
       margin-top: 14px;
       font-size: 11px;
       color: var(--muted);
       text-align: center;
+    }
+    @media (max-width: 560px) {
+      .tab { font-size: 11px; padding: 10px 5px; }
     }
   </style>
 </head>
@@ -244,79 +372,170 @@
     <div class="mac" role="application" aria-label="Démonstration produit Agilotext">
       <div class="titlebar">
         <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="urlfake">app.agilotext.com — démo interactive</div>
+        <div class="urlfake">app.agilotext.com — espace sécurisé (démo)</div>
         <div class="brand">
           <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
         </div>
       </div>
-      <div class="tabs" role="tablist" aria-label="Vues démo">
+      <div class="tabs" role="tablist" aria-label="Fonctionnalités Agilotext">
         <button type="button" class="tab" role="tab" id="tab-cap" aria-selected="true" aria-controls="panel-cap" tabindex="0">Capturer</button>
         <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="false" aria-controls="panel-tr" tabindex="-1">Transcription</button>
         <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
+        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Agent IA</button>
       </div>
       <div class="panel-wrap">
         <div id="panel-cap" class="panel is-active" role="tabpanel" aria-labelledby="tab-cap">
           <div class="card">
-            <div class="row">
-              <span class="pill">Zéro bot dans vos réunions</span>
-              <button type="button" class="btn" id="demo-pulse">Simuler « Démarrer »</button>
+            <div class="row-between row">
+              <span class="pill">Sans robot dans la réunion</span>
             </div>
-            <p style="margin:12px 0 0;font-size:13px;color:var(--muted);line-height:1.5;">
-              Choisissez comment alimenter Agilotext : enregistrement, import, lien YouTube ou dictée — sans connexion calendrier intrusive.
+            <p class="lead">Transformez vos échanges en texte exploitable</p>
+            <p class="sublead">
+              Importez un fichier audio ou vidéo, collez un lien ou enregistrez depuis votre navigateur — Agilotext transcrit, structure et prépare vos livrables, sans connecteur calendrier intrusif.
             </p>
-            <div class="grid2">
-              <div class="tile">Enregistrer<br /><small>réunion</small></div>
-              <div class="tile">Importer<br /><small>audio / vidéo</small></div>
+            <div class="row">
+              <button type="button" class="btn" id="btn-simulate-tr">Simuler une transcription</button>
+              <a class="btn btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+            </div>
+            <div class="grid2" aria-hidden="true">
+              <div class="tile">Enregistrer<br /><small>visio / téléphone</small></div>
+              <div class="tile">Importer<br /><small>fichier média</small></div>
               <div class="tile">Coller<br /><small>lien YouTube</small></div>
-              <div class="tile">Dicter<br /><small>micro</small></div>
+              <div class="tile">Dicter<br /><small>prise de notes</small></div>
             </div>
           </div>
         </div>
+
         <div id="panel-tr" class="panel" role="tabpanel" aria-labelledby="tab-tr">
           <div class="card">
-            <div class="row">
-              <span class="pill">Diarisation</span>
-              <button type="button" class="btn btn-secondary">Exporter</button>
+            <div class="row-between row">
+              <span class="pill">Diarisation &amp; horodatage</span>
+              <button type="button" class="btn btn-secondary" disabled title="Export désactivé en démo">Exporter</button>
             </div>
-            <div style="margin-top:14px;">
-              <div class="speaker"><strong>Alice</strong> — On valide la dictée sur la popup homepage pour demain.</div>
-              <div class="speaker"><strong>Marc</strong> — OK, même micro que l’éditeur pour rester cohérent.</div>
-              <div class="speaker"><strong>Sophie</strong> — Et on garde le message « pas de bot Teams » au-dessus de la ligne de flottaison.</div>
-            </div>
+            <p class="meta-strip">Exemple fictif — Comité pilotage Q1 · entreprise générique · audio illustratif ~8 min</p>
+            <article class="seg">
+              <div class="seg-top"><strong>Claire Dubois</strong> <time>00:00</time></div>
+              Ordre du jour : bilan conformité fournisseurs et arbitrage budget formation sécurité. Je propose qu’on valide trois décisions aujourd’hui pour débloquer le reporting régional de mars.
+            </article>
+            <article class="seg">
+              <div class="seg-top"><strong>Thomas Meyer</strong> <time>02:14</time></div>
+              Les écarts sur deux prestataires sont sous contrôle si on harmonise le référentiel preuves dans Agilotext — tout est déjà dans la transcription que vous recevez après la réunion.
+            </article>
+            <article class="seg">
+              <div class="seg-top"><strong>Sarah Nielsen</strong> <time>05:02</time></div>
+              On fige la revue trimestrielle et on envoie les actions au COPIL vendredi. Merci de garder les durées de rétention alignées sur ce qu’on avait acté la semaine dernière.
+            </article>
           </div>
         </div>
+
         <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
           <div class="card">
-            <div class="report-header">
-              <div class="report-logo">
-                <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="24" />
+            <div class="cr-head">
+              <div class="cr-brand">
+                <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="28" />
                 <div>
-                  <div class="report-h">Compte rendu — Sprint homepage</div>
-                  <div class="report-meta">Interne — Direction produit · 29 avril 2026</div>
+                  <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
+                  <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
                 </div>
               </div>
-              <span class="pill">HTML + charte</span>
+              <span class="pill">Structuré</span>
             </div>
-            <ul class="report-lines">
-              <li><strong>Décisions :</strong> démo iframe GitHub Pages ; branche <code style="background:#f4f4f4;padding:2px 6px;border-radius:4px;font-size:11px;">1.06</code>.</li>
-              <li><strong>Actions :</strong> coller le bloc Webflow ci-dessous ; ajuster la hauteur d’iframe selon la section.</li>
-              <li><strong>Risques :</strong> cache CDN jsDelivr (quelques minutes après push).</li>
-            </ul>
+            <div class="cr-section">
+              <h4>Synthèse</h4>
+              <p>
+                Réunion de pilotage centrée sur la conformité fournisseurs et le budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+              </p>
+            </div>
+            <div class="cr-section">
+              <h4>Décisions</h4>
+              <ul>
+                <li>Harmonisation du référentiel « preuves » pour les audits externes.</li>
+                <li>Validation du calendrier de reporting régional mars avec arbitrage budgétaire minimal.</li>
+                <li>Communication standardisée aux filiales pour les durées de rétention documentaire.</li>
+              </ul>
+            </div>
+            <div class="cr-section">
+              <h4>Actions</h4>
+              <table class="cr-actions">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>Échéance</th>
+                    <th>Responsable</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Publier la grille de contrôle fournisseurs v2</td>
+                    <td>15 mars</td>
+                    <td>Qualité</td>
+                  </tr>
+                  <tr>
+                    <td>Diffuser le récap COPIL aux équipes régionales</td>
+                    <td>21 mars</td>
+                    <td>Ops</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="cr-section">
+              <h4>Points de vigilance</h4>
+              <p>
+                Suivre deux prestataires encore en observation ; aucune donnée nominative client réelle n’est utilisée dans cette démo marketing.
+              </p>
+            </div>
           </div>
         </div>
-        <p class="footnote">Démo statique — aucune donnée envoyée. Palette : orange <code>#FD7E14</code>, beige <code>#E7E0DA</code>.</p>
+
+        <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
+          <div class="card">
+            <div class="row-between row">
+              <span class="pill">Questions sur ce document</span>
+            </div>
+            <p class="sublead" style="margin-bottom:12px;">
+              L’assistant travaille à partir du transcript et du compte rendu du fichier — pas sur Internet ouvert dans cette démo statique.
+            </p>
+            <div class="chat">
+              <div class="chat-msg chat-msg--user">
+                <div class="chat-msg-label">Vous</div>
+                Quelles décisions dois-je communiquer en priorité à ma direction ?
+              </div>
+              <div class="chat-msg chat-msg--bot">
+                <div class="chat-msg-label">Agent IA</div>
+                Priorisez les trois décisions listées dans la section « Décisions » : référentiel preuves, calendrier de reporting mars et cadre de communication sur la rétention — ce sont les éléments qui débloquent les prochaines étapes opérationnelles.
+              </div>
+              <div class="chat-msg chat-msg--user">
+                <div class="chat-msg-label">Vous</div>
+                Résume les risques en trois bullets pour un email court.
+              </div>
+              <div class="chat-msg chat-msg--bot">
+                <div class="chat-msg-label">Agent IA</div>
+                • Deux fournisseurs encore sous surveillance.<br />
+                • Alignement des preuves à finaliser avant audit externe.<br />
+                • Communication aux filiales à caler avant clôture mensuelle.
+              </div>
+            </div>
+            <p class="chat-note">
+              Exemple illustratif — dans l’application, les réponses sont générées à partir de vos contenus et paramètres ; aucune requête n’est envoyée depuis cette page embed.
+            </p>
+          </div>
+        </div>
+
+        <p class="footnote">
+          Démo statique — aucune donnée envoyée · Palette orange <code>#FD7E14</code> · beige <code>#E7E0DA</code>
+        </p>
       </div>
     </div>
   </div>
   <script>
     (function () {
-      var tabs = document.querySelectorAll(".tab");
       var panels = {
         cap: document.getElementById("panel-cap"),
         tr: document.getElementById("panel-tr"),
-        cr: document.getElementById("panel-cr")
+        cr: document.getElementById("panel-cr"),
+        ia: document.getElementById("panel-ia")
       };
-      var ids = ["cap", "tr", "cr"];
+      var ids = ["cap", "tr", "cr", "ia"];
 
       function show(which) {
         ids.forEach(function (id) {
@@ -333,10 +552,9 @@
         });
       }
 
-      tabs.forEach(function (tab) {
+      document.querySelectorAll(".tab").forEach(function (tab) {
         tab.addEventListener("click", function () {
-          var id = tab.id.replace("tab-", "");
-          show(id);
+          show(tab.id.replace("tab-", ""));
         });
       });
 
@@ -366,11 +584,13 @@
         document.getElementById("tab-" + ids[next]).focus();
       });
 
-      var pulse = document.getElementById("demo-pulse");
-      if (pulse) {
-        pulse.addEventListener("click", function () {
-          pulse.style.opacity = "0.7";
-          setTimeout(function () { pulse.style.opacity = "1"; }, 120);
+      var sim = document.getElementById("btn-simulate-tr");
+      if (sim) {
+        sim.addEventListener("click", function () {
+          sim.style.opacity = "0.75";
+          setTimeout(function () {
+            sim.style.opacity = "1";
+          }, 140);
           show("tr");
           document.getElementById("tab-tr").focus();
         });
