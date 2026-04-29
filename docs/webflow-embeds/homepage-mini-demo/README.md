@@ -3,6 +3,16 @@
 Page HTML autonome destinée à être chargée dans un **élément Embed** Webflow via `<iframe src="…">`.
 
 **Emplacement dans le repo :** `docs/webflow-embeds/homepage-mini-demo/index.html`  
+**Styles :** feuille Webflow officielle (CDN) + patch local `demo-agilo-editor-patch.css` (thème éditeur violet / lecteur / transcript / onglets).
+
+**Feuille Webflow utilisée (snapshot — à documenter si publish Webflow change le hash) :**
+
+```
+https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/css/agilotext-test.webflow.shared.e5b39dcfe.min.css
+```
+
+Référence enregistrée le **29 avril 2026**. Si le fichier `*.min.css` change de nom après un publish Webflow, mettre à jour l’URL dans `index.html` et cette section.
+
 (Fichiers sous `docs/` pour pouvoir les servir via **GitHub Pages** avec le bon `Content-Type: text/html`.)
 
 ---
@@ -84,8 +94,8 @@ Coller dans **Add → Embed** :
     src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/"
     title="Démonstration Agilotext"
     width="100%"
-    height="560"
-    style="display:block;border:0;width:100%;min-height:520px;"
+    height="620"
+    style="display:block;border:0;width:100%;min-height:560px;"
     loading="lazy"
     referrerpolicy="strict-origin-when-cross-origin"
   ></iframe>
@@ -99,18 +109,18 @@ Variante jsDelivr (si Pages pas encore activé) :
   src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/docs/webflow-embeds/homepage-mini-demo/index.html"
   title="Démonstration Agilotext"
   width="100%"
-  height="560"
-  style="display:block;border:0;width:100%;min-height:520px;"
+  height="620"
+  style="display:block;border:0;width:100%;min-height:560px;"
   loading="lazy"
 ></iframe>
 ```
 
-Ajuster `height` / `min-height` selon la section (mobile : souvent 480–520px).
+Ajuster `height` / `min-height` selon la section (mobile : souvent 480–560px ; la démo « éditeur » est un peu plus haute que l’ancienne mini-app).
 
 ---
 
 ## Modifier la démo
 
-1. Éditer `docs/webflow-embeds/homepage-mini-demo/index.html`.
+1. Éditer `docs/webflow-embeds/homepage-mini-demo/index.html` et, si besoin, `demo-agilo-editor-patch.css`.
 2. Commit + push sur **`1.06`**.
 3. GitHub Pages se met à jour en quelques minutes ; jsDelivr peut mettre quelques minutes (cache CDN).

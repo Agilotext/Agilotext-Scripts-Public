@@ -3,341 +3,347 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Agilotext — Démo mini-app (embed)</title>
-  <style>
-    :root {
-      --orange: #fd7e14;
-      --orange-soft: #ffe7d1;
-      --bg-cream: #e7e0da;
-      --bg-card: #f2ede5;
-      --text: #1a1a1a;
-      --muted: #5c5c5c;
-      --deep: #001427;
-      --border: #d4caba;
-      --radius: 12px;
-      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      min-height: 100%;
-      font-family: var(--font);
-      color: var(--text);
-      background: var(--bg-cream);
-      -webkit-font-smoothing: antialiased;
-    }
-    .shell {
-      padding: clamp(12px, 2vw, 20px);
-      min-height: 100vh;
-      display: flex;
-      align-items: stretch;
-      justify-content: center;
-    }
-    .mac {
-      width: 100%;
-      max-width: 920px;
-      margin: 0 auto;
-      background: var(--bg-card);
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      box-shadow:
-        0 4px 6px rgba(0, 20, 39, 0.06),
-        0 24px 48px rgba(0, 20, 39, 0.08);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      min-height: 480px;
-    }
-    .titlebar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
-      border-bottom: 1px solid var(--border);
-    }
-    .dots { display: flex; gap: 6px; flex-shrink: 0; }
-    .dots span {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-    }
-    .dots span:nth-child(1) { background: #ff5f56; }
-    .dots span:nth-child(2) { background: #febc2e; }
-    .dots span:nth-child(3) { background: #28c840; }
-    .urlfake {
-      flex: 1;
-      font-size: 11px;
-      color: var(--muted);
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 6px 10px;
-      text-align: center;
-      font-variant-numeric: tabular-nums;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .brand img { height: 22px; width: auto; display: block; }
-    .tabs {
-      display: flex;
-      gap: 0;
-      padding: 0 12px;
-      background: #ebe4dc;
-      border-bottom: 1px solid var(--border);
-    }
-    .tab {
-      flex: 1;
-      padding: 12px 10px;
-      border: none;
-      background: transparent;
-      font: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--muted);
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
-    }
-    .tab:hover { color: var(--text); background: rgba(253, 126, 20, 0.06); }
-    .tab[aria-selected="true"] {
-      color: var(--deep);
-      border-bottom-color: var(--orange);
-      background: rgba(255, 255, 255, 0.6);
-    }
-    .panel-wrap {
-      flex: 1;
-      padding: 16px;
-      background: var(--bg-cream);
-    }
-    .panel {
-      display: none;
-      animation: fadeIn 0.22s ease;
-    }
-    .panel.is-active { display: block; }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .card {
-      background: #fff;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      margin-bottom: 12px;
-    }
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .pill {
-      display: inline-block;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: var(--orange-soft);
-      color: #8b4510;
-    }
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 14px;
-      border-radius: 8px;
-      border: none;
-      font: inherit;
-      font-weight: 600;
-      font-size: 13px;
-      cursor: pointer;
-      background: var(--orange);
-      color: #fff;
-    }
-    .btn:active { transform: scale(0.98); }
-    .btn-secondary {
-      background: #fff;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    .grid2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 10px;
-      margin-top: 12px;
-    }
-    .tile {
-      border: 1px dashed var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 12px;
-      text-align: center;
-      color: var(--muted);
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .tile:hover {
-      border-style: solid;
-      border-color: var(--orange);
-      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.15);
-    }
-    .speaker {
-      font-size: 12px;
-      padding: 8px 10px;
-      margin-bottom: 8px;
-      border-radius: 8px;
-      border-left: 3px solid var(--orange);
-      background: #faf8f5;
-    }
-    .speaker strong { color: var(--deep); }
-    .report-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
-      margin-bottom: 14px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    .report-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .report-logo img { height: 28px; }
-    .report-meta { font-size: 11px; color: var(--muted); line-height: 1.4; }
-    .report-h {
-      font-size: 15px;
-      font-weight: 700;
-      margin: 0 0 8px;
-      color: var(--deep);
-    }
-    .report-lines {
-      font-size: 12px;
-      line-height: 1.55;
-      color: var(--text);
-    }
-    .report-lines li { margin-bottom: 6px; }
-    .footnote {
-      margin-top: 14px;
-      font-size: 11px;
-      color: var(--muted);
-      text-align: center;
-    }
-  </style>
+  <title>Agilotext — Démo éditeur (embed)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/css/agilotext-test.webflow.shared.e5b39dcfe.min.css" rel="stylesheet" type="text/css" />
+  <link href="./demo-agilo-editor-patch.css" rel="stylesheet" type="text/css" />
 </head>
-<body>
-  <div class="shell">
-    <div class="mac" role="application" aria-label="Démonstration produit Agilotext">
-      <div class="titlebar">
-        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="urlfake">app.agilotext.com — démo interactive</div>
-        <div class="brand">
-          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
-        </div>
-      </div>
-      <div class="tabs" role="tablist">
-        <button type="button" class="tab" role="tab" id="tab-cap" aria-selected="true" aria-controls="panel-cap">Capturer</button>
-        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="false" aria-controls="panel-tr">Transcription</button>
-        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr">Compte rendu</button>
-      </div>
-      <div class="panel-wrap">
-        <div id="panel-cap" class="panel is-active" role="tabpanel" aria-labelledby="tab-cap">
-          <div class="card">
-            <div class="row">
-              <span class="pill">Zéro bot dans vos réunions</span>
-              <button type="button" class="btn" id="demo-pulse">Simuler « Démarrer »</button>
-            </div>
-            <p style="margin:12px 0 0;font-size:13px;color:var(--muted);line-height:1.5;">
-              Choisissez comment alimenter Agilotext : enregistrement, import, lien YouTube ou dictée — sans connexion calendrier intrusive.
-            </p>
-            <div class="grid2">
-              <div class="tile">Enregistrer<br /><small>réunion</small></div>
-              <div class="tile">Importer<br /><small>audio / vidéo</small></div>
-              <div class="tile">Coller<br /><small>lien YouTube</small></div>
-              <div class="tile">Dicter<br /><small>micro</small></div>
-            </div>
-          </div>
-        </div>
-        <div id="panel-tr" class="panel" role="tabpanel" aria-labelledby="tab-tr">
-          <div class="card">
-            <div class="row">
-              <span class="pill">Diarisation</span>
-              <button type="button" class="btn btn-secondary">Exporter</button>
-            </div>
-            <div style="margin-top:14px;">
-              <div class="speaker"><strong>Alice</strong> — On valide la dictée sur la popup homepage pour demain.</div>
-              <div class="speaker"><strong>Marc</strong> — OK, même micro que l’éditeur pour rester cohérent.</div>
-              <div class="speaker"><strong>Sophie</strong> — Et on garde le message « pas de bot Teams » au-dessus de la ligne de flottaison.</div>
-            </div>
-          </div>
-        </div>
-        <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
-          <div class="card">
-            <div class="report-header">
-              <div class="report-logo">
-                <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="24" />
-                <div>
-                  <div class="report-h">Compte rendu — Sprint homepage</div>
-                  <div class="report-meta">Interne — Direction produit · 29 avril 2026</div>
+<body class="agilo-a11y-app homepage-mini-demo-root">
+  <div class="demo-mini-shell">
+    <div class="main-wrapper">
+      <section class="section_hero app">
+        <div class="dashboard mes-transcript">
+          <div class="dashboard-left" id="agiloSidebar" role="navigation" aria-label="Menu principal">
+            <div class="dashboard-menu menu-app">
+              <div class="wrapper-menu">
+                <a href="https://www.agilotext.com/" class="nav_logo-link app-center w-nav-brand" rel="noopener noreferrer">
+                  <img
+                    src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg"
+                    loading="lazy"
+                    alt="Agilotext"
+                    class="nav_logo app-center"
+                    width="120"
+                    height="28"
+                  />
+                </a>
+                <div class="demo-sidebar-meta">
+                  <span class="demo-plan-badge">Business</span>
+                  <span class="demo-avatar" aria-hidden="true">Démo</span>
+                </div>
+                <div class="full-width">
+                  <a href="#" class="dashboard-link w-inline-block demo-nav-fake" data-demo-nav>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-1x1-small dashboard" aria-hidden="true">
+                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      <polyline points="9 22 9 12 15 12 15 22" />
+                    </svg>
+                    <div class="wrapper-link"><div>Tableau de bord</div></div>
+                  </a>
+                  <a href="#" class="dashboard-link w-inline-block demo-nav-fake" data-demo-nav data-tour="nav-transcripts">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-1x1-small dashboard" aria-hidden="true">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="16" y1="13" x2="8" y2="13" />
+                      <line x1="16" y1="17" x2="8" y2="17" />
+                    </svg>
+                    <div class="wrapper-link"><div>Mes fichiers</div></div>
+                  </a>
+                  <a href="#" class="dashboard-link w-inline-block w--current demo-nav-fake" data-demo-nav aria-current="page">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-1x1-small dashboard" aria-hidden="true">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                    </svg>
+                    <div class="wrapper-link"><div>Éditeur</div></div>
+                  </a>
+                  <a href="https://www.agilotext.com/tarifs" class="dashboard-link w-inline-block" rel="noopener noreferrer">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-1x1-small dashboard" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 16v-4" />
+                      <path d="M12 8h.01" />
+                    </svg>
+                    <div class="wrapper-link"><div>Tarifs</div></div>
+                  </a>
                 </div>
               </div>
-              <span class="pill">HTML + charte</span>
             </div>
-            <ul class="report-lines">
-              <li><strong>Décisions :</strong> embed iframe jsDelivr sans Vercel ; branche <code style="background:#f4f4f4;padding:2px 6px;border-radius:4px;font-size:11px;">1.06</code>.</li>
-              <li><strong>Actions :</strong> coller le bloc Webflow ci-dessous ; hauteur min ~520px.</li>
-              <li><strong>Risques :</strong> cache CDN jsDelivr (~minutes après push).</li>
-            </ul>
+          </div>
+
+          <div class="dashboard-right" role="main" aria-label="Contenu principal" id="agilo-main-focus">
+            <div class="wrapper-dashboard">
+              <div class="breadcrumb profile">
+                <a href="#" class="breadcrumb_text-link demo-nav-fake">← Tous les fichiers</a>
+                <div class="breadcrumb-icon w-icon-dropdown-toggle" aria-hidden="true"></div>
+                <span class="breadcrumb_text-link w--current">Éditeur</span>
+              </div>
+              <div class="wrapper-title_compte">
+                <h2 class="h1-small">Éditeur de transcription &amp; compte rendu</h2>
+              </div>
+            </div>
+
+            <div class="wrapper-dashboard flex">
+              <div class="dashboard-content demo-dashboard-editor-stack">
+                <div class="ed-header">
+                  <div class="ed-wrap">
+                    <div class="ed-title-wrap">
+                      <span class="ed-title" contenteditable="false">Réunion produit — jalons Q2 (aperçu)</span>
+                      <button type="button" class="ed-rename" aria-label="Renommer (démo inactive)" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small" aria-hidden="true">
+                          <path d="M0 0h24v24H0z" fill="none"></path>
+                          <path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="ed-wrap vertical">
+                    <button type="button" class="button-secondary black" disabled>Exporter</button>
+                  </div>
+                </div>
+
+                <div class="wrapper-audio-api w-embed">
+                  <div id="agilo-audio-wrap" class="agilo-player">
+                    <div class="agilo-bar">
+                      <button type="button" class="agilo-btn" disabled title="Démo statique">15s</button>
+                      <button type="button" class="agilo-btn is-primary" disabled aria-label="Lecture (démo)">▶︎ Lire</button>
+                      <button type="button" class="agilo-btn" disabled title="Démo statique">30s</button>
+                      <button type="button" class="agilo-btn agilo-speed" disabled>1×</button>
+                      <button type="button" class="agilo-btn" disabled aria-label="Télécharger (démo inactive)" title="Télécharger (démo inactive)">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                          <polyline points="7 10 12 15 17 10"></polyline>
+                          <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                      </button>
+                      <div class="agilo-spacer"></div>
+                      <div class="agilo-vol">
+                        <span class="icon-small --grey" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="1em" height="1em" focusable="false">
+                            <path fill="currentColor" d="M3 9v6h4l5 4V5L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"></path>
+                          </svg>
+                        </span>
+                        <input id="agilo-volume" type="range" min="0" max="1" step="0.01" value="0.85" disabled aria-label="Volume (démo)" />
+                      </div>
+                    </div>
+                    <div class="agilo-timeline">
+                      <div class="agilo-track" aria-hidden="true">
+                        <div class="agilo-buffered"></div>
+                        <div class="agilo-progress"></div>
+                        <div class="agilo-thumb"></div>
+                      </div>
+                      <div class="agilo-times" aria-hidden="true">
+                        <div class="ag-time ag-time--left">1:04</div>
+                        <div class="ag-time ag-time--right">–4:12</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <nav role="tablist" aria-label="Onglets éditeur" class="ed-tabs" data-tour="ed-tabs">
+                  <button
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="pane-transcript"
+                    id="tab-transcript"
+                    data-tab="transcript"
+                    class="ed-tab summary is-active"
+                    tabindex="0"
+                    type="button"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" class="icon-small" aria-hidden="true">
+                      <path fill="currentColor" d="M4 4h16v2H4V4zm0 4h10v2H4V8zm0 4h14v2H4v-2zm0 4h8v2H4v-2z" />
+                    </svg>
+                    Transcription
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="pane-summary"
+                    id="tab-summary"
+                    data-tab="summary"
+                    class="ed-tab cr"
+                    tabindex="-1"
+                    type="button"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 15 15" fill="none" class="icon-small" aria-hidden="true">
+                      <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M1 1.5C1 .672 1.672 0 2.5 0h8.207L14 3.293V13.5c0 .828-.672 1.5-1.5 1.5h-10A1.5 1.5 0 011 13.5V1.5zm3 2.5h7v1H4v-1zm7 3H4v1h7v-1zm0 3H4v1h7v-1z" />
+                    </svg>
+                    Compte rendu
+                  </button>
+                  <button
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="pane-chat"
+                    id="tab-chat"
+                    data-tab="chat"
+                    class="ed-tab"
+                    tabindex="-1"
+                    type="button"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="icon-small" aria-hidden="true">
+                      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z" />
+                    </svg>
+                    Conversation IA
+                  </button>
+                </nav>
+
+                <div id="pane-transcript" role="tabpanel" aria-labelledby="tab-transcript" class="edtr-pane is-active">
+                  <div id="transcriptEditor" contenteditable="false" spellcheck="false" class="edtr-editor" data-placeholder="Tapez ici…" data-mode="structured">
+                    <article class="ag-seg is-active" lang="fr">
+                      <header class="ag-seg__head">
+                        <button class="time" type="button" title="Horodatage (démo)">00:00</button>
+                        <span class="speaker" style="color:#5d2de6">Camille</span>
+                      </header>
+                      <div class="ag-seg__text">
+                        Bonjour à toutes et tous — on valide le script de démo iframe pour la homepage : même squelette que l’éditeur Business, sans donnée sensible ni appel API.
+                      </div>
+                    </article>
+                    <article class="ag-seg" lang="fr">
+                      <header class="ag-seg__head">
+                        <button class="time" type="button" title="Horodatage (démo)">00:18</button>
+                        <span class="speaker" style="color:#7c3aed">Ibrahim</span>
+                      </header>
+                      <div class="ag-seg__text">
+                        On garde les trois volets : transcription enrichie, compte rendu HTML statique, et conversation IA en état d’accueil avec suggestions — tout reste purement visuel côté embed.
+                      </div>
+                    </article>
+                    <article class="ag-seg" lang="fr">
+                      <header class="ag-seg__head">
+                        <button class="time" type="button" title="Horodatage (démo)">00:42</button>
+                        <span class="speaker" style="color:#0891b2">Lucie</span>
+                      </header>
+                      <div class="ag-seg__text">
+                        Parfait : accents violet/gris comme en prod, typo Inter, et libellés alignés pour que l’utilisateur reconnaisse tout de suite l’outil — objectif confiance.
+                      </div>
+                    </article>
+                  </div>
+                </div>
+
+                <div id="pane-summary" role="tabpanel" aria-labelledby="tab-summary" class="edtr-pane" hidden>
+                  <div class="demo-cr-static">
+                    <div class="cr-page">
+                      <header class="cr-header">
+                        <div class="cr-header-left">
+                          <img class="cr-logo" src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="" width="100" height="24" />
+                          <div>
+                            <div class="cr-header-meta__title">Compte rendu structuré</div>
+                            <div class="cr-header-meta__sub">Exemple statique — équipe produit</div>
+                          </div>
+                        </div>
+                        <span class="cr-badge">Démo</span>
+                      </header>
+                      <section class="cr-title">
+                        <h2>Sprint homepage — fidélité visuelle démo</h2>
+                        <p>Réunion interne — support marketing &amp; produit</p>
+                        <div class="cr-meta">
+                          <div class="cr-meta-item"><b>Date</b><span>29 avril 2026</span></div>
+                          <div class="cr-meta-item"><b>Durée</b><span>~25 min</span></div>
+                          <div class="cr-meta-item"><b>Lieu</b><span>Visio</span></div>
+                          <div class="cr-meta-item"><b>Réf.</b><span>DEMO-IFRAME</span></div>
+                        </div>
+                      </section>
+                      <section class="cr-body">
+                        <div class="cr-card accent">
+                          <h3>Synthèse</h3>
+                          <p>
+                            Aligner l’iframe publique sur la coque réelle de l’éditeur (sidebar, lecteur, onglets) avec la charte violet/gris Business, tout en restant une maquette statique hébergée sur GitHub Pages.
+                          </p>
+                        </div>
+                        <div class="cr-card">
+                          <h3>Décisions</h3>
+                          <ul>
+                            <li>Option A : fidélité produit (violet) dans l’iframe ; orange marketing réservé au hero Webflow.</li>
+                            <li>Compte rendu affiché en HTML inline (pas d’iframe imbriquée en V1).</li>
+                            <li>Aucune URL API, token, identifiant de job ni contenu client réel dans le dépôt public.</li>
+                          </ul>
+                        </div>
+                        <div class="cr-card">
+                          <h3>Prochaines étapes</h3>
+                          <p>
+                            Ajuster la hauteur d’embed selon la section Webflow ; surveiller le cache CDN après publication sur la branche de livraison.
+                          </p>
+                        </div>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+
+                <div id="pane-chat" role="tabpanel" aria-labelledby="tab-chat" class="edtr-pane" hidden>
+                  <div id="chatView" contenteditable="false" spellcheck="false" class="edtr-chatlog">
+                    <div class="msg-empty-state" lang="fr">
+                      <p class="msg-empty-title">Comment puis-je vous aider avec ce transcript&nbsp;?</p>
+                      <div class="msg-empty-prompts">
+                        <button type="button" class="msg-empty-prompt" disabled>Résumer les points clés du transcript</button>
+                        <button type="button" class="msg-empty-prompt" disabled>Proposer un plan de compte rendu structuré</button>
+                        <button type="button" class="msg-empty-prompt" disabled>Extraire les décisions et actions</button>
+                      </div>
+                      <div class="demo-chat-faux" aria-hidden="true">
+                        <div class="demo-chat-bubble demo-chat-bubble--user">
+                          Exemple de question (texte générique pour la démo).
+                        </div>
+                        <div class="demo-chat-bubble demo-chat-bubble--bot">
+                          Réponse factice : l’assistant IA répondra ici dans l’application réelle — aucune donnée n’est envoyée depuis cette page.
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <p class="footnote">Démo statique — aucune donnée envoyée. Palette : orange <code>#FD7E14</code>, beige <code>#E7E0DA</code>.</p>
-      </div>
+      </section>
     </div>
+    <p class="demo-footnote">
+      Démo statique — aucune donnée envoyée. Thème éditeur&nbsp;: violet <code>#5D2DE6</code>. CSS Webflow + patch local documentés dans le README du dossier.
+    </p>
   </div>
   <script>
     (function () {
-      var tabs = document.querySelectorAll(".tab");
-      var panels = {
-        cap: document.getElementById("panel-cap"),
-        tr: document.getElementById("panel-tr"),
-        cr: document.getElementById("panel-cr")
-      };
-      var ids = ["cap", "tr", "cr"];
+      document.querySelectorAll(".demo-nav-fake").forEach(function (el) {
+        el.addEventListener("click", function (e) {
+          e.preventDefault();
+        });
+      });
 
-      function show(which) {
-        ids.forEach(function (id) {
-          var active = id === which;
-          var tabEl = document.getElementById("tab-" + id);
-          var panelEl = panels[id];
-          if (tabEl) tabEl.setAttribute("aria-selected", active ? "true" : "false");
-          if (panelEl) {
-            panelEl.classList.toggle("is-active", active);
+      var order = ["tab-transcript", "tab-summary", "tab-chat"];
+      function activate(tabId) {
+        order.forEach(function (id) {
+          var btn = document.getElementById(id);
+          if (!btn) return;
+          var panelId = btn.getAttribute("aria-controls");
+          var panel = panelId ? document.getElementById(panelId) : null;
+          var on = id === tabId;
+          btn.setAttribute("aria-selected", on ? "true" : "false");
+          btn.classList.toggle("is-active", on);
+          btn.setAttribute("tabindex", on ? "0" : "-1");
+          if (panel) {
+            panel.hidden = !on;
+            panel.classList.toggle("is-active", on);
           }
         });
       }
 
-      tabs.forEach(function (tab) {
-        tab.addEventListener("click", function () {
-          var id = tab.id.replace("tab-", "");
-          show(id);
+      order.forEach(function (id) {
+        var btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          activate(id);
         });
       });
 
-      var pulse = document.getElementById("demo-pulse");
-      if (pulse) {
-        pulse.addEventListener("click", function () {
-          pulse.style.opacity = "0.7";
-          setTimeout(function () { pulse.style.opacity = "1"; }, 120);
-          show("tr");
-          document.getElementById("tab-tr").focus();
-        });
-      }
+      document.addEventListener("keydown", function (e) {
+        var i = order.indexOf(document.activeElement && document.activeElement.id);
+        if (i < 0) return;
+        if (e.key === "ArrowRight") {
+          e.preventDefault();
+          activate(order[(i + 1) % order.length]);
+          document.getElementById(order[(i + 1) % order.length]).focus();
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          activate(order[(i + order.length - 1) % order.length]);
+          document.getElementById(order[(i + order.length - 1) % order.length]).focus();
+        }
+      });
     })();
   </script>
 </body>
