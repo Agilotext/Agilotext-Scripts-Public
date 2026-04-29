@@ -23,6 +23,10 @@ upload-to-github.js
 !docs/integration-titres-dossiers-1.05/webflow-exports/*.html
 !scripts/pages/dashboard/Code-sidebar-folders-embed.html
 
+# Embeds Webflow — pages statiques (iframe jsDelivr, sans build)
+!webflow-embeds/**/*.html
+!webflow-embeds/**/*.md
+
 # Fichiers JavaScript de test/développement
 *_TEST*.js
 *_DEBUG*.js
