@@ -695,7 +695,46 @@
       color: var(--muted);
       text-align: center;
     }
-  </style>
+
+    /* Démo idle — halo (aligné sur capture.html) */
+    .idle-demo-spotlight {
+      position: relative;
+      z-index: 2;
+      border-radius: 10px;
+      transition: box-shadow 0.35s ease;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.98),
+        0 0 0 4px rgba(23, 74, 150, 0.5),
+        0 12px 36px rgba(23, 74, 150, 0.16);
+    }
+    .player-card.idle-demo-spotlight {
+      padding: 8px;
+      margin: -4px -4px 8px;
+      border-radius: 12px;
+    }
+    .seg.idle-demo-spotlight {
+      padding: 8px 10px;
+      margin: 0 -4px 12px;
+      border-radius: var(--radius-base);
+    }
+    .tab.idle-demo-spotlight {
+      border-radius: 8px;
+    }
+    #panel-cr > .card.idle-demo-spotlight {
+      padding: 12px;
+      margin: -4px -4px 8px;
+      border-radius: var(--radius);
+    }
+    .ia-chips.idle-demo-spotlight {
+      padding: 10px;
+      margin: -6px auto 10px;
+      border-radius: 14px;
+    }
+    .ia-composer-wrap.idle-demo-spotlight {
+      padding: 8px;
+      margin: -4px -4px 4px;
+      border-radius: 14px;
+    }
 </head>
 <body>
   <div class="shell">
@@ -1054,6 +1093,203 @@
           "<strong>Décisions :</strong> harmoniser le référentiel preuves ; calendrier mars.<br /><strong>Actions :</strong> grille fournisseurs v2 (Qualité, 15 mars) ; récap COPIL (Ops, 21 mars)."
         );
       });
+
+      /* ---------- Démo automatique après inactivité (alignée sur capture.html) ---------- */
+      var macEl = document.querySelector(".mac");
+      var prefersReducedMotionIdle =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      var userEngagedIdle = false;
+      var loopTimerIdle = null;
+      var tourTimersIdle = [];
+      var spotlightElIdle = null;
+
+      function clearTourTimersIdle() {
+        tourTimersIdle.forEach(clearTimeout);
+        tourTimersIdle = [];
+      }
+
+      function afterIdle(ms, fn) {
+        var id = setTimeout(function () {
+          var ix = tourTimersIdle.indexOf(id);
+          if (ix >= 0) tourTimersIdle.splice(ix, 1);
+          if (!userEngagedIdle && fn) fn();
+        }, ms);
+        tourTimersIdle.push(id);
+      }
+
+      function clearSpotlightIdle() {
+        if (spotlightElIdle) {
+          spotlightElIdle.classList.remove("idle-demo-spotlight");
+          spotlightElIdle = null;
+        }
+      }
+
+      function setSpotlightIdle(el) {
+        clearSpotlightIdle();
+        if (!el || userEngagedIdle) return;
+        if (prefersReducedMotionIdle) return;
+        spotlightElIdle = el;
+        el.classList.add("idle-demo-spotlight");
+        try {
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (e) {
+          el.scrollIntoView(false);
+        }
+      }
+
+      function resetIdleDemoState() {
+        show("tr");
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+          if (curEl) curEl.textContent = fmt(0);
+          syncPlayIcon();
+          audio.dispatchEvent(new Event("timeupdate"));
+        }
+        ["chip-sum", "chip-plan", "chip-actions"].forEach(function (cid) {
+          var cel = document.getElementById(cid);
+          if (cel) cel.disabled = false;
+        });
+        var chatEl = document.getElementById("ia-chat");
+        if (chatEl) chatEl.innerHTML = "";
+      }
+
+      function stopIdleDemoResult() {
+        if (userEngagedIdle) return;
+        userEngagedIdle = true;
+        clearTimeout(loopTimerIdle);
+        loopTimerIdle = null;
+        clearTourTimersIdle();
+        clearSpotlightIdle();
+        resetIdleDemoState();
+      }
+
+      function isIdleDemoInteractiveTarget(el) {
+        return !!(
+          el &&
+          el.closest &&
+          el.closest(
+            'button, a[href], select, [role="tab"], input, textarea, .chip, [contenteditable="true"]'
+          )
+        );
+      }
+
+      if (macEl) {
+        macEl.addEventListener(
+          "click",
+          function (e) {
+            if (isIdleDemoInteractiveTarget(e.target)) stopIdleDemoResult();
+          },
+          true
+        );
+        macEl.addEventListener(
+          "keydown",
+          function (e) {
+            if (isIdleDemoInteractiveTarget(e.target)) stopIdleDemoResult();
+          },
+          true
+        );
+      }
+
+      var IDLE_BEFORE_MS_IDLE = 4000;
+      var STEP_MS_IDLE = 1450;
+      var PAUSE_BETWEEN_LOOPS_MS_IDLE = 9500;
+
+      function runIdleTourResult(done) {
+        if (userEngagedIdle || !macEl) {
+          if (done) done();
+          return;
+        }
+
+        show("tr");
+
+        afterIdle(0, function () {
+          var playerCard = document.querySelector("#panel-tr .player-card");
+          if (playerCard) setSpotlightIdle(playerCard);
+          afterIdle(STEP_MS_IDLE, function () {
+            clearSpotlightIdle();
+            var seg1 = document.getElementById("seg-1");
+            if (seg1) setSpotlightIdle(seg1);
+            afterIdle(STEP_MS_IDLE, function () {
+              clearSpotlightIdle();
+              show("cr");
+              var crCard = document.querySelector("#panel-cr > .card");
+              if (crCard) setSpotlightIdle(crCard);
+              afterIdle(STEP_MS_IDLE, function () {
+                clearSpotlightIdle();
+                show("ia");
+                var iaChips = document.querySelector("#panel-ia .ia-chips");
+                if (iaChips) setSpotlightIdle(iaChips);
+                afterIdle(STEP_MS_IDLE, function () {
+                  clearSpotlightIdle();
+                  var composer = document.querySelector("#panel-ia .ia-composer-wrap");
+                  if (composer) setSpotlightIdle(composer);
+                  afterIdle(STEP_MS_IDLE, function () {
+                    clearSpotlightIdle();
+                    resetIdleDemoState();
+                    if (done) done();
+                  });
+                });
+              });
+            });
+          });
+        });
+      }
+
+      function scheduleIdleLoopResult(isFirst) {
+        if (userEngagedIdle) return;
+        clearTimeout(loopTimerIdle);
+        var wait = isFirst ? IDLE_BEFORE_MS_IDLE : PAUSE_BETWEEN_LOOPS_MS_IDLE;
+        loopTimerIdle = setTimeout(function () {
+          loopTimerIdle = null;
+          if (userEngagedIdle) return;
+          runIdleTourResult(function () {
+            if (!userEngagedIdle) scheduleIdleLoopResult(false);
+          });
+        }, wait);
+      }
+
+      function scheduleIdleWhenVisibleResult() {
+        var obsTarget = document.querySelector(".panel-wrap") || macEl;
+        var started = false;
+
+        function kickoff() {
+          if (started) return;
+          started = true;
+          scheduleIdleLoopResult(true);
+        }
+
+        if (!obsTarget || !("IntersectionObserver" in window)) {
+          kickoff();
+          return;
+        }
+
+        var ioIdle = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
+                ioIdle.disconnect();
+                kickoff();
+              }
+            });
+          },
+          { threshold: [0, 0.08, 0.25] }
+        );
+        ioIdle.observe(obsTarget);
+
+        setTimeout(function () {
+          ioIdle.disconnect();
+          kickoff();
+        }, 2500);
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisibleResult);
+      } else {
+        scheduleIdleWhenVisibleResult();
+      }
     })();
   </script>
 </body>
