@@ -22,8 +22,8 @@
       --agilo-blue: var(--color-blue);
       --agilo-blue-soft: rgba(23, 74, 150, 0.1);
       --agilo-blue-border: rgba(23, 74, 150, 0.28);
-      --bg-cream: #e7e0da;
-      --bg-card: #f2ede5;
+      --bg-cream: #f8f9fa;
+      --bg-card: #f8f9fa;
       --text: var(--color-gris-fonce);
       --muted: var(--color-gris);
       --border: var(--color-noir-25);
@@ -66,7 +66,7 @@
       align-items: center;
       gap: 10px;
       padding: 10px 14px;
-      background: linear-gradient(180deg, #faf8f5 0%, #f2ede5 100%);
+      background: linear-gradient(180deg, var(--color-white) 0%, var(--bg-cream) 100%);
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
@@ -114,6 +114,23 @@
       border-bottom: 3px solid transparent;
       transition: color 0.15s, border-color 0.15s, background 0.15s;
       white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .tab-ico {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      display: block;
+    }
+    .tab-ico path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .tab:hover { color: var(--text); background: var(--agilo-blue-soft); }
     .tab:focus-visible {
@@ -252,13 +269,13 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 26px;
-      height: 26px;
+      width: 30px;
+      height: 30px;
       padding: 0;
       border: none;
-      border-radius: 6px;
+      border-radius: var(--radius-base);
       background: transparent;
-      color: var(--muted);
+      color: var(--color-gris);
       cursor: default;
       transition: background 0.15s, color 0.15s;
     }
@@ -267,10 +284,13 @@
       color: var(--agilo-blue);
     }
     .seg-tool-btn svg {
-      width: 15px;
-      height: 15px;
-      fill: currentColor;
-      stroke: none;
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .seg-tool-btn--danger:hover {
       color: var(--color-rouge) !important;
@@ -630,15 +650,27 @@
       height: 18px;
       stroke: currentColor;
       fill: none;
-      stroke-width: 1.5;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
     .ia-composer-icons .ia-send-btn svg {
       fill: currentColor;
       stroke: none;
     }
-    .ia-composer-icons svg.mic-fill {
-      stroke: none;
-      fill: currentColor;
+    .ia-composer-icons button.ia-mic-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(23, 74, 150, 0.09);
+      color: var(--agilo-blue);
+    }
+    .ia-composer-icons button.ia-mic-btn:hover {
+      background: rgba(23, 74, 150, 0.15);
+    }
+    .ico-mic {
+      width: 20px !important;
+      height: 20px !important;
     }
     .ia-composer-hint {
       margin: 8px 4px 0;
@@ -677,9 +709,19 @@
       </div>
 
       <div class="tabs" role="tablist" aria-label="Contenus générés">
-        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">Transcription</button>
-        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">Compte rendu</button>
-        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">Assistant IA <span class="tab-badge" aria-hidden="true">IA</span></button>
+        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h11"/></svg>
+          <span>Transcription</span>
+        </button>
+        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          <span>Compte rendu</span>
+        </button>
+        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8.5z"/></svg>
+          <span>Assistant IA</span>
+          <span class="tab-badge" aria-hidden="true">IA</span>
+        </button>
       </div>
 
       <div class="panel-wrap">
@@ -717,10 +759,10 @@
                 <button type="button" class="time-btn" data-seek="0">00:00</button>
                 <span class="speaker-name">Claire Dubois</span>
                 <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
                 <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
                 </button>
               </div>
               <div class="seg-text" contenteditable="true" spellcheck="false">Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.</div>
@@ -730,10 +772,10 @@
                 <button type="button" class="time-btn" data-seek="10">00:10</button>
                 <span class="speaker-name">Thomas Meyer</span>
                 <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
                 <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
                 </button>
               </div>
               <div class="seg-text" contenteditable="true" spellcheck="false">Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur après la réunion.</div>
@@ -743,10 +785,10 @@
                 <button type="button" class="time-btn" data-seek="20">00:20</button>
                 <span class="speaker-name">Sarah Nielsen</span>
                 <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
                 </button>
                 <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
                 </button>
               </div>
               <div class="seg-text" contenteditable="true" spellcheck="false">On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.</div>
@@ -834,12 +876,12 @@
                 <div class="ia-composer-bar">
                   <div class="ia-composer-icons">
                     <button type="button" aria-label="Pièce jointe (démo)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
                     </button>
                   </div>
                   <div class="ia-composer-icons">
-                    <button type="button" aria-label="Dicter (démo)">
-                      <svg class="mic-fill" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm6-3h-2c0 3.53-2.61 6.43-6 6.92V21h-2v-3.08C8.61 17.43 6 14.53 6 11H4c0 4.97 4.03 9 9 9s9-4.03 9-9z"/></svg>
+                    <button type="button" class="ia-mic-btn" aria-label="Dicter (démo)">
+                      <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3v-6a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
                     </button>
                     <button type="button" class="ia-send-btn" aria-label="Envoyer (démo)">
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
