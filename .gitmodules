@@ -1,0 +1,66 @@
+# Déclarations sous-modules — nécessaires pour que checkout/GitHub Pages ne échoue pas (exit 128).
+# URLs alignées sur les remotes locaux des dossiers concernés.
+
+[submodule "CNOEC_Agiloshield_Docs/AgiloTextApi-audit"]
+	path = CNOEC_Agiloshield_Docs/AgiloTextApi-audit
+	url = https://github.com/kawansoft/AgiloTextApi.git
+
+[submodule "CNOEC_Agiloshield_Docs/AgiloTextApi-github-2.0.5"]
+	path = CNOEC_Agiloshield_Docs/AgiloTextApi-github-2.0.5
+	url = https://github.com/kawansoft/AgiloTextApi.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-1.8.17"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-1.8.17
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-4.1.2-verif"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-4.1.2-verif
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-8.0.0"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-8.0.0
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-8.0.16-clientpass"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-8.0.16-clientpass
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-8.0.18"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-8.0.18
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-8.0.19"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-8.0.19
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-9.0.0-audit"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-9.0.0-audit
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-Florian-8.0.25"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-Florian-8.0.25
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-github-9.0.1"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-github-9.0.1
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-nico-4.1.1"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-nico-4.1.1
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-nicolas"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-nicolas
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "CNOEC_Agiloshield_Docs/spacy-anon-repo"]
+	path = CNOEC_Agiloshield_Docs/spacy-anon-repo
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "agiloshield-anon"]
+	path = agiloshield-anon
+	url = https://github.com/Agilotext/spacy-anon.git
+
+[submodule "partage_nicolas_agiloshield/repo_to_push"]
+	path = partage_nicolas_agiloshield/repo_to_push
+	url = https://github.com/Agilotext/agiloshield-partage-nicolas.git
