@@ -6,15 +6,28 @@
   <title>Agilotext — Démo résultat (embed)</title>
   <style>
     :root {
-      --agilo-blue: #174a96;
+      /* Charte Base — design tokens Agilotext */
+      --color-white: #ffffff;
+      --color-orange: #fd7e14;
+      --color-vert: #1c661a;
+      --color-blue: #174a96;
+      --color-blue-hover: #143061;
+      --color-gris-fonce: #020202;
+      --color-blanc-gris: #f8f9fa;
+      --color-noir-25: rgba(52, 58, 64, 0.25);
+      --color-gris: #525252;
+      --color-rouge: #a82633;
+      --radius-base: 0.5rem;
+
+      --agilo-blue: var(--color-blue);
       --agilo-blue-soft: rgba(23, 74, 150, 0.1);
       --agilo-blue-border: rgba(23, 74, 150, 0.28);
       --bg-cream: #e7e0da;
       --bg-card: #f2ede5;
-      --text: #1a1a1a;
-      --muted: #5c5c5c;
-      --border: #d4caba;
-      --radius: 12px;
+      --text: var(--color-gris-fonce);
+      --muted: var(--color-gris);
+      --border: var(--color-noir-25);
+      --radius: var(--radius-base);
       --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     }
     * { box-sizing: border-box; }
@@ -38,7 +51,7 @@
       max-width: 920px;
       margin: 0 auto;
       background: var(--bg-card);
-      border-radius: var(--radius);
+      border-radius: calc(var(--radius-base) + 0.35rem);
       border: 1px solid var(--border);
       box-shadow:
         0 4px 6px rgba(0, 20, 39, 0.06),
@@ -70,7 +83,7 @@
       flex: 1;
       font-size: 11px;
       color: var(--muted);
-      background: #fff;
+      background: var(--color-white);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 6px 10px;
@@ -82,7 +95,7 @@
       display: flex;
       gap: 0;
       padding: 0 8px;
-      background: #ebe4dc;
+      background: var(--color-blanc-gris);
       border-bottom: 1px solid var(--border);
       overflow-x: auto;
       flex-shrink: 0;
@@ -134,7 +147,7 @@
     }
 
     .card {
-      background: #fff;
+      background: var(--color-white);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 14px;
@@ -174,7 +187,7 @@
       border-radius: 50%;
       border: none;
       background: var(--agilo-blue);
-      color: #fff;
+      color: var(--color-white);
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -206,9 +219,9 @@
       font-size: 12px;
       padding: 10px 11px;
       margin-bottom: 8px;
-      border-radius: 8px;
+      border-radius: var(--radius-base);
       border-left: 3px solid transparent;
-      background: #fdfcfa;
+      background: var(--color-blanc-gris);
       line-height: 1.48;
       transition: border-color 0.15s, background 0.15s;
     }
@@ -260,8 +273,8 @@
       stroke: none;
     }
     .seg-tool-btn--danger:hover {
-      color: #b91c1c !important;
-      background: rgba(185, 28, 28, 0.08) !important;
+      color: var(--color-rouge) !important;
+      background: rgba(168, 38, 51, 0.09) !important;
     }
     .seg-text {
       font-size: 12px;
@@ -298,8 +311,8 @@
       min-width: 0;
       padding: 6px 10px;
       border: 1px solid var(--border);
-      border-radius: 8px;
-      background: #fafafa;
+      border-radius: var(--radius-base);
+      background: var(--color-blanc-gris);
     }
     .editor-search-input {
       flex: 1;
@@ -332,7 +345,7 @@
       align-items: center;
       gap: 6px;
       padding: 8px 14px;
-      border-radius: 8px;
+      border-radius: var(--radius-base);
       font: inherit;
       font-size: 12px;
       font-weight: 600;
@@ -341,14 +354,14 @@
       white-space: nowrap;
     }
     .btn-toolbar--save {
-      background: #05381a;
-      color: #fff;
-      border-color: #05381a;
+      background: var(--color-vert);
+      color: var(--color-white);
+      border-color: var(--color-vert);
     }
     .btn-toolbar--muted {
-      background: #ebebeb;
-      color: #262626;
-      border-color: #d4d4d4;
+      background: var(--color-blanc-gris);
+      color: var(--color-gris-fonce);
+      border-color: var(--color-noir-25);
     }
     .editor-regen-note {
       margin: 0 0 10px;
@@ -364,7 +377,7 @@
       font-size: 9px;
       font-weight: 800;
       letter-spacing: 0.04em;
-      color: #fff;
+      color: var(--color-white);
       background: var(--agilo-blue);
       border-radius: 5px;
       vertical-align: middle;
@@ -382,7 +395,7 @@
       text-underline-offset: 2px;
     }
     button.time-btn:hover {
-      color: #0f3466;
+      color: var(--color-blue-hover);
     }
 
     .cr-toolbar {
@@ -396,7 +409,7 @@
     .ico-doc {
       width: 36px;
       height: 36px;
-      border-radius: 8px;
+      border-radius: var(--radius-base);
       background: var(--agilo-blue-soft);
       border: 1px solid var(--agilo-blue-border);
       display: flex;
@@ -416,7 +429,7 @@
       font-size: 14px;
       font-weight: 700;
       margin: 0 0 2px;
-      color: #0e1e33;
+      color: var(--color-gris-fonce);
     }
     .cr-doc-meta { font-size: 10px; color: var(--muted); }
 
@@ -454,7 +467,7 @@
       border: 1px solid var(--border);
       font-weight: 700;
       font-size: 10px;
-      color: #0e1e33;
+      color: var(--color-gris-fonce);
     }
     .cr-actions td {
       padding: 6px 8px;
@@ -471,7 +484,7 @@
       margin: 0 0 14px;
       font-size: 15px;
       font-weight: 700;
-      color: #0e1e33;
+      color: var(--color-gris-fonce);
       line-height: 1.35;
     }
     .ia-chips {
@@ -489,7 +502,7 @@
     .chip {
       appearance: none;
       border: 1px solid var(--agilo-blue-border);
-      background: #fff;
+      background: var(--color-white);
       color: var(--agilo-blue);
       font: inherit;
       font-size: 11px;
@@ -531,7 +544,7 @@
     }
     .chat-msg--bot {
       align-self: flex-start;
-      background: #fff;
+      background: var(--color-white);
       border: 1px solid var(--border);
       color: var(--text);
     }
@@ -562,7 +575,7 @@
     .ia-composer-inner {
       border: 1px solid var(--border);
       border-radius: 12px;
-      background: #fff;
+      background: var(--color-white);
       overflow: hidden;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
@@ -578,7 +591,7 @@
       min-height: 72px;
       box-sizing: border-box;
       color: var(--text);
-      background: #fff;
+      background: var(--color-white);
     }
     .ia-composer-input:focus {
       outline: none;
@@ -589,7 +602,7 @@
       justify-content: space-between;
       padding: 8px 10px;
       border-top: 1px solid var(--border);
-      background: #fafafa;
+      background: var(--color-blanc-gris);
     }
     .ia-composer-icons {
       display: flex;
@@ -603,14 +616,14 @@
       width: 34px;
       height: 34px;
       border: none;
-      border-radius: 8px;
+      border-radius: var(--radius-base);
       background: transparent;
       color: var(--muted);
       cursor: default;
     }
     .ia-composer-icons button.ia-send-btn {
       background: var(--agilo-blue);
-      color: #fff;
+      color: var(--color-white);
     }
     .ia-composer-icons svg {
       width: 18px;
