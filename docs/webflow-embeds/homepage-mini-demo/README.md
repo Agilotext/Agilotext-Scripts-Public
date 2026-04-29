@@ -3,7 +3,8 @@
 Page HTML autonome destinée à être chargée dans un **élément Embed** Webflow via `<iframe src="…">`.
 
 **Emplacement dans le repo :** `docs/webflow-embeds/homepage-mini-demo/index.html`  
-**Styles :** feuille Webflow officielle (CDN) + patch local `demo-agilo-editor-patch.css` (thème éditeur violet / lecteur / transcript / onglets).
+**Styles :** feuille Webflow officielle (CDN) + patch local `demo-agilo-editor-patch.css` (tokens éditeur bleu `#174a96`, fenêtre Mac, lecteur, transcript, onglets).  
+**Audio :** fichier statique `assets/demo-audio.mp3` (60 s — actuellement piste silencieuse de synchro ; remplaçable par une prise de son réelle alignée sur le transcript).
 
 **Feuille Webflow utilisée (snapshot — à documenter si publish Webflow change le hash) :**
 
@@ -94,8 +95,8 @@ Coller dans **Add → Embed** :
     src="https://agilotext.github.io/Agilotext-Scripts-Public/webflow-embeds/homepage-mini-demo/"
     title="Démonstration Agilotext"
     width="100%"
-    height="620"
-    style="display:block;border:0;width:100%;min-height:560px;"
+    height="640"
+    style="display:block;border:0;width:100%;min-height:600px;"
     loading="lazy"
     referrerpolicy="strict-origin-when-cross-origin"
   ></iframe>
@@ -109,18 +110,19 @@ Variante jsDelivr (si Pages pas encore activé) :
   src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.06/docs/webflow-embeds/homepage-mini-demo/index.html"
   title="Démonstration Agilotext"
   width="100%"
-  height="620"
-  style="display:block;border:0;width:100%;min-height:560px;"
+  height="640"
+  style="display:block;border:0;width:100%;min-height:600px;"
   loading="lazy"
 ></iframe>
 ```
 
-Ajuster `height` / `min-height` selon la section (mobile : souvent 480–560px ; la démo « éditeur » est un peu plus haute que l’ancienne mini-app).
+Ajuster `height` / `min-height` selon la section (mobile : souvent 480–560px ; fenêtre Mac + lecteur : souvent **600–660px**).
 
 ---
 
 ## Modifier la démo
 
 1. Éditer `docs/webflow-embeds/homepage-mini-demo/index.html` et, si besoin, `demo-agilo-editor-patch.css`.
-2. Commit + push sur **`1.06`**.
-3. GitHub Pages se met à jour en quelques minutes ; jsDelivr peut mettre quelques minutes (cache CDN).
+2. Remplacer **optionnellement** `assets/demo-audio.mp3` par un fichier du même nom (durée cohérente avec les `data-start` / `data-end` des segments dans `index.html`).
+3. Commit + push sur **`1.06`**.
+4. GitHub Pages se met à jour en quelques minutes ; jsDelivr peut mettre quelques minutes (cache CDN).
