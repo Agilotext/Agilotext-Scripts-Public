@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.0';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -215,9 +215,28 @@
     }
   }
 
+  function formatLeadCapturedAt(iso) {
+    var raw = asText(iso);
+    if (!raw) return '—';
+    try {
+      var d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) return '—';
+      return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (_errDate) {
+      return '—';
+    }
+  }
+
+  function leadsPanelDefaultOpen() {
+    return /^true$/i.test(readBodyConfig('data-agilo-ref-leads-default-open', ''));
+  }
+
   function renderReferralsLeads(modal, leads) {
     var section = q('[data-agilo-ref-leads-section]', modal);
     var tbody = q('[data-agilo-ref-leads-tbody]', modal);
+    var toggle = q('[data-agilo-ref-leads-toggle]', modal);
+    var panel = q('[data-agilo-ref-leads-panel]', modal);
+    var countEl = q('[data-agilo-ref-leads-count]', modal);
     if (!section || !tbody) return;
     while (tbody.firstChild) {
       tbody.removeChild(tbody.firstChild);
@@ -227,17 +246,36 @@
       return;
     }
     section.hidden = false;
+    var n = leads.length;
+    if (countEl) countEl.textContent = '(' + String(n) + ')';
+
+    var userPref = modal && modal.__agiloLeadsUserExpanded;
+    var openFirst = typeof userPref === 'boolean' ? userPref : leadsPanelDefaultOpen();
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', openFirst ? 'true' : 'false');
+    }
+    if (panel) {
+      panel.hidden = !openFirst;
+      section.classList.toggle('is-open', openFirst);
+    }
+
     leads.forEach(function (lead) {
       var tr = document.createElement('tr');
       var tdName = document.createElement('td');
       var tdEmail = document.createElement('td');
+      var tdDate = document.createElement('td');
       var tdStat = document.createElement('td');
       var labelName = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim();
       tdName.textContent = labelName || '—';
       tdEmail.textContent = lead.email || '—';
-      tdStat.textContent = lead.paid ? 'Payant' : 'A convertir';
+      tdDate.textContent = formatLeadCapturedAt(lead.capturedAt);
+      var badge = document.createElement('span');
+      badge.className = 'agilo-referral-leads__badge ' + (lead.paid ? 'is-paid' : 'is-free');
+      badge.textContent = lead.paid ? 'Payant' : 'Gratuit · a convertir';
+      tdStat.appendChild(badge);
       tr.appendChild(tdName);
       tr.appendChild(tdEmail);
+      tr.appendChild(tdDate);
       tr.appendChild(tdStat);
       tbody.appendChild(tr);
     });
@@ -246,20 +284,32 @@
   function buildLeadsSectionHtml() {
     return '' +
       '<section class="agilo-referral-leads" data-agilo-ref-leads-section hidden>' +
-      '<h4 class="agilo-referral-leads__title">Personnes invitees</h4>' +
-      '<p class="agilo-referral-leads__hint">Inscrits via votre lien. Relancez les profils « A convertir » pour les accompagner vers PRO/Biz.</p>' +
+      '<button type="button" class="agilo-referral-leads__toggle" data-agilo-ref-leads-toggle aria-expanded="false" aria-controls="agiloReferralLeadsPanel" id="agiloReferralLeadsToggle">' +
+      '<span class="agilo-referral-leads__toggle-inner">' +
+      '<span class="agilo-referral-leads__toggle-label">Voir mes invitations</span>' +
+      '<span class="agilo-referral-leads__toggle-count" data-agilo-ref-leads-count></span>' +
+      '</span>' +
+      '<span class="agilo-referral-leads__toggle-chevron" aria-hidden="true"></span>' +
+      '</button>' +
+      '<div class="agilo-referral-leads__panel" id="agiloReferralLeadsPanel" data-agilo-ref-leads-panel hidden role="region" aria-labelledby="agiloReferralLeadsToggle">' +
+      '<p class="agilo-referral-leads__hint">Comptes crees via votre lien. Tri du plus recent au plus ancien. Les lignes « Gratuit » sont des profils a accompagner vers PRO/Business.</p>' +
       '<div class="agilo-referral-leads__scroll">' +
       '<table class="agilo-referral-leads__table" role="grid">' +
-      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Statut</th></tr></thead>' +
+      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Inscription</th><th scope="col">Statut</th></tr></thead>' +
       '<tbody data-agilo-ref-leads-tbody></tbody>' +
-      '</table></div></section>';
+      '</table></div></div></section>';
   }
 
   function ensureLeadsSection(panel) {
     if (!panel || q('[data-agilo-ref-leads-section]', panel)) return;
-    var conv = q('#agiloReferralConversionSecondary', panel);
-    if (conv) {
-      conv.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+    var copyWrap = q('.agilo-referral-copy', panel);
+    if (copyWrap) {
+      copyWrap.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+    } else {
+      var conv = q('#agiloReferralConversionSecondary', panel);
+      if (conv) {
+        conv.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+      }
     }
   }
 
@@ -430,13 +480,23 @@
       '.agilo-referral-claim__link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;line-height:1.2;background:#174a96;color:#fff;border:1px solid rgba(23,74,150,.24);}' +
       '.agilo-referral-claim__link:hover{background:#123a75;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
-      '.agilo-referral-leads{margin-top:10px;padding-top:10px;border-top:1px solid #edf2fb;}' +
-      '.agilo-referral-leads__title{margin:0 0 6px;font-size:14px;font-weight:700;color:#1b2430;}' +
+      '.agilo-referral-leads{margin-top:12px;padding-top:12px;border-top:1px solid #edf2fb;}' +
+      '.agilo-referral-leads__toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:11px;border:1px solid #d8e6fc;background:linear-gradient(180deg,#f5f8ff 0,#fff 55%);cursor:pointer;font:inherit;text-align:left;color:#174a96;font-weight:700;font-size:13px;transition:background .2s,border-color .2s;}' +
+      '.agilo-referral-leads__toggle:hover{background:#eaf1ff;border-color:#b8cef5;}' +
+      '.agilo-referral-leads__toggle:focus{outline:2px solid rgba(23,74,150,.35);outline-offset:2px;}' +
+      '.agilo-referral-leads__toggle-inner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}' +
+      '.agilo-referral-leads__toggle-count{font-weight:600;color:#526076;font-size:12px;}' +
+      '.agilo-referral-leads__toggle-chevron{flex-shrink:0;width:9px;height:9px;border-right:2px solid #174a96;border-bottom:2px solid #174a96;transform:rotate(-45deg);margin-top:-4px;transition:transform .25s ease;}' +
+      '.agilo-referral-leads.is-open .agilo-referral-leads__toggle-chevron{transform:rotate(135deg);margin-top:2px;}' +
+      '.agilo-referral-leads__panel{margin-top:8px;}' +
       '.agilo-referral-leads__hint{margin:0 0 8px;font-size:11px;color:#5b677a;line-height:1.45;}' +
-      '.agilo-referral-leads__scroll{max-height:200px;overflow:auto;border:1px solid #e7edf8;border-radius:10px;background:#fafcff;}' +
+      '.agilo-referral-leads__scroll{max-height:min(42vh,260px);overflow:auto;border:1px solid #e7edf8;border-radius:10px;background:#fafcff;}' +
       '.agilo-referral-leads__table{width:100%;border-collapse:collapse;font-size:12px;}' +
-      '.agilo-referral-leads__table th,.agilo-referral-leads__table td{padding:6px 8px;text-align:left;border-bottom:1px solid #edf2fb;}' +
-      '.agilo-referral-leads__table th{font-size:10px;text-transform:uppercase;color:#6c7890;font-weight:700;}' +
+      '.agilo-referral-leads__table th,.agilo-referral-leads__table td{padding:7px 8px;text-align:left;border-bottom:1px solid #edf2fb;vertical-align:middle;}' +
+      '.agilo-referral-leads__table th{font-size:10px;text-transform:uppercase;color:#6c7890;font-weight:700;white-space:nowrap;}' +
+      '.agilo-referral-leads__badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;}' +
+      '.agilo-referral-leads__badge.is-paid{background:#e6f4ea;color:#13693a;}' +
+      '.agilo-referral-leads__badge.is-free{background:#fff4e5;color:#8a5a00;}' +
       '.agilo-referral-gauge{display:none;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
     document.head.appendChild(style);
@@ -538,6 +598,19 @@
     modal.addEventListener('click', function (ev) {
       var target = ev.target;
       var backdrop = q('.agilo-referral-modal__backdrop', modal);
+      var toggleBtn = target && target.closest && target.closest('[data-agilo-ref-leads-toggle]');
+      if (toggleBtn && modal.contains(toggleBtn)) {
+        var leadSection = toggleBtn.closest('[data-agilo-ref-leads-section]');
+        var leadPanel = leadSection && q('[data-agilo-ref-leads-panel]', leadSection);
+        var expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+        var next = expanded ? 'false' : 'true';
+        toggleBtn.setAttribute('aria-expanded', next);
+        if (leadPanel) leadPanel.hidden = expanded;
+        if (leadSection) leadSection.classList.toggle('is-open', !expanded);
+        modal.__agiloLeadsUserExpanded = !expanded;
+        return;
+      }
+
       if (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-copy-link')) {
         var button = target;
         if (button.disabled) return;
