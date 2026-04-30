@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.4.0';
+  var VERSION = '1.5.1';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -215,9 +215,47 @@
     }
   }
 
+  function formatLeadCapturedAt(iso) {
+    var raw = asText(iso);
+    if (!raw) return '—';
+    try {
+      var d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) return '—';
+      return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (_errDate) {
+      return '—';
+    }
+  }
+
+  function buildLeadReminderMailto(lead) {
+    var email = asText(lead && lead.email);
+    if (!email || email.indexOf('@') < 0) return '';
+    var subject = readBodyConfig(
+      'data-agilo-ref-lead-remind-subject',
+      'Agilotext — passer sur PRO ou Business'
+    );
+    var first = asText(lead && lead.firstName);
+    var greet = first ? 'Bonjour ' + first + ',' : 'Bonjour,';
+    var body =
+      greet +
+      '\n\n' +
+      'Je me permets de vous recontacter suite a votre inscription via mon lien de parrainage.\n' +
+      'Si vous souhaitez aller plus loin avec une offre PRO ou Business, je reste disponible pour echanger.\n\n' +
+      'Bien cordialement';
+    var addr = encodeURIComponent(email).replace(/%40/gi, '@');
+    return 'mailto:' + addr + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+
+  function leadsPanelDefaultOpen() {
+    return /^true$/i.test(readBodyConfig('data-agilo-ref-leads-default-open', ''));
+  }
+
   function renderReferralsLeads(modal, leads) {
     var section = q('[data-agilo-ref-leads-section]', modal);
     var tbody = q('[data-agilo-ref-leads-tbody]', modal);
+    var toggle = q('[data-agilo-ref-leads-toggle]', modal);
+    var panel = q('[data-agilo-ref-leads-panel]', modal);
+    var countEl = q('[data-agilo-ref-leads-count]', modal);
     if (!section || !tbody) return;
     while (tbody.firstChild) {
       tbody.removeChild(tbody.firstChild);
@@ -227,18 +265,53 @@
       return;
     }
     section.hidden = false;
+    var n = leads.length;
+    if (countEl) countEl.textContent = '(' + String(n) + ')';
+
+    var userPref = modal && modal.__agiloLeadsUserExpanded;
+    var openFirst = typeof userPref === 'boolean' ? userPref : leadsPanelDefaultOpen();
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', openFirst ? 'true' : 'false');
+    }
+    if (panel) {
+      panel.hidden = !openFirst;
+      section.classList.toggle('is-open', openFirst);
+    }
+
     leads.forEach(function (lead) {
       var tr = document.createElement('tr');
       var tdName = document.createElement('td');
       var tdEmail = document.createElement('td');
+      var tdDate = document.createElement('td');
       var tdStat = document.createElement('td');
+      var tdRemind = document.createElement('td');
       var labelName = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim();
       tdName.textContent = labelName || '—';
       tdEmail.textContent = lead.email || '—';
-      tdStat.textContent = lead.paid ? 'Payant' : 'A convertir';
+      tdDate.textContent = formatLeadCapturedAt(lead.capturedAt);
+      var badge = document.createElement('span');
+      badge.className = 'agilo-referral-leads__badge ' + (lead.paid ? 'is-paid' : 'is-free');
+      badge.textContent = lead.paid ? 'Payant' : 'Gratuit · a convertir';
+      tdStat.appendChild(badge);
+      if (!lead.paid) {
+        var mailHref = buildLeadReminderMailto(lead);
+        if (mailHref) {
+          var mailLink = document.createElement('a');
+          mailLink.className = 'agilo-referral-leads__mailto';
+          mailLink.href = mailHref;
+          mailLink.textContent = 'Relancer';
+          mailLink.setAttribute(
+            'aria-label',
+            'Ouvrir votre messagerie pour relancer ' + (asText(lead.email) || 'ce contact')
+          );
+          tdRemind.appendChild(mailLink);
+        }
+      }
       tr.appendChild(tdName);
       tr.appendChild(tdEmail);
+      tr.appendChild(tdDate);
       tr.appendChild(tdStat);
+      tr.appendChild(tdRemind);
       tbody.appendChild(tr);
     });
   }
@@ -246,20 +319,32 @@
   function buildLeadsSectionHtml() {
     return '' +
       '<section class="agilo-referral-leads" data-agilo-ref-leads-section hidden>' +
-      '<h4 class="agilo-referral-leads__title">Personnes invitees</h4>' +
-      '<p class="agilo-referral-leads__hint">Inscrits via votre lien. Relancez les profils « A convertir » pour les accompagner vers PRO/Biz.</p>' +
+      '<button type="button" class="agilo-referral-leads__toggle" data-agilo-ref-leads-toggle aria-expanded="false" aria-controls="agiloReferralLeadsPanel" id="agiloReferralLeadsToggle">' +
+      '<span class="agilo-referral-leads__toggle-inner">' +
+      '<span class="agilo-referral-leads__toggle-label">Voir mes invitations</span>' +
+      '<span class="agilo-referral-leads__toggle-count" data-agilo-ref-leads-count></span>' +
+      '</span>' +
+      '<span class="agilo-referral-leads__toggle-chevron" aria-hidden="true"></span>' +
+      '</button>' +
+      '<div class="agilo-referral-leads__panel" id="agiloReferralLeadsPanel" data-agilo-ref-leads-panel hidden role="region" aria-labelledby="agiloReferralLeadsToggle">' +
+      '<p class="agilo-referral-leads__hint">Comptes crees via votre lien. Tri du plus recent au plus ancien. Les lignes « Gratuit » sont des profils a accompagner vers PRO/Business.</p>' +
       '<div class="agilo-referral-leads__scroll">' +
       '<table class="agilo-referral-leads__table" role="grid">' +
-      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Statut</th></tr></thead>' +
+      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Inscription</th><th scope="col">Statut</th><th scope="col">Relance</th></tr></thead>' +
       '<tbody data-agilo-ref-leads-tbody></tbody>' +
-      '</table></div></section>';
+      '</table></div></div></section>';
   }
 
   function ensureLeadsSection(panel) {
     if (!panel || q('[data-agilo-ref-leads-section]', panel)) return;
-    var conv = q('#agiloReferralConversionSecondary', panel);
-    if (conv) {
-      conv.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+    var copyWrap = q('.agilo-referral-copy', panel);
+    if (copyWrap) {
+      copyWrap.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+    } else {
+      var conv = q('#agiloReferralConversionSecondary', panel);
+      if (conv) {
+        conv.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
+      }
     }
   }
 
@@ -400,9 +485,9 @@
       '.agilo-referral-cta.is-primary{background:#174a96;color:#fff;}' +
       '.agilo-referral-cta.is-secondary{background:#eff4fb;color:#174a96;border:1px solid rgba(23,74,150,.18);}' +
       '.agilo-referral-modal[hidden]{display:none!important;}' +
-      '.agilo-referral-modal{position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:16px;}' +
-      '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.28);}' +
-      '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(480px,100%);border-radius:16px;background:#fff;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
+      '.agilo-referral-modal{position:fixed;inset:0;z-index:2147483000;display:flex;justify-content:center;align-items:flex-start;padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom));overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}' +
+      '.agilo-referral-modal__backdrop{position:absolute;inset:0;background:rgba(9,20,44,.28);min-height:100%;}' +
+      '.agilo-referral-modal__panel{position:relative;z-index:1;width:min(480px,100%);max-height:min(calc(100vh - max(32px,env(safe-area-inset-top) + env(safe-area-inset-bottom))),720px);overflow-y:auto;-webkit-overflow-scrolling:touch;margin-bottom:auto;border-radius:16px;background:#fff;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.22);border:1px solid #e6ecf5;color:#1b2430;font-family:Inter,Arial,sans-serif;}' +
       '.agilo-referral-modal__close{position:absolute;top:8px;right:10px;border:0;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:#526076;}' +
       '.agilo-referral-modal__title{margin:0 30px 4px 0;font-size:19px;font-weight:700;letter-spacing:-.01em;}' +
       '.agilo-referral-modal__desc{margin:0 0 12px;font-size:13px;color:#5b677a;line-height:1.4;}' +
@@ -430,13 +515,26 @@
       '.agilo-referral-claim__link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;line-height:1.2;background:#174a96;color:#fff;border:1px solid rgba(23,74,150,.24);}' +
       '.agilo-referral-claim__link:hover{background:#123a75;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
-      '.agilo-referral-leads{margin-top:10px;padding-top:10px;border-top:1px solid #edf2fb;}' +
-      '.agilo-referral-leads__title{margin:0 0 6px;font-size:14px;font-weight:700;color:#1b2430;}' +
+      '.agilo-referral-leads{margin-top:12px;padding-top:12px;border-top:1px solid #edf2fb;}' +
+      '.agilo-referral-leads__toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:11px;border:1px solid #d8e6fc;background:linear-gradient(180deg,#f5f8ff 0,#fff 55%);cursor:pointer;font:inherit;text-align:left;color:#174a96;font-weight:700;font-size:13px;transition:background .2s,border-color .2s;}' +
+      '.agilo-referral-leads__toggle:hover{background:#eaf1ff;border-color:#b8cef5;}' +
+      '.agilo-referral-leads__toggle:focus{outline:2px solid rgba(23,74,150,.35);outline-offset:2px;}' +
+      '.agilo-referral-leads__toggle-inner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}' +
+      '.agilo-referral-leads__toggle-count{font-weight:600;color:#526076;font-size:12px;}' +
+      '.agilo-referral-leads__toggle-chevron{flex-shrink:0;width:9px;height:9px;border-right:2px solid #174a96;border-bottom:2px solid #174a96;transform:rotate(-45deg);margin-top:-4px;transition:transform .25s ease;}' +
+      '.agilo-referral-leads.is-open .agilo-referral-leads__toggle-chevron{transform:rotate(135deg);margin-top:2px;}' +
+      '.agilo-referral-leads__panel{margin-top:8px;}' +
       '.agilo-referral-leads__hint{margin:0 0 8px;font-size:11px;color:#5b677a;line-height:1.45;}' +
-      '.agilo-referral-leads__scroll{max-height:200px;overflow:auto;border:1px solid #e7edf8;border-radius:10px;background:#fafcff;}' +
+      '.agilo-referral-leads__scroll{overflow:visible;border:1px solid #e7edf8;border-radius:10px;background:#fafcff;}' +
       '.agilo-referral-leads__table{width:100%;border-collapse:collapse;font-size:12px;}' +
-      '.agilo-referral-leads__table th,.agilo-referral-leads__table td{padding:6px 8px;text-align:left;border-bottom:1px solid #edf2fb;}' +
-      '.agilo-referral-leads__table th{font-size:10px;text-transform:uppercase;color:#6c7890;font-weight:700;}' +
+      '.agilo-referral-leads__table th,.agilo-referral-leads__table td{padding:7px 8px;text-align:left;border-bottom:1px solid #edf2fb;vertical-align:middle;}' +
+      '.agilo-referral-leads__table th{font-size:10px;text-transform:uppercase;color:#6c7890;font-weight:700;white-space:nowrap;}' +
+      '.agilo-referral-leads__badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;}' +
+      '.agilo-referral-leads__badge.is-paid{background:#e6f4ea;color:#13693a;}' +
+      '.agilo-referral-leads__badge.is-free{background:#fff4e5;color:#8a5a00;}' +
+      '.agilo-referral-leads__mailto{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;color:#174a96;background:#eff4fb;border:1px solid rgba(23,74,150,.22);white-space:nowrap;}' +
+      '.agilo-referral-leads__mailto:hover{background:#dbe7ff;color:#123a75;}' +
+      '.agilo-referral-leads__mailto:focus{outline:2px solid rgba(23,74,150,.35);outline-offset:1px;}' +
       '.agilo-referral-gauge{display:none;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
     document.head.appendChild(style);
@@ -538,6 +636,19 @@
     modal.addEventListener('click', function (ev) {
       var target = ev.target;
       var backdrop = q('.agilo-referral-modal__backdrop', modal);
+      var toggleBtn = target && target.closest && target.closest('[data-agilo-ref-leads-toggle]');
+      if (toggleBtn && modal.contains(toggleBtn)) {
+        var leadSection = toggleBtn.closest('[data-agilo-ref-leads-section]');
+        var leadPanel = leadSection && q('[data-agilo-ref-leads-panel]', leadSection);
+        var expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+        var next = expanded ? 'false' : 'true';
+        toggleBtn.setAttribute('aria-expanded', next);
+        if (leadPanel) leadPanel.hidden = expanded;
+        if (leadSection) leadSection.classList.toggle('is-open', !expanded);
+        modal.__agiloLeadsUserExpanded = !expanded;
+        return;
+      }
+
       if (target && target.hasAttribute && target.hasAttribute('data-agilo-ref-copy-link')) {
         var button = target;
         if (button.disabled) return;
