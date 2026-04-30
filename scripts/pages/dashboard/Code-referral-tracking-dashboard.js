@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.5.1';
+  var VERSION = '1.5.2';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -227,9 +227,9 @@
     }
   }
 
-  function buildLeadReminderMailto(lead) {
+  function getLeadReminderDraft(lead) {
     var email = asText(lead && lead.email);
-    if (!email || email.indexOf('@') < 0) return '';
+    if (!email || email.indexOf('@') < 0) return null;
     var subject = readBodyConfig(
       'data-agilo-ref-lead-remind-subject',
       'Agilotext — passer sur PRO ou Business'
@@ -242,8 +242,19 @@
       'Je me permets de vous recontacter suite a votre inscription via mon lien de parrainage.\n' +
       'Si vous souhaitez aller plus loin avec une offre PRO ou Business, je reste disponible pour echanger.\n\n' +
       'Bien cordialement';
-    var addr = encodeURIComponent(email).replace(/%40/gi, '@');
-    return 'mailto:' + addr + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+    return { email: email, subject: subject, body: body };
+  }
+
+  function formatLeadReminderForClipboard(draft) {
+    if (!draft) return '';
+    return (
+      'A : ' +
+      draft.email +
+      '\nObjet : ' +
+      draft.subject +
+      '\n\n---\n\n' +
+      draft.body
+    );
   }
 
   function leadsPanelDefaultOpen() {
@@ -294,17 +305,28 @@
       badge.textContent = lead.paid ? 'Payant' : 'Gratuit · a convertir';
       tdStat.appendChild(badge);
       if (!lead.paid) {
-        var mailHref = buildLeadReminderMailto(lead);
-        if (mailHref) {
-          var mailLink = document.createElement('a');
-          mailLink.className = 'agilo-referral-leads__mailto';
-          mailLink.href = mailHref;
-          mailLink.textContent = 'Relancer';
-          mailLink.setAttribute(
+        var draft = getLeadReminderDraft(lead);
+        if (draft) {
+          var copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'agilo-referral-leads__copy-draft';
+          copyBtn.textContent = 'Copier le message';
+          copyBtn.setAttribute(
             'aria-label',
-            'Ouvrir votre messagerie pour relancer ' + (asText(lead.email) || 'ce contact')
+            'Copier un brouillon de relance pour ' + (asText(lead.email) || 'ce contact')
           );
-          tdRemind.appendChild(mailLink);
+          copyBtn.addEventListener('click', function () {
+            var d = getLeadReminderDraft(lead);
+            if (!d) return;
+            var labelDefault = 'Copier le message';
+            copyToClipboard(formatLeadReminderForClipboard(d)).then(function (ok) {
+              copyBtn.textContent = ok ? 'Copie !' : 'Erreur';
+              setTimeout(function () {
+                copyBtn.textContent = labelDefault;
+              }, 2000);
+            });
+          });
+          tdRemind.appendChild(copyBtn);
         }
       }
       tr.appendChild(tdName);
@@ -327,10 +349,10 @@
       '<span class="agilo-referral-leads__toggle-chevron" aria-hidden="true"></span>' +
       '</button>' +
       '<div class="agilo-referral-leads__panel" id="agiloReferralLeadsPanel" data-agilo-ref-leads-panel hidden role="region" aria-labelledby="agiloReferralLeadsToggle">' +
-      '<p class="agilo-referral-leads__hint">Comptes crees via votre lien. Tri du plus recent au plus ancien. Les lignes « Gratuit » sont des profils a accompagner vers PRO/Business.</p>' +
+      '<p class="agilo-referral-leads__hint">Comptes crees via votre lien. Tri du plus recent au plus ancien. Les lignes « Gratuit » : bouton « Copier le message » puis collage dans Gmail, Outlook ou votre messagerie habituelle.</p>' +
       '<div class="agilo-referral-leads__scroll">' +
       '<table class="agilo-referral-leads__table" role="grid">' +
-      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Inscription</th><th scope="col">Statut</th><th scope="col">Relance</th></tr></thead>' +
+      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Inscription</th><th scope="col">Statut</th><th scope="col">Message</th></tr></thead>' +
       '<tbody data-agilo-ref-leads-tbody></tbody>' +
       '</table></div></div></section>';
   }
@@ -532,9 +554,9 @@
       '.agilo-referral-leads__badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;}' +
       '.agilo-referral-leads__badge.is-paid{background:#e6f4ea;color:#13693a;}' +
       '.agilo-referral-leads__badge.is-free{background:#fff4e5;color:#8a5a00;}' +
-      '.agilo-referral-leads__mailto{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:700;text-decoration:none;color:#174a96;background:#eff4fb;border:1px solid rgba(23,74,150,.22);white-space:nowrap;}' +
-      '.agilo-referral-leads__mailto:hover{background:#dbe7ff;color:#123a75;}' +
-      '.agilo-referral-leads__mailto:focus{outline:2px solid rgba(23,74,150,.35);outline-offset:1px;}' +
+      '.agilo-referral-leads__copy-draft{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border-radius:8px;font-size:11px;font-weight:700;font:inherit;color:#174a96;background:#eff4fb;border:1px solid rgba(23,74,150,.22);white-space:nowrap;cursor:pointer;}' +
+      '.agilo-referral-leads__copy-draft:hover{background:#dbe7ff;color:#123a75;}' +
+      '.agilo-referral-leads__copy-draft:focus{outline:2px solid rgba(23,74,150,.35);outline-offset:1px;}' +
       '.agilo-referral-gauge{display:none;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
     document.head.appendChild(style);

@@ -113,14 +113,14 @@
   .agilo-referral-leads__scroll {
     overflow: visible; border: 1px solid #e7edf8; border-radius: 10px; background: #fafcff;
   }
-  .agilo-referral-leads__mailto {
+  .agilo-referral-leads__copy-draft {
     display: inline-flex; align-items: center; justify-content: center;
     padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 700;
-    text-decoration: none; color: #174a96; background: #eff4fb;
-    border: 1px solid rgba(23, 74, 150, 0.22); white-space: nowrap;
+    font: inherit; color: #174a96; background: #eff4fb;
+    border: 1px solid rgba(23, 74, 150, 0.22); white-space: nowrap; cursor: pointer;
   }
-  .agilo-referral-leads__mailto:hover { background: #dbe7ff; color: #123a75; }
-  .agilo-referral-leads__mailto:focus {
+  .agilo-referral-leads__copy-draft:hover { background: #dbe7ff; color: #123a75; }
+  .agilo-referral-leads__copy-draft:focus {
     outline: 2px solid rgba(23, 74, 150, 0.35); outline-offset: 1px;
   }
   .agilo-referral-leads__table { width: 100%; border-collapse: collapse; font-size: 12px; }
@@ -211,7 +211,7 @@ Ne mets PAS de <script> inline dans cet embed.
 Ajoute le script externe dans Page Settings > Before </body>.
 
 Optionnel sur <body> : data-agilo-ref-lead-remind-subject="Votre objet personnalise"
-(pour les liens mailto « Relancer » generes par Code-referral-tracking-dashboard.js).
+(pour le brouillon copie dans « Copier le message », voir Code-referral-tracking-dashboard.js).
 -->
 <!--
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@927f223/scripts/pages/dashboard/Code-referral-tracking-dashboard.js"></script>
