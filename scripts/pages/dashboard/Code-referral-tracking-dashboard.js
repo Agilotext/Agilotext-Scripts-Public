@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.3.9';
+  var VERSION = '1.4.0';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -143,7 +143,7 @@
       return 'Partagez votre lien d invitation pour lancer vos premiers parrainages.';
     }
     if (pending > 0) {
-      return String(pending) + ' filleul(s) en attente de passage PRO/Biz. Accompagnez-les pour debloquer votre recompense.';
+      return String(pending) + ' contact(s) a convertir vers PRO/Biz. Une relance peut debloquer votre progression.';
     }
     if (paid > 0) {
       return 'Votre base convertit deja. Continuez pour atteindre le seuil de 3 payants.';
@@ -176,6 +176,90 @@
       return Boolean(ok);
     } catch (_errExec) {
       return false;
+    }
+  }
+
+  function parseReferralsLeadsJson(raw) {
+    if (raw !== null && raw !== undefined && typeof raw === 'object') {
+      try {
+        raw = JSON.stringify(raw);
+      } catch (_errStringifyLeads) {
+        raw = '';
+      }
+    }
+    var text = asText(raw);
+    if (!text) return [];
+    try {
+      var data = JSON.parse(text);
+      if (!Array.isArray(data)) return [];
+      var rows = data
+        .filter(function (row) {
+          return row && typeof row === 'object' && asText(row.id);
+        })
+        .map(function (row) {
+          return {
+            id: asText(row.id),
+            email: asText(row.email),
+            firstName: asText(row.firstName),
+            lastName: asText(row.lastName),
+            paid: Boolean(row.paid),
+            capturedAt: asText(row.capturedAt)
+          };
+        });
+      rows.sort(function (a, b) {
+        return String(b.capturedAt || '').localeCompare(String(a.capturedAt || ''));
+      });
+      return rows;
+    } catch (_errParseLeads) {
+      return [];
+    }
+  }
+
+  function renderReferralsLeads(modal, leads) {
+    var section = q('[data-agilo-ref-leads-section]', modal);
+    var tbody = q('[data-agilo-ref-leads-tbody]', modal);
+    if (!section || !tbody) return;
+    while (tbody.firstChild) {
+      tbody.removeChild(tbody.firstChild);
+    }
+    if (!leads || !leads.length) {
+      section.hidden = true;
+      return;
+    }
+    section.hidden = false;
+    leads.forEach(function (lead) {
+      var tr = document.createElement('tr');
+      var tdName = document.createElement('td');
+      var tdEmail = document.createElement('td');
+      var tdStat = document.createElement('td');
+      var labelName = [lead.firstName, lead.lastName].filter(Boolean).join(' ').trim();
+      tdName.textContent = labelName || '—';
+      tdEmail.textContent = lead.email || '—';
+      tdStat.textContent = lead.paid ? 'Payant' : 'A convertir';
+      tr.appendChild(tdName);
+      tr.appendChild(tdEmail);
+      tr.appendChild(tdStat);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function buildLeadsSectionHtml() {
+    return '' +
+      '<section class="agilo-referral-leads" data-agilo-ref-leads-section hidden>' +
+      '<h4 class="agilo-referral-leads__title">Personnes invitees</h4>' +
+      '<p class="agilo-referral-leads__hint">Inscrits via votre lien. Relancez les profils « A convertir » pour les accompagner vers PRO/Biz.</p>' +
+      '<div class="agilo-referral-leads__scroll">' +
+      '<table class="agilo-referral-leads__table" role="grid">' +
+      '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Statut</th></tr></thead>' +
+      '<tbody data-agilo-ref-leads-tbody></tbody>' +
+      '</table></div></section>';
+  }
+
+  function ensureLeadsSection(panel) {
+    if (!panel || q('[data-agilo-ref-leads-section]', panel)) return;
+    var conv = q('#agiloReferralConversionSecondary', panel);
+    if (conv) {
+      conv.insertAdjacentHTML('beforebegin', buildLeadsSectionHtml());
     }
   }
 
@@ -346,6 +430,13 @@
       '.agilo-referral-claim__link{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border-radius:10px;padding:8px 12px;font-weight:700;font-size:13px;line-height:1.2;background:#174a96;color:#fff;border:1px solid rgba(23,74,150,.24);}' +
       '.agilo-referral-claim__link:hover{background:#123a75;}' +
       '.agilo-referral-modal__hint{margin:10px 0 0;font-size:12px;color:#5b677a;line-height:1.45;}' +
+      '.agilo-referral-leads{margin-top:10px;padding-top:10px;border-top:1px solid #edf2fb;}' +
+      '.agilo-referral-leads__title{margin:0 0 6px;font-size:14px;font-weight:700;color:#1b2430;}' +
+      '.agilo-referral-leads__hint{margin:0 0 8px;font-size:11px;color:#5b677a;line-height:1.45;}' +
+      '.agilo-referral-leads__scroll{max-height:200px;overflow:auto;border:1px solid #e7edf8;border-radius:10px;background:#fafcff;}' +
+      '.agilo-referral-leads__table{width:100%;border-collapse:collapse;font-size:12px;}' +
+      '.agilo-referral-leads__table th,.agilo-referral-leads__table td{padding:6px 8px;text-align:left;border-bottom:1px solid #edf2fb;}' +
+      '.agilo-referral-leads__table th{font-size:10px;text-transform:uppercase;color:#6c7890;font-weight:700;}' +
       '.agilo-referral-gauge{display:none;}' +
       '@media (max-width:460px){.agilo-referral-kpis{grid-template-columns:1fr;}.agilo-referral-hero__progress{font-size:26px;}}';
     document.head.appendChild(style);
@@ -387,7 +478,7 @@
       '<div class="agilo-referral-kpis">' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Inscrits</p><p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p></article>' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Payants comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">En attente</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">A convertir</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
       '</div>' +
       '<p class="agilo-referral-conversion-secondary" id="agiloReferralConversionSecondary" data-agilo-ref-conversion-secondary>Conversion : 0%</p>' +
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint-business>Partagez votre lien pour augmenter vos statistiques.</p>' +
@@ -431,6 +522,7 @@
     }
 
     ensureClaimBlock(panel);
+    ensureLeadsSection(panel);
 
     if (isModalWantedOpen()) {
       modal.hidden = false;
@@ -560,6 +652,8 @@
     setNodeTextIn(modal, ['[data-agilo-ref-hint-business]', '[data-agilo-ref-hint]'], secondaryHint);
     setNodeTextIn(modal, ['[data-agilo-referrals-last-at]'], lastAt);
 
+    renderReferralsLeads(modal, state.referralsLeads || []);
+
     if (claimWrap && claimLink) {
       var unlocked = rewardState.status === 'unlocked' || paid >= rewardTarget;
       claimWrap.hidden = !unlocked;
@@ -668,6 +762,10 @@
     if (referralsPending === null) referralsPending = Math.max(0, referralsRegistered - referralsPaid);
     referralsPending = toSafeInt(referralsPending, 0);
 
+    var referralsLeadsRaw = readFieldValue(memberFromApi, ['referrals-leads-json', 'referrals_leads_json']);
+    if (referralsLeadsRaw === null) referralsLeadsRaw = readDomBoundValue(['referrals-leads-json', 'referrals_leads_json']);
+    var referralsLeads = parseReferralsLeadsJson(referralsLeadsRaw);
+
     return {
       version: VERSION,
       currentMemberId: currentMemberId,
@@ -680,6 +778,8 @@
       referralsPaid: toSafeInt(referralsPaid, 0),
       referralsPending: toSafeInt(referralsPending, 0),
       referralsLastAt: referralsLastAt,
+      referralsLeadsJson: referralsLeadsRaw === null || referralsLeadsRaw === undefined ? '' : String(referralsLeadsRaw),
+      referralsLeads: referralsLeads,
       computedAt: new Date().toISOString()
     };
   }
