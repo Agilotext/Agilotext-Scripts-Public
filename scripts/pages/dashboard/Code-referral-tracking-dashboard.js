@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.5.4';
+  var VERSION = '1.5.5';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -357,11 +357,92 @@
       { label: 'App mail par défaut', url: urls.mailto, external: false, icon: defaultMailSvg }
     ];
 
+    var scrollRoots = [];
+    function pushScrollRoot(el) {
+      if (!el || scrollRoots.indexOf(el) >= 0) return;
+      scrollRoots.push(el);
+    }
+    pushScrollRoot(openWrap.closest('.agilo-referral-modal'));
+    pushScrollRoot(openWrap.closest('.agilo-referral-modal__panel'));
+    pushScrollRoot(openWrap.closest('.agilo-referral-leads__scroll'));
+
+    function clearDropdownFixedStyles() {
+      dropdown.style.position = '';
+      dropdown.style.left = '';
+      dropdown.style.top = '';
+      dropdown.style.right = '';
+      dropdown.style.bottom = '';
+      dropdown.style.zIndex = '';
+      dropdown.style.margin = '';
+    }
+
+    function measureAndPlaceDropdown() {
+      if (dropdown.hidden) return;
+      var rect = openWrap.getBoundingClientRect();
+      var gap = 6;
+      var vw = window.innerWidth;
+      var vh = window.innerHeight;
+      var mw = dropdown.offsetWidth || 200;
+      var mh = dropdown.offsetHeight || 140;
+      var left = rect.right - mw;
+      if (left < gap) left = gap;
+      if (left + mw > vw - gap) left = Math.max(gap, vw - mw - gap);
+      var top = rect.top - mh - gap;
+      if (top < gap) {
+        top = rect.bottom + gap;
+      }
+      if (top + mh > vh - gap) {
+        top = Math.max(gap, vh - mh - gap);
+      }
+      dropdown.style.position = 'fixed';
+      dropdown.style.left = left + 'px';
+      dropdown.style.top = top + 'px';
+      dropdown.style.right = 'auto';
+      dropdown.style.bottom = 'auto';
+      dropdown.style.margin = '0';
+      dropdown.style.zIndex = '2147483647';
+    }
+
+    function onScrollOrResizeReposition() {
+      measureAndPlaceDropdown();
+    }
+
+    function bindDropdownScrollReposition() {
+      scrollRoots.forEach(function (el) {
+        el.addEventListener('scroll', onScrollOrResizeReposition, true);
+      });
+      window.addEventListener('scroll', onScrollOrResizeReposition, true);
+      window.addEventListener('resize', onScrollOrResizeReposition);
+    }
+
+    function unbindDropdownScrollReposition() {
+      scrollRoots.forEach(function (el) {
+        el.removeEventListener('scroll', onScrollOrResizeReposition, true);
+      });
+      window.removeEventListener('scroll', onScrollOrResizeReposition, true);
+      window.removeEventListener('resize', onScrollOrResizeReposition);
+    }
+
     function closeDropdown() {
       dropdown.hidden = true;
       openTrigger.setAttribute('aria-expanded', 'false');
+      clearDropdownFixedStyles();
+      unbindDropdownScrollReposition();
       document.removeEventListener('click', closeDropdown);
       document.removeEventListener('keydown', onEscape);
+    }
+
+    function openDropdownUi() {
+      dropdown.hidden = false;
+      requestAnimationFrame(function () {
+        measureAndPlaceDropdown();
+        requestAnimationFrame(measureAndPlaceDropdown);
+      });
+      bindDropdownScrollReposition();
+      setTimeout(function () {
+        document.addEventListener('click', closeDropdown);
+        document.addEventListener('keydown', onEscape);
+      }, 0);
     }
 
     function onEscape(ev) {
@@ -395,17 +476,12 @@
       e.preventDefault();
       e.stopPropagation();
       var willShow = dropdown.hidden;
-      dropdown.hidden = !willShow;
-      openTrigger.setAttribute('aria-expanded', willShow ? 'true' : 'false');
       if (!willShow) {
-        document.removeEventListener('click', closeDropdown);
-        document.removeEventListener('keydown', onEscape);
-      } else {
-        setTimeout(function () {
-          document.addEventListener('click', closeDropdown);
-          document.addEventListener('keydown', onEscape);
-        }, 0);
+        closeDropdown();
+        return;
       }
+      openTrigger.setAttribute('aria-expanded', 'true');
+      openDropdownUi();
     });
 
     dropdown.addEventListener('click', function (e) {
@@ -711,7 +787,7 @@
       '.agilo-referral-leads__msg-tool-btn--open .agilo-ref-leads-send-icon{color:inherit;}' +
       '.agilo-referral-leads__msg-tool-btn--copy.is-copied{color:#13693a;background:#e6f4ea;border-color:rgba(19,105,58,.35);}' +
       '.agilo-ref-leads-icon,.agilo-ref-leads-send-icon{display:block;width:1.125rem;height:1.125rem;}' +
-      '.agilo-referral-leads__dropdown{position:absolute;right:0;bottom:100%;margin-bottom:.25rem;min-width:11.25rem;padding:.375rem;border-radius:.5rem;background:#fff;border:1px solid rgba(52,58,64,.25);box-shadow:0 .125rem .5rem rgba(0,0,0,.1);z-index:12000;list-style:none;}' +
+      '.agilo-referral-leads__dropdown{position:absolute;right:0;bottom:100%;margin-bottom:.25rem;min-width:11.25rem;padding:.375rem;border-radius:.5rem;background:#fff;border:1px solid rgba(52,58,64,.25);box-shadow:0 .125rem .5rem rgba(0,0,0,.1);z-index:2147483646;list-style:none;}' +
       '.agilo-referral-leads__dropdown[hidden]{display:none!important;}' +
       '.agilo-referral-leads__dropdown-item{display:flex;align-items:center;gap:.625rem;width:100%;padding:.5rem .625rem;border:none;border-radius:.375rem;background:transparent;color:#1b2430;font:500 .8125rem/1.3 system-ui,-apple-system,Segoe UI,Roboto;text-decoration:none;cursor:pointer;transition:background .12s;text-align:left;box-sizing:border-box;}' +
       '.agilo-referral-leads__dropdown-item:hover{background:rgba(11,18,34,.06);color:#020202;}' +
