@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.5.5';
+  var VERSION = '1.5.6';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -232,15 +232,23 @@
     if (!email || email.indexOf('@') < 0) return null;
     var subject = readBodyConfig(
       'data-agilo-ref-lead-remind-subject',
-      'Agilotext — passer sur PRO ou Business'
+      'Agilotext — plein de nouveautés depuis votre inscription'
+    );
+    var loginUrl = readBodyConfig(
+      'data-agilo-ref-lead-remind-login-url',
+      'https://www.agilotext.com/auth/login'
     );
     var first = asText(lead && lead.firstName);
     var greet = first ? 'Bonjour ' + first + ',' : 'Bonjour,';
     var body =
       greet +
       '\n\n' +
-      'Je me permets de vous recontacter suite a votre inscription via mon lien de parrainage.\n' +
-      'Si vous souhaitez aller plus loin avec une offre PRO ou Business, je reste disponible pour echanger.\n\n' +
+      'J’espère que vous allez bien.\n\n' +
+      'Merci encore pour votre inscription via mon lien de parrainage. Depuis, Agilotext a bien évolué : nouvelles fonctions, interface plus agréable — en résumé, il y a de quoi redécouvrir l’outil, et ce serait dommage de passer à côté.\n\n' +
+      'Pour vous reconnecter et voir tout ça de vos yeux :\n' +
+      loginUrl +
+      '\n\n' +
+      'Si vous souhaitez ensuite passer sur une offre PRO ou Business, je reste disponible avec plaisir pour en discuter.\n\n' +
       'Bien cordialement';
     return { email: email, subject: subject, body: body };
   }
