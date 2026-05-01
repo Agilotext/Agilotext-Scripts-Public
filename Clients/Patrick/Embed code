@@ -249,7 +249,7 @@
           <div class="agilo-referral-reward-step" data-agilo-ref-reward-step="3">3</div>
         </div>
         <p class="agilo-referral-hero__status" data-agilo-ref-reward-status-label>
-          Partagez votre lien pour demarrer vos premiers parrainages.
+          Partagez votre lien pour démarrer vos premiers parrainages.
         </p>
       </section>
 
@@ -260,11 +260,11 @@
             <p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p>
           </article>
           <article class="agilo-referral-kpi">
-            <p class="agilo-referral-kpi__label">Payants comptes</p>
+            <p class="agilo-referral-kpi__label">Filleuls payants</p>
             <p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p>
           </article>
           <article class="agilo-referral-kpi">
-            <p class="agilo-referral-kpi__label">A convertir</p>
+            <p class="agilo-referral-kpi__label">À convertir</p>
             <p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p>
           </article>
         </div>
@@ -275,15 +275,15 @@
           Partagez votre lien pour augmenter vos statistiques.
         </p>
         <p class="agilo-referral-modal__hint" data-agilo-referral-status-label>
-          Verification manuelle requise
+          Vérification manuelle requise
         </p>
       </section>
 
       <div class="agilo-referral-copy">
-        <button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button>
+        <button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d'invitation</button>
       </div>
       <div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden>
-        <a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Reclamer mon mois offert</a>
+        <a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Réclamer mon mois offert</a>
       </div>
     </section>
   </div>
