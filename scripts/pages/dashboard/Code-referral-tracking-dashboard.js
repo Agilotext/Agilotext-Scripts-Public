@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.5.6';
+  var VERSION = '1.5.7';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -83,33 +83,33 @@
   function computeRewardHint(rewardState, registered, paid) {
     if (!rewardState || rewardState.status === 'empty') {
       if (registered > 0) {
-        return 'Vous avez deja des inscrits. Prochaine etape : les accompagner vers PRO/Biz pour debloquer la recompense.';
+        return 'Vous avez déjà des inscrits. Prochaine étape : les accompagner vers Pro / Business pour débloquer la récompense.';
       }
-      return 'Partagez votre lien pour obtenir vos premiers inscrits et demarrer la progression vers 1 mois offert.';
+      return 'Partagez votre lien pour obtenir vos premiers inscrits et démarrer la progression vers 1 mois offert.';
     }
 
     if (rewardState.status === 'started') {
-      return 'Bon rythme : continuez a accompagner vos filleuls jusqu au plan PRO/Biz pour accelerer la progression.';
+      return 'Bon rythme : continuez à accompagner vos filleuls jusqu\'au plan Pro / Business pour accélérer la progression.';
     }
 
     if (rewardState.status === 'almost') {
-      return 'Vous etes a une etape du mois offert. Un filleul payant supplementaire debloque la recompense.';
+      return 'Vous êtes à une étape du mois offert. Un filleul payant supplémentaire débloque la récompense.';
     }
 
     if (rewardState.status === 'unlocked') {
-      return 'Bravo, objectif atteint. Votre recompense est debloquee et en cours de validation.';
+      return 'Bravo, objectif atteint. Votre récompense est débloquée et en cours de validation.';
     }
 
     if (paid > 0) {
-      return 'Excellent : votre programme ambassadeur convertit deja en abonnements PRO/Biz.';
+      return 'Excellent : votre programme ambassadeur convertit déjà en abonnements Pro / Business.';
     }
 
-    return 'Partagez votre lien pour demarrer vos premiers parrainages.';
+    return 'Partagez votre lien pour démarrer vos premiers parrainages.';
   }
 
   function buildClaimMailto(state, rewardState, rewardLabel) {
     var toEmail = readBodyConfig('data-agilo-ref-reward-claim-email', 'contact@agilotext.com');
-    var subjectBase = readBodyConfig('data-agilo-ref-reward-claim-subject', 'Reclamation mois offert ambassadeur');
+    var subjectBase = readBodyConfig('data-agilo-ref-reward-claim-subject', 'Réclamation mois offert ambassadeur');
     var memberId = asText(state && state.currentMemberId) || '-';
     var inviteCode = asText(state && state.inviteCode) || '-';
     var paid = toSafeInt(state && state.referralsPaid, 0);
@@ -118,9 +118,9 @@
     var rewardName = asText(rewardLabel) || '1 mois offert';
     var subject = subjectBase + ' - ' + memberId;
     var body = [
-      'Bonjour equipe Agilotext,',
+      'Bonjour équipe Agilotext,',
       '',
-      'Je souhaite reclamer ma recompense ambassadeur : ' + rewardName + '.',
+      'Je souhaite réclamer ma récompense ambassadeur : ' + rewardName + '.',
       '',
       'Infos:',
       '- Member ID: ' + memberId,
@@ -137,18 +137,18 @@
   function computeSecondaryHint(rewardState, registered, paid, pending, rewardTarget) {
     var target = Math.max(1, toSafeInt(rewardTarget, 3));
     if ((rewardState && rewardState.status === 'unlocked') || paid >= target) {
-      return 'Recompense debloquee : utilisez le bouton ci-dessous pour envoyer votre demande a notre equipe.';
+      return 'Récompense débloquée : utilisez le bouton ci-dessous pour envoyer votre demande à notre équipe.';
     }
     if (registered <= 0) {
-      return 'Partagez votre lien d invitation pour lancer vos premiers parrainages.';
+      return 'Partagez votre lien d\'invitation pour lancer vos premiers parrainages.';
     }
     if (pending > 0) {
-      return String(pending) + ' contact(s) a convertir vers PRO/Biz. Une relance peut debloquer votre progression.';
+      return String(pending) + ' contact(s) à convertir vers Pro / Business. Une relance peut débloquer votre progression.';
     }
     if (paid > 0) {
-      return 'Votre base convertit deja. Continuez pour atteindre le seuil de 3 payants.';
+      return 'Votre base convertit déjà. Continuez pour atteindre le seuil de 3 payants.';
     }
-    return 'Vous avez des inscrits. Prochaine etape : les aider a activer un abonnement PRO/Biz.';
+    return 'Vous avez des inscrits. Prochaine étape : les aider à activer un abonnement Pro / Business.';
   }
 
   async function copyToClipboard(text) {
@@ -232,7 +232,7 @@
     if (!email || email.indexOf('@') < 0) return null;
     var subject = readBodyConfig(
       'data-agilo-ref-lead-remind-subject',
-      'Agilotext — plein de nouveautés depuis votre inscription'
+      'Agilotext — apps mobiles, Chrome et offres Pro / Business'
     );
     var loginUrl = readBodyConfig(
       'data-agilo-ref-lead-remind-login-url',
@@ -244,11 +244,14 @@
       greet +
       '\n\n' +
       'J’espère que vous allez bien.\n\n' +
-      'Merci encore pour votre inscription via mon lien de parrainage. Depuis, Agilotext a bien évolué : nouvelles fonctions, interface plus agréable — en résumé, il y a de quoi redécouvrir l’outil, et ce serait dommage de passer à côté.\n\n' +
-      'Pour vous reconnecter et voir tout ça de vos yeux :\n' +
+      'Merci encore pour votre inscription via mon lien de parrainage. Agilotext a encore évolué depuis : nous avons une extension Chrome, des applications mobiles, et la reconnaissance des intervenants qui fonctionne très bien sur les enregistrements du quotidien.\n\n' +
+      'Pour vous reconnecter et tout retrouver dans votre espace :\n' +
       loginUrl +
       '\n\n' +
-      'Si vous souhaitez ensuite passer sur une offre PRO ou Business, je reste disponible avec plaisir pour en discuter.\n\n' +
+      'Si vous envisagez une offre payante, Pro et Business sont celles qui débloquent le plus de confort et de précision.\n' +
+      '— Pro : idéal pour un usage régulier avec déjà beaucoup de fonctionnalités avancées.\n' +
+      '— Business : encore au-dessus pour les usages exigeants ; nous nous appuyons sur Mistral AI, particulièrement pertinent pour le français et les réunions avec plusieurs intervenants (prise en compte fine des tours de parole et du vocabulaire métier).\n\n' +
+      'Je reste disponible avec plaisir si vous souhaitez qu’on regarde ensemble ce qui vous correspond le mieux.\n\n' +
       'Bien cordialement';
     return { email: email, subject: subject, body: body };
   }
@@ -548,7 +551,7 @@
       tdDate.textContent = formatLeadCapturedAt(lead.capturedAt);
       var badge = document.createElement('span');
       badge.className = 'agilo-referral-leads__badge ' + (lead.paid ? 'is-paid' : 'is-free');
-      badge.textContent = lead.paid ? 'Payant' : 'Gratuit · a convertir';
+      badge.textContent = lead.paid ? 'Payant' : 'Gratuit · à convertir';
       tdStat.appendChild(badge);
       if (!lead.paid) {
         attachLeadReminderMessageToolbar(tdRemind, lead);
@@ -573,7 +576,7 @@
       '<span class="agilo-referral-leads__toggle-chevron" aria-hidden="true"></span>' +
       '</button>' +
       '<div class="agilo-referral-leads__panel" id="agiloReferralLeadsPanel" data-agilo-ref-leads-panel hidden role="region" aria-labelledby="agiloReferralLeadsToggle">' +
-      '<p class="agilo-referral-leads__hint">Comptes crees via votre lien. Tri du plus recent au plus ancien. Les lignes « Gratuit » : copier le brouillon ou l’ouvrir dans Gmail, Outlook ou votre application mail (icone avion).</p>' +
+      '<p class="agilo-referral-leads__hint">Comptes créés via votre lien. Tri du plus récent au plus ancien. Les lignes « Gratuit » : copier le brouillon ou l’ouvrir dans Gmail, Outlook ou votre application mail (icône avion).</p>' +
       '<div class="agilo-referral-leads__scroll">' +
       '<table class="agilo-referral-leads__table" role="grid">' +
       '<thead><tr><th scope="col">Nom</th><th scope="col">Email</th><th scope="col">Inscription</th><th scope="col">Statut</th><th scope="col">Message</th></tr></thead>' +
@@ -706,7 +709,7 @@
 
   function renderStatus(state) {
     var status = state.inviteOwnerMatchesCurrentMember ? 'ok' : 'needs_check';
-    var statusLabel = status === 'ok' ? 'Lien invitation valide' : 'Verification manuelle requise';
+    var statusLabel = status === 'ok' ? 'Lien d\'invitation valide' : 'Vérification manuelle requise';
     setNodeText('[data-agilo-referral-status-label]', statusLabel);
     setNodeText('[data-agilo-referral-status-code]', status);
   }
@@ -809,7 +812,7 @@
   }
 
   function buildClaimBlockHtml() {
-    return '<div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden><a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Reclamer mon mois offert</a></div>';
+    return '<div class="agilo-referral-claim" data-agilo-ref-claim-wrap hidden><a class="agilo-referral-claim__link" data-agilo-ref-claim-link href="#">Réclamer mon mois offert</a></div>';
   }
 
   function ensureClaimBlock(panel) {
@@ -838,19 +841,19 @@
       '<div class="agilo-referral-reward-step" data-agilo-ref-reward-step="2">2</div>' +
       '<div class="agilo-referral-reward-step" data-agilo-ref-reward-step="3">3</div>' +
       '</div>' +
-      '<p class="agilo-referral-hero__status" data-agilo-ref-reward-status-label>Partagez votre lien pour demarrer vos premiers parrainages.</p>' +
+      '<p class="agilo-referral-hero__status" data-agilo-ref-reward-status-label>Partagez votre lien pour démarrer vos premiers parrainages.</p>' +
       '</section>' +
       '<section class="agilo-referral-secondary">' +
       '<div class="agilo-referral-kpis">' +
       '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Inscrits</p><p class="agilo-referral-kpi__value" data-agilo-ref-registered data-agilo-referrals-registered>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Payants comptes</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
-      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">A convertir</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">Filleuls payants</p><p class="agilo-referral-kpi__value" data-agilo-ref-paid data-agilo-referrals-paid>0</p></article>' +
+      '<article class="agilo-referral-kpi"><p class="agilo-referral-kpi__label">À convertir</p><p class="agilo-referral-kpi__value" data-agilo-ref-pending data-agilo-referrals-pending>0</p></article>' +
       '</div>' +
       '<p class="agilo-referral-conversion-secondary" id="agiloReferralConversionSecondary" data-agilo-ref-conversion-secondary>Conversion : 0%</p>' +
       '<p class="agilo-referral-modal__hint" data-agilo-ref-hint-business>Partagez votre lien pour augmenter vos statistiques.</p>' +
-      '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Verification manuelle requise</p>' +
+      '<p class="agilo-referral-modal__hint" data-agilo-referral-status-label style="margin-top:4px;">Vérification manuelle requise</p>' +
       '</section>' +
-      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d invitation</button></div>' +
+      '<div class="agilo-referral-copy"><button type="button" class="agilo-referral-copy__btn" data-agilo-ref-copy-link>Copier mon lien d\'invitation</button></div>' +
       buildClaimBlockHtml();
   }
 
@@ -926,7 +929,7 @@
           button.textContent = ok ? 'Lien copie' : 'Copie impossible';
         }).finally(function () {
           window.setTimeout(function () {
-            button.textContent = 'Copier mon lien d invitation';
+            button.textContent = 'Copier mon lien d\'invitation';
             button.disabled = false;
           }, 1500);
         });
