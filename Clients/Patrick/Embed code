@@ -294,7 +294,7 @@ IMPORTANT (Webflow + CSP) :
 Ne mets PAS de <script> inline dans cet embed.
 Ajoute le script externe dans Page Settings > Before </body>.
 
-Optionnel sur <body> : data-agilo-ref-lead-remind-subject="Votre objet personnalise"
+Optionnel sur <body> : data-agilo-ref-lead-remind-subject="..." et data-agilo-ref-lead-remind-login-url="https://..."
 (barre copier + menu Gmail / Outlook / app mail : voir Code-referral-tracking-dashboard.js).
 -->
 <!--
