@@ -1,8 +1,113 @@
 // Agilotext — Mes transcripts : bulk export / webhook / suppression (+ confirm modale)
 // Source: extrait de l’embed Webflow ; à servir via jsDelivr.
+//
+// Si un ANCIEN embed inline a déjà défini AgilotextBulk, tout le bloc ci‑dessous est ignoré
+// (voir `if (window.AgilotextBulk) return`). Le correctif suivant garantit tout de même la
+// poubelle par ligne (`window.confirm`). Retirez tout script inline dupliqué et ne garde
+// QUE ce fichier pour retrouver la modale Agilo unifiée.
+
+(function agiloMesTranscriptsRowTrashFallback() {
+  if (window.__agiloMesTranscriptsRowTrashFallback) return;
+  window.__agiloMesTranscriptsRowTrashFallback = true;
+
+  function editionFromPath() {
+    const p = window.location.pathname;
+    if (p.includes('/app/free/')) return 'free';
+    if (p.includes('/app/pro/') || p.includes('/app/premium/')) return 'pro';
+    if (p.includes('/app/ent/') || p.includes('/app/business/')) return 'ent';
+    return 'ent';
+  }
+
+  document.addEventListener(
+    'click',
+    async function agiloMesTranscriptsRowTrashFallbackClick(ev) {
+      if (window.__agiloRowTrashHandledByBulk) return;
+
+      const btn = ev.target && ev.target.closest && ev.target.closest('.delete-job-button_to-confirm');
+      if (!btn || btn.id === 'bulkDeleteBtn') return;
+
+      const row = btn.closest('.wrapper-content_item-row[data-job-id]');
+      if (!row) return;
+
+      const jobsRoot = document.getElementById('jobs-container');
+      if (!jobsRoot || !jobsRoot.contains(btn)) return;
+
+      ev.preventDefault();
+
+      try {
+        if (!window.confirm('Êtes-vous sûr de vouloir supprimer cette transcription ?')) return;
+      } catch (_) {
+        return;
+      }
+
+      const emailEl = document.querySelector('[name="memberEmail"]');
+      const email = (
+        emailEl?.value ||
+        emailEl?.getAttribute('src') ||
+        emailEl?.textContent ||
+        ''
+      ).trim();
+      const token = typeof globalToken !== 'undefined' && globalToken ? globalToken : null;
+      if (!token) {
+        window.alert('Session indisponible (token). Rechargez la page.');
+        return;
+      }
+      if (!email) {
+        window.alert('Email utilisateur introuvable.');
+        return;
+      }
+
+      const jobId = row.getAttribute('data-job-id');
+      if (!jobId) return;
+
+      const apiBase = jobsRoot.dataset.apiBase || 'https://api.agilotext.com/api/v1';
+      const edition = editionFromPath();
+      const url =
+        `${apiBase}/deleteJob?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}` +
+        `&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(edition)}`;
+
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      try {
+        const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+        const data = await res.json().catch(() => ({}));
+        if (data.status === 'OK') {
+          row.remove();
+          try {
+            const all = Array.from(document.querySelectorAll('#jobs-container .wrapper-content_item-row .job-select'));
+            const checked = all.filter(function (cb) { return cb.checked; });
+            const countEl = document.getElementById('selected-count');
+            if (countEl) countEl.textContent = checked.length + ' sélectionné(s)';
+            const selectAll = document.getElementById('select-all');
+            if (selectAll && all.length) {
+              if (checked.length === 0) { selectAll.checked = false; selectAll.indeterminate = false; }
+              else if (checked.length === all.length) { selectAll.checked = true; selectAll.indeterminate = false; }
+              else { selectAll.checked = false; selectAll.indeterminate = true; }
+            }
+          } catch (_) {}
+        } else {
+          window.alert(data.errorMessage || data.message || 'Suppression impossible.');
+        }
+      } catch (err) {
+        window.alert(err && err.message ? err.message : 'Erreur réseau.');
+      } finally {
+        btn.disabled = false;
+        btn.removeAttribute('aria-busy');
+      }
+    },
+    true
+  );
+})();
 
 (() => {
-  if (window.AgilotextBulk) return; // évite double injection
+  if (window.AgilotextBulk) {
+    console.warn(
+      '[Agilotext] Embed AgilotextBulk déjà présent (souvent un ancien bloc Webflow avant jsDelivr). ' +
+      'La poubelle par ligne passe par un secours avec confirm navigateur tant que vous ne supprimez pas le doublon. ' +
+      'Retirez tout script inline équivalent puis ne chargez que ce fichier (v2.4.2).'
+    );
+    return;
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // Helpers: tier-aware URLs (/app/{tier}/...)
@@ -631,9 +736,10 @@
     function initNow() {
       injectDialogTheme();
       bindUI();
+      window.__agiloRowTrashHandledByBulk = true;
     }
 
-    return { init: initNow, version: '2.4.1' };
+    return { init: initNow, version: '2.4.2' };
   })();
 
   // Démarrage immédiat
