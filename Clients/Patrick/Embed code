@@ -298,5 +298,5 @@ Optionnel sur <body> : data-agilo-ref-lead-remind-subject="..." et data-agilo-re
 (barre copier + menu Gmail / Outlook / app mail : voir Code-referral-tracking-dashboard.js).
 -->
 <!--
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@d3fae21/scripts/pages/dashboard/Code-referral-tracking-dashboard.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@977b927/scripts/pages/dashboard/Code-referral-tracking-dashboard.js"></script>
 -->
