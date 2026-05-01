@@ -4,7 +4,7 @@
   if (window.__agiloReferralTrackingDashboard) return;
   window.__agiloReferralTrackingDashboard = true;
 
-  var VERSION = '1.5.7';
+  var VERSION = '1.5.8';
   var REFRESH_INTERVAL_MS = 15000;
 
   function q(selector, root) {
@@ -232,7 +232,7 @@
     if (!email || email.indexOf('@') < 0) return null;
     var subject = readBodyConfig(
       'data-agilo-ref-lead-remind-subject',
-      'Agilotext — apps mobiles, Chrome et offres Pro / Business'
+      'Agilotext — nouveautés : Chrome, apps mobiles, Pro / Business'
     );
     var loginUrl = readBodyConfig(
       'data-agilo-ref-lead-remind-login-url',
@@ -244,14 +244,14 @@
       greet +
       '\n\n' +
       'J’espère que vous allez bien.\n\n' +
-      'Merci encore pour votre inscription via mon lien de parrainage. Agilotext a encore évolué depuis : nous avons une extension Chrome, des applications mobiles, et la reconnaissance des intervenants qui fonctionne très bien sur les enregistrements du quotidien.\n\n' +
-      'Pour vous reconnecter et tout retrouver dans votre espace :\n' +
+      'Merci encore pour votre inscription via mon lien de parrainage. Je vous renvoie un petit message de mon côté : depuis, il y a pas mal de nouveautés côté Agilotext — extension Chrome, applications mobiles, et la reconnaissance des intervenants qui fonctionne vraiment bien sur les enregistrements du quotidien (je trouve que ça vaut un nouveau passage dans l’outil).\n\n' +
+      'Pour vous reconnecter à votre espace :\n' +
       loginUrl +
       '\n\n' +
-      'Si vous envisagez une offre payante, Pro et Business sont celles qui débloquent le plus de confort et de précision.\n' +
-      '— Pro : idéal pour un usage régulier avec déjà beaucoup de fonctionnalités avancées.\n' +
-      '— Business : encore au-dessus pour les usages exigeants ; nous nous appuyons sur Mistral AI, particulièrement pertinent pour le français et les réunions avec plusieurs intervenants (prise en compte fine des tours de parole et du vocabulaire métier).\n\n' +
-      'Je reste disponible avec plaisir si vous souhaitez qu’on regarde ensemble ce qui vous correspond le mieux.\n\n' +
+      'Si vous envisagez une offre payante un jour, de ce que j’en comprends Pro et Business sont les deux paliers les plus complets :\n' +
+      '— Pro : confort et fonctions avancées pour un usage régulier.\n' +
+      '— Business : pensée pour les usages plus exigeants ; chez Agilotext l’offre est présentée autour de Mistral AI — très adaptée au français et aux réunions avec plusieurs intervenants (précision sur les tours de parole et le vocabulaire métier).\n\n' +
+      'N’hésitez pas si vous voulez qu’on en rediscute ; sinon bon test si vous retournez sur la plateforme.\n\n' +
       'Bien cordialement';
     return { email: email, subject: subject, body: body };
   }
