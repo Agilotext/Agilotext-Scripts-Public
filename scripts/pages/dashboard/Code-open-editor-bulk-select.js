@@ -6,17 +6,21 @@
 // poubelle par ligne (`window.confirm`). Retirez tout script inline dupliqué et ne garde
 // QUE ce fichier pour retrouver la modale Agilo unifiée.
 
-(function agiloMesTranscriptsRowTrashFallback() {
-  if (window.__agiloMesTranscriptsRowTrashFallback) return;
-  window.__agiloMesTranscriptsRowTrashFallback = true;
-
-  function editionFromPath() {
-    const p = window.location.pathname;
+/** Paramètre API `edition` : dérivé du chemin (/app/free/, /app/pro/, /app/business/, …). */
+(function registerAgiloBulkApiEdition() {
+  if (typeof window.agiloBulkApiEdition === 'function') return;
+  window.agiloBulkApiEdition = function agiloBulkApiEdition() {
+    const p = window.location.pathname || '';
     if (p.includes('/app/free/')) return 'free';
     if (p.includes('/app/pro/') || p.includes('/app/premium/')) return 'pro';
     if (p.includes('/app/ent/') || p.includes('/app/business/')) return 'ent';
     return 'ent';
-  }
+  };
+})();
+
+(function agiloMesTranscriptsRowTrashFallback() {
+  if (window.__agiloMesTranscriptsRowTrashFallback) return;
+  window.__agiloMesTranscriptsRowTrashFallback = true;
 
   document.addEventListener(
     'click',
@@ -61,7 +65,7 @@
       if (!jobId) return;
 
       const apiBase = jobsRoot.dataset.apiBase || 'https://api.agilotext.com/api/v1';
-      const edition = editionFromPath();
+      const edition = window.agiloBulkApiEdition();
       const url =
         `${apiBase}/deleteJob?username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}` +
         `&jobId=${encodeURIComponent(jobId)}&edition=${encodeURIComponent(edition)}`;
@@ -104,7 +108,7 @@
     console.warn(
       '[Agilotext] Embed AgilotextBulk déjà présent (souvent un ancien bloc Webflow avant jsDelivr). ' +
       'La poubelle par ligne passe par un secours avec confirm navigateur tant que vous ne supprimez pas le doublon. ' +
-      'Retirez tout script inline équivalent puis ne chargez que ce fichier (v2.4.2).'
+      'Retirez tout script inline équivalent puis ne chargez que ce fichier (v2.4.3).'
     );
     return;
   }
@@ -121,6 +125,12 @@
     const clean = String(subpath).replace(/^\/+/, "");
     return `/app/${tier}/${clean}`;
   }
+
+  /** Même convention que Code-mes-transcripts-logic.js (URLs → paramètre API `edition`). */
+  function apiEditionFromUrl() {
+    return window.agiloBulkApiEdition();
+  }
+
   function injectDialogTheme() {
     if (document.getElementById('agilo-dialog-theme')) return;
     const css = `
@@ -258,7 +268,7 @@
       automationProvider: '#automationProvider'
     };
 
-    const EDITION  = 'ent';
+    const EDITION = apiEditionFromUrl();
     const API_BASE =
       document.querySelector(SELECTORS.container)?.dataset.apiBase ||
       'https://api.agilotext.com/api/v1';
@@ -739,7 +749,7 @@
       window.__agiloRowTrashHandledByBulk = true;
     }
 
-    return { init: initNow, version: '2.4.2' };
+    return { init: initNow, version: '2.4.3' };
   })();
 
   // Démarrage immédiat
