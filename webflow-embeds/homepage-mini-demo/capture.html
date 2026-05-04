@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agilotext — Démo capture (embed)</title>
+  <style>
+    :root {
+      /* Charte Base — design tokens Agilotext */
+      --color-white: #ffffff;
+      --color-orange: #fd7e14;
+      --color-vert: #1c661a;
+      --color-blue: #174a96;
+      --color-gris-fonce: #020202;
+      --color-blanc-gris: #f8f9fa;
+      --color-noir-25: rgba(52, 58, 64, 0.25);
+      --color-gris: #525252;
+      --color-rouge: #a82633;
+      --radius-base: 0.5rem;
+
+      --shell-bg: #f8f9fa;
+      --shell-border: rgba(52, 58, 64, 0.18);
+      --shell-card: #f8f9fa;
+      --agilo-primary: var(--color-blue);
+      --agilo-primary-soft: rgba(23, 74, 150, 0.14);
+      --agilo-text: var(--color-gris-fonce);
+      --agilo-dim: var(--color-gris);
+      --agilo-surface: var(--color-white);
+      --agilo-surface-2: var(--color-blanc-gris);
+      --agilo-border: var(--color-noir-25);
+      --agilo-accent: var(--color-orange);
+      --btn-radius: var(--radius-base);
+      --toggle-off: rgba(82, 82, 82, 0.22);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      color: var(--agilo-text);
+      background: var(--shell-bg);
+      -webkit-font-smoothing: antialiased;
+      text-align: start;
+    }
+
+    .shell {
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 820px;
+      margin: 0 auto;
+      background: var(--shell-card);
+      border-radius: calc(var(--radius-base) + 0.35rem);
+      border: 1px solid var(--shell-border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 56px rgba(0, 20, 39, 0.09);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      max-height: min(920px, calc(100vh - 20px));
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, var(--color-white) 0%, var(--shell-bg) 100%);
+      border-bottom: 1px solid var(--shell-border);
+      flex-shrink: 0;
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span { width: 10px; height: 10px; border-radius: 50%; }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--agilo-dim);
+      background: var(--color-white);
+      border: 1px solid var(--shell-border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .brand img { height: 22px; width: auto; display: block; }
+
+    .inner {
+      padding: 0;
+      background: var(--shell-bg);
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+      /* Ancrage gauche pour tout le contenu scrollable (évite l’héritage d’un parent iframe centré) */
+      text-align: start;
+    }
+
+    /* Carte principale */
+    .dashboard-card {
+      display: block;
+      margin: 12px;
+      padding: 20px 16px 20px;
+      background: var(--agilo-surface);
+      border-radius: var(--radius-base);
+      border: 1px solid var(--agilo-border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      transition: box-shadow 0.35s ease, transform 0.35s ease;
+    }
+
+    /* Tout le bloc titre / upload / options reste centré */
+    .dashboard-card-main {
+      width: 100%;
+      text-align: center;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      .dashboard-card {
+        animation: demo-card-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+    }
+    @keyframes demo-card-in {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    .dashboard-card:hover {
+      box-shadow:
+        0 4px 14px rgba(23, 74, 150, 0.07),
+        0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Mise en avant douce pendant la démo auto-inactivité (désactivée si prefers-reduced-motion) */
+    .idle-demo-spotlight {
+      position: relative;
+      z-index: 2;
+      border-radius: 10px;
+      transition: box-shadow 0.35s ease;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.98),
+        0 0 0 4px rgba(23, 74, 150, 0.5),
+        0 12px 36px rgba(23, 74, 150, 0.16);
+    }
+    .process-toggle-line.idle-demo-spotlight {
+      padding: 8px 10px;
+      margin: -4px -6px 12px;
+      border-radius: 10px;
+    }
+    .lang-select-block.idle-demo-spotlight {
+      padding: 8px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .select-template.idle-demo-spotlight {
+      border-radius: var(--radius-base);
+    }
+    .upload-zone-placeholder.idle-demo-spotlight {
+      border-radius: var(--radius-base);
+    }
+    .source-tab.idle-demo-spotlight {
+      border-radius: 8px;
+    }
+
+    .dash-title-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .dash-title {
+      margin: 0;
+      font-size: clamp(1.05rem, 2.8vw, 1.2rem);
+      font-weight: 700;
+      color: var(--agilo-text);
+      line-height: 1.25;
+      max-width: 26rem;
+    }
+    .help-ico {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--agilo-border);
+      color: var(--agilo-dim);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: default;
+      margin-top: 2px;
+    }
+
+    /* Bouton Enregistrer : plus compact, rebords carrés comme « Tester gratuitement » */
+    .btn-record {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.48rem 1rem;
+      margin: 0 auto 8px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--color-white);
+      background: var(--agilo-primary);
+      border: none;
+      border-radius: var(--btn-radius);
+      cursor: default;
+      box-shadow: 0 2px 8px rgba(23, 74, 150, 0.2);
+    }
+    .btn-record svg.ico-mic {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .btn-record-wrap {
+      text-align: center;
+    }
+
+    .rgpd-note {
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--agilo-dim);
+      margin: 0 0 16px;
+      line-height: 1.45;
+    }
+
+    .or-rule {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 4px 0 14px;
+      color: var(--agilo-dim);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .or-rule::before,
+    .or-rule::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(52, 58, 64, 0.18);
+    }
+
+    .agilo-source-wrap {
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .source-tabs {
+      display: flex;
+      border-bottom: 2px solid var(--agilo-border);
+      background: transparent;
+    }
+    .source-tab {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.85rem 0.35rem;
+      font-family: inherit;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--agilo-dim);
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      position: relative;
+      transition: color 0.2s, background 0.2s;
+    }
+    .source-tab:hover { color: var(--agilo-text); background: var(--color-blanc-gris); }
+    .source-tab.active {
+      color: var(--agilo-primary);
+      font-weight: 600;
+    }
+    .source-tab.active::after {
+      content: "";
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--agilo-primary);
+      border-radius: 3px 3px 0 0;
+    }
+    .source-tab svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+
+    .ag-badge.orange {
+      display: inline-block;
+      font-size: 0.62rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: var(--agilo-accent);
+      color: var(--color-white);
+      margin-left: 4px;
+      vertical-align: middle;
+      letter-spacing: 0.02em;
+    }
+
+    .source-panels { padding: 1.1rem 0 0; }
+    .source-panel { display: none; }
+    .source-panel.active {
+      display: block;
+      animation: panelFadeIn 0.22s ease;
+    }
+    @keyframes panelFadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .source-panel.active { animation: none; }
+    }
+
+    /* Zone fichier centrée */
+    .panel-file-centered {
+      max-width: 440px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .panel-file-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.65rem;
+    }
+
+    .checkbox-component.multiple-audios {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.65rem;
+      margin-top: 0.25rem;
+      font-size: 0.8125rem;
+      flex-wrap: wrap;
+    }
+    .checkbox-component.multiple-audios .text-size-small { color: var(--agilo-dim); }
+
+    /* Toggle unique (même style partout) */
+    /* Toggle : pastille centrée verticalement */
+    .toggle-fake {
+      position: relative;
+      width: 38px;
+      height: 22px;
+      background: var(--toggle-off);
+      border-radius: 12px;
+      cursor: pointer;
+      flex-shrink: 0;
+      border: none;
+      padding: 0;
+      vertical-align: middle;
+    }
+    .toggle-fake::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 3px;
+      width: 16px;
+      height: 16px;
+      margin-top: 0;
+      border-radius: 50%;
+      background: var(--color-white);
+      border: 1px solid rgba(0, 0, 0, 0.06);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+      transition: transform 0.25s;
+      transform: translateY(-50%);
+    }
+    .toggle-fake.on {
+      background: var(--agilo-accent);
+    }
+    .toggle-fake.on::after {
+      transform: translate(16px, -50%);
+    }
+
+    .upload-zone-placeholder {
+      border: 2px dashed var(--agilo-border);
+      border-radius: var(--radius-base);
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--agilo-dim);
+      font-size: 0.875rem;
+      transition: border-color 0.25s, background 0.25s;
+      cursor: default;
+      margin-top: 1rem;
+    }
+    .upload-zone-placeholder:hover {
+      border-color: var(--agilo-primary);
+      background: rgba(23, 74, 150, 0.03);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .upload-zone-placeholder {
+        transition:
+          border-color 0.25s ease,
+          background 0.25s ease,
+          transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+          box-shadow 0.35s ease;
+      }
+      .upload-zone-placeholder:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(23, 74, 150, 0.08);
+      }
+    }
+    .upload-zone-placeholder .browse {
+      color: var(--agilo-primary);
+      text-decoration: underline;
+      font-weight: 500;
+      cursor: default;
+    }
+
+    .youtube-panel-inner {
+      text-align: center;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+    .youtube-panel-inner h5 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 0.65rem;
+    }
+    .youtube-panel-inner .input-youtube {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--agilo-border);
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-family: inherit;
+      box-sizing: border-box;
+      background: var(--agilo-surface-2);
+      color: var(--agilo-dim);
+      pointer-events: none;
+    }
+    .youtube-panel-inner .yt-helper {
+      font-size: 0.75rem;
+      color: var(--agilo-dim);
+      margin-top: 0.45rem;
+      text-align: center;
+    }
+
+    .dictee-inner-card { text-align: center; padding: 0.5rem 0 0; }
+    .dictee-status-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      color: var(--agilo-dim);
+      margin-bottom: 0.45rem;
+    }
+    .dictee-status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--agilo-dim);
+      flex-shrink: 0;
+    }
+    .dictee-timer {
+      font-size: 1.85rem;
+      font-weight: 700;
+      margin-bottom: 0.65rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--agilo-dim);
+    }
+    .dictee-timer .sep { opacity: 0.85; }
+    .dictee-preview-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      font-size: 0.68rem;
+      color: var(--agilo-dim);
+      margin-bottom: 0.45rem;
+    }
+    .dictee-preview-label svg {
+      width: 13px;
+      height: 13px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+    .dictee-textarea-static {
+      width: 100%;
+      min-height: 140px;
+      border: 1px solid var(--agilo-border);
+      border-radius: var(--radius-base);
+      padding: 1rem 1.1rem;
+      font-family: inherit;
+      font-size: 0.875rem;
+      line-height: 1.55;
+      color: var(--agilo-dim);
+      resize: none;
+      background: var(--agilo-surface-2);
+      box-sizing: border-box;
+      pointer-events: none;
+    }
+    .dictee-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 0.85rem;
+    }
+    .dictee-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.35rem;
+      padding: 0.55rem 1rem;
+      font-family: inherit;
+      font-size: 0.78rem;
+      font-weight: 600;
+      border-radius: var(--radius-base);
+      border: none;
+      cursor: not-allowed;
+      opacity: 0.55;
+      line-height: 1.3;
+    }
+    .dictee-btn svg,
+    .dictee-btn .ico-mic {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .dictee-btn--start {
+      background: var(--agilo-primary);
+      color: var(--color-white);
+    }
+    .dictee-note {
+      font-size: 0.65rem;
+      color: var(--agilo-dim);
+      margin-top: 0.85rem;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    /* Bloc options : même ligne label + toggle, groupe centré comme Envoi multiple */
+    .process-stack {
+      margin-top: 1.15rem;
+      padding-top: 1rem;
+      border-top: 1px solid rgba(52, 58, 64, 0.12);
+      max-width: 440px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+    .process-toggle-line {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 11px;
+      font-size: 0.78rem;
+      color: var(--agilo-text);
+      flex-wrap: wrap;
+      width: 100%;
+      min-height: 26px;
+    }
+    .process-toggle-line label {
+      font-weight: 500;
+      text-align: center;
+      flex: 0 1 auto;
+      max-width: min(280px, 88vw);
+      margin: 0;
+      cursor: default;
+    }
+
+    .template-cr-block {
+      margin: 0 auto 14px;
+      padding: 12px 0 4px;
+      max-width: 380px;
+      text-align: center;
+      border-bottom: 1px solid rgba(52, 58, 64, 0.08);
+      padding-bottom: 14px;
+    }
+    .template-cr-block.is-hidden {
+      display: none;
+    }
+    .template-cr-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--agilo-text);
+    }
+    /* Liste langues — double liséré orange / bleu comme le produit */
+    .lang-select-block {
+      margin: 2px auto 16px;
+      max-width: 380px;
+      text-align: center;
+    }
+    .lang-select-block.is-hidden {
+      display: none;
+    }
+    .select-lang-double-border {
+      padding: 2px;
+      border-radius: 11px;
+      background: var(--agilo-primary);
+      box-shadow: inset 0 0 0 2px var(--agilo-accent);
+    }
+    .select-lang-pro {
+      display: block;
+      width: 100%;
+      margin: 0;
+      padding: 11px 12px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--agilo-text);
+      border: none;
+      border-radius: 9px;
+      background: var(--color-white);
+      cursor: default;
+      text-align: left;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23525252'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+    .select-template {
+      width: 100%;
+      max-width: 100%;
+      padding: 9px 11px;
+      font-size: 0.78rem;
+      border: 1px solid var(--agilo-border);
+      border-radius: var(--radius-base);
+      background: var(--agilo-surface-2);
+      color: var(--agilo-text);
+      cursor: pointer;
+      margin-bottom: 8px;
+      text-align: left;
+    }
+    .link-create-template {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--agilo-accent);
+      text-decoration: none;
+      cursor: default;
+    }
+    .link-create-template:hover {
+      text-decoration: underline;
+    }
+
+    /* Envoyer mon fichier */
+    .send-block {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px dashed rgba(52, 58, 64, 0.15);
+      text-align: center;
+    }
+    /* Comme capture produit : CTA orange lisible, coins arrondis marqués (pas pilule bleue) */
+    .btn-send-orange {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 340px;
+      padding: 13px 22px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--color-white);
+      background: var(--agilo-accent);
+      border: none;
+      border-radius: 14px;
+      cursor: default;
+      box-shadow: 0 3px 14px rgba(253, 126, 20, 0.28);
+      transition: box-shadow 0.15s;
+    }
+    .send-disclaimer {
+      margin: 14px auto 0;
+      max-width: 380px;
+      font-size: 0.72rem;
+      color: var(--agilo-dim);
+      line-height: 1.45;
+      text-align: center;
+    }
+    .send-disclaimer p {
+      margin: 0 0 6px;
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+      padding: 11px 18px;
+      border-radius: var(--btn-radius);
+      border: 1px solid var(--agilo-border);
+      font: inherit;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      background: var(--color-white);
+      color: var(--agilo-text);
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-secondary:hover {
+      border-color: var(--agilo-primary);
+      color: var(--agilo-primary);
+    }
+    .btn-secondary:focus-visible {
+      outline: 2px solid var(--agilo-primary);
+      outline-offset: 2px;
+    }
+
+    .bridge {
+      margin: 12px 12px 0;
+      padding: 0 8px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--agilo-dim);
+      text-align: center;
+    }
+    .bridge a {
+      color: var(--agilo-primary);
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .bridge a:hover { text-decoration: underline; }
+
+    .fineprint {
+      margin: 8px 12px 12px;
+      font-size: 10px;
+      color: var(--agilo-dim);
+      text-align: center;
+      opacity: 0.92;
+    }
+
+    @media (max-width: 560px) {
+      .mac { max-height: none; }
+      .source-tab { font-size: 0.72rem; padding: 0.75rem 0.2rem; }
+      .process-toggle-line label { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="mac" role="application" aria-label="Démonstration capture Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.com — démo capture</div>
+        <div class="brand">
+          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
+        </div>
+      </div>
+
+      <div class="inner">
+        <div class="dashboard-card">
+          <div class="dashboard-card-main">
+          <div class="dash-title-row">
+            <h1 class="dash-title">Capturez l’audio de votre réunion ou visio</h1>
+            <span class="help-ico" title="Démo statique" aria-hidden="true">?</span>
+          </div>
+
+          <div class="btn-record-wrap">
+            <button type="button" class="btn-record" disabled aria-disabled="true" title="Démo — aucun enregistrement réel">
+              <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3v-6a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+              Enregistrer
+            </button>
+          </div>
+          <p class="rgpd-note">Conforme au RGPD. L’audio reste en local jusqu’à l’envoi.</p>
+
+          <div class="or-rule" role="presentation"><span>Ou</span></div>
+
+          <div class="agilo-source-wrap">
+            <section class="source-card">
+              <div class="source-tabs" role="tablist" aria-label="Source du média">
+                <button type="button" class="source-tab active" role="tab" id="tab-file" aria-selected="true" aria-controls="panel-file" tabindex="0" data-tab="file">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/></svg>
+                  Fichier
+                </button>
+                <button type="button" class="source-tab" role="tab" id="tab-youtube" aria-selected="false" aria-controls="panel-youtube" tabindex="-1" data-tab="youtube">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                  YouTube
+                </button>
+                <button type="button" class="source-tab" role="tab" id="tab-dictee" aria-selected="false" aria-controls="panel-dictee" tabindex="-1" data-tab="dictee">
+                  <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3v-6a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                  Dictée en direct
+                  <span class="ag-badge orange">Nouveau</span>
+                </button>
+              </div>
+
+              <div class="source-panels">
+                <div class="source-panel active" id="panel-file" role="tabpanel" aria-labelledby="tab-file">
+                  <div class="panel-file-centered">
+                    <div class="panel-file-title">Uploadez votre fichier audio ou vidéo ici :</div>
+                    <div class="checkbox-component multiple-audios">
+                      <span class="text-size-small">Envoi multiple</span>
+                      <button type="button" class="toggle-fake on" id="toggle-envoi" aria-label="Basculer envoi multiple ou envoi unique (démo)" aria-pressed="true"></button>
+                      <span class="text-size-small">Envoi unique</span>
+                    </div>
+                    <div class="upload-zone-placeholder">
+                      Glissez-déposez votre fichier audio (M4A, MP3, MP4, WAV) ou <span class="browse">Parcourir</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="source-panel" id="panel-youtube" role="tabpanel" aria-labelledby="tab-youtube">
+                  <div class="youtube-panel-inner">
+                    <h5>Transcrire une vidéo YouTube</h5>
+                    <input type="url" readonly tabindex="-1" class="input-youtube" value="https://www.youtube.com/watch?v=…" aria-label="Exemple de champ YouTube (démo)" />
+                    <p class="yt-helper">Collez le lien complet de la vidéo YouTube que vous souhaitez transcrire.</p>
+                  </div>
+                </div>
+
+                <div class="source-panel" id="panel-dictee" role="tabpanel" aria-labelledby="tab-dictee">
+                  <div class="dictee-inner-card">
+                    <div class="dictee-status-row">
+                      <span class="dictee-status-dot" aria-hidden="true"></span>
+                      <span>Prêt à enregistrer</span>
+                    </div>
+                    <div class="dictee-timer" aria-hidden="true">00<span class="sep">:</span>00</div>
+                    <div class="dictee-preview-label">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                      Aperçu en direct — le résultat final sera traité après envoi
+                    </div>
+                    <textarea class="dictee-textarea-static" readonly rows="5" aria-label="Zone de dictée (démo inactive)">La transcription apparaîtra ici lorsque vous utiliserez Agilotext pour de vrai…</textarea>
+                    <div class="dictee-actions">
+                      <button type="button" class="dictee-btn dictee-btn--start" disabled aria-disabled="true">
+                        <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3v-6a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                        Démarrer la dictée
+                      </button>
+                    </div>
+                    <p class="dictee-note">
+                      Démo statique : pas d’écoute micro dans cette iframe. Dans l’application, l’audio reste local jusqu’à l’envoi · RGPD (serveurs UE).
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div class="process-stack">
+            <div class="process-toggle-line">
+              <label for="toggle-speaker">Activer la reconnaissance des intervenants</label>
+              <button type="button" class="toggle-fake on" id="toggle-speaker" aria-label="Reconnaissance des intervenants" aria-pressed="true"></button>
+            </div>
+
+            <div class="process-toggle-line">
+              <label for="toggle-translate">Traduire le compte rendu</label>
+              <button type="button" class="toggle-fake" id="toggle-translate" aria-label="Traduire le compte rendu" aria-pressed="false"></button>
+            </div>
+
+            <div id="lang-select-block" class="lang-select-block is-hidden" aria-hidden="true">
+              <div class="select-lang-double-border">
+                <select id="select-lang" class="select-lang-pro" aria-label="Langue de traduction du compte rendu (démo)" tabindex="-1">
+                  <option>Français</option>
+                  <option>Anglais</option>
+                  <option>Espagnol</option>
+                  <option>Allemand</option>
+                  <option>Italien</option>
+                  <option>Portugais</option>
+                  <option>Néerlandais</option>
+                  <option>Polonais</option>
+                  <option>Arabe</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="process-toggle-line">
+              <label for="toggle-cr">Générer le compte rendu</label>
+              <button type="button" class="toggle-fake on" id="toggle-cr" aria-label="Générer le compte rendu" aria-pressed="true"></button>
+            </div>
+
+            <div id="template-cr-block" class="template-cr-block">
+              <span class="template-cr-label">Choisissez un modèle pour votre compte rendu</span>
+              <select class="select-template" aria-label="Modèle de compte rendu (démo)">
+                <option>Réunion complète — synthèse, décisions, actions</option>
+                <option>Court — décisions et suites uniquement</option>
+                <option>Stand-up / point rapide — l’essentiel en puces</option>
+                <option>Formation — étapes et points à retenir</option>
+              </select>
+              <a href="#" class="link-create-template" tabindex="-1" onclick="return false;" aria-disabled="true">+ Créer un modèle</a>
+            </div>
+          </div>
+
+          <div class="send-block">
+            <button type="button" class="btn-send-orange" disabled title="Démo statique">
+              Envoyer mon fichier
+            </button>
+            <div class="send-disclaimer">
+              <p>Les transcriptions et comptes rendus peuvent comporter des erreurs.</p>
+              <p>Vérifiez attentivement vos résultats avant de les partager ou de les utiliser.</p>
+            </div>
+            <a class="btn-secondary" href="https://www.agilotext.com/tarifs" target="_blank" rel="noopener noreferrer">Tester gratuitement</a>
+          </div>
+          </div>
+        </div>
+
+        <p class="bridge">
+          Valeur produit : transcription synchronisée, compte rendu et assistant IA — voir la démo
+          <a href="result.html">« Résultat »</a> sous cette iframe sur la homepage.
+        </p>
+        <p class="fineprint">Démo statique · aucune donnée envoyée · interface inspirée de l’application Agilotext</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var mac = document.querySelector(".mac");
+      var tabs = document.querySelectorAll(".source-tab");
+      var panels = {
+        file: document.getElementById("panel-file"),
+        youtube: document.getElementById("panel-youtube"),
+        dictee: document.getElementById("panel-dictee")
+      };
+
+      function activate(name) {
+        tabs.forEach(function (tab) {
+          var on = tab.getAttribute("data-tab") === name;
+          tab.classList.toggle("active", on);
+          tab.setAttribute("aria-selected", on ? "true" : "false");
+          tab.setAttribute("tabindex", on ? "0" : "-1");
+        });
+        Object.keys(panels).forEach(function (key) {
+          var p = panels[key];
+          if (!p) return;
+          p.classList.toggle("active", key === name);
+        });
+      }
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          activate(tab.getAttribute("data-tab"));
+        });
+      });
+
+      document.querySelector(".source-tabs").addEventListener("keydown", function (e) {
+        var order = ["file", "youtube", "dictee"];
+        var keys = { ArrowLeft: -1, ArrowRight: 1 };
+        var delta = keys[e.key];
+        if (!delta) return;
+        var active = document.activeElement;
+        if (!active || !active.classList.contains("source-tab")) return;
+        e.preventDefault();
+        var i = order.indexOf(active.getAttribute("data-tab"));
+        if (i < 0) return;
+        var next = (i + delta + order.length) % order.length;
+        activate(order[next]);
+        document.querySelector('[data-tab="' + order[next] + '"]').focus();
+      });
+
+      function setPressed(el, on) {
+        if (!el) return;
+        el.classList.toggle("on", on);
+        el.setAttribute("aria-pressed", on ? "true" : "false");
+      }
+
+      var langBlock = document.getElementById("lang-select-block");
+      var tplBlock = document.getElementById("template-cr-block");
+      var toggleEnvoi = document.getElementById("toggle-envoi");
+      var toggleSpeaker = document.getElementById("toggle-speaker");
+      var toggleTranslate = document.getElementById("toggle-translate");
+      var toggleCr = document.getElementById("toggle-cr");
+      var selectLang = document.getElementById("select-lang");
+      var selectTemplate = document.querySelector(".select-template");
+
+      function setTranslate(on) {
+        setPressed(toggleTranslate, on);
+        if (langBlock) {
+          langBlock.classList.toggle("is-hidden", !on);
+          langBlock.setAttribute("aria-hidden", on ? "false" : "true");
+        }
+      }
+
+      function setCr(on) {
+        setPressed(toggleCr, on);
+        if (tplBlock) {
+          tplBlock.classList.toggle("is-hidden", !on);
+        }
+      }
+
+      function bindToggle(el) {
+        if (!el) return;
+        el.addEventListener("click", function () {
+          setPressed(el, !el.classList.contains("on"));
+        });
+      }
+
+      bindToggle(toggleEnvoi);
+      bindToggle(toggleSpeaker);
+
+      if (toggleTranslate) {
+        toggleTranslate.addEventListener("click", function () {
+          setTranslate(!toggleTranslate.classList.contains("on"));
+        });
+      }
+
+      if (toggleCr) {
+        toggleCr.addEventListener("click", function () {
+          setCr(!toggleCr.classList.contains("on"));
+        });
+      }
+
+      /* ---------- Démo automatique après inactivité ---------- */
+      var prefersReducedMotion =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      var userEngaged = false;
+      var loopTimer = null;
+      var tourTimers = [];
+      var spotlightEl = null;
+
+      function clearTourTimers() {
+        tourTimers.forEach(clearTimeout);
+        tourTimers = [];
+      }
+
+      function after(ms, fn) {
+        var id = setTimeout(function () {
+          var ix = tourTimers.indexOf(id);
+          if (ix >= 0) tourTimers.splice(ix, 1);
+          if (!userEngaged && fn) fn();
+        }, ms);
+        tourTimers.push(id);
+      }
+
+      function clearSpotlight() {
+        if (spotlightEl) {
+          spotlightEl.classList.remove("idle-demo-spotlight");
+          spotlightEl = null;
+        }
+      }
+
+      function setSpotlight(el) {
+        clearSpotlight();
+        if (!el || userEngaged) return;
+        /* Halo désactivé si « Réduire les mouvements » — la séquence continue quand même */
+        if (prefersReducedMotion) return;
+        spotlightEl = el;
+        el.classList.add("idle-demo-spotlight");
+        try {
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (e) {
+          el.scrollIntoView(false);
+        }
+      }
+
+      function resetDemoState() {
+        activate("file");
+        setPressed(toggleSpeaker, true);
+        setTranslate(false);
+        setCr(true);
+        setPressed(toggleEnvoi, true);
+        if (selectLang) selectLang.selectedIndex = 0;
+        if (selectTemplate) selectTemplate.selectedIndex = 0;
+      }
+
+      function stopIdleDemo() {
+        if (userEngaged) return;
+        userEngaged = true;
+        clearTimeout(loopTimer);
+        loopTimer = null;
+        clearTourTimers();
+        clearSpotlight();
+        resetDemoState();
+      }
+
+      /* Arrêt seulement si clic / interaction sur un contrôle réel (pas la zone vide de la fenêtre) */
+      function isDemoInteractiveTarget(el) {
+        return !!(
+          el &&
+          el.closest &&
+          el.closest(
+            'button, a[href], select, .toggle-fake, [role="tab"], input, textarea'
+          )
+        );
+      }
+
+      if (mac) {
+        mac.addEventListener(
+          "click",
+          function (e) {
+            if (isDemoInteractiveTarget(e.target)) stopIdleDemo();
+          },
+          true
+        );
+        mac.addEventListener(
+          "keydown",
+          function (e) {
+            if (isDemoInteractiveTarget(e.target)) stopIdleDemo();
+          },
+          true
+        );
+      }
+
+      var IDLE_BEFORE_MS = 4000;
+      /* Rythme narration : sources d’abord, puis traitement (comme la lecture du formulaire) */
+      var STEP_MS = 1450;
+      var PAUSE_BETWEEN_LOOPS_MS = 9500;
+
+      function lineForToggle(id) {
+        var t = document.getElementById(id);
+        return t ? t.closest(".process-toggle-line") : null;
+      }
+
+      function runIdleTour(done) {
+        if (userEngaged || !mac) {
+          if (done) done();
+          return;
+        }
+
+        activate("file");
+
+        /* 1 — Zone d’upload (action principale panneau Fichier) */
+        after(0, function () {
+          var uz = document.querySelector(".upload-zone-placeholder");
+          if (uz) setSpotlight(uz);
+          after(STEP_MS, function () {
+            clearSpotlight();
+
+            /* 2 — Envoi multiple / unique (option sur le même panneau) */
+            var wasOn = toggleEnvoi && toggleEnvoi.classList.contains("on");
+            if (toggleEnvoi) setPressed(toggleEnvoi, !wasOn);
+            after(650, function () {
+              if (toggleEnvoi) setPressed(toggleEnvoi, wasOn);
+              after(350, function () {
+                /* 3 — Autre source : YouTube */
+                activate("youtube");
+                var yt = document.querySelector('.source-tab[data-tab="youtube"]');
+                if (yt) setSpotlight(yt);
+                after(Math.round(STEP_MS * 1.05), function () {
+                  clearSpotlight();
+
+                  /* 4 — Dictée en direct (badge Nouveau) */
+                  activate("dictee");
+                  var dic = document.querySelector('.source-tab[data-tab="dictee"]');
+                  if (dic) setSpotlight(dic);
+                  after(Math.round(STEP_MS * 0.95), function () {
+                    clearSpotlight();
+
+                    /* 5 — Retour Fichier : onglet actif */
+                    activate("file");
+                    var tabFile = document.querySelector('.source-tab[data-tab="file"]');
+                    if (tabFile) setSpotlight(tabFile);
+                    after(Math.round(STEP_MS * 0.75), function () {
+                      clearSpotlight();
+
+                      /* 6–9 — Traitement dans l’ordre du bloc (intervenants → traduction → modèle CR) */
+                      setSpotlight(lineForToggle("toggle-speaker"));
+                      after(STEP_MS, function () {
+                        clearSpotlight();
+                        setTranslate(true);
+                        setSpotlight(lineForToggle("toggle-translate"));
+                        after(STEP_MS, function () {
+                          clearSpotlight();
+                          if (selectLang) {
+                            selectLang.selectedIndex =
+                              (selectLang.selectedIndex + 1) % selectLang.options.length;
+                          }
+                          if (langBlock) setSpotlight(langBlock);
+                          after(Math.round(STEP_MS * 0.88), function () {
+                            clearSpotlight();
+                            setTranslate(false);
+                            if (selectTemplate) {
+                              selectTemplate.selectedIndex =
+                                (selectTemplate.selectedIndex + 1) %
+                                selectTemplate.options.length;
+                              setSpotlight(selectTemplate);
+                            }
+                            after(STEP_MS, function () {
+                              clearSpotlight();
+                              resetDemoState();
+                              if (done) done();
+                            });
+                          });
+                        });
+                      });
+                    });
+                  });
+                });
+              });
+            });
+          });
+        });
+      }
+
+      function scheduleIdleLoop(isFirst) {
+        if (userEngaged) return;
+        clearTimeout(loopTimer);
+        var wait = isFirst ? IDLE_BEFORE_MS : PAUSE_BETWEEN_LOOPS_MS;
+        loopTimer = setTimeout(function () {
+          loopTimer = null;
+          if (userEngaged) return;
+          runIdleTour(function () {
+            if (!userEngaged) scheduleIdleLoop(false);
+          });
+        }, wait);
+      }
+
+      /* Démarre quand la carte est visible dans l’iframe (scroll homepage) ; repli après 2 s sinon */
+      function scheduleIdleWhenVisible() {
+        var card = document.querySelector(".dashboard-card");
+        var obsTarget = card || mac;
+        var started = false;
+
+        function kickoff() {
+          if (started) return;
+          started = true;
+          scheduleIdleLoop(true);
+        }
+
+        if (!obsTarget || !("IntersectionObserver" in window)) {
+          kickoff();
+          return;
+        }
+
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
+                io.disconnect();
+                kickoff();
+              }
+            });
+          },
+          { threshold: [0, 0.08, 0.25] }
+        );
+        io.observe(obsTarget);
+
+
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisible);
+      } else {
+        scheduleIdleWhenVisible();
+      }
+    })();
+  </script>
+</body>
+</html>

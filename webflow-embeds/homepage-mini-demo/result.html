@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agilotext — Démo résultat (embed)</title>
+  <style>
+    :root {
+      /* Charte Base — design tokens Agilotext */
+      --color-white: #ffffff;
+      --color-orange: #fd7e14;
+      --color-vert: #1c661a;
+      --color-blue: #174a96;
+      --color-blue-hover: #143061;
+      --color-gris-fonce: #020202;
+      --color-blanc-gris: #f8f9fa;
+      --color-noir-25: rgba(52, 58, 64, 0.25);
+      --color-gris: #525252;
+      --color-rouge: #a82633;
+      --radius-base: 0.5rem;
+
+      --agilo-blue: var(--color-blue);
+      --agilo-blue-soft: rgba(23, 74, 150, 0.1);
+      --agilo-blue-border: rgba(23, 74, 150, 0.28);
+      --bg-cream: #f8f9fa;
+      --bg-card: #f8f9fa;
+      --text: var(--color-gris-fonce);
+      --muted: var(--color-gris);
+      --border: var(--color-noir-25);
+      --radius: var(--radius-base);
+      --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg-cream);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .mac {
+      width: 100%;
+      max-width: 920px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border-radius: calc(var(--radius-base) + 0.35rem);
+      border: 1px solid var(--border);
+      box-shadow:
+        0 4px 6px rgba(0, 20, 39, 0.06),
+        0 24px 56px rgba(0, 20, 39, 0.09);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 420px;
+    }
+    .titlebar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: linear-gradient(180deg, var(--color-white) 0%, var(--bg-cream) 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .dots { display: flex; gap: 6px; flex-shrink: 0; }
+    .dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .dots span:nth-child(1) { background: #ff5f56; }
+    .dots span:nth-child(2) { background: #febc2e; }
+    .dots span:nth-child(3) { background: #28c840; }
+    .urlfake {
+      flex: 1;
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--color-white);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+    }
+    .brand img { height: 22px; width: auto; display: block; }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 8px;
+      background: var(--color-blanc-gris);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 11px 10px;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .tab-ico {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      display: block;
+    }
+    .tab-ico path {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .tab:hover { color: var(--text); background: var(--agilo-blue-soft); }
+    .tab:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: -2px;
+    }
+    .tab[aria-selected="true"] {
+      color: var(--agilo-blue);
+      border-bottom-color: var(--agilo-blue);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .panel-wrap {
+      flex: 1;
+      padding: 14px;
+      background: var(--bg-cream);
+      overflow: auto;
+      min-height: 0;
+    }
+    .panel {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+    .panel.is-active { display: block; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .panel { animation: none; }
+    }
+
+    .card {
+      background: var(--color-white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 10px;
+    }
+
+    /* Lecteur audio compact */
+    .player-card {
+      margin-bottom: 12px;
+    }
+    .player-caption {
+      margin: 0 0 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    audio.visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .player-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .btn-play {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: var(--agilo-blue);
+      color: var(--color-white);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: box-shadow 0.15s;
+    }
+    .btn-play:hover {
+      box-shadow: 0 4px 12px rgba(23, 74, 150, 0.35);
+    }
+    .btn-play:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: 2px;
+    }
+    .btn-play svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+    .times {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .times strong { color: var(--text); }
+
+    .seg {
+      font-size: 12px;
+      padding: 10px 11px;
+      margin-bottom: 8px;
+      border-radius: var(--radius-base);
+      border-left: 3px solid transparent;
+      background: var(--color-blanc-gris);
+      line-height: 1.48;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .seg.is-active {
+      border-left-color: var(--agilo-blue);
+      background: rgba(23, 74, 150, 0.06);
+    }
+    .seg-top {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .seg-speaker-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .speaker-name {
+      font-weight: 700;
+      color: var(--agilo-blue);
+      font-size: 13px;
+    }
+    .seg-tool-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      border: none;
+      border-radius: var(--radius-base);
+      background: transparent;
+      color: var(--color-gris);
+      cursor: default;
+      transition: background 0.15s, color 0.15s;
+    }
+    .seg-tool-btn:hover {
+      background: var(--agilo-blue-soft);
+      color: var(--agilo-blue);
+    }
+    .seg-tool-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .seg-tool-btn--danger:hover {
+      color: var(--color-rouge) !important;
+      background: rgba(168, 38, 51, 0.09) !important;
+    }
+    .seg-text {
+      font-size: 12px;
+      line-height: 1.55;
+      color: var(--text);
+      outline: none;
+      border-radius: 6px;
+      padding: 6px 4px;
+      margin: 0 -4px;
+      min-height: 2.8em;
+      transition: box-shadow 0.15s;
+    }
+    .seg-text:focus {
+      box-shadow: 0 0 0 2px rgba(23, 74, 150, 0.2);
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    /* Barre type éditeur Pro */
+    .editor-top-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 10px;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .editor-search-wrap {
+      flex: 1 1 180px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-base);
+      background: var(--color-blanc-gris);
+    }
+    .editor-search-input {
+      flex: 1;
+      min-width: 0;
+      border: none;
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .editor-search-count {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .editor-search-arrows {
+      font-size: 10px;
+      color: var(--border);
+      letter-spacing: 2px;
+    }
+    .editor-top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+    .btn-toolbar {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius-base);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: default;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .btn-toolbar--save {
+      background: var(--color-vert);
+      color: var(--color-white);
+      border-color: var(--color-vert);
+    }
+    .btn-toolbar--muted {
+      background: var(--color-blanc-gris);
+      color: var(--color-gris-fonce);
+      border-color: var(--color-noir-25);
+    }
+    .editor-regen-note {
+      margin: 0 0 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    .tab-badge {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 7px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: var(--color-white);
+      background: var(--agilo-blue);
+      border-radius: 5px;
+      vertical-align: middle;
+    }
+    button.time-btn {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      color: var(--agilo-blue);
+      font-weight: 600;
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    button.time-btn:hover {
+      color: var(--color-blue-hover);
+    }
+
+    .cr-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 10px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ico-doc {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-base);
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--agilo-blue-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--agilo-blue);
+    }
+    .ico-doc svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 1.75;
+    }
+    .cr-doc-title {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0 0 2px;
+      color: var(--color-gris-fonce);
+    }
+    .cr-doc-meta { font-size: 10px; color: var(--muted); }
+
+    .cr-section {
+      margin-bottom: 12px;
+    }
+    .cr-section:last-child { margin-bottom: 0; }
+    .cr-section h4 {
+      margin: 0 0 5px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .cr-section p,
+    .cr-section ul {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .cr-section ul { padding-left: 16px; }
+    .cr-section li { margin-bottom: 3px; }
+    .cr-actions {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+    .cr-actions th {
+      text-align: left;
+      padding: 6px 8px;
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 10px;
+      color: var(--color-gris-fonce);
+    }
+    .cr-actions td {
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    /* Agent IA — empty state */
+    .ia-empty {
+      text-align: center;
+      padding: 18px 12px 8px;
+    }
+    .ia-empty-title {
+      margin: 0 0 14px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-gris-fonce);
+      line-height: 1.35;
+    }
+    .ia-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      margin-bottom: 14px;
+    }
+    .ia-chips-row2 {
+      flex-basis: 100%;
+      display: flex;
+      justify-content: center;
+    }
+    .chip {
+      appearance: none;
+      border: 1px solid var(--agilo-blue-border);
+      background: var(--color-white);
+      color: var(--agilo-blue);
+      font: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 9px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      max-width: 100%;
+      text-align: center;
+    }
+    .chip:hover:not(:disabled) {
+      background: var(--agilo-blue-soft);
+      border-color: var(--agilo-blue);
+    }
+    .chip:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .chat {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .chat-msg {
+      max-width: 94%;
+      padding: 9px 11px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.48;
+    }
+    .chat-msg--user {
+      align-self: flex-end;
+      background: var(--agilo-blue-soft);
+      border: 1px solid var(--agilo-blue-border);
+      color: var(--text);
+    }
+    .chat-msg--bot {
+      align-self: flex-start;
+      background: var(--color-white);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .chat-msg-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 3px;
+    }
+    .ia-note {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .ia-search-row {
+      margin-bottom: 14px;
+    }
+    .ia-composer-wrap {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .ia-composer-inner {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--color-white);
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    .ia-composer-input {
+      display: block;
+      width: 100%;
+      border: none;
+      padding: 12px 14px;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+      resize: vertical;
+      min-height: 72px;
+      box-sizing: border-box;
+      color: var(--text);
+      background: var(--color-white);
+    }
+    .ia-composer-input:focus {
+      outline: none;
+    }
+    .ia-composer-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      border-top: 1px solid var(--border);
+      background: var(--color-blanc-gris);
+    }
+    .ia-composer-icons {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .ia-composer-icons button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: var(--radius-base);
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+    }
+    .ia-composer-icons button.ia-send-btn {
+      background: var(--agilo-blue);
+      color: var(--color-white);
+    }
+    .ia-composer-icons svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .ia-composer-icons .ia-send-btn svg {
+      fill: currentColor;
+      stroke: none;
+    }
+    .ia-composer-icons button.ia-mic-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(23, 74, 150, 0.09);
+      color: var(--agilo-blue);
+    }
+    .ia-composer-icons button.ia-mic-btn:hover {
+      background: rgba(23, 74, 150, 0.15);
+    }
+    .ico-mic {
+      width: 20px !important;
+      height: 20px !important;
+    }
+    .ia-composer-hint {
+      margin: 8px 4px 0;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: left;
+    }
+
+    .cr-actions-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-bottom: 12px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .footnote {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* Positionnement infrastructure — conviction (prod) */
+    #panel-cr > .card > .cr-document > .cr-actions-row,
+    #panel-cr > .card > .cr-document > .editor-regen-note,
+    #panel-cr > .card > .cr-document > .cr-toolbar {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+    #panel-cr > .card > .cr-document > .cr-section {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .cr-document {
+      padding-bottom: 8px;
+    }
+
+    .cr-doc-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 8px 14px 12px;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--color-white);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    }
+    .cr-doc-metrics__label-zone {
+      margin: 0 14px 6px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .cr-doc-metrics > div {
+      text-align: center;
+    }
+    .cr-doc-metrics__n {
+      display: block;
+      font-size: clamp(20px, 5vw, 26px);
+      font-weight: 800;
+      color: var(--agilo-blue);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .cr-doc-metrics__l {
+      display: block;
+      margin-top: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .cr-product-story {
+      margin: 14px -14px -14px;
+      border: 1px solid var(--border);
+      border-radius: 0 0 var(--radius) var(--radius);
+      background: var(--color-blanc-gris);
+      overflow: hidden;
+    }
+    .cr-product-story > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--color-blue-hover);
+      background: rgba(23, 74, 150, 0.07);
+      border-bottom: 1px solid transparent;
+    }
+    .cr-product-story > summary::-webkit-details-marker {
+      display: none;
+    }
+    .cr-product-story[open] > summary {
+      border-bottom-color: var(--border);
+    }
+    .cr-product-story > summary::after {
+      content: " ▸";
+      font-weight: 700;
+      opacity: 0.65;
+    }
+    .cr-product-story[open] > summary::after {
+      content: " ▾";
+    }
+    .cr-product-story__intro {
+      margin: 0;
+      padding: 8px 14px 10px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+      border-bottom: 1px solid var(--border);
+      background: var(--color-white);
+    }
+    .cr-product-story .demo-cockpit-wrap {
+      margin: 8px 0 0;
+    }
+    .cr-product-story .demo-infra-row {
+      margin-left: 14px;
+      margin-right: 14px;
+    }
+    .cr-product-story > summary:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: -2px;
+    }
+
+    .demo-cockpit--illustration .demo-cockpit-lbl::after {
+      content: "";
+    }
+    .demo-cockpit-sub {
+      margin: 0 0 12px;
+      padding: 0 8px;
+      font-size: 8px;
+      font-weight: 600;
+      text-align: center;
+      opacity: 0.75;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .demo-cockpit-wrap {
+      margin: 8px -14px 0;
+      position: relative;
+      z-index: 1;
+    }
+    .demo-thesis {
+      margin: 0 14px 10px;
+      padding: 12px 12px;
+      border: 2px solid var(--agilo-blue);
+      border-radius: 10px;
+      background: var(--color-white);
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(23, 74, 150, 0.09);
+    }
+    .demo-thesis p {
+      margin: 0;
+      font-size: clamp(12px, 2.6vw, 14px);
+      font-weight: 800;
+      color: var(--color-blue-hover);
+      line-height: 1.28;
+      letter-spacing: -0.02em;
+    }
+
+    .demo-avant-apres {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0 14px 12px;
+    }
+    .demo-avant-apres__col {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .demo-avant-apres__col--muted {
+      background: var(--color-blanc-gris);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .demo-avant-apres__col--accent {
+      background: rgba(23, 74, 150, 0.08);
+      border: 1px solid rgba(23, 74, 150, 0.35);
+      color: var(--color-gris-fonce);
+    }
+    .demo-avant-apres__label {
+      display: block;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+    .demo-avant-apres__col--accent .demo-avant-apres__label {
+      color: var(--agilo-blue);
+    }
+
+    .demo-trust-block {
+      margin: 0 14px 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--color-white);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    .demo-trust-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .demo-trust-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--color-gris-fonce);
+    }
+    .demo-trust-ico {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-top: 1px;
+      color: var(--agilo-blue);
+    }
+
+    .demo-cockpit {
+      padding: 22px 16px 18px;
+      margin-bottom: 0;
+      border-radius: 0;
+      background:
+        linear-gradient(155deg, #050f22 0%, var(--color-blue-hover) 42%, #081830 100%);
+      color: var(--color-white);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 16px 40px rgba(5, 15, 40, 0.42),
+        0 6px 16px rgba(23, 74, 150, 0.28);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .demo-cockpit h3 {
+      margin: 0 0 14px;
+      font-size: 10px;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      font-weight: 800;
+      opacity: 0.96;
+      text-align: center;
+    }
+    .demo-cockpit-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      text-align: center;
+    }
+    .demo-cockpit-num {
+      font-size: clamp(28px, 7vw, 38px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--color-orange);
+      text-shadow: 0 2px 18px rgba(253, 126, 20, 0.35);
+    }
+    .demo-cockpit-lbl {
+      margin-top: 7px;
+      font-size: 9px;
+      font-weight: 600;
+      opacity: 0.93;
+      line-height: 1.25;
+    }
+    .demo-chain {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      margin-top: 14px;
+    }
+    .demo-chain-step {
+      flex: 1 1 56px;
+      min-width: 52px;
+      max-width: 74px;
+      padding: 8px 5px;
+      font: inherit;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: center;
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      background: rgba(255, 255, 255, 0.07);
+      color: #fff;
+      line-height: 1.25;
+      cursor: default;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .demo-chain-step:hover,
+    .demo-chain-step:focus-visible {
+      outline: none;
+      transform: scale(1.06);
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.55);
+    }
+    .demo-chain span.arr {
+      color: rgba(255, 255, 255, 0.62);
+      font-weight: 800;
+      font-size: 11px;
+      user-select: none;
+    }
+    .demo-chain-cap {
+      margin: 10px 0 0;
+      font-size: 9px;
+      text-align: center;
+      opacity: 0.84;
+      line-height: 1.35;
+    }
+    .demo-chain-hint {
+      margin: 6px 0 0;
+      font-size: 9px;
+      text-align: center;
+      opacity: 0.72;
+      line-height: 1.35;
+      min-height: 2.6em;
+      transition: opacity 0.15s ease;
+    }
+
+    .demo-infra-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 10px 14px 12px;
+    }
+    @media (max-width: 520px) {
+      .demo-infra-row { grid-template-columns: 1fr; }
+      .demo-cockpit-stats { grid-template-columns: 1fr; }
+      .demo-avant-apres { grid-template-columns: 1fr; }
+    }
+    .demo-infra-card {
+      padding: 10px 10px;
+      border-radius: var(--radius-base);
+      border: 1px solid var(--border);
+      background: var(--color-blanc-gris);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .demo-infra-card h4 {
+      margin: 0 0 6px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--color-gris-fonce);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .demo-infra-card .tag-mcp {
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: rgba(253, 126, 20, 0.18);
+      color: #8b4510;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 800;
+    }
+    .demo-infra-card .demo-infra-lead {
+      margin: 0 0 6px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .demo-infra-card ul {
+      margin: 0;
+      padding-left: 14px;
+    }
+    .demo-infra-card li { margin-bottom: 3px; }
+    .demo-infra-mcp { border-left: 3px solid var(--color-orange); }
+
+    .cr-section__title-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .cr-section__title-row h4 {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--color-gris-fonce);
+    }
+    .cr-section__badge {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--color-orange);
+      white-space: nowrap;
+    }
+    .cr-section__kicker {
+      margin: 0 0 8px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    /* Démo idle — halo (aligné sur capture.html) */
+    .idle-demo-spotlight {
+      position: relative;
+      z-index: 2;
+      border-radius: 10px;
+      transition: box-shadow 0.35s ease;
+      box-shadow:
+        0 0 0 2px rgba(255, 255, 255, 0.98),
+        0 0 0 4px rgba(23, 74, 150, 0.5),
+        0 12px 36px rgba(23, 74, 150, 0.16);
+    }
+    .player-card.idle-demo-spotlight {
+      padding: 8px;
+      margin: -4px -4px 8px;
+      border-radius: 12px;
+    }
+    .seg.idle-demo-spotlight {
+      padding: 8px 10px;
+      margin: 0 -4px 12px;
+      border-radius: var(--radius-base);
+    }
+    .tab.idle-demo-spotlight {
+      border-radius: 8px;
+    }
+    #panel-cr > .card.idle-demo-spotlight {
+      padding: 12px;
+      margin: -4px -4px 8px;
+      border-radius: var(--radius);
+    }
+    .ia-chips.idle-demo-spotlight {
+      padding: 10px;
+      margin: -6px auto 10px;
+      border-radius: 14px;
+    }
+    .ia-composer-wrap.idle-demo-spotlight {
+      padding: 8px;
+      margin: -4px -4px 4px;
+      border-radius: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="mac" role="application" aria-label="Éditeur Agilotext">
+      <div class="titlebar">
+        <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="urlfake">app.agilotext.com — éditeur</div>
+        <div class="brand">
+          <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
+        </div>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Contenus générés">
+        <button type="button" class="tab" role="tab" id="tab-tr" aria-selected="true" aria-controls="panel-tr" tabindex="0">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h11"/></svg>
+          <span>Transcription</span>
+        </button>
+        <button type="button" class="tab" role="tab" id="tab-cr" aria-selected="false" aria-controls="panel-cr" tabindex="-1">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+          <span>Compte rendu</span>
+        </button>
+        <button type="button" class="tab" role="tab" id="tab-ia" aria-selected="false" aria-controls="panel-ia" tabindex="-1">
+          <svg class="tab-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8.5z"/></svg>
+          <span>Assistant IA</span>
+          <span class="tab-badge" aria-hidden="true">IA</span>
+        </button>
+      </div>
+
+      <div class="panel-wrap">
+        <div id="panel-tr" class="panel is-active" role="tabpanel" aria-labelledby="tab-tr">
+          <div class="card player-card">
+            <p class="player-caption">Extrait audio · 30&nbsp;s</p>
+            <audio id="demo-audio" preload="metadata" aria-label="Lecteur audio, extrait trente secondes">
+              <source src="demo.mp3" type="audio/mpeg" />
+            </audio>
+            <div class="player-bar">
+              <button type="button" class="btn-play" id="btn-play" aria-label="Lecture ou pause">
+                <svg id="ico-play" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                <svg id="ico-pause" viewBox="0 0 24 24" aria-hidden="true" style="display:none"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+              </button>
+              <span class="times"><strong id="cur-time">0:00</strong> / <span id="dur-time">0:30</span></span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="editor-top-bar">
+              <div class="editor-search-wrap">
+                <input type="search" class="editor-search-input" readonly tabindex="-1" placeholder="Rechercher (Ctrl/Cmd+F)" aria-label="Rechercher dans la transcription (démo)" />
+                <span class="editor-search-count">0</span>
+                <span class="editor-search-arrows" aria-hidden="true">↑↓</span>
+              </div>
+              <div class="editor-top-actions">
+                <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
+                <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
+              </div>
+            </div>
+            <p class="editor-regen-note">2/2 régénérations restantes</p>
+
+            <article class="seg" id="seg-1" data-start="0" data-end="10">
+              <div class="seg-speaker-row">
+                <button type="button" class="time-btn" data-seek="0">00:00</button>
+                <span class="speaker-name">Claire Dubois</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
+                </button>
+              </div>
+              <div class="seg-text" contenteditable="true" spellcheck="false">Bilan conformité fournisseurs et arbitrage formation sécurité — on vise trois décisions pour le reporting régional.</div>
+            </article>
+            <article class="seg" id="seg-2" data-start="10" data-end="20">
+              <div class="seg-speaker-row">
+                <button type="button" class="time-btn" data-seek="10">00:10</button>
+                <span class="speaker-name">Thomas Meyer</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
+                </button>
+              </div>
+              <div class="seg-text" contenteditable="true" spellcheck="false">Les écarts sont sous contrôle si on harmonise le référentiel preuves dans l’éditeur après la réunion.</div>
+            </article>
+            <article class="seg" id="seg-3" data-start="20" data-end="30">
+              <div class="seg-speaker-row">
+                <button type="button" class="time-btn" data-seek="20">00:20</button>
+                <span class="speaker-name">Sarah Nielsen</span>
+                <button type="button" class="seg-tool-btn" title="Renommer l’intervenant (démo)" aria-label="Renommer l’intervenant">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                </button>
+                <button type="button" class="seg-tool-btn seg-tool-btn--danger" title="Supprimer le bloc (démo)" aria-label="Supprimer le bloc">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3 6h18"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M10 11v6M14 11v6"/></svg>
+                </button>
+              </div>
+              <div class="seg-text" contenteditable="true" spellcheck="false">On fige la revue trimestrielle et on envoie les actions au COPIL vendredi prochain.</div>
+            </article>
+          </div>
+        </div>
+
+        <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
+          <div class="card">
+            <div class="cr-document">
+              <div class="cr-actions-row">
+                <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
+                <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
+              </div>
+              <p class="editor-regen-note">2/2 régénérations restantes</p>
+              <div class="cr-toolbar">
+                <div class="ico-doc" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                </div>
+                <div>
+                  <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
+                  <div class="cr-doc-meta">Synthèse décisionnelle · infrastructure parole · mars 2026</div>
+                </div>
+              </div>
+
+              <p class="cr-doc-metrics__label-zone">Synthèse de cette réunion</p>
+              <div class="cr-doc-metrics" aria-label="Synthèse chiffrée de cette réunion">
+                <div>
+                  <span class="cr-doc-metrics__n">2</span>
+                  <span class="cr-doc-metrics__l">Décisions</span>
+                </div>
+                <div>
+                  <span class="cr-doc-metrics__n">2</span>
+                  <span class="cr-doc-metrics__l">Actions</span>
+                </div>
+                <div>
+                  <span class="cr-doc-metrics__n">1</span>
+                  <span class="cr-doc-metrics__l">Risque suivi</span>
+                </div>
+              </div>
+
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Décisions critiques</h4>
+                  <span class="cr-section__badge">2</span>
+                </div>
+                <p class="cr-section__kicker">Issues extraites automatiquement de cet enregistrement.</p>
+                <ul>
+                  <li>Harmoniser le référentiel « preuves » pour les audits.</li>
+                  <li>Valider le calendrier de reporting régional de mars.</li>
+                </ul>
+              </div>
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Actions assignées</h4>
+                  <span class="cr-section__badge">2</span>
+                </div>
+                <p class="cr-section__kicker">Assignations déduites du flux audio et suivies dans le tableau ci-dessous.</p>
+                <table class="cr-actions">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Échéance</th>
+                      <th>Resp.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Publier la grille contrôle fournisseurs v2</td>
+                      <td>15 mars</td>
+                      <td>Qualité</td>
+                    </tr>
+                    <tr>
+                      <td>Diffuser le récap COPIL aux régions</td>
+                      <td>21 mars</td>
+                      <td>Ops</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Risques / vigilance</h4>
+                  <span class="cr-section__badge">1</span>
+                </div>
+                <p class="cr-section__kicker">Point isolé à partir du flux audio.</p>
+                <ul>
+                  <li>Retard possible sur la diffusion régionale si la grille v2 reste bloquée en validation.</li>
+                </ul>
+              </div>
+              <div class="cr-section">
+                <h4>Synthèse</h4>
+                <p>
+                  Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+                </p>
+              </div>
+            </div>
+
+            <details class="cr-product-story">
+              <summary>Pourquoi Agilotext — au-delà du compte rendu</summary>
+              <p class="cr-product-story__intro">
+                Les blocs ci-dessous décrivent la valeur plateforme à titre illustratif (données fictives ou volume-type). Les grands chiffres ne correspondent pas au périmètre du document ci-dessus.
+              </p>
+              <div class="demo-cockpit-wrap demo-cockpit--illustration">
+                <div class="demo-cockpit">
+                  <h3>Analyse automatique</h3>
+                  <p class="demo-cockpit-sub">Illustration — volume-type plateforme</p>
+                  <div class="demo-cockpit-stats">
+                    <div>
+                      <div class="demo-cockpit-num">5</div>
+                      <div class="demo-cockpit-lbl">Décisions critiques</div>
+                    </div>
+                    <div>
+                      <div class="demo-cockpit-num">12</div>
+                      <div class="demo-cockpit-lbl">Actions assignées</div>
+                    </div>
+                    <div>
+                      <div class="demo-cockpit-num">2</div>
+                      <div class="demo-cockpit-lbl">Risques majeurs</div>
+                    </div>
+                  </div>
+                  <div class="demo-chain" role="group" aria-label="Chaîne parole vers impact">
+                    <button type="button" class="demo-chain-step" data-chain-desc="Flux audio traité dans votre périmètre sécurisé.">Audio</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Segmentation, extraction des engagements et arbitrages.">Analyse</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Décisions critiques isolées et hiérarchisées.">Décision</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Actions assignées avec échéances et responsables.">Action</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Suivi, conformité et exploitation dans vos outils.">Impact</button>
+                  </div>
+                  <p class="demo-chain-cap">Parole → décisions exploitables — traçabilité pour environnements réglementés.</p>
+                  <p id="demo-chain-hint" class="demo-chain-hint" data-default="Survolez une étape du flux pour afficher le détail." aria-live="polite">Survolez une étape du flux pour afficher le détail.</p>
+                </div>
+              </div>
+
+              <div class="demo-avant-apres">
+                <div class="demo-avant-apres__col demo-avant-apres__col--muted">
+                  <span class="demo-avant-apres__label">Avant</span>
+                  Réunion → notes dispersées → perte de traçabilité
+                </div>
+                <div class="demo-avant-apres__col demo-avant-apres__col--accent">
+                  <span class="demo-avant-apres__label">Après</span>
+                  Réunion → décisions exploitables → audit facilité
+                </div>
+              </div>
+
+              <div class="demo-thesis">
+                <p>Chaque réunion devient un système de décisions traçables et exploitables.</p>
+              </div>
+
+              <div class="demo-trust-block">
+                <ul class="demo-trust-list">
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Données traitées dans le périmètre européen (UE).</span>
+                  </li>
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="18" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M7 8h2M15 8h2M7 18h2M15 18h2"/></svg>
+                    <span>Hébergement conforme aux exigences HDS.</span>
+                  </li>
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4.93 4.93l14.14 14.14"/><path fill="none" stroke="currentColor" stroke-width="1.5" d="M16 8l-8 8M8 8h4v4"/></svg>
+                    <span>Aucun agent tiers présent dans la réunion.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="demo-infra-row">
+                <div class="demo-infra-card demo-infra-mcp">
+                  <h4>Orchestration <span class="tag-mcp">MCP</span></h4>
+                  <p class="demo-infra-lead">Connexion aux outils internes (CRM, ERP, messagerie, etc.) selon votre environnement.</p>
+                  <p style="margin:0;">Décisions et actions poussées vers vos systèmes — sans recopie manuelle.</p>
+                </div>
+                <div class="demo-infra-card">
+                  <h4>Exploitation dans votre organisation</h4>
+                  <ul>
+                    <li>Synchronisation avec vos systèmes internes</li>
+                    <li>Traçabilité des décisions</li>
+                    <li>Historisation pour audit</li>
+                  </ul>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div id="panel-ia" class="panel" role="tabpanel" aria-labelledby="tab-ia">
+          <div class="card">
+            <div class="editor-search-wrap ia-search-row">
+              <input type="search" class="editor-search-input" readonly tabindex="-1" placeholder="Rechercher (Ctrl/Cmd+F)" aria-label="Rechercher (démo)" />
+              <span class="editor-search-count">0</span>
+              <span class="editor-search-arrows" aria-hidden="true">↑↓</span>
+            </div>
+            <div class="ia-empty" id="ia-empty-block">
+              <p class="ia-empty-title">Comment puis-je vous aider avec ce transcript&nbsp;?</p>
+              <div class="ia-chips">
+                <button type="button" class="chip" id="chip-sum">Résumer les points clés du transcript</button>
+                <button type="button" class="chip" id="chip-plan">Proposer un plan de compte-rendu structuré</button>
+                <div class="ia-chips-row2">
+                  <button type="button" class="chip" id="chip-actions">Extraire les décisions et actions</button>
+                </div>
+              </div>
+            </div>
+            <div class="chat" id="ia-chat" aria-live="polite"></div>
+            <div class="ia-composer-wrap">
+              <div class="ia-composer-inner">
+                <textarea class="ia-composer-input" readonly placeholder="Posez votre question…" aria-label="Saisie du message (démo)"></textarea>
+                <div class="ia-composer-bar">
+                  <div class="ia-composer-icons">
+                    <button type="button" aria-label="Pièce jointe (démo)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                    </button>
+                  </div>
+                  <div class="ia-composer-icons">
+                    <button type="button" class="ia-mic-btn" aria-label="Dicter (démo)">
+                      <svg class="ico-mic" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3v-6a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+                    </button>
+                    <button type="button" class="ia-send-btn" aria-label="Envoyer (démo)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p class="ia-composer-hint">Entrée pour envoyer, Maj+Entrée pour nouvelle ligne</p>
+            </div>
+            <p class="ia-note">
+              Prévisualisation locale — dans l’application, l’assistant s’appuie sur votre document.
+            </p>
+          </div>
+        </div>
+
+        <p class="footnote">Durée de l’extrait&nbsp;: 30&nbsp;s</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var panels = {
+        tr: document.getElementById("panel-tr"),
+        cr: document.getElementById("panel-cr"),
+        ia: document.getElementById("panel-ia")
+      };
+      var ids = ["tr", "cr", "ia"];
+
+      function show(which) {
+        ids.forEach(function (id) {
+          var active = id === which;
+          var tabEl = document.getElementById("tab-" + id);
+          var panelEl = panels[id];
+          if (tabEl) {
+            tabEl.setAttribute("aria-selected", active ? "true" : "false");
+            tabEl.setAttribute("tabindex", active ? "0" : "-1");
+          }
+          if (panelEl) panelEl.classList.toggle("is-active", active);
+        });
+      }
+
+      document.querySelectorAll(".tab").forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          show(tab.id.replace("tab-", ""));
+        });
+      });
+
+      document.querySelector(".tabs").addEventListener("keydown", function (e) {
+        var el = document.activeElement;
+        if (!el || el.id.indexOf("tab-") !== 0) return;
+        var delta = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+        if (e.key === "Home") {
+          e.preventDefault();
+          show(ids[0]);
+          document.getElementById("tab-" + ids[0]).focus();
+          return;
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          show(ids[ids.length - 1]);
+          document.getElementById("tab-" + ids[ids.length - 1]).focus();
+          return;
+        }
+        if (delta === undefined) return;
+        e.preventDefault();
+        var i = ids.indexOf(el.id.replace("tab-", ""));
+        if (i < 0) return;
+        var next = (i + delta + ids.length) % ids.length;
+        show(ids[next]);
+        document.getElementById("tab-" + ids[next]).focus();
+      });
+
+      /* Audio */
+      var audio = document.getElementById("demo-audio");
+      var btnPlay = document.getElementById("btn-play");
+      var icoPlay = document.getElementById("ico-play");
+      var icoPause = document.getElementById("ico-pause");
+      var curEl = document.getElementById("cur-time");
+      var durEl = document.getElementById("dur-time");
+
+      function fmt(t) {
+        if (!isFinite(t)) return "0:00";
+        var m = Math.floor(t / 60);
+        var s = Math.floor(t % 60);
+        return m + ":" + (s < 10 ? "0" : "") + s;
+      }
+
+      audio.addEventListener("loadedmetadata", function () {
+        durEl.textContent = fmt(audio.duration);
+      });
+
+      function syncPlayIcon() {
+        var playing = !audio.paused && !audio.ended;
+        icoPlay.style.display = playing ? "none" : "block";
+        icoPause.style.display = playing ? "block" : "none";
+        btnPlay.setAttribute("aria-pressed", playing ? "true" : "false");
+      }
+
+      btnPlay.addEventListener("click", function () {
+        if (audio.paused) audio.play().catch(function () {});
+        else audio.pause();
+      });
+      audio.addEventListener("play", syncPlayIcon);
+      audio.addEventListener("pause", syncPlayIcon);
+      audio.addEventListener("ended", syncPlayIcon);
+
+      audio.addEventListener("timeupdate", function () {
+        curEl.textContent = fmt(audio.currentTime);
+        var t = audio.currentTime;
+        var segs = document.querySelectorAll(".seg");
+        segs.forEach(function (seg) {
+          var start = parseFloat(seg.getAttribute("data-start"), 10);
+          var end = parseFloat(seg.getAttribute("data-end"), 10);
+          var last = seg.id === "seg-3";
+          var active = t >= start && (last ? t <= end + 0.01 : t < end);
+          seg.classList.toggle("is-active", active);
+        });
+      });
+
+      document.querySelectorAll(".time-btn").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var s = parseFloat(b.getAttribute("data-seek"), 10);
+          audio.currentTime = s;
+          audio.play().catch(function () {});
+        });
+      });
+
+      syncPlayIcon();
+
+      /* Chaîne parole → impact : texte contextuel au survol / focus */
+      (function () {
+        var hintEl = document.getElementById("demo-chain-hint");
+        if (!hintEl) return;
+        var defaultHint =
+          hintEl.getAttribute("data-default") || hintEl.textContent.trim();
+        document.querySelectorAll(".demo-chain-step").forEach(function (btn) {
+          function showDesc() {
+            var d = btn.getAttribute("data-chain-desc");
+            hintEl.textContent = d || defaultHint;
+          }
+          function hideDesc() {
+            hintEl.textContent = defaultHint;
+          }
+          btn.addEventListener("mouseenter", showDesc);
+          btn.addEventListener("mouseleave", hideDesc);
+          btn.addEventListener("focus", showDesc);
+          btn.addEventListener("blur", hideDesc);
+        });
+      })();
+
+      /* IA chips */
+      function appendMsg(role, html) {
+        var wrap = document.createElement("div");
+        wrap.className =
+          "chat-msg " + (role === "user" ? "chat-msg--user" : "chat-msg--bot");
+        wrap.innerHTML =
+          '<div class="chat-msg-label">' +
+          (role === "user" ? "Vous" : "Agent IA") +
+          "</div>" +
+          html;
+        document.getElementById("ia-chat").appendChild(wrap);
+      }
+
+      document.getElementById("chip-sum").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Résume les points clés du transcript.");
+        appendMsg(
+          "bot",
+          "Points clés : arbitrage budget sécurité et conformité fournisseurs ; décisions attendues sur le reporting régional ; validation des actions COPIL sous une semaine."
+        );
+      });
+
+      document.getElementById("chip-plan").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Propose un plan de compte-rendu structuré.");
+        appendMsg(
+          "bot",
+          "<strong>Plan suggéré :</strong><br />1) Contexte · 2) Synthèse · 3) Décisions · 4) Actions et responsables · 5) Prochaines étapes."
+        );
+      });
+
+      document.getElementById("chip-actions").addEventListener("click", function () {
+        if (this.disabled) return;
+        this.disabled = true;
+        appendMsg("user", "Extrais les décisions et actions.");
+        appendMsg(
+          "bot",
+          "<strong>Décisions :</strong> harmoniser le référentiel preuves ; calendrier mars.<br /><strong>Actions :</strong> grille fournisseurs v2 (Qualité, 15 mars) ; récap COPIL (Ops, 21 mars)."
+        );
+      });
+
+      /* ---------- Démo automatique après inactivité (alignée sur capture.html) ---------- */
+      var macEl = document.querySelector(".mac");
+      var prefersReducedMotionIdle =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      var userEngagedIdle = false;
+      var loopTimerIdle = null;
+      var tourTimersIdle = [];
+      var spotlightElIdle = null;
+
+      function clearTourTimersIdle() {
+        tourTimersIdle.forEach(clearTimeout);
+        tourTimersIdle = [];
+      }
+
+      function afterIdle(ms, fn) {
+        var id = setTimeout(function () {
+          var ix = tourTimersIdle.indexOf(id);
+          if (ix >= 0) tourTimersIdle.splice(ix, 1);
+          if (!userEngagedIdle && fn) fn();
+        }, ms);
+        tourTimersIdle.push(id);
+      }
+
+      function clearSpotlightIdle() {
+        if (spotlightElIdle) {
+          spotlightElIdle.classList.remove("idle-demo-spotlight");
+          spotlightElIdle = null;
+        }
+      }
+
+      function setSpotlightIdle(el) {
+        clearSpotlightIdle();
+        if (!el || userEngagedIdle) return;
+        if (prefersReducedMotionIdle) return;
+        spotlightElIdle = el;
+        el.classList.add("idle-demo-spotlight");
+        try {
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (e) {
+          el.scrollIntoView(false);
+        }
+      }
+
+      function resetIdleDemoState() {
+        show("tr");
+        if (audio) {
+          audio.pause();
+          audio.currentTime = 0;
+          if (curEl) curEl.textContent = fmt(0);
+          syncPlayIcon();
+          audio.dispatchEvent(new Event("timeupdate"));
+        }
+        ["chip-sum", "chip-plan", "chip-actions"].forEach(function (cid) {
+          var cel = document.getElementById(cid);
+          if (cel) cel.disabled = false;
+        });
+        var chatEl = document.getElementById("ia-chat");
+        if (chatEl) chatEl.innerHTML = "";
+      }
+
+      function stopIdleDemoResult() {
+        if (userEngagedIdle) return;
+        userEngagedIdle = true;
+        clearTimeout(loopTimerIdle);
+        loopTimerIdle = null;
+        clearTourTimersIdle();
+        clearSpotlightIdle();
+        resetIdleDemoState();
+      }
+
+      function isIdleDemoInteractiveTarget(el) {
+        return !!(
+          el &&
+          el.closest &&
+          el.closest(
+            'button, a[href], select, [role="tab"], input, textarea, .chip, summary, [contenteditable="true"]'
+          )
+        );
+      }
+
+      if (macEl) {
+        macEl.addEventListener(
+          "click",
+          function (e) {
+            if (isIdleDemoInteractiveTarget(e.target)) stopIdleDemoResult();
+          },
+          true
+        );
+        macEl.addEventListener(
+          "keydown",
+          function (e) {
+            if (isIdleDemoInteractiveTarget(e.target)) stopIdleDemoResult();
+          },
+          true
+        );
+      }
+
+      var IDLE_BEFORE_MS_IDLE = 4000;
+      var STEP_MS_IDLE = 1450;
+      var PAUSE_BETWEEN_LOOPS_MS_IDLE = 9500;
+
+      function runIdleTourResult(done) {
+        if (userEngagedIdle || !macEl) {
+          if (done) done();
+          return;
+        }
+
+        show("tr");
+
+        afterIdle(0, function () {
+          var playerCard = document.querySelector("#panel-tr .player-card");
+          if (playerCard) setSpotlightIdle(playerCard);
+          afterIdle(STEP_MS_IDLE, function () {
+            clearSpotlightIdle();
+            var seg1 = document.getElementById("seg-1");
+            if (seg1) setSpotlightIdle(seg1);
+            afterIdle(STEP_MS_IDLE, function () {
+              clearSpotlightIdle();
+              show("cr");
+              var crCard = document.querySelector("#panel-cr > .card");
+              if (crCard) setSpotlightIdle(crCard);
+              afterIdle(STEP_MS_IDLE, function () {
+                clearSpotlightIdle();
+                show("ia");
+                var iaChips = document.querySelector("#panel-ia .ia-chips");
+                if (iaChips) setSpotlightIdle(iaChips);
+                afterIdle(STEP_MS_IDLE, function () {
+                  clearSpotlightIdle();
+                  var composer = document.querySelector("#panel-ia .ia-composer-wrap");
+                  if (composer) setSpotlightIdle(composer);
+                  afterIdle(STEP_MS_IDLE, function () {
+                    clearSpotlightIdle();
+                    resetIdleDemoState();
+                    if (done) done();
+                  });
+                });
+              });
+            });
+          });
+        });
+      }
+
+      function scheduleIdleLoopResult(isFirst) {
+        if (userEngagedIdle) return;
+        clearTimeout(loopTimerIdle);
+        var wait = isFirst ? IDLE_BEFORE_MS_IDLE : PAUSE_BETWEEN_LOOPS_MS_IDLE;
+        loopTimerIdle = setTimeout(function () {
+          loopTimerIdle = null;
+          if (userEngagedIdle) return;
+          runIdleTourResult(function () {
+            if (!userEngagedIdle) scheduleIdleLoopResult(false);
+          });
+        }, wait);
+      }
+
+      function scheduleIdleWhenVisibleResult() {
+        var obsTarget = document.querySelector(".panel-wrap") || macEl;
+        var started = false;
+
+        function kickoff() {
+          if (started) return;
+          started = true;
+          scheduleIdleLoopResult(true);
+        }
+
+        if (!obsTarget || !("IntersectionObserver" in window)) {
+          kickoff();
+          return;
+        }
+
+        var ioIdle = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (entry) {
+              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
+                ioIdle.disconnect();
+                kickoff();
+              }
+            });
+          },
+          { threshold: [0, 0.08, 0.25] }
+        );
+        ioIdle.observe(obsTarget);
+
+
+      }
+
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisibleResult);
+      } else {
+        scheduleIdleWhenVisibleResult();
+      }
+    })();
+  </script>
+</body>
+</html>
