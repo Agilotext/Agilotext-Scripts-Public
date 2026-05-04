@@ -1,0 +1,38 @@
+---
+description: Auth et secrets pour le serveur MCP Agilotext (ne jamais casser la config ni exposer de credentials).
+alwaysApply: true
+---
+
+# MCP Agilotext — configuration et sécurité
+
+## Où l’utilisateur met le mot de passe (jamais « en dur » dans le code)
+
+- **Fichier recommandé Cursor** : **`~/.cursor/agilotext-mcp.env`** (texte local, **non** versionné) — ici on met typiquement `AGILOTEXT_PASSWORD=...` avec `AGILOTEXT_USERNAME=...` et `AGILOTEXT_EDITION=...` pour le compte à tester.
+- **Fichier alternatif** : **`agilotext-mcp-server/.env`** (même contenu, pour dev hors Cursor ; copie depuis `agilotext-mcp-server/.env.example`).
+- **Interdit** : mots de passe ou tokens dans `mcp.json`, dans le code source du package, ou dans un commit. Le MCP ne lit **que** l’environnement / ces fichiers `.env` locaux.
+- Après toute modif de ces variables : **redémarrer** le serveur MCP (ou recharger la fenêtre Cursor).
+
+Sans dupliquer les secrets dans le chat : ne jamais coller ici de mots de passe réels.
+
+## Variables attendues (identité **contextuelle** — rien n’est figé dans le code MCP)
+
+Le serveur MCP **ne contient pas** un e-mail ou une édition « officiels » : tout passe par les **variables d’environnement**. Elles **changent** selon le cas :
+
+- **`AGILOTEXT_USERNAME`** = compte Agilotext **pour lequel** tu veux appeler l’API (un client, un collègue, toi, etc.). Un `jobId` est toujours lié à **un** utilisateur côté serveur : si le mail ne correspond **pas** au propriétaire du job, les chemins / droits / tokens seront incohérents.
+- **`AGILOTEXT_EDITION`** = `free` | `pro` | `ent` **du même compte** que l’e-mail (sinon token / getAuthToken incohérents).
+- **Soit** `AGILOTEXT_TOKEN` **soit** un mot de passe parmi (priorité) : `AGILOTEXT_PASSWORD`, `AGILOTEXT_APP_PASSWORD`, `AGILOTEXT_ADMIN_PASSWORD`.
+- `AGILOTEXT_API_URL` optionnel (défaut prod v1).
+
+Pour **changer de compte** : éditer `~/.cursor/agilotext-mcp.env` et/ou `agilotext-mcp-server/.env`, **redémarrer le serveur MCP** (rechargement fenêtre Cursor ou toggle du serveur).
+
+## `getAuthToken`
+
+- Le client MCP utilise **`POST`** avec corps **`application/x-www-form-urlencoded`** (`username`, `password`, `edition`), **pas** du multipart pour cet endpoint.
+- Documentation détaillée : `agilotext-mcp-server/README.md`.
+
+## Règles pour l’agent
+
+- Ne **jamais** supposer un e-mail ou une édition fixes lorsqu’on débugue un job : le **username** attendu est celui du **propriétaire** du job côté API.
+- Ne **jamais** suggérer de committer `.env`, `*mcp*.env`, ni de coller tokens/mots de passe dans des issues ou README.
+- Ne **pas** remplacer un token valide par un mot de passe dans le code sans demande explicite ; les deux modes sont supportés.
+- En cas d’erreur `invalid_token` / 401 côté API : vérifier d’abord l’`env` chargé par Cursor, puis le `.env` du package — et **aligner `AGILOTEXT_USERNAME` + `AGILOTEXT_EDITION` + secret** sur le **bon** compte pour l’action voulue.

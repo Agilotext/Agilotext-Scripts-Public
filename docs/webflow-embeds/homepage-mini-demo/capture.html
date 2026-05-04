@@ -36,7 +36,7 @@
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
-      min-height: auto;
+      min-height: 100%;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       color: var(--agilo-text);
       background: transparent !important;
@@ -45,8 +45,8 @@
     }
 
     .shell {
-      padding: 10px 0;
-      min-height: auto;
+      padding: clamp(10px, 2vw, 18px);
+      min-height: 100vh;
       display: flex;
       align-items: flex-start;
       justify-content: center;
