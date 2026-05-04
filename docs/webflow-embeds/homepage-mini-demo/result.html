@@ -696,6 +696,399 @@
       text-align: center;
     }
 
+    /* Positionnement infrastructure — conviction (prod) */
+    #panel-cr > .card > .cr-document > .cr-actions-row,
+    #panel-cr > .card > .cr-document > .editor-regen-note,
+    #panel-cr > .card > .cr-document > .cr-toolbar {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+    #panel-cr > .card > .cr-document > .cr-section {
+      padding-left: 14px;
+      padding-right: 14px;
+    }
+
+    .cr-document {
+      padding-bottom: 8px;
+    }
+
+    .cr-doc-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 8px 14px 12px;
+      padding: 10px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--color-white);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+    }
+    .cr-doc-metrics__label-zone {
+      margin: 0 14px 6px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .cr-doc-metrics > div {
+      text-align: center;
+    }
+    .cr-doc-metrics__n {
+      display: block;
+      font-size: clamp(20px, 5vw, 26px);
+      font-weight: 800;
+      color: var(--agilo-blue);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .cr-doc-metrics__l {
+      display: block;
+      margin-top: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .cr-product-story {
+      margin: 14px -14px -14px;
+      border: 1px solid var(--border);
+      border-radius: 0 0 var(--radius) var(--radius);
+      background: var(--color-blanc-gris);
+      overflow: hidden;
+    }
+    .cr-product-story > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 14px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--color-blue-hover);
+      background: rgba(23, 74, 150, 0.07);
+      border-bottom: 1px solid transparent;
+    }
+    .cr-product-story > summary::-webkit-details-marker {
+      display: none;
+    }
+    .cr-product-story[open] > summary {
+      border-bottom-color: var(--border);
+    }
+    .cr-product-story > summary::after {
+      content: " ▸";
+      font-weight: 700;
+      opacity: 0.65;
+    }
+    .cr-product-story[open] > summary::after {
+      content: " ▾";
+    }
+    .cr-product-story__intro {
+      margin: 0;
+      padding: 8px 14px 10px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+      border-bottom: 1px solid var(--border);
+      background: var(--color-white);
+    }
+    .cr-product-story .demo-cockpit-wrap {
+      margin: 8px 0 0;
+    }
+    .cr-product-story .demo-infra-row {
+      margin-left: 14px;
+      margin-right: 14px;
+    }
+    .cr-product-story > summary:focus-visible {
+      outline: 2px solid var(--agilo-blue);
+      outline-offset: -2px;
+    }
+
+    .demo-cockpit--illustration .demo-cockpit-lbl::after {
+      content: "";
+    }
+    .demo-cockpit-sub {
+      margin: 0 0 12px;
+      padding: 0 8px;
+      font-size: 8px;
+      font-weight: 600;
+      text-align: center;
+      opacity: 0.75;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .demo-cockpit-wrap {
+      margin: 8px -14px 0;
+      position: relative;
+      z-index: 1;
+    }
+    .demo-thesis {
+      margin: 0 14px 10px;
+      padding: 12px 12px;
+      border: 2px solid var(--agilo-blue);
+      border-radius: 10px;
+      background: var(--color-white);
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(23, 74, 150, 0.09);
+    }
+    .demo-thesis p {
+      margin: 0;
+      font-size: clamp(12px, 2.6vw, 14px);
+      font-weight: 800;
+      color: var(--color-blue-hover);
+      line-height: 1.28;
+      letter-spacing: -0.02em;
+    }
+
+    .demo-avant-apres {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 0 14px 12px;
+    }
+    .demo-avant-apres__col {
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 9px;
+      line-height: 1.35;
+    }
+    .demo-avant-apres__col--muted {
+      background: var(--color-blanc-gris);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .demo-avant-apres__col--accent {
+      background: rgba(23, 74, 150, 0.08);
+      border: 1px solid rgba(23, 74, 150, 0.35);
+      color: var(--color-gris-fonce);
+    }
+    .demo-avant-apres__label {
+      display: block;
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+    .demo-avant-apres__col--accent .demo-avant-apres__label {
+      color: var(--agilo-blue);
+    }
+
+    .demo-trust-block {
+      margin: 0 14px 12px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--color-white);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+    .demo-trust-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .demo-trust-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: var(--color-gris-fonce);
+    }
+    .demo-trust-ico {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-top: 1px;
+      color: var(--agilo-blue);
+    }
+
+    .demo-cockpit {
+      padding: 22px 16px 18px;
+      margin-bottom: 0;
+      border-radius: 0;
+      background:
+        linear-gradient(155deg, #050f22 0%, var(--color-blue-hover) 42%, #081830 100%);
+      color: var(--color-white);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.06),
+        0 16px 40px rgba(5, 15, 40, 0.42),
+        0 6px 16px rgba(23, 74, 150, 0.28);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .demo-cockpit h3 {
+      margin: 0 0 14px;
+      font-size: 10px;
+      letter-spacing: 0.26em;
+      text-transform: uppercase;
+      font-weight: 800;
+      opacity: 0.96;
+      text-align: center;
+    }
+    .demo-cockpit-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      text-align: center;
+    }
+    .demo-cockpit-num {
+      font-size: clamp(28px, 7vw, 38px);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+      color: var(--color-orange);
+      text-shadow: 0 2px 18px rgba(253, 126, 20, 0.35);
+    }
+    .demo-cockpit-lbl {
+      margin-top: 7px;
+      font-size: 9px;
+      font-weight: 600;
+      opacity: 0.93;
+      line-height: 1.25;
+    }
+    .demo-chain {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+      margin-top: 14px;
+    }
+    .demo-chain-step {
+      flex: 1 1 56px;
+      min-width: 52px;
+      max-width: 74px;
+      padding: 8px 5px;
+      font: inherit;
+      font-size: 8px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: center;
+      border-radius: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.38);
+      background: rgba(255, 255, 255, 0.07);
+      color: #fff;
+      line-height: 1.25;
+      cursor: default;
+      transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+    }
+    .demo-chain-step:hover,
+    .demo-chain-step:focus-visible {
+      outline: none;
+      transform: scale(1.06);
+      background: rgba(255, 255, 255, 0.2);
+      box-shadow: 0 0 0 2px rgba(253, 126, 20, 0.55);
+    }
+    .demo-chain span.arr {
+      color: rgba(255, 255, 255, 0.62);
+      font-weight: 800;
+      font-size: 11px;
+      user-select: none;
+    }
+    .demo-chain-cap {
+      margin: 10px 0 0;
+      font-size: 9px;
+      text-align: center;
+      opacity: 0.84;
+      line-height: 1.35;
+    }
+    .demo-chain-hint {
+      margin: 6px 0 0;
+      font-size: 9px;
+      text-align: center;
+      opacity: 0.72;
+      line-height: 1.35;
+      min-height: 2.6em;
+      transition: opacity 0.15s ease;
+    }
+
+    .demo-infra-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 10px 14px 12px;
+    }
+    @media (max-width: 520px) {
+      .demo-infra-row { grid-template-columns: 1fr; }
+      .demo-cockpit-stats { grid-template-columns: 1fr; }
+      .demo-avant-apres { grid-template-columns: 1fr; }
+    }
+    .demo-infra-card {
+      padding: 10px 10px;
+      border-radius: var(--radius-base);
+      border: 1px solid var(--border);
+      background: var(--color-blanc-gris);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .demo-infra-card h4 {
+      margin: 0 0 6px;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--color-gris-fonce);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .demo-infra-card .tag-mcp {
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      background: rgba(253, 126, 20, 0.18);
+      color: #8b4510;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 800;
+    }
+    .demo-infra-card .demo-infra-lead {
+      margin: 0 0 6px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+    .demo-infra-card ul {
+      margin: 0;
+      padding-left: 14px;
+    }
+    .demo-infra-card li { margin-bottom: 3px; }
+    .demo-infra-mcp { border-left: 3px solid var(--color-orange); }
+
+    .cr-section__title-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 5px;
+    }
+    .cr-section__title-row h4 {
+      margin: 0;
+      text-transform: none;
+      letter-spacing: 0.02em;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--color-gris-fonce);
+    }
+    .cr-section__badge {
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--color-orange);
+      white-space: nowrap;
+    }
+    .cr-section__kicker {
+      margin: 0 0 8px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
     /* Démo idle — halo (aligné sur capture.html) */
     .idle-demo-spotlight {
       position: relative;
@@ -735,14 +1128,50 @@
       margin: -4px -4px 4px;
       border-radius: 14px;
     }
+
+    /* Bouton démarrer la démo */
+    .btn-start-demo-wrap {
+      text-align: center;
+      padding: 10px 12px 14px;
+    }
+    .btn-start-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--agilo-blue);
+      background: var(--color-white);
+      border: 2px solid var(--agilo-blue);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-start-demo:hover {
+      background: var(--agilo-blue);
+      color: var(--color-white);
+    }
+    .btn-start-demo.is-playing {
+      background: var(--agilo-blue);
+      color: var(--color-white);
+      cursor: default;
+      opacity: 0.8;
+    }
+    .btn-start-demo svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
   </style>
 </head>
 <body>
   <div class="shell">
-    <div class="mac" role="application" aria-label="Démonstration résultat Agilotext">
+    <div class="mac" role="application" aria-label="Éditeur Agilotext">
       <div class="titlebar">
         <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
-        <div class="urlfake">app.agilotext.com — éditeur (démo)</div>
+        <div class="urlfake">app.agilotext.com — éditeur</div>
         <div class="brand">
           <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg" alt="Agilotext" width="120" height="24" />
         </div>
@@ -767,8 +1196,8 @@
       <div class="panel-wrap">
         <div id="panel-tr" class="panel is-active" role="tabpanel" aria-labelledby="tab-tr">
           <div class="card player-card">
-            <p class="player-caption">Extrait audio de démonstration (30&nbsp;s) — fichier factice, aucune donnée client</p>
-            <audio id="demo-audio" preload="metadata" aria-label="Extrait audio de démonstration trente secondes">
+            <p class="player-caption">Extrait audio · 30&nbsp;s</p>
+            <audio id="demo-audio" preload="metadata" aria-label="Lecteur audio, extrait trente secondes">
               <source src="demo.mp3" type="audio/mpeg" />
             </audio>
             <div class="player-bar">
@@ -838,57 +1267,178 @@
 
         <div id="panel-cr" class="panel" role="tabpanel" aria-labelledby="tab-cr">
           <div class="card">
-            <div class="cr-actions-row">
-              <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
-              <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
-            </div>
-            <p class="editor-regen-note">2/2 régénérations restantes</p>
-            <div class="cr-toolbar">
-              <div class="ico-doc" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+            <div class="cr-document">
+              <div class="cr-actions-row">
+                <button type="button" class="btn-toolbar btn-toolbar--save">Sauvegarder</button>
+                <button type="button" class="btn-toolbar btn-toolbar--muted">Régénérer le compte rendu</button>
               </div>
-              <div>
-                <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
-                <div class="cr-doc-meta">Synthèse automatique · exemple statique · mars 2026</div>
+              <p class="editor-regen-note">2/2 régénérations restantes</p>
+              <div class="cr-toolbar">
+                <div class="ico-doc" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>
+                </div>
+                <div>
+                  <div class="cr-doc-title">Compte rendu — Comité pilotage Q1</div>
+                  <div class="cr-doc-meta">Synthèse décisionnelle · infrastructure parole · mars 2026</div>
+                </div>
+              </div>
+
+              <p class="cr-doc-metrics__label-zone">Synthèse de cette réunion</p>
+              <div class="cr-doc-metrics" aria-label="Synthèse chiffrée de cette réunion">
+                <div>
+                  <span class="cr-doc-metrics__n">2</span>
+                  <span class="cr-doc-metrics__l">Décisions</span>
+                </div>
+                <div>
+                  <span class="cr-doc-metrics__n">2</span>
+                  <span class="cr-doc-metrics__l">Actions</span>
+                </div>
+                <div>
+                  <span class="cr-doc-metrics__n">1</span>
+                  <span class="cr-doc-metrics__l">Risque suivi</span>
+                </div>
+              </div>
+
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Décisions critiques</h4>
+                  <span class="cr-section__badge">2</span>
+                </div>
+                <p class="cr-section__kicker">Issues extraites automatiquement de cet enregistrement.</p>
+                <ul>
+                  <li>Harmoniser le référentiel « preuves » pour les audits.</li>
+                  <li>Valider le calendrier de reporting régional de mars.</li>
+                </ul>
+              </div>
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Actions assignées</h4>
+                  <span class="cr-section__badge">2</span>
+                </div>
+                <p class="cr-section__kicker">Assignations déduites du flux audio et suivies dans le tableau ci-dessous.</p>
+                <table class="cr-actions">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Échéance</th>
+                      <th>Resp.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>Publier la grille contrôle fournisseurs v2</td>
+                      <td>15 mars</td>
+                      <td>Qualité</td>
+                    </tr>
+                    <tr>
+                      <td>Diffuser le récap COPIL aux régions</td>
+                      <td>21 mars</td>
+                      <td>Ops</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="cr-section">
+                <div class="cr-section__title-row">
+                  <h4>Risques / vigilance</h4>
+                  <span class="cr-section__badge">1</span>
+                </div>
+                <p class="cr-section__kicker">Point isolé à partir du flux audio.</p>
+                <ul>
+                  <li>Retard possible sur la diffusion régionale si la grille v2 reste bloquée en validation.</li>
+                </ul>
+              </div>
+              <div class="cr-section">
+                <h4>Synthèse</h4>
+                <p>
+                  Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+                </p>
               </div>
             </div>
-            <div class="cr-section">
-              <h4>Synthèse</h4>
-              <p>
-                Pilotage conformité fournisseurs et budget formation sécurité. Consensus pour figer la revue trimestrielle et transmettre les actions au COPIL sous cinq jours ouvrés.
+
+            <details class="cr-product-story">
+              <summary>Pourquoi Agilotext — au-delà du compte rendu</summary>
+              <p class="cr-product-story__intro">
+                Les blocs ci-dessous décrivent la valeur plateforme à titre illustratif (données fictives ou volume-type). Les grands chiffres ne correspondent pas au périmètre du document ci-dessus.
               </p>
-            </div>
-            <div class="cr-section">
-              <h4>Décisions</h4>
-              <ul>
-                <li>Harmoniser le référentiel « preuves » pour les audits.</li>
-                <li>Valider le calendrier de reporting régional de mars.</li>
-              </ul>
-            </div>
-            <div class="cr-section">
-              <h4>Actions</h4>
-              <table class="cr-actions">
-                <thead>
-                  <tr>
-                    <th>Action</th>
-                    <th>Échéance</th>
-                    <th>Resp.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Publier la grille contrôle fournisseurs v2</td>
-                    <td>15 mars</td>
-                    <td>Qualité</td>
-                  </tr>
-                  <tr>
-                    <td>Diffuser le récap COPIL aux régions</td>
-                    <td>21 mars</td>
-                    <td>Ops</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+              <div class="demo-cockpit-wrap demo-cockpit--illustration">
+                <div class="demo-cockpit">
+                  <h3>Analyse automatique</h3>
+                  <p class="demo-cockpit-sub">Illustration — volume-type plateforme</p>
+                  <div class="demo-cockpit-stats">
+                    <div>
+                      <div class="demo-cockpit-num">5</div>
+                      <div class="demo-cockpit-lbl">Décisions critiques</div>
+                    </div>
+                    <div>
+                      <div class="demo-cockpit-num">12</div>
+                      <div class="demo-cockpit-lbl">Actions assignées</div>
+                    </div>
+                    <div>
+                      <div class="demo-cockpit-num">2</div>
+                      <div class="demo-cockpit-lbl">Risques majeurs</div>
+                    </div>
+                  </div>
+                  <div class="demo-chain" role="group" aria-label="Chaîne parole vers impact">
+                    <button type="button" class="demo-chain-step" data-chain-desc="Flux audio traité dans votre périmètre sécurisé.">Audio</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Segmentation, extraction des engagements et arbitrages.">Analyse</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Décisions critiques isolées et hiérarchisées.">Décision</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Actions assignées avec échéances et responsables.">Action</button><span class="arr" aria-hidden="true">→</span>
+                    <button type="button" class="demo-chain-step" data-chain-desc="Suivi, conformité et exploitation dans vos outils.">Impact</button>
+                  </div>
+                  <p class="demo-chain-cap">Parole → décisions exploitables — traçabilité pour environnements réglementés.</p>
+                  <p id="demo-chain-hint" class="demo-chain-hint" data-default="Survolez une étape du flux pour afficher le détail." aria-live="polite">Survolez une étape du flux pour afficher le détail.</p>
+                </div>
+              </div>
+
+              <div class="demo-avant-apres">
+                <div class="demo-avant-apres__col demo-avant-apres__col--muted">
+                  <span class="demo-avant-apres__label">Avant</span>
+                  Réunion → notes dispersées → perte de traçabilité
+                </div>
+                <div class="demo-avant-apres__col demo-avant-apres__col--accent">
+                  <span class="demo-avant-apres__label">Après</span>
+                  Réunion → décisions exploitables → audit facilité
+                </div>
+              </div>
+
+              <div class="demo-thesis">
+                <p>Chaque réunion devient un système de décisions traçables et exploitables.</p>
+              </div>
+
+              <div class="demo-trust-block">
+                <ul class="demo-trust-list">
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    <span>Données traitées dans le périmètre européen (UE).</span>
+                  </li>
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="13" width="18" height="8" rx="1" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" d="M7 8h2M15 8h2M7 18h2M15 18h2"/></svg>
+                    <span>Hébergement conforme aux exigences HDS.</span>
+                  </li>
+                  <li>
+                    <svg class="demo-trust-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4.93 4.93l14.14 14.14"/><path fill="none" stroke="currentColor" stroke-width="1.5" d="M16 8l-8 8M8 8h4v4"/></svg>
+                    <span>Aucun agent tiers présent dans la réunion.</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="demo-infra-row">
+                <div class="demo-infra-card demo-infra-mcp">
+                  <h4>Orchestration <span class="tag-mcp">MCP</span></h4>
+                  <p class="demo-infra-lead">Connexion aux outils internes (CRM, ERP, messagerie, etc.) selon votre environnement.</p>
+                  <p style="margin:0;">Décisions et actions poussées vers vos systèmes — sans recopie manuelle.</p>
+                </div>
+                <div class="demo-infra-card">
+                  <h4>Exploitation dans votre organisation</h4>
+                  <ul>
+                    <li>Synchronisation avec vos systèmes internes</li>
+                    <li>Traçabilité des décisions</li>
+                    <li>Historisation pour audit</li>
+                  </ul>
+                </div>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -932,12 +1482,18 @@
               <p class="ia-composer-hint">Entrée pour envoyer, Maj+Entrée pour nouvelle ligne</p>
             </div>
             <p class="ia-note">
-              Démo statique — aucune requête envoyée. Dans l’application, l’assistant lit votre document.
+              Prévisualisation locale — dans l’application, l’assistant s’appuie sur votre document.
             </p>
           </div>
         </div>
 
-        <p class="footnote">Audio synchronisé avec segments fictifs · durée fichier demo.mp3&nbsp;: 30&nbsp;s</p>
+        <p class="footnote">Durée de l’extrait&nbsp;: 30&nbsp;s</p>
+        <div class="btn-start-demo-wrap">
+          <button type="button" class="btn-start-demo" id="btn-start-demo-result">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Démarrer la démo guidée
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1052,6 +1608,27 @@
 
       syncPlayIcon();
 
+      /* Chaîne parole → impact : texte contextuel au survol / focus */
+      (function () {
+        var hintEl = document.getElementById("demo-chain-hint");
+        if (!hintEl) return;
+        var defaultHint =
+          hintEl.getAttribute("data-default") || hintEl.textContent.trim();
+        document.querySelectorAll(".demo-chain-step").forEach(function (btn) {
+          function showDesc() {
+            var d = btn.getAttribute("data-chain-desc");
+            hintEl.textContent = d || defaultHint;
+          }
+          function hideDesc() {
+            hintEl.textContent = defaultHint;
+          }
+          btn.addEventListener("mouseenter", showDesc);
+          btn.addEventListener("mouseleave", hideDesc);
+          btn.addEventListener("focus", showDesc);
+          btn.addEventListener("blur", hideDesc);
+        });
+      })();
+
       /* IA chips */
       function appendMsg(role, html) {
         var wrap = document.createElement("div");
@@ -1165,6 +1742,12 @@
         clearTourTimersIdle();
         clearSpotlightIdle();
         resetIdleDemoState();
+        /* Remettre le bouton à l'état initial */
+        var btn = document.getElementById('btn-start-demo-result');
+        if (btn) {
+          btn.classList.remove('is-playing');
+          btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+        }
       }
 
       function isIdleDemoInteractiveTarget(el) {
@@ -1172,7 +1755,7 @@
           el &&
           el.closest &&
           el.closest(
-            'button, a[href], select, [role="tab"], input, textarea, .chip, [contenteditable="true"]'
+            'button, a[href], select, [role="tab"], input, textarea, .chip, summary, [contenteditable="true"]'
           )
         );
       }
@@ -1196,7 +1779,6 @@
 
       var IDLE_BEFORE_MS_IDLE = 4000;
       var STEP_MS_IDLE = 1450;
-      var PAUSE_BETWEEN_LOOPS_MS_IDLE = 9500;
 
       function runIdleTourResult(done) {
         if (userEngagedIdle || !macEl) {
@@ -1239,57 +1821,49 @@
         });
       }
 
-      function scheduleIdleLoopResult(isFirst) {
-        if (userEngagedIdle) return;
-        clearTimeout(loopTimerIdle);
-        var wait = isFirst ? IDLE_BEFORE_MS_IDLE : PAUSE_BETWEEN_LOOPS_MS_IDLE;
-        loopTimerIdle = setTimeout(function () {
-          loopTimerIdle = null;
-          if (userEngagedIdle) return;
-          runIdleTourResult(function () {
-            if (!userEngagedIdle) scheduleIdleLoopResult(false);
-          });
-        }, wait);
+      /* ========== Déclenchement par bouton uniquement ========== */
+      var btnStartDemoResult = document.getElementById('btn-start-demo-result');
+
+      /* BroadcastChannel : empêche les deux iframes de tourner en même temps */
+      var demoChannelResult = (typeof BroadcastChannel !== 'undefined')
+        ? new BroadcastChannel('agilo-demo-sync')
+        : null;
+
+      if (demoChannelResult) {
+        demoChannelResult.onmessage = function (evt) {
+          if (evt.data === 'result-start') return; /* ignore son propre message */
+          /* L'autre iframe a démarré → on s'arrête */
+          if (!userEngagedIdle) stopIdleDemoResult();
+        };
       }
 
-      function scheduleIdleWhenVisibleResult() {
-        var obsTarget = document.querySelector(".panel-wrap") || macEl;
-        var started = false;
+      if (btnStartDemoResult) {
+        btnStartDemoResult.addEventListener('click', function () {
+          if (btnStartDemoResult.classList.contains('is-playing')) return;
 
-        function kickoff() {
-          if (started) return;
-          started = true;
-          scheduleIdleLoopResult(true);
-        }
+          /* Prévenir l'autre iframe */
+          if (demoChannelResult) demoChannelResult.postMessage('result-start');
 
-        if (!obsTarget || !("IntersectionObserver" in window)) {
-          kickoff();
-          return;
-        }
+          /* Réinitialiser pour pouvoir relancer */
+          userEngagedIdle = false;
+          clearTourTimersIdle();
+          clearSpotlightIdle();
+          resetIdleDemoState();
 
-        var ioIdle = new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
-                ioIdle.disconnect();
-                kickoff();
-              }
+          btnStartDemoResult.classList.add('is-playing');
+          btnStartDemoResult.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Démo en cours…';
+
+          /* Lancer UNE SEULE FOIS */
+          loopTimerIdle = setTimeout(function () {
+            loopTimerIdle = null;
+            runIdleTourResult(function () {
+              /* Fin de la démo — remettre le bouton */
+              btnStartDemoResult.classList.remove('is-playing');
+              btnStartDemoResult.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+              userEngagedIdle = false;
             });
-          },
-          { threshold: [0, 0.08, 0.25] }
-        );
-        ioIdle.observe(obsTarget);
-
-        setTimeout(function () {
-          ioIdle.disconnect();
-          kickoff();
-        }, 2500);
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisibleResult);
-      } else {
-        scheduleIdleWhenVisibleResult();
+          }, 500);
+        });
       }
     })();
   </script>

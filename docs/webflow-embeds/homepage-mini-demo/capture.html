@@ -761,6 +761,42 @@
       .source-tab { font-size: 0.72rem; padding: 0.75rem 0.2rem; }
       .process-toggle-line label { max-width: 100%; }
     }
+
+    /* Bouton démarrer la démo */
+    .btn-start-demo-wrap {
+      text-align: center;
+      padding: 10px 12px 14px;
+    }
+    .btn-start-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--agilo-primary);
+      background: var(--color-white);
+      border: 2px solid var(--agilo-primary);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-start-demo:hover {
+      background: var(--agilo-primary);
+      color: var(--color-white);
+    }
+    .btn-start-demo.is-playing {
+      background: var(--agilo-primary);
+      color: var(--color-white);
+      cursor: default;
+      opacity: 0.8;
+    }
+    .btn-start-demo svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
   </style>
 </head>
 <body>
@@ -922,6 +958,12 @@
           <a href="result.html">« Résultat »</a> sous cette iframe sur la homepage.
         </p>
         <p class="fineprint">Démo statique · aucune donnée envoyée · interface inspirée de l’application Agilotext</p>
+        <div class="btn-start-demo-wrap">
+          <button type="button" class="btn-start-demo" id="btn-start-demo">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Démarrer la démo guidée
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1086,6 +1128,12 @@
         clearTourTimers();
         clearSpotlight();
         resetDemoState();
+        /* Remettre le bouton à l'état initial */
+        var btn = document.getElementById('btn-start-demo');
+        if (btn) {
+          btn.classList.remove('is-playing');
+          btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+        }
       }
 
       /* Arrêt seulement si clic / interaction sur un contrôle réel (pas la zone vide de la fenêtre) */
@@ -1116,10 +1164,7 @@
         );
       }
 
-      var IDLE_BEFORE_MS = 4000;
-      /* Rythme narration : sources d’abord, puis traitement (comme la lecture du formulaire) */
       var STEP_MS = 1450;
-      var PAUSE_BETWEEN_LOOPS_MS = 9500;
 
       function lineForToggle(id) {
         var t = document.getElementById(id);
@@ -1134,41 +1179,31 @@
 
         activate("file");
 
-        /* 1 — Zone d’upload (action principale panneau Fichier) */
         after(0, function () {
           var uz = document.querySelector(".upload-zone-placeholder");
           if (uz) setSpotlight(uz);
           after(STEP_MS, function () {
             clearSpotlight();
-
-            /* 2 — Envoi multiple / unique (option sur le même panneau) */
             var wasOn = toggleEnvoi && toggleEnvoi.classList.contains("on");
             if (toggleEnvoi) setPressed(toggleEnvoi, !wasOn);
             after(650, function () {
               if (toggleEnvoi) setPressed(toggleEnvoi, wasOn);
               after(350, function () {
-                /* 3 — Autre source : YouTube */
                 activate("youtube");
                 var yt = document.querySelector('.source-tab[data-tab="youtube"]');
                 if (yt) setSpotlight(yt);
                 after(Math.round(STEP_MS * 1.05), function () {
                   clearSpotlight();
-
-                  /* 4 — Dictée en direct (badge Nouveau) */
                   activate("dictee");
                   var dic = document.querySelector('.source-tab[data-tab="dictee"]');
                   if (dic) setSpotlight(dic);
                   after(Math.round(STEP_MS * 0.95), function () {
                     clearSpotlight();
-
-                    /* 5 — Retour Fichier : onglet actif */
                     activate("file");
                     var tabFile = document.querySelector('.source-tab[data-tab="file"]');
                     if (tabFile) setSpotlight(tabFile);
                     after(Math.round(STEP_MS * 0.75), function () {
                       clearSpotlight();
-
-                      /* 6–9 — Traitement dans l’ordre du bloc (intervenants → traduction → modèle CR) */
                       setSpotlight(lineForToggle("toggle-speaker"));
                       after(STEP_MS, function () {
                         clearSpotlight();
@@ -1207,59 +1242,49 @@
         });
       }
 
-      function scheduleIdleLoop(isFirst) {
-        if (userEngaged) return;
-        clearTimeout(loopTimer);
-        var wait = isFirst ? IDLE_BEFORE_MS : PAUSE_BETWEEN_LOOPS_MS;
-        loopTimer = setTimeout(function () {
-          loopTimer = null;
-          if (userEngaged) return;
-          runIdleTour(function () {
-            if (!userEngaged) scheduleIdleLoop(false);
-          });
-        }, wait);
+      /* ========== Déclenchement par bouton uniquement ========== */
+      var btnStartDemo = document.getElementById('btn-start-demo');
+
+      /* BroadcastChannel : empêche les deux iframes de tourner en même temps */
+      var demoChannel = (typeof BroadcastChannel !== 'undefined')
+        ? new BroadcastChannel('agilo-demo-sync')
+        : null;
+
+      if (demoChannel) {
+        demoChannel.onmessage = function (evt) {
+          if (evt.data === 'capture-start') return; /* ignore son propre message */
+          /* L'autre iframe a démarré → on s'arrête */
+          if (!userEngaged) stopIdleDemo();
+        };
       }
 
-      /* Démarre quand la carte est visible dans l’iframe (scroll homepage) ; repli après 2 s sinon */
-      function scheduleIdleWhenVisible() {
-        var card = document.querySelector(".dashboard-card");
-        var obsTarget = card || mac;
-        var started = false;
+      if (btnStartDemo) {
+        btnStartDemo.addEventListener('click', function () {
+          if (btnStartDemo.classList.contains('is-playing')) return;
 
-        function kickoff() {
-          if (started) return;
-          started = true;
-          scheduleIdleLoop(true);
-        }
+          /* Prévenir l'autre iframe */
+          if (demoChannel) demoChannel.postMessage('capture-start');
 
-        if (!obsTarget || !("IntersectionObserver" in window)) {
-          kickoff();
-          return;
-        }
+          /* Réinitialiser pour pouvoir relancer */
+          userEngaged = false;
+          clearTourTimers();
+          clearSpotlight();
+          resetDemoState();
 
-        var io = new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting && entry.intersectionRatio > 0.08) {
-                io.disconnect();
-                kickoff();
-              }
+          btnStartDemo.classList.add('is-playing');
+          btnStartDemo.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Démo en cours…';
+
+          /* Lancer UNE SEULE FOIS */
+          loopTimer = setTimeout(function () {
+            loopTimer = null;
+            runIdleTour(function () {
+              /* Fin de la démo — remettre le bouton */
+              btnStartDemo.classList.remove('is-playing');
+              btnStartDemo.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+              userEngaged = false;
             });
-          },
-          { threshold: [0, 0.08, 0.25] }
-        );
-        io.observe(obsTarget);
-
-        setTimeout(function () {
-          io.disconnect();
-          kickoff();
-        }, 2500);
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisible);
-      } else {
-        scheduleIdleWhenVisible();
+          }, 500);
+        });
       }
     })();
   </script>
