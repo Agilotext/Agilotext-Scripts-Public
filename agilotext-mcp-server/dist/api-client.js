@@ -6,66 +6,186 @@ import { logger } from "./logger.js";
 import { validateJobsResponse, validateTranscriptStatus, validateSummaryResponse, validateTextResponse, } from "./utils/api-response-validators.js";
 export class AgilotextClient {
     client;
+    /** Jeton issu d’AGILOTEXT_TOKEN ou d’un appel /getAuthToken (username + password). */
+    resolvedToken = null;
+    /**
+     * Après un `error_invalid_token`, on n’utilise plus le jeton figé du .env pour cette session :
+     * prochaine auth = POST /getAuthToken avec le mot de passe (si présent).
+     */
+    envTokenDisabled = false;
     constructor() {
         this.client = axios.create({
             baseURL: config.AGILOTEXT_API_URL,
             timeout: 60000,
         });
     }
-    getAuthParams() {
-        return {
-            username: config.AGILOTEXT_USERNAME,
-            token: config.AGILOTEXT_TOKEN,
-            edition: config.AGILOTEXT_EDITION,
-        };
+    /** Détecte les réponses API liées à un jeton expiré / invalide. */
+    isInvalidTokenMessage(msg) {
+        if (!msg)
+            return false;
+        const m = String(msg).toLowerCase();
+        return (m.includes("invalid_token") ||
+            m.includes("invalid token") ||
+            m.includes("error_invalid_token") ||
+            (m.includes("token") && m.includes("invalid")));
     }
-    async post(endpoint, params = {}, files = {}) {
-        return this.postWithRetry(endpoint, params, files, 3);
+    /**
+     * POST /getAuthToken (urlencoded) — ne met **pas** à jour `resolvedToken` (réservé à l’appelant).
+     */
+    async fetchTokenWithPasswordFor(username, edition) {
+        const pwd = config.accountPassword;
+        if (!pwd) {
+            return null;
+        }
+        const body = new URLSearchParams({
+            username,
+            password: pwd,
+            edition,
+        });
+        const response = await this.client.post("/getAuthToken", body.toString(), {
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        });
+        const data = response.data;
+        if (!data || data.status !== "OK" || !data.token) {
+            return null;
+        }
+        return String(data.token);
     }
-    async postWithRetry(endpoint, params = {}, files = {}, maxRetries = 3) {
+    /**
+     * Obtient un jeton via POST /getAuthToken (urlencoded) et alimente le cache de session.
+     */
+    async ensureTokenFromPassword() {
+        const t = await this.fetchTokenWithPasswordFor(config.AGILOTEXT_USERNAME, config.AGILOTEXT_EDITION);
+        if (!t) {
+            throw new Error("AGILOTEXT_TOKEN expiré ou absent : renseigner l’un de AGILOTEXT_PASSWORD / AGILOTEXT_APP_PASSWORD / AGILOTEXT_ADMIN_PASSWORD (POST getAuthToken, urlencoded).");
+        }
+        this.resolvedToken = t;
+        return this.resolvedToken;
+    }
+    async ensureToken() {
+        if (this.resolvedToken) {
+            return this.resolvedToken;
+        }
+        if (config.AGILOTEXT_TOKEN && config.AGILOTEXT_TOKEN.length > 0 && !this.envTokenDisabled) {
+            this.resolvedToken = config.AGILOTEXT_TOKEN;
+            return this.resolvedToken;
+        }
+        return this.ensureTokenFromPassword();
+    }
+    /**
+     * Résout username / token / edition pour un appel, avec surcharges optionnelles.
+     */
+    async getAuthParams(override) {
+        const username = (override?.username?.trim() || config.AGILOTEXT_USERNAME);
+        const edition = (override?.edition ?? config.AGILOTEXT_EDITION);
+        if (override?.token && String(override.token).length > 0) {
+            return { username, token: String(override.token), edition };
+        }
+        if (username === config.AGILOTEXT_USERNAME && edition === config.AGILOTEXT_EDITION) {
+            return {
+                username,
+                token: await this.ensureToken(),
+                edition,
+            };
+        }
+        const t = await this.fetchTokenWithPasswordFor(username, edition);
+        if (!t) {
+            throw new Error("Pour un autre compte (username/édition), fournir `token` dans l’appel d’outil, ou le mot de passe du compte dans l’`env` pour getAuthToken.");
+        }
+        return { username, token: t, edition };
+    }
+    /**
+     * Après `error_invalid_token` : nouveau jeton via POST /getAuthToken pour le contexte effectif (override ou .env).
+     */
+    async refreshAfterInvalidToken(workingOverride) {
+        this.resolvedToken = null;
+        this.envTokenDisabled = true;
+        const u = (workingOverride?.username?.trim() || config.AGILOTEXT_USERNAME);
+        const e = (workingOverride?.edition ?? config.AGILOTEXT_EDITION);
+        const t = await this.fetchTokenWithPasswordFor(u, e);
+        if (!t) {
+            logger.warn("Impossible de renouveler le jeton (getAuthToken) pour la requête en cours.");
+            return null;
+        }
+        if (!workingOverride) {
+            this.resolvedToken = t;
+        }
+        return { username: u, edition: e, token: t };
+    }
+    async post(endpoint, params = {}, files = {}, maxRetries = 3, authOverride) {
+        return this.postWithRetry(endpoint, params, files, maxRetries, authOverride);
+    }
+    async postWithRetry(endpoint, params = {}, files = {}, maxRetries = 3, authOverride) {
         let lastError;
+        let workingOverride = authOverride;
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            const formData = new FormData();
-            const auth = this.getAuthParams();
-            Object.entries(auth).forEach(([key, value]) => formData.append(key, value));
-            Object.entries(params).forEach(([key, value]) => {
-                if (value !== undefined && value !== null) {
-                    formData.append(key, String(value));
-                }
-            });
-            Object.entries(files).forEach(([key, value]) => {
-                if (value)
-                    formData.append(key, value);
-            });
-            try {
-                const response = await this.client.post(endpoint, formData, {
-                    headers: { ...formData.getHeaders() },
+            let allowAuthRefresh = true;
+            let postFormData = true;
+            while (postFormData) {
+                postFormData = false;
+                const formData = new FormData();
+                const auth = await this.getAuthParams(workingOverride);
+                Object.entries(auth).forEach(([key, value]) => formData.append(key, value));
+                Object.entries(params).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null) {
+                        formData.append(key, String(value));
+                    }
                 });
-                const data = response.data;
-                if (data && data.status === "KO") {
-                    throw new Error(`Agilotext API Error: ${data.errorMessage || "Unknown error"}`);
-                }
-                return data;
-            }
-            catch (error) {
-                lastError = error;
-                // Check if we should retry (handles 429 and 5xx)
-                if (shouldRetry(error, attempt, maxRetries)) {
-                    // Check for Retry-After header (for 429)
-                    const retryAfter = getRetryAfterDelay(error);
-                    const delay = retryAfter || calculateRetryDelay(attempt);
-                    logger.warn(`[Retry] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.ceil(delay)}ms...`, {
-                        status: error.response?.status,
-                        endpoint: endpoint,
+                Object.entries(files).forEach(([key, value]) => {
+                    if (value)
+                        formData.append(key, value);
+                });
+                try {
+                    const response = await this.client.post(endpoint, formData, {
+                        headers: { ...formData.getHeaders() },
                     });
-                    await new Promise((resolve) => setTimeout(resolve, delay));
-                    continue;
+                    const data = response.data;
+                    if (data && data.status === "KO") {
+                        const errMsg = data.errorMessage || "";
+                        if (allowAuthRefresh && this.isInvalidTokenMessage(errMsg)) {
+                            allowAuthRefresh = false;
+                            const next = await this.refreshAfterInvalidToken(workingOverride);
+                            if (next) {
+                                workingOverride = next;
+                                postFormData = true;
+                                continue;
+                            }
+                        }
+                        throw new Error(`Agilotext API Error: ${errMsg || "Unknown error"}`);
+                    }
+                    return data;
                 }
-                // Don't retry - throw error
-                if (error.response) {
-                    throw new Error(`HTTP Error ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+                catch (error) {
+                    lastError = error;
+                    const bodyData = error.response?.data;
+                    const bodyMsg = typeof bodyData === "object" && bodyData?.errorMessage
+                        ? String(bodyData.errorMessage)
+                        : String(error.message ?? "");
+                    if (allowAuthRefresh &&
+                        (this.isInvalidTokenMessage(bodyMsg) || this.isInvalidTokenMessage(String(bodyData)))) {
+                        allowAuthRefresh = false;
+                        const next = await this.refreshAfterInvalidToken(workingOverride);
+                        if (next) {
+                            workingOverride = next;
+                            postFormData = true;
+                            continue;
+                        }
+                    }
+                    if (shouldRetry(error, attempt, maxRetries)) {
+                        const retryAfter = getRetryAfterDelay(error);
+                        const delay = retryAfter || calculateRetryDelay(attempt);
+                        logger.warn(`[Retry] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.ceil(delay)}ms...`, {
+                            status: error.response?.status,
+                            endpoint: endpoint,
+                        });
+                        await new Promise((resolve) => setTimeout(resolve, delay));
+                        break;
+                    }
+                    if (error.response) {
+                        throw new Error(`HTTP Error ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+                    }
+                    throw error;
                 }
-                throw error;
             }
         }
         throw lastError;
@@ -74,40 +194,76 @@ export class AgilotextClient {
      * GET avec auth en query (même contrat que webapp / mobile) — certains endpoints
      * n’acceptent pas correctement le POST multipart (ex. getTranscriptStatus, redoSummary).
      */
-    async get(endpoint, params = {}) {
-        return this.getWithRetry(endpoint, params, 3);
+    async get(endpoint, params = {}, maxRetries = 3, authOverride) {
+        return this.getWithRetry(endpoint, params, maxRetries, authOverride);
     }
-    async getWithRetry(endpoint, params = {}, maxRetries = 3) {
+    async getWithRetry(endpoint, params = {}, maxRetries = 3, authOverride) {
         let lastError;
-        const auth = this.getAuthParams();
-        const query = {};
-        for (const [key, value] of Object.entries({ ...auth, ...params })) {
-            if (value !== undefined && value !== null) {
-                query[key] = String(value);
+        let workingOverride = authOverride;
+        const buildQuery = async () => {
+            const auth = await this.getAuthParams(workingOverride);
+            const q = {};
+            for (const [key, value] of Object.entries({ ...auth, ...params })) {
+                if (value !== undefined && value !== null) {
+                    q[key] = String(value);
+                }
             }
-        }
+            return q;
+        };
         for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                const response = await this.client.get(endpoint, { params: query });
-                const data = response.data;
-                if (data && data.status === "KO") {
-                    throw new Error(`Agilotext API Error: ${data.errorMessage || "Unknown error"}`);
+            let allowAuthRefresh = true;
+            let doRequest = true;
+            let query = await buildQuery();
+            while (doRequest) {
+                doRequest = false;
+                try {
+                    const response = await this.client.get(endpoint, { params: query });
+                    const data = response.data;
+                    if (data && data.status === "KO") {
+                        const errMsg = data.errorMessage || "";
+                        if (allowAuthRefresh && this.isInvalidTokenMessage(errMsg)) {
+                            allowAuthRefresh = false;
+                            const next = await this.refreshAfterInvalidToken(workingOverride);
+                            if (next) {
+                                workingOverride = next;
+                                query = await buildQuery();
+                                doRequest = true;
+                                continue;
+                            }
+                        }
+                        throw new Error(`Agilotext API Error: ${errMsg || "Unknown error"}`);
+                    }
+                    return data;
                 }
-                return data;
-            }
-            catch (error) {
-                lastError = error;
-                if (shouldRetry(error, attempt, maxRetries)) {
-                    const retryAfter = getRetryAfterDelay(error);
-                    const delay = retryAfter || calculateRetryDelay(attempt);
-                    logger.warn(`[Retry GET] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.ceil(delay)}ms...`, { status: error.response?.status, endpoint });
-                    await new Promise((resolve) => setTimeout(resolve, delay));
-                    continue;
+                catch (error) {
+                    lastError = error;
+                    const bodyData = error.response?.data;
+                    const bodyMsg = typeof bodyData === "object" && bodyData?.errorMessage
+                        ? String(bodyData.errorMessage)
+                        : String(error.message ?? "");
+                    if (allowAuthRefresh &&
+                        (this.isInvalidTokenMessage(bodyMsg) || this.isInvalidTokenMessage(String(bodyData)))) {
+                        allowAuthRefresh = false;
+                        const next = await this.refreshAfterInvalidToken(workingOverride);
+                        if (next) {
+                            workingOverride = next;
+                            query = await buildQuery();
+                            doRequest = true;
+                            continue;
+                        }
+                    }
+                    if (shouldRetry(error, attempt, maxRetries)) {
+                        const retryAfter = getRetryAfterDelay(error);
+                        const delay = retryAfter || calculateRetryDelay(attempt);
+                        logger.warn(`[Retry GET] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${Math.ceil(delay)}ms...`, { status: error.response?.status, endpoint });
+                        await new Promise((resolve) => setTimeout(resolve, delay));
+                        break;
+                    }
+                    if (error.response) {
+                        throw new Error(`HTTP Error ${error.response.status}: ${JSON.stringify(error.response.data)}`);
+                    }
+                    throw error;
                 }
-                if (error.response) {
-                    throw new Error(`HTTP Error ${error.response.status}: ${JSON.stringify(error.response.data)}`);
-                }
-                throw error;
             }
         }
         throw lastError;
@@ -132,21 +288,21 @@ export class AgilotextClient {
         });
     }
     // ============ SECTION 2: JOB TRACKING ============
-    async getJobsInfo(limit = 20, offset = 0) {
-        const response = await this.post("/getJobsInfo", { limit, offset });
+    async getJobsInfo(limit = 20, offset = 0, auth) {
+        const response = await this.post("/getJobsInfo", { limit, offset }, {}, 3, auth);
         return validateJobsResponse(response);
     }
-    async getTranscriptStatus(jobId) {
-        const response = await this.get("/getTranscriptStatus", { jobId });
+    async getTranscriptStatus(jobId, auth) {
+        const response = await this.get("/getTranscriptStatus", { jobId }, 3, auth);
         return validateTranscriptStatus(response);
     }
     // ============ SECTION 3: DOWNLOADS ============
-    async receiveText(jobId, format = "txt") {
-        const response = await this.post("/receiveText", { jobId, format });
+    async receiveText(jobId, format = "txt", auth) {
+        const response = await this.post("/receiveText", { jobId, format }, {}, 3, auth);
         return validateTextResponse(response);
     }
-    async receiveSummary(jobId, format = "html") {
-        const response = await this.post("/receiveSummary", { jobId, format });
+    async receiveSummary(jobId, format = "html", auth) {
+        const response = await this.post("/receiveSummary", { jobId, format }, {}, 3, auth);
         return validateSummaryResponse(response);
     }
     async receiveAudio(jobId) {
@@ -156,16 +312,16 @@ export class AgilotextClient {
     async renameTranscriptFile(jobId, newName) {
         return this.post("/renameTranscriptFile", { jobId, newName });
     }
-    async updateTranscriptFile(jobId, transcriptContent) {
-        const buffer = Buffer.from(transcriptContent, 'utf-8');
-        return this.post("/updateTranscriptFile", { jobId }, { fileUpload: buffer });
+    async updateTranscriptFile(jobId, transcriptContent, auth) {
+        const buffer = Buffer.from(transcriptContent, "utf-8");
+        return this.post("/updateTranscriptFile", { jobId }, { fileUpload: buffer }, 3, auth);
     }
-    async redoSummary(jobId, promptId) {
+    async redoSummary(jobId, promptId, auth) {
         const params = { jobId };
         if (promptId !== undefined && promptId !== null && String(promptId).trim() !== "") {
             params.promptId = promptId;
         }
-        return this.get("/redoSummary", params);
+        return this.get("/redoSummary", params, 3, auth);
     }
     async deleteJob(jobId) {
         return this.post("/deleteJob", { jobId });
@@ -192,7 +348,7 @@ export class AgilotextClient {
         return this.post("/updatePromptModelUser", { promptId }, { fileUpload: buffer });
     }
     async renamePromptModel(promptId, newName) {
-        return this.post("/renamePromptModel", { promptId, newName });
+        return this.post("/renamePromptModel", { promptId, promptName: newName });
     }
     async setPromptModelUserDefault(promptId) {
         return this.post("/setPromptModelUserDefault", { promptId });
@@ -214,27 +370,27 @@ export class AgilotextClient {
         return this.post("/receiveRepromptText", { jobId, promptId, format });
     }
     // ============ SECTION 7: WORD BOOST ============
-    async setWordBoost2(wordBoostName, words) {
-        const wordsJson = JSON.stringify(words);
-        return this.post("/setWordBoost2", { wordBoostName, words: wordsJson });
+    async setWordBoost2(wordBoostName, words, boostId = "0") {
+        const wordBoost = JSON.stringify({ wordBoost: words });
+        return this.post("/setWordBoost2", { boostId, boostName: wordBoostName, wordBoost });
     }
     async getWordBoost2(wordBoostId) {
-        return this.post("/getWordBoost2", { wordBoostId });
+        return this.post("/getWordBoost2", { boostId: wordBoostId });
     }
     async getWordBoostInfo2() {
         return this.post("/getWordBoostInfo2");
     }
     async getStatusWordBoost2(wordBoostId) {
-        return this.post("/getStatusWordBoost2", { wordBoostId });
+        return this.post("/getStatusWordBoost2", { boostId: wordBoostId });
     }
     async renameWordBoost2(wordBoostId, newName) {
-        return this.post("/renameWordBoost2", { wordBoostId, newName });
+        return this.post("/renameWordBoost2", { boostId: wordBoostId, boostName: newName });
     }
     async deleteWordBoost2(wordBoostId) {
-        return this.post("/deleteWordBoost2", { wordBoostId });
+        return this.post("/deleteWordBoost2", { boostId: wordBoostId });
     }
     async setWordBoostDefault2(wordBoostId) {
-        return this.post("/setWordBoostDefault2", { wordBoostId });
+        return this.post("/setWordBoostDefault2", { boostId: wordBoostId });
     }
     // ============ SECTION 8: USER PREFERENCES ============
     async getUserModelPreference() {
@@ -285,8 +441,17 @@ export class AgilotextClient {
     async getNumberOfUploadsForPeriod(period = "month") {
         return this.post("/getNumberOfUploadsForPeriod", { period });
     }
+    /**
+     * getVersion : GET sans auth ni paramètres (contrat API public — voir doc).
+     * Ne pas utiliser post() + multipart : le serveur peut répondre "username token" manquants.
+     */
     async getVersion() {
-        return this.post("/getVersion");
+        const response = await this.client.get("/getVersion");
+        const data = response.data;
+        if (data && data.status === "KO") {
+            throw new Error(`Agilotext API Error: ${data.errorMessage || "Unknown error"}`);
+        }
+        return data;
     }
     async cleanupOldJobs(daysOld = 30) {
         return this.post("/cleanupOldJobs", { daysOld });

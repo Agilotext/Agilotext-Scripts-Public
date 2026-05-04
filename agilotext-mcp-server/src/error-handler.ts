@@ -78,7 +78,8 @@ export function formatError(error: any, endpoint?: string, toolName?: string): E
         errorDetails.message = `Bad Request: ${error.response.data?.errorMessage || error.message}`;
         break;
       case 401:
-        errorDetails.message = 'Unauthorized: Check your AGILOTEXT_TOKEN and AGILOTEXT_USERNAME';
+        errorDetails.message =
+            "Unauthorized: AGILOTEXT_USERNAME + AGILOTEXT_TOKEN, ou un mot de passe (AGILOTEXT_PASSWORD / AGILOTEXT_APP_PASSWORD / AGILOTEXT_ADMIN_PASSWORD + POST getAuthToken urlencoded).";
         break;
       case 403:
         errorDetails.message = 'Forbidden: You don\'t have permission to access this resource';

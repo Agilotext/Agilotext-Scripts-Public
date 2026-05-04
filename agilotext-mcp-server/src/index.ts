@@ -2,7 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { AgilotextClient } from "./api-client.js";
+import { AgilotextClient, type AuthOverride } from "./api-client.js";
 import { config } from "./config.js";
 import { formatError, logError } from "./error-handler.js";
 import { logger } from "./logger.js";
@@ -163,6 +163,36 @@ function deriveEmailStyleFingerprint(raw: string) {
   };
 }
 
+/** Surcharge d’authentification par appel (n’alimente pas d’e-mail/édition figés dans le serveur). */
+const authOverrideSchema = {
+  username: z
+    .string()
+    .email()
+    .optional()
+    .describe("Optionnel: email du compte Agilotext (défaut: AGILOTEXT_USERNAME du .env)"),
+  edition: z
+    .enum(["free", "pro", "ent"])
+    .optional()
+    .describe("Optionnel: free | pro | ent (défaut: AGILOTEXT_EDITION)"),
+  token: z
+    .string()
+    .optional()
+    .describe("Optionnel: jeton API pour ce compte (sinon .env + getAuthToken)"),
+} satisfies Record<string, z.ZodTypeAny>;
+
+function pickAuthOverride(args: {
+  username?: string;
+  edition?: "free" | "pro" | "ent";
+  token?: string;
+}): AuthOverride | undefined {
+  if (!args.username && !args.edition && !args.token) return undefined;
+  return {
+    username: args.username,
+    edition: args.edition,
+    token: args.token,
+  };
+}
+
 // ============ JOBS & STATUS ============
 
 server.tool(
@@ -175,10 +205,11 @@ server.tool(
     dateFrom: z.string().optional().describe("Filter jobs from this date (ISO format YYYY-MM-DD)"),
     dateTo: z.string().optional().describe("Filter jobs until this date (ISO format YYYY-MM-DD)"),
     filenameContains: z.string().optional().describe("Filter jobs where filename contains this text"),
+    ...authOverrideSchema,
   },
-  async ({ limit, offset, status, dateFrom, dateTo, filenameContains }) => {
+  async ({ limit, offset, status, dateFrom, dateTo, filenameContains, username, edition, token }) => {
     try {
-      const response = await client.getJobsInfo(limit, offset);
+      const response = await client.getJobsInfo(limit, offset, pickAuthOverride({ username, edition, token }));
       let jobs = response.jobsInfoDtos || [];
 
       // Apply filters
@@ -226,9 +257,11 @@ server.tool(
 server.tool(
   "get_transcript_status",
   "Get detailed status of a specific job (PENDING, READY_SUMMARY_READY, ON_ERROR, etc.)",
-  { jobId: z.string() },
-  async ({ jobId }) => {
-    // Check cache first
+  { jobId: z.string(), ...authOverrideSchema },
+  async ({ jobId, username, edition, token }) => {
+    const auth = pickAuthOverride({ username, edition, token });
+    const useCache = !auth;
+    if (useCache) {
       const cacheKey = `job_status_${jobId}`;
       const cached = jobStatusCache.get(cacheKey);
       if (cached) {
@@ -237,9 +270,12 @@ server.tool(
         return { content: [{ type: "text" as const, text: JSON.stringify(cached, null, 2) }] };
       }
       metrics.recordCacheMiss();
+    }
     return validateJobIdWrapper(jobId, async () => {
-      const result = await client.getTranscriptStatus(jobId);
-      jobStatusCache.set(cacheKey, result, 10 * 1000); // 10 seconds
+      const result = await client.getTranscriptStatus(jobId, auth);
+      if (useCache) {
+        jobStatusCache.set(`job_status_${jobId}`, result, 10 * 1000);
+      }
       return result;
     }, "get_transcript_status");
   }
@@ -269,9 +305,15 @@ server.tool(
   "Update/modify the transcript content for a job",
   {
     jobId: z.string().describe("The job ID"),
-    transcriptContent: z.string().describe("The new transcript content")
+    transcriptContent: z.string().describe("The new transcript content"),
+    ...authOverrideSchema,
   },
-  async ({ jobId, transcriptContent }) => validateJobIdWrapper(jobId, () => client.updateTranscriptFile(jobId, transcriptContent), "update_transcript")
+  async ({ jobId, transcriptContent, username, edition, token }) =>
+    validateJobIdWrapper(
+      jobId,
+      () => client.updateTranscriptFile(jobId, transcriptContent, pickAuthOverride({ username, edition, token })),
+      "update_transcript"
+    )
 );
 
 // ============ DOWNLOADS ============
@@ -279,22 +321,41 @@ server.tool(
 server.tool(
   "download_transcript",
   "Download transcript text in various formats",
-  { jobId: z.string(), format: z.enum(["txt", "rtf", "docx", "pdf"]).default("txt") },
-  async ({ jobId, format }) => validateJobIdWrapper(jobId, () => client.receiveText(jobId, format), "download_transcript")
+  { jobId: z.string(), format: z.enum(["txt", "rtf", "docx", "pdf"]).default("txt"), ...authOverrideSchema },
+  async ({ jobId, format, username, edition, token }) =>
+    validateJobIdWrapper(
+      jobId,
+      () => client.receiveText(jobId, format, pickAuthOverride({ username, edition, token })),
+      "download_transcript"
+    )
 );
 
 server.tool(
   "download_summary",
   "Download summary/compte-rendu in various formats",
-  { jobId: z.string(), format: z.enum(["txt", "html", "rtf", "docx", "pdf"]).default("html") },
-  async ({ jobId, format }) => validateJobIdWrapper(jobId, () => client.receiveSummary(jobId, format), "download_summary")
+  {
+    jobId: z.string(),
+    format: z.enum(["txt", "html", "rtf", "docx", "pdf"]).default("html"),
+    ...authOverrideSchema,
+  },
+  async ({ jobId, format, username, edition, token }) =>
+    validateJobIdWrapper(
+      jobId,
+      () => client.receiveSummary(jobId, format, pickAuthOverride({ username, edition, token })),
+      "download_summary"
+    )
 );
 
 server.tool(
   "redo_summary",
   "Regenerate summary for a job, optionally with a different prompt",
-  { jobId: z.string(), promptId: z.string().optional() },
-  async ({ jobId, promptId }) => validateJobIdWrapper(jobId, () => client.redoSummary(jobId, promptId), "redo_summary")
+  { jobId: z.string(), promptId: z.string().optional(), ...authOverrideSchema },
+  async ({ jobId, promptId, username, edition, token }) =>
+    validateJobIdWrapper(
+      jobId,
+      () => client.redoSummary(jobId, promptId, pickAuthOverride({ username, edition, token })),
+      "redo_summary"
+    )
 );
 
 server.tool(
@@ -467,7 +528,7 @@ server.tool(
 
 server.tool(
   "get_prompt_status",
-  "Get status of a prompt model (active, pending, etc.)",
+  "Statut de **préparation** d’un prompt **utilisateur** (`UserPromptModel`) — pas les seuls modèles catalogue. Si l’id n’existe pas en base utilisateur, statut souvent UNKNOWN.",
   { promptId: z.string() },
   async ({ promptId }) => handleTool(() => client.getPromptModelUserStatus(promptId))
 );
@@ -508,11 +569,43 @@ server.tool(
 
 server.tool(
   "set_default_prompt",
-  "Set a prompt model as the default for new transcriptions",
+  "Définir le prompt **par défaut pour ce compte**. Le doc UI indique souvent un **promptId standard (catalogue)** ; le backend peut accepter aussi un id **utilisateur** selon version. Pas un réglage « pour tous les comptes ».",
   { promptId: z.string() },
   async ({ promptId }) => {
     const result = await handleTool(() => client.setPromptModelUserDefault(promptId), "set_default_prompt");
     promptsCache.delete("user_prompts");
+    return result;
+  }
+);
+
+server.tool(
+  "create_standard_prompt_admin",
+  "⚠️ **Admin / compte système uniquement** (API `createPromptModelStandard`). Crée un nouveau prompt **catalogue** global. Les comptes normaux reçoivent une erreur. Invalide le cache `list_standard_prompts`.",
+  { promptName: z.string(), content: z.string() },
+  async ({ promptName, content }) => {
+    const result = await handleTool(
+      () => client.createPromptModelStandard(promptName, content),
+      "create_standard_prompt_admin"
+    );
+    promptsCache.delete("standard_prompts");
+    return result;
+  }
+);
+
+server.tool(
+  "update_standard_prompt_admin",
+  "⚠️ **Admin / compte système uniquement** (`updatePromptModelStandard`). Met à jour nom + contenu d’un **prompt standard** existant (`promptId` catalogue valide). Invalide le cache `list_standard_prompts`.",
+  {
+    promptId: z.string(),
+    promptName: z.string(),
+    content: z.string(),
+  },
+  async ({ promptId, promptName, content }) => {
+    const result = await handleTool(
+      () => client.updatePromptModelStandard(promptId, promptName, content),
+      "update_standard_prompt_admin"
+    );
+    promptsCache.delete("standard_prompts");
     return result;
   }
 );
@@ -970,8 +1063,21 @@ server.tool(
   async () => {
     try {
       const startTime = Date.now();
-      const version = await client.getVersion();
-      const prefs = await client.getUserModelPreference();
+      /** GET public : selon l’environnement API peut échouer — ne bloque pas le health. */
+      let apiVersion: any = null;
+      try {
+        apiVersion = await client.getVersion();
+      } catch {
+        apiVersion = { note: "getVersion non disponible (ignoré pour le statut)" };
+      }
+      /** Vérif authentifiée (POST multipart + token) — requis pour « healthy ». */
+      const jobsProbe = await client.getJobsInfo(1, 0);
+      let prefs: any = null;
+      try {
+        prefs = await client.getUserModelPreference();
+      } catch {
+        prefs = { note: "getUserModelPreference indisponible (non bloquant)" };
+      }
       const latency = Date.now() - startTime;
 
       // Check webhook configuration (optional)
@@ -991,9 +1097,10 @@ server.tool(
           type: "text" as const,
           text: JSON.stringify({
             status: "healthy",
-            apiVersion: version.version || version,
+            apiVersion: apiVersion?.version ?? apiVersion,
+            jobsProbeOk: jobsProbe?.status === "OK",
             latencyMs: latency,
-            modelPreference: prefs.modelPreference || prefs,
+            modelPreference: prefs?.modelPreference ?? prefs,
             webhooks: webhooksConfigured,
             system: {
               memoryMB: Math.round(memUsage.heapUsed / 1024 / 1024),

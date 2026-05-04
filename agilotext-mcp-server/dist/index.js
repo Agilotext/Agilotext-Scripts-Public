@@ -145,6 +145,31 @@ function deriveEmailStyleFingerprint(raw) {
         paragraphCount: paragraphs.length,
     };
 }
+/** Surcharge d’authentification par appel (n’alimente pas d’e-mail/édition figés dans le serveur). */
+const authOverrideSchema = {
+    username: z
+        .string()
+        .email()
+        .optional()
+        .describe("Optionnel: email du compte Agilotext (défaut: AGILOTEXT_USERNAME du .env)"),
+    edition: z
+        .enum(["free", "pro", "ent"])
+        .optional()
+        .describe("Optionnel: free | pro | ent (défaut: AGILOTEXT_EDITION)"),
+    token: z
+        .string()
+        .optional()
+        .describe("Optionnel: jeton API pour ce compte (sinon .env + getAuthToken)"),
+};
+function pickAuthOverride(args) {
+    if (!args.username && !args.edition && !args.token)
+        return undefined;
+    return {
+        username: args.username,
+        edition: args.edition,
+        token: args.token,
+    };
+}
 // ============ JOBS & STATUS ============
 server.tool("list_jobs", "List transcription jobs with optional filters. Returns filtered results based on status, date range, and filename.", {
     limit: z.number().default(50).describe("Max jobs to fetch (will filter from these)"),
@@ -153,9 +178,10 @@ server.tool("list_jobs", "List transcription jobs with optional filters. Returns
     dateFrom: z.string().optional().describe("Filter jobs from this date (ISO format YYYY-MM-DD)"),
     dateTo: z.string().optional().describe("Filter jobs until this date (ISO format YYYY-MM-DD)"),
     filenameContains: z.string().optional().describe("Filter jobs where filename contains this text"),
-}, async ({ limit, offset, status, dateFrom, dateTo, filenameContains }) => {
+    ...authOverrideSchema,
+}, async ({ limit, offset, status, dateFrom, dateTo, filenameContains, username, edition, token }) => {
     try {
-        const response = await client.getJobsInfo(limit, offset);
+        const response = await client.getJobsInfo(limit, offset, pickAuthOverride({ username, edition, token }));
         let jobs = response.jobsInfoDtos || [];
         // Apply filters
         if (status && status !== "ALL") {
@@ -197,19 +223,24 @@ server.tool("list_jobs", "List transcription jobs with optional filters. Returns
         };
     }
 });
-server.tool("get_transcript_status", "Get detailed status of a specific job (PENDING, READY_SUMMARY_READY, ON_ERROR, etc.)", { jobId: z.string() }, async ({ jobId }) => {
-    // Check cache first
-    const cacheKey = `job_status_${jobId}`;
-    const cached = jobStatusCache.get(cacheKey);
-    if (cached) {
-        metrics.recordCacheHit();
-        logger.debug(`Returning cached job status for ${jobId}`);
-        return { content: [{ type: "text", text: JSON.stringify(cached, null, 2) }] };
+server.tool("get_transcript_status", "Get detailed status of a specific job (PENDING, READY_SUMMARY_READY, ON_ERROR, etc.)", { jobId: z.string(), ...authOverrideSchema }, async ({ jobId, username, edition, token }) => {
+    const auth = pickAuthOverride({ username, edition, token });
+    const useCache = !auth;
+    if (useCache) {
+        const cacheKey = `job_status_${jobId}`;
+        const cached = jobStatusCache.get(cacheKey);
+        if (cached) {
+            metrics.recordCacheHit();
+            logger.debug(`Returning cached job status for ${jobId}`);
+            return { content: [{ type: "text", text: JSON.stringify(cached, null, 2) }] };
+        }
+        metrics.recordCacheMiss();
     }
-    metrics.recordCacheMiss();
     return validateJobIdWrapper(jobId, async () => {
-        const result = await client.getTranscriptStatus(jobId);
-        jobStatusCache.set(cacheKey, result, 10 * 1000); // 10 seconds
+        const result = await client.getTranscriptStatus(jobId, auth);
+        if (useCache) {
+            jobStatusCache.set(`job_status_${jobId}`, result, 10 * 1000);
+        }
         return result;
     }, "get_transcript_status");
 });
@@ -222,12 +253,17 @@ server.tool("delete_job", "Delete a transcription job", { jobId: z.string() }, a
 server.tool("rename_transcript", "Rename a transcript file", { jobId: z.string(), newName: z.string() }, async ({ jobId, newName }) => validateJobIdWrapper(jobId, () => client.renameTranscriptFile(jobId, newName), "rename_transcript"));
 server.tool("update_transcript", "Update/modify the transcript content for a job", {
     jobId: z.string().describe("The job ID"),
-    transcriptContent: z.string().describe("The new transcript content")
-}, async ({ jobId, transcriptContent }) => validateJobIdWrapper(jobId, () => client.updateTranscriptFile(jobId, transcriptContent), "update_transcript"));
+    transcriptContent: z.string().describe("The new transcript content"),
+    ...authOverrideSchema,
+}, async ({ jobId, transcriptContent, username, edition, token }) => validateJobIdWrapper(jobId, () => client.updateTranscriptFile(jobId, transcriptContent, pickAuthOverride({ username, edition, token })), "update_transcript"));
 // ============ DOWNLOADS ============
-server.tool("download_transcript", "Download transcript text in various formats", { jobId: z.string(), format: z.enum(["txt", "rtf", "docx", "pdf"]).default("txt") }, async ({ jobId, format }) => validateJobIdWrapper(jobId, () => client.receiveText(jobId, format), "download_transcript"));
-server.tool("download_summary", "Download summary/compte-rendu in various formats", { jobId: z.string(), format: z.enum(["txt", "html", "rtf", "docx", "pdf"]).default("html") }, async ({ jobId, format }) => validateJobIdWrapper(jobId, () => client.receiveSummary(jobId, format), "download_summary"));
-server.tool("redo_summary", "Regenerate summary for a job, optionally with a different prompt", { jobId: z.string(), promptId: z.string().optional() }, async ({ jobId, promptId }) => validateJobIdWrapper(jobId, () => client.redoSummary(jobId, promptId), "redo_summary"));
+server.tool("download_transcript", "Download transcript text in various formats", { jobId: z.string(), format: z.enum(["txt", "rtf", "docx", "pdf"]).default("txt"), ...authOverrideSchema }, async ({ jobId, format, username, edition, token }) => validateJobIdWrapper(jobId, () => client.receiveText(jobId, format, pickAuthOverride({ username, edition, token })), "download_transcript"));
+server.tool("download_summary", "Download summary/compte-rendu in various formats", {
+    jobId: z.string(),
+    format: z.enum(["txt", "html", "rtf", "docx", "pdf"]).default("html"),
+    ...authOverrideSchema,
+}, async ({ jobId, format, username, edition, token }) => validateJobIdWrapper(jobId, () => client.receiveSummary(jobId, format, pickAuthOverride({ username, edition, token })), "download_summary"));
+server.tool("redo_summary", "Regenerate summary for a job, optionally with a different prompt", { jobId: z.string(), promptId: z.string().optional(), ...authOverrideSchema }, async ({ jobId, promptId, username, edition, token }) => validateJobIdWrapper(jobId, () => client.redoSummary(jobId, promptId, pickAuthOverride({ username, edition, token })), "redo_summary"));
 server.tool("get_shared_url", "Get a shareable URL for a transcript", { jobId: z.string() }, async ({ jobId }) => validateJobIdWrapper(jobId, () => client.getSharedUrl(jobId), "get_shared_url"));
 server.tool("download_audio", "Download the original audio file for a job", { jobId: z.string() }, async ({ jobId }) => validateJobIdWrapper(jobId, () => client.receiveAudio(jobId), "download_audio"));
 server.tool("batch_delete_jobs", "Delete multiple jobs at once. Returns success/failure count.", { jobIds: z.array(z.string()).describe("Array of job IDs to delete") }, async ({ jobIds }) => {
@@ -576,8 +612,23 @@ server.tool("batch_download", "Download transcripts for multiple jobs in paralle
 server.tool("health_check", "Check if Agilotext API is reachable and credentials are valid", {}, async () => {
     try {
         const startTime = Date.now();
-        const version = await client.getVersion();
-        const prefs = await client.getUserModelPreference();
+        /** GET public : selon l’environnement API peut échouer — ne bloque pas le health. */
+        let apiVersion = null;
+        try {
+            apiVersion = await client.getVersion();
+        }
+        catch {
+            apiVersion = { note: "getVersion non disponible (ignoré pour le statut)" };
+        }
+        /** Vérif authentifiée (POST multipart + token) — requis pour « healthy ». */
+        const jobsProbe = await client.getJobsInfo(1, 0);
+        let prefs = null;
+        try {
+            prefs = await client.getUserModelPreference();
+        }
+        catch {
+            prefs = { note: "getUserModelPreference indisponible (non bloquant)" };
+        }
         const latency = Date.now() - startTime;
         // Check webhook configuration (optional)
         const webhooksConfigured = {
@@ -594,9 +645,10 @@ server.tool("health_check", "Check if Agilotext API is reachable and credentials
                     type: "text",
                     text: JSON.stringify({
                         status: "healthy",
-                        apiVersion: version.version || version,
+                        apiVersion: apiVersion?.version ?? apiVersion,
+                        jobsProbeOk: jobsProbe?.status === "OK",
                         latencyMs: latency,
-                        modelPreference: prefs.modelPreference || prefs,
+                        modelPreference: prefs?.modelPreference ?? prefs,
                         webhooks: webhooksConfigured,
                         system: {
                             memoryMB: Math.round(memUsage.heapUsed / 1024 / 1024),

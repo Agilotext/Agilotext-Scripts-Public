@@ -4,7 +4,7 @@
  */
 const SECRET_PATTERNS = [
     /(?:^|\s)(token|password|secret|key|api[_-]?key|auth[_-]?token|bearer)\s*[:=]\s*([a-zA-Z0-9_\-]{20,})/gi,
-    /(?:^|\s)(AGILOTEXT_TOKEN|MCP_WEBHOOK_TOKEN|API_KEY|SECRET_KEY)\s*[:=]\s*([^\s]+)/gi,
+    /(?:^|\s)(AGILOTEXT_TOKEN|AGILOTEXT_PASSWORD|AGILOTEXT_APP_PASSWORD|AGILOTEXT_ADMIN_PASSWORD|MCP_WEBHOOK_TOKEN|API_KEY|SECRET_KEY)\s*[:=]\s*([^\s]+)/gi,
     /bearer\s+[a-zA-Z0-9_\-]{20,}/gi,
     /[a-zA-Z0-9_\-]{32,}/g, // Long alphanumeric strings (potential tokens)
 ];
@@ -41,7 +41,7 @@ export function sanitizeForLogging(input) {
         });
     }
     // Mask environment variable values that might contain secrets
-    const envVarPattern = /(AGILOTEXT_TOKEN|MCP_WEBHOOK_TOKEN|API_KEY|SECRET_KEY)\s*[:=]\s*([^\s,}]+)/gi;
+    const envVarPattern = /(AGILOTEXT_TOKEN|AGILOTEXT_PASSWORD|AGILOTEXT_APP_PASSWORD|AGILOTEXT_ADMIN_PASSWORD|MCP_WEBHOOK_TOKEN|API_KEY|SECRET_KEY)\s*[:=]\s*([^\s,}]+)/gi;
     sanitized = sanitized.replace(envVarPattern, (match, varName, value) => {
         return `${varName}=${maskSecret(value)}`;
     });
@@ -74,6 +74,9 @@ export function sanitizeObjectForLogging(obj, depth = 5) {
             key.toLowerCase().includes("secret") ||
             key.toLowerCase().includes("key") ||
             key === "AGILOTEXT_TOKEN" ||
+            key === "AGILOTEXT_PASSWORD" ||
+            key === "AGILOTEXT_APP_PASSWORD" ||
+            key === "AGILOTEXT_ADMIN_PASSWORD" ||
             key === "MCP_WEBHOOK_TOKEN") {
             sanitized[key] = "[REDACTED]";
             continue;

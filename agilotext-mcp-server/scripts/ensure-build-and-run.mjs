@@ -10,6 +10,20 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distIndex = path.join(root, 'dist', 'index.js');
+const mcpSdkMarker = path.join(root, 'node_modules', '@modelcontextprotocol', 'sdk', 'package.json');
+
+function runNpmInstall() {
+  console.error('[agilotext-mcp] dépendances npm manquantes ou incomplètes — exécution de npm install…');
+  const res = spawnSync('npm', ['install'], {
+    cwd: root,
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    env: process.env,
+  });
+  if (res.status !== 0) {
+    process.exit(res.status ?? 1);
+  }
+}
 
 function runBuild() {
   const res = spawnSync('npm', ['run', 'build'], {
@@ -21,6 +35,10 @@ function runBuild() {
   if (res.status !== 0) {
     process.exit(res.status ?? 1);
   }
+}
+
+if (!fs.existsSync(mcpSdkMarker)) {
+  runNpmInstall();
 }
 
 if (!fs.existsSync(distIndex)) {
