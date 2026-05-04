@@ -2,31 +2,20 @@
  * Agilotext — Mode médical (domainRecognition général/médical) via préférences d’envoi utilisateur.
  * API v2.0.70+: getUserSendDefaults / setUserSendDefaults + champ domainRecognition.
  *
- * Auth: même schéma que le reste du site (memberEmail + globalToken + edition dérivée du path).
- * Transport: multipart FormData (aligné MCP api-client axios + usages upload dashboard).
+ * Auth : memberEmail + globalToken + edition (path).
+ * Transport : POST multipart FormData (aligné api-client / dashboard).
  *
- * ─── Webflow : coller cet embed dans la page Profil (après token-resolver), puis ───
+ * ─── HTML + CSS (copier-coller Webflow) ───
+ *     scripts/pages/profile/Code-user-send-domain-medical-embed.html
+ *
+ * ─── Bouton Sauvegarder (Designer Webflow), comme pour #save-mailNotif ───
+ *     Type : button
+ *     ID   : agilo-medical-save-btn
+ *     Classes : recopier celles du bouton notifications métier (ex. button / w-button / variante verte).
+ *     Retirer la classe agt-med-btn-fallback si tu relies le style uniquement aux classes Webflow.
+ *
+ * ─── Script (après token-resolver) ───
  * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<SHA>/scripts/pages/profile/Code-user-send-domain-medical.js" defer></script>
- *
- * ─── HTML suggéré (styles = classes Webflow / tokens projet, à ajuster au design Notifications) ───
- *
- * <section id="agilo-medical-domain-root" class="profile-section" aria-labelledby="agilo-medical-heading">
- *   <h2 id="agilo-medical-heading" class="h1-small">Reconnaissance du domaine</h2>
- *   <p class="text-muted">Appliqué par défaut à vos nouveaux envois audio (sendMultipleAudio).</p>
- *   <label class="agilo-medical-card" style="display:flex;align-items:flex-start;gap:12px;padding:16px;border:1px solid var(--color--noir_25,#e0e0e0);border-radius:var(--0-5_radius,.5rem);cursor:pointer;">
- *     <input type="checkbox" id="agilo-domain-medical-input" aria-describedby="agilo-medical-help" />
- *     <span>
- *       <strong>Mode médical</strong>
- *       <span id="agilo-medical-help" class="text-muted" style="display:block;font-size:.9em;margin-top:4px;">
- *         Terminologie médicale prioritaire pour la transcription (domainRecognition = medical).
- *       </span>
- *     </span>
- *   </label>
- *   <div class="wrapper-button" style="margin-top:16px;">
- *     <button type="button" id="agilo-medical-save-btn" class="button">Sauvegarder</button>
- *   </div>
- *   <p id="agilo-medical-domain-status" role="status" aria-live="polite" style="margin-top:10px;font-size:.9em;"></p>
- * </section>
  */
 (function () {
   'use strict';
@@ -146,10 +135,30 @@
     return s === 'medical' ? 'medical' : 'general';
   }
 
-  function setStatus(el, msg, isError) {
+  function setStatus(el, msg, isError, neutralClasses) {
     if (!el) return;
     el.textContent = msg || '';
-    el.style.color = isError ? '#b91c1c' : '';
+    el.classList.remove('ok', 'err');
+    if (!msg && !neutralClasses) return;
+    if (neutralClasses) return;
+    if (msg)
+      el.classList.add(isError ? 'err' : 'ok');
+  }
+
+  function setRadioDomainFromValue(root, dr) {
+    var val = dr === 'medical' ? 'medical' : 'general';
+    var r = root.querySelector(
+      'input[name="agiloDomainRecognition"][value="' + val + '"]'
+    );
+    if (r) r.checked = true;
+  }
+
+  function readSelectedDomain(root) {
+    var sel = root.querySelector(
+      'input[name="agiloDomainRecognition"]:checked'
+    );
+    var v = sel && sel.value;
+    return v === 'medical' ? 'medical' : 'general';
   }
 
   function init() {
@@ -157,12 +166,14 @@
     var root = document.getElementById('agilo-medical-domain-root');
     if (!root) return;
 
-    var input = document.getElementById('agilo-domain-medical-input');
     var saveBtn = document.getElementById('agilo-medical-save-btn');
     var statusEl = document.getElementById('agilo-medical-domain-status');
+    var radioSample = root.querySelector('input[name="agiloDomainRecognition"]');
 
-    if (!input || !saveBtn) {
-      console.warn('[agilo-medical] Éléments requis manquants (#agilo-domain-medical-input ou #agilo-medical-save-btn).');
+    if (!radioSample || !saveBtn) {
+      console.warn(
+        '[agilo-medical] Éléments requis manquants (input[name="agiloDomainRecognition"] ou #agilo-medical-save-btn).'
+      );
       return;
     }
 
@@ -171,12 +182,12 @@
     var lastPayloadForSave = {};
 
     function loadFromApi() {
-      setStatus(statusEl, 'Chargement…', false);
+      setStatus(statusEl, 'Chargement…', false, true);
       postFormData('/getUserSendDefaults', {})
         .then(function (data) {
           lastPayloadForSave = stripMetaForSave(pickDefaultsObject(data));
           var dr = readDomainRecognition(data);
-          input.checked = dr === 'medical';
+          setRadioDomainFromValue(root, dr);
           setStatus(statusEl, '', false);
         })
         .catch(function (e) {
@@ -192,12 +203,12 @@
       }
 
       var next = Object.assign({}, lastPayloadForSave, {
-        domainRecognition: input.checked ? 'medical' : 'general'
+        domainRecognition: readSelectedDomain(root)
       });
 
       saveBtn.disabled = true;
       saveBtn.setAttribute('aria-busy', 'true');
-      setStatus(statusEl, 'Enregistrement…', false);
+      setStatus(statusEl, 'Enregistrement…', false, true);
 
       postFormData('/setUserSendDefaults', next)
         .then(function () {
@@ -240,7 +251,8 @@
         setStatus(
           statusEl,
           'En attente de session… rechargez après connexion.',
-          false
+          false,
+          true
         );
       }
     }, 250);
