@@ -717,7 +717,10 @@ export class AgilotextClient {
     }
 
     async setUserSendDefaults(defaults: Record<string, any>): Promise<any> {
-        return this.post("/setUserSendDefaults", defaults);
+        /** Servlet : paramètre unique `userSendDefaultsJson` (chaîne JSON), pas champs aplatis. */
+        return this.post("/setUserSendDefaults", {
+            userSendDefaultsJson: JSON.stringify(defaults),
+        });
     }
 
     async getMailNotifyType(): Promise<any> {

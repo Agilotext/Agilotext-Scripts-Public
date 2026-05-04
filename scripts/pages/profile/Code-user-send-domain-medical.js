@@ -7,6 +7,8 @@
  *   puis localStorage agilo:edition, sinon free
  * - token : window.globalToken / globalToken puis GET /getToken si besoin (comme loadPreferences mail)
  *
+ * Transport : POST x-www-form-urlencoded ; setUserSendDefaults exige le paramètre userSendDefaultsJson (chaîne JSON).
+ *
  * HTML + CSS : scripts/pages/profile/Code-user-send-domain-medical-embed.html
  *
  * Bouton Sauvegarder (hors embed, comme #save-mailNotif) :
@@ -215,25 +217,28 @@
     });
   }
 
-  function postFormData(endpoint, fields, auth) {
+  function postUrlEncoded(endpoint, fields, auth) {
     if (!auth) return Promise.reject(new Error('Session indisponible'));
 
-    var fd = new FormData();
-    fd.append('username', auth.username);
-    fd.append('token', auth.token);
-    fd.append('edition', auth.edition);
+    var body = new URLSearchParams();
+    body.append('username', auth.username);
+    body.append('token', auth.token);
+    body.append('edition', auth.edition);
 
     var k;
     for (k in fields) {
       if (!Object.prototype.hasOwnProperty.call(fields, k)) continue;
       var v = fields[k];
       if (v === undefined || v === null) continue;
-      fd.append(k, String(v));
+      body.append(k, String(v));
     }
 
     return fetch(API_BASE + endpoint, {
       method: 'POST',
-      body: fd,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: body.toString(),
       credentials: 'omit',
       cache: 'no-store'
     }).then(function (res) {
@@ -348,7 +353,7 @@
             );
             return Promise.reject(new Error('no-auth'));
           }
-          return postFormData('/getUserSendDefaults', {}, auth);
+          return postUrlEncoded('/getUserSendDefaults', {}, auth);
         })
         .then(function (data) {
           if (seq !== loadSeq) return;
@@ -382,20 +387,23 @@
             return Promise.reject(new Error('no-auth'));
           }
 
-          var next = Object.assign({}, lastPayloadForSave, {
+          var merged = Object.assign({}, lastPayloadForSave, {
             domainRecognition: readSelectedDomain(root)
           });
+          var toSave = stripMetaForSave(merged);
 
           saveBtn.disabled = true;
           saveBtn.setAttribute('aria-busy', 'true');
           setStatus(statusEl, 'Enregistrement…', false, true);
 
-          return postFormData('/setUserSendDefaults', next, auth).then(
-            function () {
-              lastPayloadForSave = stripMetaForSave(next);
-              setStatus(statusEl, 'Préférences enregistrées.', false);
-            }
-          );
+          return postUrlEncoded(
+            '/setUserSendDefaults',
+            { userSendDefaultsJson: JSON.stringify(toSave) },
+            auth
+          ).then(function () {
+            lastPayloadForSave = toSave;
+            setStatus(statusEl, 'Préférences enregistrées.', false);
+          });
         })
         .catch(function (e) {
           if (e && e.message === 'no-auth') return;
