@@ -1128,6 +1128,42 @@
       margin: -4px -4px 4px;
       border-radius: 14px;
     }
+
+    /* Bouton démarrer la démo */
+    .btn-start-demo-wrap {
+      text-align: center;
+      padding: 10px 12px 14px;
+    }
+    .btn-start-demo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 20px;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--agilo-blue);
+      background: var(--color-white);
+      border: 2px solid var(--agilo-blue);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .btn-start-demo:hover {
+      background: var(--agilo-blue);
+      color: var(--color-white);
+    }
+    .btn-start-demo.is-playing {
+      background: var(--agilo-blue);
+      color: var(--color-white);
+      cursor: default;
+      opacity: 0.8;
+    }
+    .btn-start-demo svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
   </style>
 </head>
 <body>
@@ -1452,6 +1488,12 @@
         </div>
 
         <p class="footnote">Durée de l’extrait&nbsp;: 30&nbsp;s</p>
+        <div class="btn-start-demo-wrap">
+          <button type="button" class="btn-start-demo" id="btn-start-demo-result">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Démarrer la démo guidée
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -1700,6 +1742,12 @@
         clearTourTimersIdle();
         clearSpotlightIdle();
         resetIdleDemoState();
+        /* Remettre le bouton à l'état initial */
+        var btn = document.getElementById('btn-start-demo-result');
+        if (btn) {
+          btn.classList.remove('is-playing');
+          btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+        }
       }
 
       function isIdleDemoInteractiveTarget(el) {
@@ -1731,7 +1779,6 @@
 
       var IDLE_BEFORE_MS_IDLE = 4000;
       var STEP_MS_IDLE = 1450;
-      var PAUSE_BETWEEN_LOOPS_MS_IDLE = 9500;
 
       function runIdleTourResult(done) {
         if (userEngagedIdle || !macEl) {
@@ -1774,54 +1821,49 @@
         });
       }
 
-      function scheduleIdleLoopResult(isFirst) {
-        if (userEngagedIdle) return;
-        clearTimeout(loopTimerIdle);
-        var wait = isFirst ? IDLE_BEFORE_MS_IDLE : PAUSE_BETWEEN_LOOPS_MS_IDLE;
-        loopTimerIdle = setTimeout(function () {
-          loopTimerIdle = null;
-          if (userEngagedIdle) return;
-          runIdleTourResult(function () {
-            // Animation terminée (plus de boucle)
-          });
-        }, wait);
+      /* ========== Déclenchement par bouton uniquement ========== */
+      var btnStartDemoResult = document.getElementById('btn-start-demo-result');
+
+      /* BroadcastChannel : empêche les deux iframes de tourner en même temps */
+      var demoChannelResult = (typeof BroadcastChannel !== 'undefined')
+        ? new BroadcastChannel('agilo-demo-sync')
+        : null;
+
+      if (demoChannelResult) {
+        demoChannelResult.onmessage = function (evt) {
+          if (evt.data === 'result-start') return; /* ignore son propre message */
+          /* L'autre iframe a démarré → on s'arrête */
+          if (!userEngagedIdle) stopIdleDemoResult();
+        };
       }
 
-      function scheduleIdleWhenVisibleResult() {
-        var obsTarget = document.querySelector(".panel-wrap") || macEl;
-        var started = false;
+      if (btnStartDemoResult) {
+        btnStartDemoResult.addEventListener('click', function () {
+          if (btnStartDemoResult.classList.contains('is-playing')) return;
 
-        function kickoff() {
-          if (started) return;
-          started = true;
-          scheduleIdleLoopResult(true);
-        }
+          /* Prévenir l'autre iframe */
+          if (demoChannelResult) demoChannelResult.postMessage('result-start');
 
-        if (!obsTarget || !("IntersectionObserver" in window)) {
-          kickoff();
-          return;
-        }
+          /* Réinitialiser pour pouvoir relancer */
+          userEngagedIdle = false;
+          clearTourTimersIdle();
+          clearSpotlightIdle();
+          resetIdleDemoState();
 
-        var ioIdle = new IntersectionObserver(
-          function (entries) {
-            entries.forEach(function (entry) {
-              if (entry.isIntersecting && entry.intersectionRatio > 0.65) {
-                ioIdle.disconnect();
-                kickoff();
-              }
+          btnStartDemoResult.classList.add('is-playing');
+          btnStartDemoResult.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Démo en cours…';
+
+          /* Lancer UNE SEULE FOIS */
+          loopTimerIdle = setTimeout(function () {
+            loopTimerIdle = null;
+            runIdleTourResult(function () {
+              /* Fin de la démo — remettre le bouton */
+              btnStartDemoResult.classList.remove('is-playing');
+              btnStartDemoResult.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg> Relancer la démo';
+              userEngagedIdle = false;
             });
-          },
-          { threshold: [0, 0.25, 0.65, 0.9] }
-        );
-        ioIdle.observe(obsTarget);
-
-
-      }
-
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", scheduleIdleWhenVisibleResult);
-      } else {
-        scheduleIdleWhenVisibleResult();
+          }, 500);
+        });
       }
     })();
   </script>
