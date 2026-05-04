@@ -1,20 +1,17 @@
 /**
- * Agilotext — Mode médical (domainRecognition général/médical) via préférences d’envoi utilisateur.
- * API v2.0.70+: getUserSendDefaults / setUserSendDefaults + champ domainRecognition.
+ * Agilotext — domainRecognition (général | médical) via getUserSendDefaults / setUserSendDefaults.
  *
- * Auth : memberEmail + globalToken + edition (path).
- * Transport : POST multipart FormData (aligné api-client / dashboard).
+ * Aligné sur le script notifications mail (page export) :
+ * - email : [name="memberEmail"], [data-ms-member="email"], #memberEmail
+ * - édition : ?edition=, [name="edition"], globaux tête, chemin (/app/free|pro|business…),
+ *   puis localStorage agilo:edition, sinon free
+ * - token : window.globalToken / globalToken puis GET /getToken si besoin (comme loadPreferences mail)
  *
- * ─── HTML + CSS (copier-coller Webflow) ───
- *     scripts/pages/profile/Code-user-send-domain-medical-embed.html
+ * HTML + CSS : scripts/pages/profile/Code-user-send-domain-medical-embed.html
  *
- * ─── Bouton Sauvegarder (Designer Webflow), comme pour #save-mailNotif ───
- *     Type : button
- *     ID   : agilo-medical-save-btn
- *     Classes : recopier celles du bouton notifications métier (ex. button / w-button / variante verte).
- *     Retirer la classe agt-med-btn-fallback si tu relies le style uniquement aux classes Webflow.
+ * Bouton Sauvegarder (hors embed, comme #save-mailNotif) :
+ *   Type button, ID agilo-medical-save-btn, classes « button save » (recopier mail).
  *
- * ─── Script (après token-resolver) ───
  * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<SHA>/scripts/pages/profile/Code-user-send-domain-medical.js" defer></script>
  */
 (function () {
@@ -31,38 +28,194 @@
     message: 1
   };
 
-  function editionFromPath() {
+  function normEdition(v) {
+    v = String(v || '')
+      .toLowerCase()
+      .trim();
+    if (v === 'business' || v === 'enterprise' || v === 'entreprise' || v === 'biz')
+      return 'ent';
+    if (v === 'premium') return 'pro';
+    return v;
+  }
+
+  /** Même esprit que detectEdition() notifications + inferEdition token-resolver. */
+  function resolveEdition() {
+    try {
+      var q = new URLSearchParams(window.location.search || '').get('edition');
+      if (q) {
+        q = normEdition(q);
+        if (q === 'ent' || q === 'pro' || q === 'free') return q;
+      }
+    } catch (e) {}
+
+    var input = document.querySelector('[name="edition"]');
+    if (input && String(input.value || '').trim()) {
+      q = normEdition(input.value);
+      if (q === 'ent' || q === 'pro' || q === 'free') return q;
+    }
+
+    var head =
+      (typeof window.agilotextEdition === 'string' &&
+        window.agilotextEdition.trim()) ||
+      (typeof window.__AGILOTEXT_EDITION__ === 'string' &&
+        window.__AGILOTEXT_EDITION__.trim());
+    if (head) {
+      q = normEdition(head);
+      if (q === 'ent' || q === 'pro' || q === 'free') return q;
+    }
+
     var p = window.location.pathname || '';
     if (p.indexOf('/app/free/') !== -1) return 'free';
-    if (p.indexOf('/app/pro/') !== -1 || p.indexOf('/app/premium/') !== -1) return 'pro';
-    if (p.indexOf('/app/ent/') !== -1 || p.indexOf('/app/business/') !== -1) return 'ent';
-    return 'ent';
+    if (
+      p.indexOf('/app/pro/') !== -1 ||
+      p.indexOf('/app/premium/') !== -1
+    )
+      return 'pro';
+    if (
+      p.indexOf('/app/ent/') !== -1 ||
+      p.indexOf('/app/business/') !== -1
+    )
+      return 'ent';
+    if (p.indexOf('/business/') !== -1 || p.indexOf('/ent/') !== -1)
+      return 'ent';
+    if (p.indexOf('/premium/') !== -1 || p.indexOf('/pro/') !== -1)
+      return 'pro';
+    if (p.indexOf('/free/') !== -1) return 'free';
+
+    try {
+      var stored = localStorage.getItem('agilo:edition');
+      if (
+        stored &&
+        (stored === 'free' || stored === 'pro' || stored === 'ent')
+      )
+        return stored;
+    } catch (e2) {}
+
+    return 'free';
   }
 
   function readEmail() {
-    var el = document.querySelector('[name="memberEmail"]');
+    var el =
+      document.querySelector('[name="memberEmail"]') ||
+      document.querySelector('[data-ms-member="email"]') ||
+      document.getElementById('memberEmail');
     return String(
-      (el && (el.value || el.getAttribute('src') || el.textContent)) || ''
+      (el &&
+        (el.value ||
+          el.getAttribute('src') ||
+          el.textContent ||
+          el.getAttribute('value'))) ||
+        ''
     ).trim();
   }
 
-  function readToken() {
+  function readTokenSync() {
     try {
-      if (typeof globalToken !== 'undefined' && globalToken) return String(globalToken).trim();
+      if (typeof globalToken !== 'undefined' && globalToken)
+        return String(globalToken).trim();
     } catch (e) {}
-    return String(window.globalToken || '').trim();
+    if (typeof window.globalToken === 'string' && window.globalToken.trim())
+      return window.globalToken.trim();
+    if (window.globalToken) return String(window.globalToken).trim();
+    return '';
   }
 
-  function getAuthOrNull() {
+  function writeToken(tok) {
+    var t = String(tok || '').trim();
+    if (!t) return;
+    window.globalToken = t;
+    try {
+      globalToken = t;
+    } catch (e) {}
+  }
+
+  function fetchTokenFromApi(email, edition, retryCount) {
+    retryCount = retryCount || 0;
+    if (retryCount >= 3) return Promise.resolve('');
+    var url =
+      API_BASE +
+      '/getToken?username=' +
+      encodeURIComponent(email) +
+      '&edition=' +
+      encodeURIComponent(edition);
+    return fetch(url)
+      .then(function (res) {
+        return res.json().then(function (data) {
+          return { res: res, data: data };
+        });
+      })
+      .then(function (x) {
+        var res = x.res;
+        var data = x.data || {};
+        if (res.ok && data.status === 'OK' && data.token) {
+          writeToken(data.token);
+          try {
+            window.dispatchEvent(
+              new CustomEvent('agilo:token', {
+                detail: {
+                  token: data.token,
+                  email: email,
+                  edition: edition
+                }
+              })
+            );
+          } catch (e3) {}
+          return String(data.token).trim();
+        }
+        var err = data.errorMessage || '';
+        if (err.indexOf('error_invalid_token') !== -1 && retryCount < 2) {
+          return new Promise(function (resolve) {
+            setTimeout(function () {
+              fetchTokenFromApi(email, edition, retryCount + 1).then(resolve);
+            }, 500);
+          });
+        }
+        if (retryCount < 2) {
+          return new Promise(function (resolve) {
+            setTimeout(function () {
+              fetchTokenFromApi(email, edition, retryCount + 1).then(resolve);
+            }, 500);
+          });
+        }
+        return '';
+      })
+      .catch(function () {
+        if (retryCount < 2) {
+          return new Promise(function (resolve) {
+            setTimeout(function () {
+              fetchTokenFromApi(email, edition, retryCount + 1).then(resolve);
+            }, 500);
+          });
+        }
+        return '';
+      });
+  }
+
+  function ensureToken(email, edition) {
+    var t = readTokenSync();
+    if (t) return Promise.resolve(t);
+    if (!email) return Promise.resolve('');
+    return fetchTokenFromApi(email, edition, 0);
+  }
+
+  function getAuthResolved() {
     var email = readEmail();
-    var token = readToken();
-    var edition = editionFromPath();
-    if (!email || !token) return null;
-    return { username: email, token: token, edition: edition };
+    var edition = resolveEdition();
+    var token = readTokenSync();
+    if (!email) return Promise.resolve(null);
+    if (token)
+      return Promise.resolve({
+        username: email,
+        token: token,
+        edition: edition
+      });
+    return ensureToken(email, edition).then(function (tok) {
+      if (!tok) return null;
+      return { username: email, token: tok, edition: edition };
+    });
   }
 
-  function postFormData(endpoint, fields) {
-    var auth = getAuthOrNull();
+  function postFormData(endpoint, fields, auth) {
     if (!auth) return Promise.reject(new Error('Session indisponible'));
 
     var fd = new FormData();
@@ -141,8 +294,7 @@
     el.classList.remove('ok', 'err');
     if (!msg && !neutralClasses) return;
     if (neutralClasses) return;
-    if (msg)
-      el.classList.add(isError ? 'err' : 'ok');
+    if (msg) el.classList.add(isError ? 'err' : 'ok');
   }
 
   function setRadioDomainFromValue(root, dr) {
@@ -172,7 +324,7 @@
 
     if (!radioSample || !saveBtn) {
       console.warn(
-        '[agilo-medical] Éléments requis manquants (input[name="agiloDomainRecognition"] ou #agilo-medical-save-btn).'
+        '[agilo-medical] Manque input[name="agiloDomainRecognition"] ou #agilo-medical-save-btn (bouton hors embed comme #save-mailNotif).'
       );
       return;
     }
@@ -180,43 +332,78 @@
     window.__agiloMedicalPrefInit = true;
 
     var lastPayloadForSave = {};
+    var loadSeq = 0;
 
     function loadFromApi() {
+      var seq = ++loadSeq;
       setStatus(statusEl, 'Chargement…', false, true);
-      postFormData('/getUserSendDefaults', {})
+      getAuthResolved()
+        .then(function (auth) {
+          if (seq !== loadSeq) return;
+          if (!auth) {
+            setStatus(
+              statusEl,
+              'Session indisponible (email ou token). Rechargez la page.',
+              true
+            );
+            return Promise.reject(new Error('no-auth'));
+          }
+          return postFormData('/getUserSendDefaults', {}, auth);
+        })
         .then(function (data) {
+          if (seq !== loadSeq) return;
           lastPayloadForSave = stripMetaForSave(pickDefaultsObject(data));
           var dr = readDomainRecognition(data);
           setRadioDomainFromValue(root, dr);
           setStatus(statusEl, '', false);
         })
         .catch(function (e) {
-          setStatus(statusEl, e && e.message ? e.message : 'Impossible de charger les préférences.', true);
+          if (seq !== loadSeq) return;
+          if (e && e.message === 'no-auth') return;
+          setStatus(
+            statusEl,
+            e && e.message
+              ? e.message
+              : 'Impossible de charger les préférences.',
+            true
+          );
         });
     }
 
     function save() {
-      var auth = getAuthOrNull();
-      if (!auth) {
-        setStatus(statusEl, 'Connectez-vous ou rechargez la page (token manquant).', true);
-        return;
-      }
+      getAuthResolved()
+        .then(function (auth) {
+          if (!auth) {
+            setStatus(
+              statusEl,
+              'Connexion ou token indisponible. Rechargez la page.',
+              true
+            );
+            return Promise.reject(new Error('no-auth'));
+          }
 
-      var next = Object.assign({}, lastPayloadForSave, {
-        domainRecognition: readSelectedDomain(root)
-      });
+          var next = Object.assign({}, lastPayloadForSave, {
+            domainRecognition: readSelectedDomain(root)
+          });
 
-      saveBtn.disabled = true;
-      saveBtn.setAttribute('aria-busy', 'true');
-      setStatus(statusEl, 'Enregistrement…', false, true);
+          saveBtn.disabled = true;
+          saveBtn.setAttribute('aria-busy', 'true');
+          setStatus(statusEl, 'Enregistrement…', false, true);
 
-      postFormData('/setUserSendDefaults', next)
-        .then(function () {
-          lastPayloadForSave = stripMetaForSave(next);
-          setStatus(statusEl, 'Préférences enregistrées.', false);
+          return postFormData('/setUserSendDefaults', next, auth).then(
+            function () {
+              lastPayloadForSave = stripMetaForSave(next);
+              setStatus(statusEl, 'Préférences enregistrées.', false);
+            }
+          );
         })
         .catch(function (e) {
-          setStatus(statusEl, e && e.message ? e.message : 'Échec de l’enregistrement.', true);
+          if (e && e.message === 'no-auth') return;
+          setStatus(
+            statusEl,
+            e && e.message ? e.message : 'Échec de l’enregistrement.',
+            true
+          );
         })
         .finally(function () {
           saveBtn.disabled = false;
@@ -224,7 +411,8 @@
         });
     }
 
-    saveBtn.addEventListener('click', function () {
+    saveBtn.addEventListener('click', function (e) {
+      if (e && e.preventDefault) e.preventDefault();
       save();
     });
 
@@ -236,26 +424,53 @@
       { passive: true }
     );
 
-    if (readToken()) {
-      loadFromApi();
-      return;
+    function tryBootstrap() {
+      if (readEmail() && readTokenSync()) {
+        loadFromApi();
+        return true;
+      }
+      return false;
     }
 
-    var t0 = Date.now();
-    var poll = window.setInterval(function () {
-      if (readToken()) {
-        window.clearInterval(poll);
+    setTimeout(function () {
+      if (tryBootstrap()) return;
+      getAuthResolved().then(function (auth) {
+        if (auth) loadFromApi();
+        else {
+          var t0 = Date.now();
+          var poll = window.setInterval(function () {
+            if (tryBootstrap()) {
+              window.clearInterval(poll);
+              return;
+            }
+            getAuthResolved().then(function (a) {
+              if (a) {
+                window.clearInterval(poll);
+                loadFromApi();
+              } else if (Date.now() - t0 > 25000) {
+                window.clearInterval(poll);
+                setStatus(
+                  statusEl,
+                  'En attente de session… rechargez après connexion.',
+                  false,
+                  true
+                );
+              }
+            });
+          }, 700);
+        }
+      });
+    }, 450);
+
+    var emailRetries = 0;
+    var emailTimer = window.setInterval(function () {
+      emailRetries += 1;
+      if (readEmail()) {
+        window.clearInterval(emailTimer);
+        if (!readTokenSync()) return;
         loadFromApi();
-      } else if (Date.now() - t0 > 20000) {
-        window.clearInterval(poll);
-        setStatus(
-          statusEl,
-          'En attente de session… rechargez après connexion.',
-          false,
-          true
-        );
-      }
-    }, 250);
+      } else if (emailRetries >= 12) window.clearInterval(emailTimer);
+    }, 900);
   }
 
   if (document.readyState === 'loading') {
