@@ -1,0 +1,328 @@
+<!--
+  Webflow — Embed « Mode médical / domainRecognition »
+  Copier-coller tout le bloc ci-dessous dans un Embed (avant le script JS).
+
+  Bouton Sauvegarder (Webflow) :
+  - Type : button  (obligatoire si le bloc est dans un <form>, pour éviter submit)
+  - ID   : agilo-medical-save-btn
+  - Classes : les mêmes que ton bouton notifications (#save-mailNotif), ex. selon ton projet :
+      class="button w-button"  ou  class="button is-green"  (recopie depuis le bouton existant)
+  - Pas de name requis. Le script gère disabled et aria-busy au clic.
+-->
+<style>
+  #agilo-medical-domain-root {
+    --agt-bg: var(--color--white, #ffffff);
+    --agt-card: var(--color--white, #ffffff);
+    --agt-border: var(--color--Noir_25, rgba(52, 58, 64, 0.25));
+    --agt-text: var(--color--gris_foncé, #020202);
+    --agt-muted: var(--color--Gris, #525252);
+    --agt-accent: var(--color--orange, #fd7e14);
+    --agt-accent-weak: rgba(253, 126, 20, 0.14);
+    --agt-success: var(--color--vert, #1c661a);
+    --agt-danger: var(--color--rouge, #a82633);
+    --agt-radius: 1rem;
+    --agt-shadow: 0 12px 30px rgba(2, 2, 2, 0.08);
+    --agt-font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+    font-family: var(--agt-font);
+    color: var(--agt-text);
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    #agilo-medical-domain-root {
+      --agt-bg: var(--color--gris_foncé, #020202);
+      --agt-card: var(--color--gris_foncé, #020202);
+      --agt-border: var(--color--Noir_25, rgba(52, 58, 64, 0.25));
+      --agt-text: var(--color--white, #ffffff);
+      --agt-muted: var(--color--Gris, #525252);
+      --agt-shadow: 0 18px 38px rgba(0,0,0,0.35);
+    }
+  }
+
+  #agilo-medical-domain-root .agt-med-card {
+    background: var(--agt-card);
+    border: 1px solid var(--agt-border);
+    border-radius: var(--agt-radius);
+    box-shadow: var(--agt-shadow);
+    padding: 22px 22px 18px;
+  }
+
+  #agilo-medical-domain-root .agt-med-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  #agilo-medical-domain-root .agt-med-title {
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 750;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  #agilo-medical-domain-root .agt-med-sub {
+    margin: 6px 0 0;
+    font-size: 13.5px;
+    color: var(--agt-muted);
+    line-height: 1.45;
+  }
+
+  #agilo-medical-domain-root .agt-med-section {
+    padding: 14px 0;
+    border-top: 1px solid var(--agt-border);
+  }
+
+  #agilo-medical-domain-root .agt-med-section:first-of-type {
+    border-top: none;
+    padding-top: 6px;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 12px;
+    border: 1px solid var(--agt-border);
+    border-radius: 14px;
+    cursor: pointer;
+    transition: border-color .15s ease, transform .05s ease, background .15s ease;
+    background: transparent;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio:hover {
+    border-color: rgba(253, 126, 20, 0.55);
+    background: var(--agt-accent-weak);
+  }
+
+  #agilo-medical-domain-root .agt-med-radio:active {
+    transform: scale(0.995);
+  }
+
+  #agilo-medical-domain-root .agt-med-radio input[type="radio"] {
+    margin-top: 2px;
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    border: 2px solid var(--agt-border);
+    border-radius: 50%;
+    background: var(--agt-card);
+    transition: all 0.2s ease;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio input[type="radio"]:checked {
+    border-color: var(--agt-accent);
+    background-image: radial-gradient(circle, var(--agt-accent) 40%, transparent 40%);
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio:has(input[type="radio"]:checked) {
+    border-color: rgba(253, 126, 20, 0.55);
+    background: var(--agt-accent-weak);
+  }
+
+  #agilo-medical-domain-root .agt-med-radio-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio-main {
+    font-weight: 700;
+    font-size: 14.5px;
+    line-height: 1.25;
+  }
+
+  #agilo-medical-domain-root .agt-med-radio-desc {
+    font-size: 13px;
+    color: var(--agt-muted);
+    line-height: 1.35;
+  }
+
+  #agilo-medical-domain-root .agt-med-reco {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 8px;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--color--gris_foncé, #020202);
+    background: rgba(253, 126, 20, 0.16);
+    border: 1px solid rgba(253, 126, 20, 0.28);
+    padding: 3px 8px;
+    border-radius: 999px;
+    vertical-align: middle;
+  }
+
+  #agilo-medical-domain-root .agt-med-privacy {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px 12px;
+    border-radius: 14px;
+    border: 1px solid var(--agt-border);
+    background: rgba(28, 102, 26, 0.06);
+  }
+
+  #agilo-medical-domain-root .agt-med-privacy .agt-med-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(28, 102, 26, 0.14);
+    color: var(--agt-success);
+    flex: 0 0 auto;
+    margin-top: 2px;
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  #agilo-medical-domain-root .agt-med-privacy b {
+    display: block;
+    font-size: 13.5px;
+    margin-bottom: 2px;
+  }
+
+  #agilo-medical-domain-root .agt-med-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+
+  /* Bouton : compléter par les classes Webflow (vert/orange) sur l’élément #agilo-medical-save-btn */
+  #agilo-medical-domain-root #agilo-medical-save-btn.agt-med-btn-fallback {
+    appearance: none;
+    border: 0;
+    border-radius: 14px;
+    padding: 12px 16px;
+    font-weight: 800;
+    cursor: pointer;
+    background: var(--agt-accent);
+    color: var(--color--white, #ffffff);
+    box-shadow: 0 12px 22px rgba(253, 126, 20, 0.25);
+    transition: transform .05s ease, filter .15s ease, opacity .15s ease;
+  }
+
+  #agilo-medical-domain-root #agilo-medical-save-btn.agt-med-btn-fallback:active {
+    transform: translateY(1px);
+  }
+
+  #agilo-medical-domain-root #agilo-medical-save-btn.agt-med-btn-fallback[disabled] {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  #agilo-medical-domain-root #agilo-medical-domain-status {
+    font-size: 12.5px;
+    color: var(--agt-muted);
+    min-height: 18px;
+    margin: 0;
+    flex: 1 1 200px;
+  }
+
+  #agilo-medical-domain-root #agilo-medical-domain-status.ok {
+    color: var(--agt-success);
+    font-weight: 700;
+  }
+
+  #agilo-medical-domain-root #agilo-medical-domain-status.err {
+    color: var(--agt-danger);
+    font-weight: 700;
+  }
+
+  @media (max-width: 767px) {
+    #agilo-medical-domain-root .agt-med-radio {
+      padding: 14px;
+    }
+    #agilo-medical-domain-root .agt-med-card {
+      padding: 18px;
+    }
+    #agilo-medical-domain-root .agt-med-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    #agilo-medical-domain-root #agilo-medical-save-btn.agt-med-btn-fallback {
+      width: 100%;
+    }
+  }
+</style>
+
+<section id="agilo-medical-domain-root" class="agilo-medical-embed" aria-labelledby="agilo-medical-heading">
+  <div class="agt-med-card">
+    <header class="agt-med-header">
+      <div>
+        <h2 id="agilo-medical-heading" class="agt-med-title">Reconnaissance du domaine</h2>
+        <p class="agt-med-sub">
+          S’applique par défaut à vos prochains envois audio. Vous pouvez modifier ce réglage à tout moment.
+        </p>
+      </div>
+    </header>
+
+    <div class="agt-med-section">
+      <div class="agt-med-radio-group" role="radiogroup" aria-labelledby="agilo-medical-heading">
+        <label class="agt-med-radio">
+          <input type="radio" name="agiloDomainRecognition" value="general" checked />
+          <span class="agt-med-radio-text">
+            <span class="agt-med-radio-main">Général</span>
+            <span class="agt-med-radio-desc">Transcription standard pour la plupart des contenus.</span>
+          </span>
+        </label>
+
+        <label class="agt-med-radio">
+          <input type="radio" name="agiloDomainRecognition" value="medical" />
+          <span class="agt-med-radio-text">
+            <span class="agt-med-radio-main">
+              Mode médical
+              <span class="agt-med-reco">Lexique médical</span>
+            </span>
+            <span class="agt-med-radio-desc">Priorité au vocabulaire et formulations médicales (comptes rendus, actes cliniques, etc.).</span>
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="agt-med-section">
+      <div class="agt-med-privacy">
+        <div class="agt-med-icon">✓</div>
+        <div>
+          <b>Confidentialité &amp; données</b>
+          <p class="agt-med-sub" style="margin:0;">
+            La préférence est enregistrée sur votre compte Agilotext (<code style="font-size:11px;">domainRecognition</code>).
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="agt-med-actions">
+      <!--
+        Webflow : Button, Type = button, ID = agilo-medical-save-btn
+        Ajoute tes classes design (identiques à save-mailNotif ou « Mettre à jour »).
+        Si aucune classe : ajoute agt-med-btn-fallback ci-dessous pour le style orange par défaut.
+      -->
+      <button type="button" id="agilo-medical-save-btn" class="agt-med-btn-fallback">
+        Sauvegarder
+      </button>
+      <p id="agilo-medical-domain-status" role="status" aria-live="polite"></p>
+    </div>
+  </div>
+</section>

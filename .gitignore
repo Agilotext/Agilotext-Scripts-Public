@@ -22,6 +22,7 @@ upload-to-github.js
 !CNOEC_Agiloshield_Docs/Front_END/*.html
 !docs/integration-titres-dossiers-1.05/webflow-exports/*.html
 !scripts/pages/dashboard/Code-sidebar-folders-embed.html
+!scripts/pages/profile/Code-user-send-domain-medical-embed.html
 
 # Embeds Webflow — pages statiques (iframe GitHub Pages ou jsDelivr ; sans build)
 !docs/index.html
