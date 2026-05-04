@@ -1280,10 +1280,7 @@
         );
         ioIdle.observe(obsTarget);
 
-        setTimeout(function () {
-          ioIdle.disconnect();
-          kickoff();
-        }, 2500);
+
       }
 
       if (document.readyState === "loading") {
