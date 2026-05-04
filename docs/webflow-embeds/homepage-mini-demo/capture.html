@@ -36,20 +36,21 @@
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
-      min-height: 100%;
+      min-height: auto;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       color: var(--agilo-text);
-      background: var(--shell-bg);
+      background: transparent !important;
       -webkit-font-smoothing: antialiased;
       text-align: start;
     }
 
     .shell {
-      padding: clamp(10px, 2vw, 18px);
-      min-height: 100vh;
+      padding: 10px 0;
+      min-height: auto;
       display: flex;
       align-items: flex-start;
       justify-content: center;
+      background: transparent !important;
     }
     .mac {
       width: 100%;
@@ -765,7 +766,7 @@
     /* Bouton démarrer la démo */
     .btn-start-demo-wrap {
       text-align: center;
-      padding: 10px 12px 14px;
+      padding: 6px 12px 10px;
     }
     .btn-start-demo {
       display: inline-flex;

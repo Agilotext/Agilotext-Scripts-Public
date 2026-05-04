@@ -33,18 +33,19 @@
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
-      min-height: 100%;
+      min-height: auto;
       font-family: var(--font);
       color: var(--text);
-      background: var(--bg-cream);
+      background: transparent !important;
       -webkit-font-smoothing: antialiased;
     }
     .shell {
-      padding: clamp(10px, 2vw, 18px);
-      min-height: 100vh;
+      padding: 10px 0;
+      min-height: auto;
       display: flex;
       align-items: flex-start;
       justify-content: center;
+      background: transparent !important;
     }
     .mac {
       width: 100%;
@@ -1132,7 +1133,7 @@
     /* Bouton démarrer la démo */
     .btn-start-demo-wrap {
       text-align: center;
-      padding: 10px 12px 14px;
+      padding: 6px 12px 10px;
     }
     .btn-start-demo {
       display: inline-flex;
