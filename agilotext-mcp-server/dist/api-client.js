@@ -247,7 +247,9 @@ export class AgilotextClient {
         return this.post("/getUserSendDefaults");
     }
     async setUserSendDefaults(defaults) {
-        return this.post("/setUserSendDefaults", defaults);
+        return this.post("/setUserSendDefaults", {
+            userSendDefaultsJson: JSON.stringify(defaults),
+        });
     }
     async getMailNotifyType() {
         return this.post("/getMailNotifyType");
