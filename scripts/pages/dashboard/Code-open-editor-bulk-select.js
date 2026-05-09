@@ -424,6 +424,24 @@
       setSelectAllState();
     }
 
+    let lastClickedCheckbox = null;
+
+    function getRowCheckboxes() {
+      return Array.from(document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`));
+    }
+
+    function applyRangeSelection(currentCheckbox) {
+      const all = getRowCheckboxes();
+      if (!lastClickedCheckbox || lastClickedCheckbox === currentCheckbox) return;
+      const start = all.indexOf(lastClickedCheckbox);
+      const end = all.indexOf(currentCheckbox);
+      if (start === -1 || end === -1) return;
+      const from = Math.min(start, end);
+      const to = Math.max(start, end);
+      const targetState = !!currentCheckbox.checked;
+      all.slice(from, to + 1).forEach(cb => { cb.checked = targetState; });
+    }
+
     function openEditorForRow(row) {
       const jobId = getJobIdFromRow(row);
       if (!jobId) return;
@@ -472,6 +490,15 @@
         const el = e.target.closest(SELECTORS.selectAll);
         if (!el) return;
         toggleAll(!!el.checked);
+      }, { capture:true });
+
+      // Shift+clic sur les checkboxes des lignes
+      document.addEventListener('click', (e) => {
+        const checkbox = e.target && e.target.closest && e.target.closest(`${SELECTORS.container} ${SELECTORS.row} .job-select`);
+        if (!checkbox) return;
+        if (e.shiftKey) applyRangeSelection(checkbox);
+        lastClickedCheckbox = checkbox;
+        setSelectAllState();
       }, { capture:true });
 
       // BULK DELETE (délégation + capture) - AVEC CONFIRMATION
