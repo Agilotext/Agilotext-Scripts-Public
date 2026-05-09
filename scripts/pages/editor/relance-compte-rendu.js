@@ -1087,6 +1087,7 @@
     if (__summaryLoaderObserver) return;
     const ensure = () => {
       if (!window.__agiloSummaryRegenInProgress) return;
+      if (window.__agiloSummaryRegenInProgress !== pickJobId()) return;
       const el = querySummaryEditor();
       if (!el) return;
       if (!el.querySelector('.summary-loading-indicator')) {
@@ -1254,7 +1255,7 @@
         // ✅ Anti-écran-blanc : un flag global + un MutationObserver maintiennent
         // le loader visible même si l'orchestrateur écrase summaryEditor (clearAll,
         // beforeload, polling pendant un fetch). Désactivé dès qu'on rend la main.
-        window.__agiloSummaryRegenInProgress = true;
+        window.__agiloSummaryRegenInProgress = jobId;
         showSummaryLoading();
         startSummaryLoaderPersistence();
         updateButtonVisibility();

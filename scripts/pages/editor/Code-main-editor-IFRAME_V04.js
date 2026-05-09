@@ -1270,6 +1270,102 @@
     return c;
   }
 
+  const UNDO_MAX = 20;
+  const _undoStack = [];
+  let _undoSaveTimer = null;
+
+  function getSegList(root) {
+    if (!root) return [];
+    return root.querySelectorAll(':scope > .ag-seg');
+  }
+  function getSegIndex(root, segEl) {
+    return Array.prototype.indexOf.call(getSegList(root), segEl);
+  }
+
+  function hideUndoToasts() {
+    const tRoot = byId('toaster') || byId('ag-toasts');
+    if (tRoot) tRoot.querySelectorAll('.toast--undo').forEach(n => n.remove());
+  }
+  function hideUndoBar() { hideUndoToasts(); }
+
+  function scheduleUndoExpiry() {
+    clearTimeout(_undoSaveTimer);
+    if (_undoStack.length === 0) return;
+    _undoSaveTimer = setTimeout(() => {
+      _undoStack.length = 0;
+      hideUndoBar();
+      if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+    }, 4500);
+  }
+
+  function showUndoBar() {
+    hideUndoToasts();
+    const entry = _undoStack[_undoStack.length - 1];
+    if (!entry) return;
+    const msg = entry.label || 'Action effectuée';
+    const t = toast(msg + ' — <button class="ag-undo-link" style="color:#fff;text-decoration:underline;background:none;border:none;padding:0;cursor:pointer;font:inherit;">Annuler</button>', 4000);
+    if (t) {
+      t.classList.add('toast--undo');
+      const btn = t.querySelector('.ag-undo-link');
+      if (btn) btn.onclick = (e) => { e.preventDefault(); applyUndo(); };
+    }
+  }
+
+  function pushUndo(entry) {
+    _undoStack.push(entry);
+    if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+    scheduleUndoExpiry();
+    showUndoBar();
+  }
+
+  function applyUndo() {
+    const entry = _undoStack.pop();
+    if (!entry) return;
+    if (entry.type === 'one') {
+      window._segments.splice(entry.indices[0], 0, entry.snapshots[0]);
+    } else if (entry.type === 'bulk') {
+      for (let k = entry.indices.length - 1; k >= 0; k--) {
+        window._segments.splice(entry.indices[k], 0, entry.snapshots[k]);
+      }
+    }
+    _activeSeg = -1;
+    renderSegments(window._segments);
+    hideUndoToasts();
+    toast(entry.label ? `Annulé : ${entry.label}` : 'Action annulée');
+    if (_undoStack.length === 0) {
+      clearTimeout(_undoSaveTimer);
+    }
+  }
+
+  function deleteSegEl(segEl) {
+    const root = editors.transcript; if (!root) return;
+    if (!window._segments || window._segments.length <= 1) {
+      toast('Impossible de supprimer le dernier segment.');
+      return;
+    }
+    const idx = getSegIndex(root, segEl);
+    if (idx < 0) return;
+    const snapshot = Object.assign({}, window._segments[idx]);
+    window._segments.splice(idx, 1);
+    segEl.remove();
+    if (_activeSeg === idx) _activeSeg = -1;
+    else if (_activeSeg > idx) _activeSeg--;
+    
+    pushUndo({ type: 'one', snapshots: [snapshot], indices: [idx], label: 'Segment supprimé' });
+  }
+
+  function buildDeleteBtn() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Supprimer ce segment (annulable 4 s)');
+    btn.setAttribute('aria-keyshortcuts', 'Control+Shift+Backspace');
+    btn.className = 'delete-seg-btn absolute';
+    btn.dataset.action = 'delete-seg';
+    btn.title = 'Supprimer ce segment — annulable pendant 4 s\nRaccourci : Ctrl+Maj+Retour Arrière';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="none"/><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>';
+    return btn;
+  }
+
   function setSpeakerStyle(el, name) {
     if (!el) return;
     el.style.color = getSpeakerColor(name);
@@ -1328,6 +1424,8 @@
 
         const rename = buildRenameBtn();
         header.appendChild(rename);
+        const delBtn = buildDeleteBtn();
+        header.appendChild(delBtn);
         art.appendChild(header);
       }
 
@@ -1370,6 +1468,16 @@
         });
       });
 
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured') return;
+        const btn = e.target.closest('[data-action="delete-seg"]');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        const segEl = btn.closest('.ag-seg');
+        if (!segEl) return;
+        deleteSegEl(segEl);
+      });
+
       root.addEventListener('dblclick', (e) => {
         if (__mode !== 'structured') return;
         const sp = e.target.closest('.speaker'); if (!sp) return;
@@ -1387,37 +1495,20 @@
         }
       });
 
-      // ✅ PROTECTION CRITIQUE : Empêcher la suppression accidentelle de segments entiers
       root.addEventListener('keydown', (e) => {
-        if (__mode !== 'structured') return;
-
-        const node = e.target.closest('.ag-seg__text');
-        if (!node) return;
-
-        const segEl = node.closest('.ag-seg');
-        if (!segEl) return;
-
-        // Vérifier si on appuie sur Backspace ou Delete
+        const node = e.target.closest('.ag-seg__text'); if (!node) return;
         if (e.key === 'Backspace' || e.key === 'Delete') {
           const textContent = (node.innerText || node.textContent || '').trim();
           const selection = window.getSelection();
           const range = selection?.rangeCount > 0 ? selection.getRangeAt(0) : null;
-
-          // Si le contenu est vide ou presque vide
           if (textContent.length <= 1) {
-            // Vérifier si on est au début ou à la fin du segment
             const isAtStart = range && range.startOffset === 0 && range.startContainer === node;
             const isAtEnd = range && range.endOffset === (node.textContent?.length || 0) && range.endContainer === node;
-
-            // Si on est au début avec Backspace ou à la fin avec Delete, empêcher la suppression
             if ((e.key === 'Backspace' && isAtStart) || (e.key === 'Delete' && isAtEnd)) {
               e.preventDefault();
               e.stopPropagation();
-
-              // S'assurer qu'il reste au moins un espace pour éviter la suppression du segment
               if (!textContent) {
                 node.textContent = ' ';
-                // Placer le curseur après l'espace
                 const newRange = document.createRange();
                 newRange.selectNodeContents(node);
                 newRange.collapse(false);
@@ -1429,6 +1520,37 @@
           }
         }
       });
+
+      if (!root.__agiloDocKeys) {
+        root.__agiloDocKeys = true;
+        document.addEventListener('keydown', (e) => {
+          const tr = editors.transcript;
+          if (!tr) return;
+          if (__mode !== 'structured') return;
+          if (e.key === 'Escape') return; // Géré ailleurs si besoin
+          
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Backspace') {
+            const segEl = e.target && e.target.closest && e.target.closest('.ag-seg');
+            if (!segEl || !tr.contains(segEl)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSegEl(segEl);
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && _undoStack.length > 0) {
+            // Vérifier si le focus est dans un champ texte
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.contentEditable === 'true')) {
+              // On laisse le navigateur gérer l'undo natif SI on est dans le texte du segment
+              // sauf si on veut vraiment notre propre undo global.
+              // Ici on laisse passer pour le texte.
+              return;
+            }
+            e.preventDefault();
+            applyUndo();
+          }
+        }, true);
+      }
 
       root.__bound = true;
     }
@@ -1852,11 +1974,29 @@
     }, 200);
   }
 
+  function isSummaryUiContextCurrent(context = {}) {
+    if (!editorRoot) return true;
+    const currentId = String(editorRoot.dataset.jobId || '').trim();
+    const ctxId = String(context.jobId || '').trim();
+    if (ctxId && currentId && ctxId !== currentId) return false;
+    if (context.seq !== undefined && context.seq !== null && context.seq !== __loadSeq) return false;
+    return true;
+  }
+
   /**
    * Afficher un indicateur de chargement dans l'onglet Compte-rendu
    * Utilise l'animation Lottie existante
    */
-  function showSummaryLoading() {
+  function showSummaryLoading(context = {}) {
+    const ctxJobId = String(context?.jobId || '').trim();
+    const ctxSeq = typeof context?.seq === 'number' ? String(context.seq) : '';
+    const force = context?.force === true;
+
+    if (!force) {
+      if (ctxJobId && __lastLoadJobId && ctxJobId !== __lastLoadJobId) return;
+      if (!isSummaryUiContextCurrent({ jobId: ctxJobId || __lastLoadJobId, seq: context?.seq ?? null })) return;
+    }
+
     const summaryEditor = editors.summary || pickSummaryEl();
     if (!summaryEditor) return;
 
@@ -1951,7 +2091,16 @@
    * Masquer l'indicateur de chargement
    * ⚠️ AMÉLIORATION : Cherche uniquement dans editors.summary pour éviter les conflits
    */
-  function hideSummaryLoading() {
+  function hideSummaryLoading(context = {}) {
+    const ctxJobId = String(context?.jobId || '').trim();
+    const ctxSeq = typeof context?.seq === 'number' ? String(context.seq) : '';
+    const force = context?.force === true;
+
+    if (!force) {
+      if (ctxJobId && __lastLoadJobId && ctxJobId !== __lastLoadJobId) return;
+      if (!isSummaryUiContextCurrent({ jobId: ctxJobId || __lastLoadJobId, seq: context?.seq ?? null })) return;
+    }
+
     const summaryEditor = editors.summary || pickSummaryEl();
     if (!summaryEditor) return;
 
@@ -2023,12 +2172,8 @@
     }
     if (sm) {
       sm.setAttribute('aria-busy', 'true');
-      // ⚠️ AMÉLIORATION : Ne pas réinitialiser si un loader Lottie est déjà présent
-      // (il sera géré par loadJob qui vérifiera le statut PENDING)
-      const existingLoader = sm.querySelector('.summary-loading-indicator');
-      if (!existingLoader) {
-        sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
-      }
+      hideSummaryLoading({ force: true });
+      sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
     }
 
     const my = __wdToken;
@@ -2053,6 +2198,9 @@
     __wdToken++;
 
     __lastLoadJobId = id;
+    if (editorRoot) {
+      editorRoot.dataset.jobId = id;
+    }
 
     if (!SOFT_CANCEL) { try { __activeFetchCtl?.abort?.(); } catch { } }
     __activeFetchCtl = new AbortController();
@@ -2072,6 +2220,8 @@
     }
 
     const seq = computeSeq();
+    const showSummaryLoadingScoped = () => showSummaryLoading({ jobId: id, seq });
+    const hideSummaryLoadingScoped = (opts = {}) => hideSummaryLoading({ jobId: id, seq, ...opts });
 
     await waitFrames(1);
 
@@ -2088,7 +2238,7 @@
       __wdToken++;
       editors.transcript?.removeAttribute('aria-busy');
       editors.summary?.removeAttribute('aria-busy');
-      hideSummaryLoading();
+      hideSummaryLoadingScoped();
       return;
     }
 
@@ -2100,7 +2250,7 @@
       toast('Authentification manquante');
       editors.transcript?.removeAttribute('aria-busy');
       editors.summary?.removeAttribute('aria-busy');
-      hideSummaryLoading();
+      hideSummaryLoadingScoped({ force: true });
       return;
     }
     try { window.__agiloLoadPendingToken = ''; } catch { }
@@ -2115,7 +2265,7 @@
         __wdToken++;
         editors.transcript?.removeAttribute('aria-busy');
         editors.summary?.removeAttribute('aria-busy');
-        hideSummaryLoading();
+        hideSummaryLoadingScoped();
         return;
       }
 
@@ -2198,7 +2348,7 @@
               editors.summary.style.cursor = '';
               editors.summary.classList.remove('ag-summary-readonly');
             }
-            showSummaryLoading();
+            showSummaryLoadingScoped();
           }
         } catch (e) {
           if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus:', e);
@@ -2212,27 +2362,28 @@
         if (isBlankHtml(cleaned)) {
           // Si le statut est PENDING, garder le loader affiché pendant le polling
           if (!isSummaryPending && editors.summary) {
-            showSummaryLoading(); // Afficher le loader si pas déjà affiché
+            showSummaryLoadingScoped(); // Afficher le loader si pas déjà affiché
           }
 
           const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
           if (polled.ok) {
             rawHtml = polled.html || '';  // ✅ polled.html est maintenant brut
             cleaned = sanitizeHtml(rawHtml);  // Pour vérifier si vide
-            hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
+            hideSummaryLoadingScoped(); // Cacher le loader une fois le compte-rendu prêt
           } else if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
             // Si toujours en cours après polling, garder le loader affiché
             if (editors.summary && !editors.summary.querySelector('.summary-loading-indicator')) {
-              showSummaryLoading();
+              showSummaryLoadingScoped();
             }
           } else {
             // ⚠️ AMÉLIORATION : Cacher le loader en cas d'erreur définitive
-            hideSummaryLoading();
+            hideSummaryLoadingScoped();
           }
         }
         if (!isBlankHtml(cleaned)) {
+          if (isStale(seq) || !isSummaryUiContextCurrent({ jobId: id, seq })) return;
           summaryEmpty = false;
-          hideSummaryLoading(); // S'assurer que le loader est caché
+          hideSummaryLoadingScoped(); // S'assurer que le loader est caché
           if (editors.summary) {
             // ✅ ISOLATION : Passer le HTML BRUT pour permettre la détection des styles globaux
             injectSummaryContent(rawHtml);
@@ -2278,16 +2429,17 @@
               }
             }
             if (isSummaryPending || looksPending) {
-              showSummaryLoading();
+              showSummaryLoadingScoped();
             }
           } else if (isSummaryPending && editors.summary) {
-            showSummaryLoading(); // S'assurer que le loader est affiché
+            showSummaryLoadingScoped(); // S'assurer que le loader est affiché
           }
 
           const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
           if (polled.ok && !isBlankHtml(sanitizeHtml(polled.html || ''))) {
+            if (isStale(seq) || !isSummaryUiContextCurrent({ jobId: id, seq })) return;
             summaryEmpty = false;
-            hideSummaryLoading(); // Cacher le loader une fois le compte-rendu prêt
+            hideSummaryLoadingScoped(); // Cacher le loader une fois le compte-rendu prêt
             if (editors.summary) {
               // ✅ ISOLATION : polled.html est maintenant brut (non sanitizé)
               injectSummaryContent(polled.html);
@@ -2301,11 +2453,11 @@
             // Si toujours en cours, garder le loader, sinon afficher l'erreur
             if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
               if (!editors.summary.querySelector('.summary-loading-indicator')) {
-                showSummaryLoading();
+                showSummaryLoadingScoped();
               }
             } else {
               // ⚠️ AMÉLIORATION : Toujours cacher le loader en cas d'erreur définitive
-              hideSummaryLoading();
+              hideSummaryLoadingScoped();
               const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
               editors.summary.innerHTML = '';
               // Réinitialiser les attributs de lecture seule en cas d'erreur
@@ -2318,7 +2470,7 @@
             }
           }
         } else if (editors.summary) {
-          hideSummaryLoading(); // Cacher le loader en cas d'erreur
+          hideSummaryLoadingScoped(); // Cacher le loader en cas d'erreur
           const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
           editors.summary.innerHTML = '';
           editors.summary.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, '') || ''));
@@ -2331,7 +2483,7 @@
       }
     } catch (e) {
       if (e?.name === 'AbortError') return;
-      hideSummaryLoading(); // S'assurer que le loader est caché en cas d'erreur
+      hideSummaryLoadingScoped({ force: true }); // S'assurer que le loader est caché en cas d'erreur
       const errBox = renderAlert("Erreur de chargement.", e?.message || '');
       if (editors.transcript) editors.transcript.replaceChildren(errBox.cloneNode(true));
       if (editors.summary) editors.summary.replaceChildren(errBox.cloneNode(true));
@@ -2355,7 +2507,7 @@
 
       // S'assurer que le loader est toujours caché à la fin (sauf si vraiment en cours)
       if (!isSummaryPending) {
-        hideSummaryLoading();
+        hideSummaryLoadingScoped();
       }
     }
   }

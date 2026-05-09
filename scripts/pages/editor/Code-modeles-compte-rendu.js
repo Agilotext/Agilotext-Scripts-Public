@@ -527,7 +527,7 @@
         // ✅ Anti-écran-blanc : flag global piloté par relance-compte-rendu.js
         // (un MutationObserver y réinjecte le loader si l'orchestrateur écrase
         //  summaryEditor pendant la régénération).
-        window.__agiloSummaryRegenInProgress = true;
+        window.__agiloSummaryRegenInProgress = jobId;
 
         const ui = showSummaryRegenLoader(modelName);
         const H = window.__agiloSummaryRegenHelpers;

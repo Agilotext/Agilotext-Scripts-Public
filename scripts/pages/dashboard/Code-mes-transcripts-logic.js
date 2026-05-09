@@ -4,15 +4,29 @@
    - Bulk Actions Module (v2.4.0)
    - v1.06: receiveSummary pour download_wrapper-link_summary_* (compte rendu)
    - v1.06.1: ne pas forcer display:inline-block sur les liens (laisser le flex Webflow)
+   - v1.08: liste blanche receiveText ; verrou téléchargements vides ; tooltips État ;
+            icônes SVG alignées editor ; data-creation-date ; aria-expanded fermé au rendu.
    ============================================================================= */
 
-(function() {
+(function () {
   'use strict';
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
+
+  (function injectAgiloMesTranscriptsLockStyles() {
+    if (document.getElementById('agilo-mes-transcripts-lock-style')) return;
+    const style = document.createElement('style');
+    style.id = 'agilo-mes-transcripts-lock-style';
+    style.textContent =
+      '#jobs-container .custom-element.options.agilo-download-locked{' +
+      'pointer-events:none;opacity:.5;cursor:not-allowed;}' +
+      '#jobs-container .custom-element.options.agilo-download-locked .download-link,' +
+      '#jobs-container .custom-element.options.agilo-download-locked svg.options{cursor:not-allowed;}';
+    document.head.appendChild(style);
+  })();
 
   // ───────────────────────────────────────────────────────────────────────────
   // PART 1: RENDERING & INLINE RENAME (Original Nickel v1.1.4 Logic)
@@ -27,7 +41,7 @@
   }
 
   function displayJobTitle(job) {
-    return (job.jobTitle || job.filename || "Transcript").split('.')[0];
+    return (job.jobTitle || job.filename || 'Transcript').split('.')[0];
   }
 
   function convertDateStringToDate(ds) {
@@ -37,44 +51,64 @@
     return new Date(`${yr}-${mon}-${day}T${t}`);
   }
 
+  /** Liste blanche : transcript textuel considéré disponible api receiveText ; pas de sous-chaîne ERROR. */
+  const TRANSCRIPT_TEXT_DOWNLOAD_STATUSES = new Set([
+    'READY',
+    'READY_TRANSCRIPT',
+    'READY_TEXT',
+    'READY_SUMMARY_PENDING',
+    'READY_SUMMARY_READY'
+  ]);
+
+  function isTranscriptTextDownloadAllowed(status) {
+    const st = String(status || '').toUpperCase();
+    if (!st || st.includes('ERROR')) return false;
+    return TRANSCRIPT_TEXT_DOWNLOAD_STATUSES.has(st);
+  }
+
   async function renameOnServer({ jobId, userEmail, token, edition, jobTitle, originalFilename }) {
     // FIX 20/20 : Extraction de l'extension originale pour éviter "extensions do not match"
     const parts = originalFilename.split('.');
     const ext = parts.length > 1 ? parts.pop() : '';
     let finalTitle = jobTitle;
     if (ext && !jobTitle.toLowerCase().endsWith('.' + ext.toLowerCase())) {
-        finalTitle = `${jobTitle}.${ext}`;
+      finalTitle = `${jobTitle}.${ext}`;
     }
-    
-    const body = new URLSearchParams({ 
-      username: userEmail, 
-      token, 
-      edition, 
-      jobId: String(jobId), 
-      jobTitle: finalTitle 
+
+    const body = new URLSearchParams({
+      username: userEmail,
+      token,
+      edition,
+      jobId: String(jobId),
+      jobTitle: finalTitle
     });
-    
+
     try {
       const r = await fetch(`${API_BASE}/renameTranscriptTitle`, {
-        method: "POST",
-        headers: { "Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString()
       });
       const data = await r.json();
-      if (data.status === "OK") return { ok: true };
-      return { ok: false, error: data.message || data.errorMessage || data.error || "Erreur inconnue" };
-    } catch (e) { return { ok: false, error: e?.message || "Erreur réseau" }; }
+      if (data.status === 'OK') return { ok: true };
+      return {
+        ok: false,
+        error: data.message || data.errorMessage || data.error || 'Erreur inconnue'
+      };
+    } catch (e) {
+      return { ok: false, error: e?.message || 'Erreur réseau' };
+    }
   }
 
   function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
     if (!anchorEl || !buttonEl) return;
-    buttonEl.addEventListener("click", () => {
+    buttonEl.addEventListener('click', () => {
       if (anchorEl.__editing) return;
       anchorEl.__editing = true;
       const currentTitle = displayJobTitle(job);
-      const input = document.createElement("input");
-      input.className = "file-name-input";
-      input.style.width = "100%";
+      const input = document.createElement('input');
+      input.className = 'file-name-input';
+      input.style.width = '100%';
       input.value = currentTitle;
       anchorEl.style.display = 'none';
       anchorEl.parentNode.insertBefore(input, anchorEl);
@@ -84,24 +118,34 @@
         const next = input.value.trim();
         if (next && next !== currentTitle) {
           input.disabled = true;
-          const res = await renameOnServer({ 
-             jobId: job.jobid, userEmail, token, edition, 
-             jobTitle: next, 
-             originalFilename: job.filename 
+          const res = await renameOnServer({
+            jobId: job.jobid,
+            userEmail,
+            token,
+            edition,
+            jobTitle: next,
+            originalFilename: job.filename
           });
-          if (res.ok) { anchorEl.textContent = next; }
-          else { alert(`Renommage impossible : ${res.error}`); }
+          if (res.ok) {
+            anchorEl.textContent = next;
+          } else {
+            alert(`Renommage impossible : ${res.error}`);
+          }
         }
         input.remove();
         anchorEl.style.display = '';
         anchorEl.__editing = false;
       };
 
-      input.addEventListener("keydown", (e) => { 
-        if (e.key === "Enter") save(); 
-        if (e.key === "Escape") { input.remove(); anchorEl.style.display = ''; anchorEl.__editing = false; } 
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') save();
+        if (e.key === 'Escape') {
+          input.remove();
+          anchorEl.style.display = '';
+          anchorEl.__editing = false;
+        }
       });
-      input.addEventListener("blur", () => save());
+      input.addEventListener('blur', () => save());
     });
   }
 
@@ -109,17 +153,199 @@
     return String(transcriptStatus || '').toUpperCase() === 'READY_SUMMARY_READY';
   }
 
-  function updateIconVisibility(clone, status) {
-    const st = (status || '').toUpperCase();
-    const icons = {
-      prog: clone.querySelector('.icon-inprogress'),
-      err: clone.querySelector('.icon-error'),
-      ok: clone.querySelector('.icon-ready')
+  function isRestrictedFreeFormat(fmt) {
+    const f = String(fmt || '').toLowerCase();
+    return f === 'doc' || f === 'pdf';
+  }
+
+  function showProUpgradeForLockedFormat() {
+    if (window.AgiloGate?.showUpgrade) {
+      window.AgiloGate.showUpgrade('pro', 'Formats DOC/PDF');
+      return;
+    }
+    window.alert('Format réservé aux offres Pro et Business.');
+  }
+
+  function lockFormatForFree(link, msg) {
+    if (!link) return;
+    link.setAttribute('href', '#');
+    link.removeAttribute('target');
+    link.setAttribute('title', msg);
+    link.setAttribute('aria-disabled', 'true');
+    if (!link.__agiloPlanLockedClick) {
+      link.__agiloPlanLockedClick = true;
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        showProUpgradeForLockedFormat();
+      });
+    }
+  }
+
+  function getStatusTooltipFrench(status, job) {
+    const code = String(status || '').trim() || '—';
+    const up = code.toUpperCase();
+    let line = '';
+
+    switch (up) {
+      case 'PENDING':
+        line = 'En attente de traitement';
+        break;
+      case 'IN_PROGRESS':
+      case 'QUEUED':
+      case 'UPLOADING':
+        line = 'Transcription en cours de traitement';
+        break;
+      case 'READY_SUMMARY_PENDING':
+        line = 'Transcription prête ; compte rendu en cours de génération';
+        break;
+      case 'READY_SUMMARY_READY':
+        line = 'Transcription et compte rendu prêts';
+        break;
+      case 'READY_SUMMARY_ON_ERROR':
+        line = 'La génération du compte rendu a échoué';
+        break;
+      case 'ERROR_SUMMARY_ON_ERROR':
+        line = 'La génération du compte rendu a échoué';
+        break;
+      case 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS':
+        line = "Aucun compte rendu : il n’a pas été demandé pour cette transcription";
+        break;
+      case 'ERROR_TOO_MANY_LANGUAGES_CODE':
+        line = 'Erreur : trop de langues détectées dans l’audio';
+        break;
+      case 'ON_ERROR':
+        line = 'Le serveur a signalé une erreur';
+        break;
+      case 'UNKNOWN':
+        line = 'État inconnu';
+        break;
+      case 'READY':
+      case 'READY_TRANSCRIPT':
+      case 'READY_TEXT':
+        line = 'Transcription prête (téléchargement disponible)';
+        break;
+      default:
+        if (up.includes('ERROR')) line = 'Une erreur est survenue pendant le traitement';
+        else if (TRANSCRIPT_TEXT_DOWNLOAD_STATUSES.has(up)) line = 'Transcription prête (téléchargement disponible)';
+        else line = 'Traitement en cours';
+    }
+
+    const userMsg =
+      job && (job.userErrorMessage || job.userMessage || '').toString().trim();
+    const errMsg = job && (job.errorMessage || job.exceptionMessage || '').toString().trim();
+    if (up.includes('ERROR') || up === 'READY_SUMMARY_ON_ERROR') {
+      if (userMsg) line += ` — ${userMsg}`;
+      else if (errMsg) line += ` — ${errMsg}`;
+    }
+
+    return `${line} (statut technique : ${code})`;
+  }
+
+  function buildStatusAlertMessage(job) {
+    const detail = getStatusTooltipFrench(job?.transcriptStatus, job);
+    const title = displayJobTitle(job);
+    return `État de la transcription\n\n${title}\n\n${detail}`;
+  }
+
+  function setupStatusAlert(row, job) {
+    const stateWrap =
+      row.querySelector('.custom-element.state') ||
+      row.querySelector('.custom-element.select .state') ||
+      row.querySelector('.state');
+    if (!stateWrap) return;
+
+    const clickHint = 'Cliquer pour voir le detail du statut';
+    const detail = getStatusTooltipFrench(job?.transcriptStatus, job);
+
+    stateWrap.style.cursor = 'pointer';
+    stateWrap.setAttribute('role', 'button');
+    stateWrap.setAttribute('tabindex', '0');
+    stateWrap.setAttribute('aria-label', `${detail}. ${clickHint}`);
+    stateWrap.setAttribute('title', `${detail} — ${clickHint}`);
+
+    const showAlert = () => {
+      window.alert(buildStatusAlertMessage(job));
     };
-    Object.values(icons).forEach(i => { if (i) i.style.display = 'none'; });
-    if (['PENDING', 'IN_PROGRESS', 'READY_SUMMARY_PENDING'].includes(st)) { if (icons.prog) icons.prog.style.display = 'block'; }
-    else if (st.includes('ERROR')) { if (icons.err) icons.err.style.display = 'block'; }
-    else if (st.includes('READY')) { if (icons.ok) icons.ok.style.display = 'block'; }
+
+    stateWrap.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showAlert();
+    });
+
+    stateWrap.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      event.stopPropagation();
+      showAlert();
+    });
+  }
+
+  /**
+   * Icônes alignées avec scripts/pages/editor/Code-ed-header.js ; support div fallback + SVG Webflow.
+   */
+  function updateIconVisibility(clone, status, job) {
+    const stateWrap = clone.querySelector('.custom-element.state');
+    const st = (status || '').toUpperCase();
+    const tip = job ? getStatusTooltipFrench(job.transcriptStatus, job) : '';
+
+    const root = stateWrap || clone;
+
+    root
+      .querySelectorAll(
+        '.icon-inprogress, .icon-error, .icon-ready, .icon-ready_summary_pending,' +
+          ' .icon-ready_summary_ready, .icon-ready_summary_on_error,' +
+          ' svg[class^="icon-"]'
+      )
+      .forEach((node) => {
+        node.style.display = 'none';
+        node.removeAttribute('title');
+        node.removeAttribute('role');
+      });
+
+    const map = {
+      '.icon-error': ['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE'],
+      '.icon-inprogress': ['PENDING', 'IN_PROGRESS', 'QUEUED', 'UPLOADING'],
+      '.icon-ready_summary_pending': ['READY_SUMMARY_PENDING'],
+      '.icon-ready_summary_ready': ['READY_SUMMARY_READY'],
+      '.icon-ready_summary_on_error': ['READY_SUMMARY_ON_ERROR'],
+      '.icon-ready': ['READY', 'READY_TRANSCRIPT', 'READY_TEXT']
+    };
+
+    function show(sel) {
+      const n = root.querySelector(sel);
+      if (n) {
+        n.style.display = 'block';
+        if (tip) {
+          n.setAttribute('title', tip);
+          n.setAttribute('role', 'img');
+        }
+        return n;
+      }
+      return null;
+    }
+
+    let shown = null;
+    for (const sel in map) {
+      if (map[sel].includes(st)) {
+        shown = show(sel);
+        break;
+      }
+    }
+
+    if (!shown) {
+      if (st.includes('ERROR')) shown = show('.icon-error');
+      else if (['PENDING', 'IN_PROGRESS', 'QUEUED', 'UPLOADING'].includes(st))
+        shown = show('.icon-inprogress');
+      else if (isTranscriptTextDownloadAllowed(st)) shown = show('.icon-ready');
+      else shown = show('.icon-ready');
+    }
+
+    if (stateWrap && tip) {
+      stateWrap.setAttribute('aria-label', tip);
+      stateWrap.setAttribute('title', tip);
+    }
   }
 
   const FALLBACK_ROW_HTML = `
@@ -152,6 +378,38 @@
     </div>
   `;
 
+  function lockDownloadStack(row, lock) {
+    const optionsEl = row.querySelector('.custom-element.options');
+    const panel = row.querySelector('.download_link-options');
+    const dlBtn = row.querySelector('.download-link');
+    const dotSvg = row.querySelector('svg.icon-1x1-small.options');
+
+    if (!optionsEl) return;
+
+    const lockedTitle = 'Aucun téléchargement disponible pour ce traitement';
+
+    if (lock) {
+      optionsEl.setAttribute('data-agilo-download-locked', '1');
+      optionsEl.classList.add('agilo-download-locked');
+      if (panel) {
+        panel.style.display = 'none';
+      }
+      if (dlBtn) {
+        dlBtn.setAttribute('aria-expanded', 'false');
+        dlBtn.setAttribute('title', lockedTitle);
+      }
+      if (dotSvg) dotSvg.setAttribute('title', lockedTitle);
+    } else {
+      optionsEl.removeAttribute('data-agilo-download-locked');
+      optionsEl.classList.remove('agilo-download-locked');
+      if (dlBtn && dlBtn.getAttribute('title') === lockedTitle) {
+        dlBtn.removeAttribute('title');
+      }
+      if (dotSvg && dotSvg.getAttribute('title') === lockedTitle) dotSvg.removeAttribute('title');
+      if (dlBtn && !dlBtn.hasAttribute('aria-expanded')) dlBtn.setAttribute('aria-expanded', 'false');
+    }
+  }
+
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
     let row;
     let clone;
@@ -173,10 +431,20 @@
     if (!row) return;
 
     row.setAttribute('data-job-id', job.jobid);
-    updateIconVisibility(clone, job.transcriptStatus);
+    row.setAttribute('data-creation-date', job.dtCreation || '');
+
+    updateIconVisibility(clone, job.transcriptStatus, job);
+    setupStatusAlert(row, job);
 
     const creation = clone.querySelector('.creation-date');
-    if (creation) creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    if (creation)
+      creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString('fr-FR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
 
     const fileNameAnchor = clone.querySelector('.file-name');
     const renameButton = clone.querySelector('.rename-btn');
@@ -185,21 +453,30 @@
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
       // ✅ AJOUT : Tooltip affichant le nom de fichier original au survol
-      fileNameAnchor.title = "Fichier original : " + (job.filename || "Inconnu");
-      const tier = location.pathname.match(/^\/app\/([^\/]+)/)?.[1] || "business";
+      fileNameAnchor.title = 'Fichier original : ' + (job.filename || 'Inconnu');
+      const tier = location.pathname.match(/^\/app\/([^/]+)/)?.[1] || 'business';
       fileNameAnchor.href = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
       if (openLink) openLink.href = fileNameAnchor.href;
     }
     setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
 
-    // Downloads logic v1.1.4
+    // Downloads logic v1.1.4+
+    let hasAnyTranscriptLink = false;
+    let hasAnySummaryLink = false;
     const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
-    formats.forEach(fmt => {
+    const isFree = String(edition || '').toLowerCase() === 'free';
+    formats.forEach((fmt) => {
       const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
-      if (aT && job.transcriptStatus && job.transcriptStatus.includes('READY')) {
-        aT.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
-        aT.target = "_blank";
+      if (aT && isFree && isRestrictedFreeFormat(fmt)) {
+        lockFormatForFree(aT, 'Réservé aux offres Pro et Business');
         aT.style.removeProperty('display');
+      } else if (aT && isTranscriptTextDownloadAllowed(job.transcriptStatus)) {
+        aT.href = `${API_BASE}/receiveText?jobId=${job.jobid}&username=${encodeURIComponent(
+          userEmail
+        )}&token=${encodeURIComponent(token)}&format=${fmt}&edition=${encodeURIComponent(edition)}`;
+        aT.target = '_blank';
+        aT.style.removeProperty('display');
+        hasAnyTranscriptLink = true;
       } else if (aT) {
         aT.style.display = 'none';
       }
@@ -214,14 +491,31 @@
     ];
     summaryFormats.forEach(({ slot, apiFormat }) => {
       const aS = clone.querySelector(`.download_wrapper-link_summary_${slot}`);
-      if (aS && isSummaryReadyForDownload(job.transcriptStatus)) {
-        aS.href = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&format=${apiFormat}&edition=${encodeURIComponent(edition)}`;
+      if (aS && isFree && isRestrictedFreeFormat(slot)) {
+        lockFormatForFree(aS, 'Réservé aux offres Pro et Business');
+        aS.style.removeProperty('display');
+      } else if (aS && isSummaryReadyForDownload(job.transcriptStatus)) {
+        aS.href = `${API_BASE}/receiveSummary?jobId=${job.jobid}&username=${encodeURIComponent(
+          userEmail
+        )}&token=${encodeURIComponent(token)}&format=${apiFormat}&edition=${encodeURIComponent(
+          edition
+        )}`;
         aS.target = '_blank';
         aS.style.removeProperty('display');
+        hasAnySummaryLink = true;
       } else if (aS) {
         aS.style.display = 'none';
       }
     });
+
+    const hasAnyDownloadable = hasAnyTranscriptLink || hasAnySummaryLink;
+    lockDownloadStack(row, !hasAnyDownloadable);
+
+    const optsBox = row.querySelector('.custom-element.options');
+    const dlBtnEarly = row.querySelector('.download-link');
+    if (dlBtnEarly && optsBox && !optsBox.classList.contains('agilo-download-locked')) {
+      dlBtnEarly.setAttribute('aria-expanded', 'false');
+    }
 
     container.appendChild(row);
   }
@@ -230,27 +524,34 @@
   // PART 2: BULK ACTIONS MODULE (The v2.4.0 logic provided by user)
   // ───────────────────────────────────────────────────────────────────────────
   // [Note: Simplified integration of the Bulk Module for the file]
-  
+
   function initializeBulkActions() {
-      if (window.AgilotextBulk && typeof window.AgilotextBulk.init === 'function') {
-          window.AgilotextBulk.init();
-      }
+    if (window.AgilotextBulk && typeof window.AgilotextBulk.init === 'function') {
+      window.AgilotextBulk.init();
+    }
   }
 
   async function mainScriptExecution(token) {
     const emailInput = document.querySelector('[name="memberEmail"]');
-    const userEmail = (emailInput?.value || emailInput?.getAttribute('src') || emailInput?.textContent || "").trim();
+    const userEmail = (
+      emailInput?.value ||
+      emailInput?.getAttribute('src') ||
+      emailInput?.textContent ||
+      ''
+    ).trim();
     let edition = getEdition();
 
     if (!userEmail) {
-      console.warn("[Agilo] Email utilisateur non trouvé dans le DOM.");
+      console.warn('[Agilo] Email utilisateur non trouvé dans le DOM.');
       return;
     }
-    
+
     async function getJobs(ed) {
       const urlParams = new URLSearchParams(window.location.search);
       const folderId = urlParams.get('folderId');
-      let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=2000&offset=0`;
+      let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(
+        userEmail
+      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=2000&offset=0`;
       if (folderId) {
         url += `&folderId=${encodeURIComponent(folderId)}`;
       }
@@ -260,22 +561,22 @@
 
     try {
       let data = await getJobs(edition);
-      
+
       // FALLBACK LOGIQUE : Si vide en "free", on regarde en "ent" (Business)
       if ((!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) && edition === 'free') {
         console.log("[Agilo] Aucun job en 'free', tentative de secours en 'ent' pour :", userEmail);
         const fallbackData = await getJobs('ent');
-        if (fallbackData.status === "OK" && fallbackData.jobsInfoDtos?.length > 0) {
+        if (fallbackData.status === 'OK' && fallbackData.jobsInfoDtos?.length > 0) {
           data = fallbackData;
-          edition = 'ent'; 
+          edition = 'ent';
         }
       }
 
-      if (data.status !== "OK") return;
+      if (data.status !== 'OK') return;
       const container = document.getElementById('jobs-container');
       const templateEl = document.getElementById('template-row');
       if (!container || !templateEl) return;
-      
+
       container.innerHTML = '';
 
       if (!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) {
@@ -289,11 +590,16 @@
         return;
       }
 
-      data.jobsInfoDtos.forEach(job => buildJobRow({ 
-          job, userEmail, token, edition, 
-          template: templateEl.content, 
-          container 
-      }));
+      data.jobsInfoDtos.forEach((job) =>
+        buildJobRow({
+          job,
+          userEmail,
+          token,
+          edition,
+          template: templateEl.content,
+          container
+        })
+      );
       initializeBulkActions();
     } catch (err) {
       console.error('[Agilo] Execution error:', err);
@@ -301,10 +607,9 @@
   }
 
   const tmr = setInterval(() => {
-    if (typeof globalToken !== 'undefined' && globalToken) { 
-        clearInterval(tmr); 
-        mainScriptExecution(globalToken); 
+    if (typeof globalToken !== 'undefined' && globalToken) {
+      clearInterval(tmr);
+      mainScriptExecution(globalToken);
     }
   }, 250);
-
 })();

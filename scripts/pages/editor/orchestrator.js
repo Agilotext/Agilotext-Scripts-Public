@@ -197,6 +197,7 @@
   // Avant ouverture des téléchargements API : le href contient un token figé (souvent périmé si onglet ouvert longtemps).
   // On force toujours un getToken frais puis on reconstruit l’URL (évite Invalid Token sur receiveText / receiveSummary).
   const AGILO_API_V1 = 'https://api.agilotext.com/api/v1';
+  const FREE_RESTRICTED_FORMATS = new Set(['doc', 'pdf']);
 
   const downloadClickHandler = (e) => {
     const a = e.target.closest?.(
@@ -217,6 +218,21 @@
     ).trim();
     const edition = orch.credentials.edition || getEdition();
     const targetWin = a.getAttribute('target') || '_blank';
+
+    try {
+      const initialUrl = new URL(href, location.href);
+      const fmt = String(initialUrl.searchParams.get('format') || '').toLowerCase();
+      if (normEdition(edition) === 'free' && FREE_RESTRICTED_FORMATS.has(fmt)) {
+        if (window.AgiloGate?.showUpgrade) {
+          window.AgiloGate.showUpgrade('pro', 'Formats DOC/PDF');
+        } else {
+          window.alert('Format réservé aux offres Pro et Business.');
+        }
+        return;
+      }
+    } catch (_) {
+      // no-op: fallback to legacy flow below
+    }
 
     const openWithHref = (url) => {
       if (targetWin === '_blank') window.open(url, '_blank', 'noopener,noreferrer');

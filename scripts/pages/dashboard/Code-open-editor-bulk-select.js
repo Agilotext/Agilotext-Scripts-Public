@@ -1,4 +1,5 @@
 // Agilotext — Mes transcripts : bulk export / webhook / suppression (+ confirm modale)
+// v1.08 — Suit la branche 1.08 Mes transcripts (#jobs-container, lignes data-job-id).
 // Source: extrait de l’embed Webflow ; à servir via jsDelivr.
 //
 // Si un ANCIEN embed inline a déjà défini AgilotextBulk, tout le bloc ci‑dessous est ignoré
@@ -27,7 +28,7 @@
     async function agiloMesTranscriptsRowTrashFallbackClick(ev) {
       if (window.__agiloRowTrashHandledByBulk) return;
 
-      const btn = ev.target && ev.target.closest && ev.target.closest('.delete-job-button_to-confirm');
+      const btn = ev.target && ev.target.closest && (ev.target.closest('.delete-job-button_to-confirm') || ev.target.closest('.delete-job-button'));
       if (!btn || btn.id === 'bulkDeleteBtn') return;
 
       const row = btn.closest('.wrapper-content_item-row[data-job-id]');
@@ -524,7 +525,7 @@
 
       // Suppression ligne (poubelle Webflow `.delete-job-button_to-confirm`) — même modale que le bulk `#bulkDeleteBtn`
       document.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.delete-job-button_to-confirm');
+        const btn = e.target.closest('.delete-job-button_to-confirm') || e.target.closest('.delete-job-button');
         if (!btn) return;
         const row = getRow(btn);
         if (!row || !getJobIdFromRow(row)) return;
