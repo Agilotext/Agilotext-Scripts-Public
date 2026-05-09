@@ -185,6 +185,9 @@
   function getStatusTooltipFrench(status, job) {
     const code = String(status || '').trim() || '—';
     const up = code.toUpperCase();
+    const userMsg =
+      job && (job.userErrorMessage || job.userMessage || '').toString().trim();
+    const errMsg = job && (job.errorMessage || job.exceptionMessage || '').toString().trim();
     let line = '';
 
     switch (up) {
@@ -203,10 +206,10 @@
         line = 'Transcription et compte rendu prêts';
         break;
       case 'READY_SUMMARY_ON_ERROR':
-        line = 'La génération du compte rendu a échoué';
+        line = 'Le compte rendu n’a pas pu être généré';
         break;
       case 'ERROR_SUMMARY_ON_ERROR':
-        line = 'La génération du compte rendu a échoué';
+        line = 'Le compte rendu n’a pas pu être généré';
         break;
       case 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS':
         line = "Aucun compte rendu : il n’a pas été demandé pour cette transcription";
@@ -215,7 +218,7 @@
         line = 'Erreur : trop de langues détectées dans l’audio';
         break;
       case 'ON_ERROR':
-        line = 'Le serveur a signalé une erreur';
+        line = 'Le traitement n’a pas pu aboutir';
         break;
       case 'UNKNOWN':
         line = 'État inconnu';
@@ -231,15 +234,12 @@
         else line = 'Traitement en cours';
     }
 
-    const userMsg =
-      job && (job.userErrorMessage || job.userMessage || '').toString().trim();
-    const errMsg = job && (job.errorMessage || job.exceptionMessage || '').toString().trim();
     if (up.includes('ERROR') || up === 'READY_SUMMARY_ON_ERROR') {
       if (userMsg) line += ` — ${userMsg}`;
       else if (errMsg) line += ` — ${errMsg}`;
     }
 
-    return `${line} (statut technique : ${code})`;
+    return line;
   }
 
   function buildStatusAlertMessage(job) {
@@ -255,7 +255,7 @@
       row.querySelector('.state');
     if (!stateWrap) return;
 
-    const clickHint = 'Cliquer pour voir le detail du statut';
+    const clickHint = 'Cliquer pour voir le détail du statut';
     const detail = getStatusTooltipFrench(job?.transcriptStatus, job);
 
     stateWrap.style.cursor = 'pointer';
