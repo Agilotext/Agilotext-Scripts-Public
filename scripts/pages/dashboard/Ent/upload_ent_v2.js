@@ -225,6 +225,15 @@ document.addEventListener('DOMContentLoaded', function () {
     youtubeNotFound:     document.getElementById('form_error')
   };
 
+  var defaultErrorBox = errorMessageDivs['default'];
+  var defaultErrorTextNode = null;
+  if (defaultErrorBox && defaultErrorBox.children) {
+    defaultErrorTextNode = Array.prototype.find.call(defaultErrorBox.children, function (el) {
+      return !(el.classList && el.classList.contains('form-error_icon'));
+    }) || null;
+  }
+  var defaultErrorHtml = defaultErrorTextNode ? defaultErrorTextNode.innerHTML : '';
+
   /* ─── Helpers UI ───────────────────────────────────────────── */
   function hideAllErrors() {
     Object.keys(errorMessageDivs).forEach(function (k) {
@@ -241,6 +250,42 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function showSuccess() { hideAllErrors(); if (successDiv) successDiv.style.display = 'flex'; }
+
+  function resetDefaultErrorMessage() {
+    if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = defaultErrorHtml;
+  }
+
+  function escapeHtml(value) {
+    return String(value || '').replace(/[&<>"']/g, function (ch) {
+      return {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      }[ch];
+    });
+  }
+
+  function buildBusinessErrorHtml(message) {
+    var text = String(message || '').trim();
+    var normalized = text.toLowerCase();
+    if (normalized.indexOf('vide') !== -1 || normalized.indexOf('silencieux') !== -1 || normalized.indexOf('silent') !== -1) {
+      return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
+    }
+    if (!text) return defaultErrorHtml;
+    return '<strong>Traitement interrompu</strong><br>' + escapeHtml(text).replace(/\n/g, '<br>');
+  }
+
+  function showDefaultError() {
+    resetDefaultErrorMessage();
+    showError('default');
+  }
+
+  function showBusinessProcessingError(message) {
+    if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = buildBusinessErrorHtml(message);
+    showError('default');
+  }
 
   function scrollToEl(el, offset) {
     if (!el) return;
@@ -539,8 +584,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 clearInterval(intId); window._agiloStatusInt = null;
                 if (loadingAnimDiv) { var ps2 = loadingAnimDiv.querySelector('.progress-status'); if (ps2) ps2.remove(); loadingAnimDiv.style.display = 'none'; }
                 if (summaryCheckbox && summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
-                showError('default');
-                alert(window.agiloJobErrorParts(data, 'Erreur inconnue').alertText);
+                showBusinessProcessingError(window.agiloJobErrorParts(data, 'Erreur inconnue').primary);
                 break;
 
               default:
@@ -569,7 +613,7 @@ document.addEventListener('DOMContentLoaded', function () {
               if (readyAnimDiv) readyAnimDiv.style.display = 'none';
               if (err.type === 'timeout') { showError('timeout'); alert('Connexion trop lente ou instable.'); }
               else if (err.type === 'offline') { showError('offline'); alert('Vous êtes hors ligne.'); }
-              else if (err.type === 'serverError') { showError('default'); alert('Erreur serveur.'); }
+              else if (err.type === 'serverError') { showDefaultError(); alert('Erreur serveur.'); }
               else { showError('unreachable'); alert('Impossible de contacter le serveur.'); }
             }
           });
@@ -822,12 +866,12 @@ document.addEventListener('DOMContentLoaded', function () {
               else if (err.includes('error_audio_file_not_found')) showError('audioNotFound');
               else if (err.includes('error_invalid_token')) showError('invalidToken');
               else if (err.includes('error_too_many_hours') || err.includes('error_quota_exceeded') || err.includes('error_subscription')) showError('tooManyHours');
-              else if (err.includes('error_too_many_devices')) { showError('default'); alert('Trop d\'appareils utilisés pour ce compte.'); }
+              else if (err.includes('error_too_many_devices')) { showDefaultError(); alert('Trop d\'appareils utilisés pour ce compte.'); }
               else if (err.includes('error_too_many_calls')) showError('tooMuchTraffic');
               else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('invalid') !== -1)) showError('youtubeInvalid');
               else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL')) showError('youtubePrivate');
               else if (err.toLowerCase().indexOf('youtube') !== -1 && err.toLowerCase().indexOf('not found') !== -1) showError('youtubeNotFound');
-              else { showError('default'); if (err && err.trim()) alert('Erreur: ' + err); }
+              else { showDefaultError(); if (err && err.trim()) alert('Erreur: ' + err); }
             }
           })
           .catch(function (err) {
@@ -845,7 +889,7 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('ensureValidToken (submit):', err);
         form.dataset.sending = '0';
         window.removeEventListener('beforeunload', beforeUnloadGuard);
-        showError('default');
+        showDefaultError();
       });
     });
   }

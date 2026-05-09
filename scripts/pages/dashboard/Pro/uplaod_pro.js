@@ -158,6 +158,10 @@ document.addEventListener('DOMContentLoaded', () => {
     httpError: document.getElementById('form_error')
   };
 
+  const defaultErrorBox = errorMessageDivs.default;
+  const defaultErrorTextNode = defaultErrorBox && Array.from(defaultErrorBox.children).find(el => !el.classList.contains('form-error_icon'));
+  const defaultErrorHtml = defaultErrorTextNode ? defaultErrorTextNode.innerHTML : '';
+
   /* ---------------- Helpers UI ---------------- */
   const hideAllErrors = () => { Object.values(errorMessageDivs).forEach(d => d && (d.style.display = 'none')); };
   const showError = key => {
@@ -166,6 +170,28 @@ document.addEventListener('DOMContentLoaded', () => {
     (errorMessageDivs[key] || errorMessageDivs.default)?.style && ((errorMessageDivs[key] || errorMessageDivs.default).style.display = 'block');
   };
   const showSuccess = () => { hideAllErrors(); if (successDiv) successDiv.style.display = 'flex'; };
+  const resetDefaultErrorMessage = () => { if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = defaultErrorHtml; };
+  const escapeHtml = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+  const buildBusinessErrorHtml = message => {
+    const text = String(message || '').trim();
+    const normalized = text.toLowerCase();
+    if (normalized.includes('vide') || normalized.includes('silencieux') || normalized.includes('silent')) {
+      return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
+    }
+    if (!text) return defaultErrorHtml;
+    return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
+  };
+  const showDefaultError = () => { resetDefaultErrorMessage(); showError('default'); };
+  const showBusinessProcessingError = message => {
+    if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = buildBusinessErrorHtml(message);
+    showError('default');
+  };
   const scrollToEl = (el, offset = 0) => { if (!el) return; const top = el.getBoundingClientRect().top + window.pageYOffset + offset; window.scrollTo({ top, behavior: 'smooth' }); };
 
   // Détecter la source active (Fichier ou YouTube)
@@ -287,7 +313,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if ((err.type === 'httpError' || err.type === 'serverError') && err.status === 404) return;
         if (err.type === 'offline') showError('offline');
         else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
+        else showDefaultError();
       });
   }
 
@@ -321,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setSummaryUI('error');
         if (err.type === 'offline') showError('offline');
         else if (err.type === 'timeout') showError('timeout');
-        else showError('default');
+        else showDefaultError();
       });
   }
 
@@ -410,8 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadingAnimDiv.style.display = 'none';
               }
               if (summaryCheckbox && summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
-              showError('default');
-              alert(window.agiloJobErrorParts(data, 'Erreur inconnue').alertText);
+              showBusinessProcessingError(window.agiloJobErrorParts(data, 'Erreur inconnue').primary);
               break;
             }
 
@@ -444,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
               showError('offline');
               alert('Vous êtes hors ligne. Veuillez vérifier votre connexion internet.');
             } else if (err.type === 'serverError') {
-              showError('default');
+              showDefaultError();
               alert('Erreur serveur. Veuillez réessayer dans quelques instants.');
             } else {
               showError('unreachable');
@@ -754,12 +779,12 @@ document.addEventListener('DOMContentLoaded', () => {
               err.includes('error_subscription_limit') ||
               err.includes('error_limit_reached')
             ) showError('tooManyHours');
-            else if (err.includes('error_too_many_devices_used_for_account')) { showError('default'); alert('Trop d\'appareils utilisés pour ce compte. Veuillez contacter le support.'); }
+            else if (err.includes('error_too_many_devices_used_for_account')) { showDefaultError(); alert('Trop d\'appareils utilisés pour ce compte. Veuillez contacter le support.'); }
             else if (err.includes('error_too_many_calls')) showError('tooMuchTraffic');
             else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('invalid'))) showError('youtubeInvalid');
             else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('private'))) showError('youtubePrivate');
             else if (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('not found')) showError('youtubeNotFound');
-            else { console.error('❌ Erreur non mappée:', err); showError('default'); if (err && err.trim()) alert('Erreur: ' + err); }
+            else { console.error('❌ Erreur non mappée:', err); showDefaultError(); if (err && err.trim()) alert('Erreur: ' + err); }
           }
         })
         .catch(err => {
