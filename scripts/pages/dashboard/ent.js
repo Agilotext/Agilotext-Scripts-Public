@@ -149,6 +149,10 @@ document.addEventListener('DOMContentLoaded', () => {
     youtubeNotFound: document.getElementById('form_error'),
   };
 
+  const defaultErrorBox = errorMessageDivs.default;
+  const defaultErrorTextNode = defaultErrorBox && Array.from(defaultErrorBox.children).find(el => !el.classList.contains('form-error_icon'));
+  const defaultErrorHtml = defaultErrorTextNode ? defaultErrorTextNode.innerHTML : '';
+
   const A11Y_ERROR_LABELS = {
     default: 'Une erreur s’est produite. Consultez le message à l’écran.',
     tooMuchTraffic: 'Trop de demandes en ce moment. Réessayez plus tard.',
@@ -186,6 +190,33 @@ document.addEventListener('DOMContentLoaded', () => {
     hideAllErrors();
     if (successDiv) successDiv.style.display = 'flex';
     agiloA11yAnnounce('Demande acceptée. Transcription en cours.');
+  };
+  const resetDefaultErrorMessage = () => {
+    if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = defaultErrorHtml;
+  };
+  const escapeHtml = value => String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+  const buildBusinessErrorHtml = message => {
+    const text = String(message || '').trim();
+    const normalized = text.toLowerCase();
+    if (normalized.includes('vide') || normalized.includes('silencieux') || normalized.includes('silent')) {
+      return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
+    }
+    if (!text) return defaultErrorHtml;
+    return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
+  };
+  const showDefaultError = () => {
+    resetDefaultErrorMessage();
+    showError('default');
+  };
+  const showBusinessProcessingError = message => {
+    if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = buildBusinessErrorHtml(message);
+    showError('default');
   };
   const scrollToEl = (el, offset=0) => window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset + offset, behavior:'smooth'});
 
@@ -522,8 +553,7 @@ document.addEventListener('DOMContentLoaded', () => {
               const progressStatusErr = loadingAnimDiv.querySelector('.progress-status');
               if (progressStatusErr) progressStatusErr.remove();
               if (summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
-              showError('default');
-              alert(window.agiloJobErrorParts(data, 'Erreur inconnue').alertText);
+              showBusinessProcessingError(window.agiloJobErrorParts(data, 'Erreur inconnue').primary);
               break;
           }
         })
@@ -563,7 +593,7 @@ document.addEventListener('DOMContentLoaded', () => {
               showError('offline');
               alert('Vous êtes hors ligne. Veuillez vérifier votre connexion internet.');
             } else if (err.type === 'serverError') {
-              showError('default');
+              showDefaultError();
               alert('Erreur serveur. Veuillez réessayer dans quelques instants.');
             } else {
               showError('unreachable');
@@ -1330,4 +1360,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initLiveStreamingMode();
 });
-
