@@ -3,6 +3,13 @@
 # Fichiers de configuration locaux
 .env
 *.env.local
+agilotext-mcp-server/
+CNOEC_Agiloshield_Docs/AgiloTextApi-audit/
+CNOEC_Agiloshield_Docs/AgiloTextApi-github-2.0.5/
+CNOEC_Agiloshield_Docs/spacy-anon-*/
+CNOEC_Agiloshield_Docs/NEW_VERSION_AVRIL_2026/
+CNOEC_Agiloshield_Docs/marvin_intel/
+CNOEC_Agiloshield_Docs/security/
 
 # Fichiers de documentation temporaires
 *.md
@@ -34,4 +41,3 @@ scripts/relance/
 *.swp
 *.swo
 *~
-
