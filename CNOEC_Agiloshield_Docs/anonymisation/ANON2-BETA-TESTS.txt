@@ -1,0 +1,50 @@
+Anon2 Beta Test Notes
+
+Fichiers ajoutés
+- anonymisation/agiloshield-embed-anonymisation-anon2-beta.js
+- anonymisation/index-anon2-beta.html
+- Front_END/FINAL-2026-05-10-anon2-beta.html
+
+Endpoints Anon2 branchés
+- /anon2AsyncOfficeText
+- /getAnon2JobsInfo
+- /getAnon2Status
+- /receiveAnon2Text
+- /receiveAnon2Zip
+- /deleteAnon2Job
+
+URLs de test
+- Page locale: anonymisation/index-anon2-beta.html
+- Snippet Webflow staging: Front_END/FINAL-2026-05-10-anon2-beta.html
+- Script CDN staging:
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.0.0-beta1
+
+Vérifications déjà faites
+- Syntaxe JS validée avec node --check
+- Endpoints Anon2 bien substitués dans le bundle beta
+- Parsing tolérant renforcé sur:
+  - jobIdList, jobIds, jobs[]
+  - anonStatus, status, state, jobStatus
+  - jobs, jobList, jobsInfoDtos, jobsAnon2InfoDtos, results
+
+Résultat des appels live depuis le poste local
+- POST /getAnon2JobsInfo répond bien, mais le token chargé depuis .env est refusé avec error_invalid_token
+- GET /getToken appelé depuis le poste local retourne error_forbidden_source
+
+Conséquence
+- Les tests end-to-end normaux doivent être faits:
+  - soit sur une page Webflow staging autorisée par l’API
+  - soit en mode identifiants manuels avec un token valide déjà obtenu côté source autorisée
+
+Checklist de validation manuelle
+- Charger le snippet beta sur une page staging dédiée
+- Vérifier que la prod actuelle ne charge pas le script beta
+- Tester upload PDF
+- Tester upload DOCX
+- Tester upload XLSX si support backend confirmé
+- Tester lot multi-fichiers
+- Vérifier polling PENDING -> READY
+- Vérifier téléchargement fichier simple
+- Vérifier téléchargement ZIP
+- Vérifier historique des jobs
+- Vérifier suppression d’un job
