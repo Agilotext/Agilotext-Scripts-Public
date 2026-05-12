@@ -106,6 +106,12 @@
     buttonEl.setAttribute('type', 'button');
     buttonEl.setAttribute('title', 'Renommer ce fichier');
     buttonEl.setAttribute('aria-label', 'Renommer ce fichier');
+    const icon = buttonEl.querySelector('svg');
+    if (icon) {
+      icon.style.removeProperty('display');
+      icon.removeAttribute('hidden');
+      icon.setAttribute('aria-hidden', 'true');
+    }
     buttonEl.addEventListener('click', () => {
       if (anchorEl.__editing) return;
       anchorEl.__editing = true;
@@ -569,15 +575,33 @@
 
     const fileNameAnchor = clone.querySelector('.file-name');
     const renameButton = clone.querySelector('.rename-btn');
-    const openLink = clone.querySelector('.open-link');
+    const openLink = clone.querySelector('.button-open, .open-link');
 
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
-      // ✅ AJOUT : Tooltip affichant le nom de fichier original au survol
       fileNameAnchor.title = 'Fichier original : ' + (job.filename || 'Inconnu');
-      const tier = location.pathname.match(/^\/app\/([^/]+)/)?.[1] || 'business';
-      fileNameAnchor.href = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
-      if (openLink) openLink.href = fileNameAnchor.href;
+      fileNameAnchor.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(
+        userEmail
+      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      fileNameAnchor.setAttribute('download', job.filename || `${displayJobTitle(job)}.mp3`);
+    }
+
+    const tier = location.pathname.match(/^\/app\/([^/]+)/)?.[1] || 'business';
+    const editorUrl = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
+    if (openLink) {
+      if (openLink.tagName === 'A') {
+        openLink.href = editorUrl;
+      } else {
+        openLink.setAttribute('data-editor-url', editorUrl);
+        if (!openLink.__agiloOpenBound) {
+          openLink.__agiloOpenBound = true;
+          openLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            window.location.href = openLink.getAttribute('data-editor-url') || editorUrl;
+          });
+        }
+      }
     }
     if (!fileNameAnchor || !renameButton) {
       console.warn('[Agilo][MesTranscripts] rename UI incomplete', {
