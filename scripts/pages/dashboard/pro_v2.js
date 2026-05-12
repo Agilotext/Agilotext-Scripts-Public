@@ -111,14 +111,75 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  /* ─── Envoi multiple → redirection ──────────────────────────── */
-  const multiToggle = document.querySelector('.checkbox-component.multiple-audios .checkbox_toggle');
-  if (multiToggle) {
-    multiToggle.addEventListener('click', e => {
-      e.preventDefault();
-      window.location.href = '/app/pro/dashboard/multi-file-upload';
+  /* ─── Envoi multiple → routage externe au composant Webflow ── */
+  function initMultiUploadSwitch({ edition, multiUploadUrl }) {
+    const wrap = document.querySelector('.checkbox-component.multiple-audios');
+    if (!wrap) return;
+
+    const link = wrap.querySelector('.agilo-multi-upload-link, a');
+    const toggle = wrap.querySelector('.agilo-multi-upload-toggle, .checkbox_toggle');
+    const input = wrap.querySelector('.agilo-multi-upload-input, input[type="checkbox"]');
+    const isMultiPage = /\/multi-file-upload\/?$/.test(window.location.pathname || '');
+
+    function setToggleState(checked) {
+      if (input) input.checked = !!checked;
+      if (toggle) toggle.classList.toggle('w--redirected-checked', !!checked);
+      wrap.setAttribute('aria-pressed', checked ? 'true' : 'false');
+    }
+
+    function showFreeUpgradeMessage() {
+      if (window.AgiloGate && typeof window.AgiloGate.showUpgrade === 'function') {
+        window.AgiloGate.showUpgrade('pro', 'Envoi multiple');
+        return;
+      }
+      window.alert("L’envoi multiple est réservé aux offres Pro et Business.");
+    }
+
+    function handleActivate(event) {
+      if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+      if (isMultiPage) {
+        setToggleState(true);
+        return;
+      }
+      if (edition === 'free') {
+        wrap.classList.add('is-disabled');
+        setToggleState(false);
+        showFreeUpgradeMessage();
+        return;
+      }
+      if (!multiUploadUrl) {
+        setToggleState(false);
+        console.warn('[Agilotext] URL multi-upload introuvable pour cette edition.');
+        return;
+      }
+      setToggleState(true);
+      window.location.href = multiUploadUrl;
+    }
+
+    wrap.setAttribute('role', 'button');
+    wrap.setAttribute('tabindex', '0');
+    wrap.setAttribute('aria-label', 'Activer l’envoi multiple');
+    if (link) link.setAttribute('href', multiUploadUrl || '#');
+
+    setToggleState(isMultiPage);
+    wrap.classList.toggle('is-disabled', edition === 'free');
+
+    wrap.addEventListener('click', handleActivate);
+    wrap.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') handleActivate(event);
     });
+    if (link) {
+      link.addEventListener('click', event => handleActivate(event));
+    }
   }
+
+  initMultiUploadSwitch({
+    edition: 'pro',
+    multiUploadUrl: '/app/premium/dashboard/multi-file-upload'
+  });
 
   /* ---------------- FilePond init ---------------- */
   if (typeof FilePond !== 'undefined' && FilePond.registerPlugin) {
