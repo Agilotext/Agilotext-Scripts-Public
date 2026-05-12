@@ -108,7 +108,7 @@
     buttonEl.setAttribute('aria-label', 'Renommer ce fichier');
     const icon = buttonEl.querySelector('svg');
     if (icon) {
-      icon.style.display = 'block';
+      icon.style.display = 'flex';
       icon.removeAttribute('hidden');
       icon.setAttribute('aria-hidden', 'true');
     }
