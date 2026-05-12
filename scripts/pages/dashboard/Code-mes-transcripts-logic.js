@@ -106,15 +106,6 @@
     buttonEl.setAttribute('type', 'button');
     buttonEl.setAttribute('title', 'Renommer ce fichier');
     buttonEl.setAttribute('aria-label', 'Renommer ce fichier');
-    buttonEl.style.opacity = '0.92';
-    buttonEl.style.fontSize = '12px';
-    buttonEl.style.padding = '2px 8px';
-    buttonEl.style.border = '1px solid #d1d5db';
-    buttonEl.style.borderRadius = '999px';
-    buttonEl.style.background = '#ffffff';
-    buttonEl.style.lineHeight = '1.2';
-    buttonEl.style.fontWeight = '600';
-    buttonEl.style.color = '#1f2937';
     buttonEl.addEventListener('click', () => {
       if (anchorEl.__editing) return;
       anchorEl.__editing = true;
@@ -410,7 +401,7 @@
       <div class="custom-element titles">
         <div style="display:flex; align-items:center; gap:8px;">
           <a href="#" class="file-name" style="text-decoration:none; color:inherit; font-weight:600;"></a>
-          <button class="rename-btn" style="background:#ffffff; border:1px solid #d1d5db; cursor:pointer; padding:2px 8px; opacity:0.92; font-size:12px; border-radius:999px; font-weight:600;">Renommer</button>
+          <button class="rename-btn" style="background:none; border:none; cursor:pointer; padding:0; opacity:0.5; font-size:14px;">✏️</button>
         </div>
       </div>
       <div class="custom-element titles"><a href="#" class="open-link" style="color:#174a96; font-weight:600; text-decoration:none;">Éditer</a></div>
