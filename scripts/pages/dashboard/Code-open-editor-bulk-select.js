@@ -113,6 +113,7 @@
     );
     return;
   }
+  window.__agiloMesTranscriptsBulkVersion = '1.09';
 
   // ───────────────────────────────────────────────────────────────────────────
   // Helpers: tier-aware URLs (/app/{tier}/...)
@@ -375,6 +376,11 @@
         });
         const data = await res.json().catch(()=> ({}));
         if (res.ok && data.status === 'OK' && data.url) return { ok:true, jobId, url:data.url, download: toDownloadUrl(data.url) };
+        console.warn('[Agilo][BulkExport] getSharedUrl returned no usable url', {
+          jobId,
+          status: data.status,
+          errorMessage: data.errorMessage || data.message || null
+        });
         return { ok:false, jobId, code: data.errorMessage || 'share_unknown', raw: JSON.stringify(data) };
       } catch (e) { return { ok:false, jobId, code:'network_error', raw: e?.message || String(e) }; }
     }
@@ -383,20 +389,27 @@
       const results = await pMap(tasks, (t) => fetchSharedUrl(t.jobId, email, token), { concurrency: CONCURRENCY });
       const oks = results.filter(r => r.ok), kos = results.filter(r => !r.ok);
 
-      if (tasks.length === 1 && oks.length === 1) { triggerDownload(oks[0].download); return; }
+      const downloadButtonLabel = oks.length > 1
+        ? `Télécharger les fichiers (${oks.length})`
+        : 'Télécharger le fichier';
 
       const linksHtml = oks.length
-        ? `<div class="agilo-kbdrow"><button id="agilo-dl-all" class="agilo-btn agilo-btn--primary">Télécharger tout (${oks.length})</button></div>
+        ? `<div class="agilo-kbdrow"><button id="agilo-dl-all" class="agilo-btn agilo-btn--primary">${downloadButtonLabel}</button></div>
+           <div class="agilo-block__text">Selon votre navigateur, plusieurs téléchargements automatiques peuvent nécessiter une autorisation.</div>
            <div class="agilo-linklist">${oks.map(x => `<a href="${x.download}" rel="noopener">${x.jobId} — Télécharger</a>`).join('')}</div>`
-        : `<div class="agilo-block__text">Aucun lien de partage généré.</div>`;
+        : `<div class="agilo-block__text">Impossible de préparer les téléchargements demandés.</div>`;
 
-      const blocks = [{ heading: "Liens de téléchargement", html: linksHtml }];
+      const blocks = [{ heading: "Téléchargements prêts", html: linksHtml }];
       if (kos.length) blocks.push({
         heading: "Échecs",
         details: kos.slice(0,10).map(r => `• ${r.jobId} : ${r.code} ${r.raw ? '('+r.raw+')' : ''}`).join('\n') + (kos.length>10?'\n…':'')
       });
 
-      showDialog({ title: "Export (liens de partage)", subtitle: `${oks.length} OK, ${kos.length} échec(s).`, blocks });
+      showDialog({
+        title: "Préparation des téléchargements",
+        subtitle: `${oks.length} lien(s) prêt(s), ${kos.length} échec(s).`,
+        blocks
+      });
 
       const dlAllBtn = document.getElementById('agilo-dl-all');
       if (dlAllBtn) dlAllBtn.addEventListener('click', () => {
@@ -725,8 +738,9 @@
 
         const rows = getSelectedRows();
         if (rows.length === 0) { 
+          console.warn('[Agilo][BulkExport] export requested with no selection');
           showDialog({ 
-            title:'Export', 
+            title:'Préparation des téléchargements', 
             subtitle:'0 sélection', 
             blocks:[{text:'Sélectionnez au moins un élément.'}]
           }); 
@@ -746,8 +760,9 @@
         const email = getUserEmail();
         const token = getToken();
         if (!token) { 
+          console.warn('[Agilo][BulkExport] export requested without token');
           showDialog({ 
-            title:'Export', 
+            title:'Préparation des téléchargements', 
             blocks:[{text:'Token non disponible. Réessayez.'}]
           }); 
           return; 

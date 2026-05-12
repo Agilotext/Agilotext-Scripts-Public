@@ -13,6 +13,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
+  window.__agiloMesTranscriptsLogicVersion = '1.09';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
@@ -102,6 +103,18 @@
 
   function setupInlineRename({ anchorEl, buttonEl, job, userEmail, token, edition }) {
     if (!anchorEl || !buttonEl) return;
+    buttonEl.setAttribute('type', 'button');
+    buttonEl.setAttribute('title', 'Renommer ce fichier');
+    buttonEl.setAttribute('aria-label', 'Renommer ce fichier');
+    buttonEl.style.opacity = '0.92';
+    buttonEl.style.fontSize = '12px';
+    buttonEl.style.padding = '2px 8px';
+    buttonEl.style.border = '1px solid #d1d5db';
+    buttonEl.style.borderRadius = '999px';
+    buttonEl.style.background = '#ffffff';
+    buttonEl.style.lineHeight = '1.2';
+    buttonEl.style.fontWeight = '600';
+    buttonEl.style.color = '#1f2937';
     buttonEl.addEventListener('click', () => {
       if (anchorEl.__editing) return;
       anchorEl.__editing = true;
@@ -129,7 +142,11 @@
           if (res.ok) {
             anchorEl.textContent = next;
           } else {
-            alert(`Renommage impossible : ${res.error}`);
+            console.warn('[Agilo][MesTranscripts] renameTranscriptTitle failed', {
+              jobId: job.jobid,
+              reason: res.error
+            });
+            alert(`Impossible de renommer ce fichier : ${res.error}`);
           }
         }
         input.remove();
@@ -151,6 +168,40 @@
 
   function isSummaryReadyForDownload(transcriptStatus) {
     return String(transcriptStatus || '').toUpperCase() === 'READY_SUMMARY_READY';
+  }
+
+  function getSummaryAvailability(job) {
+    const status = String(job?.transcriptStatus || '').toUpperCase();
+    const detail = getStatusTooltipFrench(job?.transcriptStatus, job);
+    if (status === 'READY_SUMMARY_READY') {
+      return { downloadable: true, label: 'Télécharger', title: detail };
+    }
+    if (status === 'READY_SUMMARY_PENDING') {
+      return {
+        downloadable: false,
+        label: 'En cours',
+        title: 'Le compte-rendu est en cours de génération.'
+      };
+    }
+    if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+      return {
+        downloadable: false,
+        label: 'Non demandé',
+        title: "Aucun compte-rendu n’a été demandé pour cette transcription."
+      };
+    }
+    if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ERROR_SUMMARY_ON_ERROR') {
+      return {
+        downloadable: false,
+        label: 'Indisponible',
+        title: detail || 'Le compte-rendu n’a pas pu être généré.'
+      };
+    }
+    return {
+      downloadable: false,
+      label: 'Indisponible',
+      title: detail || 'Le compte-rendu n’est pas disponible pour cette transcription.'
+    };
   }
 
   function isRestrictedFreeFormat(fmt) {
@@ -359,7 +410,7 @@
       <div class="custom-element titles">
         <div style="display:flex; align-items:center; gap:8px;">
           <a href="#" class="file-name" style="text-decoration:none; color:inherit; font-weight:600;"></a>
-          <button class="rename-btn" style="background:none; border:none; cursor:pointer; padding:0; opacity:0.5; font-size:14px;">✏️</button>
+          <button class="rename-btn" style="background:#ffffff; border:1px solid #d1d5db; cursor:pointer; padding:2px 8px; opacity:0.92; font-size:12px; border-radius:999px; font-weight:600;">Renommer</button>
         </div>
       </div>
       <div class="custom-element titles"><a href="#" class="open-link" style="color:#174a96; font-weight:600; text-decoration:none;">Éditer</a></div>
@@ -410,6 +461,85 @@
     }
   }
 
+  function setSummaryCellState(row, job) {
+    const availability = getSummaryAvailability(job);
+    const summaryLinks = Array.from(row.querySelectorAll('[class*="download_wrapper-link_summary_"]'));
+    if (!summaryLinks.length) {
+      console.warn('[Agilo][MesTranscripts] summary cell missing', {
+        jobId: job?.jobid,
+        transcriptStatus: job?.transcriptStatus
+      });
+      return availability;
+    }
+
+    const summaryCell = summaryLinks
+      .map((link) => link.closest('.custom-element.options') || link.closest('.custom-element') || link.parentElement)
+      .find(Boolean);
+
+    if (!summaryCell) {
+      console.warn('[Agilo][MesTranscripts] summary container missing', {
+        jobId: job?.jobid,
+        transcriptStatus: job?.transcriptStatus
+      });
+      return availability;
+    }
+
+    const summaryToggle = summaryCell.querySelector('.download-link');
+    const summaryPanel = summaryCell.querySelector('.download_link-options');
+    let stateChip = summaryCell.querySelector('.agilo-summary-state');
+
+    summaryLinks.forEach((link) => {
+      if (!availability.downloadable) {
+        link.style.display = 'none';
+        link.removeAttribute('href');
+        link.removeAttribute('target');
+      }
+    });
+
+    summaryCell.setAttribute('title', availability.title || '');
+    summaryCell.setAttribute('aria-label', availability.title || '');
+
+    if (availability.downloadable) {
+      summaryCell.classList.remove('agilo-download-locked');
+      if (summaryToggle) {
+        summaryToggle.style.display = '';
+        summaryToggle.textContent = 'Télécharger';
+        summaryToggle.setAttribute('aria-expanded', 'false');
+        summaryToggle.setAttribute('title', availability.title || '');
+      }
+      if (summaryPanel) summaryPanel.style.display = 'none';
+      if (stateChip) stateChip.remove();
+      return availability;
+    }
+
+    if (summaryToggle) {
+      summaryToggle.style.display = 'none';
+      summaryToggle.setAttribute('aria-expanded', 'false');
+    }
+    if (summaryPanel) summaryPanel.style.display = 'none';
+
+    if (!stateChip) {
+      stateChip = document.createElement('span');
+      stateChip.className = 'agilo-summary-state';
+      stateChip.style.display = 'inline-flex';
+      stateChip.style.alignItems = 'center';
+      stateChip.style.justifyContent = 'center';
+      stateChip.style.padding = '6px 10px';
+      stateChip.style.borderRadius = '999px';
+      stateChip.style.fontSize = '12px';
+      stateChip.style.fontWeight = '600';
+      stateChip.style.background = '#f3f4f6';
+      stateChip.style.color = '#6b7280';
+      stateChip.style.border = '1px solid #e5e7eb';
+      summaryCell.appendChild(stateChip);
+    }
+
+    stateChip.textContent = availability.label;
+    stateChip.title = availability.title || '';
+    summaryCell.classList.add('agilo-download-locked');
+    return availability;
+  }
+
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
     let row;
     let clone;
@@ -457,6 +587,13 @@
       const tier = location.pathname.match(/^\/app\/([^/]+)/)?.[1] || 'business';
       fileNameAnchor.href = `/app/${tier}/editor?jobId=${job.jobid}&edition=${edition}`;
       if (openLink) openLink.href = fileNameAnchor.href;
+    }
+    if (!fileNameAnchor || !renameButton) {
+      console.warn('[Agilo][MesTranscripts] rename UI incomplete', {
+        jobId: job.jobid,
+        hasAnchor: !!fileNameAnchor,
+        hasButton: !!renameButton
+      });
     }
     setupInlineRename({ anchorEl: fileNameAnchor, buttonEl: renameButton, job, userEmail, token, edition });
 
@@ -508,6 +645,8 @@
       }
     });
 
+    const summaryAvailability = setSummaryCellState(row, job);
+    hasAnySummaryLink = !!summaryAvailability.downloadable;
     const hasAnyDownloadable = hasAnyTranscriptLink || hasAnySummaryLink;
     lockDownloadStack(row, !hasAnyDownloadable);
 
