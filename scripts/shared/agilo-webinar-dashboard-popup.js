@@ -115,15 +115,15 @@
       'position:fixed;',
       'left:24px;',
       'bottom:-560px;',
-      'width:min(460px, calc(100vw - 32px));',
+      'width:min(430px, calc(100vw - 32px));',
       'display:flex;',
       'flex-direction:column;',
-      'border-radius:22px;',
+      'border-radius:24px;',
       'overflow:hidden;',
-      'background:#001427;',
+      'background:linear-gradient(180deg,#021224 0%,#001427 100%);',
       'color:#ffffff;',
-      'box-shadow:0 24px 64px rgba(0,0,0,.34);',
-      'border:1px solid rgba(253,126,20,.16);',
+      'box-shadow:0 28px 80px rgba(0,0,0,.36);',
+      'border:1px solid rgba(253,126,20,.14);',
       'z-index:2147483000;',
       'opacity:0;',
       'pointer-events:none;',
@@ -133,21 +133,23 @@
       '}',
       '#' + cfg.popupId + '.agilo-webinar-popup--visible{bottom:24px;opacity:1;pointer-events:auto;}',
       '#' + cfg.popupId + ' *{box-sizing:border-box;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__media{position:relative;background:linear-gradient(180deg,#05182c 0%,#02111f 100%);padding:12px 12px 0;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__image-frame{position:relative;border-radius:16px 16px 0 0;overflow:hidden;background:#02111f;border:1px solid rgba(255,255,255,.06);border-bottom:none;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__media{position:relative;background:radial-gradient(circle at top right,rgba(253,126,20,.14),transparent 38%),linear-gradient(180deg,#05182c 0%,#02111f 100%);padding:12px 12px 0;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__image-frame{position:relative;border-radius:18px 18px 0 0;overflow:hidden;background:#02111f;border:1px solid rgba(255,255,255,.05);border-bottom:none;}',
       '#' + cfg.popupId + ' .agilo-webinar-popup__media img{display:block;width:100%;height:auto;aspect-ratio:16 / 9;object-fit:contain;object-position:center top;background:#02111f;}',
       '#' + cfg.popupId + ' .agilo-webinar-popup__media-top{position:absolute;top:14px;left:14px;right:14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;pointer-events:none;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__badge{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:999px;background:rgba(0,20,39,.72);backdrop-filter:blur(8px);font-size:12px;font-weight:700;color:#FD7E14;pointer-events:auto;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__close{appearance:none;border:none;width:34px;height:34px;border-radius:999px;background:rgba(0,20,39,.72);backdrop-filter:blur(8px);color:#fff;cursor:pointer;font-size:20px;line-height:1;pointer-events:auto;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__badge{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:999px;background:rgba(0,20,39,.68);backdrop-filter:blur(10px);font-size:12px;font-weight:700;color:#FD7E14;pointer-events:auto;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__close{appearance:none;border:none;width:34px;height:34px;border-radius:999px;background:rgba(0,20,39,.68);backdrop-filter:blur(10px);color:#fff;cursor:pointer;font-size:20px;line-height:1;pointer-events:auto;}',
       '#' + cfg.popupId + ' .agilo-webinar-popup__close:hover{background:rgba(0,20,39,.9);}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__content{display:flex;flex-direction:column;gap:10px;padding:16px 18px 18px;min-width:0;border-top:1px solid rgba(255,255,255,.05);}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__title{margin:0;color:#ffffff;font-size:22px;line-height:1.08;font-weight:800;letter-spacing:-.02em;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__desc{margin:0;font-size:15px;line-height:1.48;color:rgba(255,255,255,.84);}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__meta{margin:2px 0 0;font-size:13px;font-weight:700;color:#E7E0DA;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__cta{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:11px 16px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__cta--primary{background:#FD7E14;color:#fff;box-shadow:0 8px 18px rgba(253,126,20,.28);}',
-      '#' + cfg.popupId + ' .agilo-webinar-popup__cta--secondary{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#fff;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__content{display:flex;flex-direction:column;gap:12px;padding:18px 18px 18px;min-width:0;border-top:1px solid rgba(255,255,255,.05);}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__title{margin:0;color:#ffffff;font-size:24px;line-height:1.06;font-weight:800;letter-spacing:-.03em;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__desc{margin:0;font-size:15px;line-height:1.5;color:rgba(255,255,255,.82);}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__meta-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__meta{margin:0;font-size:13px;font-weight:700;color:#E7E0DA;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__pill{display:inline-flex;align-items:center;min-height:28px;padding:6px 10px;border-radius:999px;background:rgba(253,126,20,.12);border:1px solid rgba(253,126,20,.18);font-size:12px;font-weight:700;color:#FDB066;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__actions{display:flex;gap:10px;flex-wrap:nowrap;margin-top:2px;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__cta{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:11px 16px;border-radius:13px;text-decoration:none;font-weight:700;font-size:14px;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__cta--primary{flex:1 1 auto;background:#FD7E14;color:#fff;box-shadow:0 10px 22px rgba(253,126,20,.32);}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__cta--secondary{flex:0 0 auto;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:#fff;min-width:112px;}',
       '@media (max-width: 767px){',
       '#' + cfg.popupId + '{left:50%;transform:translateX(-50%);width:calc(100vw - 24px);max-width:360px;}',
       '#' + cfg.popupId + '.agilo-webinar-popup--visible{bottom:12px;}',
@@ -155,6 +157,8 @@
       '#' + cfg.popupId + ' .agilo-webinar-popup__content{padding:14px 14px 16px;}',
       '#' + cfg.popupId + ' .agilo-webinar-popup__title{font-size:20px;}',
       '#' + cfg.popupId + ' .agilo-webinar-popup__desc{font-size:14px;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__actions{flex-wrap:wrap;}',
+      '#' + cfg.popupId + ' .agilo-webinar-popup__cta--secondary{flex:1 1 100%;min-width:0;}',
       '}'
     ].join('');
 
@@ -204,7 +208,10 @@
       '<div class="agilo-webinar-popup__content">' +
       '<h3 class="agilo-webinar-popup__title">' + cfg.title + '</h3>' +
       '<p class="agilo-webinar-popup__desc">' + cfg.description + '</p>' +
+      '<div class="agilo-webinar-popup__meta-row">' +
       '<p class="agilo-webinar-popup__meta">' + cfg.meta + '</p>' +
+      '<span class="agilo-webinar-popup__pill">Replay + checklist offerts</span>' +
+      '</div>' +
       '<div class="agilo-webinar-popup__actions">' +
       '<a class="agilo-webinar-popup__cta agilo-webinar-popup__cta--primary" href="' + cfg.targetUrl + '" target="_blank" rel="noopener noreferrer">' + cfg.primaryCta + '</a>' +
       '<button type="button" class="agilo-webinar-popup__cta agilo-webinar-popup__cta--secondary">' + cfg.secondaryCta + '</button>' +
