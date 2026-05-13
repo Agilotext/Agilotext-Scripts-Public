@@ -1,0 +1,136 @@
+Integration webinaire 1.09
+==========================
+
+Cette integration ajoute 2 surfaces promo distinctes pour le webinaire Agilotext :
+- un popup bas-gauche sur le dashboard connecte ;
+- un bandeau sticky discret sur le site public.
+
+URL cible unique :
+https://www.agilotext.com/webinaire/comment-obtenir-des-comptes-rendus-professionnels-avec-agilotext-methode-bonnes-pratiques-et-cas-reel
+
+Date de coupure :
+2026-05-20T12:00:00+02:00
+
+Fichiers
+--------
+- scripts/shared/agilo-webinar-dashboard-popup.js
+- scripts/shared/agilo-webinar-public-sticky.js
+
+Comportement dashboard connecte
+-------------------------------
+- portee : chemins de type /app/{edition}/dashboard
+- delai : 1500 ms
+- fermeture : reapparition apres 3 jours
+- clic CTA : plus jamais affiche
+- stockage : localStorage
+
+Cles utilisees :
+- agilo:webinar:2026-05-20:dismissedAt
+- agilo:webinar:2026-05-20:clickedAt
+
+Comportement site public
+------------------------
+- portee par defaut :
+  - /
+  - /tarifs
+  - /blog/*
+  - /tools/*
+  - /anonymisation/*
+  - /extension-chrome/*
+- exclu par defaut :
+  - /webinaire/*
+  - /auth/*
+  - /app/*
+  - /style-guide/*
+- delai : 1000 ms
+- fermeture : masquage 24 h
+- clic CTA : plus jamais affiche
+- stockage : localStorage
+
+Cles utilisees :
+- agilo:webinar:2026-05-20:publicDismissedAt
+- agilo:webinar:2026-05-20:publicClickedAt
+
+Mode test QA
+------------
+Ajouter ?agilo_webinar_test=1 a l'URL :
+- force l'affichage ;
+- ignore la date de fin ;
+- ignore les dismiss/clicks deja stockes ;
+- reduit le delai d'apparition.
+
+Exemple :
+https://www.agilotext.com/?agilo_webinar_test=1
+
+Embed Webflow - Dashboard
+-------------------------
+A coller sur la page dashboard connectee, dans un Embed ou dans le footer custom code de la page.
+
+<script>
+  window.AGILO_WEBINAR_DASHBOARD_CONFIG = {
+    targetUrl:
+      "https://www.agilotext.com/webinaire/comment-obtenir-des-comptes-rendus-professionnels-avec-agilotext-methode-bonnes-pratiques-et-cas-reel",
+    eventEndIso: "2026-05-20T12:00:00+02:00",
+    showDelayMs: 1500,
+    reappearDays: 3,
+    imageUrl:
+      "https://cdn.prod.website-files.com/6815bee5a9c0b57da1835531/6a01fed41b8d33ba789efeba_1%20(1).png"
+  };
+</script>
+<script
+  defer
+  src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-webinar-dashboard-popup.js"
+></script>
+
+Embed Webflow - Site public
+---------------------------
+A coller dans le custom code global du site public ou sur les pages marketing si vous preferez un ciblage page par page.
+
+<script>
+  window.AGILO_WEBINAR_PUBLIC_CONFIG = {
+    targetUrl:
+      "https://www.agilotext.com/webinaire/comment-obtenir-des-comptes-rendus-professionnels-avec-agilotext-methode-bonnes-pratiques-et-cas-reel",
+    eventEndIso: "2026-05-20T12:00:00+02:00",
+    showDelayMs: 1000,
+    hideHours: 24,
+    imageUrl:
+      "https://cdn.prod.website-files.com/6815bee5a9c0b57da1835531/6a01fed41b8d33ba789efeba_1%20(1).png",
+    exactAllowPaths: ["/", "/tarifs"],
+    prefixAllowPaths: ["/blog", "/tools", "/anonymisation", "/extension-chrome"],
+    prefixDenyPaths: ["/webinaire", "/auth", "/app", "/style-guide"]
+  };
+</script>
+<script
+  defer
+  src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-webinar-public-sticky.js"
+></script>
+
+Ou coller quoi
+--------------
+Dashboard
+- cible : page dashboard connectee ;
+- emplacement recommande : footer code de la page dashboard ;
+- ne pas coller le script public sur cette page.
+
+Site public
+- cible : site marketing ;
+- emplacement recommande : Project settings -> Custom code -> Footer ;
+- si besoin de limiter encore plus finement, conserver le script global et ajuster exactAllowPaths et prefixAllowPaths.
+
+Checklist rapide
+----------------
+Dashboard
+- popup visible apres 1,5 s
+- clic sur Plus tard -> disparition
+- reapparition apres 3 jours
+- clic Je m'inscris -> plus de reapparition
+
+Site public
+- bandeau visible sur / et /tarifs
+- absent sur /webinaire/...
+- fermeture -> retour apres 24 h
+- clic S'inscrire -> plus de reapparition
+
+Note
+----
+Ne pas tester le formulaire d'inscription tant que le branchement Webflow / agenda / automation n'est pas finalise.
