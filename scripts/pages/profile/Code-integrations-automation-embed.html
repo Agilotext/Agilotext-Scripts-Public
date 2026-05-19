@@ -1,0 +1,416 @@
+<!--
+  Agilotext — page Intégrations / Automatisations.
+  1. Collez ce bloc HTML dans un Embed Webflow.
+  2. Ajoutez ensuite le script :
+     <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<SHA>/scripts/pages/profile/Code-integrations-automation.js" defer></script>
+-->
+<style>
+  #agilo-integrations-root {
+    --agi-blue: var(--color--blue, #174a96);
+    --agi-blue-soft: rgba(23, 74, 150, 0.07);
+    --agi-border: var(--color--gris-clair, #e0e0e0);
+    --agi-bg: var(--color--white, #fff);
+    --agi-soft: var(--color--blanc-gris, #f8f9fa);
+    --agi-text: var(--color--gris_foncé, #020202);
+    --agi-muted: var(--color--gris, #525252);
+    --agi-success: var(--color--vert, #1c661a);
+    --agi-danger: var(--color--rouge, #a82633);
+    --agi-warning: var(--color--orange, #fd7e14);
+    color: var(--agi-text);
+  }
+
+  #agilo-integrations-root .agilo-card {
+    background: var(--agi-bg);
+    border: 1px solid var(--agi-border);
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    box-sizing: border-box;
+  }
+
+  #agilo-integrations-root .agilo-stack {
+    display: grid;
+    gap: 1rem;
+  }
+
+  #agilo-integrations-root .agilo-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    background: var(--agi-blue-soft);
+    color: var(--agi-blue);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+
+  #agilo-integrations-root .agilo-subtle {
+    color: var(--agi-muted);
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+
+  #agilo-integrations-root .agilo-notion-actions,
+  #agilo-integrations-root .templates-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  #agilo-integrations-root .agilo-notion-panel {
+    display: none;
+    border: 1px solid rgba(23, 74, 150, 0.18);
+    background: linear-gradient(180deg, rgba(23, 74, 150, 0.04), rgba(255, 255, 255, 1));
+  }
+
+  #agilo-integrations-root .agilo-notion-panel.is-active {
+    display: block;
+  }
+
+  #agilo-integrations-root .agilo-steps {
+    margin: 0;
+    padding-left: 1.2rem;
+    line-height: 1.6;
+    color: var(--agi-text);
+    font-size: 0.9375rem;
+  }
+
+  #agilo-integrations-root .agilo-steps li + li {
+    margin-top: 0.4rem;
+  }
+
+  #agilo-integrations-root .agilo-helper {
+    margin-top: 1rem;
+    padding: 0.875rem;
+    background: var(--agi-soft);
+    border-left: 3px solid var(--agi-blue);
+    border-radius: 0.25rem;
+    color: var(--agi-muted);
+    font-size: 0.8125rem;
+    line-height: 1.55;
+  }
+
+  #agilo-integrations-root .agilo-expert-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  #agilo-integrations-root .agilo-expert-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--agi-border);
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: var(--agi-muted);
+    background: var(--agi-bg);
+  }
+
+  #agilo-integrations-root .param-card {
+    background: var(--agi-soft);
+    border-radius: 0.375rem;
+    padding: 1.25rem;
+    font-size: 0.875rem;
+    overflow-x: auto;
+  }
+
+  #agilo-integrations-root .message-success,
+  #agilo-integrations-root .message-error {
+    display: none;
+    margin-top: 1rem;
+    padding: 0.875rem;
+    border-left: 3px solid;
+    border-radius: 0.25rem;
+    font-size: 0.875rem;
+    color: var(--agi-muted);
+  }
+
+  #agilo-integrations-root .message-success {
+    background: rgba(28, 102, 26, 0.1);
+    border-left-color: var(--agi-success);
+  }
+
+  #agilo-integrations-root .message-error {
+    background: rgba(168, 38, 51, 0.1);
+    border-left-color: var(--agi-danger);
+  }
+
+  #agilo-integrations-root details summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #agilo-integrations-root details summary {
+    cursor: pointer;
+    list-style: none;
+  }
+
+  @media (max-width: 767px) {
+    #agilo-integrations-root .agilo-notion-actions,
+    #agilo-integrations-root .templates-grid {
+      grid-template-columns: 1fr;
+    }
+
+    #agilo-integrations-root .param-row {
+      flex-direction: column !important;
+      align-items: flex-start !important;
+    }
+  }
+</style>
+
+<div id="agilo-integrations-root">
+  <h2 class="h1-small">Automatisations</h2>
+  <div class="spacer-10"></div>
+  <div>
+    Connectez Agilotext à vos outils d'automatisation préférés pour transcrire vos fichiers audio automatiquement.
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card agilo-stack">
+    <div class="agilo-chip">🧠 Notion</div>
+    <div style="font-size: 1.125rem; font-weight: 700;">Envoyez automatiquement vos comptes rendus dans Notion.</div>
+    <div class="agilo-subtle">
+      Le plus simple aujourd'hui : connectez Agilotext à Notion via Make ou Zapier, sans manipuler l'API à la main.
+    </div>
+    <div class="agilo-notion-actions">
+      <button id="agilo-notion-make-btn" class="button save" type="button">
+        <div>Connecter avec Make</div>
+      </button>
+      <button id="agilo-notion-zapier-btn" class="button secondary" type="button">
+        <div>Connecter avec Zapier</div>
+      </button>
+    </div>
+    <div class="agilo-subtle">Installation en 2 minutes. Aucun code nécessaire.</div>
+
+    <div id="agilo-notion-make-panel" class="agilo-card agilo-notion-panel">
+      <div style="font-size: 1rem; font-weight: 700; margin-bottom: 0.8rem;">Parcours Make recommandé</div>
+      <ol class="agilo-steps">
+        <li>Ouvrez le scénario préconfiguré Agilotext pour Notion.</li>
+        <li>Cliquez sur <strong>Run once</strong>.</li>
+        <li>Connectez votre compte Notion.</li>
+        <li>Choisissez votre base de données.</li>
+        <li>Activez le scénario.</li>
+      </ol>
+      <div class="templates-grid" style="margin-top: 1rem;">
+        <button id="download-make-notion-blueprint" class="button save" type="button">
+          <div>🚀 Ouvrir le scénario préconfiguré</div>
+        </button>
+        <a href="https://www.make.com/en/integrations/make/notion" target="_blank" rel="noopener noreferrer" class="button" style="text-decoration: none; justify-content: center;">
+          <div>Voir Make + Notion</div>
+        </a>
+      </div>
+      <div class="agilo-helper">
+        Le scénario Agilotext standardise le format Notion : une page par réunion, avec le résumé, la transcription complète et un titre du type
+        <code>{{date}} - {{meeting_title}}</code>.
+      </div>
+    </div>
+
+    <div id="agilo-notion-zapier-panel" class="agilo-card agilo-notion-panel">
+      <div style="font-size: 1rem; font-weight: 700; margin-bottom: 0.8rem;">Parcours Zapier supporté</div>
+      <ol class="agilo-steps">
+        <li>Ouvrez le guide Zapier Agilotext pour Notion.</li>
+        <li>Connectez votre compte Notion.</li>
+        <li>Connectez le webhook Agilotext.</li>
+        <li>Choisissez votre base de données.</li>
+        <li>Publiez le Zap.</li>
+      </ol>
+      <div class="templates-grid" style="margin-top: 1rem;">
+        <button id="download-zapier-notion-guide" class="button secondary" type="button">
+          <div>📘 Télécharger le guide Zapier</div>
+        </button>
+        <a href="https://zapier.com/apps/notion/integrations" target="_blank" rel="noopener noreferrer" class="button" style="text-decoration: none; justify-content: center;">
+          <div>Voir Zapier + Notion</div>
+        </a>
+      </div>
+      <div class="agilo-helper">
+        Zapier reste un chemin officiel si vous l'utilisez déjà. Le guide est volontairement cadré pour éviter les réglages avancés inutiles.
+      </div>
+    </div>
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card agilo-stack" id="agilo-expert-mode">
+    <div class="agilo-expert-header">
+      <div>
+        <div style="font-size: 1.125rem; font-weight: 700;">Mode expert</div>
+        <div class="agilo-subtle">Accès direct aux clés, webhooks et templates avancés Make / Zapier / n8n.</div>
+      </div>
+      <div class="agilo-expert-badge">Compatibilité conservée : Make · Zapier · n8n</div>
+    </div>
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card">
+    <div class="custom-select-wrapper flex-mobile" style="margin-bottom: 1.25rem;">
+      <div class="wrapper-text">
+        <div class="wrapper-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon-1x1-small" style="width: 1.5rem; height: 1.5rem; color: var(--color--blue, #174a96);">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </div>
+        <div class="text-weight-bold" style="font-size: 1.125rem;">Générez votre clé d'automatisation</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1.25rem; color: var(--color--gris, #525252); font-size: 0.9375rem; line-height: 1.6;">
+      Cette clé permet à Make, Zapier ou n8n de demander une transcription à Agilotext en votre nom, à partir d'une <strong>URL publique</strong> vers le fichier audio.
+    </div>
+
+    <div id="automation-token-warning" style="display: none; margin-bottom: 1.25rem; padding: 0.875rem; background: rgba(253, 126, 20, 0.1); border-left: 3px solid var(--color--orange, #fd7e14); border-radius: 0.25rem; color: var(--color--gris, #525252); font-size: 0.875rem; line-height: 1.5;">
+      <strong style="color: var(--color--orange, #fd7e14);">⚠️ Attention :</strong> Si vous générez une nouvelle clé, toutes vos clés précédentes seront désactivées. Vos automatisations existantes cesseront de fonctionner.
+    </div>
+
+    <div style="display: flex; gap: 0.625rem; align-items: stretch; margin-bottom: 1rem; flex-wrap: wrap;">
+      <input type="text" id="automation-token" class="input w-input" readonly spellcheck="false" autocomplete="off" placeholder="Chargement..." aria-label="Clé d'automatisation" style="flex: 1; min-width: 0; font-family: monospace; font-size: 0.875rem;">
+      <button id="copy-automation-token" class="button secondary" type="button" style="display: none; white-space: nowrap;" aria-label="Copier la clé d'automatisation">
+        <div>Copier</div>
+      </button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.625rem;">
+      <button id="generate-automation-token" class="button save" type="button" disabled style="width: 100%; box-sizing: border-box;">
+        <div>Générer ma clé</div>
+      </button>
+      <button id="revoke-automation-token" class="button" type="button" style="display: none; background: var(--color--blanc-gris, #f8f9fa); color: var(--color--gris, #525252); border: 1px solid var(--color--gris-clair, #e0e0e0); width: 100%; box-sizing: border-box;">
+        <div>Supprimer</div>
+      </button>
+    </div>
+
+    <div id="automation-token-success" class="message-success">
+      <span style="color: var(--color--vert, #1c661a);">✓</span> <span id="automation-token-success-text">Clé générée !</span>
+    </div>
+    <div id="automation-token-error" class="message-error">
+      <span style="color: var(--color--rouge, #a82633);">✗</span> <span id="automation-token-error-text">Une erreur est survenue.</span>
+    </div>
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card">
+    <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Configurez votre scénario</h3>
+    <div style="margin-bottom: 1.25rem; color: var(--color--gris, #525252); font-size: 0.9375rem; line-height: 1.6;">
+      Dans votre outil d'automatisation (Make, Zapier ou n8n), créez un module HTTP avec ces paramètres :
+    </div>
+
+    <div class="param-card">
+      <div style="margin-bottom: 1.25rem;">
+        <strong style="color: var(--color--gris, #525252); display: block; margin-bottom: 0.5rem;">📍 URL de l'API :</strong>
+        <code id="api-endpoint" tabindex="0" role="button" aria-label="Copier l'URL de l'API" style="background: var(--color--white, #fff); padding: 0.5rem 0.75rem; border-radius: 0.25rem; display: block; cursor: pointer; word-break: break-all; font-size: 0.8125rem; border: 1px solid var(--color--gris-clair, #e0e0e0);">https://api.agilotext.com/api/v1/sendFromAutomation</code>
+        <span style="font-size: 0.75rem; color: var(--color--gris, #888); display: block; margin-top: 0.375rem;">Cliquez ou appuyez sur Entrée / Espace pour copier</span>
+      </div>
+      <div style="margin-bottom: 1.25rem;">
+        <strong style="color: var(--color--gris, #525252); display: block; margin-bottom: 0.5rem;">📍 Méthode HTTP :</strong>
+        <code style="background: var(--color--white, #fff); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">POST</code>
+      </div>
+      <div style="margin-bottom: 1.25rem;">
+        <strong style="color: var(--color--gris, #525252); display: block; margin-bottom: 0.5rem;">📍 Type de contenu (Body type) :</strong>
+        <code style="background: var(--color--white, #fff); padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-size: 0.8125rem;">application/x-www-form-urlencoded</code>
+        <span style="font-size: 0.75rem; color: var(--color--gris, #888); display: block; margin-top: 0.375rem; line-height: 1.4;">Les champs <code>username</code>, <code>automationToken</code> et <code>url</code> doivent être envoyés en paires clé=valeur encodées (URL-encoded), pas en multipart.</span>
+      </div>
+      <div style="margin-bottom: 1.25rem; padding: 0.875rem; background: rgba(253, 126, 20, 0.08); border-left: 3px solid var(--color--orange, #fd7e14); border-radius: 0.25rem; font-size: 0.8125rem; color: var(--color--gris, #525252); line-height: 1.55;">
+        <strong style="color: var(--color--orange, #fd7e14);">Postman :</strong> utilisez <strong>Body → x-www-form-urlencoded</strong>, pas <strong>form-data</strong>.
+      </div>
+      <div>
+        <strong style="color: var(--color--gris, #525252); display: block; margin-bottom: 0.75rem;">📍 Paramètres à envoyer :</strong>
+        <div style="background: var(--color--white, #fff); border-radius: 0.25rem; padding: 1rem; border: 1px solid var(--color--gris-clair, #e0e0e0);">
+          <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color--gris-clair, #e0e0e0);">
+            <code style="font-weight: 700;">username</code>
+            <div id="display-email" style="color: var(--color--blue, #174a96); margin-top: 0.25rem;">votre email</div>
+          </div>
+          <div style="margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color--gris-clair, #e0e0e0);">
+            <code style="font-weight: 700;">automationToken</code>
+            <div style="color: var(--color--blue, #174a96); margin-top: 0.25rem;">la clé générée ci-dessus</div>
+          </div>
+          <div>
+            <code style="font-weight: 700;">url</code>
+            <div style="color: var(--color--blue, #174a96); margin-top: 0.25rem;">lien vers votre fichier audio</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 1.25rem;">
+      <a href="https://www.agilotext.com/blog/articles/comment-automatiser-vos-transcriptions-audio-avec-agilotext-zapier-n8n-make-guide-complet" target="_blank" rel="noopener noreferrer" style="color: var(--color--blue, #174a96); font-weight: 500; font-size: 0.9375rem; text-decoration: none;">
+        → Voir le guide complet avec captures d'écran
+      </a>
+    </div>
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card">
+    <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Templates prêts à l'emploi</h3>
+    <div style="margin-bottom: 1.25rem; color: var(--color--gris, #525252); font-size: 0.9375rem; line-height: 1.6;">
+      Téléchargez nos scénarios pré-configurés et importez-les directement dans votre outil.
+    </div>
+    <div class="templates-grid">
+      <button id="download-make-blueprint" class="button" type="button"><div>Make - Envoi</div></button>
+      <button id="download-make-reception" class="button" type="button"><div>Make - Réception</div></button>
+      <button id="download-n8n-blueprint" class="button" type="button"><div>n8n - Réception</div></button>
+      <a href="https://www.agilotext.com/blog/articles/comment-automatiser-vos-transcriptions-audio-avec-agilotext-zapier-n8n-make-guide-complet" target="_blank" rel="noopener noreferrer" class="button" style="text-decoration: none; justify-content: center;"><div>📖 Guide complet</div></a>
+    </div>
+    <div class="agilo-helper">
+      <strong>Positionnement :</strong> Make est la voie recommandée pour Notion, Zapier est officiellement supporté pour les clients qui l'utilisent déjà, et n8n reste disponible en mode expert.
+    </div>
+  </div>
+
+  <div class="spacer-30"></div>
+
+  <div class="agilo-card">
+    <h3 style="margin: 0 0 1rem 0; font-size: 1.125rem; font-weight: 600;">Optionnel : Recevoir les transcriptions automatiquement</h3>
+    <div style="margin-bottom: 1.25rem; color: var(--color--gris, #525252); font-size: 0.9375rem; line-height: 1.6;">
+      Configurez un webhook pour recevoir vos transcriptions dès qu'elles sont prêtes. Agilotext enverra automatiquement les fichiers PDF à votre outil d'automatisation.
+    </div>
+
+    <details style="margin-bottom: 1.25rem;">
+      <summary style="padding: 0.875rem; background: rgba(23, 74, 150, 0.05); border-left: 3px solid var(--color--blue, #174a96); border-radius: 0.25rem; font-size: 0.875rem; color: var(--color--blue, #174a96); font-weight: 600;">
+        📥 Voir les données reçues par le webhook
+      </summary>
+      <div style="padding: 0.875rem; background: var(--color--white, #fff); border: 1px solid var(--color--gris-clair, #e0e0e0); border-top: none; border-radius: 0 0 0.25rem 0.25rem; font-size: 0.8125rem; line-height: 1.6; color: var(--color--gris, #525252);">
+        <div><code>username</code> — votre adresse email Agilotext</div>
+        <div><code>jobId</code> — identifiant unique de la transcription</div>
+        <div><code>agilotextType</code> — <code>TRANSCRIPT</code> ou <code>SUMMARY</code></div>
+        <div><code>filename</code> — nom du fichier PDF</div>
+        <div><code>fileUrl</code> — URL sécurisée de téléchargement</div>
+        <div><code>dateTime</code> — date et heure de création</div>
+      </div>
+    </details>
+
+    <div class="select-container" style="margin-bottom: 1.25rem;">
+      <div class="custom-select-wrapper flex-mobile">
+        <div class="wrapper-text">
+          <div class="text-weight-bold">Choix de l'outil :</div>
+        </div>
+        <select id="webhook-provider" class="custom-select" aria-label="Outil d'automatisation pour le webhook">
+          <option value="Make">Make</option>
+          <option value="Zapier">Zapier</option>
+          <option value="n8n">n8n</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label for="webhook-url" style="font-weight: 500; margin-bottom: 0.5rem; display: block; font-size: 0.9375rem; color: var(--color--gris, #525252);">URL de votre webhook :</label>
+      <input class="input w-input" maxlength="512" placeholder="https://hook.make.com/..." type="url" id="webhook-url" name="webhook-url" style="width: 100%; box-sizing: border-box;" autocomplete="url" inputmode="url" spellcheck="false">
+      <div style="font-size: 0.75rem; color: var(--color--gris, #888); margin-top: 0.375rem; line-height: 1.4;">
+        Collez l'URL fournie par votre outil. Sur Make, une URL peut expirer : recréez le webhook puis mettez l'URL à jour ici.
+      </div>
+    </div>
+
+    <button type="button" id="save-webhook-config" class="button save"><div>Enregistrer le webhook</div></button>
+
+    <div id="webhook-success-message" class="message-success">
+      <span style="color: var(--color--vert, #1c661a);">✓</span> Webhook enregistré et testé avec succès !
+    </div>
+    <div id="webhook-error-message" class="message-error">
+      <span style="color: var(--color--rouge, #a82633);">✗</span> <span id="webhook-error-text">Une erreur est survenue.</span>
+    </div>
+  </div>
+</div>
