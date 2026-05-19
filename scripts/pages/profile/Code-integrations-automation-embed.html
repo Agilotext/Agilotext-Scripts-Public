@@ -189,22 +189,25 @@
     <div id="agilo-notion-make-panel" class="agilo-card agilo-notion-panel">
       <div style="font-size: 1rem; font-weight: 700; margin-bottom: 0.8rem;">Parcours Make recommandé</div>
       <ol class="agilo-steps">
-        <li>Ouvrez le scénario préconfiguré Agilotext pour Notion.</li>
+        <li>Téléchargez le guide Make Notion Agilotext.</li>
         <li>Cliquez sur <strong>Run once</strong>.</li>
         <li>Connectez votre compte Notion.</li>
         <li>Choisissez votre base de données.</li>
         <li>Activez le scénario.</li>
       </ol>
       <div class="templates-grid" style="margin-top: 1rem;">
-        <button id="download-make-notion-blueprint" class="button save" type="button">
-          <div>🚀 Ouvrir le scénario préconfiguré</div>
+        <button id="download-make-notion-guide" class="button save" type="button">
+          <div>📘 Télécharger le guide Make Notion</div>
+        </button>
+        <button id="download-make-notion-reception" class="button secondary" type="button">
+          <div>⬇️ Télécharger le webhook Make</div>
         </button>
         <a href="https://www.make.com/en/integrations/make/notion" target="_blank" rel="noopener noreferrer" class="button" style="text-decoration: none; justify-content: center;">
           <div>Voir Make + Notion</div>
         </a>
       </div>
       <div class="agilo-helper">
-        Le scénario Agilotext standardise le format Notion : une page par réunion, avec le résumé, la transcription complète et un titre du type
+        Le guide Agilotext standardise le format Notion : une page par réunion, avec le résumé, la transcription complète et un titre du type
         <code>{{date}} - {{meeting_title}}</code>.
       </div>
     </div>
@@ -414,3 +417,15 @@
     </div>
   </div>
 </div>
+<script>
+  (function () {
+    if (window.__agiloIntegrationsInitV2) return;
+    if (window.location.protocol !== 'file:') return;
+    if (document.querySelector('script[data-agilo-local-integrations]')) return;
+    var script = document.createElement('script');
+    script.src = new URL('./Code-integrations-automation.js', window.location.href).href;
+    script.defer = true;
+    script.setAttribute('data-agilo-local-integrations', '1');
+    document.head.appendChild(script);
+  })();
+</script>

@@ -441,66 +441,30 @@
     };
   }
 
-  function getMakeNotionBlueprint(email) {
-    var safeEmail = email || 'VOTRE_EMAIL_AGILOTEXT';
-    return {
-      name: 'Agilotext - Notion (Compte rendu automatique)',
-      flow: [
-        {
-          id: 1,
-          module: 'gateway:CustomWebHook',
-          version: 1,
-          parameters: { maxResults: 1 },
-          mapper: {},
-          metadata: { designer: { x: 0, y: 0, name: 'Webhook Agilotext' } }
-        },
-        {
-          id: 2,
-          module: 'util:SetVariables',
-          version: 1,
-          parameters: {},
-          mapper: {
-            variables: [
-              { name: 'meeting_title', value: '{{1.filename}}' },
-              { name: 'meeting_date', value: '{{1.dateTime}}' },
-              {
-                name: 'page_content',
-                value:
-                  '# Résumé\\n\\n{{1.summary}}\\n\\n---\\n\\n# Transcription complète\\n\\n{{1.transcript}}\\n\\n---\\n\\nCréé automatiquement par Agilotext'
-              }
-            ]
-          },
-          metadata: { designer: { x: 240, y: 0, name: 'Formatter' } }
-        },
-        {
-          id: 3,
-          module: 'notion:createAPage',
-          version: 1,
-          parameters: { __IMTCONN__: 'VOTRE_CONNEXION_NOTION' },
-          mapper: {
-            parent: 'VOTRE_DATABASE_NOTION',
-            title: '{{2.meeting_date}} - {{2.meeting_title}}',
-            content: '{{2.page_content}}'
-          },
-          metadata: { designer: { x: 520, y: 0, name: 'Create Notion Page' } }
-        }
-      ],
-      ___INSTRUCTIONS___: {
-        fr: {
-          objectif: 'Créer automatiquement une page Notion quand le compte-rendu est prêt.',
-          etape_1: 'Importez ce blueprint dans Make.',
-          etape_2: 'Créez le webhook du module 1 puis collez son URL dans Agilotext > Intégrations.',
-          etape_3: 'Cliquez sur Run once pour capter un premier payload Agilotext.',
-          etape_4: 'Connectez Notion sur le module Create Notion Page.',
-          etape_5: 'Choisissez votre base de données Notion.',
-          note: 'Email de référence pour ce blueprint : ' + safeEmail
-        }
-      },
-      ___NOTION_FORMAT___: {
-        title: '{{date}} - {{meeting_title}}',
-        content: ['# Résumé', '{{summary}}', '---', '# Transcription complète', '{{transcript}}', '---', 'Créé automatiquement par Agilotext']
-      }
-    };
+  function getMakeNotionGuideHtml(email) {
+    var safeEmail = escapeHtml(email || 'votre@email.fr');
+    return (
+      '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Agilotext + Make + Notion</title>' +
+      '<style>body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:900px;margin:32px auto;padding:0 20px;line-height:1.6;color:#1f2937}h1,h2{color:#174a96}code,pre{background:#f8f9fa;border:1px solid #e5e7eb;border-radius:6px}code{padding:2px 6px}pre{padding:16px;overflow:auto}.box{background:#f8fbff;border-left:4px solid #174a96;padding:16px;border-radius:8px;margin:20px 0}ol{padding-left:20px}</style></head><body>' +
+      '<h1>Agilotext → Make → Notion</h1>' +
+      '<p>Objectif : créer automatiquement une page Notion quand votre compte-rendu Agilotext est prêt.</p>' +
+      '<div class="box"><strong>Approche recommandée</strong><br>1. Importer le blueprint webhook Make Agilotext.<br>2. Lancer <code>Run once</code>.<br>3. Capter un vrai payload Agilotext.<br>4. Ajouter ensuite un module Notion <strong>Create a Page</strong> dans Make.<br>5. Connecter Notion et choisir la base cible.</div>' +
+      '<h2>Étapes</h2><ol>' +
+      '<li>Importez d’abord le fichier <strong>agilotext-make-reception.json</strong>.</li>' +
+      '<li>Dans le module Webhook Make, créez une nouvelle URL puis collez-la dans Agilotext &gt; Intégrations.</li>' +
+      '<li>Cliquez sur <strong>Run once</strong> dans Make.</li>' +
+      '<li>Depuis Agilotext, enregistrez le webhook pour envoyer un premier test.</li>' +
+      '<li>Ajoutez ensuite un module Notion <strong>Create a Page</strong>.</li>' +
+      '<li>Connectez votre compte Notion.</li>' +
+      '<li>Choisissez votre base de données.</li>' +
+      '<li>Mappez le titre et le contenu selon le format recommandé ci-dessous.</li>' +
+      '</ol>' +
+      '<h2>Format Notion recommandé</h2>' +
+      '<pre>Titre : {{date}} - {{meeting_title}}\n\n# Résumé\n\n{{summary}}\n\n---\n\n# Transcription complète\n\n{{transcript}}\n\n---\n\nCréé automatiquement par Agilotext</pre>' +
+      '<div class="box"><strong>Important</strong><br>Cette V1 n’essaie pas d’inventer un blueprint Notion Make non validé. Elle s’appuie sur le webhook Make Agilotext déjà éprouvé, puis vous ajoutez le module Notion dans Make avec votre propre connexion.</div>' +
+      '<p>Email de référence : <code>' + safeEmail + '</code></p>' +
+      '</body></html>'
+    );
   }
 
   function getZapierNotionGuideHtml(email, token) {
@@ -540,11 +504,18 @@
     if (makeBtn) makeBtn.addEventListener('click', function () { showNotionPanel('make'); });
     if (zapierBtn) zapierBtn.addEventListener('click', function () { showNotionPanel('zapier'); });
 
-    var makeDownload = $('#download-make-notion-blueprint');
-    if (makeDownload) {
-      makeDownload.addEventListener('click', function () {
+    var makeGuide = $('#download-make-notion-guide');
+    if (makeGuide) {
+      makeGuide.addEventListener('click', function () {
         var email = getEmailNow();
-        downloadJsonFile('agilotext-make-notion-blueprint.json', getMakeNotionBlueprint(email));
+        downloadTextFile('agilotext-make-notion-guide.html', getMakeNotionGuideHtml(email), 'text/html;charset=utf-8');
+      });
+    }
+
+    var makeReception = $('#download-make-notion-reception');
+    if (makeReception) {
+      makeReception.addEventListener('click', function () {
+        downloadJsonFile('agilotext-make-reception.json', getMakeBlueprintReception());
       });
     }
 
@@ -812,8 +783,8 @@
         var email = getEmailNow();
         downloadJsonFile('agilotext-make-envoi.json', getMakeBlueprint(email, getStoredAutomationToken(email)));
       },
-      downloadMakeNotionBlueprint: function () {
-        downloadJsonFile('agilotext-make-notion-blueprint.json', getMakeNotionBlueprint(getEmailNow()));
+      downloadMakeNotionGuide: function () {
+        downloadTextFile('agilotext-make-notion-guide.html', getMakeNotionGuideHtml(getEmailNow()), 'text/html;charset=utf-8');
       },
       downloadZapierNotionGuide: function () {
         var email = getEmailNow();
