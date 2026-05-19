@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.0.0-beta1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.1.0-beta1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -13,6 +13,11 @@
   const ANON_RECEIVE = API_BASE + '/receiveAnon2Text';
   const ANON_RECEIVE_ZIP = API_BASE + '/receiveAnon2Zip';
   const ANON_DELETE = API_BASE + '/deleteAnon2Job';
+  const ANON_OPTIONS_GET_DEFAULTS = API_BASE + '/getAnon2UserDefaults';
+  const ANON_OPTIONS_SET_DEFAULTS = API_BASE + '/setAnon2UserDefaults';
+  const ANON_OPTIONS_GET = API_BASE + '/getAnon2UserOptions';
+  const ANON_OPTIONS_SET = API_BASE + '/setAnon2UserOptions';
+  const ANON_RECONCILE = API_BASE + '/reconcileAnon2Text';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
@@ -31,8 +36,39 @@
   const query = new URLSearchParams(window.location.search);
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
-    pseudo: runtimeFeatureFlags.pseudo === true || query.get('featurePseudo') === '1',
-    inclusion: runtimeFeatureFlags.inclusion === true || query.get('featureInclusion') === '1'
+    pseudo: runtimeFeatureFlags.pseudo !== false && query.get('featurePseudo') !== '0',
+    inclusion: runtimeFeatureFlags.inclusion !== false && query.get('featureInclusion') !== '0'
+  });
+  const ANON2_OPTION_ENDPOINTS = Object.freeze({
+    defaults: Object.freeze({ get: ANON_OPTIONS_GET_DEFAULTS, set: ANON_OPTIONS_SET_DEFAULTS }),
+    options: Object.freeze({ get: ANON_OPTIONS_GET, set: ANON_OPTIONS_SET })
+  });
+  const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL']);
+  const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'ORG', 'PER']);
+  const ANON2_VISUAL_TO_CODE = Object.freeze({
+    PR: 'PER',
+    MAIL: 'EML',
+    PHON: 'TEL',
+    DT: 'DAT',
+    ORG: 'ORG',
+    LOC: 'LOC',
+    IBAN: 'IBA',
+    CID: 'IDN',
+    FRNIR: 'IDN'
+  });
+  const ANON2_CODE_TO_VISUAL = Object.freeze({
+    PER: ['PR'],
+    EML: ['MAIL'],
+    TEL: ['PHON'],
+    DAT: ['DT'],
+    ORG: ['ORG'],
+    LOC: ['LOC'],
+    IBA: ['IBAN'],
+    IDN: ['CID', 'FRNIR'],
+    ADR: [],
+    JOB: [],
+    PII: [],
+    PRO: []
   });
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
@@ -68,7 +104,17 @@
     abortController: null,
     includeTerms: [],
     excludeTerms: [],
-    pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG }
+    pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG },
+    optionsApiMode: null,
+    anon2OptionsLoaded: false,
+    anon2OptionsSaved: false,
+    reconcileAvailable: null,
+    removeImages: true,
+    doPseudoAnon: false,
+    anon2OptionCodes: DEFAULT_ANON2_OPTION_CODES.slice(),
+    restoreAnonFiles: [],
+    restorePropertiesFiles: [],
+    restoreProcessing: false
   };
   window.__AGILO_EMBED_STATE__ = state; // Export pour debug console
   const DEBOUNCE_TEXT_MS = 1000;
@@ -231,7 +277,9 @@
     manualAuthFields: document.getElementById('agfManualAuthFields'),
     manualUsername: document.getElementById('agfManualUsername'),
     manualToken: document.getElementById('agfManualToken'),
-    manualEdition: document.getElementById('agfManualEdition')
+    manualEdition: document.getElementById('agfManualEdition'),
+    restorePanel: document.getElementById('agfPanel-restore'),
+    restoreLocked: document.getElementById('agfRestoreLocked')
   };
 
   const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
@@ -343,6 +391,195 @@
       return JSON.stringify(ordered);
     }
     return JSON.stringify(value);
+  }
+
+  function normalizeBoolean(value, fallback) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const t = value.trim().toLowerCase();
+      if (t === 'true' || t === '1' || t === 'yes' || t === 'on') return true;
+      if (t === 'false' || t === '0' || t === 'no' || t === 'off') return false;
+    }
+    if (typeof value === 'number') return value !== 0;
+    return typeof fallback === 'boolean' ? fallback : false;
+  }
+
+  function getManualAuthOverride() {
+    const username = ui.manualUsername ? (ui.manualUsername.value || '').trim() : '';
+    const token = ui.manualToken ? (ui.manualToken.value || '').trim() : '';
+    const edition = ui.manualEdition ? normalizeEdition(ui.manualEdition.value || state.edition) : normalizeEdition(state.edition);
+    return {
+      username: username || null,
+      token: token || null,
+      edition
+    };
+  }
+
+  function normalizeAnon2OptionCodes(raw) {
+    let parsed = raw;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed) parsed = [];
+      else {
+        try {
+          parsed = JSON.parse(trimmed);
+        } catch (e) {
+          parsed = trimmed.split(/[,\s]+/).filter(Boolean);
+        }
+      }
+    }
+    if (!Array.isArray(parsed)) parsed = [];
+    const seen = new Set();
+    return parsed
+      .map((item) => String(item || '').trim().toUpperCase())
+      .filter((code) => ANON2_ALLOWED_CODES.includes(code))
+      .filter((code) => {
+        if (seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      })
+      .sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
+  }
+
+  function selectedAnon2OptionCodes() {
+    const seen = new Set();
+    return selectedVisualEntities()
+      .map((code) => ANON2_VISUAL_TO_CODE[code] || null)
+      .filter(Boolean)
+      .filter((code) => {
+        if (seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      })
+      .sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
+  }
+
+  function setVisualEntitiesFromAnon2Codes(optionCodes) {
+    const normalized = normalizeAnon2OptionCodes(optionCodes);
+    const activeCodes = new Set();
+    normalized.forEach((code) => {
+      (ANON2_CODE_TO_VISUAL[code] || []).forEach((visualCode) => activeCodes.add(visualCode));
+    });
+    const availableSet = new Set(TYPES_AVAILABLE);
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      const visualCode = chk.getAttribute('data-entity');
+      if (!availableSet.has(visualCode)) return;
+      chk.checked = activeCodes.has(visualCode);
+    });
+  }
+
+  function buildAnon2OptionsPayload() {
+    const optionCodes = selectedAnon2OptionCodes();
+    return {
+      optionCodes,
+      anon2OptionsJson: JSON.stringify(optionCodes),
+      doPseudoAnon: state.mode === 'pseudonymiser'
+    };
+  }
+
+  function updateAnon2UiStateFromServer(optionCodes, doPseudoAnon) {
+    const normalizedCodes = normalizeAnon2OptionCodes(optionCodes);
+    state.anon2OptionCodes = normalizedCodes.length ? normalizedCodes : DEFAULT_ANON2_OPTION_CODES.slice();
+    state.doPseudoAnon = normalizeBoolean(doPseudoAnon, false);
+    setVisualEntitiesFromAnon2Codes(state.anon2OptionCodes);
+    setMode(state.doPseudoAnon ? 'pseudonymiser' : 'anonymiser', { silent: true });
+    renderTypeCount();
+    renderPseudoSummary();
+  }
+
+  function buildAnon2OptionsMissingMessage() {
+    return 'Options Anon2 indisponibles. Impossible de lancer l’anonymisation tant que la configuration serveur n’est pas accessible.';
+  }
+
+  function shouldTryFallbackOptionsApi(response, parsed) {
+    if (!response) return true;
+    if (response.status === 404 || response.status === 405 || response.status === 501 || response.status === 500) return true;
+    if (!parsed || !parsed.ok) return true;
+    const data = parsed.data || {};
+    const message = String(data.errorMessage || data.userErrorMessage || '').toLowerCase();
+    if (!message) return false;
+    return message.indexOf('not found') !== -1 || message.indexOf('unknown') !== -1 || message.indexOf('no handler') !== -1;
+  }
+
+  async function callAnon2OptionsApi(action, extraParams) {
+    const params = new URLSearchParams();
+    params.set('username', state.email || '');
+    params.set('token', state.token || '');
+    params.set('edition', getEditionForApi());
+    Object.keys(extraParams || {}).forEach((key) => {
+      if (extraParams[key] == null || extraParams[key] === '') return;
+      params.set(key, String(extraParams[key]));
+    });
+
+    const preferredModes = state.optionsApiMode ? [state.optionsApiMode] : ['defaults', 'options'];
+    const modes = preferredModes.concat(preferredModes.indexOf('defaults') === -1 ? ['defaults'] : []).concat(preferredModes.indexOf('options') === -1 ? ['options'] : []);
+    const uniqueModes = modes.filter((mode, index) => modes.indexOf(mode) === index);
+
+    let lastError = null;
+    for (const mode of uniqueModes) {
+      const endpointGroup = ANON2_OPTION_ENDPOINTS[mode];
+      if (!endpointGroup || !endpointGroup[action]) continue;
+      let response = null;
+      let raw = '';
+      let parsed = null;
+      try {
+        response = await fetchWithTimeout(endpointGroup[action], {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        }, STATUS_REQUEST_TIMEOUT);
+        raw = await response.text();
+        parsed = tryParseJson(raw);
+        if (response.ok && parsed.ok && parsed.data && parsed.data.status !== 'KO' && parsed.data.status !== 'ko') {
+          state.optionsApiMode = mode;
+          return { mode, data: parsed.data, raw };
+        }
+        const message = parsed && parsed.ok && parsed.data
+          ? sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage || 'Erreur de configuration Anon2.')
+          : buildInvalidJsonMessage(raw, true);
+        lastError = new Error(message || buildAnon2OptionsMissingMessage());
+        if (!shouldTryFallbackOptionsApi(response, parsed)) break;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err || buildAnon2OptionsMissingMessage()));
+      }
+    }
+    throw lastError || new Error(buildAnon2OptionsMissingMessage());
+  }
+
+  async function loadAnon2Options(forceReload) {
+    if (!forceReload && state.anon2OptionsLoaded) return state.anon2OptionCodes.slice();
+    const result = await callAnon2OptionsApi('get');
+    const data = result.data || {};
+    const optionCodes = normalizeAnon2OptionCodes(data.anon2OptionsJson);
+    updateAnon2UiStateFromServer(optionCodes, data.doPseudoAnon);
+    state.anon2OptionsLoaded = true;
+    state.anon2OptionsSaved = false;
+    state.reconcileAvailable = true;
+    storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+    storage.set(STORAGE_MODE, state.mode);
+    renderRestorePanel();
+    return state.anon2OptionCodes.slice();
+  }
+
+  async function saveAnon2Options() {
+    const payload = buildAnon2OptionsPayload();
+    if (payload.optionCodes.length < 2) {
+      throw new Error('Sélectionnez au moins 2 types de données Anon2 avant de lancer le traitement.');
+    }
+    const result = await callAnon2OptionsApi('set', {
+      anon2OptionsJson: payload.anon2OptionsJson,
+      doPseudoAnon: payload.doPseudoAnon ? 'true' : 'false'
+    });
+    state.optionsApiMode = result.mode;
+    state.anon2OptionCodes = payload.optionCodes.slice();
+    state.doPseudoAnon = payload.doPseudoAnon;
+    state.anon2OptionsLoaded = true;
+    state.anon2OptionsSaved = true;
+    state.reconcileAvailable = true;
+    storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+    storage.set(STORAGE_MODE, state.mode);
+    renderPseudoSummary();
+    return result.data || {};
   }
 
   function currentTextConfigKey(text) {
@@ -855,7 +1092,11 @@
           anonStatus: anonStatus === 'READY' || anonStatus === 'PENDING' || anonStatus === 'ON_ERROR' || anonStatus === 'CANCELED' || anonStatus === 'CANCELLED' ? anonStatus : null,
           fileName: j.originalFileName || j.fileName || j.filename || j.fileNameOrigin || j.resultFilename || null,
           fileLength: j.fileLength || j.fileSize || j.resultSize || null,
-          dtCreation: j.dtCreation || j.creationDate || j.createdAt || null
+          dtCreation: j.dtCreation || j.creationDate || j.createdAt || null,
+          dtUpdate: j.dtUpdate || j.updateDate || j.updatedAt || null,
+          javaException: j.javaException || j.errorMessage || null,
+          originalFilePath: j.originalFilePath || null,
+          anonFilePath: j.anonFilePath || null
         });
       }
       const needStatus = list.filter((item) => item.anonStatus == null);
@@ -1066,6 +1307,7 @@
         } else if (job.anonStatus === 'ON_ERROR') {
           badge.className = 'agf-status-badge agf-status-badge--error';
           badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M11 15h2v2h-2zm0-8h2v6h-2zm.99-5C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/></svg> Erreur';
+          if (job.javaException) badge.title = sanitizeApiErrorMessage(job.javaException);
         } else if (job.anonStatus === 'CANCELED') {
           badge.className = 'agf-status-badge agf-status-badge--canceled';
           badge.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;flex-shrink:0"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg> Annulé';
@@ -1129,6 +1371,31 @@
             dlBtn.disabled = false;
           });
           btnGroup.appendChild(dlBtn);
+
+          const propsBtn = document.createElement('button');
+          propsBtn.type = 'button';
+          propsBtn.className = 'agf-hist-btn-dl';
+          propsBtn.title = 'Télécharger le fichier .properties';
+          propsBtn.setAttribute('aria-label', 'Télécharger les propriétés de ' + (job.fileName || ''));
+          propsBtn.textContent = '.properties';
+          propsBtn.addEventListener('click', async function () {
+            propsBtn.disabled = true;
+            try {
+              await ensureAuth();
+              const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0, 'properties');
+              const name = parseFilename(contentDisposition, (job.fileName || 'document') + '.properties');
+              const a = document.createElement('a');
+              const url = URL.createObjectURL(blob);
+              a.href = url;
+              a.download = name;
+              a.click();
+              setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+            } catch (err) {
+              setStatus('error', (err && err.message) || 'Téléchargement des propriétés impossible.');
+            }
+            propsBtn.disabled = false;
+          });
+          btnGroup.appendChild(propsBtn);
           tdAction.appendChild(btnGroup);
         } else if (job.anonStatus !== 'ON_ERROR' && job.anonStatus !== 'CANCELED') {
           // Action: Kill (Contextual for pending jobs)
@@ -1319,9 +1586,9 @@
 
   function renderTypeCount() {
     const total = selectedVisualEntities().length;
-    const apiReady = selectedEntities().length;
+    const anon2Count = selectedAnon2OptionCodes().length;
     if (ui.typesCount) ui.typesCount.textContent = String(total);
-    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) (dont ' + apiReady + ' envoyés à l\'API).';
+    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) · ' + anon2Count + ' code(s) Anon2 envoyable(s).';
 
     Array.from(document.querySelectorAll('#agfTypeGrid .agf-type-card')).forEach((card) => {
       const selectedInGroup = card.querySelectorAll('input[type="checkbox"][data-entity]:checked').length;
@@ -1488,6 +1755,7 @@
       cancelActiveProcessing();
     }
 
+    state.doPseudoAnon = pseudoActive;
     storage.set(STORAGE_MODE, state.mode);
     resetTextCache();
     renderPseudoSummary();
@@ -1497,12 +1765,171 @@
     const cfg = state.pseudoConfig || DEFAULT_PSEUDO_CONFIG;
     if (ui.pseudoSummary) {
       if (!isFeatureEnabled('pseudo')) {
-        ui.pseudoSummary.textContent = 'Pseudo: aperçu disponible · activation backend en cours';
+        ui.pseudoSummary.textContent = 'Pseudo: désactivée pour cette version.';
         return;
       }
-      const modeTxt = state.mode === 'pseudonymiser' ? 'actif' : 'configuré';
-      ui.pseudoSummary.textContent =
-        'Pseudo ' + modeTxt + ': ' + strategyLabel(cfg.strategy) + ' · clé ' + (cfg.keyMode || 'server') + ' · fenêtre ' + (cfg.restoreWindow || '30d');
+      const codes = normalizeAnon2OptionCodes(state.anon2OptionCodes || []);
+      const modeTxt = state.mode === 'pseudonymiser' ? 'active' : 'inactive';
+      const codesTxt = codes.length ? codes.join(', ') : DEFAULT_ANON2_OPTION_CODES.join(', ');
+      ui.pseudoSummary.textContent = 'Pseudo ' + modeTxt + ' · codes Anon2: ' + codesTxt;
+    }
+  }
+
+  function setRestoreStatus(kind, message) {
+    const node = document.getElementById('agfRestoreStatus');
+    if (!node) return;
+    if (!message) {
+      node.classList.remove('is-visible');
+      node.removeAttribute('data-kind');
+      node.textContent = '';
+      return;
+    }
+    node.classList.add('is-visible');
+    node.setAttribute('data-kind', kind);
+    node.textContent = message;
+  }
+
+  function renderRestoreFilesList(containerId, files) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.textContent = '';
+    if (!files || !files.length) {
+      const empty = document.createElement('div');
+      empty.className = 'agf-restore-list-item is-empty';
+      empty.textContent = 'Aucun fichier sélectionné.';
+      container.appendChild(empty);
+      return;
+    }
+    files.forEach((file) => {
+      const row = document.createElement('div');
+      row.className = 'agf-restore-list-item';
+      row.textContent = file.name + ' · ' + formatSize(file.size || 0);
+      container.appendChild(row);
+    });
+  }
+
+  function updateRestoreActions() {
+    const btn = document.getElementById('agfRestoreSubmit');
+    if (!btn) return;
+    btn.disabled = state.restoreProcessing || state.restoreAnonFiles.length === 0 || state.restorePropertiesFiles.length === 0;
+  }
+
+  function bindRestorePanelEvents() {
+    const anonInput = document.getElementById('agfRestoreAnonFiles');
+    const propsInput = document.getElementById('agfRestorePropertiesFiles');
+    const submitBtn = document.getElementById('agfRestoreSubmit');
+    if (!anonInput || anonInput.dataset.agfBound === '1') return;
+    anonInput.dataset.agfBound = '1';
+    if (propsInput) propsInput.dataset.agfBound = '1';
+    if (submitBtn) submitBtn.dataset.agfBound = '1';
+
+    anonInput.addEventListener('change', function (e) {
+      state.restoreAnonFiles = Array.from((e.target && e.target.files) || []);
+      renderRestoreFilesList('agfRestoreAnonList', state.restoreAnonFiles);
+      updateRestoreActions();
+    });
+    if (propsInput) {
+      propsInput.addEventListener('change', function (e) {
+        state.restorePropertiesFiles = Array.from((e.target && e.target.files) || []);
+        renderRestoreFilesList('agfRestorePropertiesList', state.restorePropertiesFiles);
+        updateRestoreActions();
+      });
+    }
+    if (submitBtn) submitBtn.addEventListener('click', restoreAnon2Files);
+  }
+
+  function renderRestorePanel() {
+    const panel = ui.restorePanel || document.getElementById('agfPanel-restore');
+    if (!panel) return;
+    if (state.reconcileAvailable === false) {
+      panel.innerHTML =
+        '<div class="agf-lock-block" id="agfRestoreLocked">' +
+        '<svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+        '<rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.6" />' +
+        '<path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6" />' +
+        '<circle cx="12" cy="16" r="1.2" fill="currentColor" />' +
+        '</svg>' +
+        '<p class="agf-lock-title">Restauration Anon2 non validée</p>' +
+        '<p class="agf-lock-text">Le backend de réconciliation n’a pas encore été confirmé sur cette version. Réessayez après validation ou contactez Nicolas.</p>' +
+        '</div>';
+      return;
+    }
+    panel.innerHTML =
+      '<div class="agf-restore-shell">' +
+      '<p class="agf-restore-note">Chargez les fichiers Anon2 et leurs sidecars <code>.properties</code>. Un fichier renvoie le document restauré, plusieurs renvoient un ZIP.</p>' +
+      '<div class="agf-row agf-row--restore">' +
+      '<div class="agf-restore-card">' +
+      '<label for="agfRestoreAnonFiles">Fichiers Anon2</label>' +
+      '<input id="agfRestoreAnonFiles" class="agf-restore-input" type="file" multiple accept=".docx,.xlsx,.pptx,.pdf" />' +
+      '<div id="agfRestoreAnonList" class="agf-restore-list"></div>' +
+      '</div>' +
+      '<div class="agf-restore-card">' +
+      '<label for="agfRestorePropertiesFiles">Fichiers .properties</label>' +
+      '<input id="agfRestorePropertiesFiles" class="agf-restore-input" type="file" multiple accept=".properties,text/plain" />' +
+      '<div id="agfRestorePropertiesList" class="agf-restore-list"></div>' +
+      '</div>' +
+      '</div>' +
+      '<div id="agfRestoreStatus" class="agf-status" role="status" aria-live="polite"></div>' +
+      '<div class="agf-actions"><button id="agfRestoreSubmit" type="button" class="agf-btn-primary" disabled>Restaurer les fichiers</button></div>' +
+      '</div>';
+    renderRestoreFilesList('agfRestoreAnonList', state.restoreAnonFiles);
+    renderRestoreFilesList('agfRestorePropertiesList', state.restorePropertiesFiles);
+    bindRestorePanelEvents();
+    updateRestoreActions();
+  }
+
+  async function restoreAnon2Files() {
+    if (state.restoreProcessing) return;
+    if (!state.restoreAnonFiles.length || !state.restorePropertiesFiles.length) {
+      setRestoreStatus('error', 'Ajoutez au moins un fichier Anon2 et un fichier .properties.');
+      return;
+    }
+    try {
+      await ensureAuth();
+    } catch (err) {
+      setRestoreStatus('error', (err && err.message) || 'Connexion impossible.');
+      return;
+    }
+    state.restoreProcessing = true;
+    updateRestoreActions();
+    setRestoreStatus('loading', 'Restauration en cours…');
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', getEditionForApi());
+    state.restoreAnonFiles.forEach((file) => formData.append('anonFile', file, file.name));
+    state.restorePropertiesFiles.forEach((file) => formData.append('propertiesFile', file, file.name));
+    try {
+      const response = await fetchWithTimeout(ANON_RECONCILE, {
+        method: 'POST',
+        body: formData
+      }, REQUEST_TIMEOUT);
+      const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
+      const contentDisposition = response.headers.get('Content-Disposition') || '';
+      const blob = await response.blob();
+      if (!response.ok || contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
+        const raw = await blob.text();
+        const parsed = tryParseJson(raw);
+        if (response.status === 404 || !parsed.ok) {
+          state.reconcileAvailable = false;
+          renderRestorePanel();
+          throw new Error('Activation backend non validée sur cette version.');
+        }
+        throw new Error(sanitizeApiErrorMessage((parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) || 'Restauration impossible.'));
+      }
+      const a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      a.href = url;
+      a.download = parseFilename(contentDisposition, state.restoreAnonFiles.length > 1 ? 'documents_reconcilies.zip' : state.restoreAnonFiles[0].name);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+      setRestoreStatus('success', 'Téléchargement du fichier restauré lancé.');
+      state.reconcileAvailable = true;
+    } catch (err) {
+      setRestoreStatus('error', sanitizeApiErrorMessage((err && err.message) || 'Restauration impossible.'));
+    } finally {
+      state.restoreProcessing = false;
+      updateRestoreActions();
     }
   }
 
@@ -1569,6 +1996,8 @@
     const storedMode = storage.get(STORAGE_MODE);
     setMode(storedMode === 'pseudonymiser' ? 'pseudonymiser' : 'anonymiser', { silent: true });
 
+    state.anon2OptionCodes = selectedAnon2OptionCodes();
+    state.doPseudoAnon = state.mode === 'pseudonymiser';
     renderTypeCount();
   }
 
@@ -1661,12 +2090,18 @@
   }
 
   async function ensureAuth() {
+    const manualAuth = getManualAuthOverride();
+    if (manualAuth.username) state.email = manualAuth.username;
+    if (manualAuth.token) state.token = manualAuth.token;
+    if (manualAuth.edition) state.edition = manualAuth.edition;
     if (!state.email) state.email = await getUserEmail();
     if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
     if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
     if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
     if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
     if (!state.token) await getToken(state.email, getEditionForApi(), 0);
+    storage.set('agilo:username', state.email);
+    storage.set('agilo:edition', state.edition);
   }
 
   async function runSessionMaintenance() {
@@ -1693,11 +2128,21 @@
     if (m.indexOf('error_anon_not_ready') !== -1) return 'Fichier pas encore prêt. Réessayez dans quelques instants.';
     if (m.indexOf('error_anon_file_not_exists') !== -1) return 'Fichier introuvable côté serveur.';
     if (m.indexOf('error_anon_invalid_file_type') !== -1) return 'Type de fichier non accepté pour le téléchargement.';
+    if (m.indexOf('error_invalid_anon2_options_json') !== -1) return 'Configuration Anon2 invalide. Vérifiez les types sélectionnés.';
+    if (m.indexOf('error_anon2_reconcile_supports_docx_xlsx_pptx_pdf_only') !== -1) return 'La restauration Anon2 supporte seulement DOCX, XLSX, PPTX et PDF.';
+    if (m.indexOf('error_anon2_reconcile_missing_matching_properties') !== -1) return 'Un ou plusieurs fichiers .properties correspondants sont manquants.';
+    if (m.indexOf('error_anon2_reconcile_unused_properties') !== -1) return 'Certains fichiers .properties ne correspondent à aucun document Anon2.';
+    if (m.indexOf('error_anon2_reconcile_ambiguous_properties') !== -1) return 'Association ambiguë entre documents Anon2 et fichiers .properties.';
+    if (m.indexOf('error_invalid_office_extension') !== -1) return 'Extension Office non supportée.';
+    if (m.indexOf('error_content_size_too_big') !== -1) return 'Fichier trop volumineux pour le traitement.';
+    if (m.indexOf('error_too_many_files') !== -1) return 'Trop de fichiers envoyés en une seule fois.';
     return m;
   }
 
   function parseFilename(contentDisposition, fallbackFileName) {
     if (fallbackFileName) {
+      if (/\.properties$/i.test(fallbackFileName)) return fallbackFileName;
+      if (/\.zip$/i.test(fallbackFileName)) return fallbackFileName;
       const base = fallbackFileName.replace(/\.[^.]+$/, '').trim();
       const ext = (fallbackFileName.match(/\.[^.]+$/) || ['.bin'])[0];
       const suffix = '_anonymisé';
@@ -1714,9 +2159,8 @@
     formData.append('username', state.email);
     formData.append('token', state.token);
     formData.append('edition', getEditionForApi());
+    formData.append('removeImages', state.removeImages ? 'true' : 'false');
     formData.append('fileUpload[]', file, fileName);
-    const entities = selectedEntities();
-    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
     if (isFeatureEnabled('inclusion')) {
       const inc = (state.includeTerms || []).join('\n').trim();
       if (inc) formData.append('includeTerms', inc);
@@ -1740,10 +2184,8 @@
     formData.append('username', state.email);
     formData.append('token', state.token);
     formData.append('edition', getEditionForApi());
-    // Backend anonAsyncOfficeText attend fileUpload1, fileUpload2, ... fileUploadN
-    items.forEach((item, index) => { formData.append('fileUpload' + (index + 1), item.file, item.fileName); });
-    const entities = selectedEntities();
-    if (entities.length) formData.append('entityTypes', JSON.stringify(entities));
+    formData.append('removeImages', state.removeImages ? 'true' : 'false');
+    items.forEach((item) => { formData.append('fileUpload[]', item.file, item.fileName); });
     if (isFeatureEnabled('inclusion')) {
       const inc = (state.includeTerms || []).join('\n').trim();
       if (inc) formData.append('includeTerms', inc);
@@ -1856,7 +2298,9 @@
     const anonStatus = (data && data.anonStatus != null) ? String(data.anonStatus).toUpperCase() : '';
     if (anonStatus === 'READY') return { status: 'done' };
     if (anonStatus === 'ON_ERROR') {
-      const errMsg = (data && (data.javaException || data.userErrorMessage || data.errorMessage)) ? sanitizeApiErrorMessage(data.javaException || data.userErrorMessage || data.errorMessage) : 'Échec du traitement.';
+      const errMsg = (data && (data.userErrorMessage || data.errorMessage || data.errorCode || data.javaException))
+        ? sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || data.errorCode || data.javaException)
+        : 'Échec du traitement.';
       return { status: 'error', errorMessage: errMsg };
     }
     if (anonStatus === 'CANCELED' || anonStatus === 'CANCELLED') {
@@ -1916,7 +2360,7 @@
       const isTransient = err.name === 'AbortError' || (err.message && (err.message.indexOf('réseau') !== -1 || err.message === 'Failed to fetch'));
       if (isTransient && attempt < 1) {
         await new Promise((r) => setTimeout(r, 2000));
-        return receiveAnonFile(jobId, attempt + 1);
+        return receiveAnonFile(jobId, attempt + 1, type);
       }
       throw err;
     }
@@ -2122,6 +2566,13 @@
     if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
 
     try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
+    try {
+      if (!state.anon2OptionsLoaded) await loadAnon2Options(true);
+      await saveAnon2Options();
+    } catch (e) {
+      setStatus('error', (e && e.message) || buildAnon2OptionsMissingMessage());
+      return;
+    }
 
     state.abortController = new AbortController();
     state.processing = true;
@@ -2275,7 +2726,7 @@
           a.download = 'documents_anonymisés.zip';
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 30000);
-          setStatus('success', 'Téléchargement du zip lancé.');
+          setStatus('success', 'Téléchargement du zip lancé (fichiers Anon2 et sidecars si disponibles).');
           reenableZipBtn();
         })
         .catch((err) => {
@@ -2308,7 +2759,7 @@
         }
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé.'); done(); };
+        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé (sans sidecars supplémentaires).'); done(); };
         script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); done(); };
         document.head.appendChild(script);
       }
@@ -2756,6 +3207,8 @@
 
     if (ui.saveTypes) ui.saveTypes.addEventListener('click', () => {
       storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+      state.anon2OptionCodes = selectedAnon2OptionCodes();
+      state.anon2OptionsSaved = false;
       resetTextCache();
       renderTypeCount();
       closeModal(ui.modals.types);
@@ -2779,6 +3232,7 @@
       }
       state.pseudoConfig = readPseudoFromUi();
       storage.set(STORAGE_PSEUDO, JSON.stringify(state.pseudoConfig));
+      state.anon2OptionsSaved = false;
       resetTextCache();
       setMode('pseudonymiser');
       setStatus('success', 'Paramètres enregistrés.');
@@ -2873,6 +3327,7 @@
       syncHiddenTermFields();
       storage.set(STORAGE_INC, (ui.includeTerms && ui.includeTerms.value) || '');
       storage.set(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
+      state.anon2OptionsSaved = false;
       resetTextCache();
       setStatus('success', 'Listes enregistrées.');
       closeModal(ui.modals.inclusion);
@@ -2911,6 +3366,9 @@
       if (!field) return;
       field.addEventListener('change', () => {
         state.token = '';
+        state.anon2OptionsLoaded = false;
+        state.anon2OptionsSaved = false;
+        state.optionsApiMode = null;
         resetTextCache();
       });
     });
@@ -2986,8 +3444,17 @@
     loadPreferences();
     applyEditionLocks();
     applyFeatureAvailability();
+    renderRestorePanel();
     renderFileList();
     updateActions();
+    if (state.email && state.token) {
+      loadAnon2Options(true).catch(function (err) {
+        state.anon2OptionsLoaded = false;
+        state.reconcileAvailable = false;
+        renderRestorePanel();
+        console.warn('Anon2 options unavailable', err);
+      });
+    }
     await resumeInFlightJobsIfAny();
     if (shouldCallApiMeta()) {
       runSessionMaintenance();

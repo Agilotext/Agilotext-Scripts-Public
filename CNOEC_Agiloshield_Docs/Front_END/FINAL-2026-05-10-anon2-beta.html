@@ -1,13 +1,11 @@
 <!-- Intégration staging Anon2 : la page qui inclut ce fragment doit déclarer <meta charset="utf-8"> pour l'affichage des accents.
-     Script embed : APIs Anon2 Async (/anon2AsyncOfficeText, /getAnon2Status, /receiveAnon2Text, /receiveAnon2Zip). Limite 256 Mo/fichier.
+     Script embed : APIs Anon2 Async + options serveur + réconciliation. Limite 256 Mo/fichier.
      Ordre de chargement recommandé (Webflow staging uniquement) :
      1) HEAD : token resolver (agilo token).
      2) Avant l'embed : lottie-web (optionnel).
      3) Footer : script embed Anon2 beta (une seule inclusion).
-     Lien recommandé (GitHub raw) :
-     <script src="https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js"></script>
-     Alternative CDN (recommandé pour Webflow staging) :
-     <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.0.0-beta1"></script>
+     Lien CDN unique (recommandé pour Webflow staging) :
+     <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.1.0-beta1"></script>
      Ne pas brancher ce fragment sur une page de production avant validation complète Anon2.
      Optionnel – animation Lottie pendant le chargement : charger lottie-web avant le script embed, puis définir l’URL du JSON :
      <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous"></script>
@@ -25,7 +23,7 @@
   }
 </style>
 <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=1.0.3">
+  href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.1.0-beta1">
 
 <form id="agfForm" ms-code-anonymisation="form" novalidate>
   <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
@@ -411,7 +409,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.0.0-beta1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.1.0-beta1"></script>
 
 <div id="agfModalPseudoWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
   aria-labelledby="agfModalPseudoTitle" aria-hidden="true">
