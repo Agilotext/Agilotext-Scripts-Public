@@ -44,6 +44,13 @@
     font-weight: 700;
   }
 
+  #agilo-integrations-root .agilo-chip img {
+    width: 1rem;
+    height: 1rem;
+    display: block;
+    object-fit: contain;
+  }
+
   #agilo-integrations-root .agilo-subtle {
     color: var(--agi-muted);
     font-size: 0.875rem;
@@ -171,7 +178,10 @@
   <div class="spacer-30"></div>
 
   <div class="agilo-card agilo-stack">
-    <div class="agilo-chip">🧠 Notion</div>
+    <div class="agilo-chip">
+      <img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a0c9768b327d098f9b8bce9_Notion-logo.svg.png" alt="Notion">
+      <span>Notion</span>
+    </div>
     <div style="font-size: 1.125rem; font-weight: 700;">Envoyez automatiquement vos comptes rendus dans Notion.</div>
     <div class="agilo-subtle">
       Le plus simple aujourd'hui : connectez Agilotext à Notion via Make ou Zapier, sans manipuler l'API à la main.
