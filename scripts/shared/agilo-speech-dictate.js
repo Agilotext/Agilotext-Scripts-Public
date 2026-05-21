@@ -272,6 +272,33 @@
     return btn;
   }
 
+  function getWrapForInput(input) {
+    if (!input) return null;
+    var parent = input.parentNode;
+    if (
+      parent &&
+      parent.classList &&
+      parent.classList.contains("agilo-wizard-dictate__wrap")
+    ) {
+      return parent;
+    }
+    return input.closest ? input.closest(".agilo-wizard-dictate__wrap") : null;
+  }
+
+  function collapseDuplicateButtons(wrap, preferredBtn) {
+    if (!wrap) return preferredBtn || null;
+    var buttons = [].slice.call(wrap.querySelectorAll(".agilo-wizard-dictate__btn"));
+    if (!buttons.length) return preferredBtn || null;
+
+    var keep = preferredBtn && buttons.indexOf(preferredBtn) !== -1 ? preferredBtn : buttons[0];
+    buttons.forEach(function (node) {
+      if (node !== keep && node.parentNode) {
+        node.parentNode.removeChild(node);
+      }
+    });
+    return keep;
+  }
+
   /**
    * Bouton à côté du champ ; wrapper léger sous le champ (alignement type barre Conversation).
    * Ne pas utiliser `#chat-dictate-btn` hors éditeur (IDs réservés au chat).
@@ -289,7 +316,19 @@
    */
   function mountButtonAdjacent(input, options) {
     options = options || {};
-    if (!input || input.getAttribute("data-agilo-dictate-mounted") === "1") {
+    if (!input) {
+      return null;
+    }
+
+    var existingWrap = getWrapForInput(input);
+    var existingBtn = existingWrap ? collapseDuplicateButtons(existingWrap, null) : null;
+    if (existingBtn) {
+      bindButton(input, existingBtn, options);
+      input.setAttribute("data-agilo-dictate-mounted", "1");
+      return existingBtn;
+    }
+
+    if (input.getAttribute("data-agilo-dictate-mounted") === "1") {
       return null;
     }
 
@@ -416,6 +455,7 @@
       if (layout === "inline") {
         applyLayoutUi(wrap, barDisabled, input, "inline");
       }
+      collapseDuplicateButtons(wrap, btn);
       barDisabled.appendChild(btn);
       if (
         announceEl &&
@@ -450,6 +490,7 @@
         applyLayoutUi(wrap, bar, input, "inline");
       }
     }
+    collapseDuplicateButtons(wrap, btn);
     bar.appendChild(btn);
 
     if (

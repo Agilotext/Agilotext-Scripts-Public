@@ -196,13 +196,28 @@
     if (!wrap || !wrap.contains(field)) return false;
     var bar = wrap.querySelector(".agilo-wizard-dictate__bar");
     if (!bar) return false;
-    var btn = bar.querySelector(".agilo-wizard-dictate__btn");
-    if (!btn) return false;
+    var btns = wrap.querySelectorAll(".agilo-wizard-dictate__btn");
+    if (!btns.length) return false;
     return true;
   }
 
+  function collapseDuplicateMounts(field) {
+    if (!field) return;
+    var wrap = field.closest(".agilo-wizard-dictate__wrap");
+    if (!wrap) return;
+    var btns = wrap.querySelectorAll(".agilo-wizard-dictate__btn");
+    if (btns.length <= 1) return;
+    [].slice.call(btns).forEach(function (btn, index) {
+      if (index > 0 && btn.parentNode) {
+        btn.parentNode.removeChild(btn);
+      }
+    });
+  }
+
   function healMount(field) {
-    if (!field || field.getAttribute("data-agilo-dictate-mounted") !== "1") return;
+    if (!field) return;
+    collapseDuplicateMounts(field);
+    if (field.getAttribute("data-agilo-dictate-mounted") !== "1") return;
     if (hasHealthyMount(field)) return;
     field.removeAttribute("data-agilo-dictate-mounted");
   }
