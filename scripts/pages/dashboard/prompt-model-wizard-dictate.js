@@ -6,7 +6,7 @@
  *   formSelector, rootSelector, fieldSelector, defaultFieldNames,
  *   restrictToKnownNames, lang
  * };
- * @version 1.1.0
+ * @version 1.1.1
  */
 (function () {
   "use strict";
@@ -31,6 +31,8 @@
     debTimer: null,
     healTimer: null,
     wiredLifecycle: false,
+    wiredNavigation: false,
+    pulseTimers: [],
   };
 
   function cfg() {
@@ -181,6 +183,15 @@
       } catch (e) {}
     });
     st.observers = [];
+  }
+
+  function clearPulseTimers() {
+    st.pulseTimers.forEach(function (timer) {
+      try {
+        clearTimeout(timer);
+      } catch (e) {}
+    });
+    st.pulseTimers = [];
   }
 
   function isElementVisible(el) {
@@ -335,6 +346,7 @@
     );
 
     window.addEventListener("beforeunload", function () {
+      clearPulseTimers();
       if (st.healTimer) {
         clearInterval(st.healTimer);
         st.healTimer = null;
@@ -344,7 +356,7 @@
   }
 
   function scheduleEnhance() {
-    if (st.debTimer) clearTimeout(st.debTimer);
+    if (st.debTimer) return;
     st.debTimer = setTimeout(function () {
       st.debTimer = null;
       try {
@@ -355,15 +367,54 @@
     }, DEBOUNCE_MS);
   }
 
+  function scheduleEnhancePulse(delays) {
+    clearPulseTimers();
+    (delays || [0, 120, 320, 700]).forEach(function (delay) {
+      var t = setTimeout(function () {
+        try {
+          enhanceNow();
+        } catch (e) {
+          if (console && console.warn) {
+            console.warn("prompt-model-wizard-dictate pulse enhance", e);
+          }
+        }
+      }, delay);
+      st.pulseTimers.push(t);
+    });
+  }
+
+  function wireNavigationHooks(form) {
+    if (st.wiredNavigation || !form) return;
+    st.wiredNavigation = true;
+
+    form.addEventListener(
+      "click",
+      function (ev) {
+        var trigger = ev.target && ev.target.closest
+          ? ev.target.closest('[data-form="next-btn"], [data-form="back-btn"]')
+          : null;
+        if (!trigger || !form.contains(trigger)) return;
+        scheduleEnhancePulse([0, 120, 320, 700, 1200]);
+      },
+      true
+    );
+  }
+
   function initObserver() {
+    var c = cfg();
+    var form = resolveForm(c);
+    var root = resolveModalRoot(form || document.body, c) || form || document.body || document.documentElement;
     var mo = new MutationObserver(scheduleEnhance);
-    mo.observe(document.documentElement, {
+    mo.observe(root, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ["class", "style"],
     });
+    st.observers.push(mo);
+    if (form) wireNavigationHooks(form);
     scheduleEnhance();
+    scheduleEnhancePulse([0, 180, 500]);
   }
 
   /** Attendez agilo-speech-dictate (embed distinct possible). */
