@@ -198,34 +198,50 @@
 
     var fields = gather(form, c);
     fields.forEach(function (field) {
-      if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
-        D.mountButtonAdjacent(field, {
-          layout: "inline",
-          lang: c.lang || "fr-FR",
-          ariaLabel: ariaFor(field),
-          announceUnsupportedOnce: true,
-          onError: function (_e, human) {
-            if (human) toast(human);
-          },
-        });
-      }
+      try {
+        if (field.getAttribute("data-agilo-dictate-mounted") === "1") {
+          var parent = field.parentNode;
+          var hasWrap = parent && parent.classList && parent.classList.contains("agilo-wizard-dictate__wrap");
+          var hasBtn = hasWrap && parent.querySelector(".agilo-wizard-dictate__btn");
+          if (!hasWrap || !hasBtn) {
+            field.removeAttribute("data-agilo-dictate-mounted");
+          }
+        }
 
-      var io = new IntersectionObserver(
-        function (entries) {
-          entries.forEach(function (en) {
-            if (
-              !en.isIntersecting &&
-              D.isRecordingFor &&
-              D.isRecordingFor(field)
-            ) {
-              D.tearDown();
-            }
+        if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
+          D.mountButtonAdjacent(field, {
+            layout: "inline",
+            lang: c.lang || "fr-FR",
+            ariaLabel: ariaFor(field),
+            announceUnsupportedOnce: true,
+            onError: function (_e, human) {
+              if (human) toast(human);
+            },
           });
-        },
-        { root: modal && modal.nodeType === 1 ? modal : null, threshold: 0 }
-      );
-      io.observe(field);
-      st.observers.push(io);
+        }
+
+        var rootEl = (modal && modal.nodeType === 1 && modal.contains(field)) ? modal : null;
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (en) {
+              if (
+                !en.isIntersecting &&
+                D.isRecordingFor &&
+                D.isRecordingFor(field)
+              ) {
+                D.tearDown();
+              }
+            });
+          },
+          { root: rootEl, threshold: 0 }
+        );
+        io.observe(field);
+        st.observers.push(io);
+      } catch (err) {
+        if (typeof console !== "undefined" && console.error) {
+          console.error("[Agilo] Error mounting microphone for field:", field, err);
+        }
+      }
     });
 
     wireGlobalOnce();
@@ -272,7 +288,12 @@
 
   function initObserver() {
     var mo = new MutationObserver(scheduleEnhance);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
+    mo.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"]
+    });
     scheduleEnhance();
   }
 

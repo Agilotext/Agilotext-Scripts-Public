@@ -7,6 +7,8 @@
 
 (function () {
   'use strict';
+  if (window.__agiloTokenResolverLoaded) return;
+  window.__agiloTokenResolverLoaded = true;
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   /** Marge sous le TTL Web (4 h) pour rafraîchir avant expiration */

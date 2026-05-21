@@ -109,16 +109,49 @@
     rec.interimResults = true;
     rec.continuous = true;
 
+    var baselineValue = (input.value || "").trimEnd();
+
     rec.onresult = function (ev) {
-      var chunk = "";
-      var i = ev.resultIndex;
-      for (; i < ev.results.length; i++) {
-        if (ev.results[i].isFinal) {
-          chunk += ev.results[i][0].transcript;
+      var target = opts.getActiveInput ? opts.getActiveInput() : activeInput || input;
+      if (!target) return;
+
+      var finalText = "";
+      var interimText = "";
+      for (var i = 0; i < ev.results.length; i++) {
+        var res = ev.results[i];
+        if (res && res[0]) {
+          if (res.isFinal) {
+            finalText += res[0].transcript;
+          } else {
+            interimText += res[0].transcript;
+          }
         }
       }
-      var target = opts.getActiveInput ? opts.getActiveInput() : activeInput || input;
-      if (chunk && target) appendFinalChunk(target, chunk);
+
+      var max = typeof target.maxLength === "number" && target.maxLength >= 0 ? target.maxLength : 0;
+      var cur = baselineValue;
+      if (finalText) {
+        cur = cur + (cur ? " " : "") + finalText.trim();
+      }
+
+      var next = cur;
+      if (interimText) {
+        next = next + (next ? " " : "") + interimText.trim();
+      } else if (finalText) {
+        next = next + " ";
+      }
+
+      if (max > 0 && next.length > max) {
+        next = next.slice(0, max);
+      }
+
+      target.value = next;
+      try {
+        target.dispatchEvent(new Event("input", { bubbles: true }));
+        target.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (e) {
+        /* noop */
+      }
     };
 
     rec.onerror = function (e) {
