@@ -29,6 +29,7 @@
     modalRoot: null,
     observers: [],
     debTimer: null,
+    healTimer: null,
     wiredLifecycle: false,
   };
 
@@ -227,6 +228,42 @@
     return modal.contains(field) ? modal : null;
   }
 
+  function ensureMountedField(field, c, D) {
+    if (!field || !D || !D.mountButtonAdjacent) return;
+    healMount(field);
+    if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
+      D.mountButtonAdjacent(field, {
+        layout: "inline",
+        lang: c.lang || "fr-FR",
+        ariaLabel: ariaFor(field),
+        announceUnsupportedOnce: true,
+        onError: function (_e, human) {
+          if (human) toast(human);
+        },
+      });
+    }
+  }
+
+  function startHealLoop() {
+    if (st.healTimer) return;
+    st.healTimer = window.setInterval(function () {
+      var D = window.AgiloSpeechDictate;
+      if (!D || !D.mountButtonAdjacent) return;
+      var c = cfg();
+      var form = resolveForm(c);
+      if (!form || !document.body.contains(form)) return;
+      gather(form, c).forEach(function (field) {
+        try {
+          ensureMountedField(field, c, D);
+        } catch (e) {
+          if (console && console.warn) {
+            console.warn("prompt-model-wizard-dictate heal loop", field && (field.id || field.name), e);
+          }
+        }
+      });
+    }, 400);
+  }
+
   function enhanceNow() {
     var D = window.AgiloSpeechDictate;
     if (!D || !D.mountButtonAdjacent) return;
@@ -245,19 +282,7 @@
     fields.forEach(function (field) {
       try {
         var visibleNow = isElementVisible(field);
-        healMount(field);
-
-        if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
-          D.mountButtonAdjacent(field, {
-            layout: "inline",
-            lang: c.lang || "fr-FR",
-            ariaLabel: ariaFor(field),
-            announceUnsupportedOnce: true,
-            onError: function (_e, human) {
-              if (human) toast(human);
-            },
-          });
-        }
+        ensureMountedField(field, c, D);
 
         var io = new IntersectionObserver(
           function (entries) {
@@ -283,6 +308,7 @@
       }
     });
 
+    startHealLoop();
     wireGlobalOnce();
   }
 
@@ -309,6 +335,10 @@
     );
 
     window.addEventListener("beforeunload", function () {
+      if (st.healTimer) {
+        clearInterval(st.healTimer);
+        st.healTimer = null;
+      }
       if (window.AgiloSpeechDictate) window.AgiloSpeechDictate.tearDown();
     });
   }
