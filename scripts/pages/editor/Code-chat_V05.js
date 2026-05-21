@@ -76,7 +76,6 @@ function agiloChatInitFromDom() {
   const PENDING_FILES = [];
   const MSG_QUEUE = new Map();
   let __dictationActive = false;
-  let __speechRecognition = null;
   let chatSendBtn = null; // bouton d'envoi créé par ensureChatChrome (remplace div#btnAsk Webflow)
 
   /* ================== DOM ================== */
@@ -1701,51 +1700,36 @@ function agiloChatInitFromDom() {
       }
     }
 
-    /* ---- E. Mic (Web Speech API) : uniquement s'il manque DANS la barre du vrai #chatPrompt ---- */
-    if ((window.SpeechRecognition || window.webkitSpeechRecognition) && _bar) {
-      if (!_bar.querySelector('#chat-dictate-btn') && activeChatPrompt()) {
-        const lang = ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR';
-        const micBtn = document.createElement('button');
-        micBtn.type = 'button';
-        micBtn.id = 'chat-dictate-btn';
-        micBtn.setAttribute('aria-pressed', 'false');
-        micBtn.setAttribute('aria-label', 'Dicter');
-        micBtn.title = 'Dicter (navigateur)';
-        micBtn.innerHTML = SVG_MIC;
-        micBtn.addEventListener('click', () => {
-          if (__dictationActive) { try { __speechRecognition?.stop(); } catch { } return; }
-          const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-          if (!Rec) { toast('Dictée non supportée sur ce navigateur', 'error'); return; }
-          const rec = new Rec();
-          rec.lang = lang; rec.interimResults = true; rec.continuous = true;
-          rec.onresult = (ev) => {
-            let chunk = '';
-            for (let i = ev.resultIndex; i < ev.results.length; i++) { if (ev.results[i].isFinal) chunk += ev.results[i][0].transcript; }
-            if (chunk) {
-              const inp = activeChatPrompt();
-              if (!inp) return;
-              const cur = (inp.value || '').trimEnd();
-              inp.value = cur + (cur ? ' ' : '') + chunk.trim() + ' ';
-              autosizeChatPrompt(inp);
-              updatePromptCounter(inp);
-              refreshSendReadyState();
-            }
-          };
-          rec.onerror = (e) => { err('speech', e); toast('Dictée : ' + (e.error || 'erreur'), 'error'); };
-          rec.onend = () => {
-            __dictationActive = false; __speechRecognition = null;
-            micBtn.setAttribute('aria-pressed', 'false');
-            micBtn.classList.remove('is-recording');
-            micBtn.innerHTML = SVG_MIC;
-            if (chatSendBtn) chatSendBtn.disabled = false;
-          };
-          try {
-            rec.start(); __dictationActive = true; __speechRecognition = rec;
-            micBtn.setAttribute('aria-pressed', 'true');
-            micBtn.classList.add('is-recording');
-            micBtn.innerHTML = SVG_MIC_STOP;
-            if (chatSendBtn) chatSendBtn.disabled = true;
-          } catch { toast('Impossible de démarrer la dictée', 'error'); }
+    /* ---- E. Mic (moteur partagé) : uniquement s'il manque DANS la barre du vrai #chatPrompt ---- */
+    if (_bar && activeChatPrompt()) {
+      const D = window.AgiloSpeechDictate;
+      if (D && D.createDictateButton && D.bindButton && !_bar.querySelector('#chat-dictate-btn')) {
+        const micBtn = D.createDictateButton({
+          id: 'chat-dictate-btn',
+          ariaLabel: 'Dicter',
+          titleHint: 'Dicter (navigateur)',
+        });
+        D.bindButton(activeChatPrompt(), micBtn, {
+          lang: ($('#pane-chat')?.dataset?.agiloChatLang) || 'fr-FR',
+          getActiveInput: () => activeChatPrompt(),
+          onValueRendered: (_value, inp) => {
+            if (!inp) return;
+            autosizeChatPrompt(inp);
+            updatePromptCounter(inp);
+            refreshSendReadyState();
+          },
+          onStateChange: (state) => {
+            __dictationActive = state === 'recording';
+            if (chatSendBtn) chatSendBtn.disabled = __dictationActive;
+            refreshSendReadyState();
+          },
+          onError: (e, human) => {
+            err('speech', e);
+            toast(human || ('Dictée : ' + (e?.error || 'erreur')), 'error');
+          },
+          onUnsupported: () => {
+            toast('Dictée non supportée sur ce navigateur', 'error');
+          }
         });
         const sendRef = _bar.querySelector('#chat-send-btn') || chatSendBtn;
         if (sendRef) _bar.insertBefore(micBtn, sendRef);

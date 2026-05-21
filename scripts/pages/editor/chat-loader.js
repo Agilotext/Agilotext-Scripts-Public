@@ -1,7 +1,8 @@
 // Agilotext - Chat Loader (un seul script Webflow)
 // 1) Styles (fetch chat-embed-styles.css, même contenu qu’avant via Code-chat-css.js)
 // 2) Markup (chat-submission-embed.html)
-// 3) Code-chat_V05.js
+// 3) agilo-speech-dictate.js
+// 4) Code-chat_V05.js
 // Ancien enchaînement Code-chat-css.js + V05 : remplacé par ce loader seul.
 (function () {
   if (window.__agiloChatLoaderComplete) return;
@@ -24,6 +25,7 @@
 
   const REF = getCdnRef();
   const BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${REF}/scripts/pages/editor`;
+  const SHARED_BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${REF}/scripts/shared`;
 
   window.__agiloChatLoaderDiag = function () {
     return {
@@ -54,6 +56,20 @@
     return new Promise((resolve, reject) => {
       const src = `${BASE}/${file}?v=${REF}${BUSTQ}`;
       const already = Array.from(document.scripts).some((s) => String(s.src || '').includes(`/scripts/pages/editor/${file}`));
+      if (already) return resolve();
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = false;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error(`Echec de chargement: ${src}`));
+      document.head.appendChild(s);
+    });
+  }
+
+  function loadSharedScript(file) {
+    return new Promise((resolve, reject) => {
+      const src = `${SHARED_BASE}/${file}?v=${REF}${BUSTQ}`;
+      const already = Array.from(document.scripts).some((s) => String(s.src || '').includes(`/scripts/shared/${file}`));
       if (already) return resolve();
       const s = document.createElement('script');
       s.src = src;
@@ -101,6 +117,7 @@
     try {
       await injectChatStylesIfNeeded();
       await injectMarkupIfNeeded();
+      await loadSharedScript('agilo-speech-dictate.js');
       /* Code-chat_V05 s’exécute après ; il réinitialise si document déjà prêt. */
       await loadScript('Code-chat_V05.js');
       window.__agiloChatLoaderComplete = true;

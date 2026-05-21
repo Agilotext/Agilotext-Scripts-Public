@@ -1,7 +1,7 @@
 /**
  * Dictée locale (Web Speech API) réutilisable : une seule reconnaissance à la fois.
- * Contrat navigateur comme l’onglet Conversation (Code-chat_V05) : segments finaux appendus.
- * @version 1.0.2
+ * Contrat navigateur mutualisé wizard + chat : rendu temps réel via interim + final.
+ * @version 1.1.0
  */
 (function (global) {
   "use strict";
@@ -14,6 +14,7 @@
   var speechRec = null;
   var activeInput = null;
   var activeMicBtn = null;
+  var activeStateChange = null;
 
   function sanitizeId(raw) {
     return String(raw || "")
@@ -36,6 +37,17 @@
     activeInput = null;
   }
 
+  function notifyStateChange(nextState, input, micBtn) {
+    if (typeof activeStateChange === "function") {
+      try {
+        activeStateChange(nextState, input || activeInput || null, micBtn || activeMicBtn || null);
+      } catch (e) {
+        /* noop */
+      }
+    }
+    if (nextState === "idle") activeStateChange = null;
+  }
+
   /**
    * @param {HTMLInputElement|HTMLTextAreaElement} el
    * @returns {boolean}
@@ -49,8 +61,11 @@
    */
   function tearDown() {
     var prev = speechRec;
+    var prevInput = activeInput;
+    var prevMicBtn = activeMicBtn;
     speechRec = null;
     cleanupMicUi();
+    notifyStateChange("idle", prevInput, prevMicBtn);
     if (prev) {
       try {
         prev.stop();
@@ -66,13 +81,9 @@
    */
   function appendFinalChunk(input, chunk) {
     if (!chunk || !input) return;
-    var max = typeof input.maxLength === "number" && input.maxLength >= 0 ? input.maxLength : 0;
     var cur = (input.value || "").trimEnd();
     var next = cur + (cur ? " " : "") + chunk.trim() + " ";
-    if (max > 0 && next.length > max) {
-      next = next.slice(0, max);
-    }
-    input.value = next;
+    input.value = clampValue(input, next);
     try {
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
@@ -81,11 +92,52 @@
     }
   }
 
+  function clampValue(input, next) {
+    var max = typeof input.maxLength === "number" && input.maxLength >= 0 ? input.maxLength : 0;
+    var out = String(next == null ? "" : next);
+    if (max > 0 && out.length > max) {
+      out = out.slice(0, max);
+    }
+    return out;
+  }
+
+  function renderValue(input, next, opts) {
+    if (!input) return;
+    var out = clampValue(input, next);
+    input.value = out;
+    try {
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) {
+      /* IE */
+    }
+    if (opts && typeof opts.onValueRendered === "function") {
+      try {
+        opts.onValueRendered(out, input);
+      } catch (e2) {
+        /* noop */
+      }
+    }
+  }
+
+  function composeStreamingValue(baselineValue, finalText, interimText) {
+    var base = String(baselineValue || "").trimEnd();
+    var committed = String(finalText || "").trim().replace(/\s+/g, " ");
+    var interim = String(interimText || "").trim().replace(/\s+/g, " ");
+    var parts = [];
+    if (base) parts.push(base);
+    if (committed) parts.push(committed);
+    if (interim) parts.push(interim);
+    return parts.join(" ") + (parts.length ? " " : "");
+  }
+
   /**
    * @typedef {object} StartInlineDictateOpts
    * @property {string} [lang]
    * @property {(evt: SpeechRecognitionErrorEvent|Error) => void} [onError]
    * @property {() => void} [onUnsupported]
+   * @property {(value: string, input: HTMLInputElement|HTMLTextAreaElement) => void} [onValueRendered]
+   * @property {(state: "recording"|"idle", input: HTMLInputElement|HTMLTextAreaElement|null, micBtn: HTMLButtonElement|null) => void} [onStateChange]
    */
 
   /**
@@ -105,53 +157,25 @@
 
     var rec = new Rec();
     var lang = opts.lang || "fr-FR";
+    var baselineValue = (input && input.value) || "";
     rec.lang = lang;
     rec.interimResults = true;
     rec.continuous = true;
 
-    var baselineValue = (input.value || "").trimEnd();
-
     rec.onresult = function (ev) {
-      var target = opts.getActiveInput ? opts.getActiveInput() : activeInput || input;
-      if (!target) return;
-
       var finalText = "";
       var interimText = "";
-      for (var i = 0; i < ev.results.length; i++) {
-        var res = ev.results[i];
-        if (res && res[0]) {
-          if (res.isFinal) {
-            finalText += res[0].transcript;
-          } else {
-            interimText += res[0].transcript;
-          }
+      var i = 0;
+      for (; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) {
+          finalText += ev.results[i][0].transcript + " ";
+        } else {
+          interimText += ev.results[i][0].transcript + " ";
         }
       }
-
-      var max = typeof target.maxLength === "number" && target.maxLength >= 0 ? target.maxLength : 0;
-      var cur = baselineValue;
-      if (finalText) {
-        cur = cur + (cur ? " " : "") + finalText.trim();
-      }
-
-      var next = cur;
-      if (interimText) {
-        next = next + (next ? " " : "") + interimText.trim();
-      } else if (finalText) {
-        next = next + " ";
-      }
-
-      if (max > 0 && next.length > max) {
-        next = next.slice(0, max);
-      }
-
-      target.value = next;
-      try {
-        target.dispatchEvent(new Event("input", { bubbles: true }));
-        target.dispatchEvent(new Event("change", { bubbles: true }));
-      } catch (e) {
-        /* noop */
-      }
+      var target = opts.getActiveInput ? opts.getActiveInput() : activeInput || input;
+      if (!target) return;
+      renderValue(target, composeStreamingValue(baselineValue, finalText, interimText), opts);
     };
 
     rec.onerror = function (e) {
@@ -164,15 +188,18 @@
     rec.onend = function () {
       if (speechRec !== rec) return;
       speechRec = null;
+      notifyStateChange("idle", activeInput, activeMicBtn);
       cleanupMicUi();
     };
 
     speechRec = rec;
     activeInput = input;
     activeMicBtn = micBtn;
+    activeStateChange = opts.onStateChange || null;
     micBtn.setAttribute("aria-pressed", "true");
     micBtn.classList.add("is-recording");
     micBtn.innerHTML = SVG_MIC_STOP;
+    notifyStateChange("recording", input, micBtn);
     try {
       rec.start();
     } catch (err) {
@@ -193,6 +220,56 @@
     }
     if (speechRec) tearDown();
     startForField(input, micBtn, opts);
+  }
+
+  function createDictateButton(options) {
+    options = options || {};
+    var btn = global.document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      options.buttonClass ||
+      "agilo-wizard-dictate__btn agilo-wizard-dictate__btn--standalone";
+    if (options.id) btn.id = String(options.id);
+    btn.setAttribute("aria-pressed", "false");
+    btn.setAttribute("aria-label", options.ariaLabel || "Dicter");
+    btn.title = options.titleHint || "Dicter (navigateur)";
+    btn.innerHTML = SVG_MIC;
+    return btn;
+  }
+
+  function bindButton(input, btn, options) {
+    if (!input || !btn || btn.__agiloDictateBound) return btn || null;
+    btn.__agiloDictateBound = true;
+    btn.addEventListener(
+      "click",
+      function (ev) {
+        ev.preventDefault();
+        toggleForField(input, btn, {
+          lang: options.lang || "fr-FR",
+          getActiveInput: function () {
+            return typeof options.getActiveInput === "function" ? options.getActiveInput() : input;
+          },
+          onValueRendered: options.onValueRendered,
+          onStateChange: options.onStateChange,
+          onError: function (e) {
+            var msg = e && e.error ? String(e.error) : "";
+            var human =
+              msg === "not-allowed"
+                ? "Micro refusé : autorisez le micro dans la barre d’adresse."
+                : "Dictée : " + (msg || "erreur");
+            if (options.onError) options.onError(e, human);
+          },
+          onUnsupported: function () {
+            var h =
+              global.document.getElementById("agilo-wizard-dictate-unsupported-msg");
+            if (h) h.hidden = false;
+            if (options.onUnsupported) options.onUnsupported();
+          },
+        });
+      },
+      { passive: false }
+    );
+    return btn;
   }
 
   /**
@@ -384,32 +461,7 @@
       wrap.__agiloUnsupportedInserted = true;
     }
 
-    btn.addEventListener(
-      "click",
-      function (ev) {
-        ev.preventDefault();
-        toggleForField(input, btn, {
-          lang: options.lang || "fr-FR",
-          getActiveInput: function () {
-            return input;
-          },
-          onError: function (e) {
-            var msg = e && e.error ? String(e.error) : "";
-            var human =
-              msg === "not-allowed"
-                ? "Micro refusé : autorisez le micro dans la barre d’adresse."
-                : "Dictée : " + (msg || "erreur");
-            if (options.onError) options.onError(e, human);
-          },
-          onUnsupported: function () {
-            var h =
-              global.document.getElementById("agilo-wizard-dictate-unsupported-msg");
-            if (h) h.hidden = false;
-          },
-        });
-      },
-      { passive: false }
-    );
+    bindButton(input, btn, options);
 
     input.setAttribute("data-agilo-dictate-mounted", "1");
   }
@@ -422,6 +474,8 @@
     tearDown: tearDown,
     isRecordingFor: isRecordingFor,
     mountButtonAdjacent: mountButtonAdjacent,
+    createDictateButton: createDictateButton,
+    bindButton: bindButton,
     appendFinalChunk: appendFinalChunk,
     toggleForField: toggleForField,
     startForField: startForField,

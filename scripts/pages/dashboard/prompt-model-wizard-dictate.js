@@ -6,7 +6,7 @@
  *   formSelector, rootSelector, fieldSelector, defaultFieldNames,
  *   restrictToKnownNames, lang
  * };
- * @version 1.0.2
+ * @version 1.1.0
  */
 (function () {
   "use strict";
@@ -182,6 +182,36 @@
     st.observers = [];
   }
 
+  function isElementVisible(el) {
+    if (!el || !document.documentElement.contains(el)) return false;
+    var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    if (style && (style.display === "none" || style.visibility === "hidden")) return false;
+    return true;
+  }
+
+  function hasHealthyMount(field) {
+    if (!field) return false;
+    if (field.getAttribute("data-agilo-dictate-mounted") !== "1") return false;
+    var wrap = field.closest(".agilo-wizard-dictate__wrap");
+    if (!wrap || !wrap.contains(field)) return false;
+    var bar = wrap.querySelector(".agilo-wizard-dictate__bar");
+    if (!bar) return false;
+    var btn = bar.querySelector(".agilo-wizard-dictate__btn");
+    if (!btn) return false;
+    return true;
+  }
+
+  function healMount(field) {
+    if (!field || field.getAttribute("data-agilo-dictate-mounted") !== "1") return;
+    if (hasHealthyMount(field)) return;
+    field.removeAttribute("data-agilo-dictate-mounted");
+  }
+
+  function resolveObserverRoot(field, modal) {
+    if (!modal || modal.nodeType !== 1) return null;
+    return modal.contains(field) ? modal : null;
+  }
+
   function enhanceNow() {
     var D = window.AgiloSpeechDictate;
     if (!D || !D.mountButtonAdjacent) return;
@@ -199,14 +229,8 @@
     var fields = gather(form, c);
     fields.forEach(function (field) {
       try {
-        if (field.getAttribute("data-agilo-dictate-mounted") === "1") {
-          var parent = field.parentNode;
-          var hasWrap = parent && parent.classList && parent.classList.contains("agilo-wizard-dictate__wrap");
-          var hasBtn = hasWrap && parent.querySelector(".agilo-wizard-dictate__btn");
-          if (!hasWrap || !hasBtn) {
-            field.removeAttribute("data-agilo-dictate-mounted");
-          }
-        }
+        var visibleNow = isElementVisible(field);
+        healMount(field);
 
         if (field.getAttribute("data-agilo-dictate-mounted") !== "1") {
           D.mountButtonAdjacent(field, {
@@ -220,11 +244,11 @@
           });
         }
 
-        var rootEl = (modal && modal.nodeType === 1 && modal.contains(field)) ? modal : null;
         var io = new IntersectionObserver(
           function (entries) {
             entries.forEach(function (en) {
               if (
+                visibleNow &&
                 !en.isIntersecting &&
                 D.isRecordingFor &&
                 D.isRecordingFor(field)
@@ -233,13 +257,13 @@
               }
             });
           },
-          { root: rootEl, threshold: 0 }
+          { root: resolveObserverRoot(field, modal), threshold: 0 }
         );
         io.observe(field);
         st.observers.push(io);
-      } catch (err) {
-        if (typeof console !== "undefined" && console.error) {
-          console.error("[Agilo] Error mounting microphone for field:", field, err);
+      } catch (e) {
+        if (console && console.warn) {
+          console.warn("prompt-model-wizard-dictate field enhance", field && (field.id || field.name), e);
         }
       }
     });
@@ -292,7 +316,7 @@
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["style", "class"]
+      attributeFilter: ["class", "style"],
     });
     scheduleEnhance();
   }
