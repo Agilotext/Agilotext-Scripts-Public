@@ -278,7 +278,7 @@
       const card = document.createElement('section');
       card.className = 'agf-type-card agf-type-card--official';
       card.setAttribute('data-type-group', 'anon2');
-      card.innerHTML = '<div class="agf-type-card-head"><h5>Types de données</h5><span class="agf-type-card-count" id="agfGroupCount-anon2">0</span></div><div class="agf-checkboxes agf-checkboxes--official"></div>';
+      card.innerHTML = '<div class="agf-type-card-head"><h5>Types de données à anonymiser</h5><span class="agf-type-card-count" id="agfGroupCount-anon2">0</span></div><div class="agf-checkboxes agf-checkboxes--official"></div>';
       const list = card.querySelector('.agf-checkboxes');
       ANON2_ALLOWED_CODES.forEach((code) => {
         const label = document.createElement('label');
@@ -583,7 +583,24 @@
 
   function updateAnon2UiStateFromServer(optionCodes, doPseudoAnon) {
     const normalizedCodes = normalizeAnon2OptionCodes(optionCodes);
-    state.anon2OptionCodes = normalizedCodes.length ? normalizedCodes : DEFAULT_ANON2_OPTION_CODES.slice();
+    
+    // Récupérer la sélection locale avant écrasement
+    let localCodes = [];
+    const raw = storage.get(STORAGE_TYPES);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          localCodes = parsed.filter(c => ANON2_ALLOWED_CODES.includes(c));
+        }
+      } catch(e) {}
+    }
+    
+    // Fusionner les codes du serveur et les codes locaux
+    const mergedCodesSet = new Set([...normalizedCodes, ...localCodes]);
+    const mergedCodes = Array.from(mergedCodesSet).sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
+    
+    state.anon2OptionCodes = mergedCodes.length ? mergedCodes : DEFAULT_ANON2_OPTION_CODES.slice();
     state.doPseudoAnon = normalizeBoolean(doPseudoAnon, false);
     setVisualEntitiesFromAnon2Codes(state.anon2OptionCodes);
     setMode(state.doPseudoAnon ? 'pseudonymiser' : 'anonymiser', { silent: true });
@@ -1481,7 +1498,8 @@
           // Action: Preview Anonymized
           const previewBtn = document.createElement('button');
           previewBtn.type = 'button';
-          previewBtn.className = 'agf-hist-btn-preview';
+          previewBtn.className = 'agf-hist-btn-preview notranslate';
+          previewBtn.setAttribute('translate', 'no');
           previewBtn.title = 'Aperçu du résultat (après)';
           previewBtn.setAttribute('aria-label', 'Aperçu du résultat');
           previewBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -1503,7 +1521,8 @@
           // Action: Download
           const dlBtn = document.createElement('button');
           dlBtn.type = 'button';
-          dlBtn.className = 'agf-hist-btn-dl';
+          dlBtn.className = 'agf-hist-btn-dl notranslate';
+          dlBtn.setAttribute('translate', 'no');
           dlBtn.title = 'Télécharger le résultat';
           dlBtn.setAttribute('aria-label', 'Télécharger ' + (job.fileName || ''));
           dlBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
@@ -1528,7 +1547,8 @@
 
           const propsBtn = document.createElement('button');
           propsBtn.type = 'button';
-          propsBtn.className = 'agf-hist-btn-preview agf-hist-btn-props';
+          propsBtn.className = 'agf-hist-btn-preview agf-hist-btn-props notranslate';
+          propsBtn.setAttribute('translate', 'no');
           propsBtn.title = 'Télécharger la clé de restauration (.properties)';
           propsBtn.setAttribute('aria-label', 'Télécharger la clé de restauration de ' + (job.fileName || ''));
           propsBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 3-9.6 9.6"/><path d="m15.5 7.5 3 3"/><path d="M18.5 4.5 21.5 7.5"/></svg>';
@@ -1555,7 +1575,8 @@
           // Action: Kill (Contextual for pending jobs)
           const killBtn = document.createElement('button');
           killBtn.type = 'button';
-          killBtn.className = 'agf-hist-btn-preview agf-hist-btn--kill';
+          killBtn.className = 'agf-hist-btn-preview agf-hist-btn--kill notranslate';
+          killBtn.setAttribute('translate', 'no');
           killBtn.title = 'Interrompre ce traitement';
           killBtn.setAttribute('aria-label', 'Annuler le traitement');
           killBtn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.8"><path d="M18 6L6 18M6 6l12 12"/></svg>';
@@ -1589,7 +1610,8 @@
         tdDelete.className = 'agf-hist-td-delete';
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
-        delBtn.className = 'agf-hist-btn-delete';
+        delBtn.className = 'agf-hist-btn-delete notranslate';
+        delBtn.setAttribute('translate', 'no');
         delBtn.title = 'Supprimer ' + (job.fileName || 'ce document');
         delBtn.setAttribute('aria-label', 'Supprimer ' + (job.fileName || 'ce document'));
         delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
@@ -3370,6 +3392,7 @@
       state.anon2OptionsSaved = false;
       resetTextCache();
       renderTypeCount();
+      renderPseudoSummary();
       closeModal(ui.modals.types);
       refreshTextIfNeeded();
 
