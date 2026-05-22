@@ -536,6 +536,12 @@
       .sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
   }
 
+  function mapVisualEntityToAnon2Code(visualCode) {
+    const normalized = String(visualCode || '').trim().toUpperCase();
+    if (ANON2_ALLOWED_CODES.includes(normalized)) return normalized;
+    return ANON2_VISUAL_TO_CODE[normalized] || null;
+  }
+
   function selectedAnon2OptionCodes() {
     const seen = new Set();
     return selectedVisualEntities()
@@ -685,7 +691,7 @@
       throw err;
     } finally {
       state.optionsLoading = false;
-      setAnon2OptionsControlsEnabled(!state.optionsError);
+      setAnon2OptionsControlsEnabled(true);
       updateActions();
       renderPseudoSummary();
     }
@@ -1522,10 +1528,10 @@
 
           const propsBtn = document.createElement('button');
           propsBtn.type = 'button';
-          propsBtn.className = 'agf-hist-btn-dl agf-hist-btn-props';
-          propsBtn.title = 'Télécharger le fichier de correspondance';
-          propsBtn.setAttribute('aria-label', 'Télécharger le fichier de correspondance de ' + (job.fileName || ''));
-          propsBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="9" cy="15" r="2"/><path d="M11 15h5"/><path d="M14 15v2"/></svg>';
+          propsBtn.className = 'agf-hist-btn-preview agf-hist-btn-props';
+          propsBtn.title = 'Télécharger la clé de restauration (.properties)';
+          propsBtn.setAttribute('aria-label', 'Télécharger la clé de restauration de ' + (job.fileName || ''));
+          propsBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 3-9.6 9.6"/><path d="m15.5 7.5 3 3"/><path d="M18.5 4.5 21.5 7.5"/></svg>';
           propsBtn.addEventListener('click', async function () {
             propsBtn.disabled = true;
             try {
@@ -1539,7 +1545,7 @@
               a.click();
               setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
             } catch (err) {
-              setStatus('error', (err && err.message) || 'Téléchargement des propriétés impossible.');
+              setStatus('error', (err && err.message) || 'Téléchargement de la clé de restauration impossible.');
             }
             propsBtn.disabled = false;
           });
@@ -1748,7 +1754,7 @@
 
   function selectedVisualEntities() {
     return Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]'))
-      .filter((c) => !c.disabled && c.checked)
+      .filter((c) => c.checked)
       .map((c) => c.getAttribute('data-entity'));
   }
 
@@ -1768,7 +1774,7 @@
     const total = selectedVisualEntities().length;
     const anon2Count = selectedAnon2OptionCodes().length;
     if (ui.typesCount) ui.typesCount.textContent = String(total);
-    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) · ' + anon2Count + ' code(s) Anon2 envoyable(s).';
+    if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) de données actif(s).';
 
     Array.from(document.querySelectorAll('#agfTypeGrid .agf-type-card')).forEach((card) => {
       const selectedInGroup = card.querySelectorAll('input[type="checkbox"][data-entity]:checked').length;
@@ -1999,7 +2005,7 @@
     }
     if (propsCount) {
       const count = state.restorePropertiesFiles.length;
-      propsCount.textContent = 'Fichiers de correspondance : ' + count;
+      propsCount.textContent = 'Clés de restauration : ' + count;
     }
   }
 
@@ -2051,18 +2057,18 @@
     }
     panel.innerHTML =
       '<div class="agf-restore-shell">' +
-      '<p class="agf-restore-note">Chargez les documents pseudonymisés et les fichiers de correspondance associés. Un document renvoie un fichier restauré, plusieurs documents renvoient une archive ZIP.</p>' +
+      '<p class="agf-restore-note">Chargez vos documents anonymisés et leurs clés de restauration correspondantes. Un document renvoie un fichier restauré, plusieurs documents renvoient une archive ZIP.</p>' +
       '<div class="agf-row agf-row--restore">' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestoreAnonFiles">Documents pseudonymisés</label>' +
+      '<label for="agfRestoreAnonFiles">Documents anonymisés</label>' +
       '<p class="agf-restore-counter" id="agfRestoreAnonCount">Documents sélectionnés : 0</p>' +
       '<input id="agfRestoreAnonFiles" class="agf-restore-input" type="file" multiple accept=".docx,.xlsx,.pptx,.pdf" />' +
       '<div id="agfRestoreAnonList" class="agf-restore-list"></div>' +
       '</div>' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestorePropertiesFiles">Fichiers de correspondance</label>' +
-      '<p class="agf-restore-help">Nécessaires pour restaurer les pseudonymes. Extension attendue : <code>.properties</code>.</p>' +
-      '<p class="agf-restore-counter" id="agfRestorePropertiesCount">Fichiers de correspondance : 0</p>' +
+      '<label for="agfRestorePropertiesFiles">Clés de restauration (.properties)</label>' +
+      '<p class="agf-restore-help">Ces fichiers clés (au format <code>.properties</code>) sont indispensables pour retrouver vos données d\'origine.</p>' +
+      '<p class="agf-restore-counter" id="agfRestorePropertiesCount">Clés de restauration : 0</p>' +
       '<input id="agfRestorePropertiesFiles" class="agf-restore-input" type="file" multiple accept=".properties,text/plain" />' +
       '<div id="agfRestorePropertiesList" class="agf-restore-list"></div>' +
       '</div>' +
@@ -2080,7 +2086,7 @@
   async function restoreAnon2Files() {
     if (state.restoreProcessing) return;
     if (!state.restoreAnonFiles.length || !state.restorePropertiesFiles.length) {
-      setRestoreStatus('error', 'Ajoutez au moins un document pseudonymisé et un fichier de correspondance.');
+      setRestoreStatus('error', 'Ajoutez au moins un document anonymisé et sa clé de restauration.');
       return;
     }
     if (state.restoreAnonFiles.some((file) => !hasAllowedExtension(file, ['docx', 'xlsx', 'pptx', 'pdf']))) {
@@ -2088,7 +2094,7 @@
       return;
     }
     if (state.restorePropertiesFiles.some((file) => !hasAllowedExtension(file, ['properties']))) {
-      setRestoreStatus('error', 'Ajoutez uniquement des fichiers de correspondance au format .properties.');
+      setRestoreStatus('error', 'Ajoutez uniquement des clés de restauration au format .properties.');
       return;
     }
     try {
@@ -3353,14 +3359,27 @@
       refreshTextIfNeeded();
     });
 
-    if (ui.saveTypes) ui.saveTypes.addEventListener('click', () => {
+    if (ui.saveTypes) ui.saveTypes.addEventListener('click', async () => {
+      const selectedCodes = selectedAnon2OptionCodes();
+      if (selectedCodes.length < 2) {
+        setStatus('error', 'Sélectionnez au moins 2 types de données.');
+        return;
+      }
       storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
-      state.anon2OptionCodes = selectedAnon2OptionCodes();
+      state.anon2OptionCodes = selectedCodes;
       state.anon2OptionsSaved = false;
       resetTextCache();
       renderTypeCount();
       closeModal(ui.modals.types);
       refreshTextIfNeeded();
+
+      if (state.email && state.token) {
+        try {
+          await saveAnon2Options();
+        } catch (err) {
+          console.warn('Erreur lors de la sauvegarde automatique des préférences sur le serveur :', err);
+        }
+      }
     });
 
     if (ui.pseudoDefaults) ui.pseudoDefaults.addEventListener('click', () => {
@@ -3607,7 +3626,7 @@
         state.anon2OptionsLoaded = false;
         state.optionsError = err instanceof Error ? err.message : String(err || buildAnon2OptionsMissingMessage());
         state.reconcileAvailable = true;
-        setAnon2OptionsControlsEnabled(false);
+        setAnon2OptionsControlsEnabled(true);
         updateActions();
         renderPseudoSummary();
         renderRestorePanel();

@@ -515,7 +515,8 @@
   }
 
   .agf-hist-td-action {
-    width: 2.75rem;
+    width: 7.25rem;
+    min-width: 7.25rem;
     text-align: center;
   }
 
@@ -659,7 +660,8 @@
   }
 
   .agf-hist-td-action {
-    width: 4.5rem;
+    width: 7.25rem;
+    min-width: 7.25rem;
     text-align: center;
     padding-left: 0.25rem !important;
     padding-right: 0.25rem !important;
