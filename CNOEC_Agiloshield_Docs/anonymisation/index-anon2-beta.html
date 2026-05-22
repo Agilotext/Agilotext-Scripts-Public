@@ -20,7 +20,7 @@
     <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
       <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" aria-controls="agfPanel-file" data-tab="file">
         <strong>Traitement de fichier</strong>
-        <span>PDF, Image, CSV, FEC, etc.</span>
+        <span>PDF, Word, Excel, PowerPoint, CSV</span>
       </button>
       <button id="agfTab-text" class="agf-tab" type="button" role="tab" aria-selected="false" aria-controls="agfPanel-text" data-tab="text">
         <strong>Traitement de texte</strong>
@@ -90,7 +90,7 @@
               <circle cx="12" cy="16" r="1.2" fill="currentColor"/>
             </svg>
             <p class="agf-lock-title">Restauration des pseudonymes</p>
-            <p class="agf-lock-text">Chargez les fichiers Anon2 et leurs sidecars .properties pour restaurer les documents.</p>
+            <p class="agf-lock-text">Chargez les fichiers anonymisés et leurs fichiers de correspondance (.properties) pour restaurer les documents.</p>
           </div>
         </section>
       </div>
@@ -131,7 +131,7 @@
 
         <div class="agf-group">
           <p class="agf-label">Pseudonymes</p>
-          <p id="agfPseudoSummary" class="agf-small">Codes actifs: LOC, ORG, PER</p>
+          <p id="agfPseudoSummary" class="agf-small"><span class="agf-summary-line"><strong>Mode :</strong> Anonymisation</span><span class="agf-summary-line"><strong>Codes actifs :</strong> LOC, ORG, PER</span></p>
         </div>
 
         <p id="agfApiMeta" class="agf-small">API: vérification...</p>

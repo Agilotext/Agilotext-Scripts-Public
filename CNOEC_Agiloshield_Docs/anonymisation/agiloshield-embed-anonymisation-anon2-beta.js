@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.2.0-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.3.0-prod2';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -133,6 +133,9 @@
     excludeTerms: [],
     pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG },
     optionsApiMode: null,
+    optionsLoading: false,
+    optionsError: null,
+    optionsSource: 'defaults',
     anon2OptionsLoaded: false,
     anon2OptionsSaved: false,
     reconcileAvailable: null,
@@ -231,6 +234,9 @@
     const headSub = document.querySelector('.agf-head p');
     if (headSub) headSub.textContent = 'Traitement sécurisé de fichiers Office et PDF avec options Anon2.';
 
+    const fileTabSub = document.querySelector('#agfTab-file .agf-tab-content span');
+    if (fileTabSub) fileTabSub.textContent = 'PDF, Word, Excel, PowerPoint, CSV';
+
     const dropzone = document.getElementById('agfDropzone');
     if (dropzone) {
       const title = dropzone.querySelector('h4');
@@ -277,7 +283,8 @@
       ANON2_ALLOWED_CODES.forEach((code) => {
         const label = document.createElement('label');
         label.className = 'agf-entity-option';
-        label.innerHTML = '<input type="checkbox" data-entity="' + code + '" checked><span class="agf-entity-code">' + code + '</span><span class="agf-entity-name">' + ANON2_CODE_LABELS[code] + '</span>';
+        const checked = DEFAULT_ANON2_OPTION_CODES.includes(code) ? ' checked' : '';
+        label.innerHTML = '<input type="checkbox" data-entity="' + code + '"' + checked + '><span class="agf-entity-code">' + code + '</span><span class="agf-entity-name">' + ANON2_CODE_LABELS[code] + '</span>';
         list.appendChild(label);
       });
       grid.appendChild(card);
@@ -582,14 +589,24 @@
     return 'Options Anon2 indisponibles. Impossible de lancer l’anonymisation tant que la configuration serveur n’est pas accessible.';
   }
 
+  function isOptionsEndpointMissingMessage(message) {
+    const m = String(message || '').toLowerCase();
+    if (!m) return false;
+    return m.indexOf('not found') !== -1 ||
+      m.indexOf('no handler') !== -1 ||
+      m.indexOf('no route') !== -1 ||
+      m.indexOf('unknown endpoint') !== -1 ||
+      m.indexOf('endpoint unknown') !== -1 ||
+      m.indexOf('not implemented') !== -1;
+  }
+
   function shouldTryFallbackOptionsApi(response, parsed) {
-    if (!response) return true;
-    if (response.status === 404 || response.status === 405 || response.status === 501 || response.status === 500) return true;
-    if (!parsed || !parsed.ok) return true;
+    if (!response) return false;
+    if (response.status === 404 || response.status === 405 || response.status === 501) return true;
+    if (!parsed || !parsed.ok) return false;
     const data = parsed.data || {};
-    const message = String(data.errorMessage || data.userErrorMessage || '').toLowerCase();
-    if (!message) return false;
-    return message.indexOf('not found') !== -1 || message.indexOf('unknown') !== -1 || message.indexOf('no handler') !== -1;
+    const message = String(data.errorMessage || data.userErrorMessage || data.exceptionStackTrace || '');
+    return isOptionsEndpointMissingMessage(message);
   }
 
   async function callAnon2OptionsApi(action, extraParams) {
@@ -629,9 +646,13 @@
           ? sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage || 'Erreur de configuration Anon2.')
           : buildInvalidJsonMessage(raw, true);
         lastError = new Error(message || buildAnon2OptionsMissingMessage());
+        if (mode === 'defaults' && shouldTryFallbackOptionsApi(response, parsed)) {
+          console.warn('Anon2 defaults options endpoint unavailable, trying legacy options fallback.');
+        }
         if (!shouldTryFallbackOptionsApi(response, parsed)) break;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err || buildAnon2OptionsMissingMessage()));
+        break;
       }
     }
     throw lastError || new Error(buildAnon2OptionsMissingMessage());
@@ -639,17 +660,35 @@
 
   async function loadAnon2Options(forceReload) {
     if (!forceReload && state.anon2OptionsLoaded) return state.anon2OptionCodes.slice();
-    const result = await callAnon2OptionsApi('get');
-    const data = result.data || {};
-    const optionCodes = normalizeAnon2OptionCodes(data.anon2OptionsJson);
-    updateAnon2UiStateFromServer(optionCodes, data.doPseudoAnon);
-    state.anon2OptionsLoaded = true;
-    state.anon2OptionsSaved = false;
-    state.reconcileAvailable = true;
-    storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
-    storage.set(STORAGE_MODE, state.mode);
-    renderRestorePanel();
-    return state.anon2OptionCodes.slice();
+    state.optionsLoading = true;
+    state.optionsError = null;
+    setAnon2OptionsControlsEnabled(false);
+    updateActions();
+    renderPseudoSummary();
+    try {
+      const result = await callAnon2OptionsApi('get');
+      const data = result.data || {};
+      const optionCodes = normalizeAnon2OptionCodes(data.anon2OptionsJson);
+      updateAnon2UiStateFromServer(optionCodes, data.doPseudoAnon);
+      state.optionsApiMode = result.mode;
+      state.optionsSource = result.mode || 'defaults';
+      state.anon2OptionsLoaded = true;
+      state.anon2OptionsSaved = false;
+      state.reconcileAvailable = true;
+      storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
+      storage.set(STORAGE_MODE, state.mode);
+      renderRestorePanel();
+      return state.anon2OptionCodes.slice();
+    } catch (err) {
+      state.anon2OptionsLoaded = false;
+      state.optionsError = err instanceof Error ? err.message : String(err || buildAnon2OptionsMissingMessage());
+      throw err;
+    } finally {
+      state.optionsLoading = false;
+      setAnon2OptionsControlsEnabled(!state.optionsError);
+      updateActions();
+      renderPseudoSummary();
+    }
   }
 
   async function saveAnon2Options() {
@@ -658,10 +697,11 @@
       throw new Error('Sélectionnez au moins 2 types de données Anon2 avant de lancer le traitement.');
     }
     const result = await callAnon2OptionsApi('set', {
-      anon2OptionsJson: payload.anon2OptionsJson,
-      doPseudoAnon: payload.doPseudoAnon ? 'true' : 'false'
+      anon2OptionsJson: payload.anon2OptionsJson
     });
     state.optionsApiMode = result.mode;
+    state.optionsSource = result.mode || 'defaults';
+    state.optionsError = null;
     state.anon2OptionCodes = payload.optionCodes.slice();
     state.doPseudoAnon = payload.doPseudoAnon;
     state.anon2OptionsLoaded = true;
@@ -994,8 +1034,14 @@
     const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
     const hasAnonJobs = Array.isArray(state.anonJobsList) && state.anonJobsList.length > 0;
+    const optionsBlocked = state.optionsLoading || !!state.optionsError;
 
-    document.querySelectorAll('#agfSubmit').forEach(el => { el.disabled = state.processing || !hasPending; });
+    document.querySelectorAll('#agfSubmit').forEach(el => {
+      el.disabled = state.processing || optionsBlocked || !hasPending;
+      if (state.optionsLoading) el.title = 'Chargement des options Anon2 en cours.';
+      else if (state.optionsError) el.title = buildAnon2OptionsMissingMessage();
+      else el.removeAttribute('title');
+    });
     document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
     document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed && !hasAnonJobs; });
     // agfAnonJobsWrap is always visible as a standalone section (renderAnonJobsList handles empty state)
@@ -1007,6 +1053,17 @@
       el.hidden = doneCount < 2;
       el.title = doneCount >= 2 ? 'Télécharger les fichiers terminés en une archive (.zip)' : '';
       el.disabled = state.processing || doneCount < 2;
+    });
+  }
+
+  function setAnon2OptionsControlsEnabled(enabled) {
+    const disabled = !enabled;
+    document.querySelectorAll('#agfOpenTypes, #agfSaveTypes, #agfDefaultsTypes, #agfDetectAllTypes, #agfIgnoreAllTypes').forEach((el) => {
+      el.disabled = disabled;
+    });
+    document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]').forEach((checkbox) => {
+      const code = mapVisualEntityToAnon2Code(checkbox.getAttribute('data-entity'));
+      checkbox.disabled = disabled || !code || !ANON2_ALLOWED_CODES.includes(code);
     });
   }
 
@@ -1465,10 +1522,10 @@
 
           const propsBtn = document.createElement('button');
           propsBtn.type = 'button';
-          propsBtn.className = 'agf-hist-btn-dl';
-          propsBtn.title = 'Télécharger le fichier .properties';
-          propsBtn.setAttribute('aria-label', 'Télécharger les propriétés de ' + (job.fileName || ''));
-          propsBtn.textContent = '.properties';
+          propsBtn.className = 'agf-hist-btn-dl agf-hist-btn-props';
+          propsBtn.title = 'Télécharger le fichier de correspondance (.properties)';
+          propsBtn.setAttribute('aria-label', 'Télécharger le fichier de correspondance de ' + (job.fileName || ''));
+          propsBtn.textContent = 'Correspondance';
           propsBtn.addEventListener('click', async function () {
             propsBtn.disabled = true;
             try {
@@ -1612,6 +1669,25 @@
     if (!blob || blob.size < 4) return false;
     const bytes = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
     return bytes[0] === 0x50 && bytes[1] === 0x4b;
+  }
+
+  async function readApiErrorFromBlob(blob, fallbackMessage) {
+    let raw = '';
+    try { raw = await blob.text(); } catch (e) { }
+    const parsed = tryParseJson(raw);
+    if (parsed.ok && parsed.data) {
+      const data = parsed.data;
+      return sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || data.errorCode || fallbackMessage || 'Erreur de traitement.');
+    }
+    const text = normalizeResponseText(raw);
+    if (text && text.length < 240) return sanitizeApiErrorMessage(text);
+    return fallbackMessage || 'Erreur de traitement.';
+  }
+
+  async function assertZipBlob(blob, fallbackMessage) {
+    if (await blobStartsWithZipSignature(blob)) return;
+    const message = await readApiErrorFromBlob(blob, fallbackMessage);
+    throw new Error(sanitizeApiErrorMessage(message || fallbackMessage || 'Archive ZIP invalide.'));
   }
 
   function getRejectReason(file) {
@@ -1785,8 +1861,7 @@
   function renderInclusionSummary() {
     const i = state.includeTerms.length;
     const e = state.excludeTerms.length;
-    const previewSuffix = isFeatureEnabled('inclusion') ? '' : ' · aperçu non appliqué';
-    if (ui.incSummary) ui.incSummary.textContent = 'Inclusion: ' + i + ' · Exclusion: ' + e + previewSuffix;
+    if (ui.incSummary) ui.incSummary.textContent = 'Inclusion: ' + i + ' · Exclusion: ' + e;
     if (ui.inclusionChip) ui.inclusionChip.textContent = i + ' / ' + e;
   }
 
@@ -1841,7 +1916,7 @@
     const pseudoEnabled = isFeatureEnabled('pseudo');
     if (wantsPseudo && !pseudoEnabled) {
       state.mode = 'anonymiser';
-      if (!opts.silent) setStatus('info', 'Pseudonymisation en mode aperçu pour le moment. Activation backend en cours.');
+      if (!opts.silent) setStatus('info', 'Pseudonymisation indisponible pour ce compte.');
     } else {
       state.mode = wantsPseudo ? 'pseudonymiser' : 'anonymiser';
     }
@@ -1868,13 +1943,15 @@
 
   function renderPseudoSummary() {
     if (ui.pseudoSummary) {
-      if (!isFeatureEnabled('pseudo')) {
-        ui.pseudoSummary.textContent = 'Codes actifs: ' + DEFAULT_ANON2_OPTION_CODES.join(', ');
-        return;
-      }
       const codes = normalizeAnon2OptionCodes(state.anon2OptionCodes || []);
       const codesTxt = codes.length ? codes.join(', ') : DEFAULT_ANON2_OPTION_CODES.join(', ');
-      ui.pseudoSummary.textContent = 'Codes actifs: ' + codesTxt;
+      const modeLabel = state.mode === 'pseudonymiser' ? 'Pseudonymisation' : 'Anonymisation';
+      const loading = state.optionsLoading ? '<span class="agf-summary-muted">Chargement des options...</span>' : '';
+      const error = state.optionsError ? '<span class="agf-summary-error">Options serveur indisponibles</span>' : '';
+      ui.pseudoSummary.innerHTML =
+        '<span class="agf-summary-line"><strong>Mode :</strong> ' + escapeHtml(modeLabel) + '</span>' +
+        '<span class="agf-summary-line"><strong>Codes actifs :</strong> ' + escapeHtml(codesTxt) + '</span>' +
+        loading + error;
     }
   }
 
@@ -1901,6 +1978,7 @@
       empty.className = 'agf-restore-list-item is-empty';
       empty.textContent = 'Aucun fichier sélectionné.';
       container.appendChild(empty);
+      updateRestoreCounters();
       return;
     }
     files.forEach((file) => {
@@ -1909,6 +1987,20 @@
       row.textContent = file.name + ' · ' + formatSize(file.size || 0);
       container.appendChild(row);
     });
+    updateRestoreCounters();
+  }
+
+  function updateRestoreCounters() {
+    const anonCount = document.getElementById('agfRestoreAnonCount');
+    const propsCount = document.getElementById('agfRestorePropertiesCount');
+    if (anonCount) {
+      const count = state.restoreAnonFiles.length;
+      anonCount.textContent = 'Fichiers anonymisés : ' + count;
+    }
+    if (propsCount) {
+      const count = state.restorePropertiesFiles.length;
+      propsCount.textContent = 'Fichiers de correspondance : ' + count;
+    }
   }
 
   function updateRestoreActions() {
@@ -1959,15 +2051,17 @@
     }
     panel.innerHTML =
       '<div class="agf-restore-shell">' +
-      '<p class="agf-restore-note">Chargez les fichiers Anon2 et leurs sidecars <code>.properties</code>. Un fichier renvoie le document restauré, plusieurs renvoient un ZIP.</p>' +
+      '<p class="agf-restore-note">Chargez les fichiers pseudonymisés et leurs fichiers de correspondance. Un fichier renvoie le document restauré, plusieurs renvoient un ZIP.</p>' +
       '<div class="agf-row agf-row--restore">' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestoreAnonFiles">Fichiers Anon2</label>' +
+      '<label for="agfRestoreAnonFiles">Fichiers anonymisés Anon2</label>' +
+      '<p class="agf-restore-counter" id="agfRestoreAnonCount">Fichiers anonymisés : 0</p>' +
       '<input id="agfRestoreAnonFiles" class="agf-restore-input" type="file" multiple accept=".docx,.xlsx,.pptx,.pdf" />' +
       '<div id="agfRestoreAnonList" class="agf-restore-list"></div>' +
       '</div>' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestorePropertiesFiles">Fichiers .properties</label>' +
+      '<label for="agfRestorePropertiesFiles">Fichier de correspondance (.properties) — nécessaire pour restaurer les pseudonymes</label>' +
+      '<p class="agf-restore-counter" id="agfRestorePropertiesCount">Fichiers de correspondance : 0</p>' +
       '<input id="agfRestorePropertiesFiles" class="agf-restore-input" type="file" multiple accept=".properties,text/plain" />' +
       '<div id="agfRestorePropertiesList" class="agf-restore-list"></div>' +
       '</div>' +
@@ -1977,6 +2071,7 @@
       '</div>';
     renderRestoreFilesList('agfRestoreAnonList', state.restoreAnonFiles);
     renderRestoreFilesList('agfRestorePropertiesList', state.restorePropertiesFiles);
+    updateRestoreCounters();
     bindRestorePanelEvents();
     updateRestoreActions();
   }
@@ -2020,19 +2115,10 @@
       const blob = await response.blob();
       const isJsonOrText = contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1 || contentType.indexOf('text/plain') !== -1;
       if (!response.ok || isJsonOrText) {
-        const raw = await blob.text();
-        const parsed = tryParseJson(raw);
-        if (response.status === 404 || !parsed.ok) {
-          throw new Error(sanitizeApiErrorMessage(raw || 'Restauration impossible.'));
-        }
-        throw new Error(sanitizeApiErrorMessage((parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) || 'Restauration impossible.'));
+        throw new Error(await readApiErrorFromBlob(blob, 'Restauration impossible.'));
       }
-      if (state.restoreAnonFiles.length > 1 && !(await blobStartsWithZipSignature(blob))) {
-        let raw = '';
-        try { raw = await blob.text(); } catch (e) { }
-        const parsed = tryParseJson(raw);
-        const backendMessage = parsed.ok && parsed.data ? (parsed.data.userErrorMessage || parsed.data.errorMessage) : '';
-        throw new Error(sanitizeApiErrorMessage(backendMessage || 'La restauration a répondu, mais le ZIP reçu est invalide. Vérifiez les fichiers .properties associés.'));
+      if (state.restoreAnonFiles.length > 1) {
+        await assertZipBlob(blob, 'La restauration a répondu, mais le ZIP reçu est invalide. Vérifiez les fichiers .properties associés.');
       }
       const a = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -2288,12 +2374,6 @@
     formData.append('edition', getEditionForApi());
     formData.append('removeImages', state.removeImages ? 'true' : 'false');
     formData.append('fileUpload[]', file, fileName);
-    if (isFeatureEnabled('inclusion')) {
-      const inc = (state.includeTerms || []).join('\n').trim();
-      if (inc) formData.append('includeTerms', inc);
-      const exc = (state.excludeTerms || []).join('\n').trim();
-      if (exc) formData.append('excludeTerms', exc);
-    }
     return formData;
   }
 
@@ -2304,12 +2384,6 @@
     formData.append('edition', getEditionForApi());
     formData.append('removeImages', state.removeImages ? 'true' : 'false');
     items.forEach((item) => { formData.append('fileUpload[]', item.file, item.fileName); });
-    if (isFeatureEnabled('inclusion')) {
-      const inc = (state.includeTerms || []).join('\n').trim();
-      if (inc) formData.append('includeTerms', inc);
-      const exc = (state.excludeTerms || []).join('\n').trim();
-      if (exc) formData.append('excludeTerms', exc);
-    }
     return formData;
   }
 
@@ -2440,29 +2514,13 @@
         body: body.toString()
       }, REQUEST_TIMEOUT);
       if (!response.ok) {
-        const raw = await response.text();
-        let msg = 'Impossible de récupérer le fichier.';
-        const parsed = tryParseJson(raw);
-        if (parsed.ok) {
-          const json = parsed.data;
-          if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
-        } else {
-          const text = normalizeResponseText(raw);
-          if (text && text.length < 120) msg = sanitizeApiErrorMessage(text);
-        }
-        throw new Error(msg);
+        const blob = await response.blob();
+        throw new Error(await readApiErrorFromBlob(blob, 'Impossible de récupérer le fichier.'));
       }
       const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
       const blob = await response.blob();
-      if (contentType.indexOf('application/json') !== -1) {
-        const text = await blob.text();
-        const parsed = tryParseJson(text);
-        if (parsed.ok) {
-          const json = parsed.data;
-          if (json && (json.status === 'KO' || json.status === 'ko')) throw new Error(sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur.'));
-          throw new Error('Réponse serveur inattendue.');
-        }
-        throw new Error(buildInvalidJsonMessage(text, true));
+      if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
+        throw new Error(await readApiErrorFromBlob(blob, 'Réponse serveur inattendue.'));
       }
       return { blob, contentDisposition: response.headers.get('Content-Disposition') || '' };
     } catch (err) {
@@ -2809,24 +2867,15 @@
         body: zipParams.toString()
       }, REQUEST_TIMEOUT)
         .then(async (response) => {
+          const blob = await response.blob();
           if (!response.ok) {
-            const raw = await response.text();
-            const parsed = tryParseJson(raw);
-            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
-              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
-            }
-            throw new Error('zip-api-failed');
+            throw new Error(await readApiErrorFromBlob(blob, 'Impossible de récupérer le ZIP serveur.'));
           }
           const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
-          const blob = await response.blob();
-          if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
-            const raw = await blob.text();
-            const parsed = tryParseJson(raw);
-            if (parsed.ok && parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) {
-              throw new Error(sanitizeApiErrorMessage(parsed.data.userErrorMessage || parsed.data.errorMessage));
-            }
-            throw new Error('zip-api-failed');
+          if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1 || contentType.indexOf('text/plain') !== -1) {
+            throw new Error(await readApiErrorFromBlob(blob, 'Impossible de récupérer le ZIP serveur.'));
           }
+          await assertZipBlob(blob, 'Le ZIP serveur reçu est invalide. Réessayez ou téléchargez les fichiers un par un.');
           return blob;
         })
         .then((zipBlob) => {
@@ -2835,13 +2884,12 @@
           a.download = 'documents_anonymisés.zip';
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 30000);
-          setStatus('success', 'Téléchargement du zip lancé (fichiers Anon2 et sidecars si disponibles).');
+          setStatus('success', 'Téléchargement du zip lancé (fichiers Anon2 et fichiers de correspondance si disponibles).');
           reenableZipBtn();
         })
         .catch((err) => {
-          if (err && err.message && err.message !== 'zip-api-failed') setStatus('info', sanitizeApiErrorMessage(err.message));
-          setStatus('loading', 'Zip serveur indisponible, création locale en cours…');
-          fallbackDownloadZipClient(doneItems, reenableZipBtn);
+          setStatus('error', sanitizeApiErrorMessage((err && err.message) || 'Impossible de télécharger le ZIP serveur.'));
+          reenableZipBtn();
         });
       return;
     }
@@ -2868,7 +2916,7 @@
         }
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé (sans sidecars supplémentaires).'); done(); };
+        script.onload = () => { buildAndDownloadZip(blobsToZip, blobs); setStatus('success', 'Téléchargement du zip lancé (sans fichiers de correspondance supplémentaires).'); done(); };
         script.onerror = () => { setStatus('error', 'Impossible de charger la bibliothèque zip. Réessayez.'); done(); };
         document.head.appendChild(script);
       }
@@ -3260,7 +3308,7 @@
     if (ui.openTypes) ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
     if (ui.openInclusion) ui.openInclusion.addEventListener('click', () => {
       openModal(ui.modals.inclusion);
-      if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion en aperçu: activation backend en cours.');
+      if (!isFeatureEnabled('inclusion')) setStatus('info', 'Inclusion / Exclusion indisponible pour ce compte.');
     });
     if (ui.upgradeRestore) {
       ui.upgradeRestore.addEventListener('click', () => {
@@ -3316,7 +3364,7 @@
 
     if (ui.pseudoDefaults) ui.pseudoDefaults.addEventListener('click', () => {
       if (!isFeatureEnabled('pseudo')) {
-        setStatus('info', 'Paramètres de pseudonymisation visibles en aperçu uniquement pour l’instant.');
+        setStatus('info', 'Paramètres de pseudonymisation indisponibles pour ce compte.');
         return;
       }
       state.pseudoConfig = { ...DEFAULT_PSEUDO_CONFIG };
@@ -3326,7 +3374,7 @@
 
     if (ui.savePseudo) ui.savePseudo.addEventListener('click', () => {
       if (!isFeatureEnabled('pseudo')) {
-        setStatus('info', 'Pseudonymisation non activée côté backend. Configuration conservée en aperçu.');
+        setStatus('info', 'Configuration de pseudonymisation non modifiable pour ce compte.');
         return;
       }
       state.pseudoConfig = readPseudoFromUi();
@@ -3341,7 +3389,7 @@
 
     if (ui.includeAdd) ui.includeAdd.addEventListener('click', () => {
       if (!isFeatureEnabled('inclusion')) {
-        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        setStatus('info', 'Inclusion / Exclusion non modifiable pour ce compte.');
         return;
       }
       if (addTerm('include', ui.includeInput ? ui.includeInput.value : '')) {
@@ -3354,7 +3402,7 @@
 
     if (ui.excludeAdd) ui.excludeAdd.addEventListener('click', () => {
       if (!isFeatureEnabled('inclusion')) {
-        setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+        setStatus('info', 'Inclusion / Exclusion non modifiable pour ce compte.');
         return;
       }
       if (addTerm('exclude', ui.excludeInput ? ui.excludeInput.value : '')) {
@@ -3369,7 +3417,7 @@
       if (e.key === 'Enter') {
         e.preventDefault();
         if (!isFeatureEnabled('inclusion')) {
-          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          setStatus('info', 'Inclusion / Exclusion non modifiable pour ce compte.');
           return;
         }
         if (addTerm('include', ui.includeInput.value)) {
@@ -3384,7 +3432,7 @@
       if (e.key === 'Enter') {
         e.preventDefault();
         if (!isFeatureEnabled('inclusion')) {
-          setStatus('info', 'Inclusion / Exclusion en aperçu: modification backend non disponible pour l’instant.');
+          setStatus('info', 'Inclusion / Exclusion non modifiable pour ce compte.');
           return;
         }
         if (addTerm('exclude', ui.excludeInput.value)) {
@@ -3397,7 +3445,7 @@
 
     if (ui.inclusionDefaults) ui.inclusionDefaults.addEventListener('click', () => {
       if (!isFeatureEnabled('inclusion')) {
-        setStatus('info', 'Listes en aperçu: le reset sera disponible à l’activation backend.');
+        setStatus('info', 'Listes non modifiables pour ce compte.');
         return;
       }
       state.includeTerms = [];
@@ -3468,6 +3516,11 @@
         state.anon2OptionsLoaded = false;
         state.anon2OptionsSaved = false;
         state.optionsApiMode = null;
+        state.optionsError = null;
+        state.optionsLoading = false;
+        setAnon2OptionsControlsEnabled(true);
+        updateActions();
+        renderPseudoSummary();
         resetTextCache();
       });
     });
@@ -3540,7 +3593,9 @@
 
     bindEvents();
     setActiveTab('file');
+    state.optionsLoading = !!(state.email && state.token);
     loadPreferences();
+    setAnon2OptionsControlsEnabled(!state.optionsLoading);
     applyEditionLocks();
     applyFeatureAvailability();
     renderRestorePanel();
@@ -3549,7 +3604,11 @@
     if (state.email && state.token) {
       loadAnon2Options(true).catch(function (err) {
         state.anon2OptionsLoaded = false;
-        state.reconcileAvailable = false;
+        state.optionsError = err instanceof Error ? err.message : String(err || buildAnon2OptionsMissingMessage());
+        state.reconcileAvailable = true;
+        setAnon2OptionsControlsEnabled(false);
+        updateActions();
+        renderPseudoSummary();
         renderRestorePanel();
         console.warn('Anon2 options unavailable', err);
       });

@@ -573,6 +573,15 @@
     color: var(--agilo-text-secondary);
   }
 
+  .agf-hist-btn-props {
+    width: auto;
+    min-width: 7.75rem;
+    padding: 0 0.625rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
   .agf-hist-btn-dl:hover {
     background: var(--agilo-primary);
     color: #fff;
@@ -596,6 +605,27 @@
   .agf-hist-btn-preview:disabled {
     opacity: 0.35;
     cursor: default;
+  }
+
+  .agf-summary-line,
+  .agf-summary-muted,
+  .agf-summary-error {
+    display: block;
+  }
+
+  .agf-summary-line + .agf-summary-line,
+  .agf-summary-muted,
+  .agf-summary-error {
+    margin-top: 0.25rem;
+  }
+
+  .agf-summary-muted {
+    color: var(--agilo-text-secondary);
+  }
+
+  .agf-summary-error {
+    color: var(--agilo-error);
+    font-weight: 600;
   }
 
   .agf-hist-btn-delete {
@@ -1369,6 +1399,14 @@
 
   .agf-restore-card label {
     font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .agf-restore-counter {
+    margin: -0.25rem 0 0;
+    color: var(--agilo-text-secondary);
+    font-size: 0.75rem;
     font-weight: 600;
   }
 

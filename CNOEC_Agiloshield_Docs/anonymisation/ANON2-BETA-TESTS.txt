@@ -14,24 +14,28 @@ Endpoints Anon2 branchés
 - /deleteAnon2Job
 - /getAnon2UserDefaults
 - /setAnon2UserDefaults
-- /getAnon2UserOptions (fallback)
-- /setAnon2UserOptions (fallback)
+- /getAnon2UserOptions (fallback temporaire uniquement si endpoint Defaults absent: 404/405/501/no route)
+- /setAnon2UserOptions (fallback temporaire uniquement si endpoint Defaults absent: 404/405/501/no route)
 - /reconcileAnon2Text
 
 URLs de test
 - Page locale: anonymisation/index-anon2-beta.html
 - Snippet Webflow 1.09: Front_END/FINAL-2026-05-10-anon2-beta.html
 - Script CDN prod 1.09:
-  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.2.0-prod1
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.3.0-prod2
 
 Vérifications déjà faites
 - Syntaxe JS validée avec node --check
 - Endpoints Anon2 bien substitués dans le bundle
-- Chargement/sauvegarde des options Anon2 avec fallback Defaults -> UserOptions
-- Upload async en fileUpload[] + removeImages=true
+- Chargement/sauvegarde des options Anon2 avec fallback Defaults -> UserOptions strictement limité à l’absence d’endpoint
+- Upload async strict en username + token + edition + removeImages=true + fileUpload[]
 - Champs pseudo legacy supprimés du payload upload Anon2
+- Champs includeTerms/excludeTerms supprimés du payload upload Anon2
 - Liste officielle Anon2 exposée côté UI: ADR, DAT, EML, IBA, IDN, JOB, LOC, ORG, PER, PII, PRO, TEL
-- Restauration Anon2 branchée côté frontend avec validation ZIP multi-fichiers
+- Restauration Anon2 branchée côté frontend avec validation ZIP multi-fichiers par signature PK
+- receiveAnon2Zip validé par signature PK avant téléchargement
+- Résumé latéral attendu: Mode + Codes actifs
+- Bouton historique attendu pour le sidecar: Correspondance (.properties)
 - Parsing tolérant renforcé sur:
   - jobIdList, jobIds, jobs[]
   - anonStatus, status, state, jobStatus
@@ -50,8 +54,11 @@ Checklist de validation manuelle
 - Charger le snippet 1.09 sur une page Webflow dédiée
 - Vérifier que la page ne contient plus de wording de pré-lancement
 - Vérifier que les options serveur se chargent avant le premier upload
+- Vérifier au reload que les checkboxes reflètent exactement getAnon2UserDefaults
+- Vérifier que les checkboxes sont verrouillées pendant le chargement des options serveur
 - Modifier les types, lancer un upload, vérifier que le save options précède l’upload
-- Vérifier que le payload upload ne contient pas processingMode/pseudoStrategy/pseudoScope
+- Vérifier le refus frontend si moins de deux codes sont sélectionnés
+- Vérifier que le payload upload ne contient pas processingMode/pseudoStrategy/pseudoScope/pseudoKeyMode/pseudoRestoreWindow/pseudoDeterministic/pseudoPreserveFormat/includeTerms/excludeTerms
 - Tester upload PDF
 - Tester upload DOCX
 - Tester upload XLSX si support backend confirmé
@@ -61,8 +68,12 @@ Checklist de validation manuelle
 - Vérifier téléchargement ORIGIN
 - Vérifier téléchargement .properties
 - Vérifier téléchargement ZIP
+- Vérifier que tout ZIP reçu commence par PK et s’ouvre localement
 - Vérifier historique des jobs
 - Vérifier suppression d’un job
 - Vérifier restauration: 1 fichier + 1 .properties
 - Vérifier restauration: plusieurs fichiers + plusieurs .properties
 - Vérifier que le ZIP restauration multi-fichiers est ouvrable
+- Vérifier erreur .properties manquant
+- Vérifier erreur .properties ambigu
+- Vérifier absence d’erreur console bloquante Agilo
