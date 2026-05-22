@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.3.0-prod2';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.3.1-prod3';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -232,7 +232,7 @@
     const headTitle = document.querySelector('.agf-head h2');
     if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
     const headSub = document.querySelector('.agf-head p');
-    if (headSub) headSub.textContent = 'Traitement sécurisé de fichiers Office et PDF avec options Anon2.';
+    if (headSub) headSub.textContent = 'Traitement sécurisé de fichiers Office et PDF.';
 
     const fileTabSub = document.querySelector('#agfTab-file .agf-tab-content span');
     if (fileTabSub) fileTabSub.textContent = 'PDF, Word, Excel, PowerPoint, CSV';
@@ -278,7 +278,7 @@
       const card = document.createElement('section');
       card.className = 'agf-type-card agf-type-card--official';
       card.setAttribute('data-type-group', 'anon2');
-      card.innerHTML = '<div class="agf-type-card-head"><h5>Types Anon2 actifs</h5><span class="agf-type-card-count" id="agfGroupCount-anon2">0</span></div><div class="agf-checkboxes agf-checkboxes--official"></div>';
+      card.innerHTML = '<div class="agf-type-card-head"><h5>Types de données</h5><span class="agf-type-card-count" id="agfGroupCount-anon2">0</span></div><div class="agf-checkboxes agf-checkboxes--official"></div>';
       const list = card.querySelector('.agf-checkboxes');
       ANON2_ALLOWED_CODES.forEach((code) => {
         const label = document.createElement('label');
@@ -586,7 +586,7 @@
   }
 
   function buildAnon2OptionsMissingMessage() {
-    return 'Options Anon2 indisponibles. Impossible de lancer l’anonymisation tant que la configuration serveur n’est pas accessible.';
+    return 'Options de traitement indisponibles. Impossible de lancer l’anonymisation tant que la configuration serveur n’est pas accessible.';
   }
 
   function isOptionsEndpointMissingMessage(message) {
@@ -694,7 +694,7 @@
   async function saveAnon2Options() {
     const payload = buildAnon2OptionsPayload();
     if (payload.optionCodes.length < 2) {
-      throw new Error('Sélectionnez au moins 2 types de données Anon2 avant de lancer le traitement.');
+      throw new Error('Sélectionnez au moins 2 types de données avant de lancer le traitement.');
     }
     const result = await callAnon2OptionsApi('set', {
       anon2OptionsJson: payload.anon2OptionsJson
@@ -1038,7 +1038,7 @@
 
     document.querySelectorAll('#agfSubmit').forEach(el => {
       el.disabled = state.processing || optionsBlocked || !hasPending;
-      if (state.optionsLoading) el.title = 'Chargement des options Anon2 en cours.';
+      if (state.optionsLoading) el.title = 'Chargement des options de traitement en cours.';
       else if (state.optionsError) el.title = buildAnon2OptionsMissingMessage();
       else el.removeAttribute('title');
     });
@@ -1523,9 +1523,9 @@
           const propsBtn = document.createElement('button');
           propsBtn.type = 'button';
           propsBtn.className = 'agf-hist-btn-dl agf-hist-btn-props';
-          propsBtn.title = 'Télécharger le fichier de correspondance (.properties)';
+          propsBtn.title = 'Télécharger le fichier de correspondance';
           propsBtn.setAttribute('aria-label', 'Télécharger le fichier de correspondance de ' + (job.fileName || ''));
-          propsBtn.textContent = 'Correspondance';
+          propsBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><circle cx="9" cy="15" r="2"/><path d="M11 15h5"/><path d="M14 15v2"/></svg>';
           propsBtn.addEventListener('click', async function () {
             propsBtn.disabled = true;
             try {
@@ -1995,7 +1995,7 @@
     const propsCount = document.getElementById('agfRestorePropertiesCount');
     if (anonCount) {
       const count = state.restoreAnonFiles.length;
-      anonCount.textContent = 'Fichiers anonymisés : ' + count;
+      anonCount.textContent = 'Documents sélectionnés : ' + count;
     }
     if (propsCount) {
       const count = state.restorePropertiesFiles.length;
@@ -2044,23 +2044,24 @@
         '<path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6" />' +
         '<circle cx="12" cy="16" r="1.2" fill="currentColor" />' +
         '</svg>' +
-        '<p class="agf-lock-title">Restauration Anon2 non validée</p>' +
+        '<p class="agf-lock-title">Restauration non validée</p>' +
         '<p class="agf-lock-text">Le backend de réconciliation n’a pas encore été confirmé sur cette version. Réessayez après validation ou contactez Nicolas.</p>' +
         '</div>';
       return;
     }
     panel.innerHTML =
       '<div class="agf-restore-shell">' +
-      '<p class="agf-restore-note">Chargez les fichiers pseudonymisés et leurs fichiers de correspondance. Un fichier renvoie le document restauré, plusieurs renvoient un ZIP.</p>' +
+      '<p class="agf-restore-note">Chargez les documents pseudonymisés et les fichiers de correspondance associés. Un document renvoie un fichier restauré, plusieurs documents renvoient une archive ZIP.</p>' +
       '<div class="agf-row agf-row--restore">' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestoreAnonFiles">Fichiers anonymisés Anon2</label>' +
-      '<p class="agf-restore-counter" id="agfRestoreAnonCount">Fichiers anonymisés : 0</p>' +
+      '<label for="agfRestoreAnonFiles">Documents pseudonymisés</label>' +
+      '<p class="agf-restore-counter" id="agfRestoreAnonCount">Documents sélectionnés : 0</p>' +
       '<input id="agfRestoreAnonFiles" class="agf-restore-input" type="file" multiple accept=".docx,.xlsx,.pptx,.pdf" />' +
       '<div id="agfRestoreAnonList" class="agf-restore-list"></div>' +
       '</div>' +
       '<div class="agf-restore-card">' +
-      '<label for="agfRestorePropertiesFiles">Fichier de correspondance (.properties) — nécessaire pour restaurer les pseudonymes</label>' +
+      '<label for="agfRestorePropertiesFiles">Fichiers de correspondance</label>' +
+      '<p class="agf-restore-help">Nécessaires pour restaurer les pseudonymes. Extension attendue : <code>.properties</code>.</p>' +
       '<p class="agf-restore-counter" id="agfRestorePropertiesCount">Fichiers de correspondance : 0</p>' +
       '<input id="agfRestorePropertiesFiles" class="agf-restore-input" type="file" multiple accept=".properties,text/plain" />' +
       '<div id="agfRestorePropertiesList" class="agf-restore-list"></div>' +
@@ -2079,7 +2080,7 @@
   async function restoreAnon2Files() {
     if (state.restoreProcessing) return;
     if (!state.restoreAnonFiles.length || !state.restorePropertiesFiles.length) {
-      setRestoreStatus('error', 'Ajoutez au moins un fichier Anon2 et un fichier .properties.');
+      setRestoreStatus('error', 'Ajoutez au moins un document pseudonymisé et un fichier de correspondance.');
       return;
     }
     if (state.restoreAnonFiles.some((file) => !hasAllowedExtension(file, ['docx', 'xlsx', 'pptx', 'pdf']))) {
@@ -2087,7 +2088,7 @@
       return;
     }
     if (state.restorePropertiesFiles.some((file) => !hasAllowedExtension(file, ['properties']))) {
-      setRestoreStatus('error', 'Ajoutez uniquement des fichiers sidecar .properties.');
+      setRestoreStatus('error', 'Ajoutez uniquement des fichiers de correspondance au format .properties.');
       return;
     }
     try {
@@ -2118,7 +2119,7 @@
         throw new Error(await readApiErrorFromBlob(blob, 'Restauration impossible.'));
       }
       if (state.restoreAnonFiles.length > 1) {
-        await assertZipBlob(blob, 'La restauration a répondu, mais le ZIP reçu est invalide. Vérifiez les fichiers .properties associés.');
+        await assertZipBlob(blob, 'La restauration a répondu, mais le ZIP reçu est invalide. Vérifiez les fichiers de correspondance associés.');
       }
       const a = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -2341,11 +2342,11 @@
     if (m.indexOf('error_anon_not_ready') !== -1) return 'Fichier pas encore prêt. Réessayez dans quelques instants.';
     if (m.indexOf('error_anon_file_not_exists') !== -1) return 'Fichier introuvable côté serveur.';
     if (m.indexOf('error_anon_invalid_file_type') !== -1) return 'Type de fichier non accepté pour le téléchargement.';
-    if (m.indexOf('error_invalid_anon2_options_json') !== -1) return 'Configuration Anon2 invalide. Vérifiez les types sélectionnés.';
-    if (m.indexOf('error_anon2_reconcile_supports_docx_xlsx_pptx_pdf_only') !== -1) return 'La restauration Anon2 supporte seulement DOCX, XLSX, PPTX et PDF.';
-    if (m.indexOf('error_anon2_reconcile_missing_matching_properties') !== -1) return 'Un ou plusieurs fichiers .properties correspondants sont manquants.';
-    if (m.indexOf('error_anon2_reconcile_unused_properties') !== -1) return 'Certains fichiers .properties ne correspondent à aucun document Anon2.';
-    if (m.indexOf('error_anon2_reconcile_ambiguous_properties') !== -1) return 'Association ambiguë entre documents Anon2 et fichiers .properties.';
+    if (m.indexOf('error_invalid_anon2_options_json') !== -1) return 'Configuration de traitement invalide. Vérifiez les types sélectionnés.';
+    if (m.indexOf('error_anon2_reconcile_supports_docx_xlsx_pptx_pdf_only') !== -1) return 'La restauration supporte seulement DOCX, XLSX, PPTX et PDF.';
+    if (m.indexOf('error_anon2_reconcile_missing_matching_properties') !== -1) return 'Un ou plusieurs fichiers de correspondance sont manquants.';
+    if (m.indexOf('error_anon2_reconcile_unused_properties') !== -1) return 'Certains fichiers de correspondance ne correspondent à aucun document pseudonymisé.';
+    if (m.indexOf('error_anon2_reconcile_ambiguous_properties') !== -1) return 'Association ambiguë entre documents pseudonymisés et fichiers de correspondance.';
     if (m.indexOf('error_invalid_office_extension') !== -1) return 'Extension Office non supportée.';
     if (m.indexOf('error_content_size_too_big') !== -1) return 'Fichier trop volumineux pour le traitement.';
     if (m.indexOf('error_too_many_files') !== -1) return 'Trop de fichiers envoyés en une seule fois.';
@@ -2884,7 +2885,7 @@
           a.download = 'documents_anonymisés.zip';
           a.click();
           setTimeout(() => URL.revokeObjectURL(a.href), 30000);
-          setStatus('success', 'Téléchargement du zip lancé (fichiers Anon2 et fichiers de correspondance si disponibles).');
+          setStatus('success', 'Téléchargement du zip lancé (documents traités et fichiers de correspondance si disponibles).');
           reenableZipBtn();
         })
         .catch((err) => {
