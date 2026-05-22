@@ -1,12 +1,11 @@
-<!-- Intégration staging Anon2 : la page qui inclut ce fragment doit déclarer <meta charset="utf-8"> pour l'affichage des accents.
+<!-- Intégration Anon2 : la page qui inclut ce fragment doit déclarer <meta charset="utf-8"> pour l'affichage des accents.
      Script embed : APIs Anon2 Async + options serveur + réconciliation. Limite 256 Mo/fichier.
-     Ordre de chargement recommandé (Webflow staging uniquement) :
+     Ordre de chargement recommandé (Webflow) :
      1) HEAD : token resolver (agilo token).
      2) Avant l'embed : lottie-web (optionnel).
-     3) Footer : script embed Anon2 beta (une seule inclusion).
-     Lien CDN unique (recommandé pour Webflow staging) :
-     <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.1.0-beta1"></script>
-     Ne pas brancher ce fragment sur une page de production avant validation complète Anon2.
+     3) Footer : script embed Anon2 (une seule inclusion).
+     Lien CDN unique :
+     <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.2.0-prod1"></script>
      Optionnel – animation Lottie pendant le chargement : charger lottie-web avant le script embed, puis définir l’URL du JSON :
      <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous"></script>
      -->
@@ -23,15 +22,15 @@
   }
 </style>
 <link rel="stylesheet"
-  href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.1.0-beta1">
+  href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.2.0-prod1">
 
 <form id="agfForm" ms-code-anonymisation="form" novalidate>
   <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
 
   <section class="agf-shell" aria-label="Anonymisation avancée">
     <header class="agf-head">
-      <h2>Anonymisation documentaire Anon2 (BETA)</h2>
-      <p>Surface de staging pour valider le moteur Anon2 en parallèle de la version actuelle.</p>
+      <h2>Anonymisation documentaire</h2>
+      <p>Traitement sécurisé de fichiers Office et PDF avec options Anon2.</p>
     </header>
 
     <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
@@ -86,9 +85,9 @@
           <h3 class="agf-section-title">Sélectionnez les fichiers</h3>
           <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
             <h4>Cliquez ou glissez-déposez des fichiers</h4>
-            <p>PDF, Word, Excel et autres formats courants (256 Mo / fichier — 12 fichiers maximum).</p>
+            <p>12 documents maximum — 256 Mo max / fichier.</p>
             <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx),
-              Excel (xls, xlsx), TXT.</p>
+              Excel (xls, xlsx), PDF, TXT, JSON et FEC.</p>
           </div>
           <input id="agfFileInput" type="file" name="fileUpload[]" multiple
             accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
@@ -164,8 +163,7 @@
               <circle cx="12" cy="16" r="1.2" fill="currentColor" />
             </svg>
             <p class="agf-lock-title">Restauration des pseudonymes</p>
-            <p class="agf-lock-text">Module de restauration prêt côté interface. L'activation backend sera branchée dès
-              validation du mapping sécurisé.</p>
+            <p class="agf-lock-text">Chargez les fichiers Anon2 et leurs sidecars .properties pour restaurer les documents.</p>
           </div>
         </section>
       </div>
@@ -196,9 +194,8 @@
           <p class="agf-label">Mode de traitement</p>
           <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked>
             Anonymiser</label>
-          <button id="agfPseudoMode" type="button" class="agf-item-btn"><span>Pseudonymiser</span><span class="agf-chip"
-              id="agfPseudoBadge">Bientôt</span></button>
-          <p id="agfPseudoAvailabilityHint" class="agf-small">Aperçu disponible. Activation backend en cours.</p>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="pseudonymiser">
+            Pseudonymiser</label>
         </div>
 
         <div class="agf-group">
@@ -209,17 +206,12 @@
           </button>
           <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span
               id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
-          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes visibles pour cadrage. Non appliquées pour
-            l’instant.</p>
+          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes disponibles pour affiner les détections.</p>
         </div>
 
         <div class="agf-group">
-          <p class="agf-label">Enregistré</p>
-          <button id="agfPseudoSaved" type="button" class="agf-item-btn"><span>Pseudonymes</span><span
-              id="agfPseudoSavedBadge" class="agf-chip">Aperçu</span></button>
-          <p id="agfPseudoSummary" class="agf-small">Pseudo: configuration standard</p>
-          <p id="agfSavedTypesInfo" class="agf-small">Types actifs: 0</p>
-          <p id="agfLastMaskInfo" class="agf-small">Champs anonymisés (texte): 0</p>
+          <p class="agf-label">Pseudonymes</p>
+          <p id="agfPseudoSummary" class="agf-small">Codes actifs: LOC, ORG, PER</p>
         </div>
 
         <div class="agf-api-footer" aria-hidden="true">
@@ -261,139 +253,25 @@
       <button id="agfModalTypesClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
 
-    <div class="agf-modal-types-beta-overlay" id="agfModalTypesBetaOverlay" aria-label="Message version bêta">
-      <div class="agf-modal-types-beta-box">
-        <button type="button" class="agf-modal-types-beta-close" id="agfModalTypesBetaClose"
-          aria-label="Fermer">&times;</button>
-        <p class="agf-modal-types-beta-msg">Version bêta — En cours d'optimisation. Seuls les types cochés ci-dessous
-          sont actifs pour le moment.</p>
-      </div>
-    </div>
-
     <div class="agf-type-grid" id="agfTypeGrid">
-      <section class="agf-type-card" data-type-group="person">
+      <section class="agf-type-card agf-type-card--official" data-type-group="anon2">
         <div class="agf-type-card-head">
-          <h5>Données personnelles</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-person">0</span>
+          <h5>Types Anon2 actifs</h5>
+          <span class="agf-type-card-count" id="agfGroupCount-anon2">0</span>
         </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option"><input type="checkbox" data-entity="PR" data-api="person_name" checked><span
-              class="agf-entity-code">PR</span><span class="agf-entity-name">Nom de personne</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="MAIL" data-api="email" checked><span
-              class="agf-entity-code">MAIL</span><span class="agf-entity-name">Adresse email</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="PHON" data-api="phone" checked><span
-              class="agf-entity-code">PHON</span><span class="agf-entity-name">Téléphone</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="AGE"
-              data-api="birth" disabled><span class="agf-entity-code">AGE</span><span class="agf-entity-name">Âge /
-              naissance</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="TR"
-              data-api="role" disabled><span class="agf-entity-code">TR</span><span class="agf-entity-name">Titre /
-              profession</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="DT" data-api="" checked><span
-              class="agf-entity-code">DT</span><span class="agf-entity-name">Date et heure</span></label>
-        </div>
-      </section>
-
-      <section class="agf-type-card" data-type-group="company">
-        <div class="agf-type-card-head">
-          <h5>Données d'entreprise</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-company">0</span>
-        </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CIE"
-              data-api="company" disabled><span class="agf-entity-code">CIE</span><span class="agf-entity-name">Nom
-              d'entreprise</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="CID" data-api="siren" checked><span
-              class="agf-entity-code">CID</span><span class="agf-entity-name">SIREN / identifiant</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ACT"
-              data-api="accounting" disabled><span class="agf-entity-code">ACT</span><span
-              class="agf-entity-name">Entrée comptable</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="PROD"
-              data-api="product" disabled><span class="agf-entity-code">PROD</span><span class="agf-entity-name">Produit
-              / service</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="ORG" data-api="company" checked><span
-              class="agf-entity-code">ORG</span><span class="agf-entity-name">Organisation</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FILE"
-              data-api="" disabled><span class="agf-entity-code">FILE</span><span class="agf-entity-name">Nom de
-              dossier</span></label>
-        </div>
-      </section>
-
-      <section class="agf-type-card" data-type-group="location">
-        <div class="agf-type-card-head">
-          <h5>Données de localisation</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-location">0</span>
-        </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="ADR"
-              data-api="address" disabled><span class="agf-entity-code">ADR</span><span
-              class="agf-entity-name">Adresse</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="POST"
-              data-api="address" disabled><span class="agf-entity-code">POST</span><span class="agf-entity-name">Code
-              postal</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="LOC" data-api="address" checked><span
-              class="agf-entity-code">LOC</span><span class="agf-entity-name">Ville / région</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="GEO"
-              data-api="" disabled><span class="agf-entity-code">GEO</span><span
-              class="agf-entity-name">Géolocalisation</span></label>
-        </div>
-      </section>
-
-      <section class="agf-type-card" data-type-group="finance">
-        <div class="agf-type-card-head">
-          <h5>Données financières</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-finance">0</span>
-        </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="BANK"
-              data-api="bank" disabled><span class="agf-entity-code">BANK</span><span class="agf-entity-name">Compte
-              bancaire</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CARD"
-              data-api="bank" disabled><span class="agf-entity-code">CARD</span><span class="agf-entity-name">Carte
-              bancaire</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="REF"
-              data-api="contract" disabled><span class="agf-entity-code">REF</span><span class="agf-entity-name">Numéro
-              de référence</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="MT"
-              data-api="" disabled><span class="agf-entity-code">MT</span><span
-              class="agf-entity-name">Montant</span></label>
-          <label class="agf-entity-option"><input type="checkbox" data-entity="IBAN" data-api="bank" checked><span
-              class="agf-entity-code">IBAN</span><span class="agf-entity-name">IBAN</span></label>
-        </div>
-      </section>
-
-      <section class="agf-type-card" data-type-group="misc">
-        <div class="agf-type-card-head">
-          <h5>Données diverses</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-misc">0</span>
-        </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="URL"
-              data-api="" disabled><span class="agf-entity-code">URL</span><span
-              class="agf-entity-name">URL</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="IP"
-              data-api="" disabled><span class="agf-entity-code">IP</span><span class="agf-entity-name">Adresse
-              IP</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="CLAUSE"
-              data-api="contract" disabled><span class="agf-entity-code">CLAUSE</span><span
-              class="agf-entity-name">Clause sensible</span></label>
-        </div>
-      </section>
-
-      <section class="agf-type-card" data-type-group="france">
-        <div class="agf-type-card-head">
-          <h5>Formats spécifiques France</h5>
-          <span class="agf-type-card-count" id="agfGroupCount-france">0</span>
-        </div>
-        <div class="agf-checkboxes">
-          <label class="agf-entity-option"><input type="checkbox" data-entity="FRNIR" data-api="" checked><span
-              class="agf-entity-code">FRNIR</span><span class="agf-entity-name">NIR</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRPASS"
-              data-api="" disabled><span class="agf-entity-code">FRPASS</span><span
-              class="agf-entity-name">Passeport</span></label>
-          <label class="agf-entity-option agf-entity-option--unavailable"><input type="checkbox" data-entity="FRCNI"
-              data-api="" disabled><span class="agf-entity-code">FRCNI</span><span class="agf-entity-name">Carte
-              d'identité</span></label>
+        <div class="agf-checkboxes agf-checkboxes--official">
+          <label class="agf-entity-option"><input type="checkbox" data-entity="ADR"><span class="agf-entity-code">ADR</span><span class="agf-entity-name">Adresse</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="DAT"><span class="agf-entity-code">DAT</span><span class="agf-entity-name">Date</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="EML"><span class="agf-entity-code">EML</span><span class="agf-entity-name">Email</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="IBA"><span class="agf-entity-code">IBA</span><span class="agf-entity-name">IBAN</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="IDN"><span class="agf-entity-code">IDN</span><span class="agf-entity-name">Identifiant</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="JOB"><span class="agf-entity-code">JOB</span><span class="agf-entity-name">Intitulé de poste</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="LOC" checked><span class="agf-entity-code">LOC</span><span class="agf-entity-name">Lieu</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="ORG" checked><span class="agf-entity-code">ORG</span><span class="agf-entity-name">Organisation</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PER" checked><span class="agf-entity-code">PER</span><span class="agf-entity-name">Personne</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PII"><span class="agf-entity-code">PII</span><span class="agf-entity-name">Donnée personnelle générique</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PRO"><span class="agf-entity-code">PRO</span><span class="agf-entity-name">Profession</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="TEL"><span class="agf-entity-code">TEL</span><span class="agf-entity-name">Téléphone</span></label>
         </div>
       </section>
     </div>
@@ -409,65 +287,6 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.1.0-beta1"></script>
-
-<div id="agfModalPseudoWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
-  aria-labelledby="agfModalPseudoTitle" aria-hidden="true">
-  <div class="agf-modal agf-modal--wide">
-    <div class="agf-modal-head">
-      <div>
-        <h3 id="agfModalPseudoTitle" class="agf-modal-title">Paramètres de pseudonymisation</h3>
-        <p class="agf-modal-subtitle">Choisissez le format des pseudonymes dans les résultats et exports. Aucune donnée
-          ni clé n'est stockée côté serveur.</p>
-      </div>
-      <button id="agfModalPseudoClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
-    </div>
-    <div id="agfPseudoPreviewNote" class="agf-modal-preview-note" role="note">
-      <strong>Mode aperçu:</strong> les options sont consultables pour cadrer vos besoins. L’enregistrement et
-      l’application seront activés lors du branchement backend.
-    </div>
-
-    <div id="agfPseudoReadonlyZone" class="agf-pseudo-grid agf-readonly-disabled">
-      <section class="agf-pseudo-card">
-        <p class="agf-pseudo-title">Stratégie de remplacement</p>
-        <p class="agf-pseudo-desc">Détermine le format des valeurs pseudonymisées dans les résultats et exports.</p>
-        <div class="agf-option-line">
-          <input id="agfPseudoStrategyPlaceholders" type="radio" name="agfPseudoStrategy" value="placeholders" checked>
-          <label for="agfPseudoStrategyPlaceholders">Identifiants lisibles (ex: [PR-0001])</label>
-        </div>
-        <div class="agf-option-line">
-          <input id="agfPseudoStrategyStable" type="radio" name="agfPseudoStrategy" value="stable_hash">
-          <label for="agfPseudoStrategyStable">Jeton stable (hash cohérent)</label>
-        </div>
-        <div class="agf-option-line">
-          <input id="agfPseudoStrategyAlias" type="radio" name="agfPseudoStrategy" value="human_alias">
-          <label for="agfPseudoStrategyAlias">Alias métier (lecture humaine contrôlée)</label>
-        </div>
-        <div class="agf-select-line">
-          <label for="agfPseudoScope">Périmètre de cohérence</label>
-          <select id="agfPseudoScope">
-            <option value="document">Document</option>
-            <option value="batch">Lot de fichiers</option>
-            <option value="workspace">Espace client</option>
-          </select>
-        </div>
-        <div class="agf-option-line">
-          <input id="agfPseudoDeterministic" type="checkbox" checked>
-          <label for="agfPseudoDeterministic">Même donnée source → même pseudonyme</label>
-        </div>
-        <div class="agf-option-line">
-          <input id="agfPseudoPreserveFormat" type="checkbox" checked>
-          <label for="agfPseudoPreserveFormat">Préserver la structure (longueur, séparateurs)</label>
-        </div>
-      </section>
-    </div>
-
-    <div class="agf-modal-actions">
-      <button id="agfPseudoDefaults" type="button" class="agf-btn-secondary">Réinitialiser</button>
-      <button id="agfSavePseudo" type="button" class="agf-btn-primary">Enregistrer la politique</button>
-    </div>
-  </div>
-</div>
 
 <div id="agfModalInclusionWrap" class="agf-modal-overlay" role="dialog" aria-modal="true"
   aria-labelledby="agfModalIncTitle" aria-hidden="true">
@@ -480,12 +299,7 @@
       </div>
       <button id="agfModalIncClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
     </div>
-    <div id="agfInclusionPreviewNote" class="agf-modal-preview-note" role="note">
-      <strong>Mode aperçu:</strong> les listes actuelles restent visibles pour revue métier. Les modifications et
-      l’application backend sont en cours d’activation.
-    </div>
-
-    <div id="agfInclusionReadonlyZone" class="agf-inc-grid agf-readonly-disabled">
+    <div id="agfInclusionReadonlyZone" class="agf-inc-grid">
       <section class="agf-inc-card agf-inc-card--include">
         <h4>Liste d'inclusion</h4>
         <p>Ces termes sont toujours détectés et anonymisés, même hors des types sélectionnés.</p>
@@ -520,3 +334,5 @@
     <textarea id="agfExcludeTerms" class="agf-hidden-field" aria-hidden="true"></textarea>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.2.0-prod1"></script>

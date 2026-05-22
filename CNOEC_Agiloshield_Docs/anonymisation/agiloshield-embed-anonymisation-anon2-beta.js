@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.1.0-beta1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.2.0-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -45,6 +45,20 @@
   });
   const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL']);
   const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'ORG', 'PER']);
+  const ANON2_CODE_LABELS = Object.freeze({
+    ADR: 'Adresse',
+    DAT: 'Date',
+    EML: 'Email',
+    IBA: 'IBAN',
+    IDN: 'Identifiant',
+    JOB: 'Intitulé de poste',
+    LOC: 'Lieu',
+    ORG: 'Organisation',
+    PER: 'Personne',
+    PII: 'Donnée personnelle générique',
+    PRO: 'Profession',
+    TEL: 'Téléphone'
+  });
   const ANON2_VISUAL_TO_CODE = Object.freeze({
     PR: 'PER',
     MAIL: 'EML',
@@ -56,19 +70,32 @@
     CID: 'IDN',
     FRNIR: 'IDN'
   });
+  const ANON2_CODE_TO_TEXT_API = Object.freeze({
+    ADR: 'address',
+    DAT: 'birth',
+    EML: 'email',
+    IBA: 'bank',
+    IDN: 'siren',
+    JOB: 'role',
+    LOC: 'address',
+    ORG: 'company',
+    PER: 'person_name',
+    PRO: 'product',
+    TEL: 'phone'
+  });
   const ANON2_CODE_TO_VISUAL = Object.freeze({
-    PER: ['PR'],
-    EML: ['MAIL'],
-    TEL: ['PHON'],
-    DAT: ['DT'],
+    ADR: ['ADR'],
+    DAT: ['DAT', 'DT'],
+    EML: ['EML', 'MAIL'],
+    IBA: ['IBA', 'IBAN'],
+    IDN: ['IDN', 'CID', 'FRNIR'],
+    JOB: ['JOB'],
     ORG: ['ORG'],
     LOC: ['LOC'],
-    IBA: ['IBAN'],
-    IDN: ['CID', 'FRNIR'],
-    ADR: [],
-    JOB: [],
-    PII: [],
-    PRO: []
+    PER: ['PER', 'PR'],
+    PII: ['PII'],
+    PRO: ['PRO'],
+    TEL: ['TEL', 'PHON']
   });
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
@@ -191,10 +218,71 @@
     OTHER: 'OTHER'
   };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
-  /** Types proposés dans la grille (doivent correspondre à des data-entity présents dans #agfTypeGrid). POST/URL activés dynamiquement même si disabled dans le HTML. */
-  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  /** Types proposés dans la grille Anon2 officielle. Les anciens codes UI restent mappés en compatibilité. */
+  const TYPES_AVAILABLE = ANON2_ALLOWED_CODES.slice();
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
+
+  normalizeAnon2ProductionMarkup();
+
+  function normalizeAnon2ProductionMarkup() {
+    const headTitle = document.querySelector('.agf-head h2');
+    if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
+    const headSub = document.querySelector('.agf-head p');
+    if (headSub) headSub.textContent = 'Traitement sécurisé de fichiers Office et PDF avec options Anon2.';
+
+    const dropzone = document.getElementById('agfDropzone');
+    if (dropzone) {
+      const title = dropzone.querySelector('h4');
+      if (title) title.textContent = 'Cliquez ou glissez-déposez des fichiers';
+      const paragraphs = dropzone.querySelectorAll('p');
+      if (paragraphs[0]) paragraphs[0].textContent = '12 documents maximum — 256 Mo max / fichier.';
+      if (paragraphs[1]) paragraphs[1].textContent = 'Formats pris en charge : PDF, Word, Excel, PowerPoint, CSV, TXT, JSON et FEC.';
+    }
+
+    const pseudoModeButton = document.getElementById('agfPseudoMode');
+    if (pseudoModeButton && pseudoModeButton.parentNode) {
+      const pseudoLabel = document.createElement('label');
+      pseudoLabel.className = 'agf-radio-line';
+      pseudoLabel.innerHTML = '<input type="radio" name="agfMode" value="pseudonymiser"> Pseudonymiser';
+      pseudoModeButton.parentNode.replaceChild(pseudoLabel, pseudoModeButton);
+    }
+    const pseudoAvailabilityHint = document.getElementById('agfPseudoAvailabilityHint');
+    if (pseudoAvailabilityHint) pseudoAvailabilityHint.remove();
+
+    const pseudoSaved = document.getElementById('agfPseudoSaved');
+    if (pseudoSaved) pseudoSaved.remove();
+    const pseudoGroup = document.getElementById('agfPseudoSummary') ? document.getElementById('agfPseudoSummary').closest('.agf-group') : null;
+    if (pseudoGroup) {
+      const label = pseudoGroup.querySelector('.agf-label');
+      if (label) label.textContent = 'Pseudonymes';
+      Array.from(pseudoGroup.querySelectorAll('#agfSavedTypesInfo, #agfLastMaskInfo')).forEach((node) => node.remove());
+    }
+
+    const betaOverlay = document.getElementById('agfModalTypesBetaOverlay');
+    if (betaOverlay) betaOverlay.remove();
+    const pseudoModal = document.getElementById('agfModalPseudoWrap');
+    if (pseudoModal) pseudoModal.remove();
+    const inclusionHint = document.getElementById('agfInclusionAvailabilityHint');
+    if (inclusionHint) inclusionHint.textContent = 'Listes disponibles pour affiner les détections.';
+
+    const grid = document.getElementById('agfTypeGrid');
+    if (grid) {
+      grid.innerHTML = '';
+      const card = document.createElement('section');
+      card.className = 'agf-type-card agf-type-card--official';
+      card.setAttribute('data-type-group', 'anon2');
+      card.innerHTML = '<div class="agf-type-card-head"><h5>Types Anon2 actifs</h5><span class="agf-type-card-count" id="agfGroupCount-anon2">0</span></div><div class="agf-checkboxes agf-checkboxes--official"></div>';
+      const list = card.querySelector('.agf-checkboxes');
+      ANON2_ALLOWED_CODES.forEach((code) => {
+        const label = document.createElement('label');
+        label.className = 'agf-entity-option';
+        label.innerHTML = '<input type="checkbox" data-entity="' + code + '" checked><span class="agf-entity-code">' + code + '</span><span class="agf-entity-name">' + ANON2_CODE_LABELS[code] + '</span>';
+        list.appendChild(label);
+      });
+      grid.appendChild(card);
+    }
+  }
 
   const ui = {
     form: document.getElementById('agfForm'),
@@ -282,7 +370,7 @@
     restoreLocked: document.getElementById('agfRestoreLocked')
   };
 
-  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  const DEFAULT_ENTITIES = DEFAULT_ANON2_OPTION_CODES.slice();
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
@@ -444,7 +532,11 @@
   function selectedAnon2OptionCodes() {
     const seen = new Set();
     return selectedVisualEntities()
-      .map((code) => ANON2_VISUAL_TO_CODE[code] || null)
+      .map((code) => {
+        const normalized = String(code || '').trim().toUpperCase();
+        if (ANON2_ALLOWED_CODES.includes(normalized)) return normalized;
+        return ANON2_VISUAL_TO_CODE[normalized] || null;
+      })
       .filter(Boolean)
       .filter((code) => {
         if (seen.has(code)) return false;
@@ -458,12 +550,11 @@
     const normalized = normalizeAnon2OptionCodes(optionCodes);
     const activeCodes = new Set();
     normalized.forEach((code) => {
+      activeCodes.add(code);
       (ANON2_CODE_TO_VISUAL[code] || []).forEach((visualCode) => activeCodes.add(visualCode));
     });
-    const availableSet = new Set(TYPES_AVAILABLE);
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
       const visualCode = chk.getAttribute('data-entity');
-      if (!availableSet.has(visualCode)) return;
       chk.checked = activeCodes.has(visualCode);
     });
   }
@@ -1511,6 +1602,18 @@
     return SUPPORTED_EXT.includes(ext);
   }
 
+  function hasAllowedExtension(file, allowedExtensions) {
+    if (!file || !file.name) return false;
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    return allowedExtensions.includes(ext);
+  }
+
+  async function blobStartsWithZipSignature(blob) {
+    if (!blob || blob.size < 4) return false;
+    const bytes = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+    return bytes[0] === 0x50 && bytes[1] === 0x4b;
+  }
+
   function getRejectReason(file) {
     if (!file) return 'format';
     const ext = (file.name.split('.').pop() || '').toLowerCase();
@@ -1577,7 +1680,8 @@
     const values = [];
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((c) => {
       if (!c.checked) return;
-      const apiValue = (c.getAttribute('data-api') || '').trim();
+      const entityCode = String(c.getAttribute('data-entity') || '').trim().toUpperCase();
+      const apiValue = (c.getAttribute('data-api') || ANON2_CODE_TO_TEXT_API[entityCode] || '').trim();
       if (!apiValue || !API_READY_VALUES.includes(apiValue)) return;
       if (!values.includes(apiValue)) values.push(apiValue);
     });
@@ -1744,11 +1848,12 @@
     const pseudoActive = state.mode === 'pseudonymiser';
     if (ui.pseudoMode) ui.pseudoMode.classList.toggle('is-active', pseudoActive);
     if (ui.pseudoBadge) {
-      if (!pseudoEnabled) ui.pseudoBadge.textContent = 'Bientôt';
-      else ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Paramétrer';
+      if (!pseudoEnabled) ui.pseudoBadge.textContent = 'Indisponible';
+      else ui.pseudoBadge.textContent = pseudoActive ? 'Actif' : 'Disponible';
     }
-    const anonRadio = (ui.modeRadios || []).find((r) => r.value === 'anonymiser');
-    if (anonRadio) anonRadio.checked = !pseudoActive;
+    (ui.modeRadios || []).forEach((radio) => {
+      radio.checked = radio.value === state.mode;
+    });
 
     // 20/20 Safety: Cancel if mode changes during processing
     if (state.processing || state.textProcessing) {
@@ -1762,16 +1867,14 @@
   }
 
   function renderPseudoSummary() {
-    const cfg = state.pseudoConfig || DEFAULT_PSEUDO_CONFIG;
     if (ui.pseudoSummary) {
       if (!isFeatureEnabled('pseudo')) {
-        ui.pseudoSummary.textContent = 'Pseudo: désactivée pour cette version.';
+        ui.pseudoSummary.textContent = 'Codes actifs: ' + DEFAULT_ANON2_OPTION_CODES.join(', ');
         return;
       }
       const codes = normalizeAnon2OptionCodes(state.anon2OptionCodes || []);
-      const modeTxt = state.mode === 'pseudonymiser' ? 'active' : 'inactive';
       const codesTxt = codes.length ? codes.join(', ') : DEFAULT_ANON2_OPTION_CODES.join(', ');
-      ui.pseudoSummary.textContent = 'Pseudo ' + modeTxt + ' · codes Anon2: ' + codesTxt;
+      ui.pseudoSummary.textContent = 'Codes actifs: ' + codesTxt;
     }
   }
 
@@ -1884,6 +1987,14 @@
       setRestoreStatus('error', 'Ajoutez au moins un fichier Anon2 et un fichier .properties.');
       return;
     }
+    if (state.restoreAnonFiles.some((file) => !hasAllowedExtension(file, ['docx', 'xlsx', 'pptx', 'pdf']))) {
+      setRestoreStatus('error', 'Formats acceptés pour la restauration: DOCX, XLSX, PPTX ou PDF.');
+      return;
+    }
+    if (state.restorePropertiesFiles.some((file) => !hasAllowedExtension(file, ['properties']))) {
+      setRestoreStatus('error', 'Ajoutez uniquement des fichiers sidecar .properties.');
+      return;
+    }
     try {
       await ensureAuth();
     } catch (err) {
@@ -1907,15 +2018,21 @@
       const contentType = (response.headers.get('Content-Type') || '').toLowerCase();
       const contentDisposition = response.headers.get('Content-Disposition') || '';
       const blob = await response.blob();
-      if (!response.ok || contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1) {
+      const isJsonOrText = contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/json') !== -1 || contentType.indexOf('text/plain') !== -1;
+      if (!response.ok || isJsonOrText) {
         const raw = await blob.text();
         const parsed = tryParseJson(raw);
         if (response.status === 404 || !parsed.ok) {
-          state.reconcileAvailable = false;
-          renderRestorePanel();
-          throw new Error('Activation backend non validée sur cette version.');
+          throw new Error(sanitizeApiErrorMessage(raw || 'Restauration impossible.'));
         }
         throw new Error(sanitizeApiErrorMessage((parsed.data && (parsed.data.userErrorMessage || parsed.data.errorMessage)) || 'Restauration impossible.'));
+      }
+      if (state.restoreAnonFiles.length > 1 && !(await blobStartsWithZipSignature(blob))) {
+        let raw = '';
+        try { raw = await blob.text(); } catch (e) { }
+        const parsed = tryParseJson(raw);
+        const backendMessage = parsed.ok && parsed.data ? (parsed.data.userErrorMessage || parsed.data.errorMessage) : '';
+        throw new Error(sanitizeApiErrorMessage(backendMessage || 'La restauration a répondu, mais le ZIP reçu est invalide. Vérifiez les fichiers .properties associés.'));
       }
       const a = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -1923,7 +2040,7 @@
       a.download = parseFilename(contentDisposition, state.restoreAnonFiles.length > 1 ? 'documents_reconcilies.zip' : state.restoreAnonFiles[0].name);
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
-      setRestoreStatus('success', 'Téléchargement du fichier restauré lancé.');
+      setRestoreStatus('success', state.restoreAnonFiles.length > 1 ? 'Téléchargement des fichiers restaurés lancé.' : 'Téléchargement du fichier restauré lancé.');
       state.reconcileAvailable = true;
     } catch (err) {
       setRestoreStatus('error', sanitizeApiErrorMessage((err && err.message) || 'Restauration impossible.'));
@@ -1941,20 +2058,30 @@
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const legacyMap = {
-            person_name: 'PR',
-            email: 'MAIL',
-            phone: 'PHON',
-            birth: 'AGE',
-            role: 'TR',
+            person_name: 'PER',
+            email: 'EML',
+            phone: 'TEL',
+            birth: 'DAT',
+            role: 'JOB',
             address: 'ADR',
-            company: 'CIE',
-            siren: 'CID',
-            accounting: 'ACT',
-            product: 'PROD',
-            contract: 'REF',
-            bank: 'BANK'
+            company: 'ORG',
+            siren: 'IDN',
+            accounting: 'PII',
+            product: 'PRO',
+            contract: 'PII',
+            bank: 'IBA',
+            PR: 'PER',
+            MAIL: 'EML',
+            PHON: 'TEL',
+            DT: 'DAT',
+            CID: 'IDN',
+            IBAN: 'IBA',
+            FRNIR: 'IDN'
           };
-          const mapped = parsed.map((item) => legacyMap[item] || item);
+          const mapped = parsed.map((item) => {
+            const code = String(item || '').trim().toUpperCase();
+            return legacyMap[code] || legacyMap[item] || code;
+          });
           entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
           if (entities.length === 0) entities = DEFAULT_ENTITIES;
         }
@@ -2167,15 +2294,6 @@
       const exc = (state.excludeTerms || []).join('\n').trim();
       if (exc) formData.append('excludeTerms', exc);
     }
-    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
-      formData.append('processingMode', 'pseudonymiser');
-      formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
-      formData.append('pseudoScope', state.pseudoConfig.scope || '');
-      formData.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
-      formData.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
-      formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
-      formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
-    }
     return formData;
   }
 
@@ -2191,15 +2309,6 @@
       if (inc) formData.append('includeTerms', inc);
       const exc = (state.excludeTerms || []).join('\n').trim();
       if (exc) formData.append('excludeTerms', exc);
-    }
-    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
-      formData.append('processingMode', 'pseudonymiser');
-      formData.append('pseudoStrategy', state.pseudoConfig.strategy || '');
-      formData.append('pseudoScope', state.pseudoConfig.scope || '');
-      formData.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
-      formData.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
-      formData.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
-      formData.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
     }
     return formData;
   }
@@ -2839,15 +2948,6 @@
       const exc = (state.excludeTerms || []).join('\n').trim();
       if (exc) payload.append('excludeTerms', exc);
     }
-    if (isFeatureEnabled('pseudo') && state.mode === 'pseudonymiser' && state.pseudoConfig) {
-      payload.append('processingMode', 'pseudonymiser');
-      payload.append('pseudoStrategy', state.pseudoConfig.strategy || '');
-      payload.append('pseudoScope', state.pseudoConfig.scope || '');
-      payload.append('pseudoKeyMode', state.pseudoConfig.keyMode || '');
-      payload.append('pseudoRestoreWindow', state.pseudoConfig.restoreWindow || '');
-      payload.append('pseudoDeterministic', state.pseudoConfig.deterministic ? 'true' : 'false');
-      payload.append('pseudoPreserveFormat', state.pseudoConfig.preserveFormat ? 'true' : 'false');
-    }
     payload.append('fileUpload1', new Blob([value], { type: 'text/plain;charset=utf-8' }), 'input.txt');
 
     try {
@@ -3050,8 +3150,8 @@
     if (ui.pseudoSaved) ui.pseudoSaved.classList.toggle('is-preview', !pseudoEnabled);
     if (ui.openInclusion) ui.openInclusion.classList.toggle('is-preview', !inclusionEnabled);
 
-    if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoEnabled ? 'Paramétrer' : 'Bientôt';
-    if (ui.pseudoSavedBadge) ui.pseudoSavedBadge.textContent = pseudoEnabled ? 'Gérer' : 'Aperçu';
+    if (ui.pseudoBadge) ui.pseudoBadge.textContent = pseudoEnabled ? 'Disponible' : 'Indisponible';
+    if (ui.pseudoSavedBadge) ui.pseudoSavedBadge.textContent = pseudoEnabled ? 'Codes actifs' : 'Indisponible';
     if (ui.pseudoAvailabilityHint) ui.pseudoAvailabilityHint.hidden = pseudoEnabled;
     if (ui.inclusionAvailabilityHint) ui.inclusionAvailabilityHint.hidden = inclusionEnabled;
     if (ui.pseudoPreviewNote) ui.pseudoPreviewNote.hidden = pseudoEnabled;
@@ -3151,12 +3251,11 @@
     }));
 
     if (ui.pseudoMode) ui.pseudoMode.addEventListener('click', () => {
-      openModal(ui.modals.pseudo);
-      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymisation en aperçu: activation backend en cours.');
+      setMode('pseudonymiser');
+      refreshTextIfNeeded();
     });
     if (ui.pseudoSaved) ui.pseudoSaved.addEventListener('click', () => {
-      openModal(ui.modals.pseudo);
-      if (!isFeatureEnabled('pseudo')) setStatus('info', 'Pseudonymes en aperçu: gestion active dès branchement backend.');
+      openModal(ui.modals.types);
     });
     if (ui.openTypes) ui.openTypes.addEventListener('click', () => openModal(ui.modals.types));
     if (ui.openInclusion) ui.openInclusion.addEventListener('click', () => {

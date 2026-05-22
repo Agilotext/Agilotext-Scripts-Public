@@ -2566,3 +2566,30 @@
     color: var(--agilo-error) !important;
     border-color: color-mix(in srgb, var(--agilo-error) 30%, transparent) !important;
   }
+
+  /* Anon2 prod */
+  .agf-type-card--official {
+    grid-column: 1 / -1;
+  }
+
+  .agf-checkboxes--official {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+  }
+
+  .agf-checkboxes--official .agf-entity-option {
+    min-height: 48px;
+  }
+
+  #agfPseudoSummary {
+    margin-top: 0.35rem;
+    font-weight: 700;
+    color: var(--agilo-text);
+  }
+
+  @media (max-width: 720px) {
+    .agf-checkboxes--official {
+      grid-template-columns: 1fr;
+    }
+  }

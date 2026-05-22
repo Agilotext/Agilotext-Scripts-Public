@@ -1,4 +1,4 @@
-Anon2 Beta Test Notes
+Anon2 Prod 1.09 Test Notes
 
 Fichiers ajoutés
 - anonymisation/agiloshield-embed-anonymisation-anon2-beta.js
@@ -20,16 +20,18 @@ Endpoints Anon2 branchés
 
 URLs de test
 - Page locale: anonymisation/index-anon2-beta.html
-- Snippet Webflow staging: Front_END/FINAL-2026-05-10-anon2-beta.html
-- Script CDN staging:
-  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.1.0-beta1
+- Snippet Webflow 1.09: Front_END/FINAL-2026-05-10-anon2-beta.html
+- Script CDN prod 1.09:
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.2.0-prod1
 
 Vérifications déjà faites
 - Syntaxe JS validée avec node --check
-- Endpoints Anon2 bien substitués dans le bundle beta
+- Endpoints Anon2 bien substitués dans le bundle
 - Chargement/sauvegarde des options Anon2 avec fallback Defaults -> UserOptions
 - Upload async en fileUpload[] + removeImages=true
-- Restauration Anon2 branchée côté frontend avec garde-fou
+- Champs pseudo legacy supprimés du payload upload Anon2
+- Liste officielle Anon2 exposée côté UI: ADR, DAT, EML, IBA, IDN, JOB, LOC, ORG, PER, PII, PRO, TEL
+- Restauration Anon2 branchée côté frontend avec validation ZIP multi-fichiers
 - Parsing tolérant renforcé sur:
   - jobIdList, jobIds, jobs[]
   - anonStatus, status, state, jobStatus
@@ -41,14 +43,15 @@ Résultat des appels live depuis le poste local
 
 Conséquence
 - Les tests end-to-end normaux doivent être faits:
-  - soit sur une page Webflow staging autorisée par l’API
+  - soit sur une page Webflow autorisée par l’API
   - soit en mode identifiants manuels avec un token valide déjà obtenu côté source autorisée
 
 Checklist de validation manuelle
-- Charger le snippet beta sur une page staging dédiée
-- Vérifier que la prod actuelle ne charge pas le script beta
+- Charger le snippet 1.09 sur une page Webflow dédiée
+- Vérifier que la page ne contient plus de wording de pré-lancement
 - Vérifier que les options serveur se chargent avant le premier upload
 - Modifier les types, lancer un upload, vérifier que le save options précède l’upload
+- Vérifier que le payload upload ne contient pas processingMode/pseudoStrategy/pseudoScope
 - Tester upload PDF
 - Tester upload DOCX
 - Tester upload XLSX si support backend confirmé
@@ -62,3 +65,4 @@ Checklist de validation manuelle
 - Vérifier suppression d’un job
 - Vérifier restauration: 1 fichier + 1 .properties
 - Vérifier restauration: plusieurs fichiers + plusieurs .properties
+- Vérifier que le ZIP restauration multi-fichiers est ouvrable
