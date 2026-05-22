@@ -872,6 +872,11 @@
   }
 
   function isFeatureEnabled(featureName) {
+    if (featureName === 'pseudo') {
+      if (state.edition === 'free' || state.edition === 'anonymisation') {
+        return false;
+      }
+    }
     return !!FEATURE_AVAILABILITY[featureName];
   }
 
@@ -2160,6 +2165,28 @@
   function renderRestorePanel() {
     const panel = ui.restorePanel || document.getElementById('agfPanel-restore');
     if (!panel) return;
+    if (state.edition === 'free' || state.edition === 'anonymisation') {
+      panel.innerHTML =
+        '<div class="agf-lock-block" id="agfRestoreLocked" style="text-align: center; padding: 2.5rem 1.5rem; max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1rem;">' +
+        '<div class="agf-lock-icon-wrap" style="position: relative; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--agilo-primary, #ef4444) 10%, transparent); border-radius: 50%; width: 64px; height: 64px; margin-bottom: 0.5rem; border: 1px solid color-mix(in srgb, var(--agilo-primary, #ef4444) 20%, transparent); color: var(--agilo-primary, #ef4444);">' +
+        '<svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="width: 32px; height: 32px;">' +
+        '<rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.8" />' +
+        '<path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.8" />' +
+        '<circle cx="12" cy="16" r="1.2" fill="currentColor" />' +
+        '</svg>' +
+        '<span style="position: absolute; top: -2px; right: -2px; background: var(--agilo-primary, #ef4444); color: white; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">PRO</span>' +
+        '</div>' +
+        '<p class="agf-lock-title" style="font-size: 1.25rem; font-weight: 700; color: var(--agilo-text); margin: 0;">Restauration &amp; Réversibilité</p>' +
+        '<p class="agf-lock-text" style="font-size: 0.9rem; color: color-mix(in srgb, var(--agilo-text) 70%, transparent); line-height: 1.5; margin: 0 0 0.5rem 0;">La pseudonymisation réversible et la restauration intelligente des documents d\'origine font partie de notre offre <strong>Pro</strong>.</p>' +
+        '<ul style="text-align: left; font-size: 0.85rem; color: color-mix(in srgb, var(--agilo-text) 80%, transparent); margin: 0 0 1.25rem 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; list-style-type: disc;">' +
+        '<li>Retrouvez le document original en un clic grâce aux clés <code>.properties</code>.</li>' +
+        '<li>Pseudonymisation cohérente (remplacement intelligent et contextuel).</li>' +
+        '<li>Conformité RGPD absolue avec hébergement souverain en France.</li>' +
+        '</ul>' +
+        '<a href="/agiloshield/tarifs" class="agf-btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.5rem; font-size: 0.95rem; font-weight: 600; border-radius: 0.5rem; transition: all 150ms ease; width: 100%; box-sizing: border-box; background: var(--agilo-primary, #ef4444); color: white;">Débloquer l\'offre Pro</a>' +
+        '</div>';
+      return;
+    }
     if (state.reconcileAvailable === false) {
       panel.innerHTML =
         '<div class="agf-lock-block" id="agfRestoreLocked">' +
@@ -2371,6 +2398,8 @@
           if (hasPlan('pln_business')) return 'ent';
           if (hasPlan('pln_pro')) return 'pro';
           if (hasPlan('pln_free')) return 'free';
+          if (hasPlan('pln_agiloshield-classic')) return 'anonymisation';
+          if (hasPlan('pln_classic_anonymisation')) return 'anonymisation';
           if (hasPlan('pln_anonymisation')) return 'anonymisation';
         }
       } catch (e) { console.warn('detectEdition error', e); }
@@ -3731,7 +3760,7 @@
       const n = editionFromUrl.toLowerCase();
       if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = normalizeEdition(n);
     }
-    state.edition = getEditionForApi();
+    state.edition = normalizeEdition(state.edition);
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
