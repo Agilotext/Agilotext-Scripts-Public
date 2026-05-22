@@ -104,6 +104,7 @@
   const STORAGE_PSEUDO = 'agilo:futures:pseudo:v1';
   const STORAGE_MODE = 'agilo:futures:mode:v1';
   const STORAGE_INFLIGHT = 'agilo:anon:inflight:v1';
+  const STORAGE_REMOVE_IMAGES = 'agilo:futures:remove-images:v1';
 
   const DEFAULT_PSEUDO_CONFIG = {
     strategy: 'placeholders',
@@ -330,6 +331,7 @@
     typesCount: document.getElementById('agfTypesCount'),
     upgradeRestore: document.getElementById('agfUpgradeRestore'),
     apiMeta: document.getElementById('agfApiMeta'),
+    removeImages: document.getElementById('agfRemoveImages'),
     modals: {
       types: document.getElementById('agfModalTypesWrap'),
       pseudo: document.getElementById('agfModalPseudoWrap'),
@@ -1175,11 +1177,43 @@
       result.innerHTML = '<div class="agf-file-icon agf-file-icon--done" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></div><div class="agf-file-info"><p class="agf-file-name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p><p class="agf-file-meta">' + (item.resultSize ? formatSize(item.resultSize) : '—') + '</p></div>';
       const actions = document.createElement('div');
       actions.className = 'agf-processed-actions';
+
+      if (item.jobId != null) {
+        const props = document.createElement('button');
+        props.type = 'button';
+        props.className = 'agf-btn-icon notranslate';
+        props.setAttribute('translate', 'no');
+        props.title = 'Télécharger la clé de restauration (.properties)';
+        props.setAttribute('aria-label', 'Télécharger la clé de restauration de ' + name);
+        props.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 3-9.6 9.6"/><path d="m15.5 7.5 3 3"/><path d="M18.5 4.5 21.5 7.5"/></svg>';
+        props.addEventListener('click', async function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          props.disabled = true;
+          try {
+            await ensureAuth();
+            const { blob, contentDisposition } = await receiveAnonFile(item.jobId, 0, 'properties');
+            const propName = parseFilename(contentDisposition, (item.fileName || 'document') + '.properties');
+            const a = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            a.href = url;
+            a.download = propName;
+            a.click();
+            setTimeout(function () { URL.revokeObjectURL(url); }, 30000);
+          } catch (err) {
+            setStatus('error', (err && err.message) || 'Téléchargement de la clé de restauration impossible.');
+          } finally {
+            props.disabled = false;
+          }
+        });
+        actions.appendChild(props);
+      }
+
       const dl = document.createElement('a');
       dl.href = item.resultUrl || '#';
       dl.setAttribute('download', item.resultFilename || name);
       dl.className = 'agf-btn-icon';
-      dl.title = 'Télécharger';
+      dl.title = 'Télécharger le résultat';
       dl.setAttribute('aria-label', 'Télécharger ' + name);
       dl.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>';
       actions.appendChild(dl);
@@ -2241,6 +2275,14 @@
     state.anon2OptionCodes = selectedAnon2OptionCodes();
     state.doPseudoAnon = state.mode === 'pseudonymiser';
     renderTypeCount();
+
+    const rawImg = storage.get(STORAGE_REMOVE_IMAGES);
+    if (rawImg !== null) {
+      state.removeImages = rawImg === 'true';
+    }
+    if (ui.removeImages) {
+      ui.removeImages.checked = state.removeImages;
+    }
   }
 
   async function waitForMemberstack(maxWait, interval) {
@@ -3321,6 +3363,13 @@
       }
     });
     if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
+
+    if (ui.removeImages) {
+      ui.removeImages.addEventListener('change', () => {
+        state.removeImages = ui.removeImages.checked;
+        storage.set(STORAGE_REMOVE_IMAGES, state.removeImages ? 'true' : 'false');
+      });
+    }
 
     if (ui.modeRadios.length) ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
       setMode(radio.value);

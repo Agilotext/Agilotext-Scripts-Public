@@ -20,6 +20,33 @@
   plasmo-csui * {
     pointer-events: none !important;
   }
+
+  .agf-checkbox-line {
+    border: none;
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--agilo-text) 6%, transparent);
+    min-height: 2.75rem;
+    padding: var(--space-1) var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.875rem;
+    cursor: pointer;
+    user-select: none;
+    color: var(--agilo-text);
+    transition: box-shadow 160ms ease;
+  }
+
+  .agf-checkbox-line input[type="checkbox"] {
+    accent-color: var(--agilo-primary);
+    cursor: pointer;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .agf-checkbox-line:focus-within {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
+  }
 </style>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@eb131dbd8ee2445de1a77a44e76b036967282d95/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=a1bbcb9">
@@ -206,6 +233,10 @@
           </button>
           <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span
               id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
+          <label class="agf-checkbox-line">
+            <input type="checkbox" id="agfRemoveImages" checked>
+            <span>Retirer les images</span>
+          </label>
           <p id="agfInclusionAvailabilityHint" class="agf-small">Listes disponibles pour affiner les détections.</p>
         </div>
 
