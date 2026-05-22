@@ -1474,10 +1474,31 @@
           try {
             await ensureAuth();
             const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0, 'ORIGIN');
+            
+            let name = '';
+            const match = (contentDisposition || '').match(/filename\*?=(?:UTF-8'')?([^;\n]+)/i);
+            if (match && match[1]) {
+              try {
+                name = decodeURIComponent(match[1].replace(/^['"]|['"]$/g, '').trim());
+              } catch (e) {
+                name = match[1].replace(/^['"]|['"]$/g, '').trim();
+              }
+            } else {
+              name = job.fileName || 'document';
+            }
+
+            const isPdf = name.toLowerCase().endsWith('.pdf');
             const url = URL.createObjectURL(blob);
-            window.open(url, '_blank');
-            // Revoke after a while to avoid memory leak
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            if (isPdf) {
+              window.open(url, '_blank');
+              setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } else {
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = name;
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(url), 30000);
+            }
           } catch (err) {
             setStatus('error', (err && err.message) || 'Aperçu impossible.');
           }
@@ -1541,10 +1562,20 @@
             previewBtn.disabled = true;
             try {
               await ensureAuth();
-              const { blob } = await receiveAnonFile(job.jobId, 0, 'ANON');
+              const { blob, contentDisposition } = await receiveAnonFile(job.jobId, 0, 'ANON');
+              const name = parseFilename(contentDisposition, job.fileName || 'document');
+              const isPdf = name.toLowerCase().endsWith('.pdf');
               const url = URL.createObjectURL(blob);
-              window.open(url, '_blank');
-              setTimeout(() => URL.revokeObjectURL(url), 60000);
+              if (isPdf) {
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+              } else {
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = name;
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 30000);
+              }
             } catch (err) {
               setStatus('error', (err && err.message) || 'Aperçu impossible.');
             }
@@ -2043,10 +2074,27 @@
       updateRestoreCounters();
       return;
     }
-    files.forEach((file) => {
+    files.forEach((file, index) => {
       const row = document.createElement('div');
       row.className = 'agf-restore-list-item';
-      row.textContent = file.name + ' · ' + formatSize(file.size || 0);
+      
+      const txt = document.createElement('span');
+      txt.textContent = file.name + ' · ' + formatSize(file.size || 0);
+      row.appendChild(txt);
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'agf-remove-restore-file';
+      removeBtn.innerHTML = '&times;';
+      removeBtn.title = 'Retirer ce fichier';
+      removeBtn.setAttribute('aria-label', 'Retirer ' + file.name);
+      removeBtn.addEventListener('click', function () {
+        files.splice(index, 1);
+        renderRestoreFilesList(containerId, files);
+        updateRestoreActions();
+      });
+      row.appendChild(removeBtn);
+      
       container.appendChild(row);
     });
     updateRestoreCounters();
@@ -2081,13 +2129,27 @@
     if (submitBtn) submitBtn.dataset.agfBound = '1';
 
     anonInput.addEventListener('change', function (e) {
-      state.restoreAnonFiles = Array.from((e.target && e.target.files) || []);
+      const selected = Array.from((e.target && e.target.files) || []);
+      selected.forEach((file) => {
+        const exists = state.restoreAnonFiles.some((f) => f.name === file.name && f.size === file.size);
+        if (!exists) {
+          state.restoreAnonFiles.push(file);
+        }
+      });
+      e.target.value = '';
       renderRestoreFilesList('agfRestoreAnonList', state.restoreAnonFiles);
       updateRestoreActions();
     });
     if (propsInput) {
       propsInput.addEventListener('change', function (e) {
-        state.restorePropertiesFiles = Array.from((e.target && e.target.files) || []);
+        const selected = Array.from((e.target && e.target.files) || []);
+        selected.forEach((file) => {
+          const exists = state.restorePropertiesFiles.some((f) => f.name === file.name && f.size === file.size);
+          if (!exists) {
+            state.restorePropertiesFiles.push(file);
+          }
+        });
+        e.target.value = '';
         renderRestoreFilesList('agfRestorePropertiesList', state.restorePropertiesFiles);
         updateRestoreActions();
       });
@@ -2113,7 +2175,7 @@
     }
     panel.innerHTML =
       '<div class="agf-restore-shell">' +
-      '<p class="agf-restore-note">Chargez vos documents anonymisés et leurs clés de restauration correspondantes. Un document renvoie un fichier restauré, plusieurs documents renvoient une archive ZIP.</p>' +
+      '<p class="agf-restore-note">Chargez vos documents anonymisés et leurs clés de restauration correspondantes (successivement ou en lot). Un document unique renvoie son fichier restauré, et plusieurs documents génèrent une archive ZIP.</p>' +
       '<div class="agf-row agf-row--restore">' +
       '<div class="agf-restore-card">' +
       '<label for="agfRestoreAnonFiles">Documents anonymisés</label>' +

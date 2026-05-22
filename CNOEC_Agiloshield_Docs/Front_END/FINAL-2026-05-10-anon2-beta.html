@@ -47,6 +47,67 @@
   .agf-checkbox-line:focus-within {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
   }
+
+  /* Styles de Restauration Cumulative */
+  .agf-restore-list {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .agf-restore-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: color-mix(in srgb, var(--agilo-text) 4%, transparent);
+    border: 1px solid color-mix(in srgb, var(--agilo-text) 8%, transparent);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--agilo-text);
+    transition: background 150ms ease, border-color 150ms ease;
+  }
+
+  .agf-restore-list-item:hover {
+    background: color-mix(in srgb, var(--agilo-text) 7%, transparent);
+    border-color: color-mix(in srgb, var(--agilo-text) 12%, transparent);
+  }
+
+  .agf-restore-list-item.is-empty {
+    justify-content: center;
+    color: color-mix(in srgb, var(--agilo-text) 50%, transparent);
+    font-style: italic;
+    background: transparent;
+    border: 1px dashed color-mix(in srgb, var(--agilo-text) 15%, transparent);
+  }
+
+  .agf-remove-restore-file {
+    background: transparent;
+    border: none;
+    color: color-mix(in srgb, var(--agilo-text) 40%, transparent);
+    font-size: 1.25rem;
+    line-height: 1;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 200ms ease, color 200ms ease, transform 200ms ease;
+    padding: 0;
+    margin-left: 0.5rem;
+    flex-shrink: 0;
+  }
+
+  .agf-remove-restore-file:hover {
+    background: color-mix(in srgb, #ef4444 15%, transparent);
+    color: #ef4444;
+    transform: scale(1.1);
+  }
 </style>
 <link rel="stylesheet"
   href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@c9dad56dc6e243ca16c5f6c205786b58bff22371/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=a1bbcb9">
