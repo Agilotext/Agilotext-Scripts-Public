@@ -24,7 +24,7 @@
   const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 Mo (limite FREE / abonnements non illimité)
   const MAX_FILES = 12;
   const STORAGE_USAGE = 'agilo:anon:usage:v1';
-  const DAILY_LIMITS = { free: 3, business: 10 };
+  const DAILY_LIMITS = { free: 3, business: 10, agiloshield: 9999 };
   function getQuotaExceededMsg() {
     const status = getQuotaStatus();
     return 'Limite du jour atteinte (' + status.used + '/' + status.limit + ' documents). Vous pourrez en traiter de nouveaux demain. Accès illimité (BETA) : contactez-nous.';
@@ -159,6 +159,7 @@
   function getEditionForQuota() {
     // Priorité: state.edition (Memberstack à l'init) > override manuel > cache > free
     const ed = (state.edition || window.AGILO_EDITION || storage.get('agilo:edition') || 'free').toLowerCase();
+    if (ed === 'agiloshield') return 'agiloshield';
     if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
     return 'free';
   }
@@ -501,13 +502,29 @@
   }
 
   function setTextOutputQuotaExceeded() {
-    const msg = getQuotaExceededMsg() + ' ';
-    const mailto = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
+    const msg = 'Limite d\'essai atteinte. Passez à Agiloshield Classic. ';
+    const redirect = '/anonymisation';
     document.querySelectorAll('#agfOutputText').forEach((el) => {
-      el.innerHTML = msg + '<a href="' + mailto + '" class="agf-btn-primary agf-status-contact-btn" rel="noopener noreferrer">Contacter par email</a>';
+      el.innerHTML = msg + '<a href="' + redirect + '" class="agf-btn-primary agf-status-contact-btn">Passer en Pro (19€)</a>';
       el.style.whiteSpace = 'normal';
     });
     renderOutputStats('', null, null);
+    
+    if (!document.getElementById('agfUpsellModal')) {
+      const modalHtml = `
+        <div id="agfUpsellModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
+          <div style="background:#fff;padding:2rem;border-radius:12px;max-width:450px;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0;font-size:1.5rem;color:#111;">Limite d'essai atteinte</h3>
+            <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
+            <div style="display:flex;gap:1rem;justify-content:center;">
+              <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
+              <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
   }
 
   function setQuotaExceededStatus() {
@@ -518,19 +535,34 @@
       statusEl.textContent = '';
       statusEl.querySelectorAll('.agf-status-lottie').forEach((el) => { el.innerHTML = ''; });
       const txt = document.createElement('span');
-      txt.textContent = getQuotaExceededMsg() + ' ';
+      txt.textContent = 'Limite d\'essai atteinte. ';
       statusEl.appendChild(txt);
       const btn = document.createElement('a');
-      btn.href = 'mailto:' + QUOTA_CONTACT_EMAIL + '?subject=Demande%20acc%C3%A8s%20anonymisation%20illimit%C3%A9e%20(BETA)';
+      btn.href = '/anonymisation';
       btn.className = 'agf-btn-primary agf-status-contact-btn';
-      btn.textContent = 'Contacter par email';
-      btn.rel = 'noopener noreferrer';
+      btn.textContent = 'Passer en Pro (19€)';
       statusEl.appendChild(btn);
     });
+    // Popup
+    if (!document.getElementById('agfUpsellModal')) {
+      const modalHtml = `
+        <div id="agfUpsellModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
+          <div style="background:#fff;padding:2rem;border-radius:12px;max-width:450px;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+            <h3 style="margin-top:0;font-size:1.5rem;color:#111;">Limite d'essai atteinte</h3>
+            <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
+            <div style="display:flex;gap:1rem;justify-content:center;">
+              <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
+              <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.insertAdjacentHTML('beforeend', modalHtml);
+    }
     // Griser aussi le bouton submit
     document.querySelectorAll('#agfSubmit').forEach(function(btn) {
       btn.disabled = true;
-      btn.title = 'Quota journalier atteint. Revenez demain ou contactez-nous.';
+      btn.title = 'Limite d\'essai atteinte. Passez en Pro.';
     });
     updateDropzoneTextForLimited();
   }
@@ -1761,6 +1793,7 @@
           const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
           const plans = member.planConnections || [];
           const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
+          if (hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic')) return 'agiloshield';
           const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
           if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) return 'ent';
           if (hasPlan('pln_business')) return 'ent';
