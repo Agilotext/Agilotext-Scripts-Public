@@ -46,3 +46,4 @@ scripts/relance/
 *.swo
 *~
 
+node_modules/
