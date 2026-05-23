@@ -466,8 +466,7 @@
   }
 
   function hasMemberstackAnonProPlan(plans, hasPlan) {
-    return hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic') ||
-      hasPlan('pln_classic_anonymisation') || hasPlan('pln_anonymisation');
+    return hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic');
   }
 
   function hasAgiloshieldPaidEdition() {
@@ -3054,6 +3053,28 @@
   async function submitFiles(event) {
     event.preventDefault();
     if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
+    
+    // Freemium limits via local storage
+    if (!hasAgiloshieldPaidEdition()) {
+      let count = parseInt(storage.get('agilo:anon2_free_usage') || '0', 10);
+      if (count + state.files.length > 3) {
+        const modalHtml = `
+          <div id="agfUpsellModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
+            <div style="background:#fff;padding:2rem;border-radius:12px;max-width:450px;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.2);">
+              <h3 style="margin-top:0;font-size:1.5rem;color:#111;">Limite d'essai atteinte</h3>
+              <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
+              <div style="display:flex;gap:1rem;justify-content:center;">
+                <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
+                <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+              </div>
+            </div>
+          </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        return;
+      }
+      storage.set('agilo:anon2_free_usage', count + state.files.length);
+    }
 
     try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
     try {
