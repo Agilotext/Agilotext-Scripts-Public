@@ -2380,10 +2380,14 @@
     }
     try { window.__agiloLoadPendingToken = ''; } catch { }
     try {
-      const [tRes, sRes] = await Promise.allSettled([
-        apiGetWithRetry('transcript', id, { ...auth }, 0, __activeFetchCtl.signal),
-        apiGetWithRetry('summary', id, { ...auth }, 0, __activeFetchCtl.signal)
-      ]);
+      const settle = (promise) => promise.then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason })
+      );
+      const transcriptReq = apiGetWithRetry('transcript', id, { ...auth }, 0, __activeFetchCtl.signal);
+      const summaryReq = apiGetWithRetry('summary', id, { ...auth }, 0, __activeFetchCtl.signal);
+
+      const tRes = await settle(transcriptReq);
       if (isStale(seq)) {
         // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
         clearTimeout(__wdTimer);
@@ -2441,6 +2445,18 @@
           editors.transcript.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, val?.raw || '') || ''));
         }
         window._segments = []
+      }
+      editors.transcript?.removeAttribute('aria-busy');
+
+      const sRes = await settle(summaryReq);
+      if (isStale(seq)) {
+        // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+        clearTimeout(__wdTimer);
+        __wdToken++;
+        editors.transcript?.removeAttribute('aria-busy');
+        editors.summary?.removeAttribute('aria-busy');
+        hideSummaryLoadingScoped();
+        return;
       }
       let summaryEmpty = true;
 
