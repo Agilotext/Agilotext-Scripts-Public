@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.3.1-prod4';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.2-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -18,7 +18,13 @@
   const ANON_OPTIONS_GET = API_BASE + '/getAnon2UserOptions';
   const ANON_OPTIONS_SET = API_BASE + '/setAnon2UserOptions';
   const ANON_RECONCILE = API_BASE + '/reconcileAnon2Text';
+  const ANON_USAGE = API_BASE + '/getAnon2Usage';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
+  /** Plafonds documentés (fallback si getAnon2Usage absent). 1 crédit = 20k car. ou 1 page PDF. */
+  const CREDIT_LIMITS_FALLBACK = Object.freeze({
+    free: Object.freeze({ day: 10, month: 100, pseudo: false, restore: false, maxFiles: 3 }),
+    agiloshield: Object.freeze({ day: 250, month: 5000, pseudo: true, restore: true, maxFiles: 12 })
+  });
   const CLEANUP_ENDPOINT = API_BASE + '/cleanupOldJobs';
   const VERSION_ENDPOINT = API_BASE + '/getVersion';
   const POLL_INTERVAL_MS = 2500;
@@ -145,7 +151,12 @@
     anon2OptionCodes: DEFAULT_ANON2_OPTION_CODES.slice(),
     restoreAnonFiles: [],
     restorePropertiesFiles: [],
-    restoreProcessing: false
+    restoreProcessing: false,
+    usage: null,
+    usageLoading: false,
+    usageError: null,
+    /** free | pro | ent — tier transcription Agilotext pour l'API (Nicolas n'accepte pas agiloshield). */
+    transcriptionEdition: 'free'
   };
   window.__AGILO_EMBED_STATE__ = state; // Export pour debug console
   const DEBOUNCE_TEXT_MS = 1000;
@@ -376,7 +387,8 @@
     manualToken: document.getElementById('agfManualToken'),
     manualEdition: document.getElementById('agfManualEdition'),
     restorePanel: document.getElementById('agfPanel-restore'),
-    restoreLocked: document.getElementById('agfRestoreLocked')
+    restoreLocked: document.getElementById('agfRestoreLocked'),
+    usageCredits: document.getElementById('agfUsageCredits')
   };
 
   const DEFAULT_ENTITIES = DEFAULT_ANON2_OPTION_CODES.slice();
@@ -448,15 +460,37 @@
     const n = String(rawEdition || '').trim().toLowerCase();
     if (!n) return 'free';
     if (n === 'business') return 'ent';
-    if (n === 'free' || n === 'pro' || n === 'ent' || n === 'anonymisation') return n;
+    if (n === 'anonymisation' || n === 'shield' || n === 'agiloshield-classic') return 'agiloshield';
+    if (n === 'free' || n === 'pro' || n === 'ent' || n === 'agiloshield') return n;
     return 'free';
+  }
+
+  function hasMemberstackAnonProPlan(plans, hasPlan) {
+    return hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic') ||
+      hasPlan('pln_classic_anonymisation') || hasPlan('pln_anonymisation');
+  }
+
+  function hasAgiloshieldPaidEdition() {
+    return normalizeEdition(state.edition) === 'agiloshield';
+  }
+
+  function isFreeAgiloshieldEdition() {
+    return normalizeEdition(state.edition) === 'free';
+  }
+
+  function getCreditLimitsFallback() {
+    return hasAgiloshieldPaidEdition() ? CREDIT_LIMITS_FALLBACK.agiloshield : CREDIT_LIMITS_FALLBACK.free;
   }
 
   function getEditionForApi() {
     const normalized = normalizeEdition(state.edition);
     if (state.edition !== normalized) state.edition = normalized;
-    if (normalized === 'anonymisation') return 'free';
-    return normalized;
+    if (normalized === 'agiloshield') {
+      const te = normalizeEdition(state.transcriptionEdition || 'free');
+      return te === 'ent' || te === 'pro' || te === 'free' ? te : 'free';
+    }
+    if (normalized === 'ent' || normalized === 'pro' || normalized === 'free') return normalized;
+    return 'free';
   }
 
   function createSafeStorage() {
@@ -872,12 +906,25 @@
   }
 
   function isFeatureEnabled(featureName) {
-    if (featureName === 'pseudo') {
-      if (state.edition === 'free' || state.edition === 'anonymisation') {
-        return false;
-      }
+    if (featureName === 'pseudo' || featureName === 'restore') {
+      if (state.usage && state.usage.pseudoAllowed === false && featureName === 'pseudo') return false;
+      if (state.usage && state.usage.restoreAllowed === false && featureName === 'restore') return false;
+      if (isFreeAgiloshieldEdition()) return false;
+      if (!hasAgiloshieldPaidEdition()) return false;
     }
     return !!FEATURE_AVAILABILITY[featureName];
+  }
+
+  function getEffectiveMaxFiles() {
+    const fromUsage = state.usage && Number(state.usage.maxFilesPerBatch);
+    if (Number.isFinite(fromUsage) && fromUsage > 0) return Math.floor(fromUsage);
+    return getCreditLimitsFallback().maxFiles;
+  }
+
+  function isQuotaExceededError(data) {
+    if (!data || typeof data !== 'object') return false;
+    const code = String(data.errorCode || data.error || '').toLowerCase();
+    return code.indexOf('quota') >= 0;
   }
 
   function setReadonlyControls(root, readonly) {
@@ -1801,9 +1848,10 @@
     const files = Array.from(fileList || []);
     const rejectedImages = [];
     const rejectedOther = [];
-    const maxToAdd = MAX_FILES - state.files.length;
+    const maxFiles = getEffectiveMaxFiles();
+    const maxToAdd = maxFiles - state.files.length;
     if (maxToAdd <= 0) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Retirez-en avant d\'en ajouter.');
+      setStatus('error', 'Maximum ' + maxFiles + ' fichiers. Retirez-en avant d\'en ajouter.');
       renderFileList();
       return;
     }
@@ -1815,7 +1863,7 @@
       else state.files.push({ id: uid(), file, fileName: file.name, size: file.size });
     });
     if (files.length > maxToAdd) {
-      setStatus('error', 'Maximum ' + MAX_FILES + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
+      setStatus('error', 'Maximum ' + maxFiles + ' fichiers. Seuls les ' + maxToAdd + ' premiers ont été ajoutés.');
     } else if (rejectedImages.length > 0) {
       setStatus('error', 'Les images (PNG, JPEG, etc.) ne sont pas encore prises en charge. Ce sera disponible prochainement.');
     } else if (rejectedOther.length > 0) {
@@ -2165,7 +2213,7 @@
   function renderRestorePanel() {
     const panel = ui.restorePanel || document.getElementById('agfPanel-restore');
     if (!panel) return;
-    if (state.edition === 'free' || state.edition === 'anonymisation') {
+    if (!isFeatureEnabled('restore')) {
       panel.innerHTML =
         '<div class="agf-lock-block" id="agfRestoreLocked" style="text-align: center; padding: 2.5rem 1.5rem; max-width: 500px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1rem;">' +
         '<div class="agf-lock-icon-wrap" style="position: relative; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--agilo-primary, #ef4444) 10%, transparent); border-radius: 50%; width: 64px; height: 64px; margin-bottom: 0.5rem; border: 1px solid color-mix(in srgb, var(--agilo-primary, #ef4444) 20%, transparent); color: var(--agilo-primary, #ef4444);">' +
@@ -2174,16 +2222,15 @@
         '<path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.8" />' +
         '<circle cx="12" cy="16" r="1.2" fill="currentColor" />' +
         '</svg>' +
-        '<span style="position: absolute; top: -2px; right: -2px; background: var(--agilo-primary, #ef4444); color: white; font-size: 0.65rem; font-weight: bold; padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; box-shadow: 0 2px 4px rgba(0,0,0,0.15);">PRO</span>' +
         '</div>' +
-        '<p class="agf-lock-title" style="font-size: 1.25rem; font-weight: 700; color: var(--agilo-text); margin: 0;">Restauration &amp; Réversibilité</p>' +
-        '<p class="agf-lock-text" style="font-size: 0.9rem; color: color-mix(in srgb, var(--agilo-text) 70%, transparent); line-height: 1.5; margin: 0 0 0.5rem 0;">La pseudonymisation réversible et la restauration intelligente des documents d\'origine font partie de notre offre <strong>Pro</strong>.</p>' +
+        '<p class="agf-lock-title" style="font-size: 1.25rem; font-weight: 700; color: var(--agilo-text); margin: 0;">Restauration &amp; réversibilité</p>' +
+        '<p class="agf-lock-text" style="font-size: 0.9rem; color: color-mix(in srgb, var(--agilo-text) 70%, transparent); line-height: 1.5; margin: 0 0 0.5rem 0;">La pseudonymisation réversible et la restauration via fichiers <code>.properties</code> sont incluses dans l’offre <strong>Agiloshield</strong> (19&nbsp;€ HT/mois, essai 14 jours).</p>' +
         '<ul style="text-align: left; font-size: 0.85rem; color: color-mix(in srgb, var(--agilo-text) 80%, transparent); margin: 0 0 1.25rem 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; list-style-type: disc;">' +
-        '<li>Retrouvez le document original en un clic grâce aux clés <code>.properties</code>.</li>' +
-        '<li>Pseudonymisation cohérente (remplacement intelligent et contextuel).</li>' +
-        '<li>Conformité RGPD absolue avec hébergement souverain en France.</li>' +
+        '<li>Retrouvez le document d’origine en un clic.</li>' +
+        '<li>Pseudonymisation cohérente sur vos dossiers.</li>' +
+        '<li>Hébergement souverain en France, conforme RGPD.</li>' +
         '</ul>' +
-        '<a href="/agiloshield/tarifs" class="agf-btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.5rem; font-size: 0.95rem; font-weight: 600; border-radius: 0.5rem; transition: all 150ms ease; width: 100%; box-sizing: border-box; background: var(--agilo-primary, #ef4444); color: white;">Débloquer l\'offre Pro</a>' +
+        '<a href="/agiloshield/tarifs" class="agf-btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.5rem; font-size: 0.95rem; font-weight: 600; border-radius: 0.5rem; transition: all 150ms ease; width: 100%; box-sizing: border-box; background: var(--agilo-primary, #ef4444); color: white;">Voir les tarifs Agiloshield</a>' +
         '</div>';
       return;
     }
@@ -2383,6 +2430,22 @@
     return false;
   }
 
+  async function memberHasAnonProPlan() {
+    const ms = window.$memberstackDom;
+    if (!ms || typeof ms.getCurrentMember !== 'function') return false;
+    try {
+      const result = await ms.getCurrentMember({ cache: 'reload' });
+      const member = result && result.data;
+      if (!member) return false;
+      const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
+      const plans = member.planConnections || [];
+      const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
+      return hasMemberstackAnonProPlan(plans, hasPlan);
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function detectEdition() {
     const ms = window.$memberstackDom;
     if (ms && typeof ms.getCurrentMember === 'function') {
@@ -2394,13 +2457,19 @@
           const plans = member.planConnections || [];
           const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
           const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
-          if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) return 'ent';
+          if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) {
+            state.transcriptionEdition = 'ent';
+            if (hasMemberstackAnonProPlan(plans, hasPlan)) return 'agiloshield';
+            return 'ent';
+          }
+          if (hasPlan('pln_business')) state.transcriptionEdition = 'ent';
+          else if (hasPlan('pln_pro')) state.transcriptionEdition = 'pro';
+          else if (hasPlan('pln_free')) state.transcriptionEdition = 'free';
+          else state.transcriptionEdition = 'free';
+          if (hasMemberstackAnonProPlan(plans, hasPlan)) return 'agiloshield';
           if (hasPlan('pln_business')) return 'ent';
           if (hasPlan('pln_pro')) return 'pro';
           if (hasPlan('pln_free')) return 'free';
-          if (hasPlan('pln_agiloshield-classic')) return 'anonymisation';
-          if (hasPlan('pln_classic_anonymisation')) return 'anonymisation';
-          if (hasPlan('pln_anonymisation')) return 'anonymisation';
         }
       } catch (e) { console.warn('detectEdition error', e); }
     }
@@ -2408,10 +2477,12 @@
     const fromQuery = new URLSearchParams(window.location.search).get('edition');
     if (fromQuery) {
       const n = fromQuery.toLowerCase();
-      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) return n === 'business' ? 'ent' : n;
+      if (['free', 'pro', 'ent', 'business'].includes(n)) {
+        return n === 'business' ? 'ent' : normalizeEdition(n);
+      }
     }
     const stored = storage.get('agilo:edition');
-    if (stored && ['free', 'pro', 'ent', 'anonymisation'].includes(stored)) return stored;
+    if (stored) return normalizeEdition(stored);
     if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) return 'ent';
     if (window.location.pathname.includes('/pro/')) return 'pro';
     return 'free';
@@ -2483,6 +2554,93 @@
     if (!state.email || !state.token) return;
     const cleanupUrl = CLEANUP_ENDPOINT + '?username=' + encodeURIComponent(state.email) + '&token=' + encodeURIComponent(state.token) + '&edition=' + encodeURIComponent(getEditionForApi());
     try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
+  }
+
+  function renderUsageCredits() {
+    let el = ui.usageCredits;
+    if (!el) {
+      const side = document.querySelector('.agf-side');
+      if (!side) return;
+      el = document.createElement('div');
+      el.id = 'agfUsageCredits';
+      el.className = 'agf-group agf-usage-credits';
+      const apiFooter = side.querySelector('.agf-api-footer');
+      if (apiFooter) side.insertBefore(el, apiFooter);
+      else side.appendChild(el);
+      ui.usageCredits = el;
+    }
+    const limits = getCreditLimitsFallback();
+    const u = state.usage;
+    if (state.usageLoading) {
+      el.innerHTML = '<p class="agf-label">Crédits</p><p class="agf-small">Chargement de la consommation…</p>';
+      return;
+    }
+    if (u && u.status === 'OK') {
+      const dayUsed = Number(u.creditsUsedToday) || 0;
+      const dayLimit = Number(u.creditsLimitDay) || limits.day;
+      const monthUsed = Number(u.creditsUsedMonth) || 0;
+      const monthLimit = Number(u.creditsLimitMonth) || limits.month;
+      const dayRem = Number.isFinite(Number(u.creditsRemainingToday))
+        ? Number(u.creditsRemainingToday)
+        : Math.max(0, dayLimit - dayUsed);
+      const dayPct = dayLimit > 0 ? Math.min(100, Math.round((dayUsed / dayLimit) * 100)) : 0;
+      el.innerHTML =
+        '<p class="agf-label">Crédits</p>' +
+        '<p class="agf-small"><strong>Aujourd’hui :</strong> ' + dayUsed + ' / ' + dayLimit + ' (' + dayRem + ' restants)</p>' +
+        '<div class="agf-usage-bar" role="progressbar" aria-valuenow="' + dayPct + '" aria-valuemin="0" aria-valuemax="100" style="height:6px;border-radius:4px;background:color-mix(in srgb, var(--agilo-text) 12%, transparent);margin:0.35rem 0 0.5rem;overflow:hidden">' +
+        '<div style="height:100%;width:' + dayPct + '%;background:var(--agilo-primary, #ef4444);border-radius:4px"></div></div>' +
+        '<p class="agf-small"><strong>Ce mois :</strong> ' + monthUsed + ' / ' + monthLimit + '</p>' +
+        '<p class="agf-small agf-summary-muted">1 crédit = 20&nbsp;000 caractères ou 1 page PDF.</p>';
+      return;
+    }
+    el.innerHTML =
+      '<p class="agf-label">Crédits</p>' +
+      '<p class="agf-small"><strong>Aujourd’hui :</strong> jusqu’à ' + limits.day + ' crédits</p>' +
+      '<p class="agf-small"><strong>Ce mois :</strong> jusqu’à ' + limits.month + ' crédits</p>' +
+      (state.usageError
+        ? '<p class="agf-small agf-summary-muted">Compteur serveur en cours de déploiement.</p>'
+        : '<p class="agf-small agf-summary-muted">1 crédit = 20&nbsp;000 caractères ou 1 page PDF.</p>');
+  }
+
+  async function loadAnon2Usage(forceReload) {
+    if (!forceReload && state.usage && state.usage.status === 'OK') {
+      renderUsageCredits();
+      return state.usage;
+    }
+    if (!state.email || !state.token) {
+      renderUsageCredits();
+      return null;
+    }
+    state.usageLoading = true;
+    renderUsageCredits();
+    const url = ANON_USAGE + '?username=' + encodeURIComponent(state.email) +
+      '&token=' + encodeURIComponent(state.token) +
+      '&edition=' + encodeURIComponent(getEditionForApi());
+    try {
+      const response = await fetchWithTimeout(url, { method: 'GET' }, 15000);
+      if (response.status === 404 || response.status === 501) {
+        state.usage = null;
+        state.usageError = 'endpoint_missing';
+        return null;
+      }
+      const data = await response.json();
+      if (data && data.status === 'OK') {
+        state.usage = data;
+        state.usageError = null;
+        if (data.edition) state.edition = normalizeEdition(data.edition);
+        applyFeatureAvailability();
+        renderRestorePanel();
+        return data;
+      }
+      state.usageError = (data && (data.userErrorMessage || data.errorMessage)) || 'usage_unavailable';
+      return null;
+    } catch (err) {
+      state.usageError = err instanceof Error ? err.message : String(err || 'usage_unavailable');
+      return null;
+    } finally {
+      state.usageLoading = false;
+      renderUsageCredits();
+    }
   }
 
   async function loadApiVersion() {
@@ -2564,7 +2722,10 @@
         if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
         else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
         else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
-        else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+        else if (isQuotaExceededError(json)) {
+          msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Quota de crédits atteint pour aujourd’hui. Réessayez demain ou passez à Agiloshield.');
+          loadAnon2Usage(true).catch(function () { });
+        } else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
       } else {
         const text = normalizeResponseText(raw);
         if (text && text.length < 180) msg = sanitizeApiErrorMessage(text);
@@ -3755,10 +3916,20 @@
 
     await waitForMemberstack(10000, 200);
     state.edition = normalizeEdition(await detectEdition());
+    if (!state.transcriptionEdition) state.transcriptionEdition = 'free';
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
     if (editionFromUrl) {
       const n = editionFromUrl.toLowerCase();
-      if (['free', 'pro', 'ent', 'business', 'anonymisation'].includes(n)) state.edition = normalizeEdition(n);
+      if (['free', 'pro', 'ent', 'business'].includes(n)) {
+        state.edition = n === 'business' ? 'ent' : normalizeEdition(n);
+      }
+    }
+    if (state.edition === 'agiloshield' && !(await memberHasAnonProPlan())) {
+      state.edition = normalizeEdition(state.transcriptionEdition || 'free');
+    }
+    const cachedEdition = storage.get('agilo:edition');
+    if (cachedEdition === 'agiloshield' && state.edition !== 'agiloshield') {
+      storage.set('agilo:edition', state.edition);
     }
     state.edition = normalizeEdition(state.edition);
     storage.set('agilo:edition', state.edition);
@@ -3768,7 +3939,10 @@
       state.token = window.globalToken;
       state.email = storage.get('agilo:username');
       const cachedEdition = storage.get('agilo:edition');
-      if (cachedEdition) state.edition = normalizeEdition(cachedEdition);
+      if (cachedEdition && cachedEdition !== 'agiloshield') state.edition = normalizeEdition(cachedEdition);
+      if (cachedEdition === 'agiloshield' && state.edition === 'agiloshield' && !(await memberHasAnonProPlan())) {
+        state.edition = normalizeEdition(state.transcriptionEdition || 'free');
+      }
     } else {
       state.email = await getUserEmail();
       if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
@@ -3781,10 +3955,12 @@
     setAnon2OptionsControlsEnabled(!state.optionsLoading);
     applyEditionLocks();
     applyFeatureAvailability();
+    renderUsageCredits();
     renderRestorePanel();
     renderFileList();
     updateActions();
     if (state.email && state.token) {
+      loadAnon2Usage(true).catch(function () { });
       loadAnon2Options(true).catch(function (err) {
         state.anon2OptionsLoaded = false;
         state.optionsError = err instanceof Error ? err.message : String(err || buildAnon2OptionsMissingMessage());

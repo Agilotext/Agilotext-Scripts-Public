@@ -17,12 +17,18 @@ Endpoints Anon2 branchés
 - /getAnon2UserOptions (fallback temporaire uniquement si endpoint Defaults absent: 404/405/501/no route)
 - /setAnon2UserOptions (fallback temporaire uniquement si endpoint Defaults absent: 404/405/501/no route)
 - /reconcileAnon2Text
+- /getAnon2Usage (attendu backend — compteur crédits, v2.4+ front)
+
+Monétisation (mai 2026)
+- edition API: agiloshield (plus de mapping anonymisation -> free)
+- Quotas documentés: free 10/j, payant 250/j (fallback UI si usage API absent)
+- Brief Nicolas: NEW_VERSION_AVRIL_2026/BRIEF_NICOLAS_EDITION_CREDITS_ANON2.md
 
 URLs de test
 - Page locale: anonymisation/index-anon2-beta.html
 - Snippet Webflow 1.09: Front_END/FINAL-2026-05-10-anon2-beta.html
-- Script CDN prod 1.09:
-  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.3.0-prod2
+- Script CDN prod 2.4:
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@d5f42b82b994fd236787af414b2dab6791bc8cc1/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.0-prod1
 
 Vérifications déjà faites
 - Syntaxe JS validée avec node --check
