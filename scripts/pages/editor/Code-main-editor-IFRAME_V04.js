@@ -1219,6 +1219,8 @@
 
   window._segments = Array.isArray(window._segments) ? window._segments : [];
   let _activeSeg = -1;
+  let _selectedSegs = new Set();
+  let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
 
   function syncDomToModel() {
@@ -1311,6 +1313,73 @@
     }
   }
 
+  function syncSelectedClasses() {
+    const root = editors.transcript; if (!root) return;
+    const segs = getSegList(root);
+    segs.forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.forEach((i) => { if (segs[i]) segs[i].classList.add('is-selected'); });
+  }
+
+  function clearSegSelection() {
+    const root = editors.transcript;
+    if (root) root.querySelectorAll('.ag-seg.is-selected').forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.clear();
+    if (_bulkBar) _bulkBar.setAttribute('hidden', '');
+  }
+
+  function updateBulkBar() {
+    if (!_bulkBar) ensureBulkBar();
+    if (!_bulkBar) return;
+    if (_selectedSegs.size === 0) {
+      _bulkBar.setAttribute('hidden', '');
+      return;
+    }
+    if (_bulkBarCount) _bulkBarCount.textContent = `${_selectedSegs.size} segment(s) sélectionné(s)`;
+    _bulkBar.removeAttribute('hidden');
+  }
+
+  function ensureBulkBar() {
+    if (_bulkBar) return;
+    const root = editors.transcript; if (!root) return;
+    const host = root.closest('#pane-transcript, .edtr-pane, [id$="transcript"]') || document.body;
+    _bulkBar = document.createElement('div');
+    _bulkBar.id = 'agilo-bulk-bar';
+    _bulkBar.setAttribute('hidden', '');
+    _bulkBar.setAttribute('role', 'status');
+    _bulkBar.setAttribute('aria-live', 'polite');
+    _bulkBarCount = document.createElement('span');
+    _bulkBarCount.className = 'agilo-bulk-bar__count';
+    _bulkDelBtn = document.createElement('button');
+    _bulkDelBtn.type = 'button';
+    _bulkDelBtn.className = 'agilo-bulk-bar__btn';
+    _bulkDelBtn.textContent = 'Supprimer la sélection';
+    _bulkDelBtn.addEventListener('click', () => { deleteSelectedSegments({ requireConfirm: true }); });
+    _bulkBar.appendChild(_bulkBarCount);
+    _bulkBar.appendChild(_bulkDelBtn);
+    host.appendChild(_bulkBar);
+  }
+
+  function deleteSelectedSegments({ requireConfirm = true } = {}) {
+    const root = editors.transcript; if (!root) return false;
+    if (_selectedSegs.size === 0) return false;
+    const asc = Array.from(_selectedSegs).sort((a, b) => a - b);
+    const nSel = asc.length;
+    if (!window._segments || window._segments.length - nSel < 1) {
+      toast('Impossible : suppression vide le transcript.');
+      return false;
+    }
+    if (requireConfirm && !confirm(`Supprimer ${nSel} segment(s) ?`)) return false;
+    const snapshots = asc.map((i) => Object.assign({}, window._segments[i]));
+    for (let k = asc.length - 1; k >= 0; k--) {
+      window._segments.splice(asc[k], 1);
+    }
+    clearSegSelection();
+    pushUndo({ type: 'bulk', snapshots, indices: asc, label: `${nSel} segment(s) supprimés` });
+    _activeSeg = -1;
+    renderSegments(window._segments);
+    return true;
+  }
+
   function pushUndo(entry) {
     _undoStack.push(entry);
     if (_undoStack.length > UNDO_MAX) _undoStack.shift();
@@ -1329,6 +1398,7 @@
       }
     }
     _activeSeg = -1;
+    clearSegSelection();
     renderSegments(window._segments);
     hideUndoToasts();
     toast(entry.label ? `Annulé : ${entry.label}` : 'Action annulée');
@@ -1350,8 +1420,16 @@
     segEl.remove();
     if (_activeSeg === idx) _activeSeg = -1;
     else if (_activeSeg > idx) _activeSeg--;
+    const next = new Set();
+    _selectedSegs.forEach((i) => {
+      if (i === idx) return;
+      next.add(i > idx ? i - 1 : i);
+    });
+    _selectedSegs = next;
+    updateBulkBar();
     
     pushUndo({ type: 'one', snapshots: [snapshot], indices: [idx], label: 'Segment supprimé' });
+    syncSelectedClasses();
   }
 
   function buildDeleteBtn() {
@@ -1386,6 +1464,8 @@
       box.textContent = '';
       root.appendChild(box);
       root.setAttribute('contenteditable', 'false');
+      _selectedSegs.clear();
+      if (_bulkBar) _bulkBar.setAttribute('hidden', '');
       return;
     }
 
@@ -1441,8 +1521,28 @@
 
     root.appendChild(frag);
     root.setAttribute('contenteditable', 'false');
+    _selectedSegs.clear();
+    if (_bulkBar) _bulkBar.setAttribute('hidden', '');
 
     if (!root.__bound) {
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured' || !e.shiftKey) return;
+        const art = e.target.closest('.ag-seg');
+        if (!art || e.target.closest('button, .speaker')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = getSegIndex(root, art);
+        if (idx < 0) return;
+        if (_selectedSegs.has(idx)) {
+          _selectedSegs.delete(idx);
+          art.classList.remove('is-selected');
+        } else {
+          _selectedSegs.add(idx);
+          art.classList.add('is-selected');
+        }
+        updateBulkBar();
+      });
+
       root.addEventListener('click', (e) => {
         const btn = e.target.closest('button.time[data-action="seek"]');
         if (!btn || __mode !== 'structured') return;
@@ -1475,6 +1575,11 @@
         e.preventDefault(); e.stopPropagation();
         const segEl = btn.closest('.ag-seg');
         if (!segEl) return;
+        const idx = getSegIndex(root, segEl);
+        if (_selectedSegs.size > 1 && idx >= 0 && _selectedSegs.has(idx)) {
+          deleteSelectedSegments({ requireConfirm: true });
+          return;
+        }
         deleteSegEl(segEl);
       });
 
@@ -1527,9 +1632,29 @@
           const tr = editors.transcript;
           if (!tr) return;
           if (__mode !== 'structured') return;
-          if (e.key === 'Escape') return; // Géré ailleurs si besoin
+          if (e.key === 'Escape' && _selectedSegs.size > 0) {
+            e.preventDefault();
+            clearSegSelection();
+            return;
+          }
+
+          const key = String(e.key || '');
+          const target = e.target;
+          const targetIsEditable = !!(target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.contentEditable === 'true' ||
+            target.closest?.('.ag-seg__text')
+          ));
+
+          if (_selectedSegs.size > 0 && (key === 'Backspace' || key === 'Delete') && !targetIsEditable) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSelectedSegments({ requireConfirm: true });
+            return;
+          }
           
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Backspace') {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Backspace') {
             const segEl = e.target && e.target.closest && e.target.closest('.ag-seg');
             if (!segEl || !tr.contains(segEl)) return;
             e.preventDefault();
@@ -1537,7 +1662,7 @@
             deleteSegEl(segEl);
             return;
           }
-          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z') && _undoStack.length > 0) {
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (key === 'z' || key === 'Z') && _undoStack.length > 0) {
             // Vérifier si le focus est dans un champ texte
             const active = document.activeElement;
             if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.contentEditable === 'true')) {
