@@ -473,6 +473,34 @@
     return normalizeEdition(state.edition) === 'agiloshield';
   }
 
+  const AGILOSHIELD_CLASSIC_PRICE_ID = 'prc_classic-mensuel-3u5vr0uq5';
+
+  function getAgiloshieldCheckoutCtaHtml(label, extraClass, inlineStyle) {
+    const classAttr = extraClass ? ' class="' + extraClass + '"' : '';
+    const styleAttr = inlineStyle ? ' style="' + inlineStyle + '"' : '';
+    return '<a href="/agiloshield/tarifs" data-agilo-checkout="agiloshield-classic" data-ms-price:add="' + AGILOSHIELD_CLASSIC_PRICE_ID + '"' + classAttr + styleAttr + '>' + label + '</a>';
+  }
+
+  function bindAgiloshieldCheckoutLinks() {
+    if (window.__agiloAgiloshieldCheckoutBound) return;
+    window.__agiloAgiloshieldCheckoutBound = true;
+    document.addEventListener('click', async function (event) {
+      const target = event && event.target && typeof event.target.closest === 'function'
+        ? event.target.closest('[data-agilo-checkout="agiloshield-classic"]')
+        : null;
+      if (!target) return;
+      const ms = window.$memberstackDom;
+      if (!ms || typeof ms.purchasePlansWithCheckout !== 'function') return;
+      event.preventDefault();
+      try {
+        await ms.purchasePlansWithCheckout({ priceId: AGILOSHIELD_CLASSIC_PRICE_ID });
+      } catch (err) {
+        console.warn('Agiloshield checkout fallback', err);
+        window.location.href = target.getAttribute('href') || '/agiloshield/tarifs';
+      }
+    });
+  }
+
   function isFreeAgiloshieldEdition() {
     return normalizeEdition(state.edition) === 'free';
   }
@@ -2229,7 +2257,7 @@
         '<li>Pseudonymisation cohérente sur vos dossiers.</li>' +
         '<li>Hébergement souverain en France, conforme RGPD.</li>' +
         '</ul>' +
-        '<a href="/agiloshield/tarifs" class="agf-btn-primary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.5rem; font-size: 0.95rem; font-weight: 600; border-radius: 0.5rem; transition: all 150ms ease; width: 100%; box-sizing: border-box; background: var(--agilo-primary, #ef4444); color: white;">Voir les tarifs Agiloshield</a>' +
+        getAgiloshieldCheckoutCtaHtml('Voir les tarifs Agiloshield', 'agf-btn-primary', 'text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 2.75rem; padding: 0 1.5rem; font-size: 0.95rem; font-weight: 600; border-radius: 0.5rem; transition: all 150ms ease; width: 100%; box-sizing: border-box; background: var(--agilo-primary, #ef4444); color: white;') +
         '</div>';
       return;
     }
@@ -3065,7 +3093,7 @@
               <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
               <div style="display:flex;gap:1rem;justify-content:center;">
                 <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-                <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
+                ${getAgiloshieldCheckoutCtaHtml('Voir les tarifs (19€)', '', 'padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;')}
               </div>
             </div>
           </div>
@@ -3929,6 +3957,7 @@
     if (window.__agiloEmbedAnonymisationMounted) return;
     if (!ui.form || !ui.submit || !ui.dropzone) return;
     window.__agiloEmbedAnonymisationMounted = true;
+    bindAgiloshieldCheckoutLinks();
 
     window.addEventListener('agilo:token', (e) => {
       applyTokenFromEvent(e && e.detail);

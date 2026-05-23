@@ -25,6 +25,7 @@
   const MAX_FILES = 12;
   const STORAGE_USAGE = 'agilo:anon:usage:v1';
   const DAILY_LIMITS = { free: 3, business: 10, agiloshield: 9999 };
+  const AGILOSHIELD_CLASSIC_PRICE_ID = 'prc_classic-mensuel-3u5vr0uq5';
   function getQuotaExceededMsg() {
     const status = getQuotaStatus();
     return 'Limite du jour atteinte (' + status.used + '/' + status.limit + ' documents). Vous pourrez en traiter de nouveaux demain. Accès illimité (BETA) : contactez-nous.';
@@ -162,6 +163,32 @@
     if (ed === 'agiloshield') return 'agiloshield';
     if (ed === 'ent' || ed === 'business' || ed === 'pro') return 'business';
     return 'free';
+  }
+
+  function buildAgiloshieldCheckoutLink(label, className, inlineStyle) {
+    const classAttr = className ? ' class="' + className + '"' : '';
+    const styleAttr = inlineStyle ? ' style="' + inlineStyle + '"' : '';
+    return '<a href="/agiloshield/tarifs" data-agilo-checkout="agiloshield-classic" data-ms-price:add="' + AGILOSHIELD_CLASSIC_PRICE_ID + '"' + classAttr + styleAttr + '>' + label + '</a>';
+  }
+
+  function bindAgiloshieldCheckoutLinks() {
+    if (window.__agiloAgiloshieldCheckoutBound) return;
+    window.__agiloAgiloshieldCheckoutBound = true;
+    document.addEventListener('click', async function(event) {
+      const target = event && event.target && typeof event.target.closest === 'function'
+        ? event.target.closest('[data-agilo-checkout="agiloshield-classic"]')
+        : null;
+      if (!target) return;
+      const ms = window.$memberstackDom;
+      if (!ms || typeof ms.purchasePlansWithCheckout !== 'function') return;
+      event.preventDefault();
+      try {
+        await ms.purchasePlansWithCheckout({ priceId: AGILOSHIELD_CLASSIC_PRICE_ID });
+      } catch (err) {
+        console.warn('Agiloshield checkout fallback', err);
+        window.location.href = target.getAttribute('href') || '/agiloshield/tarifs';
+      }
+    });
   }
 
   /** Retourne la clé de stockage primaire.
@@ -503,9 +530,8 @@
 
   function setTextOutputQuotaExceeded() {
     const msg = 'Limite d\'essai atteinte. Passez à Agiloshield Classic. ';
-    const redirect = '/agiloshield/tarifs';
     document.querySelectorAll('#agfOutputText').forEach((el) => {
-      el.innerHTML = msg + '<a href="' + redirect + '" class="agf-btn-primary agf-status-contact-btn">Voir les tarifs (19€)</a>';
+      el.innerHTML = msg + buildAgiloshieldCheckoutLink('Voir les tarifs (19€)', 'agf-btn-primary agf-status-contact-btn');
       el.style.whiteSpace = 'normal';
     });
     renderOutputStats('', null, null);
@@ -518,7 +544,7 @@
             <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
             <div style="display:flex;gap:1rem;justify-content:center;">
               <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-              <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
+              ${buildAgiloshieldCheckoutLink('Voir les tarifs (19€)', '', 'padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;')}
             </div>
           </div>
         </div>
@@ -539,6 +565,7 @@
       statusEl.appendChild(txt);
       const btn = document.createElement('a');
       btn.href = '/agiloshield/tarifs';
+      btn.setAttribute('data-ms-price:add', AGILOSHIELD_CLASSIC_PRICE_ID);
       btn.className = 'agf-btn-primary agf-status-contact-btn';
       btn.textContent = 'Voir les tarifs (19€)';
       statusEl.appendChild(btn);
@@ -552,7 +579,7 @@
             <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
             <div style="display:flex;gap:1rem;justify-content:center;">
               <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-              <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
+              ${buildAgiloshieldCheckoutLink('Voir les tarifs (19€)', '', 'padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;')}
             </div>
           </div>
         </div>
@@ -3172,6 +3199,7 @@
     if (window.__agiloEmbedAnonymisationMounted) return;
     if (!ui.form || !ui.submit || !ui.dropzone) return;
     window.__agiloEmbedAnonymisationMounted = true;
+    bindAgiloshieldCheckoutLinks();
 
     window.addEventListener('agilo:token', (e) => {
       applyTokenFromEvent(e && e.detail);
