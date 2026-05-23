@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.2-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.3-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -43,6 +43,7 @@
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
     pseudo: runtimeFeatureFlags.pseudo !== false && query.get('featurePseudo') !== '0',
+    restore: runtimeFeatureFlags.restore !== false && query.get('featureRestore') !== '0',
     inclusion: runtimeFeatureFlags.inclusion !== false && query.get('featureInclusion') !== '0'
   });
   const ANON2_OPTION_ENDPOINTS = Object.freeze({

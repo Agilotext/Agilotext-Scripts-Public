@@ -39,6 +39,7 @@
   const runtimeFeatureFlags = window.AGILO_FEATURE_FLAGS || {};
   const FEATURE_AVAILABILITY = Object.freeze({
     pseudo: runtimeFeatureFlags.pseudo === true || query.get('featurePseudo') === '1',
+    restore: runtimeFeatureFlags.restore === true || query.get('featureRestore') === '1',
     inclusion: runtimeFeatureFlags.inclusion === true || query.get('featureInclusion') === '1'
   });
 
