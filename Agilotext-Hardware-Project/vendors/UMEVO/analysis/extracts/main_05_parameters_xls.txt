@@ -1,0 +1,44 @@
+=== Sheet: Parameters ===
+Recorder Specifications					
+Product Model	LA518				
+PCBA Version	V1.1				
+Firmware Version					
+Date					
+No.	Item		Parameter Value or Specification		
+1.0	Product Dimensions		87*53*3.1mm		
+2.0	Package Dimensions				
+3.0	Product Weight		28g (subject to the actual product)		
+4.0	Package Weight				
+5.0	Housing Material		Aluminum Alloy		
+6.0	USB Transfer		USB 2.0		
+7.0	Device Storage		64GB		
+8.0	Bluetooth Version		5.3		
+9.0	File System		exFAT		
+10.0	System Compatibility		Windows, Linux, iOS		
+11.0	Recording Format		MP3		
+12.0	Recording Sampling Rate		16kHz		Mono
+13.0	Encryption Support		No		
+14.0	Recording Bit Rate (WAV Format)		\		
+15.0	Recording Bit Rate (MP3 Format)		32 kbps		
+16.0	Time-Setting Method		Time sync by connecting to the mobile app		
+17.0	Signal-to-Noise Ratio		≤98dB		
+18.0	Recording Segment Duration (MB/hour)		App settings: 30min, 1h, 2h, or 3h; default: 3h / 42.1 MB		
+19.0	Noise Reduction Level		App settings: Off, Low, Medium, or High; default: High		
+20.0	Power-Off Standby Current		≤4.5uA		
+21.0	Standby Current, Screen On		≤5.5mA		
+22.0	Standby Current, Screen Off		≤0.3mA		
+23.0	Recording Current, Screen On		≤11mA		
+	Recording Current, Screen Off		≤8.5mA		
+24.0	Recording Current with App Connected, Screen On		≤12.6mA		
+	Recording Current with App Connected, Screen Off		≤10mA		
+25.0	Magnetic Charging Current		≤420mA		
+26.0	Magnetic Charging Power Input		5V 1A		
+27.0	Magnetic Charging Time		Approx. 1.5h		
+30.0	Continuous Recording Battery Life (Screen Off)		≤50h		
+31.0	Maximum Device Power Consumption		0.04W		
+32.0	Battery Type/Size		184948 lithium polymer battery		
+33.0	Battery Capacity		3.7 V / 400 mAh		
+34.0	Operating Temperature		（0 ℃ - 45 ℃）		
+Total Storage Time at MP3 Format, 32 Kbps Bit Rate, by Memory Capacity					
+64GB	Approx. 4,200 hours				
+=== Sheet: Sheet3 ===

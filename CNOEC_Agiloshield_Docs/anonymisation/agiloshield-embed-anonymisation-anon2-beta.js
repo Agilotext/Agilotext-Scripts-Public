@@ -2223,7 +2223,7 @@
         '</svg>' +
         '</div>' +
         '<p class="agf-lock-title" style="font-size: 1.25rem; font-weight: 700; color: var(--agilo-text); margin: 0;">Restauration &amp; réversibilité</p>' +
-        '<p class="agf-lock-text" style="font-size: 0.9rem; color: color-mix(in srgb, var(--agilo-text) 70%, transparent); line-height: 1.5; margin: 0 0 0.5rem 0;">La pseudonymisation réversible et la restauration via fichiers <code>.properties</code> sont incluses dans l’offre <strong>Agiloshield</strong> (19&nbsp;€ HT/mois, essai 14 jours).</p>' +
+        '<p class="agf-lock-text" style="font-size: 0.9rem; color: color-mix(in srgb, var(--agilo-text) 70%, transparent); line-height: 1.5; margin: 0 0 0.5rem 0;">La pseudonymisation réversible et la restauration via fichiers <code>.properties</code> sont incluses dans l’offre <strong>Agiloshield</strong> (19&nbsp;€ HT/mois, essai 7 jours).</p>' +
         '<ul style="text-align: left; font-size: 0.85rem; color: color-mix(in srgb, var(--agilo-text) 80%, transparent); margin: 0 0 1.25rem 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.4rem; list-style-type: disc;">' +
         '<li>Retrouvez le document d’origine en un clic.</li>' +
         '<li>Pseudonymisation cohérente sur vos dossiers.</li>' +
@@ -3065,7 +3065,7 @@
               <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
               <div style="display:flex;gap:1rem;justify-content:center;">
                 <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-                <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+                <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
               </div>
             </div>
           </div>
@@ -3945,14 +3945,17 @@
         state.edition = n === 'business' ? 'ent' : normalizeEdition(n);
       }
     }
-    if (state.edition === 'agiloshield' && !(await memberHasAnonProPlan())) {
-      state.edition = normalizeEdition(state.transcriptionEdition || 'free');
-    }
+    
     const cachedEdition = storage.get('agilo:edition');
     if (cachedEdition === 'agiloshield' && state.edition !== 'agiloshield') {
       storage.set('agilo:edition', state.edition);
     }
-    state.edition = normalizeEdition(state.edition);
+    
+    if (state.edition === 'agiloshield') {
+      // Trust detectEdition or cachedEdition, they already checked Memberstack
+    } else {
+      state.edition = normalizeEdition(state.edition);
+    }
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
@@ -3961,9 +3964,6 @@
       state.email = storage.get('agilo:username');
       const cachedEdition = storage.get('agilo:edition');
       if (cachedEdition && cachedEdition !== 'agiloshield') state.edition = normalizeEdition(cachedEdition);
-      if (cachedEdition === 'agiloshield' && state.edition === 'agiloshield' && !(await memberHasAnonProPlan())) {
-        state.edition = normalizeEdition(state.transcriptionEdition || 'free');
-      }
     } else {
       state.email = await getUserEmail();
       if (state.email && !state.token) await getToken(state.email, getEditionForApi(), 0).catch(() => { });

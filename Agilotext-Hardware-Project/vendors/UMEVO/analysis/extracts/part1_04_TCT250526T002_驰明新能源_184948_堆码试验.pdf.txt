@@ -1,0 +1,337 @@
+中国认可
+国际互认
+检测
+TESTING
+CNAS L6165
+
+Version: Rev. 23B1
+
+Stacking Test Report
+堆码试验报告
+Applicant’s Name
+委托方名称
+
+ShenZhen Chime New Energy Technology Co., ltd
+
+Applicant’s Address
+委托方地址
+
+B4201, Building 18, Junfeng Industrial Park, Chongqing Road, Heping
+Community, Fuhai Street, Baoan District, Shenzhen
+
+Name of Goods
+货物名称
+
+深圳市驰明新能源科技有限公司
+
+深圳市宝安区福海街道和平社区重庆路骏丰工业园厂房 18 栋 B4201
+VOICE RECORDER LA518 (Containing Lithium-ion cell 184948 3.7V 400mAh
+1.48Wh）
+录音机 LA518（内置锂离子电芯 184948 3.7V 400mAh 1.48Wh）
+Shenzhen TCT Testing Technology Co., Ltd.
+
+Testing Laboratory
+测试实验室
+
+深圳市通测检测技术有限公司
+2101 & 2201, Zhenchang Factory, Renshan Industrial Zone, Fuhai Subdistrict,
+Bao'an District, Shenzhen, Guangdong, China
+广东省深圳市宝安区福海街道桥头社区稔山工业区振昌胶粘制品厂 2101、2201
+
+Report No.
+报告编号
+
+TCT250526T002
+
+Date of Issue
+签发日期
+
+2025. 05. 27
+
+Test Type
+
+Testing by delegation
+
+检验类别
+
+委托测试
+
+Test Conclusion 测试结论:
+The test results are qualified. 测试结果为合格。
+
+Tested by 主检人:
+
+Reviewer by 审核人:
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+Approved by 批准人:
+
+Seal of TCT 报告单位（盖章）:
+
+E-mail: service@tct-lab.com
+
+U
+
+Page 1 of 6
+http://www.tct-lab.com
+
+Ⅰ、General product information一般产品信息:
+Name of Goods
+货物名称
+Packaging Container
+Manufacturer
+包装容器生产商
+Packaging Container
+Manufacturer’s
+Address
+包装容器生产商地址
+Packaging Parts
+Manufacturer
+包装件生产商
+Packaging Parts
+Manufacturer’s
+Address
+包装件生产商地址
+Shape
+形状
+
+VOICE RECORDER LA518 (Containing Lithium-ion cell 184948 3.7V 400mAh
+1.48Wh）
+录音机 LA518（内置锂离子电芯 184948 3.7V 400mAh 1.48Wh）
+Dongguan SiHong paper products Co., LTD
+东莞四宏纸品有限公司
+Dapu Industrial Zone, Huide Dahe Village, Humen Town, Dongguan City,
+Guangdong
+广东省东莞市虎门镇怀德大禾村大埔工业区
+ShenZhen Chime New Energy Technology Co., ltd
+深圳市驰明新能源科技有限公司
+B4201, Building 18, Junfeng Industrial Park, Chongqing Road, Heping
+Community, Fuhai Street, Baoan District, Shenzhen
+深圳市宝安区福海街道和平社区重庆路骏丰工业园厂房 18 栋 B4201
+Prismatic
+棱柱形
+
+Trade Mark
+商标
+
+----
+
+Packaging
+dimensions
+包装尺寸
+(L×W×T)
+
+(48.0×27.0×21.0)cm
+
+Battery number per
+packaging
+每包装件电池数量
+
+72PCS
+
+Net weight of
+batteries per package
+每包装件电池的净重
+
+0.59kg
+
+Gross weight per
+package
+每包装件毛重
+
+9.5kg
+
+Number of stacking
+layers
+堆码层数
+
+15
+
+The required
+compressive
+strength of the
+carton
+纸箱所需抗压强度
+
+133.00kgf
+
+Start Testing Date
+开始测试日期
+
+2025-05-21
+
+Completing Date
+完成日期
+
+2025-05-27
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 2 of 6
+http://www.tct-lab.com
+
+Ⅱ、Test Standard 检测标准
+United Nations "Recommendations on the Transport of Dangerous Goods-Model Regulations" (Rev.23)
+6.1.5.6
+联合国《关于危险货物运输的建议书-规章范本》
+（23 修订版）6.1.5.6
+
+Ⅲ、TEST ITEM 检测项目
+Stacking test 堆码试验
+
+Ⅳ、Test Method and Requirement 检测方法和要求
+Ambient temperature 环境温度: 23±2°C
+Ambient humidity 环境湿度：50±2%RH；
+Paper or fibreboard packagings shall be conditioned for at least 24 hours in an atmosphere having a
+controlled temperature and relative humidity (r.h.).
+纸和纤维板包装应在控制温度和相对湿度的环境下至少放置 24 小时；
+Press plate moving speed 压板移动速度：10mm/min
+Pre pressure 预压力：133.00kgf
+The required compressive strength of the carton
+=(
+
+Weight of single package. The load lasts for 24 hours.
+
+纸箱所需抗压强度=(
+
+-1)x 单个包装箱重量,负荷持续 24 小时。
+
+Test requirements 试验要求：
+1. The samples in the packing case are not damaged or leaked;
+包装箱中的样品没有损坏或泄漏；
+2. The test sample must not be damaged in a way that may adversely affect the safety of transport, or
+deform that may reduce its strength or cause unstable stacking of the package.
+试验样品不得显出可能对运输安全有不利影响的损坏,或者可能降低其强度或造成包装件堆码不稳定的
+变形；
+3. In the case of composite or combination packaging, the contents shall not leak out of the inner
+receptor and inner package.
+对复合或组合包装而言,不得有所装的物质从内贮器和内包装中漏出。
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 3 of 6
+http://www.tct-lab.com
+
+Ⅴ、TEST APPARATUS 检测仪器
+Serial No.
+设备编号
+
+TC-B117
+
+TC-B67
+
+TC-B104
+
+Name of Equipment
+设备名称
+Carton stacking machine
+纸箱堆码试验机
+Electronic Platform Scale
+电子台秤
+Tape measure
+卷尺
+
+Model
+型号
+
+Calibration Date
+/Due Date
+校准日期/到期日
+2024. 09. 18
+
+GX-6010-M
+2025. 09. 17
+2024. 06. 27
+TCS-150
+2025. 06. 26
+2025. 01. 24
+TH-2103
+2026. 01. 23
+
+Ⅵ、TEST RESULT 检测结果
+Drop position
+样品编号
+
+Test status
+测试结果
+
+Conclusion
+结论
+
+After the test 测试后：
+1. The samples in the packing case are not damaged or
+leaked; 包装箱中的样品没有损坏或泄漏；
+
+X1- X3
+
+2. The test sample does not show damage that may adversely
+affect the safety of transportation, or deformation that may
+reduce its strength or cause unstable stacking of the package;
+试验样品未显出可能对运输安全有不利影响的损坏, 或者可
+能降低其强度或造成包装件堆码不稳定的变形；
+
+Pass
+合格
+
+3. In the case of composite or combination packaging, the
+contents shall not leak out of the inner receptor and inner
+package.
+对复合或组合包装而言,不得有所装的物质从内贮器和内包
+装中漏出。
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 4 of 6
+http://www.tct-lab.com
+
+Ⅶ、Appendix Photos 附录图片
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 5 of 6
+http://www.tct-lab.com
+
+Important Notice
+注意事项
+1. The test report is invalid without the official stamp of TCT.
+本报告书无 TCT 盖章无效。
+2. Nobody is allowed to photocopy or partly photocopy this test report without written permission of
+TCT.
+未经 TCT 书面同意，不得复制或部分地复制本报告书。
+3. The test report is invalid without the signatures of Ratifier, Reviewer and Testing engineer.
+本报告书无批准人、审核人、及主检人签名无效。
+4. The report is invalid when anything of following happens – illegal transfer, reproduce,
+embezzlement, imposture, modification or tampering in any media form.
+私自转让、复制、盗用、冒用、涂改、或以任何媒体形式篡改的报告书无效。
+5. Objections to the test report must be submitted to TCT within 15 days.
+对报告书若有异议，应于收到报告之日起 15 天内向本公司提出。
+6. The test report is valid for the tested samples only.
+本报告仅对本次测试样品有效。
+7. The Chinese contents in this report are only for reference.
+本报告中的中文内容仅供参考。
+
+******End of Report 报告结束******
+
+Report No. TCT250526T002
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 6 of 6
+http://www.tct-lab.com
+
+

@@ -1,0 +1,434 @@
+TEST REPORT
+Product Name:
+
+AI Voice Recorder
+
+FCC ID:
+
+2A4PD-LA518
+
+Trademark:
+
+N/A
+
+Model Number:
+
+LA518, LA519, LP039A, L027, L029, LA528, LA537, LA558, LA627, LA636, LA135,
+LA657
+
+Prepared For:
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Address:
+
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang Village, Chang'an Town,
+Dongguan City, Guangdong Province, China
+
+Manufacturer:
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Address:
+
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang Village, Chang'an Town,
+Dongguan City, Guangdong Province, China
+
+Prepared By:
+
+Shenzhen CTB Testing Technology Co., Ltd.
+1&2/F., Building A, No.26, Xinhe Road, Xinqiao, Xinqiao Street, Bao'an District,
+
+Address:
+
+Shenzhen, Guangdong, China
+Sample Received Date:
+
+May. 27, 2025
+
+Sample tested Date:
+
+May. 27, 2025 to Jun. 13, 2025
+
+Issue Date:
+
+Jun. 13, 2025
+CTB25052700601RF02
+
+Report No.:
+Test Standards
+
+FCC CFR Title 47 Part 15 Subpart C Section 15.247
+ANSI C63.10:2020
+
+Test Results
+
+PASS
+
+Remark:
+
+This is Bluetooth radio test report.
+
+Compiled by:
+
+Reviewed by:
+
+Approved by:
+
+Zhou Kui
+
+Arron Liu
+
+Bin Mei / Director
+
+Note: If there is any objection to the inspection results in this report, please submit a written report to the
+company within 15 days from the date of receiving the report. The test report is effective only with both
+signature and specialized stamp. This result(s) shown in this report refer only to the sample(s) tested. Without
+written approval of Shenzhen CTB Testing Technology Co., Ltd. this report can’t be reproduced except in full.
+The tested sample(s) and the sample information are provided by the client. “*” indicates the testing items were
+fulfilled by subcontracted lab. “#” indicates the items are not in CNAS accreditation scope.
+
+Report
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 1 of 56
+
+Shenzhen CTB Testing Technology Co., Ltd.
+
+Report No.: CTB25052700601RF02
+
+TABLE OF CONTENT
+Test Report Declaration
+Page
+1.
+VERSION .......................................................................... 4
+2.
+TEST SUMMARY ................................................................... 5
+3.
+MEASUREMENT UNCERTAINTY ..................................................... 6
+4.
+PRODUCT INFORMATION AND TEST SETUP.......................................... 7
+4.1 Product Information .................................................................... 7
+4.2 Test Setup Configuration ............................................................... 7
+4.3 Support Equipment .................................................................... 7
+4.4 Channel List .......................................................................... 8
+4.5 Test Mode ............................................................................ 8
+4.6 Test Environment ...................................................................... 8
+5.
+TEST FACILITY AND TEST INSTRUMENT USED ....................................... 9
+5.1 Test Facility ........................................................................... 9
+5.2 Test Instrument Used .................................................................. 9
+6.
+AC POWER LINE CONDUCTED EMISSION ............................................ 12
+6.1 Block Diagram Of Test Setup .......................................................... 12
+6.2 Limit ................................................................................ 12
+6.3 Test procedure ....................................................................... 12
+6.4 Test Result .......................................................................... 14
+7.
+RADIATED SPURIOUS EMISSION ................................................... 16
+7.1 Block Diagram Of Test Setup .......................................................... 16
+7.2 Limit ................................................................................ 16
+7.3 Test procedure ....................................................................... 17
+7.4 Test Result .......................................................................... 18
+8.
+BAND EDGE AND RF COUNDUCTED SPURIOUS EMISSIONS .......................... 27
+8.1 Block Diagram Of Test Setup .......................................................... 27
+8.2 Limit ................................................................................ 27
+8.3 Test procedure ....................................................................... 27
+8.4 Test Result .......................................................................... 28
+9.
+COUDUCTED PEAK OUTPUT POWER ............................................... 35
+9.1 Block Diagram Of Test Setup .......................................................... 35
+9.2 Limit ................................................................................ 35
+9.3 Test procedure ....................................................................... 35
+9.4 Test Result .......................................................................... 35
+10. 20DB OCCUPIED BANDWIDTH...................................................... 39
+10.1 Block Diagram Of Test Setup ......................................................... 39
+10.2 Limit ............................................................................... 39
+10.3 Test procedure ...................................................................... 39
+10.4 Test Result ......................................................................... 39
+11. CARRIER FREQUENCIES SEPARATION ............................................. 43
+11.1 Block Diagram Of Test Setup ......................................................... 43
+11.2 Limit ............................................................................... 43
+11.3 Test procedure ...................................................................... 43
+11.4 Test Result ......................................................................... 43
+12. HOPPING CHANNEL NUMBER ...................................................... 47
+12.1 Block Diagram Of Test Setup ......................................................... 47
+12.2 Limit ............................................................................... 47
+12.3 Test procedure ...................................................................... 47
+12.4 Test Result ......................................................................... 47
+Report
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 2 of 56
+
+Shenzhen CTB Testing Technology Co., Ltd.
+13.
+13.1
+13.2
+13.3
+13.4
+14.
+14.1
+14.2
+14.3
+15.
+16.
+
+Report No.: CTB25052700601RF02
+
+DWELL TIME ...................................................................... 49
+Block Diagram Of Test Setup ......................................................... 49
+Limit ............................................................................... 49
+Test procedure ...................................................................... 49
+Test Result ......................................................................... 49
+PSEUDORANDOM FREQUENCY .................................................... 53
+Limit ............................................................................... 53
+Test procedure ...................................................................... 53
+Test Result ......................................................................... 53
+ANTENNA REQUIREMENT ......................................................... 54
+EUT TEST SETUP PHOTOGRAPHS .................................................. 55
+
+(Note: N/A means not applicable)
+
+Report
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 3 of 56
+
+Shenzhen CTB Testing Technology Co., Ltd.
+
+1.
+
+Report No.: CTB25052700601RF02
+
+VERSION
+
+Report
+
+Report No.
+
+Issue Date
+
+Description
+
+Approved
+
+CTB25052700601RF02
+
+Jun. 16, 2025
+
+Original
+
+Valid
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 4 of 56
+
+Shenzhen CTB Testing Technology Co., Ltd.
+
+2.
+
+Report No.: CTB25052700601RF02
+
+TEST SUMMARY
+
+The Product has been tested according to the following specifications:
+Test Item
+
+Test Requirement
+
+Test method
+
+Result
+
+AC Power Line Conducted
+Emission
+
+47 CFR Part 15 Subpart C Section
+15.207
+
+ANSI C63.10-2020
+
+PASS
+
+Radiated Spurious
+emissions
+
+47 CFR Part 15 Subpart C Section
+15.205/15.209
+
+ANSI C63.10-2020
+
+PASS
+
+Band edge and RF Conducted
+Spurious Emissions
+
+47 CFR Part 15 Subpart C Section
+15.247(d)/15.205(a)
+
+ANSI C63.10-2020
+
+PASS
+
+Conducted Peak Output
+Power
+
+47 CFR Part 15 Subpart C Section
+15.247 (b)(1)
+
+ANSI C63.10-2020
+
+PASS
+
+20dB Occupied Bandwidth
+
+47 CFR Part 15 Subpart C Section
+15.247 (a)(1)
+
+ANSI C63.10-2020
+
+PASS
+
+Carrier Frequencies
+Separation
+
+47 CFR Part 15 Subpart C Section
+15.247 (a)(1)
+
+ANSI C63.10-2020
+
+PASS
+
+Hopping Channel Number
+
+47 CFR Part 15 Subpart C Section
+15.247 (b)
+
+ANSI C63.10-2020
+
+PASS
+
+Dwell Time
+
+47 CFR Part 15 Subpart C Section
+15.247 (a)(1)
+
+ANSI C63.10-2020
+
+PASS
+
+Pseudorandom Frequency
+Hopping Sequence
+
+47 CFR Part 15 Subpart C Section
+15.247(a)&TCB Exclusion List
+(7 July 2002)
+
+ANSI C63.10-2020
+
+PASS
+
+Antenna Requirement
+
+47 CFR Part 15 Subpart C Section
+15.203/15.247 (b)
+
+/
+
+PASS
+
+RF Exposure Evaluation
+
+47 CFR Part 15 Subpart C Section
+15.247 (i)/1.1310/2.1093
+
+KDB447498D01v06
+
+PASS
+
+Remark:
+Test according to ANSI C63.10-2020.
+
+Report
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 5 of 56
+
+Shenzhen CTB Testing Technology Co., Ltd.
+
+3.
+
+Report No.: CTB25052700601RF02
+
+MEASUREMENT UNCERTAINTY
+
+Where relevant, the following measurement uncertainty levels have been estimated
+for tests performed on the Product as specified in CISPR 16-4-2. This uncertainty represents an expanded
+uncertainty expressed at approximately the 95% confidence level using a coverage factor of k=2.
+Item
+Uncertainty
+Occupancy bandwidth
+54.3kHz
+Conducted output power
+0.9dB
+Above 1G
+Conducted output power
+0.9dB
+below 1G
+Power Spectral Density , Conduction
+0.9dB
+Conduction spurious emissions
+2.0dB
+Out of band emission
+2.0dB
+3m camber Radiated spurious
+4.8dB
+emission(9KHz-30MHz)
+3m camber Radiated spurious
+4.6dB
+emission(30MHz-1GHz)
+3m chamber Radiated spurious
+5.1dB
+emission(1GHz-18GHz)
+3m chamber Radiated spurious
+3.4dB
+emission(18GHz-40GHz)
+humidity uncertainty
+5.5%
+Temperature uncertainty
+0.63℃
+frequency
+1×10-7
+Conducted Emission (150KHz-30MHz)
+3.2 dB
+Radiated Emission(30MHz ~ 1000MHz)
+4.8 dB
+Radiated Emission(1GHz ~6GHz)
+4.9 dB
+
+Report
+
+Tel: 4008-707-283
+
+Web: http://www.ctb-lab.net
+
+Page 6 of 56
+
+

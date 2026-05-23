@@ -1,0 +1,274 @@
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+EN62479 TEST REPORT
+On Behalf of
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Product Name:
+
+AI Voice Recorder
+
+Trademark:
+
+N/A
+
+Model Number:
+
+LA518, LA519, LP039A, LA528, LA537, LA558, LA627, LA636, LA135,
+LA657
+
+Prepared For:
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Address:
+
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang Village, Chang'an
+Town, Dongguan City, Guangdong Province, China
+
+Prepared By:
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Address:
+
+1st Floor, Building A1, No. 2082 Jincheng Road, Shajing Street, Bao'an
+District, Shenzhen City, Guangdong Province, China
+
+Report No.:
+
+HUAX250530041HR
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 1 of 16
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+TEST REPORT DECLARATION
+
+Applicant
+
+:
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Address :
+
+:
+
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang Village, Chang'an
+Town, Dongguan City, Guangdong Province, China
+
+EUT Description :
+
+:
+
+AI Voice Recorder
+
+Model Number
+
+:
+
+LA518
+
+Test Date
+
+May 29, 2025 - Jun. 05, 2025
+
+Date of Report
+
+Jun. 05, 2025
+
+Test Standards:
+
+EN62479:2010
+
+The EUT described above is tested by Huaxiang Testing Technology Co , Ltd EMC Laboratory to
+determine the
+maximum emissions from the EUT and ensure the EUT to be compliance with the immunity requirements of
+the EUT.huaxiang is assumed full responsibility for the accuracy of the test results. Also, this report shows th
+at
+the EUT technically complies with the EN62479:2010 requirements.
+The test report is valid for above tested sample only and shall not be reproduced in part without written approval
+of the Shenzhen Huaxiang Testing Co, Ltd
+
+Joan Wang
+Prepared by(Test Engineer):
+Amy Jiang
+Approved(Manager)
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 2 of 16
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+. General Information
+General Description Of EUT
+
+Equipment
+
+AI Voice Recorder
+
+Brand Name
+
+N/A
+
+Model Name.
+
+LA518
+OEM Brand/Model Name LA519, LP039A, LA528, LA537, LA558, LA627, LA636,
+LA135, LA657
+Remark: supplementary models are similar except the model
+Model Difference
+
+name for different power. All the tests of this report are
+carried on LA518.
+
+Applicant
+Applicant Address
+Manufacturer
+
+Dongguan Kinghal Electronic Technology Co.,Ltd
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang
+Village, Chang'an Town, Dongguan City, Guangdong
+Province, China
+Dongguan Kinghal Electronic Technology Co.,Ltd
+
+Manufacturer Address
+
+Room 1301, Building 15, No. 52, Fuhai Road, Xiagang
+Village, Chang'an Town, Dongguan City, Guangdong
+Province, China
+
+Product Description
+
+The EUT is AI Voice Recorder
+Based on the application, features, or specification exhibited
+in User's Manual, the EUT is considered as an
+ITE/Computing Device. More details of EUT technical
+specification, please refer to the User's Manual.
+
+Channel List
+
+/
+
+Power Source
+
+DC 5V, 370mA
+
+Power Rating
+
+0.18w
+
+Connecting I/O Port(s)
+
+Please refer to the User's Manual
+
+Products Covered
+
+N/A
+
+Note:
+1. For a more detailed features description, please refer to the manufacturer’s specifications or
+the User's Manual.
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 3 of 16
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+. EN 62479 REQUIREMENT
+GENERAL INFORMATION
+The essential requirements of Directive 99/5/ec in the article 3.1(a) and the limits must be taken from
+Council Recommendation 2014/53/EU for General Population or from the ICNIRP Guidelines for
+Occupational Exposure, EN 62479:2010 assesment of the compliance of low-power electronic and
+electrical equipment with the basic restrictions related to humanexposure to electromagnetic fieldS (10
+MHz to 300 GHz)
+Limit
+A. Typical usage, installation and the physical characteristics of equipment make iti nherently
+compliant with the applicable EMF exposure levels such as those listed in the bibliography. This
+low-power equipment includes unintentional (or non-intentional) radiators, for example incandescent
+light bulbs and audio/visual (A/V) equipment, information technology equipment (ITE) and multimedia
+equipment (MME) that does not contain radio transmitters.
+NOTE Equipment is described as A/V equipment, ITE or MME if its main use is playback/recording
+of music, voice or images, or processing of digital information.
+B. The input power level to electrical or electronic components that are capable of radiating
+electromagnetic energy in the relevant frequency range is so low that the available antenna power
+and/or the average total radiated power cannot exceed the low-power exclusion level defined in 4.2.
+C. The available antenna power and/or the average total radiated power are limited by
+product standards for transmitters to levels below the low-power exclusion level defined in 4.2.
+D. Measurements or calculations show that the available antenna power and/or the average
+total radiated power are below the low-power exclusion level defined in 4.2.
+2.3 Result
+PASS
+The available antenna power of this EUT is 1.95mW(2.679dBm) the power are below the
+
+low-power exclusion level defined in 4.2(Pmax: 20mW).
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 4 of 16
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+APPENDIX- PHOTOS OF EUT
+
+Photo 1
+
+Photo 2
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 5 of 16
+
+Shenzhen Huaxiang Testing Co., Ltd
+
+Report No.:HUAX250530041HR
+
+Photo 3
+
+Photo 4
+
+Web: www.hua-x.com
+
+Tel: 0755-23010432
+
+Email: huaxiang@hua-x.com
+
+Page 6 of 16
+
+

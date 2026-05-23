@@ -503,9 +503,9 @@
 
   function setTextOutputQuotaExceeded() {
     const msg = 'Limite d\'essai atteinte. Passez à Agiloshield Classic. ';
-    const redirect = '/anonymisation';
+    const redirect = '/agiloshield/tarifs';
     document.querySelectorAll('#agfOutputText').forEach((el) => {
-      el.innerHTML = msg + '<a href="' + redirect + '" class="agf-btn-primary agf-status-contact-btn">Passer en Pro (19€)</a>';
+      el.innerHTML = msg + '<a href="' + redirect + '" class="agf-btn-primary agf-status-contact-btn">Voir les tarifs (19€)</a>';
       el.style.whiteSpace = 'normal';
     });
     renderOutputStats('', null, null);
@@ -518,7 +518,7 @@
             <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
             <div style="display:flex;gap:1rem;justify-content:center;">
               <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-              <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+              <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
             </div>
           </div>
         </div>
@@ -538,9 +538,9 @@
       txt.textContent = 'Limite d\'essai atteinte. ';
       statusEl.appendChild(txt);
       const btn = document.createElement('a');
-      btn.href = '/anonymisation';
+      btn.href = '/agiloshield/tarifs';
       btn.className = 'agf-btn-primary agf-status-contact-btn';
-      btn.textContent = 'Passer en Pro (19€)';
+      btn.textContent = 'Voir les tarifs (19€)';
       statusEl.appendChild(btn);
     });
     // Popup
@@ -552,7 +552,7 @@
             <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
             <div style="display:flex;gap:1rem;justify-content:center;">
               <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-              <button onclick="window.location.href='/anonymisation'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Passer en Pro (19€)</button>
+              <button onclick="window.location.href='/agiloshield/tarifs'" style="padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;">Voir les tarifs (19€)</button>
             </div>
           </div>
         </div>

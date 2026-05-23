@@ -1,0 +1,408 @@
+Safety Data Sheet（SDS）
+安全技术说明书
+Applicant’s Name:
+委托方名称:
+Applicant’s Address:
+委托方地址:
+
+ShenZhen Chime New Energy Technology Co., ltd
+深圳市驰明新能源科技有限公司
+B4201, Building 18, Junfeng Industrial Park, Chongqing Road, Heping
+Community, Fuhai Street, Baoan District, Shenzhen
+深圳市宝安区福海街道和平社区重庆路骏丰工业园厂房 18 栋 B4201
+
+Name of Sample:
+样品名称:
+
+Lithium-ion cell
+锂离子电芯
+
+Model:
+型号:
+
+184948
+
+Nominal Voltage:
+标称电压:
+
+3.7V
+
+Rated Capacity:
+额定容量:
+
+400mAh, 1.48Wh
+
+Weight:
+重量:
+
+8.222g
+
+Size: (L×W×T)
+尺寸:
+
+(50.4×46.1×1.7) mm
+
+Prepared By:
+编制单位:
+
+Shenzhen TCT Testing Technology Co., Ltd.
+深圳市通测检测技术有限公司
+
+Address:
+地址：
+
+2101 & 2201, Zhenchang Factory, Renshan Industrial Zone, Fuhai
+Subdistrict, Bao'an District, Shenzhen, Guangdong, China
+广东省深圳市宝安区福海街道桥头社区稔山工业区振昌胶粘制品厂 2101、
+2201
+
+No.:
+编号:
+
+TCT251114M264
+
+Written by 编写:
+
+Approved by 批准:
+
+Inspected by 审核:
+
+Effective Date 生效日期: 2026. 01. 01
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 1 of 13
+http://www.tct-lab.com
+
+Safety Data Sheet (SDS)
+ST/SG/AC.10/30/Rev.11 (GHS)
+
+Section 1- Identification of the substance/mixture and of the
+company/undertaking
+第一部分 物质或混合物和供应商的标识
+1.1 Product identifier 产品标识
+Lithium-ion cell
+Name of Sample
+锂离子电芯
+样品名称
+Model
+型号
+
+184948
+
+1.2 Relevant identified uses of the substance or mixture and uses advised against
+产品的推荐用途和限制用途
+Recommended Use
+Used in consumer goods
+建议用途
+用于消费品
+Uses advised against
+No information available
+限制用途
+无资料
+1.3 Details of the supplier of the safety data sheet 供应商的详细资料
+ShenZhen Chime New Energy Technology Co., ltd
+Manufacturer’s Name
+生产单位名称
+深圳市驰明新能源科技有限公司
+Manufacturer’s
+Address
+生产单位地址
+
+B4201, Building 18, Junfeng Industrial Park, Chongqing Road,
+Heping
+Community, Fuhai Street, Baoan District, Shenzhen
+深圳市宝安区福海街道和平社区重庆路骏丰工业园厂房 18 栋 B4201
+
+Phone
+电话
+
++86-755-29985805
+
+Fax
+传真
+
+/
+
+E-mail
+
+wenming@chimetech.cn
+
+邮箱
+1.4 Emergency telephone number 应急电话
++86-755-29985805
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 2 of 13
+http://www.tct-lab.com
+
+Safety Data Sheet (SDS)
+ST/SG/AC.10/30/Rev.11 (GHS)
+
+Section 2- Hazards Identification
+第二部分 危险标识
+2.1 Classification of the substance or mixture 物质或混合物的分类
+According to the classification requirements of the 11th revision of the United Nations GHS
+system
+根据联合国 GHS 制度第 11 修订版要求分类
+Not applicable (Not within the scope of the 11th revised edition of the UNITED NATIONS GHS
+system.)
+不适用（不在联合国 GHS 制度第 11 修订版范围内）
+2.2 Label elements 标签要素
+Symbols/Pictograms Not applicable
+象形图
+不适用
+Signal word
+Not applicable
+信号词
+不适用
+Hazard Statements
+Not applicable
+危险说明
+不适用
+Precautionary statements 防范说明
+Prevention
+Not applicable
+预防措施
+不适用
+Response
+Not applicable
+事故响应
+不适用
+Storage
+Not applicable
+安全储存
+不适用
+Disposal
+Not applicable
+废弃处置
+不适用
+2.3 Hazard description 危害描述
+Contact with the electrolyte of battery may be irritating to skin, eyes and mucous membranes.
+Fire will produce irritating, corrosive and/or toxic gases. Fumes may cause dizziness or
+suffocation.
+与电池电解液接触可能会刺激皮肤、眼睛和粘膜。火灾会产生刺激性、腐蚀性和/或有毒气体。
+烟雾可能导致头晕或窒息。
+Using the battery under normal conditions according to the manufacturer's instructions is not
+hazardous. In the case of improper use, there is a risk of rupture, fire, hot, leakage of internal
+components, and may cause accidental losses. Improper use includes, but is not limited to,
+the following conditions: prolonged charging, short circuit, fire exposure, hard object impact,
+sharp object puncture, fragmentation and rupture.正常条件下根据制造商的说明使用电池不会
+产生危害。使用不当的情况下，有破裂、起火、发烫、内部成分泄露的危险，并可能造成意外
+损失。使用不当的行为包括但不仅限于下列情况：长时间充电、短路、投入火中、硬物撞击、
+尖物刺破、破碎和破裂。
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 3 of 13
+http://www.tct-lab.com
+
+Safety Data Sheet (SDS)
+ST/SG/AC.10/30/Rev.11 (GHS)
+
+Section 3- Composition/Information on Ingredients
+第三部分 成分/组成信息
+Article 物品
+
+Chemical Name
+
+CAS No.
+
+Content%
+
+化学名称
+
+化学文摘号
+
+百分含量 %
+
+12190-79-3
+
+15-40
+
+7782-42-5
+
+10-30
+
+21324-40-3
+
+10-30
+
+7440-50-8
+
+7-13
+
+7429-90-5
+
+5-10
+
+7440-02-0
+
+1-5
+
+Lithium Cobalt Oxide
+钴酸锂
+Graphite
+石墨
+Phosphate(1-), hexafluoro-, lithium
+六氟磷酸锂
+Copper
+铜
+Aluminum foil
+铝箔
+Nickel
+镍
+
+Section 4- First Aid Measures
+第四部分 急救措施
+4.1 Description of first aid measures
+急救措施的描述
+General advice
+In case of accident or unwellness, seek medical advice immediately.
+一般建议
+如果发生意外或不适，立即寻求医疗帮助。
+Inhalation
+If fumes or combustion products are inhaled, remove victim to fresh air
+吸入
+and keep at rest in a position comfortable for breathing. Get medical
+advice/attention if you feel unwell.
+如果吸入烟气或燃烧的产物，迅速脱离现场至空气新鲜处，保持呼吸通畅，
+若感到不适，寻求医生帮助。
+Give water to rinse out mouth, then drink plenty of water, vomiting, and go
+Ingestion
+to a doctor.
+摄入
+用清水冲洗嘴巴，然后喝大量的水，催吐，并就医。
+Eye contact
+Keep eyelids apart and away from eye and moving the eyelids by lifting
+眼睛接触
+the upper and lower lids occasionally, flush eyes with plenty of water or
+saline water for at least 15 minutes, call a physician if irritation persists.
+提起眼睑，用流动清水或生理盐水冲洗至少 15 分钟，若仍有刺激感，立即
+就医。
+Skin contact
+No apparent symptoms. If skin irritation persists, call a physician.
+皮肤接触
+无明显症状，如果皮肤出现持续刺激，请就医。
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 4 of 13
+http://www.tct-lab.com
+
+Safety Data Sheet (SDS)
+ST/SG/AC.10/30/Rev.11 (GHS)
+
+Protecting of
+first-aiders
+急救人员的防护
+
+Ensure that medical personnel are aware of the substance involved. Take
+precautions to protect themselves and prevent spread of contamination.
+确保医护人员了解产品的危害特性，并采取自身防护措施，以保护自己和防
+止污染传播。
+
+4.2 Most important symptoms and effects, both acute and delayed
+最重要的症状和效果,急性和延迟
+Substance accumulation, in the human body, may occur and may cause some concern following
+repeated or long-term occupational exposure.
+有限的证据表明反复或长期职业接触可能会产生涉及器官或生化系统累积性的健康影响
+4.3 Indication of any immediate medical attention and special treatment needed
+紧急医疗处理和特殊处理的说明
+Treat symptomatically，Symptoms may be delayed.
+根据症状治疗，注意症状可能会出现延迟。
+
+Section 5- Fire Fighting Measures
+第五部分 消防措施
+5.1 Extinguishing media 灭火介质
+Suitable extinguishing
+media 合适的灭火剂
+
+Use fire extinguishing media suitable for the surrounding
+environment
+使用适用于周围环境的灭火介质
+Unsuitable extinguishing No information available
+media 不合适的灭火剂
+无资料
+5.2 Special hazards arising from the substance or mixture 源于此物质或混合物产生的特殊危害
+May decompose upon combustion to generate irritating, corrosive or toxie fumes. Fumes may
+cause dizziness or suffocation.
+燃烧时可能分解，产生刺激性、腐蚀性或有毒烟雾。烟雾可能引起头晕或窒息。
+5.3 Advice for firefighters 对消防人员的建议
+Firefighters should wear self-contained breathing apparatus and full firefighting turnout gear;
+消防人员应佩戴自给式呼吸器和全套的消防服；
+Prevent, by any means available, spillage from entering drains or water courses;
+用任何方式，防止泄漏进入下水道或河道；
+Use water delivered as a fine spray to control fire and cool adjacent area.
+用水作为一个很好的喷雾控制火和冷却的邻近区域。
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 5 of 13
+http://www.tct-lab.com
+
+Safety Data Sheet (SDS)
+ST/SG/AC.10/30/Rev.11 (GHS)
+
+Section 6- Accidental Release Measures
+第六部分 泄露应急处理
+6.1 Personal precautions, protective equipment and emergency procedures
+个人预防措施、防护装备和应急程序
+If the battery material is released, remove personnel from area until fumes dissipate. Provide
+maximum ventilation to clear out hazardous gases. The preferred response is to leave the area,
+dispose the case after the batteries cool and vapors dissipate. Provide maximum ventilation.
+Avoid skin and eye contact or inhalation of vapors.
+如果电池材料被释放，请撤离该区域，直到烟雾消散。提供最大程度的通风，清除有害气体。最好
+的反应是离开该区域，在电池冷却和蒸汽消散后处理掉外壳。提供最大程度的通风。避免皮肤和眼
+睛接触或吸入蒸汽。
+6.2 Environmental precautions
+环境保护措施
+Prevent product from entering drains
+防止产品进入下水道。
+6.3 Methods and material for containment and cleaning up
+收集和清理的方法和材料
+Pick up and transfer to properly labeled containers. Avoid generation of dust
+收集和转移到合适的带标签的容器中，避免落灰。
+6.4 Reference to other sections
+参考其他部分
+Personal Protective Equipment advice is contained in Section 8 of the SDS.
+个人防护设备建议见 SDS 第 8 部分。
+Disposal considerations advice is contained in Section 13 of the SDS.
+废弃处置建议见 SDS 第 13 部分。
+
+Section 7- Handling and Storage
+第七部分 操作处置与储存
+7.1 Precautions for safe handling 安全操作注意事项
+Specific safe handling advice: Never throw out cells in a fire or expose to high temperatures. Do
+not soak cells in water and seawater. Do not expose to strong oxdizers. Do not give a strong
+mechanical shock or throw down. Never disassemble, modify or deform. Do not connect the
+positive terminal to the negative terminal with electrically conductive material.
+具体的安全处理建议:不要将电池扔进火中或暴露在高温下。不要将电池浸泡在水中或海水中。不要
+暴露在强氧化剂中。不得造成强烈的机械冲击或摔倒。切勿拆卸、修改或变形。请勿用导电材料连
+接正极和负极。
+
+Report No. TCT251114M264
+Hotline: 400-6611-140
+
+E-mail: service@tct-lab.com
+
+Page 6 of 13
+http://www.tct-lab.com
+
+
