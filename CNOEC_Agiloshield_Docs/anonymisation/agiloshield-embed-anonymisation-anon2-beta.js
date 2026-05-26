@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.6-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.7-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -639,7 +639,55 @@
     return typeof fallback === 'boolean' ? fallback : false;
   }
 
+  function isManualAuthActive() {
+    if (!ui.manualAuth || ui.manualAuth.classList.contains('is-collapsed')) return false;
+    const username = ui.manualUsername ? (ui.manualUsername.value || '').trim() : '';
+    const token = ui.manualToken ? (ui.manualToken.value || '').trim() : '';
+    return !!(username && token);
+  }
+
+  function configureManualAuthFields() {
+    if (!ui.manualAuth) return;
+    const collapsed = ui.manualAuth.classList.contains('is-collapsed');
+    if (ui.manualUsername) {
+      ui.manualUsername.autocomplete = 'off';
+      ui.manualUsername.readOnly = collapsed;
+      if (collapsed) ui.manualUsername.value = '';
+    }
+    if (ui.manualToken) {
+      ui.manualToken.autocomplete = 'new-password';
+      ui.manualToken.readOnly = collapsed;
+      if (collapsed) ui.manualToken.value = '';
+    }
+  }
+
+  function scheduleManualAuthAutofillGuard() {
+    [0, 100, 500, 1000, 2000].forEach((ms) => {
+      setTimeout(() => {
+        if (ui.manualAuth && ui.manualAuth.classList.contains('is-collapsed')) {
+          if (ui.manualUsername && ui.manualUsername.value) ui.manualUsername.value = '';
+          if (ui.manualToken && ui.manualToken.value) ui.manualToken.value = '';
+        }
+      }, ms);
+    });
+  }
+
+  function syncHiddenMemberEmail(email) {
+    if (!email) return;
+    const el = document.querySelector('[name="memberEmail"]');
+    if (el) el.value = email;
+  }
+
+  function isAgiloshieldPremiumContext() {
+    return state.edition === 'agiloshield'
+      || window.location.pathname.includes('/tools/agiloshield/')
+      || window.location.pathname.includes('/agiloshield/premium/');
+  }
+
   function getManualAuthOverride() {
+    if (!isManualAuthActive()) {
+      return { username: null, token: null, edition: normalizeEdition(state.edition) };
+    }
     const username = ui.manualUsername ? (ui.manualUsername.value || '').trim() : '';
     const token = ui.manualToken ? (ui.manualToken.value || '').trim() : '';
     const edition = ui.manualEdition ? normalizeEdition(ui.manualEdition.value || state.edition) : normalizeEdition(state.edition);
@@ -2613,18 +2661,26 @@
     return 'free';
   }
 
-  async function getUserEmail() {
+  async function getMemberstackEmail() {
     const ms = window.$memberstackDom;
-    if (ms && typeof ms.getCurrentMember === 'function') {
-      try {
-        const result = await ms.getCurrentMember({ cache: 'reload' });
-        const member = result && result.data;
-        const memberEmail = member && (member.email || (member.auth && member.auth.email));
-        if (memberEmail) return String(memberEmail).trim();
-      } catch (e) { console.warn('getUserEmail error', e); }
+    if (!ms || typeof ms.getCurrentMember !== 'function') return null;
+    try {
+      const result = await ms.getCurrentMember({ cache: 'reload' });
+      const member = result && result.data;
+      const memberEmail = member && (member.email || (member.auth && member.auth.email));
+      return memberEmail ? String(memberEmail).trim() : null;
+    } catch (e) {
+      console.warn('getMemberstackEmail error', e);
+      return null;
     }
+  }
+
+  async function getUserEmail() {
+    const msEmail = await getMemberstackEmail();
+    if (msEmail) return msEmail;
     const fromPage = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
-    if (fromPage) return fromPage;
+    if (fromPage) return String(fromPage).trim();
+    if (isAgiloshieldPremiumContext()) return null;
     return (typeof storage !== 'undefined' && storage.get('agilo:username')) || null;
   }
 
@@ -2663,21 +2719,21 @@
 
   async function ensureAuth() {
     const manualAuth = getManualAuthOverride();
-    if (manualAuth.username) state.email = manualAuth.username;
-    if (manualAuth.edition) state.edition = manualAuth.edition;
-    if (manualAuth.token) state.token = manualAuth.token;
-    if (!manualAuth.username) {
-      const freshEmail = await getUserEmail();
-      clearStaleAuthCacheIfNeeded(freshEmail);
-      if (freshEmail) state.email = freshEmail;
-    }
-    if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
-    if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
-    if (!manualAuth.token && hasAgiloshieldPaidEdition()) {
-      await getToken(state.email, getEditionForApi(), 0);
+
+    if (manualAuth.username && manualAuth.token) {
+      state.email = manualAuth.username;
+      state.token = manualAuth.token;
+      if (manualAuth.edition) state.edition = manualAuth.edition;
     } else {
-      if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
-      if (!state.token) await getToken(state.email, getEditionForApi(), 0);
+      const freshEmail = await getMemberstackEmail();
+      if (freshEmail) {
+        clearStaleAuthCacheIfNeeded(freshEmail);
+        state.email = freshEmail;
+        syncHiddenMemberEmail(freshEmail);
+      }
+      if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || '').trim() || null;
+      if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
+      await getToken(state.email, getEditionForApi(), 0);
     }
     storage.set('agilo:username', state.email);
     storage.set('agilo:edition', state.edition);
@@ -3885,6 +3941,7 @@
         ui.manualAuthFields.setAttribute('aria-hidden', collapsed ? 'true' : 'false');
         ui.manualAuthToggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
         ui.manualAuthToggle.textContent = collapsed ? 'Utiliser des identifiants manuels' : 'Masquer les identifiants manuels';
+        configureManualAuthFields();
       });
     }
 
@@ -3971,9 +4028,12 @@
     });
 
     await waitForMemberstack(10000, 200);
-    const memberEmail = await getUserEmail();
+    configureManualAuthFields();
+    scheduleManualAuthAutofillGuard();
+    const memberEmail = await getMemberstackEmail() || await getUserEmail();
     clearStaleAuthCacheIfNeeded(memberEmail);
     state.email = memberEmail;
+    if (memberEmail) syncHiddenMemberEmail(memberEmail);
     state.edition = normalizeEdition(await detectEdition());
     if (!state.transcriptionEdition) state.transcriptionEdition = 'free';
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
@@ -3998,10 +4058,14 @@
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
     if (!state.email) {
-      state.email = await getUserEmail();
+      state.email = await getMemberstackEmail() || await getUserEmail();
       clearStaleAuthCacheIfNeeded(state.email);
+      if (state.email) syncHiddenMemberEmail(state.email);
     }
     if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || '').trim() || null;
+
+    configureManualAuthFields();
+    scheduleManualAuthAutofillGuard();
 
     if (state.email) {
       try {
