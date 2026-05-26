@@ -29,21 +29,44 @@
     }
     el.value = email;
   }
+  function clearStaleAuthCache(currentEmail) {
+    const normalized = String(currentEmail || '').trim().toLowerCase();
+    if (!normalized) return;
+    try {
+      const cachedEmail = String(localStorage.getItem('agilo:username') || '').trim().toLowerCase();
+      if (cachedEmail && cachedEmail !== normalized) {
+        Object.keys(localStorage).forEach((key) => {
+          if (key === 'agilo:username' || key === 'agilo:edition' || key === 'agilo:token' || key.indexOf('agilo:token:') === 0) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+    } catch {}
+  }
   async function resolveEmail() {
+    if (window.$memberstackDom?.getCurrentMember) {
+      try {
+        const r = await window.$memberstackDom.getCurrentMember({ cache: 'reload' });
+        const email = r?.data?.auth?.email || r?.data?.email || '';
+        if (email) return String(email).trim();
+      } catch {}
+    }
+    if (window.$memberstackDom?.getMember) {
+      try {
+        const r = await window.$memberstackDom.getMember();
+        const email = r?.data?.auth?.email || r?.data?.email || '';
+        if (email) return String(email).trim();
+      } catch {}
+    }
+
     const direct = document.getElementById('memberEmail')?.value
       || document.querySelector('[name="memberEmail"]')?.value
       || window.memberEmail
-      || localStorage.getItem('agilo:username')
       || document.querySelector('[data-ms-member="email"]')?.textContent
+      || localStorage.getItem('agilo:username')
       || '';
     if (direct) return direct.trim();
 
-    if (window.$memberstackDom?.getMember) {
-      try { const r = await window.$memberstackDom.getMember(); if (r?.data?.email) return r.data.email.trim(); } catch {}
-    }
-    if (window.$memberstackDom?.getCurrentMember) {
-      try { const r = await window.$memberstackDom.getCurrentMember({ cache: 'reload' }); if (r?.data?.email) return r.data.email.trim(); } catch {}
-    }
     for (let i = 0; i < 30; i++) {
       const v = document.getElementById('memberEmail')?.value
              || document.querySelector('[name="memberEmail"]')?.value
@@ -109,6 +132,7 @@
     );
     const email = await resolveEmail();
     if (!email) { console.warn('[agilo] Email utilisateur non trouvé'); return; }
+    clearStaleAuthCache(email);
 
     // Toujours appeler getToken au chargement pour avoir un token frais (évite error_invalid_token avec un ancien token en cache).
     getToken(email, edition);

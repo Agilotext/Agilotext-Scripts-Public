@@ -55,26 +55,52 @@
     el.value = email;
   }
 
+  function clearStaleAuthCache(currentEmail) {
+    const normalized = String(currentEmail || '').trim().toLowerCase();
+    if (!normalized) return;
+    try {
+      const cachedEmail = String(localStorage.getItem('agilo:username') || '').trim().toLowerCase();
+      if (cachedEmail && cachedEmail !== normalized) {
+        Object.keys(localStorage).forEach((key) => {
+          if (key === 'agilo:username' || key === 'agilo:edition' || key === 'agilo:token' || key.indexOf('agilo:token:') === 0 || key.indexOf('agilo:tokenIssuedAt:') === 0) {
+            localStorage.removeItem(key);
+          }
+        });
+      }
+    } catch (err) {
+      if (window.AGILO_DEBUG) console.error('[agilo] clearStaleAuthCache error:', err);
+    }
+  }
+
   async function resolveEmail() {
-    const findEmail = () => {
+    const findDomEmail = () => {
       const input = document.querySelector('[name="memberEmail"]');
       return (input?.value || input?.getAttribute('src') || input?.textContent || "").trim();
     };
 
-    let email = findEmail();
+    const getMemberstackEmail = async () => {
+      if (!window.$memberstackDom) return '';
+      try {
+        const member = await window.$memberstackDom.getCurrentMember({ cache: 'reload' });
+        const email = member?.data?.auth?.email || member?.data?.email || '';
+        return String(email || '').trim();
+      } catch (e) {
+        return '';
+      }
+    };
+
+    let email = await getMemberstackEmail();
+    if (email) return email;
+
+    email = findDomEmail();
     if (email) return email;
 
     // Retry loop for Memberstack
     for (let i = 0; i < 30; i++) {
-      email = findEmail();
+      email = await getMemberstackEmail();
       if (email) return email;
-      
-      if (window.$memberstackDom) {
-        try {
-          const member = await window.$memberstackDom.getCurrentMember();
-          if (member?.data?.auth?.email) return member.data.auth.email;
-        } catch (e) { /* ignore */ }
-      }
+      email = findDomEmail();
+      if (email) return email;
       await new Promise(r => setTimeout(r, 100));
     }
     return null;
@@ -222,6 +248,8 @@
       if (window.AGILO_DEBUG) console.warn('[agilo] Email utilisateur non trouvé');
       return;
     }
+
+    clearStaleAuthCache(email);
 
     const cached = localStorage.getItem(tokenKey(email, edition));
     const issued = parseInt(localStorage.getItem(tokenIssuedAtKey(email, edition)) || '0', 10);
