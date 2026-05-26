@@ -491,7 +491,7 @@
   function getAgiloshieldCheckoutCtaHtml(label, extraClass, inlineStyle) {
     const classAttr = extraClass ? ' class="' + extraClass + '"' : '';
     const styleAttr = inlineStyle ? ' style="' + inlineStyle + '"' : '';
-    return '<a href="/agiloshield/tarifs" data-agilo-checkout="agiloshield-classic" data-ms-price:add="' + AGILOSHIELD_CLASSIC_PRICE_ID + '"' + classAttr + styleAttr + '>' + label + '</a>';
+    return '<a href="https://www.agilotext.com/anonymisation#price" data-agilo-checkout="agiloshield-classic" data-ms-price:add="' + AGILOSHIELD_CLASSIC_PRICE_ID + '"' + classAttr + styleAttr + '>' + label + '</a>';
   }
 
   function bindAgiloshieldCheckoutLinks() {
@@ -509,7 +509,7 @@
         await ms.purchasePlansWithCheckout({ priceId: AGILOSHIELD_CLASSIC_PRICE_ID });
       } catch (err) {
         console.warn('Agiloshield checkout fallback', err);
-        window.location.href = target.getAttribute('href') || '/agiloshield/tarifs';
+        window.location.href = target.getAttribute('href') || 'https://www.agilotext.com/anonymisation#price';
       }
     });
   }
