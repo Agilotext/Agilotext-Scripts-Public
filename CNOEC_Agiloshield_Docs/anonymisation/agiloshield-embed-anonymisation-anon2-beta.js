@@ -2661,17 +2661,36 @@
     }
     state.usageLoading = true;
     renderUsageCredits();
-    const url = ANON_USAGE + '?username=' + encodeURIComponent(state.email) +
-      '&token=' + encodeURIComponent(state.token) +
-      '&edition=' + encodeURIComponent(getEditionForApi());
+    const params = new URLSearchParams();
+    params.set('username', state.email || '');
+    params.set('token', state.token || '');
+    params.set('edition', getEditionForApi());
     try {
-      const response = await fetchWithTimeout(url, { method: 'GET' }, 15000);
+      let response = null;
+      let data = null;
+      try {
+        response = await fetchWithTimeout(ANON_USAGE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        }, 15000);
+        if (!(response.status === 404 || response.status === 501)) {
+          data = await response.json();
+        }
+      } catch (postErr) {
+        const url = ANON_USAGE + '?username=' + encodeURIComponent(state.email) +
+          '&token=' + encodeURIComponent(state.token) +
+          '&edition=' + encodeURIComponent(getEditionForApi());
+        response = await fetchWithTimeout(url, { method: 'GET' }, 15000);
+        if (!(response.status === 404 || response.status === 501)) {
+          data = await response.json();
+        }
+      }
       if (response.status === 404 || response.status === 501) {
         state.usage = null;
         state.usageError = 'endpoint_missing';
         return null;
       }
-      const data = await response.json();
       if (data && data.status === 'OK') {
         state.usage = data;
         state.usageError = null;
