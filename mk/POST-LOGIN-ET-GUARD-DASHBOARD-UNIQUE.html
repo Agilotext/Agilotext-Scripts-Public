@@ -1,0 +1,452 @@
+<!--
+  AGILOTEXT - Document unique : Post-Login v7 + Guard Dashboard
+  Ouvrir dans Cursor pour copier le bon script à jour.
+
+  ROUTING v7
+  ----------
+  - Free/Pro/Business Agilotext prime toujours sur Agiloshield Classic
+  - Nicolas (Free + Classic) → /app/free/dashboard
+  - Classic seul → /tools/agiloshield/premium/dashboard
+  - Legacy pln_anonymisation seul → /app/anonymisation/dashboard
+
+  DEPLOIEMENT
+  -----------
+  1) Script 1 sur /auth/post-login
+  2) Script 2 en footer global (ou sur chaque dashboard /app/* et /tools/agiloshield/*)
+-->
+
+<!-- ========== SCRIPT 1 : POST-LOGIN v7 (page /auth/post-login uniquement) ========== -->
+<script id="script-post-login">
+/* AGILOTEXT - POST LOGIN ROUTER v7 - À coller sur /auth/post-login */
+document.addEventListener('DOMContentLoaded', async () => {
+  if (!/^\/auth\/post-login\/?$/.test(window.location.pathname || '')) return;
+  if (window.__agiloPostLoginScriptInit) return;
+  window.__agiloPostLoginScriptInit = true;
+
+  const VERSION = 'v7';
+  const FREE_PLAN_ID = 'pln_free-njg10umr';
+  const AGILOSHIELD_CLASSIC_PRICE_ID = 'prc_classic-mensuel-3u5vr0uq5';
+  const flowId = 'postlogin_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+
+  const log = (event, payload = {}) => {
+    console.info('[AGILO_POST_LOGIN]', {
+      flow_id: flowId,
+      version: VERSION,
+      page: window.location.pathname,
+      event,
+      ...payload
+    });
+  };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  async function waitForMemberstack(timeoutMs = 12000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (window.$memberstackDom) return window.$memberstackDom;
+      await sleep(120);
+    }
+    return null;
+  }
+
+  function normalizeStatus(status) {
+    return String(status || '').toUpperCase();
+  }
+
+  function getConnections(member) {
+    return Array.isArray(member?.planConnections) ? member.planConnections : [];
+  }
+
+  function getPlans(member) {
+    return Array.isArray(member?.plans) ? member.plans : [];
+  }
+
+  const ACTIVE_STATUSES = new Set(['ACTIVE', 'TRIALING', 'GRACE']);
+
+  function isFreeLikePlan(plan) {
+    const id = String(plan?.planId || plan?.plan?.id || plan?.id || '').toLowerCase();
+    const name = String(plan?.planName || plan?.name || '').toLowerCase();
+    const type = String(plan?.type || '').toUpperCase();
+    return id.startsWith('pln_free') || name.includes('free') || type === 'FREE';
+  }
+
+  function isPlanObjectActive(plan) {
+    const status = normalizeStatus(plan?.status);
+    if (status) return ACTIVE_STATUSES.has(status);
+    if (typeof plan?.active === 'boolean') return plan.active;
+    return false;
+  }
+
+  function getPlanId(plan) {
+    return String(plan?.planId || plan?.plan?.id || plan?.id || '');
+  }
+
+  function getPriceId(plan) {
+    const payment = plan?.payment || {};
+    return String(payment.priceId || plan?.priceId || '');
+  }
+
+  function getPlanLabel(plan) {
+    const payment = plan?.payment || {};
+    return [
+      plan?.planId,
+      plan?.planName,
+      plan?.name,
+      plan?.priceName,
+      payment?.priceName,
+      payment?.priceId
+    ].filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function hasPlanPrefix(member, prefix) {
+    const connections = getConnections(member);
+    if (connections.length > 0) {
+      return connections.some((p) => {
+        const status = normalizeStatus(p?.status);
+        const id = getPlanId(p);
+        return ACTIVE_STATUSES.has(status) && id.startsWith(prefix);
+      });
+    }
+    return getPlans(member).some((p) => isPlanObjectActive(p) && getPlanId(p).startsWith(prefix));
+  }
+
+  function hasAgiloshieldClassic(member) {
+    function matches(plan) {
+      const planId = getPlanId(plan);
+      const priceId = getPriceId(plan);
+      const label = getPlanLabel(plan);
+      return planId.indexOf('pln_agiloshield') === 0 ||
+        planId.indexOf('pln_agiloshield-classic') === 0 ||
+        priceId === AGILOSHIELD_CLASSIC_PRICE_ID ||
+        label.indexOf('agiloshield') !== -1 ||
+        label.indexOf('classic mensuel') !== -1;
+    }
+    const connections = getConnections(member);
+    if (connections.length > 0) {
+      return connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)) && matches(p));
+    }
+    return getPlans(member).some((p) => isPlanObjectActive(p) && matches(p));
+  }
+
+  function hasFreePlan(member) {
+    if (hasPlanPrefix(member, 'pln_free')) return true;
+    const connections = getConnections(member);
+    if (connections.length > 0) {
+      return connections.some((p) => {
+        const status = normalizeStatus(p?.status);
+        const name = String(p?.planName || p?.plan?.name || '').toLowerCase();
+        return ACTIVE_STATUSES.has(status) && name.includes('free');
+      });
+    }
+    return getPlans(member).some((p) => {
+      const name = String(p?.name || '').toLowerCase();
+      return (isPlanObjectActive(p) && name.includes('free')) || isFreeLikePlan(p);
+    });
+  }
+
+  function getTeamSignals(member) {
+    const teams = member?.teams ?? { belongsToTeam: false, ownedTeams: [], joinedTeams: [] };
+    const belongsToTeam = Boolean(teams.belongsToTeam);
+    const ownedTeams = Array.isArray(teams.ownedTeams) ? teams.ownedTeams : [];
+    const joinedTeams = Array.isArray(teams.joinedTeams) ? teams.joinedTeams : [];
+    return {
+      hasTeamMembership: belongsToTeam && (ownedTeams.length > 0 || joinedTeams.length > 0),
+      isOwner: belongsToTeam && ownedTeams.length > 0,
+      isSeat: belongsToTeam && joinedTeams.length > 0 && ownedTeams.length === 0
+    };
+  }
+
+  function getEditionSignals(member) {
+    const team = getTeamSignals(member);
+    const hasLegacyAnon = hasPlanPrefix(member, 'pln_anonymisation');
+    const hasAgiloshield = hasAgiloshieldClassic(member);
+    const hasBusiness = hasPlanPrefix(member, 'pln_business');
+    const hasPro = hasPlanPrefix(member, 'pln_pro');
+    const hasFree = hasFreePlan(member);
+    const hasTranscription = hasBusiness || hasPro || hasFree || team.hasTeamMembership;
+    return {
+      hasLegacyAnon,
+      hasAgiloshield,
+      hasBusiness,
+      hasPro,
+      hasFree,
+      hasTranscription,
+      isOwner: team.isOwner,
+      isSeat: team.isSeat,
+      hasTeamMembership: team.hasTeamMembership
+    };
+  }
+
+  function hasEnoughDataToRedirect(member) {
+    const connections = getConnections(member);
+    const plans = getPlans(member);
+    if (connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)))) return true;
+    if (connections.length === 0 && plans.some((p) => isPlanObjectActive(p) || isFreeLikePlan(p))) return true;
+    const onboardingRaw = String(member?.customFields?.['onboarding-done'] || '').toLowerCase();
+    if (onboardingRaw && !['1', 'true', 'skipped'].includes(onboardingRaw)) return true;
+    if (getTeamSignals(member).hasTeamMembership) return true;
+    return false;
+  }
+
+  async function fetchMemberStable(ms, maxMs = 7000) {
+    let lastMember = null;
+    const started = Date.now();
+    while (Date.now() - started < maxMs) {
+      try {
+        const { data: member } = await ms.getCurrentMember({ useCache: false });
+        if (member) {
+          lastMember = member;
+          if (hasEnoughDataToRedirect(member)) return member;
+        }
+      } catch (_) { }
+      await sleep(Date.now() - started < 3500 ? 260 : 420);
+    }
+    return lastMember;
+  }
+
+  function resolveRoute(signals, onboardingDone) {
+    if (!onboardingDone) return { targetRoute: '/auth/setup', decisionReason: 'onboarding_incomplete' };
+    if (signals.hasBusiness || signals.isSeat) {
+      return {
+        targetRoute: '/app/business/dashboard',
+        decisionReason: signals.hasBusiness ? 'active_business_plan' : 'team_seat_membership'
+      };
+    }
+    if (signals.hasPro) return { targetRoute: '/app/premium/dashboard', decisionReason: 'active_pro_plan' };
+    if (signals.hasFree) return { targetRoute: '/app/free/dashboard', decisionReason: 'active_free_plan' };
+    if (signals.hasLegacyAnon) {
+      return { targetRoute: '/app/anonymisation/dashboard', decisionReason: 'active_legacy_anonymisation_plan' };
+    }
+    if (signals.hasAgiloshield) {
+      return {
+        targetRoute: '/tools/agiloshield/premium/dashboard',
+        decisionReason: 'active_agiloshield_classic_only'
+      };
+    }
+    return { targetRoute: '/app/free/dashboard', decisionReason: 'fallback_free' };
+  }
+
+  const ms = await waitForMemberstack();
+  if (!ms) {
+    log('memberstack_unavailable');
+    window.location.replace('/auth/login?auth_error=member_timeout');
+    return;
+  }
+
+  let member = await fetchMemberStable(ms);
+  if (!member) {
+    log('member_not_found_after_retries');
+    window.location.replace('/auth/login?auth_error=member_timeout');
+    return;
+  }
+
+  let signals = getEditionSignals(member);
+  let anyPlan = signals.hasTranscription || signals.hasLegacyAnon || signals.hasAgiloshield;
+
+  if (!anyPlan) {
+    log('no_plan_detected', { freePlanId: FREE_PLAN_ID });
+    try {
+      await ms.addPlan({ planId: FREE_PLAN_ID });
+      await sleep(700);
+      const refreshed = await ms.getCurrentMember({ useCache: false });
+      if (refreshed && refreshed.data) {
+        member = refreshed.data;
+        signals = getEditionSignals(member);
+      } else {
+        signals.hasFree = true;
+      }
+    } catch (err) {
+      signals.hasFree = true;
+      log('auto_assign_free_error', { error: String(err?.message || err) });
+    }
+  }
+
+  const onboardingDone = Boolean(member.customFields) && (
+    member.customFields['onboarding-done'] === '1' ||
+    member.customFields['onboarding-done'] === 'true' ||
+    member.customFields['onboarding-done'] === 'skipped'
+  );
+
+  log('plan_signals', {
+    memberId: member.id,
+    email: (member.auth && member.auth.email) || '',
+    hasBusiness: signals.hasBusiness,
+    hasPro: signals.hasPro,
+    hasFree: signals.hasFree,
+    hasLegacyAnon: signals.hasLegacyAnon,
+    hasAgiloshield: signals.hasAgiloshield,
+    hasTranscription: signals.hasTranscription
+  });
+
+  const route = resolveRoute(signals, onboardingDone);
+  log('route_decision', Object.assign({ memberId: member.id, email: (member.auth && member.auth.email) || '' }, route, signals));
+  window.location.replace(route.targetRoute);
+});
+</script>
+
+<!-- ========== SCRIPT 2 : GUARD DASHBOARD v7 (/app/* et /tools/agiloshield/*) ========== -->
+<script id="script-guard-dashboard">
+(function() {
+  const path = typeof window !== 'undefined' && window.location && window.location.pathname ? window.location.pathname : '';
+  const isAppPath = path.startsWith('/app/');
+  const isAgiloshieldToolsPath = path.startsWith('/tools/agiloshield/');
+  if (!isAppPath && !isAgiloshieldToolsPath) return;
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const AGILOSHIELD_CLASSIC_PRICE_ID = 'prc_classic-mensuel-3u5vr0uq5';
+    const ACTIVE_STATUSES = new Set(['ACTIVE', 'TRIALING', 'GRACE']);
+
+    async function waitForMemberstack(timeoutMs = 12000) {
+      const started = Date.now();
+      while (Date.now() - started < timeoutMs) {
+        if (window.$memberstackDom) return window.$memberstackDom;
+        await sleep(120);
+      }
+      return null;
+    }
+
+    function normalizeStatus(status) {
+      return String(status || '').toUpperCase();
+    }
+
+    function getConnections(member) {
+      return Array.isArray(member?.planConnections) ? member.planConnections : [];
+    }
+
+    function getPlans(member) {
+      return Array.isArray(member?.plans) ? member.plans : [];
+    }
+
+    function isPlanObjectActive(plan) {
+      const status = normalizeStatus(plan?.status);
+      if (status) return ACTIVE_STATUSES.has(status);
+      if (typeof plan?.active === 'boolean') return plan.active;
+      return true;
+    }
+
+    function getPlanId(plan) {
+      return String(plan?.planId || plan?.plan?.id || plan?.id || '');
+    }
+
+    function getPriceId(plan) {
+      const payment = plan?.payment || {};
+      return String(payment.priceId || plan?.priceId || '');
+    }
+
+    function getPlanLabel(plan) {
+      const payment = plan?.payment || {};
+      return [
+        plan?.planId,
+        plan?.planName,
+        plan?.name,
+        plan?.priceName,
+        payment?.priceName,
+        payment?.priceId
+      ].filter(Boolean).join(' ').toLowerCase();
+    }
+
+    function hasPlanPrefix(member, prefix) {
+      const connections = getConnections(member);
+      if (connections.length > 0) {
+        return connections.some((p) => {
+          const status = normalizeStatus(p?.status);
+          const id = getPlanId(p);
+          return ACTIVE_STATUSES.has(status) && id.startsWith(prefix);
+        });
+      }
+      return getPlans(member).some((p) => isPlanObjectActive(p) && getPlanId(p).startsWith(prefix));
+    }
+
+    function hasAgiloshieldClassic(member) {
+      function matches(plan) {
+        const planId = getPlanId(plan);
+        const priceId = getPriceId(plan);
+        const label = getPlanLabel(plan);
+        return planId.indexOf('pln_agiloshield') === 0 ||
+          planId.indexOf('pln_agiloshield-classic') === 0 ||
+          priceId === AGILOSHIELD_CLASSIC_PRICE_ID ||
+          label.indexOf('agiloshield') !== -1 ||
+          label.indexOf('classic mensuel') !== -1;
+      }
+      const connections = getConnections(member);
+      if (connections.length > 0) {
+        return connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)) && matches(p));
+      }
+      return getPlans(member).some((p) => isPlanObjectActive(p) && matches(p));
+    }
+
+    function hasFreePlan(member) {
+      if (hasPlanPrefix(member, 'pln_free')) return true;
+      const connections = getConnections(member);
+      if (connections.length > 0) {
+        return connections.some((p) => {
+          const status = normalizeStatus(p?.status);
+          const name = String(p?.planName || p?.plan?.name || '').toLowerCase();
+          return ACTIVE_STATUSES.has(status) && name.includes('free');
+        });
+      }
+      return getPlans(member).some((p) => {
+        const name = String(p?.name || '').toLowerCase();
+        return isPlanObjectActive(p) && name.includes('free');
+      });
+    }
+
+    function getEditionSignals(member) {
+      const hasLegacyAnon = hasPlanPrefix(member, 'pln_anonymisation');
+      const hasAgiloshield = hasAgiloshieldClassic(member);
+      const hasBusiness = hasPlanPrefix(member, 'pln_business');
+      const hasPro = hasPlanPrefix(member, 'pln_pro');
+      const hasFree = hasFreePlan(member);
+      const teams = member.teams ?? { belongsToTeam: false, ownedTeams: [] };
+      const isSeat = Boolean(teams.belongsToTeam) && (teams.ownedTeams || []).length === 0;
+      return { hasLegacyAnon, hasAgiloshield, hasBusiness, hasPro, hasFree, isSeat };
+    }
+
+    function hasAccessToCurrentPath(member) {
+      const s = getEditionSignals(member);
+      if (path.startsWith('/app/business/')) return s.hasBusiness || s.isSeat;
+      if (path.startsWith('/app/premium/')) return s.hasPro;
+      if (path.startsWith('/app/free/')) return s.hasFree;
+      if (path.startsWith('/app/anonymisation/')) return s.hasLegacyAnon;
+      if (path.startsWith('/tools/agiloshield/')) return s.hasAgiloshield || s.hasLegacyAnon;
+      return false;
+    }
+
+    async function fetchMemberStable(ms, retries = 18, delayMs = 280) {
+      let lastMember = null;
+      for (let i = 0; i < retries; i += 1) {
+        const { data: member } = await ms.getCurrentMember({ useCache: false });
+        if (!member) {
+          await sleep(delayMs);
+          continue;
+        }
+        lastMember = member;
+        const hasData = getConnections(member).length > 0 || getPlans(member).length > 0;
+        if (hasData) return member;
+        await sleep(delayMs);
+      }
+      return lastMember;
+    }
+
+    const ms = await waitForMemberstack();
+    if (!ms) {
+      location.replace('/auth/login');
+      return;
+    }
+
+    const member = await fetchMemberStable(ms);
+    if (!member) {
+      location.replace('/auth/login');
+      return;
+    }
+
+    if (!hasAccessToCurrentPath(member)) {
+      location.replace('/auth/access-denied');
+      return;
+    }
+
+    console.log('[Guard Dashboard v7] Accès autorisé', path, member.auth?.email);
+  });
+})();
+</script>
