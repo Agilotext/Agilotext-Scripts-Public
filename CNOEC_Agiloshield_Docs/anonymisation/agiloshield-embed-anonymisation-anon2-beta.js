@@ -50,9 +50,9 @@
     defaults: Object.freeze({ get: ANON_OPTIONS_GET_DEFAULTS, set: ANON_OPTIONS_SET_DEFAULTS }),
     options: Object.freeze({ get: ANON_OPTIONS_GET, set: ANON_OPTIONS_SET })
   });
-  const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL']);
-  const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'ORG', 'PER']);
-  const MIN_SELECTED_TYPES = 3;
+  const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL', 'URL']);
+  const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'PER']);
+  const MIN_SELECTED_TYPES = 2;
   const ANON2_CODE_LABELS = Object.freeze({
     ADR: 'Adresse',
     DAT: 'Date',
@@ -65,7 +65,8 @@
     PER: 'Personne',
     PII: 'Donnée personnelle générique',
     PRO: 'Profession',
-    TEL: 'Téléphone'
+    TEL: 'Téléphone',
+    URL: 'URL'
   });
   const ANON2_VISUAL_TO_CODE = Object.freeze({
     PR: 'PER',
@@ -103,7 +104,8 @@
     PER: ['PER', 'PR'],
     PII: ['PII'],
     PRO: ['PRO'],
-    TEL: ['TEL', 'PHON']
+    TEL: ['TEL', 'PHON'],
+    URL: ['URL']
   });
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
