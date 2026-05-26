@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier : APIs Anon Async (upload → jobIds → polling getAnonStatus → receiveAnonText/receiveAnonZip)
-  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.11-limited';
+  window.__AGILO_EMBED_ANON_VERSION__ = '1.5.12-limited';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -42,6 +42,33 @@
     restore: runtimeFeatureFlags.restore === true || query.get('featureRestore') === '1',
     inclusion: runtimeFeatureFlags.inclusion === true || query.get('featureInclusion') === '1'
   });
+  const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL']);
+  const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'ORG', 'PER']);
+  const ANON2_VISUAL_TO_CODE = Object.freeze({
+    PR: 'PER',
+    MAIL: 'EML',
+    PHON: 'TEL',
+    DT: 'DAT',
+    ORG: 'ORG',
+    LOC: 'LOC',
+    IBAN: 'IBA',
+    CID: 'IDN',
+    FRNIR: 'IDN'
+  });
+  const ANON2_CODE_TO_TEXT_API = Object.freeze({
+    ADR: 'address',
+    DAT: 'birth',
+    EML: 'email',
+    IBA: 'bank',
+    IDN: 'siren',
+    JOB: 'role',
+    LOC: 'address',
+    ORG: 'company',
+    PER: 'person_name',
+    PRO: 'product',
+    TEL: 'phone'
+  });
+  const MIN_SELECTED_TYPES = 3;
 
   const STORAGE_TYPES = 'agilo:futures:types:v1';
   const STORAGE_INC = 'agilo:futures:include:v1';
@@ -153,8 +180,8 @@
     OTHER: 'OTHER'
   };
   const API_READY_VALUES = ['person_name', 'email', 'phone', 'birth', 'role', 'address', 'company', 'siren', 'accounting', 'product', 'contract', 'bank'];
-  /** Types proposés dans la grille (doivent correspondre à des data-entity présents dans #agfTypeGrid). POST/URL activés dynamiquement même si disabled dans le HTML. */
-  const TYPES_AVAILABLE = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  /** Types proposés dans la grille moderne Anon2. */
+  const TYPES_AVAILABLE = ANON2_ALLOWED_CODES.slice();
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
   const storage = createSafeStorage();
 
@@ -382,7 +409,7 @@
     manualEdition: document.getElementById('agfManualEdition')
   };
 
-  const DEFAULT_ENTITIES = ['PR', 'MAIL', 'PHON', 'DT', 'CID', 'ORG', 'LOC', 'IBAN', 'FRNIR', 'POST', 'URL'];
+  const DEFAULT_ENTITIES = DEFAULT_ANON2_OPTION_CODES.slice();
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
@@ -880,8 +907,12 @@
     const hasPending = state.files.length > 0;
     const hasProcessed = state.processedItems.length > 0;
     const hasAnonJobs = Array.isArray(state.anonJobsList) && state.anonJobsList.length > 0;
+    const hasMinimumTypes = hasMinimumSelectedTypes();
 
-    document.querySelectorAll('#agfSubmit').forEach(el => { el.disabled = state.processing || !hasPending; });
+    document.querySelectorAll('#agfSubmit').forEach(el => {
+      el.disabled = state.processing || !hasPending || !hasMinimumTypes;
+      el.title = !hasMinimumTypes ? buildMinimumTypesMessage() : '';
+    });
     document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
     document.querySelectorAll('#agfProcessedWrap').forEach(el => { el.hidden = !hasProcessed && !hasAnonJobs; });
     // agfAnonJobsWrap is always visible as a standalone section (renderAnonJobsList handles empty state)
@@ -1536,11 +1567,51 @@
       .map((c) => c.getAttribute('data-entity'));
   }
 
+  function mapVisualEntityToAnon2Code(visualCode) {
+    const normalized = String(visualCode || '').trim().toUpperCase();
+    if (ANON2_ALLOWED_CODES.includes(normalized)) return normalized;
+    return ANON2_VISUAL_TO_CODE[normalized] || null;
+  }
+
+  function selectedAnon2OptionCodes() {
+    const seen = new Set();
+    return selectedVisualEntities()
+      .map((code) => mapVisualEntityToAnon2Code(code))
+      .filter(Boolean)
+      .filter((code) => {
+        if (seen.has(code)) return false;
+        seen.add(code);
+        return true;
+      })
+      .sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
+  }
+
+  function setVisualEntitiesFromAnon2Codes(optionCodes) {
+    const activeCodes = new Set((Array.isArray(optionCodes) ? optionCodes : [])
+      .map((code) => String(code || '').trim().toUpperCase())
+      .filter((code) => ANON2_ALLOWED_CODES.includes(code)));
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      const visualCode = chk.getAttribute('data-entity');
+      const normalizedVisual = String(visualCode || '').trim().toUpperCase();
+      const anon2Code = mapVisualEntityToAnon2Code(normalizedVisual);
+      chk.checked = activeCodes.has(normalizedVisual) || (!!anon2Code && activeCodes.has(anon2Code));
+    });
+  }
+
+  function hasMinimumSelectedTypes() {
+    return selectedAnon2OptionCodes().length >= MIN_SELECTED_TYPES;
+  }
+
+  function buildMinimumTypesMessage() {
+    return 'Sélectionnez au moins ' + MIN_SELECTED_TYPES + ' types de données.';
+  }
+
   function selectedEntities() {
     const values = [];
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((c) => {
       if (!c.checked) return;
-      const apiValue = (c.getAttribute('data-api') || '').trim();
+      const entityCode = mapVisualEntityToAnon2Code(c.getAttribute('data-entity'));
+      const apiValue = (c.getAttribute('data-api') || (entityCode ? ANON2_CODE_TO_TEXT_API[entityCode] : '') || '').trim();
       if (!apiValue || !API_READY_VALUES.includes(apiValue)) return;
       if (!values.includes(apiValue)) values.push(apiValue);
     });
@@ -1548,7 +1619,7 @@
   }
 
   function renderTypeCount() {
-    const total = selectedVisualEntities().length;
+    const total = selectedAnon2OptionCodes().length;
     const apiReady = selectedEntities().length;
     if (ui.typesCount) ui.typesCount.textContent = String(total);
     if (ui.savedTypesInfo) ui.savedTypesInfo.textContent = total + ' type(s) actif(s) (dont ' + apiReady + ' envoyés à l\'API).';
@@ -1737,27 +1808,32 @@
   }
 
   function loadPreferences() {
-    let entities = DEFAULT_ENTITIES;
+    let entities = DEFAULT_ENTITIES.slice();
     const raw = storage.get(STORAGE_TYPES);
     if (raw) {
       try {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
           const legacyMap = {
-            person_name: 'PR',
-            email: 'MAIL',
-            phone: 'PHON',
-            birth: 'AGE',
-            role: 'TR',
+            person_name: 'PER',
+            email: 'EML',
+            phone: 'TEL',
+            birth: 'DAT',
+            role: 'JOB',
             address: 'ADR',
-            company: 'CIE',
-            siren: 'CID',
-            accounting: 'ACT',
-            product: 'PROD',
-            contract: 'REF',
-            bank: 'BANK'
+            company: 'ORG',
+            siren: 'IDN',
+            accounting: 'IDN',
+            product: 'PRO',
+            contract: 'PII',
+            bank: 'IBA'
           };
-          const mapped = parsed.map((item) => legacyMap[item] || item);
+          const mapped = parsed
+            .map((item) => {
+              const normalized = String(item || '').trim();
+              return mapVisualEntityToAnon2Code(legacyMap[normalized] || normalized);
+            })
+            .filter(Boolean);
           entities = mapped.filter((code) => TYPES_AVAILABLE.includes(code));
           if (entities.length === 0) entities = DEFAULT_ENTITIES;
         }
@@ -1765,8 +1841,8 @@
     }
     const availableSet = new Set(TYPES_AVAILABLE);
     Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
-      const code = chk.getAttribute('data-entity');
-      const isAvailable = availableSet.has(code);
+      const code = mapVisualEntityToAnon2Code(chk.getAttribute('data-entity'));
+      const isAvailable = !!code && availableSet.has(code);
       // Dynamically enable/disable based on TYPES_AVAILABLE (overrides HTML disabled attr)
       chk.disabled = !isAvailable;
       const label = chk.closest('.agf-entity-option');
@@ -2349,6 +2425,10 @@
   async function submitFiles(event) {
     event.preventDefault();
     if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
+    if (!hasMinimumSelectedTypes()) {
+      setStatus('error', buildMinimumTypesMessage());
+      return;
+    }
 
     try { await ensureAuth(); } catch (e) { setStatus('error', e.message || 'Connexion impossible. Vérifiez que vous êtes bien identifié.'); return; }
 
@@ -2580,6 +2660,16 @@
     }
     if (state.textProcessing) {
       textProcessQueued = true;
+      return;
+    }
+    if (!hasMinimumSelectedTypes()) {
+      resetTextCache();
+      setTextOutput(buildMinimumTypesMessage(), false, null, null, 0);
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      setStatus('error', buildMinimumTypesMessage());
       return;
     }
     if (lastProcessedCacheKey === cacheKey && lastProcessedResult !== null) {
@@ -2973,12 +3063,10 @@
     if (ui.modalIncClose) ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
 
     if (ui.defaultsTypes) ui.defaultsTypes.addEventListener('click', () => {
-      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
-        if (chk.disabled) return;
-        chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
-      });
+      setVisualEntitiesFromAnon2Codes(DEFAULT_ENTITIES);
       resetTextCache();
       renderTypeCount();
+      updateActions();
       refreshTextIfNeeded();
     });
 
@@ -2988,6 +3076,7 @@
       });
       resetTextCache();
       renderTypeCount();
+      updateActions();
       refreshTextIfNeeded();
     });
 
@@ -2997,13 +3086,19 @@
       });
       resetTextCache();
       renderTypeCount();
+      updateActions();
       refreshTextIfNeeded();
     });
 
     if (ui.saveTypes) ui.saveTypes.addEventListener('click', () => {
+      if (!hasMinimumSelectedTypes()) {
+        setStatus('error', buildMinimumTypesMessage());
+        return;
+      }
       storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
       resetTextCache();
       renderTypeCount();
+      updateActions();
       closeModal(ui.modals.types);
       refreshTextIfNeeded();
     });
