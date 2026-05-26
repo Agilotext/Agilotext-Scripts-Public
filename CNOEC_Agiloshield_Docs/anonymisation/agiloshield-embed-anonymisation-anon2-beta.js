@@ -19,7 +19,7 @@
   const ANON_OPTIONS_SET = API_BASE + '/setAnon2UserOptions';
   const ANON_RECONCILE = API_BASE + '/reconcileAnon2Text';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
-  /** Plafonds documentés (fallback si getAnon2Usage absent). 1 crédit = 20k car. ou 1 page PDF. */
+  /** Plafonds statiques du front. 1 crédit = 20k car. ou 1 page PDF. */
   const CREDIT_LIMITS_FALLBACK = Object.freeze({
     free: Object.freeze({ day: 10, month: 100, pseudo: false, restore: false, maxFiles: 3 }),
     agiloshield: Object.freeze({ day: 250, month: 5000, pseudo: true, restore: true, maxFiles: 12 })
@@ -473,6 +473,20 @@
   }
 
   const AGILOSHIELD_CLASSIC_PRICE_ID = 'prc_classic-mensuel-3u5vr0uq5';
+  const AGILOSHIELD_UPSELL_COPY = Object.freeze({
+    pseudo_locked: Object.freeze({
+      title: 'Pseudonymisation indisponible',
+      body: 'La pseudonymisation est incluse dans Agiloshield Classic. Activez l’abonnement pour pseudonymiser vos documents et conserver une réversibilité sécurisée.'
+    }),
+    restore_locked: Object.freeze({
+      title: 'Restauration indisponible',
+      body: 'La pseudonymisation réversible et la restauration via fichiers .properties sont incluses dans Agiloshield Classic.'
+    }),
+    quota_reached: Object.freeze({
+      title: 'Limite d’essai atteinte',
+      body: 'Vous avez atteint la limite de l’essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents.'
+    })
+  });
 
   function getAgiloshieldCheckoutCtaHtml(label, extraClass, inlineStyle) {
     const classAttr = extraClass ? ' class="' + extraClass + '"' : '';
@@ -496,6 +510,37 @@
       } catch (err) {
         console.warn('Agiloshield checkout fallback', err);
         window.location.href = target.getAttribute('href') || '/agiloshield/tarifs';
+      }
+    });
+  }
+
+  function closeAgiloshieldUpsellModal() {
+    const modal = document.getElementById('agfUpsellModal');
+    if (modal) modal.remove();
+  }
+
+  function openAgiloshieldUpsellModal(reason) {
+    const copy = AGILOSHIELD_UPSELL_COPY[reason] || AGILOSHIELD_UPSELL_COPY.pseudo_locked;
+    closeAgiloshieldUpsellModal();
+    const modalHtml =
+      '<div id="agfUpsellModal" style="position:fixed;inset:0;background:rgba(15,23,42,0.58);z-index:99999;display:flex;align-items:center;justify-content:center;padding:1.5rem;">' +
+      '<div role="dialog" aria-modal="true" aria-labelledby="agfUpsellTitle" style="position:relative;background:#fff;padding:2rem;border-radius:16px;max-width:460px;width:100%;box-shadow:0 18px 48px rgba(15,23,42,0.22);">' +
+      '<button type="button" data-agf-upsell-close="1" aria-label="Fermer" style="position:absolute;top:0.9rem;right:0.9rem;border:none;background:transparent;font-size:1.8rem;line-height:1;color:#64748b;cursor:pointer;">&times;</button>' +
+      '<h3 id="agfUpsellTitle" style="margin:0 0 0.75rem 0;font-size:1.5rem;line-height:1.2;color:#0f172a;">' + escapeHtml(copy.title) + '</h3>' +
+      '<p style="margin:0 0 0.75rem 0;color:#475569;line-height:1.55;">' + escapeHtml(copy.body) + '</p>' +
+      '<p style="margin:0 0 1.5rem 0;color:#64748b;font-size:0.95rem;line-height:1.45;">19 € HT/mois · essai 7 jours</p>' +
+      '<div style="display:flex;gap:0.75rem;justify-content:flex-end;flex-wrap:wrap;">' +
+      '<button type="button" data-agf-upsell-close="1" style="padding:0.8rem 1.15rem;background:#fff;border:1px solid #cbd5e1;border-radius:10px;color:#334155;cursor:pointer;">Fermer</button>' +
+      getAgiloshieldCheckoutCtaHtml('Passer à Agiloshield Classic', '', 'padding:0.8rem 1.15rem;background:var(--agilo-primary, #ef4444);color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;') +
+      '</div>' +
+      '</div>' +
+      '</div>';
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    const modal = document.getElementById('agfUpsellModal');
+    if (!modal) return;
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal || (event.target && event.target.getAttribute('data-agf-upsell-close') === '1')) {
+        closeAgiloshieldUpsellModal();
       }
     });
   }
@@ -1916,6 +1961,11 @@
   }
 
   function setActiveTab(tab) {
+    if (tab === 'restore' && !isFeatureEnabled('restore')) {
+      setStatus('info', 'La restauration est réservée aux comptes Agiloshield Classic.');
+      openAgiloshieldUpsellModal('restore_locked');
+      return;
+    }
     state.activeTab = tab;
     ui.tabs.forEach((btn) => {
       const isActive = btn.getAttribute('data-tab') === tab;
@@ -2101,7 +2151,10 @@
     const pseudoEnabled = isFeatureEnabled('pseudo');
     if (wantsPseudo && !pseudoEnabled) {
       state.mode = 'anonymiser';
-      if (!opts.silent) setStatus('info', 'Pseudonymisation indisponible pour ce compte.');
+      if (!opts.silent) {
+        setStatus('info', 'La pseudonymisation est réservée aux comptes Agiloshield Classic.');
+        openAgiloshieldUpsellModal('pseudo_locked');
+      }
     } else {
       state.mode = wantsPseudo ? 'pseudonymiser' : 'anonymiser';
     }
@@ -3009,19 +3062,8 @@
     if (!hasAgiloshieldPaidEdition()) {
       let count = parseInt(storage.get('agilo:anon2_free_usage') || '0', 10);
       if (count + state.files.length > 3) {
-        const modalHtml = `
-          <div id="agfUpsellModal" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;">
-            <div style="background:#fff;padding:2rem;border-radius:12px;max-width:450px;text-align:center;box-shadow:0 10px 25px rgba(0,0,0,0.2);">
-              <h3 style="margin-top:0;font-size:1.5rem;color:#111;">Limite d'essai atteinte</h3>
-              <p style="margin-bottom:1.5rem;color:#555;">Vous avez atteint la limite de l'essai gratuit. Passez à Agiloshield Classic pour continuer à anonymiser vos documents sans limite.</p>
-              <div style="display:flex;gap:1rem;justify-content:center;">
-                <button onclick="document.getElementById('agfUpsellModal').remove()" style="padding:0.75rem 1.25rem;background:transparent;border:1px solid #ccc;border-radius:6px;cursor:pointer;">Fermer</button>
-                ${getAgiloshieldCheckoutCtaHtml('Voir les tarifs (19€)', '', 'padding:0.75rem 1.25rem;background:#ef4444;color:#fff;border:none;border-radius:6px;font-weight:bold;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;')}
-              </div>
-            </div>
-          </div>
-        `;
-        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        setStatus('info', 'Vous avez atteint la limite de l’essai gratuit.');
+        openAgiloshieldUpsellModal('quota_reached');
         return;
       }
       storage.set('agilo:anon2_free_usage', count + state.files.length);
