@@ -573,7 +573,7 @@
     const normalized = normalizeEdition(state.edition);
     if (state.edition !== normalized) state.edition = normalized;
     if (normalized === 'agiloshield') {
-      return 'ent';
+      return state.transcriptionEdition || 'free';
     }
     if (normalized === 'ent' || normalized === 'pro' || normalized === 'free') return normalized;
     return 'free';
