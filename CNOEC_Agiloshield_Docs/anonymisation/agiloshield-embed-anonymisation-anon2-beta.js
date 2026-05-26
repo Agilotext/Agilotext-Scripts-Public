@@ -52,6 +52,7 @@
   });
   const ANON2_ALLOWED_CODES = Object.freeze(['ADR', 'DAT', 'EML', 'IBA', 'IDN', 'JOB', 'LOC', 'ORG', 'PER', 'PII', 'PRO', 'TEL']);
   const DEFAULT_ANON2_OPTION_CODES = Object.freeze(['LOC', 'ORG', 'PER']);
+  const MIN_SELECTED_TYPES = 3;
   const ANON2_CODE_LABELS = Object.freeze({
     ADR: 'Adresse',
     DAT: 'Date',
@@ -623,6 +624,21 @@
       .sort((a, b) => ANON2_ALLOWED_CODES.indexOf(a) - ANON2_ALLOWED_CODES.indexOf(b));
   }
 
+  function hasMinimumSelectedTypes() {
+    return selectedAnon2OptionCodes().length >= MIN_SELECTED_TYPES;
+  }
+
+  function buildMinimumTypesMessage() {
+    return 'Sélectionnez au moins ' + MIN_SELECTED_TYPES + ' types de données.';
+  }
+
+  function applyDefaultAnon2TypeSelection() {
+    Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
+      if (chk.disabled) return;
+      chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
+    });
+  }
+
   function setVisualEntitiesFromAnon2Codes(optionCodes) {
     const normalized = normalizeAnon2OptionCodes(optionCodes);
     const activeCodes = new Set();
@@ -780,8 +796,8 @@
 
   async function saveAnon2Options() {
     const payload = buildAnon2OptionsPayload();
-    if (payload.optionCodes.length < 2) {
-      throw new Error('Sélectionnez au moins 2 types de données avant de lancer le traitement.');
+    if (payload.optionCodes.length < MIN_SELECTED_TYPES) {
+      throw new Error('Sélectionnez au moins ' + MIN_SELECTED_TYPES + ' types de données avant de lancer le traitement.');
     }
     const result = await callAnon2OptionsApi('set', {
       anon2OptionsJson: payload.anon2OptionsJson
@@ -1140,11 +1156,13 @@
     const hasProcessed = state.processedItems.length > 0;
     const hasAnonJobs = Array.isArray(state.anonJobsList) && state.anonJobsList.length > 0;
     const optionsBlocked = state.optionsLoading || !!state.optionsError;
+    const hasMinimumTypes = hasMinimumSelectedTypes();
 
     document.querySelectorAll('#agfSubmit').forEach(el => {
-      el.disabled = state.processing || optionsBlocked || !hasPending;
+      el.disabled = state.processing || optionsBlocked || !hasPending || !hasMinimumTypes;
       if (state.optionsLoading) el.title = 'Chargement des options de traitement en cours.';
       else if (state.optionsError) el.title = buildAnon2OptionsMissingMessage();
+      else if (!hasMinimumTypes) el.title = buildMinimumTypesMessage();
       else el.removeAttribute('title');
     });
     document.querySelectorAll('#agfActionsSubmit').forEach(el => { el.hidden = !hasPending; });
@@ -3705,12 +3723,10 @@
     if (ui.modalIncClose) ui.modalIncClose.addEventListener('click', () => closeModal(ui.modals.inclusion));
 
     if (ui.defaultsTypes) ui.defaultsTypes.addEventListener('click', () => {
-      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
-        if (chk.disabled) return;
-        chk.checked = DEFAULT_ENTITIES.includes(chk.getAttribute('data-entity'));
-      });
+      applyDefaultAnon2TypeSelection();
       resetTextCache();
       renderTypeCount();
+      updateActions();
       refreshTextIfNeeded();
     });
 
@@ -3720,22 +3736,23 @@
       });
       resetTextCache();
       renderTypeCount();
+      updateActions();
       refreshTextIfNeeded();
     });
 
     if (ui.ignoreAllTypes) ui.ignoreAllTypes.addEventListener('click', () => {
-      Array.from(document.querySelectorAll('#agfTypeGrid input[type="checkbox"][data-entity]')).forEach((chk) => {
-        if (!chk.disabled) chk.checked = false;
-      });
+      applyDefaultAnon2TypeSelection();
       resetTextCache();
       renderTypeCount();
+      updateActions();
+      setStatus('info', 'Au moins ' + MIN_SELECTED_TYPES + ' types doivent rester actifs. Les types par défaut ont été conservés.');
       refreshTextIfNeeded();
     });
 
     if (ui.saveTypes) ui.saveTypes.addEventListener('click', async () => {
       const selectedCodes = selectedAnon2OptionCodes();
-      if (selectedCodes.length < 2) {
-        setStatus('error', 'Sélectionnez au moins 2 types de données.');
+      if (selectedCodes.length < MIN_SELECTED_TYPES) {
+        setStatus('error', buildMinimumTypesMessage());
         return;
       }
       storage.set(STORAGE_TYPES, JSON.stringify(selectedVisualEntities()));
