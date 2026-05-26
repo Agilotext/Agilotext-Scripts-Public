@@ -35,6 +35,13 @@
     return null;
   }
 
+  function isAgiloshieldEmbedPage() {
+    const p = window.location.pathname;
+    return p.includes('/tools/agiloshield/')
+      || p.includes('/agiloshield/premium/')
+      || !!document.getElementById('agfForm');
+  }
+
   function tokenKey(email, edition) {
     return `agilo:token:${normEdition(edition)}:${String(email || '').toLowerCase()}`;
   }
@@ -215,6 +222,7 @@
     if (window.__agiloTokenRefreshScheduled) return;
     window.__agiloTokenRefreshScheduled = true;
     setInterval(() => {
+      if (isAgiloshieldEmbedPage()) return;
       const email = (localStorage.getItem('agilo:username') || '').trim();
       if (!email) return;
       const edition = normEdition(
@@ -229,6 +237,10 @@
   }
 
   const init = async () => {
+    if (isAgiloshieldEmbedPage()) {
+      if (window.AGILO_DEBUG) console.log('[agilo] token-resolver skipped on Agiloshield embed page');
+      return;
+    }
     let edition = normEdition(
       window.AGILO_EDITION
       || new URLSearchParams(location.search).get('edition')
