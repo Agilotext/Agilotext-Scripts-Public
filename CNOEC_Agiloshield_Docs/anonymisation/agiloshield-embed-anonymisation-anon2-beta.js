@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.3-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.4-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -465,7 +465,24 @@
   }
 
   function hasMemberstackAnonProPlan(plans, hasPlan) {
-    return hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic');
+    if (hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic')) return true;
+    const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
+    return (Array.isArray(plans) ? plans : []).some((plan) => {
+      const status = String(plan && plan.status || '').toUpperCase();
+      if (status && ACTIVE.indexOf(status) === -1) return false;
+      if (plan && plan.active === false) return false;
+      const payment = plan && plan.payment || {};
+      const priceId = String(payment.priceId || plan.priceId || '');
+      if (priceId === AGILOSHIELD_CLASSIC_PRICE_ID) return true;
+      const label = [
+        plan && plan.planId,
+        plan && plan.planName,
+        plan && plan.name,
+        plan && plan.priceName,
+        payment && payment.priceName
+      ].filter(Boolean).join(' ').toLowerCase();
+      return label.indexOf('agiloshield') !== -1 || label.indexOf('classic mensuel') !== -1;
+    });
   }
 
   function hasAgiloshieldPaidEdition() {
@@ -557,8 +574,7 @@
     const normalized = normalizeEdition(state.edition);
     if (state.edition !== normalized) state.edition = normalized;
     if (normalized === 'agiloshield') {
-      const te = normalizeEdition(state.transcriptionEdition || 'free');
-      return te === 'ent' || te === 'pro' || te === 'free' ? te : 'free';
+      return 'ent';
     }
     if (normalized === 'ent' || normalized === 'pro' || normalized === 'free') return normalized;
     return 'free';
@@ -2586,7 +2602,8 @@
       try {
         const result = await ms.getCurrentMember({ cache: 'reload' });
         const member = result && result.data;
-        if (member && member.email) return member.email;
+        const memberEmail = member && (member.email || (member.auth && member.auth.email));
+        if (memberEmail) return String(memberEmail).trim();
       } catch (e) { console.warn('getUserEmail error', e); }
     }
     const fromPage = document.querySelector('[name="memberEmail"]')?.value || document.querySelector('[data-ms-member="email"]')?.textContent?.trim() || document.getElementById('memberEmail')?.value || null;
@@ -2630,14 +2647,18 @@
   async function ensureAuth() {
     const manualAuth = getManualAuthOverride();
     if (manualAuth.username) state.email = manualAuth.username;
-    if (manualAuth.token) state.token = manualAuth.token;
     if (manualAuth.edition) state.edition = manualAuth.edition;
+    if (manualAuth.token) state.token = manualAuth.token;
     if (!state.email) state.email = await getUserEmail();
     if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
-    if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
-    if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
     if (!state.email) throw new Error('Email utilisateur introuvable. Vérifiez que vous êtes connecté ou ajoutez le script Token Resolver en tête de page.');
-    if (!state.token) await getToken(state.email, getEditionForApi(), 0);
+    if (!manualAuth.token && hasAgiloshieldPaidEdition()) {
+      await getToken(state.email, getEditionForApi(), 0);
+    } else {
+      if (!state.email && typeof window !== 'undefined' && window.globalToken) state.email = (storage.get('agilo:username') || '').trim() || null;
+      if (!state.token && typeof window !== 'undefined' && window.globalToken) state.token = window.globalToken;
+      if (!state.token) await getToken(state.email, getEditionForApi(), 0);
+    }
     storage.set('agilo:username', state.email);
     storage.set('agilo:edition', state.edition);
   }
@@ -3895,9 +3916,16 @@
 
   function applyTokenFromEvent(detail) {
     if (!detail || !detail.token) return;
-    state.token = detail.token;
     if (detail.email) state.email = detail.email;
-    if (detail.edition) state.edition = normalizeEdition(detail.edition);
+    if (detail.edition) {
+      const eventEdition = normalizeEdition(detail.edition);
+      if (state.edition === 'agiloshield' && eventEdition !== 'agiloshield') {
+        state.transcriptionEdition = eventEdition;
+        return;
+      }
+      state.edition = eventEdition;
+    }
+    state.token = detail.token;
   }
 
   async function resumeInFlightJobsIfAny() {
@@ -3952,7 +3980,11 @@
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
 
-    if (window.globalToken && storage.get('agilo:username')) {
+    if (state.edition === 'agiloshield') {
+      state.email = await getUserEmail();
+      if (!state.email) state.email = (document.querySelector('[name="memberEmail"]')?.value || storage.get('agilo:username') || '').trim() || null;
+      if (state.email) await getToken(state.email, getEditionForApi(), 0).catch(() => { });
+    } else if (window.globalToken && storage.get('agilo:username')) {
       state.token = window.globalToken;
       state.email = storage.get('agilo:username');
       const cachedEdition = storage.get('agilo:edition');
