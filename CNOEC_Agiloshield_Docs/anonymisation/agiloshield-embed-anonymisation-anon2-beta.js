@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.4-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.5-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -470,7 +470,6 @@
     return (Array.isArray(plans) ? plans : []).some((plan) => {
       const status = String(plan && plan.status || '').toUpperCase();
       if (status && ACTIVE.indexOf(status) === -1) return false;
-      if (plan && plan.active === false) return false;
       const payment = plan && plan.payment || {};
       const priceId = String(payment.priceId || plan.priceId || '');
       if (priceId === AGILOSHIELD_CLASSIC_PRICE_ID) return true;
