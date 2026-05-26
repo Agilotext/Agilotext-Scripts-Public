@@ -18,7 +18,6 @@
   const ANON_OPTIONS_GET = API_BASE + '/getAnon2UserOptions';
   const ANON_OPTIONS_SET = API_BASE + '/setAnon2UserOptions';
   const ANON_RECONCILE = API_BASE + '/reconcileAnon2Text';
-  const ANON_USAGE = API_BASE + '/getAnon2Usage';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
   /** Plafonds documentés (fallback si getAnon2Usage absent). 1 crédit = 20k car. ou 1 page PDF. */
   const CREDIT_LIMITS_FALLBACK = Object.freeze({
@@ -156,9 +155,6 @@
     restoreAnonFiles: [],
     restorePropertiesFiles: [],
     restoreProcessing: false,
-    usage: null,
-    usageLoading: false,
-    usageError: null,
     /** free | pro | ent — tier transcription Agilotext pour l'API (Nicolas n'accepte pas agiloshield). */
     transcriptionEdition: 'free'
   };
@@ -391,8 +387,7 @@
     manualToken: document.getElementById('agfManualToken'),
     manualEdition: document.getElementById('agfManualEdition'),
     restorePanel: document.getElementById('agfPanel-restore'),
-    restoreLocked: document.getElementById('agfRestoreLocked'),
-    usageCredits: document.getElementById('agfUsageCredits')
+    restoreLocked: document.getElementById('agfRestoreLocked')
   };
 
   const DEFAULT_ENTITIES = DEFAULT_ANON2_OPTION_CODES.slice();
@@ -953,8 +948,6 @@
 
   function isFeatureEnabled(featureName) {
     if (featureName === 'pseudo' || featureName === 'restore') {
-      if (state.usage && state.usage.pseudoAllowed === false && featureName === 'pseudo') return false;
-      if (state.usage && state.usage.restoreAllowed === false && featureName === 'restore') return false;
       if (isFreeAgiloshieldEdition()) return false;
       if (!hasAgiloshieldPaidEdition()) return false;
     }
@@ -962,8 +955,6 @@
   }
 
   function getEffectiveMaxFiles() {
-    const fromUsage = state.usage && Number(state.usage.maxFilesPerBatch);
-    if (Number.isFinite(fromUsage) && fromUsage > 0) return Math.floor(fromUsage);
     return getCreditLimitsFallback().maxFiles;
   }
 
@@ -2604,112 +2595,6 @@
     try { await fetchWithTimeout(cleanupUrl, { method: 'GET' }, 15000); } catch (e) { }
   }
 
-  function renderUsageCredits() {
-    let el = ui.usageCredits;
-    if (!el) {
-      const side = document.querySelector('.agf-side');
-      if (!side) return;
-      el = document.createElement('div');
-      el.id = 'agfUsageCredits';
-      el.className = 'agf-group agf-usage-credits';
-      const apiFooter = side.querySelector('.agf-api-footer');
-      if (apiFooter) side.insertBefore(el, apiFooter);
-      else side.appendChild(el);
-      ui.usageCredits = el;
-    }
-    const limits = getCreditLimitsFallback();
-    const u = state.usage;
-    if (state.usageLoading) {
-      el.innerHTML = '<p class="agf-label">Crédits</p><p class="agf-small">Chargement de la consommation…</p>';
-      return;
-    }
-    if (u && u.status === 'OK') {
-      const dayUsed = Number(u.creditsUsedToday) || 0;
-      const dayLimit = Number(u.creditsLimitDay) || limits.day;
-      const monthUsed = Number(u.creditsUsedMonth) || 0;
-      const monthLimit = Number(u.creditsLimitMonth) || limits.month;
-      const dayRem = Number.isFinite(Number(u.creditsRemainingToday))
-        ? Number(u.creditsRemainingToday)
-        : Math.max(0, dayLimit - dayUsed);
-      const dayPct = dayLimit > 0 ? Math.min(100, Math.round((dayUsed / dayLimit) * 100)) : 0;
-      el.innerHTML =
-        '<p class="agf-label">Crédits</p>' +
-        '<p class="agf-small"><strong>Aujourd’hui :</strong> ' + dayUsed + ' / ' + dayLimit + ' (' + dayRem + ' restants)</p>' +
-        '<div class="agf-usage-bar" role="progressbar" aria-valuenow="' + dayPct + '" aria-valuemin="0" aria-valuemax="100" style="height:6px;border-radius:4px;background:color-mix(in srgb, var(--agilo-text) 12%, transparent);margin:0.35rem 0 0.5rem;overflow:hidden">' +
-        '<div style="height:100%;width:' + dayPct + '%;background:var(--agilo-primary, #ef4444);border-radius:4px"></div></div>' +
-        '<p class="agf-small"><strong>Ce mois :</strong> ' + monthUsed + ' / ' + monthLimit + '</p>' +
-        '<p class="agf-small agf-summary-muted">1 crédit = 20&nbsp;000 caractères ou 1 page PDF.</p>';
-      return;
-    }
-    el.innerHTML =
-      '<p class="agf-label">Crédits</p>' +
-      '<p class="agf-small"><strong>Aujourd’hui :</strong> jusqu’à ' + limits.day + ' crédits</p>' +
-      '<p class="agf-small"><strong>Ce mois :</strong> jusqu’à ' + limits.month + ' crédits</p>' +
-      (state.usageError
-        ? '<p class="agf-small agf-summary-muted">Compteur serveur en cours de déploiement.</p>'
-        : '<p class="agf-small agf-summary-muted">1 crédit = 20&nbsp;000 caractères ou 1 page PDF.</p>');
-  }
-
-  async function loadAnon2Usage(forceReload) {
-    if (!forceReload && state.usage && state.usage.status === 'OK') {
-      renderUsageCredits();
-      return state.usage;
-    }
-    if (!state.email || !state.token) {
-      renderUsageCredits();
-      return null;
-    }
-    state.usageLoading = true;
-    renderUsageCredits();
-    const params = new URLSearchParams();
-    params.set('username', state.email || '');
-    params.set('token', state.token || '');
-    params.set('edition', getEditionForApi());
-    try {
-      let response = null;
-      let data = null;
-      try {
-        response = await fetchWithTimeout(ANON_USAGE, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: params.toString()
-        }, 15000);
-        if (!(response.status === 404 || response.status === 501)) {
-          data = await response.json();
-        }
-      } catch (postErr) {
-        const url = ANON_USAGE + '?username=' + encodeURIComponent(state.email) +
-          '&token=' + encodeURIComponent(state.token) +
-          '&edition=' + encodeURIComponent(getEditionForApi());
-        response = await fetchWithTimeout(url, { method: 'GET' }, 15000);
-        if (!(response.status === 404 || response.status === 501)) {
-          data = await response.json();
-        }
-      }
-      if (response.status === 404 || response.status === 501) {
-        state.usage = null;
-        state.usageError = 'endpoint_missing';
-        return null;
-      }
-      if (data && data.status === 'OK') {
-        state.usage = data;
-        state.usageError = null;
-        if (data.edition) state.edition = normalizeEdition(data.edition);
-        applyFeatureAvailability();
-        renderRestorePanel();
-        return data;
-      }
-      state.usageError = (data && (data.userErrorMessage || data.errorMessage)) || 'usage_unavailable';
-      return null;
-    } catch (err) {
-      state.usageError = err instanceof Error ? err.message : String(err || 'usage_unavailable');
-      return null;
-    } finally {
-      state.usageLoading = false;
-      renderUsageCredits();
-    }
-  }
-
   async function loadApiVersion() {
     try {
       const response = await fetchWithTimeout(VERSION_ENDPOINT, { method: 'GET' }, 10000);
@@ -2789,10 +2674,8 @@
         if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
         else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
         else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
-        else if (isQuotaExceededError(json)) {
-          msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Quota de crédits atteint pour aujourd’hui. Réessayez demain ou passez à Agiloshield.');
-          loadAnon2Usage(true).catch(function () { });
-        } else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+        else if (isQuotaExceededError(json)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Quota de crédits atteint pour aujourd’hui. Réessayez demain ou passez à Agiloshield.');
+        else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
       } else {
         const text = normalizeResponseText(raw);
         if (text && text.length < 180) msg = sanitizeApiErrorMessage(text);
@@ -4044,12 +3927,10 @@
     setAnon2OptionsControlsEnabled(!state.optionsLoading);
     applyEditionLocks();
     applyFeatureAvailability();
-    renderUsageCredits();
     renderRestorePanel();
     renderFileList();
     updateActions();
     if (state.email && state.token) {
-      loadAnon2Usage(true).catch(function () { });
       loadAnon2Options(true).catch(function (err) {
         state.anon2OptionsLoaded = false;
         state.optionsError = err instanceof Error ? err.message : String(err || buildAnon2OptionsMissingMessage());
