@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.9-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.10-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -244,7 +244,9 @@
     const headTitle = document.querySelector('.agf-head h2');
     if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
     const headSub = document.querySelector('.agf-head p');
-    if (headSub) headSub.textContent = 'Traitement sécurisé de fichiers Office et PDF.';
+    if (headSub) {
+      headSub.innerHTML = 'Traitement sécurisé de fichiers Office et PDF.<br><span class="agf-ai-hint" role="note">Traitement par notre IA locale. Pensez à relire le résultat.</span>';
+    }
 
     const fileTabSub = document.querySelector('#agfTab-file .agf-tab-content span');
     if (fileTabSub) fileTabSub.textContent = 'PDF, Word, Excel, PowerPoint, CSV';
