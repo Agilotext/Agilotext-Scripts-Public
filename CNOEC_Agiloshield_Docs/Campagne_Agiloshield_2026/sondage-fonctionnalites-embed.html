@@ -1,486 +1,544 @@
 <!-- ============================================================
-  AGILOSHIELD — Sondage fonctionnalités
-  Embed Webflow : coller dans un Custom Code block
-  Configurer WEBHOOK_URL ci-dessous (Make, Airtable, n8n…)
+  AGILOSHIELD — Sondage fonctionnalités (v2)
+  Webflow : coller dans un bloc Custom Code
+  Config : WEBHOOK_URL (Make → Airtable Sondage_Agiloshield_2026)
+  Doc : SONDAGE_AIRTABLE_SETUP.md
   ============================================================ -->
 <style>
-  :root {
-    --snd-navy:   #0f2a52;
-    --snd-blue:   #174a96;
-    --snd-light:  #e8f0fb;
-    --snd-grey:   #5c6570;
-    --snd-border: #d0d8e8;
-    --snd-bg:     #f7f9fd;
-    --snd-white:  #ffffff;
-    --snd-green:  #1a7a4a;
-    --snd-green-bg: #e8f5ee;
-    --snd-radius: 14px;
-    --snd-shadow: 0 4px 24px rgba(15,42,82,.08);
-  }
-
-  #agilo-sondage * { box-sizing: border-box; margin: 0; padding: 0; }
-
   #agilo-sondage {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    background: var(--snd-bg);
-    border: 1px solid var(--snd-border);
-    border-radius: var(--snd-radius);
-    padding: 2.5rem 2rem;
-    max-width: 640px;
+    --agilo-primary: var(--color--blue, #174a96);
+    --agilo-primary-soft: color-mix(in srgb, var(--agilo-primary) 10%, transparent);
+    --agilo-text: var(--color--gris_foncé, #020202);
+    --agilo-text-secondary: var(--color--gris, #525252);
+    --agilo-surface: var(--color--white, #ffffff);
+    --agilo-border: rgba(52, 58, 64, 0.14);
+    --agilo-success: var(--color--vert, #1c661a);
+    --agilo-error: var(--color--rouge, #a82633);
+    --space-1: 0.5rem;
+    --space-2: 1rem;
+    --space-3: 1.5rem;
+    --radius: 1rem;
+    --shadow-soft: 0 0.5rem 1.75rem rgba(23, 74, 150, 0.1);
+
+    font-family: "Inter", "SF Pro Text", "Segoe UI", -apple-system, sans-serif;
+    font-size: 1rem;
+    color: var(--agilo-text);
+    max-width: 42rem;
     margin: 0 auto;
-    box-shadow: var(--snd-shadow);
+    padding: var(--space-3);
+    position: relative;
+    z-index: 1;
+    -webkit-text-size-adjust: 100%;
   }
 
-  /* Header */
-  .snd-header {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    margin-bottom: 1.75rem;
-  }
-  .snd-icon {
-    flex-shrink: 0;
-    width: 44px;
-    height: 44px;
-    background: var(--snd-blue);
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .snd-icon svg { width: 22px; height: 22px; color: #fff; stroke: currentColor; fill: none; }
-  .snd-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--snd-navy);
-    line-height: 1.3;
-    margin-bottom: .35rem;
-  }
-  .snd-subtitle {
-    font-size: .875rem;
-    color: var(--snd-grey);
-    line-height: 1.5;
+  #agilo-sondage *,
+  #agilo-sondage *::before,
+  #agilo-sondage *::after {
+    box-sizing: border-box;
   }
 
-  /* Divider */
-  .snd-divider {
-    height: 1px;
-    background: var(--snd-border);
-    margin: 0 0 1.5rem;
+  #agilo-sondage .snd-card {
+    background: var(--agilo-surface);
+    border: 1px solid var(--agilo-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
+    padding: var(--space-3);
   }
 
-  /* Question */
-  .snd-question {
-    font-size: .95rem;
-    font-weight: 600;
-    color: var(--snd-navy);
-    margin-bottom: 1rem;
-  }
-
-  /* Options */
-  .snd-options {
-    display: grid;
-    gap: .6rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .snd-option {
-    display: flex;
-    align-items: flex-start;
-    gap: .75rem;
-    background: var(--snd-white);
-    border: 1.5px solid var(--snd-border);
-    border-radius: 10px;
-    padding: .9rem 1rem;
-    cursor: pointer;
-    transition: border-color .15s, background .15s, box-shadow .15s;
-    user-select: none;
-  }
-  .snd-option:hover {
-    border-color: var(--snd-blue);
-    background: var(--snd-light);
-    box-shadow: 0 2px 10px rgba(23,74,150,.08);
-  }
-  .snd-option input[type="checkbox"] { display: none; }
-  .snd-option.is-selected {
-    border-color: var(--snd-blue);
-    background: var(--snd-light);
-    box-shadow: 0 2px 10px rgba(23,74,150,.1);
-  }
-
-  /* Custom checkbox */
-  .snd-check {
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--snd-border);
-    border-radius: 5px;
-    margin-top: 1px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: border-color .15s, background .15s;
-    background: var(--snd-white);
-  }
-  .snd-option.is-selected .snd-check {
-    border-color: var(--snd-blue);
-    background: var(--snd-blue);
-  }
-  .snd-check-mark {
-    display: none;
-    width: 11px;
-    height: 11px;
-    stroke: #fff;
-    stroke-width: 2.5;
-    fill: none;
-  }
-  .snd-option.is-selected .snd-check-mark { display: block; }
-
-  .snd-option-body { flex: 1; min-width: 0; }
-  .snd-option-label {
-    font-size: .9rem;
-    font-weight: 600;
-    color: var(--snd-navy);
-    line-height: 1.35;
-  }
-  .snd-option-desc {
-    font-size: .8rem;
-    color: var(--snd-grey);
-    line-height: 1.4;
-    margin-top: .2rem;
-  }
-
-  /* Autre field */
-  .snd-other-wrap {
-    display: none;
-    margin-top: .6rem;
-  }
-  .snd-other-wrap.is-visible { display: block; }
-  .snd-other-input {
-    width: 100%;
-    border: 1.5px solid var(--snd-border);
-    border-radius: 8px;
-    padding: .55rem .8rem;
-    font-size: .875rem;
-    color: var(--snd-navy);
-    outline: none;
-    background: var(--snd-white);
-    transition: border-color .15s;
-    font-family: inherit;
-  }
-  .snd-other-input:focus { border-color: var(--snd-blue); }
-
-  /* Email */
-  .snd-field-group { margin-bottom: 1.25rem; }
-  .snd-label {
-    display: block;
-    font-size: .8125rem;
-    font-weight: 600;
-    color: var(--snd-grey);
-    margin-bottom: .4rem;
-    text-transform: uppercase;
-    letter-spacing: .04em;
-  }
-  .snd-input {
-    width: 100%;
-    border: 1.5px solid var(--snd-border);
-    border-radius: 8px;
-    padding: .65rem .9rem;
-    font-size: .9rem;
-    color: var(--snd-navy);
-    outline: none;
-    background: var(--snd-white);
-    transition: border-color .15s;
-    font-family: inherit;
-  }
-  .snd-input:focus { border-color: var(--snd-blue); box-shadow: 0 0 0 3px rgba(23,74,150,.1); }
-  .snd-input::placeholder { color: #b0b8c8; }
-
-  /* Submit */
-  .snd-submit {
-    width: 100%;
-    background: var(--snd-blue);
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    padding: .85rem 1.5rem;
-    font-size: .95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background .15s, transform .1s, box-shadow .15s;
-    font-family: inherit;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .6rem;
-  }
-  .snd-submit:hover { background: var(--snd-navy); box-shadow: 0 4px 16px rgba(15,42,82,.18); }
-  .snd-submit:active { transform: scale(.98); }
-  .snd-submit:disabled { background: #9ab0d4; cursor: not-allowed; }
-  .snd-submit svg { width: 17px; height: 17px; stroke: currentColor; fill: none; flex-shrink: 0; }
-
-  /* Hint */
-  .snd-hint {
-    font-size: .78rem;
-    color: var(--snd-grey);
+  #agilo-sondage .snd-head {
+    margin-bottom: var(--space-3);
     text-align: center;
-    margin-top: .75rem;
-    line-height: 1.5;
   }
-  .snd-hint span { opacity: .6; }
 
-  /* Success */
-  .snd-success {
+  #agilo-sondage .snd-head h2 {
+    margin: 0 0 var(--space-1);
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.3;
+    color: var(--agilo-text);
+  }
+
+  #agilo-sondage .snd-head p {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-question {
+    margin: 0 0 var(--space-2);
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--agilo-text);
+  }
+
+  #agilo-sondage .snd-question-hint {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin-bottom: var(--space-3);
+  }
+
+  /* Ligne checkbox — même logique que .agf-checkbox-line */
+  #agilo-sondage .snd-option {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    min-height: 2.75rem;
+    padding: var(--space-2);
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--agilo-text) 3%, transparent);
+    cursor: pointer;
+    user-select: none;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 2;
+    transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  #agilo-sondage .snd-option:hover {
+    border-color: color-mix(in srgb, var(--agilo-primary) 35%, var(--agilo-border));
+    background: var(--agilo-primary-soft);
+  }
+
+  #agilo-sondage .snd-option:has(input:checked),
+  #agilo-sondage .snd-option.is-selected {
+    border-color: var(--agilo-primary);
+    background: var(--agilo-primary-soft);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 12%, transparent);
+  }
+
+  #agilo-sondage .snd-option input[type="checkbox"] {
+    flex-shrink: 0;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0.15rem 0 0;
+    accent-color: var(--agilo-primary);
+    cursor: pointer;
+    pointer-events: auto !important;
+  }
+
+  #agilo-sondage .snd-option-body {
+    flex: 1;
+    min-width: 0;
+    pointer-events: none;
+  }
+
+  #agilo-sondage .snd-option-label {
+    display: block;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--agilo-text);
+  }
+
+  #agilo-sondage .snd-option-desc {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-other-wrap {
+    display: none;
+    margin-top: var(--space-1);
+    pointer-events: auto;
+  }
+
+  #agilo-sondage .snd-other-wrap.is-visible {
+    display: block;
+  }
+
+  #agilo-sondage .snd-other-input {
+    width: 100%;
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    color: var(--agilo-text);
+    background: var(--agilo-surface);
+    outline: none;
+  }
+
+  #agilo-sondage .snd-other-input:focus {
+    border-color: var(--agilo-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 15%, transparent);
+  }
+
+  #agilo-sondage .snd-field {
+    margin-bottom: var(--space-3);
+  }
+
+  #agilo-sondage .snd-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--agilo-text);
+  }
+
+  #agilo-sondage .snd-label span {
+    font-weight: 400;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-input {
+    width: 100%;
+    border: 1px solid var(--agilo-border);
+    border-radius: 0.625rem;
+    padding: 0.65rem 0.9rem;
+    font-size: 0.9375rem;
+    font-family: inherit;
+    color: var(--agilo-text);
+    background: var(--agilo-surface);
+    outline: none;
+    pointer-events: auto !important;
+  }
+
+  #agilo-sondage .snd-input:focus {
+    border-color: var(--agilo-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--agilo-primary) 15%, transparent);
+  }
+
+  #agilo-sondage .snd-input::placeholder {
+    color: color-mix(in srgb, var(--agilo-text-secondary) 55%, transparent);
+  }
+
+  #agilo-sondage .snd-error {
+    display: none;
+    margin-bottom: var(--space-2);
+    padding: 0.75rem 1rem;
+    border-radius: 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.45;
+    color: var(--agilo-error);
+    background: color-mix(in srgb, var(--agilo-error) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--agilo-error) 25%, transparent);
+  }
+
+  #agilo-sondage .snd-error.is-visible {
+    display: block;
+  }
+
+  #agilo-sondage .snd-submit {
+    width: 100%;
+    border: none;
+    border-radius: 0.625rem;
+    padding: 0.85rem 1.25rem;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: var(--agilo-primary);
+    cursor: pointer;
+    pointer-events: auto !important;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  #agilo-sondage .snd-submit:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--agilo-primary) 85%, #000);
+  }
+
+  #agilo-sondage .snd-submit:active:not(:disabled) {
+    transform: scale(0.99);
+  }
+
+  #agilo-sondage .snd-submit:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  #agilo-sondage .snd-hint {
+    margin: var(--space-2) 0 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    text-align: center;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-form.is-hidden {
+    display: none;
+  }
+
+  #agilo-sondage .snd-success {
     display: none;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    gap: 1rem;
-    padding: 1.5rem 0 .5rem;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
   }
-  .snd-success.is-visible { display: flex; }
-  .snd-form.is-hidden { display: none; }
-  .snd-success-icon {
-    width: 56px;
-    height: 56px;
-    background: var(--snd-green-bg);
+
+  #agilo-sondage .snd-success.is-visible {
+    display: flex;
+  }
+
+  #agilo-sondage .snd-success-icon {
+    width: 3.5rem;
+    height: 3.5rem;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-  .snd-success-icon svg { width: 26px; height: 26px; stroke: var(--snd-green); stroke-width: 2.2; fill: none; }
-  .snd-success-title {
-    font-size: 1.1rem;
+    background: color-mix(in srgb, var(--agilo-success) 12%, transparent);
+    color: var(--agilo-success);
+    font-size: 1.5rem;
     font-weight: 700;
-    color: var(--snd-navy);
-  }
-  .snd-success-text {
-    font-size: .875rem;
-    color: var(--snd-grey);
-    line-height: 1.6;
-    max-width: 380px;
   }
 
-  /* Responsive */
+  #agilo-sondage .snd-success h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+
+  #agilo-sondage .snd-success p {
+    margin: 0;
+    max-width: 22rem;
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--agilo-text-secondary);
+  }
+
   @media (max-width: 520px) {
-    #agilo-sondage { padding: 1.75rem 1.25rem; }
-    .snd-header { flex-direction: column; gap: .75rem; }
+    #agilo-sondage {
+      padding: var(--space-2);
+    }
+    #agilo-sondage .snd-card {
+      padding: var(--space-2);
+    }
   }
 </style>
 
 <div id="agilo-sondage">
+  <div class="snd-card">
+    <header class="snd-head">
+      <h2>Aidez-nous à prioriser les prochaines fonctionnalités</h2>
+      <p>30 secondes · Vos retours guident directement notre roadmap.</p>
+    </header>
 
-  <!-- Header -->
-  <div class="snd-header">
-    <div class="snd-icon">
-      <svg viewBox="0 0 24 24" stroke-width="1.8">
-        <path d="M9 12h6M9 16h6M9 8h2M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/>
-        <path d="M5 4v0a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2" opacity=".3"/>
-      </svg>
+    <div class="snd-form" id="sndForm">
+      <p class="snd-question">
+        Quelle fonctionnalité vous manque le plus sur Agiloshield ?
+        <span class="snd-question-hint">Vous pouvez sélectionner plusieurs réponses.</span>
+      </p>
+
+      <div class="snd-options" id="sndOptions" role="group" aria-label="Fonctionnalités souhaitées">
+        <label class="snd-option" data-slug="local">
+          <input type="checkbox" name="feature" value="local">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Logiciel installé sur mon ordinateur</span>
+            <span class="snd-option-desc">Traitement en local, sans connexion internet nécessaire</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="mcp">
+          <input type="checkbox" name="feature" value="mcp">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Intégration Claude / ChatGPT</span>
+            <span class="snd-option-desc">Anonymiser automatiquement avant d'envoyer à une IA</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="batch">
+          <input type="checkbox" name="feature" value="batch">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Traitement en lot de dossiers entiers</span>
+            <span class="snd-option-desc">Anonymiser 20, 50, 100 fichiers en une seule opération</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="office">
+          <input type="checkbox" name="feature" value="office">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Plugin Word / Excel</span>
+            <span class="snd-option-desc">Anonymiser directement depuis Microsoft Office</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="rapport">
+          <input type="checkbox" name="feature" value="rapport">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Rapport de conformité RGPD</span>
+            <span class="snd-option-desc">Document attestant l'anonymisation, exportable en PDF</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="api">
+          <input type="checkbox" name="feature" value="api">
+          <span class="snd-option-body">
+            <span class="snd-option-label">API / automatisation</span>
+            <span class="snd-option-desc">Intégrer Agiloshield dans vos propres outils ou workflows</span>
+          </span>
+        </label>
+
+        <label class="snd-option" data-slug="autre">
+          <input type="checkbox" name="feature" value="autre">
+          <span class="snd-option-body">
+            <span class="snd-option-label">Autre</span>
+            <span class="snd-option-desc">Décrivez un besoin non listé ci-dessus</span>
+            <div class="snd-other-wrap" id="sndOtherWrap">
+              <input type="text" class="snd-other-input" id="sndOtherInput" placeholder="Décrivez votre besoin…" autocomplete="off">
+            </div>
+          </span>
+        </label>
+      </div>
+
+      <div class="snd-field">
+        <label class="snd-label" for="sndEmail">Votre email <span>(facultatif)</span></label>
+        <input type="email" class="snd-input" id="sndEmail" placeholder="vous@exemple.com" autocomplete="email">
+      </div>
+
+      <div class="snd-error" id="sndError" role="alert"></div>
+
+      <button type="button" class="snd-submit" id="sndSubmit">Envoyer mes préférences</button>
+      <p class="snd-hint">Vos réponses servent uniquement à prioriser la roadmap. Aucun démarchage.</p>
     </div>
-    <div>
-      <div class="snd-title">Aidez-nous à prioriser les prochaines fonctionnalités</div>
-      <div class="snd-subtitle">30 secondes · Vos retours guident directement notre roadmap.</div>
+
+    <div class="snd-success" id="sndSuccess" aria-live="polite">
+      <div class="snd-success-icon" aria-hidden="true">✓</div>
+      <h3>Merci pour votre retour</h3>
+      <p>Vos préférences ont bien été enregistrées. Elles guident les prochaines évolutions d'Agiloshield.</p>
     </div>
   </div>
-  <div class="snd-divider"></div>
-
-  <!-- Form -->
-  <div class="snd-form" id="sndForm">
-    <p class="snd-question">Quelle fonctionnalité vous manque le plus sur Agiloshield ?<br><small style="font-weight:400;color:#5c6570;">Vous pouvez sélectionner plusieurs réponses.</small></p>
-
-    <div class="snd-options" id="sndOptions">
-
-      <label class="snd-option" data-value="local">
-        <input type="checkbox" value="local">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Logiciel installé sur mon ordinateur</span>
-          <span class="snd-option-desc">Traitement en local, sans connexion internet nécessaire</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="mcp">
-        <input type="checkbox" value="mcp">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Intégration Claude / ChatGPT</span>
-          <span class="snd-option-desc">Anonymiser automatiquement avant d'envoyer à une IA</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="batch">
-        <input type="checkbox" value="batch">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Traitement en lot de dossiers entiers</span>
-          <span class="snd-option-desc">Anonymiser 20, 50, 100 fichiers en une seule opération</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="office">
-        <input type="checkbox" value="office">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Plugin Word / Excel</span>
-          <span class="snd-option-desc">Anonymiser directement depuis Microsoft Office</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="rapport">
-        <input type="checkbox" value="rapport">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Rapport de conformité RGPD</span>
-          <span class="snd-option-desc">Document attestant l'anonymisation, exportable en PDF</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="api">
-        <input type="checkbox" value="api">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">API / automatisation</span>
-          <span class="snd-option-desc">Intégrer Agiloshield dans mes propres outils ou workflows</span>
-        </span>
-      </label>
-
-      <label class="snd-option" data-value="autre">
-        <input type="checkbox" value="autre">
-        <span class="snd-check">
-          <svg class="snd-check-mark" viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3"/></svg>
-        </span>
-        <span class="snd-option-body">
-          <span class="snd-option-label">Autre</span>
-          <span class="snd-option-desc">Dites-nous ce dont vous avez besoin</span>
-          <div class="snd-other-wrap" id="sndOtherWrap">
-            <input type="text" class="snd-other-input" id="sndOtherInput" placeholder="Décrivez votre besoin…" autocomplete="off">
-          </div>
-        </span>
-      </label>
-
-    </div>
-
-    <div class="snd-field-group">
-      <label class="snd-label" for="sndEmail">Votre email <span style="font-weight:400;opacity:.6;">(facultatif)</span></label>
-      <input type="email" class="snd-input" id="sndEmail" placeholder="vous@exemple.com" autocomplete="email">
-    </div>
-
-    <button type="button" class="snd-submit" id="sndSubmit">
-      <svg viewBox="0 0 24 24" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-      Envoyer mes préférences
-    </button>
-
-    <p class="snd-hint"><span>Vos réponses sont anonymes et utilisées uniquement pour améliorer Agiloshield. Aucun démarchage.</span></p>
-  </div>
-
-  <!-- Success -->
-  <div class="snd-success" id="sndSuccess">
-    <div class="snd-success-icon">
-      <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-    </div>
-    <div class="snd-success-title">Merci pour votre retour !</div>
-    <div class="snd-success-text">Vos préférences ont bien été enregistrées. Elles guident directement les prochaines évolutions d'Agiloshield.</div>
-  </div>
-
 </div>
 
 <script>
 (function () {
+  'use strict';
 
-  // ── À CONFIGURER ──────────────────────────────────────────────────────────
-  // Remplacez par votre webhook Make.com, n8n, ou Airtable
+  // ── Configuration Make → Airtable ─────────────────────────────────────────
   var WEBHOOK_URL = 'https://hook.eu2.make.com/VOTRE_WEBHOOK_ICI';
-  // ──────────────────────────────────────────────────────────────────────────
 
-  var options   = document.querySelectorAll('#sndOptions .snd-option');
+  // Libellés Airtable (Multiple select) — doivent correspondre à SONDAGE_AIRTABLE_SETUP.md
+  var FEATURE_MAP = {
+    local: 'Logiciel installé sur mon ordinateur',
+    mcp: 'Intégration Claude / ChatGPT',
+    batch: 'Traitement en lot de dossiers entiers',
+    office: 'Plugin Word / Excel',
+    rapport: 'Rapport de conformité RGPD',
+    api: 'API / automatisation',
+    autre: 'Autre'
+  };
+
+  var form = document.getElementById('sndForm');
+  var success = document.getElementById('sndSuccess');
   var submitBtn = document.getElementById('sndSubmit');
-  var form      = document.getElementById('sndForm');
-  var success   = document.getElementById('sndSuccess');
+  var errorBox = document.getElementById('sndError');
   var otherWrap = document.getElementById('sndOtherWrap');
-  var otherInput= document.getElementById('sndOtherInput');
+  var otherInput = document.getElementById('sndOtherInput');
+  var options = document.querySelectorAll('#sndOptions .snd-option');
 
-  // Toggle option
-  options.forEach(function (opt) {
-    opt.addEventListener('click', function (e) {
-      if (e.target === otherInput) return;
-      var selected = opt.classList.toggle('is-selected');
-      opt.querySelector('input[type="checkbox"]').checked = selected;
-      if (opt.dataset.value === 'autre') {
-        otherWrap.classList.toggle('is-visible', selected);
-        if (selected) setTimeout(function () { otherInput.focus(); }, 80);
+  function syncOptionState(opt) {
+    var cb = opt.querySelector('input[type="checkbox"]');
+    if (!cb) return;
+    opt.classList.toggle('is-selected', cb.checked);
+    if (opt.dataset.slug === 'autre') {
+      otherWrap.classList.toggle('is-visible', cb.checked);
+      if (cb.checked) {
+        setTimeout(function () { otherInput.focus(); }, 60);
       }
+    }
+  }
+
+  options.forEach(function (opt) {
+    var cb = opt.querySelector('input[type="checkbox"]');
+    if (!cb) return;
+    cb.addEventListener('change', function () {
+      syncOptionState(opt);
     });
+    syncOptionState(opt);
   });
 
-  // Submit
-  submitBtn.addEventListener('click', function () {
-    var selected = [];
-    options.forEach(function (opt) {
-      if (opt.classList.contains('is-selected')) {
-        var val = opt.dataset.value;
-        if (val === 'autre' && otherInput.value.trim()) {
-          selected.push('Autre : ' + otherInput.value.trim());
-        } else if (val !== 'autre') {
-          selected.push(opt.querySelector('.snd-option-label').textContent.trim());
-        }
-      }
-    });
+  otherInput.addEventListener('click', function (e) {
+    e.stopPropagation();
+  });
 
-    if (!selected.length) {
-      submitBtn.textContent = 'Sélectionnez au moins une option';
-      submitBtn.style.background = '#c0392b';
-      setTimeout(function () {
-        submitBtn.innerHTML = '<svg viewBox="0 0 24 24" stroke-width="2" style="width:17px;height:17px;stroke:currentColor;fill:none;flex-shrink:0"><path d="M5 12h14M12 5l7 7-7 7"/></svg> Envoyer mes préférences';
-        submitBtn.style.background = '';
-      }, 1800);
+  function hideError() {
+    errorBox.classList.remove('is-visible');
+    errorBox.textContent = '';
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add('is-visible');
+  }
+
+  function collectChoices() {
+    var choices = [];
+    options.forEach(function (opt) {
+      var cb = opt.querySelector('input[type="checkbox"]');
+      var slug = opt.dataset.slug;
+      if (!cb || !cb.checked || !slug || !FEATURE_MAP[slug]) return;
+      choices.push(FEATURE_MAP[slug]);
+    });
+    return choices;
+  }
+
+  function isWebhookConfigured() {
+    return WEBHOOK_URL && WEBHOOK_URL.indexOf('VOTRE_WEBHOOK') === -1;
+  }
+
+  submitBtn.addEventListener('click', function () {
+    hideError();
+
+    var choices = collectChoices();
+    if (!choices.length) {
+      showError('Sélectionnez au moins une fonctionnalité avant d\'envoyer.');
       return;
     }
 
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<svg viewBox="0 0 24 24" stroke-width="2" style="width:17px;height:17px;stroke:currentColor;fill:none;flex-shrink:0;animation:sndSpin 1s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Envoi en cours…';
+    if (!isWebhookConfigured()) {
+      showError('Le formulaire n\'est pas encore connecté (webhook Make à configurer). Contactez l\'équipe Agilotext.');
+      return;
+    }
+
+    var autreChecked = false;
+    options.forEach(function (opt) {
+      if (opt.dataset.slug === 'autre') {
+        var cb = opt.querySelector('input[type="checkbox"]');
+        autreChecked = cb && cb.checked;
+      }
+    });
 
     var payload = {
-      fonctionnalites: selected.join(', '),
-      email: document.getElementById('sndEmail').value.trim() || '',
+      choices: choices,
+      email: (document.getElementById('sndEmail').value || '').trim(),
       date: new Date().toISOString().slice(0, 10),
-      source: window.location.href
+      source: window.location.href,
+      autre: autreChecked ? (otherInput.value || '').trim() : ''
     };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Envoi en cours…';
 
     fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
-    }).then(function () {
-      showSuccess();
+    }).then(function (res) {
+      if (!res.ok) {
+        throw new Error('HTTP ' + res.status);
+      }
+      form.classList.add('is-hidden');
+      success.classList.add('is-visible');
     }).catch(function () {
-      // Fallback : afficher le succès quand même (ne pas bloquer l'UX)
-      showSuccess();
+      showError('L\'envoi a échoué. Réessayez dans un instant ou contactez support@agilotext.com.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Envoyer mes préférences';
     });
   });
-
-  function showSuccess() {
-    form.classList.add('is-hidden');
-    success.classList.add('is-visible');
-  }
-
-  // Spin animation
-  var style = document.createElement('style');
-  style.textContent = '@keyframes sndSpin{to{transform:rotate(360deg)}}';
-  document.head.appendChild(style);
-
 })();
 </script>
