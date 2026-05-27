@@ -203,13 +203,49 @@
     display: grid;
     gap: var(--space-3);
     align-content: start;
-    max-height: min(80vh, 38rem);
+    max-height: min(80vh, 42rem);
     overflow-y: auto;
     overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    padding-bottom: 1.25rem;
+    scroll-padding-bottom: 1.25rem;
+  }
+
+  .agf-roadmap-vote-wrap {
+    flex-shrink: 0;
+  }
+
+  .agf-roadmap-vote {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, var(--agilo-border));
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--agilo-primary) 8%, transparent);
+    color: var(--agilo-primary);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.35;
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .agf-roadmap-vote:hover {
+    background: color-mix(in srgb, var(--agilo-primary) 14%, transparent);
+    border-color: color-mix(in srgb, var(--agilo-primary) 35%, transparent);
+    box-shadow: 0 2px 8px rgba(23, 74, 150, 0.1);
+  }
+
+  .agf-roadmap-vote span:last-child {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
 
   .agf-side .agf-group {

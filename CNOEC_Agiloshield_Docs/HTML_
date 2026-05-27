@@ -84,6 +84,21 @@
     line-height: 1;
     opacity: 0.9;
   }
+  form[ms-code-anonymisation="form"] .agf-side {
+    max-height: min(80vh, 42rem);
+    padding-bottom: 1.25rem;
+    scroll-padding-bottom: 1.25rem;
+  }
+  form[ms-code-anonymisation="form"] .agf-roadmap-vote-wrap {
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+  }
+  form[ms-code-anonymisation="form"] .agf-roadmap-vote span:last-child {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@68a0bb4a27733442328d834f7e0a1189c780946d/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css">
 
@@ -223,16 +238,16 @@
           <p id="agfInclusionAvailabilityHint" class="agf-small">Listes disponibles pour affiner les détections.</p>
         </div>
 
-        <div class="agf-group">
-          <p class="agf-label">Pseudonymes</p>
-          <p id="agfPseudoSummary" class="agf-small"><span class="agf-summary-line"><strong>Mode :</strong> Anonymisation</span><span class="agf-summary-line"><strong>Codes actifs :</strong> LOC, ORG, PER</span></p>
-        </div>
-
         <div class="agf-group agf-roadmap-vote-wrap">
           <a href="https://www.agilotext.com/sondage/campagne-agiloshield-2026" class="agf-roadmap-vote" id="agfRoadmapVote" title="30 secondes pour prioriser la roadmap Agiloshield">
             <span class="agf-roadmap-vote-icon" aria-hidden="true">☆</span>
             <span>Voter pour la prochaine fonctionnalité</span>
           </a>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Pseudonymes</p>
+          <p id="agfPseudoSummary" class="agf-small"><span class="agf-summary-line"><strong>Mode :</strong> Anonymisation</span><span class="agf-summary-line"><strong>Codes actifs :</strong> LOC, ORG, PER</span></p>
         </div>
 
         <div class="agf-api-footer" aria-hidden="true">

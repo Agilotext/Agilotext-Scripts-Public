@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.12-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.13-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -254,9 +254,17 @@
     link.title = '30 secondes pour prioriser la roadmap Agiloshield';
     link.innerHTML = '<span class="agf-roadmap-vote-icon" aria-hidden="true">☆</span><span>Voter pour la prochaine fonctionnalité</span>';
     wrap.appendChild(link);
-    const footer = side.querySelector('.agf-api-footer');
-    if (footer) side.insertBefore(wrap, footer);
-    else side.appendChild(wrap);
+    const anchor = document.getElementById('agfInclusionAvailabilityHint');
+    const paramsGroup = anchor ? anchor.closest('.agf-group') : null;
+    const pseudoGroup = document.getElementById('agfPseudoSummary');
+    const pseudoWrap = pseudoGroup ? pseudoGroup.closest('.agf-group') : null;
+    if (paramsGroup && pseudoWrap) side.insertBefore(wrap, pseudoWrap);
+    else if (paramsGroup && paramsGroup.nextSibling) side.insertBefore(wrap, paramsGroup.nextSibling);
+    else {
+      const footer = side.querySelector('.agf-api-footer');
+      if (footer) side.insertBefore(wrap, footer);
+      else side.appendChild(wrap);
+    }
   }
 
   function normalizeAnon2ProductionMarkup() {
