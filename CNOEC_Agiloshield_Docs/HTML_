@@ -1,0 +1,315 @@
+<style>
+  /* Éviter qu'un overlay (extension type Plasmo, etc.) bloque les clics */
+  plasmo-csui,
+  #plasmo-inspector,
+  [id^="plasmo-"] {
+    pointer-events: none !important;
+  }
+  plasmo-csui * {
+    pointer-events: none !important;
+  }
+  .agf-checkbox-line {
+    border: none;
+    border-radius: 0.625rem;
+    background: color-mix(in srgb, var(--agilo-text) 6%, transparent);
+    min-height: 2.75rem;
+    padding: var(--space-1) var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.875rem;
+    cursor: pointer;
+    user-select: none;
+    color: var(--agilo-text);
+    transition: box-shadow 160ms ease;
+  }
+  .agf-checkbox-line input[type="checkbox"] {
+    accent-color: var(--agilo-primary);
+    cursor: pointer;
+    width: 1rem;
+    height: 1rem;
+  }
+  .agf-checkbox-line:focus-within {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--agilo-primary) 18%, transparent);
+  }
+  .agf-checkbox-line--locked {
+    cursor: default;
+    opacity: 0.88;
+    background: color-mix(in srgb, var(--agilo-text) 4%, transparent);
+  }
+  .agf-checkbox-line--locked input[type="checkbox"] {
+    cursor: not-allowed;
+    opacity: 0.75;
+  }
+  .agf-ai-notice {
+    margin: 0 0 var(--space-2, 1rem);
+    padding: 0.875rem 1rem;
+    border-radius: 0.625rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 22%, transparent);
+    background: color-mix(in srgb, var(--agilo-primary, #174a96) 6%, #f5f8fc);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--agilo-text);
+  }
+  .agf-ai-notice p {
+    margin: 0;
+  }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@68a0bb4a27733442328d834f7e0a1189c780946d/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css">
+
+<form id="agfForm" ms-code-anonymisation="form" novalidate>
+  <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
+
+  <section class="agf-shell" aria-label="Anonymisation avancée">
+    <header class="agf-head">
+      <h2>Anonymisation documentaire</h2>
+      <p>Traitement sécurisé de fichiers Office et PDF.</p>
+    </header>
+
+    <aside class="agf-ai-notice" role="note" aria-label="Avertissement sur l'utilisation de l'IA">
+      <p>AgiloShield utilise l'IA, qui peut produire des erreurs. Vérifiez les informations anonymisées avant de les utiliser.</p>
+    </aside>
+
+    <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
+      <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="agfPanel-file" data-tab="file">
+        <span class="agf-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" /><path d="M14 2v6h6" /><path d="M8 13h8" /><path d="M8 17h8" /></svg></span>
+        <span class="agf-tab-content"><strong>Traitement de fichier</strong><span>PDF, Word, Excel, PowerPoint, CSV</span></span>
+      </button>
+      <button id="agfTab-text" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="agfPanel-text" data-tab="text">
+        <span class="agf-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M4 6h16" /><path d="M4 10h16" /><path d="M4 14h10" /><path d="M4 18h6" /></svg></span>
+        <span class="agf-tab-content"><strong>Traitement de texte</strong><span>Email, Markdown, etc.</span></span>
+      </button>
+      <button id="agfTab-restore" class="agf-tab" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="agfPanel-restore" data-tab="restore">
+        <span class="agf-tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg></span>
+        <span class="agf-tab-content"><strong>Restauration</strong><span>Restaurez les données pseudonymisées</span></span>
+      </button>
+    </div>
+
+    <div class="agf-grid">
+      <div class="agf-main">
+        <section id="agfPanel-file" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-file" aria-hidden="false">
+          <h3 class="agf-section-title">Sélectionnez les fichiers</h3>
+          <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
+            <h4>Cliquez ou glissez-déposez des fichiers</h4>
+            <p>12 documents maximum — 256 Mo max / fichier.</p>
+            <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx), Excel (xls, xlsx), PDF, TXT, JSON et FEC.</p>
+          </div>
+          <input id="agfFileInput" type="file" name="fileUpload[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
+
+          <h3 class="agf-section-title agf-section-title--pending" id="agfTitleFileList">Fichiers à anonymiser</h3>
+          <div id="agfFileList" class="agf-list" role="list"></div>
+          <div id="agfStatus" class="agf-status" role="status" aria-live="polite"></div>
+
+          <div class="agf-actions" id="agfActionsSubmit">
+            <button id="agfSubmit" type="submit" class="agf-btn-primary" disabled>Anonymiser les fichiers</button>
+            <a id="agfDownload" href="#" class="agf-download" download>Télécharger le résultat</a>
+          </div>
+
+          <div class="agf-processed-wrap" id="agfProcessedWrap" hidden>
+            <div class="agf-section-title-row">
+              <h3 class="agf-section-title">Fichier(s) traité(s)</h3>
+              <div class="agf-section-title-actions">
+                <button id="agfDownloadZip" type="button" class="agf-btn-secondary agf-download-zip" hidden><span class="agf-icon-download" aria-hidden="true"></span>Télécharger tout (.zip)</button>
+                <button id="agfClearProcessed" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer les fichiers"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer</button>
+              </div>
+            </div>
+            <div id="agfProcessedList" class="agf-processed-list" role="list"></div>
+          </div>
+        </section>
+
+        <section id="agfPanel-text" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-text" aria-hidden="true" hidden>
+          <div class="agf-row agf-row--text">
+            <div class="agf-textbox agf-textbox--flex">
+              <div class="agf-textbox-head">
+                <label for="agfInputText">Saisissez le texte</label>
+                <button id="agfTextClear" type="button" class="agf-btn-link agf-btn-link--small" aria-label="Effacer le texte"><span class="agf-icon-trash" aria-hidden="true"></span>Effacer le texte</button>
+              </div>
+              <div class="agf-textbox-body">
+                <textarea id="agfInputText" class="agf-textarea" placeholder="Collez ici le texte à anonymiser (e-mail, note, etc.)"></textarea>
+              </div>
+            </div>
+            <div class="agf-textbox agf-textbox--flex">
+              <div class="agf-output-header">
+                <label class="agf-textbox-label">Texte traité</label>
+                <button id="agfTextCopy" type="button" class="agf-output-copy" aria-label="Copier le texte traité"><span class="agf-icon-copy" aria-hidden="true"></span>Copier</button>
+              </div>
+              <div class="agf-output-wrap" id="agfOutputWrap">
+                <div id="agfOutputText" class="agf-text-output" role="region" aria-live="polite" aria-busy="false">Le résultat s'affichera ici après anonymisation.</div>
+                <div id="agfOutputStats" class="agf-output-stats" aria-live="polite">
+                  <p id="agfOutputSummary" class="agf-output-summary">Aucune donnée personnelle détectée pour l'instant.</p>
+                  <div id="agfOutputEntities" class="agf-output-entities"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="agf-small">Le traitement se lance automatiquement après la saisie.</p>
+        </section>
+
+        <section id="agfPanel-restore" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-restore" aria-hidden="true" hidden>
+          <div class="agf-lock-block" id="agfRestoreLocked">
+            <svg class="agf-lock-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <rect x="3" y="11" width="18" height="10" rx="2" stroke="currentColor" stroke-width="1.6" />
+              <path d="M7 11V8a5 5 0 0110 0v3" stroke="currentColor" stroke-width="1.6" />
+              <circle cx="12" cy="16" r="1.2" fill="currentColor" />
+            </svg>
+            <p class="agf-lock-title">Restauration des documents d'origine</p>
+            <p class="agf-lock-text">Chargez vos documents anonymisés ainsi que leurs clés de restauration (.properties) pour retrouver les vrais noms en un clic.</p>
+          </div>
+        </section>
+      </div>
+
+      <aside class="agf-side" aria-label="Paramètres">
+        <div class="agf-group agf-manual-auth is-collapsed" id="agfManualAuth">
+          <p class="agf-label">Connexion API</p>
+          <button type="button" class="agf-manual-auth-toggle" id="agfManualAuthToggle" aria-expanded="false" aria-controls="agfManualAuthFields">Utiliser des identifiants manuels</button>
+          <div class="agf-manual-auth-fields" id="agfManualAuthFields" aria-hidden="true">
+            <label for="agfManualUsername">Username (email)</label>
+            <input type="text" id="agfManualUsername" name="agfManualUsername" placeholder="email@exemple.com" autocomplete="username">
+            <label for="agfManualToken">Token</label>
+            <input type="password" id="agfManualToken" name="agfManualToken" placeholder="Token API" autocomplete="off" spellcheck="false">
+            <label for="agfManualEdition">Edition</label>
+            <select id="agfManualEdition" name="agfManualEdition">
+              <option value="free">free</option>
+              <option value="pro">pro</option>
+              <option value="ent">ent</option>
+              <option value="anonymisation">anonymisation</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Mode de traitement</p>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="anonymiser" checked> Anonymiser</label>
+          <label class="agf-radio-line"><input type="radio" name="agfMode" value="pseudonymiser"> Pseudonymiser</label>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Paramètres</p>
+          <button id="agfOpenTypes" type="button" class="agf-item-btn agf-item-btn--count">
+            <span>Types de données</span>
+            <span class="agf-chip-count" id="agfTypesCount">9</span>
+          </button>
+          <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
+          <label class="agf-checkbox-line agf-checkbox-line--locked" title="Les images sont toujours retirées lors du traitement">
+            <input type="checkbox" id="agfRemoveImages" checked disabled aria-disabled="true">
+            <span>Retirer les images</span>
+          </label>
+          <p id="agfInclusionAvailabilityHint" class="agf-small">Listes disponibles pour affiner les détections.</p>
+        </div>
+
+        <div class="agf-group">
+          <p class="agf-label">Pseudonymes</p>
+          <p id="agfPseudoSummary" class="agf-small"><span class="agf-summary-line"><strong>Mode :</strong> Anonymisation</span><span class="agf-summary-line"><strong>Codes actifs :</strong> LOC, ORG, PER</span></p>
+        </div>
+
+        <div class="agf-api-footer" aria-hidden="true">
+          <p id="agfApiMeta" class="agf-small">API: vérification...</p>
+          <p class="agf-small"><a href="https://api.agilotext.com/html/menu.html" target="_blank" rel="noopener noreferrer" id="agfApiLink">API Agilotext</a></p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="agf-hist-standalone" id="agfAnonJobsWrap" aria-label="Historique des documents anonymisés">
+      <div class="agf-hist-header">
+        <div class="agf-hist-header-left">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" style="flex-shrink:0;opacity:.7">
+            <path d="M0 0h24v24H0z" fill="none" />
+            <path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z" fill="currentColor" />
+          </svg>
+          <h4>Historique – Documents anonymisés</h4>
+        </div>
+        <span class="agf-hist-count" id="agfHistCount"></span>
+      </div>
+      <div id="agfAnonJobsList" class="agf-anon-jobs-list" role="region" aria-label="Historique des documents anonymisés"></div>
+    </section>
+  </section>
+</form>
+
+<div id="agfModalTypesWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalTypesTitle" aria-hidden="true">
+  <div class="agf-modal">
+    <div class="agf-modal-head">
+      <div>
+        <h3 id="agfModalTypesTitle" class="agf-modal-title">Sélectionnez les types de données</h3>
+        <p class="agf-modal-subtitle">Ces préférences sont enregistrées et appliquées aux prochains traitements.</p>
+      </div>
+      <button id="agfModalTypesClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
+    </div>
+
+    <div class="agf-type-grid" id="agfTypeGrid">
+      <section class="agf-type-card agf-type-card--official" data-type-group="anon2">
+        <div class="agf-type-card-head">
+          <h5>Types de données à anonymiser</h5>
+          <span class="agf-type-card-count" id="agfGroupCount-anon2">0</span>
+        </div>
+        <div class="agf-checkboxes agf-checkboxes--official">
+          <label class="agf-entity-option"><input type="checkbox" data-entity="ADR"><span class="agf-entity-code">ADR</span><span class="agf-entity-name">Adresse</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="DAT"><span class="agf-entity-code">DAT</span><span class="agf-entity-name">Date</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="EML"><span class="agf-entity-code">EML</span><span class="agf-entity-name">Email</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="IBA"><span class="agf-entity-code">IBA</span><span class="agf-entity-name">IBAN</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="IDN"><span class="agf-entity-code">IDN</span><span class="agf-entity-name">Identifiant</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="JOB"><span class="agf-entity-code">JOB</span><span class="agf-entity-name">Intitulé de poste</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="LOC" checked><span class="agf-entity-code">LOC</span><span class="agf-entity-name">Lieu</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="ORG" checked><span class="agf-entity-code">ORG</span><span class="agf-entity-name">Organisation</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PER" checked><span class="agf-entity-code">PER</span><span class="agf-entity-name">Personne</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PII"><span class="agf-entity-code">PII</span><span class="agf-entity-name">Donnée personnelle générique</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="PRO"><span class="agf-entity-code">PRO</span><span class="agf-entity-name">Profession</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="URL"><span class="agf-entity-code">URL</span><span class="agf-entity-name">URL</span></label>
+          <label class="agf-entity-option"><input type="checkbox" data-entity="TEL"><span class="agf-entity-code">TEL</span><span class="agf-entity-name">Téléphone</span></label>
+        </div>
+      </section>
+    </div>
+
+    <div class="agf-modal-actions">
+      <div class="agf-actions">
+        <button id="agfDefaultsTypes" type="button" class="agf-btn-secondary">Paramètres par défaut</button>
+        <button id="agfDetectAllTypes" type="button" class="agf-btn-link">Tout détecter</button>
+        <button id="agfIgnoreAllTypes" type="button" class="agf-btn-link">Tout ignorer</button>
+      </div>
+      <button id="agfSaveTypes" type="button" class="agf-btn-primary">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="agfModalInclusionWrap" class="agf-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="agfModalIncTitle" aria-hidden="true">
+  <div class="agf-modal agf-modal--wide">
+    <div class="agf-modal-head">
+      <div>
+        <h3 id="agfModalIncTitle" class="agf-modal-title">Inclusion / Exclusion</h3>
+        <p class="agf-modal-subtitle">Gérez les listes d'inclusion et d'exclusion pour réduire les faux positifs et faux négatifs. La comparaison ignore la casse et les accents.</p>
+      </div>
+      <button id="agfModalIncClose" type="button" class="agf-close" aria-label="Fermer">&times;</button>
+    </div>
+    <div id="agfInclusionReadonlyZone" class="agf-inc-grid">
+      <section class="agf-inc-card agf-inc-card--include">
+        <h4>Liste d'inclusion</h4>
+        <p>Ces termes sont toujours détectés et anonymisés, même hors des types sélectionnés.</p>
+        <div class="agf-inc-add">
+          <input id="agfIncludeInput" type="text" placeholder="Ajouter un terme à inclure...">
+          <button id="agfIncludeAdd" type="button">Ajouter</button>
+        </div>
+        <div id="agfIncludeList" class="agf-term-list" aria-live="polite"></div>
+      </section>
+
+      <section class="agf-inc-card agf-inc-card--exclude">
+        <h4>Liste d'exclusion</h4>
+        <p>Ces termes sont systématiquement ignorés lors de l'anonymisation, même s'ils correspondent aux types sélectionnés.</p>
+        <div class="agf-inc-add">
+          <input id="agfExcludeInput" type="text" placeholder="Ajouter un terme à exclure...">
+          <button id="agfExcludeAdd" type="button">Ajouter</button>
+        </div>
+        <div id="agfExcludeList" class="agf-term-list" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <div class="agf-modal-actions">
+      <span id="agfIncSummary" class="agf-small">Inclusion: 0 · Exclusion: 0</span>
+      <div class="agf-actions">
+        <button id="agfInclusionDefaults" type="button" class="agf-btn-secondary">Vider les listes</button>
+        <button id="agfSaveInclusion" type="button" class="agf-btn-primary">Enregistrer les listes</button>
+      </div>
+    </div>
+
+    <textarea id="agfIncludeTerms" class="agf-hidden-field" aria-hidden="true"></textarea>
+    <textarea id="agfExcludeTerms" class="agf-hidden-field" aria-hidden="true"></textarea>
+  </div>
+</div>

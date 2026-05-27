@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.7-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.8-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -658,6 +658,20 @@
       ui.manualToken.autocomplete = 'new-password';
       ui.manualToken.readOnly = collapsed;
       if (collapsed) ui.manualToken.value = '';
+    }
+  }
+
+  function applyRemoveImagesLocked() {
+    state.removeImages = true;
+    if (!ui.removeImages) return;
+    ui.removeImages.checked = true;
+    ui.removeImages.disabled = true;
+    ui.removeImages.setAttribute('aria-disabled', 'true');
+    const label = ui.removeImages.closest('.agf-checkbox-line');
+    if (label) {
+      label.classList.add('agf-checkbox-line--locked');
+      label.setAttribute('aria-disabled', 'true');
+      label.title = 'Les images sont toujours retirées lors du traitement.';
     }
   }
 
@@ -2585,13 +2599,7 @@
     state.doPseudoAnon = state.mode === 'pseudonymiser';
     renderTypeCount();
 
-    const rawImg = storage.get(STORAGE_REMOVE_IMAGES);
-    if (rawImg !== null) {
-      state.removeImages = rawImg === 'true';
-    }
-    if (ui.removeImages) {
-      ui.removeImages.checked = state.removeImages;
-    }
+    applyRemoveImagesLocked();
   }
 
   async function waitForMemberstack(maxWait, interval) {
@@ -3727,12 +3735,7 @@
     });
     if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
 
-    if (ui.removeImages) {
-      ui.removeImages.addEventListener('change', () => {
-        state.removeImages = ui.removeImages.checked;
-        storage.set(STORAGE_REMOVE_IMAGES, state.removeImages ? 'true' : 'false');
-      });
-    }
+    applyRemoveImagesLocked();
 
     if (ui.modeRadios.length) ui.modeRadios.forEach((radio) => radio.addEventListener('change', () => {
       setMode(radio.value);
