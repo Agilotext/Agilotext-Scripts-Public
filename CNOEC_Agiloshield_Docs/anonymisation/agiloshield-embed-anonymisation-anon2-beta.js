@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.11-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.12-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -236,12 +236,32 @@
   /** Types proposés dans la grille Anon2 officielle. Les anciens codes UI restent mappés en compatibilité. */
   const TYPES_AVAILABLE = ANON2_ALLOWED_CODES.slice();
   const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])';
+  const ROADMAP_VOTE_URL = 'https://www.agilotext.com/sondage/campagne-agiloshield-2026';
   const storage = createSafeStorage();
 
   normalizeAnon2ProductionMarkup();
 
+  function ensureRoadmapVoteCta() {
+    if (document.getElementById('agfRoadmapVote')) return;
+    const side = document.querySelector('.agf-side');
+    if (!side) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'agf-group agf-roadmap-vote-wrap';
+    const link = document.createElement('a');
+    link.href = ROADMAP_VOTE_URL;
+    link.className = 'agf-roadmap-vote';
+    link.id = 'agfRoadmapVote';
+    link.title = '30 secondes pour prioriser la roadmap Agiloshield';
+    link.innerHTML = '<span class="agf-roadmap-vote-icon" aria-hidden="true">☆</span><span>Voter pour la prochaine fonctionnalité</span>';
+    wrap.appendChild(link);
+    const footer = side.querySelector('.agf-api-footer');
+    if (footer) side.insertBefore(wrap, footer);
+    else side.appendChild(wrap);
+  }
+
   function normalizeAnon2ProductionMarkup() {
     if (!document.getElementById('agfForm')) return;
+    ensureRoadmapVoteCta();
     const headTitle = document.querySelector('.agf-head h2');
     if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
     const headSub = document.querySelector('.agf-head p');
