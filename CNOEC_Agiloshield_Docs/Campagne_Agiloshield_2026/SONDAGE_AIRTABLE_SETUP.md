@@ -72,11 +72,38 @@ flowchart LR
 
 | Champ Airtable | ID champ | Valeur Make |
 |----------------|----------|-------------|
-| `Fonctionnalites` | `fldblVW05aD8bTusF` | `{{1.fonctionnalites}}` |
+| `Fonctionnalites` | `fldblVW05aD8bTusF` | `{{ifempty(1.fonctionnalites; join(1.choices; ", "))}}` — voir ci-dessous |
 | `Email` | `flduQbzHdLYVXhdVw` | `{{1.email}}` |
 | `Source` | `fldmufEBMW4otr4IX` | `{{1.source}}` |
 
 `Created` se remplit automatiquement côté Airtable.
+
+#### Si Make affiche `choices[]` (tableau) et pas `fonctionnalites`
+
+Ne **pas** cliquer sur `choices[]` dans le champ Fonctionnalites — Airtable attend du **texte**.
+
+Dans le champ **Fonctionnalites** du module Airtable, saisir à la main (mode formule) :
+
+```text
+{{join(1.choices; ", ")}}
+```
+
+Avec précision « Autre » en plus :
+
+```text
+{{ifempty(1.fonctionnalites; join(1.choices; ", "))}}{{if(1.autre; " — Autre : " + 1.autre; "")}}
+```
+
+Puis **Run once** sur le webhook pour re-tester.
+
+### Webflow — scripts sur la page sondage
+
+Sur [`/sondage/campagne-agiloshield-2026`](https://www.agilotext.com/sondage/campagne-agiloshield-2026) :
+
+- **Oui** : `sondage-fonctionnalites-embed.html` (Custom Code)
+- **Non** : `agiloshield-embed-anonymisation-anon2-beta.js` (réservé à la page anonymisation avec `#agfForm`)
+
+Si le script anon est chargé via le footer global, exclure cette page ou le script ne fera rien (garde `agfForm` depuis v2.4.11-prod1).
 
 ### Webflow — URL du webhook
 

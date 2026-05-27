@@ -38,6 +38,89 @@
     box-sizing: border-box;
   }
 
+  /* Extensions navigateur : ne pas bloquer les clics sur le sondage */
+  plasmo-csui,
+  #plasmo-inspector,
+  [id^="plasmo-"] {
+    pointer-events: none !important;
+  }
+
+  #agilo-sondage .snd-invite {
+    margin-bottom: var(--space-2);
+  }
+
+  #agilo-sondage .snd-invite-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 0.75rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, var(--agilo-border));
+    border-radius: 0.75rem;
+    background: var(--agilo-primary-soft);
+    color: var(--agilo-text);
+    font-family: inherit;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+    pointer-events: auto !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  #agilo-sondage .snd-invite-toggle:hover {
+    border-color: color-mix(in srgb, var(--agilo-primary) 40%, var(--agilo-border));
+    box-shadow: 0 2px 10px rgba(23, 74, 150, 0.08);
+  }
+
+  #agilo-sondage .snd-invite-toggle[aria-expanded="true"] {
+    border-radius: 0.75rem 0.75rem 0 0;
+    border-bottom-color: transparent;
+  }
+
+  #agilo-sondage .snd-invite-pill {
+    flex-shrink: 0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--agilo-primary);
+    color: #fff;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  #agilo-sondage .snd-invite-label {
+    flex: 1;
+    font-weight: 600;
+  }
+
+  #agilo-sondage .snd-invite-chevron {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: var(--agilo-text-secondary);
+    transition: transform 0.2s ease;
+  }
+
+  #agilo-sondage .snd-invite-toggle[aria-expanded="true"] .snd-invite-chevron {
+    transform: rotate(180deg);
+  }
+
+  #agilo-sondage .snd-invite-panel {
+    padding: 0.85rem 1rem 1rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, var(--agilo-border));
+    border-top: none;
+    border-radius: 0 0 0.75rem 0.75rem;
+    background: color-mix(in srgb, var(--agilo-primary-soft) 55%, var(--agilo-surface));
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--agilo-text-secondary);
+  }
+
+  #agilo-sondage .snd-invite-panel[hidden] {
+    display: none;
+  }
+
   #agilo-sondage .snd-card {
     background: var(--agilo-surface);
     border: 1px solid var(--agilo-border);
@@ -323,7 +406,19 @@
   }
 </style>
 
-<div id="agilo-sondage">
+<div id="agilo-sondage" data-agilo-page="sondage">
+  <div class="snd-invite">
+    <button type="button" class="snd-invite-toggle" id="sndInviteToggle" aria-expanded="false" aria-controls="sndInvitePanel">
+      <span class="snd-invite-pill">Roadmap</span>
+      <span class="snd-invite-label">Votez pour votre prochaine fonctionnalité Agiloshield préférée</span>
+      <span class="snd-invite-chevron" aria-hidden="true">▼</span>
+    </button>
+    <div class="snd-invite-panel" id="sndInvitePanel" hidden>
+      Cochez une ou plusieurs options ci-dessous : logiciel local, intégration IA, traitement en lot, plugin Office, etc.
+      Vos votes orientent directement ce que nous développons en priorité — 30 secondes, sans engagement.
+    </div>
+  </div>
+
   <div class="snd-card">
     <header class="snd-head">
       <h2>Aidez-nous à prioriser les prochaines fonctionnalités</h2>
@@ -443,6 +538,16 @@
   var otherWrap = document.getElementById('sndOtherWrap');
   var otherInput = document.getElementById('sndOtherInput');
   var options = document.querySelectorAll('#sndOptions .snd-option');
+  var inviteToggle = document.getElementById('sndInviteToggle');
+  var invitePanel = document.getElementById('sndInvitePanel');
+
+  if (inviteToggle && invitePanel) {
+    inviteToggle.addEventListener('click', function () {
+      var open = inviteToggle.getAttribute('aria-expanded') === 'true';
+      inviteToggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+      invitePanel.hidden = open;
+    });
+  }
 
   function syncOptionState(opt) {
     var cb = opt.querySelector('input[type="checkbox"]');

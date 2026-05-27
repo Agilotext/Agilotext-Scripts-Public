@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.10-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.11-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -241,6 +241,7 @@
   normalizeAnon2ProductionMarkup();
 
   function normalizeAnon2ProductionMarkup() {
+    if (!document.getElementById('agfForm')) return;
     const headTitle = document.querySelector('.agf-head h2');
     if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
     const headSub = document.querySelector('.agf-head p');

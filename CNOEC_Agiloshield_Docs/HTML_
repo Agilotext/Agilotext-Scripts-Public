@@ -1,3 +1,8 @@
+<!--
+  Page sondage roadmap : /sondage/campagne-agiloshield-2026
+  → embed Campagne_Agiloshield_2026/sondage-fonctionnalites-embed.html uniquement
+  → NE PAS charger agiloshield-embed-anonymisation-anon2-beta.js sur cette page
+-->
 <style>
   /* Éviter qu'un overlay (extension type Plasmo, etc.) bloque les clics */
   plasmo-csui,
