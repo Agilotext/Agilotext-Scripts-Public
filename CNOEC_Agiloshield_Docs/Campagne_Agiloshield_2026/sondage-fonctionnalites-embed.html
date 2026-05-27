@@ -1,7 +1,8 @@
 <!-- ============================================================
   AGILOSHIELD — Sondage fonctionnalités (v2)
   Webflow : coller dans un bloc Custom Code
-  Config : WEBHOOK_URL (Make → Airtable Sondage_Agiloshield_2026)
+  Config : window.__AGILO_SONDAGE_WEBHOOK__ (Make FORMULAIRE_AGILOSHIELD, eu1)
+  Blueprint : BLUEPRINT_MAKE_SONDAGE_AGILOSHIELD_2026.json
   Doc : SONDAGE_AIRTABLE_SETUP.md
   ============================================================ -->
 <style>
@@ -419,8 +420,10 @@
 (function () {
   'use strict';
 
-  // ── Configuration Make → Airtable ─────────────────────────────────────────
-  var WEBHOOK_URL = 'https://hook.eu2.make.com/VOTRE_WEBHOOK_ICI';
+  // ── Make FORMULAIRE_AGILOSHIELD (hook 3121074, zone eu1) ─────────────────
+  // Copier l’URL depuis Make > Webhooks > FORMULAIRE_AGILOSHIELD, ou définir :
+  // window.__AGILO_SONDAGE_WEBHOOK__ = 'https://hook.eu1.make.com/…' avant ce script
+  var WEBHOOK_URL = window.__AGILO_SONDAGE_WEBHOOK__ || '';
 
   // Libellés Airtable (Multiple select) — doivent correspondre à SONDAGE_AIRTABLE_SETUP.md
   var FEATURE_MAP = {
@@ -488,7 +491,15 @@
   }
 
   function isWebhookConfigured() {
-    return WEBHOOK_URL && WEBHOOK_URL.indexOf('VOTRE_WEBHOOK') === -1;
+    return typeof WEBHOOK_URL === 'string' && /^https:\/\/hook\.eu1\.make\.com\/.+/.test(WEBHOOK_URL);
+  }
+
+  function buildFonctionnalitesText(choices, autreText) {
+    var line = choices.join(', ');
+    if (autreText) {
+      line += (line ? ' — ' : '') + 'Autre : ' + autreText;
+    }
+    return line;
   }
 
   submitBtn.addEventListener('click', function () {
@@ -501,24 +512,24 @@
     }
 
     if (!isWebhookConfigured()) {
-      showError('Le formulaire n\'est pas encore connecté (webhook Make à configurer). Contactez l\'équipe Agilotext.');
+      showError('Webhook Make non configuré : ajoutez window.__AGILO_SONDAGE_WEBHOOK__ avec l’URL du webhook FORMULAIRE_AGILOSHIELD (eu1).');
       return;
     }
 
-    var autreChecked = false;
+    var autreText = '';
     options.forEach(function (opt) {
       if (opt.dataset.slug === 'autre') {
         var cb = opt.querySelector('input[type="checkbox"]');
-        autreChecked = cb && cb.checked;
+        if (cb && cb.checked) autreText = (otherInput.value || '').trim();
       }
     });
 
     var payload = {
+      fonctionnalites: buildFonctionnalitesText(choices, autreText),
       choices: choices,
       email: (document.getElementById('sndEmail').value || '').trim(),
-      date: new Date().toISOString().slice(0, 10),
       source: window.location.href,
-      autre: autreChecked ? (otherInput.value || '').trim() : ''
+      autre: autreText
     };
 
     submitBtn.disabled = true;

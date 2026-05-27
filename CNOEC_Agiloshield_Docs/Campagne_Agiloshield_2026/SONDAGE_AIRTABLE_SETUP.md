@@ -49,7 +49,10 @@ Pour un décompte rapide : extension « Chart » ou export CSV + tableau croisé
 
 ---
 
-## 3. Scénario Make.com (~10 min)
+## 3. Scénario Make.com
+
+**Blueprint prêt à importer :** [`BLUEPRINT_MAKE_SONDAGE_AGILOSHIELD_2026.json`](BLUEPRINT_MAKE_SONDAGE_AGILOSHIELD_2026.json)  
+Webhook : **FORMULAIRE_AGILOSHIELD** (hook `3121074`, zone **eu1**).
 
 ```mermaid
 flowchart LR
@@ -58,47 +61,50 @@ flowchart LR
   WH --> AT
 ```
 
-### Module 1 — Webhooks → Custom webhook
+### Import Make
 
-- Créer le webhook, copier l’URL (ex. `https://hook.eu2.make.com/xxxxx`)
-- Coller cette URL dans `WEBHOOK_URL` du fichier [`sondage-fonctionnalites-embed.html`](sondage-fonctionnalites-embed.html)
+1. Make → Scénarios → **Import blueprint** → fichier `BLUEPRINT_MAKE_SONDAGE_AGILOSHIELD_2026.json`
+2. Vérifier le module Webhook : hook **FORMULAIRE_AGILOSHIELD**
+3. Copier l’**URL du webhook** (format `https://hook.eu1.make.com/…`)
+4. Activer le scénario
 
-### Module 2 — Airtable → Create a record
+### Mapping Airtable (déjà dans le blueprint)
 
-| Paramètre | Valeur |
-|-----------|--------|
-| Connection | Compte Airtable Agilotext |
-| Base | `[CMS_Agilotext]` |
-| Table | `Sondage_Agiloshield_2026` |
+| Champ Airtable | ID champ | Valeur Make |
+|----------------|----------|-------------|
+| `Fonctionnalites` | `fldblVW05aD8bTusF` | `{{1.fonctionnalites}}` |
+| `Email` | `flduQbzHdLYVXhdVw` | `{{1.email}}` |
+| `Source` | `fldmufEBMW4otr4IX` | `{{1.source}}` |
 
-### Mapping des champs
+`Created` se remplit automatiquement côté Airtable.
 
-| Champ Airtable | Valeur Make (depuis le webhook) |
-|----------------|----------------------------------|
-| `Fonctionnalites` | `{{choices}}` — tableau / liste (multiple select) |
-| `Email` | `{{email}}` |
-| `Date_reponse` | `{{date}}` |
-| `Source` | `{{source}}` |
-| `Autre_precision` | `{{autre}}` |
+### Webflow — URL du webhook
 
-**Important :** le corps du webhook est du JSON. Dans Make, active « JSON » comme type de données entrantes si proposé.
+Dans les **paramètres de page** ou un embed **avant** le sondage :
 
-### Payload envoyé par le formulaire
+```html
+<script>
+  window.__AGILO_SONDAGE_WEBHOOK__ = 'https://hook.eu1.make.com/VOTRE_URL_ICI';
+</script>
+```
+
+### Payload JSON envoyé par le formulaire
 
 ```json
 {
+  "fonctionnalites": "Logiciel installé sur mon ordinateur, Intégration Claude / ChatGPT — Autre : Export SharePoint",
   "choices": [
     "Logiciel installé sur mon ordinateur",
-    "Intégration Claude / ChatGPT"
+    "Intégration Claude / ChatGPT",
+    "Autre"
   ],
   "email": "client@exemple.fr",
-  "date": "2026-05-27",
   "source": "https://www.agilotext.com/agiloshield/sondage",
-  "autre": ""
+  "autre": "Export SharePoint"
 }
 ```
 
-Si « Autre » est coché avec du texte, `autre` contient la précision ; `choices` inclut aussi la valeur `Autre`.
+`fonctionnalites` est la chaîne enregistrée dans Airtable (champ texte). `choices` reste disponible pour évolutions Make.
 
 ---
 
