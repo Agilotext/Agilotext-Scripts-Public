@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.8-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.9-prod1';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -2627,6 +2627,16 @@
     }
   }
 
+  function clearAnon2FreeUsageCounter() {
+    storage.remove('agilo:anon2_free_usage');
+  }
+
+  function promoteAgiloshieldEdition() {
+    state.edition = 'agiloshield';
+    storage.set('agilo:edition', 'agiloshield');
+    clearAnon2FreeUsageCounter();
+  }
+
   async function detectEdition() {
     const ms = window.$memberstackDom;
     if (ms && typeof ms.getCurrentMember === 'function') {
@@ -2640,17 +2650,17 @@
           const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
           if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) {
             state.transcriptionEdition = 'ent';
-            if (hasMemberstackAnonProPlan(plans, hasPlan)) return 'agiloshield';
-            return 'ent';
+            if (hasMemberstackAnonProPlan(plans, hasPlan)) return { edition: 'agiloshield', memberstackResolved: true };
+            return { edition: 'ent', memberstackResolved: true };
           }
           if (hasPlan('pln_business')) state.transcriptionEdition = 'ent';
           else if (hasPlan('pln_pro')) state.transcriptionEdition = 'pro';
           else if (hasPlan('pln_free')) state.transcriptionEdition = 'free';
           else state.transcriptionEdition = 'free';
-          if (hasMemberstackAnonProPlan(plans, hasPlan)) return 'agiloshield';
-          if (hasPlan('pln_business')) return 'ent';
-          if (hasPlan('pln_pro')) return 'pro';
-          if (hasPlan('pln_free')) return 'free';
+          if (hasMemberstackAnonProPlan(plans, hasPlan)) return { edition: 'agiloshield', memberstackResolved: true };
+          if (hasPlan('pln_business')) return { edition: 'ent', memberstackResolved: true };
+          if (hasPlan('pln_pro')) return { edition: 'pro', memberstackResolved: true };
+          if (hasPlan('pln_free')) return { edition: 'free', memberstackResolved: true };
         }
       } catch (e) { console.warn('detectEdition error', e); }
     }
@@ -2659,14 +2669,29 @@
     if (fromQuery) {
       const n = fromQuery.toLowerCase();
       if (['free', 'pro', 'ent', 'business'].includes(n)) {
-        return n === 'business' ? 'ent' : normalizeEdition(n);
+        return { edition: n === 'business' ? 'ent' : normalizeEdition(n), memberstackResolved: false };
       }
     }
     const stored = storage.get('agilo:edition');
-    if (stored) return normalizeEdition(stored);
-    if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) return 'ent';
-    if (window.location.pathname.includes('/pro/')) return 'pro';
-    return 'free';
+    if (stored) return { edition: normalizeEdition(stored), memberstackResolved: false };
+    if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) {
+      return { edition: 'ent', memberstackResolved: false };
+    }
+    if (window.location.pathname.includes('/pro/')) return { edition: 'pro', memberstackResolved: false };
+    return { edition: 'free', memberstackResolved: false };
+  }
+
+  async function refreshAgiloshieldEditionBeforeQuotaGate() {
+    if (hasAgiloshieldPaidEdition()) return;
+    const detected = await detectEdition();
+    const edition = normalizeEdition(detected.edition);
+    if (edition === 'agiloshield') {
+      promoteAgiloshieldEdition();
+      return;
+    }
+    if (!detected.memberstackResolved && storage.get('agilo:edition') === 'agiloshield') {
+      promoteAgiloshieldEdition();
+    }
   }
 
   async function getMemberstackEmail() {
@@ -3163,7 +3188,10 @@
     event.preventDefault();
     if (state.activeTab !== 'file' || state.processing || state.files.length === 0) return;
     
-    // Freemium limits via local storage
+    // Freemium limits via local storage (skip for Agiloshield Classic / TRIALING)
+    if (!hasAgiloshieldPaidEdition() && state.email) {
+      await refreshAgiloshieldEditionBeforeQuotaGate();
+    }
     if (!hasAgiloshieldPaidEdition()) {
       let count = parseInt(storage.get('agilo:anon2_free_usage') || '0', 10);
       if (count + state.files.length > 3) {
@@ -4037,7 +4065,9 @@
     clearStaleAuthCacheIfNeeded(memberEmail);
     state.email = memberEmail;
     if (memberEmail) syncHiddenMemberEmail(memberEmail);
-    state.edition = normalizeEdition(await detectEdition());
+    const editionDetected = await detectEdition();
+    state.edition = normalizeEdition(editionDetected.edition);
+    if (state.edition === 'agiloshield') clearAnon2FreeUsageCounter();
     if (!state.transcriptionEdition) state.transcriptionEdition = 'free';
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
     if (editionFromUrl) {
@@ -4046,14 +4076,19 @@
         state.edition = n === 'business' ? 'ent' : normalizeEdition(n);
       }
     }
-    
+
     const cachedEdition = storage.get('agilo:edition');
     if (cachedEdition === 'agiloshield' && state.edition !== 'agiloshield') {
-      storage.set('agilo:edition', state.edition);
+      if (editionDetected.memberstackResolved) {
+        storage.set('agilo:edition', state.edition);
+      } else {
+        state.edition = 'agiloshield';
+        clearAnon2FreeUsageCounter();
+      }
     }
-    
+
     if (state.edition === 'agiloshield') {
-      // Trust detectEdition or cachedEdition, they already checked Memberstack
+      clearAnon2FreeUsageCounter();
     } else {
       state.edition = normalizeEdition(state.edition);
     }
