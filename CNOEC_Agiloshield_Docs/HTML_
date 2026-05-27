@@ -41,18 +41,14 @@
     cursor: not-allowed;
     opacity: 0.75;
   }
-  .agf-ai-notice {
-    margin: 0 0 var(--space-2, 1rem);
-    padding: 0.875rem 1rem;
-    border-radius: 0.625rem;
-    border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 22%, transparent);
-    background: color-mix(in srgb, var(--agilo-primary, #174a96) 6%, #f5f8fc);
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: var(--agilo-text);
-  }
-  .agf-ai-notice p {
-    margin: 0;
+  .agf-ai-hint {
+    margin: 0.35rem auto 0;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    color: color-mix(in srgb, var(--agilo-text) 52%, transparent);
+    text-align: center !important;
+    max-width: 34rem;
+    display: block;
   }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@68a0bb4a27733442328d834f7e0a1189c780946d/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css">
@@ -64,11 +60,8 @@
     <header class="agf-head">
       <h2>Anonymisation documentaire</h2>
       <p>Traitement sécurisé de fichiers Office et PDF.</p>
+      <p class="agf-ai-hint" role="note">Traitement par notre IA locale. Pensez à relire le résultat.</p>
     </header>
-
-    <aside class="agf-ai-notice" role="note" aria-label="Avertissement sur l'utilisation de l'IA">
-      <p>AgiloShield utilise l'IA, qui peut produire des erreurs. Vérifiez les informations anonymisées avant de les utiliser.</p>
-    </aside>
 
     <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
       <button id="agfTab-file" class="agf-tab" type="button" role="tab" aria-selected="true" tabindex="0" aria-controls="agfPanel-file" data-tab="file">
