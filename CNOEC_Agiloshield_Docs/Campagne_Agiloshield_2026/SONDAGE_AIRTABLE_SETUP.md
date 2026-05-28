@@ -171,7 +171,7 @@ Une fois les champs `Email`, `Date_reponse`, etc. créés, enregistrement de tes
 
 ---
 
-## 5. Intégration Webflow
+## 6. Intégration Webflow
 
 1. Page dédiée (ex. `/agiloshield/sondage`) avec header/footer Webflow habituels.
 2. Section → Container → **Custom Code** : coller tout le contenu de `sondage-fonctionnalites-embed.html`.
@@ -181,6 +181,6 @@ Une fois les champs `Email`, `Date_reponse`, etc. créés, enregistrement de tes
 
 ---
 
-## 6. Lien campagne email
+## 7. Lien campagne email
 
 Dans les templates `SEGMENT_A`, `SEGMENT_B`, `SEGMENT_C`, ajouter un CTA vers la page sondage une fois publiée.
