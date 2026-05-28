@@ -133,21 +133,15 @@ Dans les **paramètres de page** ou un embed **avant** le sondage :
 
 `fonctionnalites` est la chaîne enregistrée dans Airtable (champ texte). `choices` reste disponible pour évolutions Make.
 
+### Anti-votes multiples (navigateur)
+
+Le formulaire enregistre `agilo:sondage_agiloshield_2026` dans **localStorage** après un envoi réussi. Au retour sur la page, le formulaire est bloqué et un message « Vous avez déjà participé » s’affiche.
+
+**Limite :** contournable en navigation privée ou autre navigateur (pas de sécurité serveur). Pour un durcissement, dédupliquer par `email` dans Make/Airtable si l’email est renseigné.
+
 ---
 
-## 4. Anti double-vote (navigateur)
-
-Le formulaire Webflow enregistre une participation **une fois par navigateur** via :
-
-- `localStorage` (`agilo:sondage_agiloshield_2026`)
-- `sessionStorage` (même clé, session en cours)
-- cookie `agilo_snd_2026` (1 an, path `/`)
-
-Si la personne revient sur la page : message **« Vous avez déjà participé »** (formulaire masqué).
-
-**Limites (honnêtes) :** navigation privée, autre navigateur, autre appareil ou suppression des données = nouveau vote possible. Pour bloquer les doublons par **email**, ajouter dans Make un module **Airtable → Search records** sur `Email` avant Create (si email renseigné).
-
-## 5. Test de bout en bout
+## 4. Test de bout en bout
 
 1. Compléter le schéma Airtable (section 1).
 2. Activer le scénario Make et coller l’URL dans l’embed Webflow.
@@ -171,7 +165,7 @@ Une fois les champs `Email`, `Date_reponse`, etc. créés, enregistrement de tes
 
 ---
 
-## 6. Intégration Webflow
+## 5. Intégration Webflow
 
 1. Page dédiée (ex. `/agiloshield/sondage`) avec header/footer Webflow habituels.
 2. Section → Container → **Custom Code** : coller tout le contenu de `sondage-fonctionnalites-embed.html`.
@@ -181,6 +175,6 @@ Une fois les champs `Email`, `Date_reponse`, etc. créés, enregistrement de tes
 
 ---
 
-## 7. Lien campagne email
+## 6. Lien campagne email
 
 Dans les templates `SEGMENT_A`, `SEGMENT_B`, `SEGMENT_C`, ajouter un CTA vers la page sondage une fois publiée.

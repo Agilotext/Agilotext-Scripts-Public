@@ -280,8 +280,7 @@
     display: none;
   }
 
-  #agilo-sondage .snd-success,
-  #agilo-sondage .snd-already {
+  #agilo-sondage .snd-success {
     display: none;
     flex-direction: column;
     align-items: center;
@@ -290,8 +289,7 @@
     padding: var(--space-2) 0;
   }
 
-  #agilo-sondage .snd-success.is-visible,
-  #agilo-sondage .snd-already.is-visible {
+  #agilo-sondage .snd-success.is-visible {
     display: flex;
   }
 
@@ -419,14 +417,8 @@
 
     <div class="snd-success" id="sndSuccess" aria-live="polite">
       <div class="snd-success-icon" aria-hidden="true">✓</div>
-      <h3>Merci pour votre retour</h3>
-      <p>Vos préférences ont bien été enregistrées. Elles guident les prochaines évolutions d'Agiloshield.</p>
-    </div>
-
-    <div class="snd-already" id="sndAlready" aria-live="polite">
-      <div class="snd-success-icon" aria-hidden="true">✓</div>
-      <h3>Vous avez déjà participé</h3>
-      <p>Une réponse a déjà été enregistrée depuis ce navigateur. Merci — une participation par appareil pour des résultats fiables.</p>
+      <h3 id="sndSuccessTitle">Merci pour votre retour</h3>
+      <p id="sndSuccessText">Vos préférences ont bien été enregistrées. Elles guident les prochaines évolutions d'Agiloshield.</p>
     </div>
   </div>
 </div>
@@ -435,15 +427,14 @@
 (function () {
   'use strict';
 
-  // ── Make FORMULAIRE_AGILOSHIELD (hook 3121074, zone eu1) ─────────────────
-  // Copier l’URL depuis Make > Webhooks > FORMULAIRE_AGILOSHIELD, ou définir :
-  // window.__AGILO_SONDAGE_WEBHOOK__ = 'https://hook.eu1.make.com/…' avant ce script
-  var WEBHOOK_URL = window.__AGILO_SONDAGE_WEBHOOK__ || '';
-  var VOTE_STORAGE_KEY = 'agilo:sondage_agiloshield_2026';
-  var VOTE_COOKIE_NAME = 'agilo_snd_2026';
-  var VOTE_COOKIE_MAX_AGE = 365 * 24 * 60 * 60;
+  // ── Make FORMULAIRE_AGILOSHIELD (zone eu1) ────────────────────────────────
+  var WEBHOOK_URL = window.__AGILO_SONDAGE_WEBHOOK__
+    || 'https://hook.eu1.make.com/qw9tb3edi5sj33m60hcyg8qfinnqx7ws';
 
-  // Libellés Airtable (Multiple select) — doivent correspondre à SONDAGE_AIRTABLE_SETUP.md
+  /** Une participation par navigateur (localStorage). Contournable en navigation privée. */
+  var VOTE_STORAGE_KEY = 'agilo:sondage_agiloshield_2026';
+
+  // Libellés Airtable — doivent correspondre à SONDAGE_AIRTABLE_SETUP.md
   var FEATURE_MAP = {
     local: 'Logiciel installé sur mon ordinateur',
     mcp: 'Intégration Claude / ChatGPT',
@@ -456,64 +447,71 @@
 
   var form = document.getElementById('sndForm');
   var success = document.getElementById('sndSuccess');
-  var already = document.getElementById('sndAlready');
   var submitBtn = document.getElementById('sndSubmit');
   var errorBox = document.getElementById('sndError');
   var otherWrap = document.getElementById('sndOtherWrap');
   var otherInput = document.getElementById('sndOtherInput');
   var options = document.querySelectorAll('#sndOptions .snd-option');
-  var isSubmitting = false;
+  var successTitle = document.getElementById('sndSuccessTitle');
+  var successText = document.getElementById('sndSuccessText');
 
-  function readVoteRecord() {
+  function readVoteLock() {
     try {
       var raw = localStorage.getItem(VOTE_STORAGE_KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* ignore */ }
-    try {
-      var sessionRaw = sessionStorage.getItem(VOTE_STORAGE_KEY);
-      if (sessionRaw) return JSON.parse(sessionRaw);
-    } catch (e2) { /* ignore */ }
-    if (document.cookie.indexOf(VOTE_COOKIE_NAME + '=1') !== -1) {
-      return { v: 1, via: 'cookie' };
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return { voted: true };
     }
-    return null;
   }
 
   function hasAlreadyVoted() {
-    return !!readVoteRecord();
+    var lock = readVoteLock();
+    return !!(lock && lock.voted);
   }
 
-  function markAsVoted(meta) {
-    var record = {
-      v: 1,
-      at: new Date().toISOString(),
-      email: (meta && meta.email) ? String(meta.email).toLowerCase() : ''
-    };
+  function markAsVoted() {
     try {
-      localStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify(record));
-    } catch (e) { /* ignore */ }
-    try {
-      sessionStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify(record));
-    } catch (e2) { /* ignore */ }
-    try {
-      document.cookie = VOTE_COOKIE_NAME + '=1; max-age=' + VOTE_COOKIE_MAX_AGE + '; path=/; SameSite=Lax';
-    } catch (e3) { /* ignore */ }
+      localStorage.setItem(VOTE_STORAGE_KEY, JSON.stringify({
+        voted: true,
+        at: new Date().toISOString()
+      }));
+    } catch (e) { /* quota privée / mode restreint */ }
   }
 
-  function showThankYou() {
-    if (form) form.classList.add('is-hidden');
-    if (already) already.classList.remove('is-visible');
-    if (success) success.classList.add('is-visible');
+  function showSuccessState(alreadyParticipated) {
+    form.classList.add('is-hidden');
+    success.classList.add('is-visible');
+    if (successTitle) {
+      successTitle.textContent = alreadyParticipated
+        ? 'Vous avez déjà participé'
+        : 'Merci pour votre retour';
+    }
+    if (successText) {
+      successText.textContent = alreadyParticipated
+        ? 'Une réponse a déjà été enregistrée depuis ce navigateur. Merci pour votre contribution à la roadmap Agiloshield.'
+        : 'Vos préférences ont bien été enregistrées. Elles guident les prochaines évolutions d\'Agiloshield.';
+    }
   }
 
-  function showAlreadyParticipated() {
-    if (form) form.classList.add('is-hidden');
-    if (success) success.classList.remove('is-visible');
-    if (already) already.classList.add('is-visible');
+  function lockFormUi() {
+    submitBtn.disabled = true;
+    options.forEach(function (opt) {
+      var cb = opt.querySelector('input[type="checkbox"]');
+      if (cb) {
+        cb.disabled = true;
+        opt.style.pointerEvents = 'none';
+        opt.style.opacity = '0.65';
+      }
+    });
+    var emailInput = document.getElementById('sndEmail');
+    if (emailInput) emailInput.disabled = true;
+    if (otherInput) otherInput.disabled = true;
   }
 
   if (hasAlreadyVoted()) {
-    showAlreadyParticipated();
+    lockFormUi();
+    showSuccessState(true);
   }
 
   function syncOptionState(opt) {
@@ -578,11 +576,10 @@
     hideError();
 
     if (hasAlreadyVoted()) {
-      showAlreadyParticipated();
+      lockFormUi();
+      showSuccessState(true);
       return;
     }
-
-    if (isSubmitting) return;
 
     var choices = collectChoices();
     if (!choices.length) {
@@ -611,7 +608,6 @@
       autre: autreText
     };
 
-    isSubmitting = true;
     submitBtn.disabled = true;
     submitBtn.textContent = 'Envoi en cours…';
 
@@ -623,14 +619,13 @@
       if (!res.ok) {
         throw new Error('HTTP ' + res.status);
       }
-      markAsVoted({ email: payload.email });
-      showThankYou();
+      markAsVoted();
+      lockFormUi();
+      showSuccessState(false);
     }).catch(function () {
       showError('L\'envoi a échoué. Réessayez dans un instant ou contactez support@agilotext.com.');
       submitBtn.disabled = false;
       submitBtn.textContent = 'Envoyer mes préférences';
-    }).finally(function () {
-      isSubmitting = false;
     });
   });
 })();
