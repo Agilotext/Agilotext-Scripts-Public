@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agiloshield — Skill Claude (guide Fabienne)</title>
+  <style>
+    :root {
+      --navy: #0f2744;
+      --blue: #2563eb;
+      --text: #1e293b;
+      --muted: #64748b;
+      --bg: #f8fafc;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.55;
+      padding: 2rem 1rem 3rem;
+    }
+    .page {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem 2.25rem;
+    }
+    header { border-bottom: 2px solid var(--navy); padding-bottom: 1rem; margin-bottom: 1.5rem; }
+    h1 { font-size: 1.5rem; color: var(--navy); margin-bottom: 0.25rem; }
+    .subtitle { color: var(--muted); font-size: 0.95rem; }
+    h2 { font-size: 1.05rem; color: var(--navy); margin: 1.5rem 0 0.75rem; }
+    p, li { font-size: 0.95rem; margin-bottom: 0.5rem; }
+    ul, ol { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .steps { counter-reset: step; list-style: none; padding: 0; }
+    .steps li {
+      counter-increment: step;
+      padding: 0.75rem 0 0.75rem 2.5rem;
+      position: relative;
+      border-bottom: 1px solid var(--border);
+    }
+    .steps li:last-child { border-bottom: none; }
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0.75rem;
+      width: 1.6rem;
+      height: 1.6rem;
+      background: var(--blue);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    code, .path {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 0.85rem;
+      background: #f1f5f9;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+    .note {
+      background: #eff6ff;
+      border-left: 4px solid var(--blue);
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    .warn {
+      background: #fef3c7;
+      border-left: 4px solid #d97706;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+      font-size: 0.9rem;
+    }
+    footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Agiloshield dans Claude</h1>
+      <p class="subtitle">Pseudonymisez vos bilans automatiquement avant analyse — profil M&amp;A</p>
+    </header>
+
+    <p>Ce guide installe le <strong>skill Agiloshield</strong> dans Claude Desktop. Quand vous mentionnez un bilan, Claude le pseudonymise d'abord : noms et sociétés masqués, dates et chiffres conservés.</p>
+
+    <div class="note">
+      <strong>Prérequis :</strong> Claude Desktop (Mac ou Windows), Python 3.8+ installé, fichier <code>.skill</code> fourni par Agilotext.
+    </div>
+
+    <h2>Installation (5 minutes)</h2>
+    <ol class="steps">
+      <li>Ouvrez <strong>Claude Desktop</strong> → <strong>Settings</strong> (Paramètres) → <strong>Capabilities</strong> → <strong>Skills</strong>.</li>
+      <li>Cliquez <strong>Upload skill</strong> et sélectionnez le fichier <code>agiloshield-ma-….skill</code> reçu par email.</li>
+      <li>Redémarrez Claude Desktop si demandé.</li>
+      <li>Vérifiez que le skill <strong>agiloshield-anonymizer</strong> apparaît dans la liste.</li>
+    </ol>
+
+    <h2>Utilisation</h2>
+    <p>Dans une conversation Claude, mentionnez simplement votre document :</p>
+    <p><em>« Analyse mon bilan : /Users/moi/Documents/bilan-societe-x.pdf »</em></p>
+    <p>Claude va :</p>
+    <ul>
+      <li>pseudonymiser le fichier via Agiloshield (25–80 s),</li>
+      <li>analyser uniquement la version safe (sans noms ni SIREN),</li>
+      <li>conserver dates, CA, EBE et montants pour l'analyse financière.</li>
+    </ul>
+
+    <h2>Fichiers produits</h2>
+    <p>À côté de votre document, un dossier <code>.agiloshield/</code> :</p>
+    <ul>
+      <li><code>outputs/*.pseudonymized.pdf</code> — version à utiliser avec Claude</li>
+      <li><code>keys/*.properties</code> — clé de restauration (ne jamais partager)</li>
+    </ul>
+
+    <div class="warn">
+      <strong>Important :</strong> en avril vous aviez testé l'<em>anonymisation complète</em> sur agiloshield.com (dates et CA supprimés). Ce skill utilise la <strong>pseudonymisation M&amp;A</strong> : identité masquée, chiffres intacts.
+    </div>
+
+    <h2>Restaurer l'original</h2>
+    <p>Demandez à Claude : <em>« Restaure mon bilan avec la clé .properties »</em> — ou utilisez agiloshield.com si besoin.</p>
+
+    <h2>Support</h2>
+    <p>Florian Bauer — Agilotext · <a href="mailto:contact@agilotext.com">contact@agilotext.com</a></p>
+
+    <footer>
+      Agiloshield par Agilotext — Hébergement France · Conforme RGPD · v1.0 skill M&amp;A
+    </footer>
+  </div>
+</body>
+</html>
