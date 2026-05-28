@@ -135,7 +135,19 @@ Dans les **paramètres de page** ou un embed **avant** le sondage :
 
 ---
 
-## 4. Test de bout en bout
+## 4. Anti double-vote (navigateur)
+
+Le formulaire Webflow enregistre une participation **une fois par navigateur** via :
+
+- `localStorage` (`agilo:sondage_agiloshield_2026`)
+- `sessionStorage` (même clé, session en cours)
+- cookie `agilo_snd_2026` (1 an, path `/`)
+
+Si la personne revient sur la page : message **« Vous avez déjà participé »** (formulaire masqué).
+
+**Limites (honnêtes) :** navigation privée, autre navigateur, autre appareil ou suppression des données = nouveau vote possible. Pour bloquer les doublons par **email**, ajouter dans Make un module **Airtable → Search records** sur `Email` avant Create (si email renseigné).
+
+## 5. Test de bout en bout
 
 1. Compléter le schéma Airtable (section 1).
 2. Activer le scénario Make et coller l’URL dans l’embed Webflow.
