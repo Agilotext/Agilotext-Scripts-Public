@@ -108,9 +108,36 @@ def encode_multipart(
     return body, f"multipart/form-data; boundary={boundary}"
 
 
+def uses_get_token() -> bool:
+    return bool(getattr(config, "USE_GET_TOKEN", False))
+
+
 class AgiloshieldClient:
     def __init__(self) -> None:
         self._token: str | None = None
+
+    def fetch_get_token(self) -> str:
+        edition = getattr(config, "EDITION", "ent")
+        query = urllib.parse.urlencode(
+            {"username": config.USERNAME, "edition": edition}
+        )
+        req = urllib.request.Request(
+            api_url("/getToken") + "?" + query,
+            headers={"User-Agent": "Python-urllib/3.12"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            die(f"HTTP {exc.code} getToken: {exc.read().decode('utf-8', errors='replace')}")
+        except urllib.error.URLError as exc:
+            die(f"Réseau getToken: {exc.reason}")
+
+        if data.get("status") != "OK" or not data.get("token"):
+            die(f"getToken échoué: {data}")
+
+        return str(data["token"])
 
     def ensure_token(self) -> str:
         auto_token = getattr(config, "AUTOMATION_TOKEN", "") or ""
@@ -120,6 +147,10 @@ class AgiloshieldClient:
         if self._token:
             return self._token
 
+        if uses_get_token():
+            self._token = self.fetch_get_token()
+            return self._token
+
         token = getattr(config, "TOKEN", "") or ""
         if token.strip():
             self._token = token.strip()
@@ -127,7 +158,9 @@ class AgiloshieldClient:
 
         password = getattr(config, "PASSWORD", "") or ""
         if not password.strip():
-            die("AUTOMATION_TOKEN, TOKEN ou PASSWORD requis dans config.py")
+            die(
+                "Auth manquante dans config.py — USE_GET_TOKEN, AUTOMATION_TOKEN, TOKEN ou PASSWORD requis"
+            )
 
         body = urllib.parse.urlencode(
             {
@@ -486,6 +519,14 @@ def cmd_restore(args: argparse.Namespace) -> None:
 
 
 def cmd_settings(_: argparse.Namespace) -> None:
+    auth_method = "getToken"
+    if getattr(config, "AUTOMATION_TOKEN", ""):
+        auth_method = "automationToken"
+    elif not uses_get_token() and getattr(config, "PASSWORD", ""):
+        auth_method = "getAuthToken"
+    elif not uses_get_token() and getattr(config, "TOKEN", ""):
+        auth_method = "staticToken"
+
     emit(
         {
             "api_base": config.API_BASE,
@@ -494,6 +535,8 @@ def cmd_settings(_: argparse.Namespace) -> None:
             "profile": getattr(config, "PROFILE", "ma"),
             "entity_types": resolve_entity_types(),
             "mode": getattr(config, "MODE", "pseudonymize"),
+            "auth_method": auth_method,
+            "use_get_token": uses_get_token(),
             "has_token": bool(getattr(config, "TOKEN", "")),
             "has_password": bool(getattr(config, "PASSWORD", "")),
         }

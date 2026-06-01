@@ -27,6 +27,7 @@ def render_config(
     password: str,
     token: str,
     automation_token: str,
+    use_get_token: bool,
     edition: str,
     profile: str,
     entity_types: list[str] | None,
@@ -44,6 +45,7 @@ def render_config(
 API_BASE = "https://api.agilotext.com/api/v1"
 
 USERNAME = {username!r}
+USE_GET_TOKEN = {str(use_get_token)}
 AUTOMATION_TOKEN = {automation_line}
 TOKEN = {token_line}
 PASSWORD = {password_line}
@@ -65,6 +67,7 @@ def build_skill_zip(
     password: str,
     token: str,
     automation_token: str,
+    use_get_token: bool,
     edition: str,
     profile: str,
     entity_types: list[str] | None,
@@ -82,7 +85,15 @@ def build_skill_zip(
     shutil.copytree(SKILL_SRC, staging / SKILL_ZIP_PREFIX, dirs_exist_ok=True)
 
     config_content = render_config(
-        username, password, token, automation_token, edition, profile, entity_types, mode
+        username,
+        password,
+        token,
+        automation_token,
+        use_get_token,
+        edition,
+        profile,
+        entity_types,
+        mode,
     )
     (staging / SKILL_ZIP_PREFIX / "scripts" / "config.py").write_text(
         config_content, encoding="utf-8"
@@ -111,6 +122,11 @@ def main() -> None:
         default="",
         help="Clé automation auto_xxx (recommandé — Mon compte → Intégrations)",
     )
+    parser.add_argument(
+        "--get-token",
+        action="store_true",
+        help="Auth via GET /getToken headless (compte whitelisté backend)",
+    )
     parser.add_argument("--edition", default="ent", choices=["free", "pro", "ent"])
     parser.add_argument(
         "--profile",
@@ -135,8 +151,13 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if not args.token and not args.password and not args.automation_token:
-        raise SystemExit("Fournir --automation-token, --token ou --password")
+    if (
+        not args.get_token
+        and not args.token
+        and not args.password
+        and not args.automation_token
+    ):
+        raise SystemExit("Fournir --get-token, --automation-token, --token ou --password")
 
     entity_types = None
     if args.types.strip():
@@ -152,6 +173,7 @@ def main() -> None:
         args.password,
         args.token,
         args.automation_token,
+        args.get_token,
         args.edition,
         args.profile,
         entity_types,

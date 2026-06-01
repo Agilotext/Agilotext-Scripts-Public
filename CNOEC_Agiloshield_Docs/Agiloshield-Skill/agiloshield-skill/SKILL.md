@@ -25,12 +25,24 @@ Le script est préconfiguré (identifiants + profil M&A) ; ne passez pas d'auth 
 
 ### Localiser le script
 
-`<skill-dir>/scripts/agiloshield.py` où `<skill-dir>` contient ce SKILL.md. Sur Claude Desktop / Claude Code, cherchez `agiloshield-skill/SKILL.md` sous le répertoire skills de l'utilisateur.
+`<skill-dir>/scripts/agiloshield.py` où `<skill-dir>` contient ce SKILL.md. Sur Claude Desktop / Claude Code / **Claude Co-work**, cherchez `agiloshield-skill/SKILL.md` sous le répertoire skills de l'utilisateur.
+
+### Claude Co-work — configuration une fois
+
+**Ordre obligatoire :** réseau → module → nouvelle conversation.
+
+1. **Settings → Capabilities** : activer *Code execution and file creation*, puis *Allow network egress*, et ajouter le domaine **`api.agilotext.com`** dans *Additional allowed domains*.
+2. **Settings → Customize** (pas Capabilities) : uploader le fichier `.skill` fourni par Agilotext.
+3. **Nouvelle conversation** après l'upload (pour charger le module).
+
+L'utilisateur doit envoyer un **message règles** en tête de chat (pseudonymiser avant toute lecture) — voir guide client.
+
+Sans whitelist réseau, les appels Anon2 échouent même si le skill est chargé.
 
 ## Profil M&A (défaut)
 
-- **Masque** : noms, sociétés, adresses, SIREN / identifiants (PER, ORG, ADR, IDN)
-- **Conserve** : dates, montants financiers, structure du bilan
+- **Masque** : 11 types sensibles typiques bilans M&A (PER, ORG, ADR, IDN, EML, TEL, IBA, LOC, JOB, PRO, PII) — voir `config.py` du client
+- **Conserve** : dates (DAT), montants financiers, structure du bilan
 - **Mode** : pseudonymisation réversible (tokens `<PER_AA>`, `<ORG_AB>`, etc.)
 
 ## Workflow standard
