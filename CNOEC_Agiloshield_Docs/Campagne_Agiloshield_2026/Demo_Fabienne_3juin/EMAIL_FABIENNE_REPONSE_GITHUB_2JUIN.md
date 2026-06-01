@@ -1,33 +1,35 @@
-# Réponse Fabienne — dépôt GitHub privé (2 juin 2026, ~minuit)
+# Réponse Fabienne — fichiers sur GitHub (2 juin 2026)
 
 **À :** f.hanras@eurallia.fr  
-**Objet :** Re : Alerte Mailinblack — fichiers sur dépôt privé GitHub
+**Objet :** Re : Alerte Mailinblack — vos fichiers Agiloshield (lien de téléchargement)
 
-**Pièces jointes :** aucune (lien GitHub dans le corps)
+**Pièces jointes :** aucune (liens GitHub dans le corps)
 
 ---
 
 Bonsoir Fabienne,
 
-Pas de souci — Mailinblack a bloqué les pièces jointes, c'est exactement pour ça qu'on change de canal.
+Pas de souci — Mailinblack a bloqué les pièces jointes, c'est pour ça qu'on passe par un lien direct.
 
-**Oui, les deux fichiers sont sur un dépôt GitHub privé**, réservé à vous :
+**Vos deux fichiers sont en ligne ici** (dossier Agilotext sur GitHub — pas besoin de compte, pas d'invitation) :
 
-**https://github.com/Agilotext/agiloshield-kit-f-hanras-202606**
+**https://github.com/Agilotext/Agilotext-Scripts-Public/tree/1.09/CNOEC_Agiloshield_Docs/Campagne_Agiloshield_2026/Demo_Fabienne_3juin**
 
-Vous allez recevoir d'ici quelques minutes un **mail d'invitation GitHub** sur **f.hanras@eurallia.fr** (vérifiez les spams). Il suffit de :
+À télécharger :
 
-1. **Accepter l'invitation** (compte GitHub gratuit — vous pouvez vous inscrire avec votre email pro en 1 minute si besoin)
-2. Ouvrir le lien ci-dessus
-3. **Télécharger** les 2 fichiers :
-   - `GUIDE_FABIENNE_CLAUDE_COWORK.pdf` — le mode d'emploi
-   - `agiloshield-ma-f-hanras-20260601.skill` — le module à importer dans Claude Co-work
+1. **`GUIDE_FABIENNE_CLAUDE_COWORK.pdf`** — le mode d'emploi complet  
+   → https://github.com/Agilotext/Agilotext-Scripts-Public/raw/1.09/CNOEC_Agiloshield_Docs/Campagne_Agiloshield_2026/Demo_Fabienne_3juin/GUIDE_FABIENNE_CLAUDE_COWORK.pdf
 
-Le dépôt est **privé** : personne d'autre ne peut y accéder.
+2. **`agiloshield-ma-f-hanras-20260601.skill`** — le module à importer dans Claude Co-work  
+   → https://github.com/Agilotext/Agilotext-Scripts-Public/raw/1.09/CNOEC_Agiloshield_Docs/Campagne_Agiloshield_2026/Demo_Fabienne_3juin/agiloshield-ma-f-hanras-20260601.skill
 
-**Rappel rapide pour le `.skill` :** ce n'est pas un virus ni un programme à installer — c'est un fichier de configuration pour Claude (comme Marvin Systems pour d'autres clients). Import : **Settings → Customize** dans Claude Co-work, comme détaillé dans le PDF.
+*(Sur la page GitHub : cliquer sur le nom du fichier, puis le bouton **Download** — ou utiliser les liens ci-dessus.)*
 
-Si GitHub vous semble compliqué ou si l'invitation ne arrive pas, répondez-moi demain matin et on fait **10 minutes au téléphone** — je vous guide pas à pas, ou on trouve un autre lien (Drive).
+**Le `.skill` n'est pas un virus** : c'est un fichier de configuration pour Claude Co-work (comme Marvin Systems chez d'autres éditeurs). Import : **Settings → Customize**, comme détaillé dans le PDF. Mailinblack réagit parfois à ce type de fichier — d'où le blocage du mail, pas d'où un vrai problème de sécurité.
+
+Si le téléchargement coince ou si vous préférez qu'on le fasse ensemble, répondez-moi demain matin — **10 minutes au téléphone** suffisent :
+
+https://calendly.com/florian-bauer-agilotext/30min?month=2026-06
 
 Bonne nuit,  
 Florian Bauer  
