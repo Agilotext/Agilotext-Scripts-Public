@@ -93,7 +93,7 @@
     word-break: break-word;
   }
 </style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.4.14-prod1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e29122/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.4.14-prod2">
 
 <form id="agfForm" ms-code-anonymisation="form" novalidate>
   <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
