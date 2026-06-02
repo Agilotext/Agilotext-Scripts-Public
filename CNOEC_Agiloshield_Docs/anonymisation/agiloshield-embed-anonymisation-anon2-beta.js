@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.13-prod1';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.14-prod2';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -45,6 +45,9 @@
     restore: runtimeFeatureFlags.restore !== false && query.get('featureRestore') !== '0',
     inclusion: runtimeFeatureFlags.inclusion !== false && query.get('featureInclusion') !== '0'
   });
+  /** false en prod : le HTML/modal restent en place, seul l'affichage sidebar est coupé. */
+  const UI_SHOW_INCLUSION = false;
+  const SHOW_INCLUSION_UI = UI_SHOW_INCLUSION || query.get('featureInclusionUi') === '1';
   const ANON2_OPTION_ENDPOINTS = Object.freeze({
     defaults: Object.freeze({ get: ANON_OPTIONS_GET_DEFAULTS, set: ANON_OPTIONS_SET_DEFAULTS }),
     options: Object.freeze({ get: ANON_OPTIONS_GET, set: ANON_OPTIONS_SET })
@@ -241,6 +244,27 @@
 
   normalizeAnon2ProductionMarkup();
 
+  function syncInclusionUiVisibility() {
+    ['agfOpenInclusion', 'agfInclusionAvailabilityHint'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.classList.toggle('agf-ui-hidden', !SHOW_INCLUSION_UI);
+    });
+  }
+
+  function ensureBetaDisclaimer() {
+    if (document.querySelector('.agf-beta-disclaimer')) return;
+    const grid = document.querySelector('.agf-grid');
+    if (!grid || !grid.parentNode) return;
+    const note = document.createElement('p');
+    note.className = 'agf-beta-disclaimer';
+    note.setAttribute('role', 'note');
+    note.textContent = 'L\'IA peut faire des erreurs. Vérifiez les résultats.';
+    const hist = document.getElementById('agfAnonJobsWrap');
+    if (hist) grid.parentNode.insertBefore(note, hist);
+    else grid.insertAdjacentElement('afterend', note);
+  }
+
   function ensureRoadmapVoteCta() {
     if (document.getElementById('agfRoadmapVote')) return;
     const side = document.querySelector('.agf-side');
@@ -254,8 +278,8 @@
     link.title = '30 secondes pour prioriser la roadmap Agiloshield';
     link.innerHTML = '<span class="agf-roadmap-vote-icon" aria-hidden="true">☆</span><span>Voter pour la prochaine fonctionnalité</span>';
     wrap.appendChild(link);
-    const anchor = document.getElementById('agfInclusionAvailabilityHint');
-    const paramsGroup = anchor ? anchor.closest('.agf-group') : null;
+    const openTypes = document.getElementById('agfOpenTypes');
+    const paramsGroup = openTypes ? openTypes.closest('.agf-group') : null;
     const pseudoGroup = document.getElementById('agfPseudoSummary');
     const pseudoWrap = pseudoGroup ? pseudoGroup.closest('.agf-group') : null;
     if (paramsGroup && pseudoWrap) side.insertBefore(wrap, pseudoWrap);
@@ -267,27 +291,49 @@
     }
   }
 
+  function normalizeDropzoneMarkup() {
+    const panel = document.getElementById('agfPanel-file');
+    if (panel) {
+      const staleTitle = panel.querySelector(':scope > h3.agf-section-title');
+      if (staleTitle && staleTitle.textContent.trim().toLowerCase().indexOf('sélectionnez') !== -1) staleTitle.remove();
+    }
+    const dropzone = document.getElementById('agfDropzone');
+    if (!dropzone) return;
+    const h4 = dropzone.querySelector('h4');
+    if (h4) h4.remove();
+    const leadText = 'Cliquez ou glissez-déposez des fichiers — 12 documents max — 256 Mo max / fichier';
+    const metaText = 'PDF, Word, Excel, PowerPoint, CSV, TXT, JSON, FEC';
+    let lead = dropzone.querySelector('.agf-dropzone-lead');
+    let meta = dropzone.querySelector('.agf-dropzone-meta');
+    if (!lead) {
+      lead = document.createElement('p');
+      lead.className = 'agf-dropzone-lead';
+      dropzone.prepend(lead);
+    }
+    if (!meta) {
+      meta = document.createElement('p');
+      meta.className = 'agf-dropzone-meta';
+      dropzone.appendChild(meta);
+    }
+    lead.textContent = leadText;
+    meta.textContent = metaText;
+    dropzone.querySelectorAll('p:not(.agf-dropzone-lead):not(.agf-dropzone-meta)').forEach((node) => node.remove());
+  }
+
   function normalizeAnon2ProductionMarkup() {
     if (!document.getElementById('agfForm')) return;
     ensureRoadmapVoteCta();
+    ensureBetaDisclaimer();
+    syncInclusionUiVisibility();
     const headTitle = document.querySelector('.agf-head h2');
-    if (headTitle) headTitle.textContent = 'Anonymisation documentaire';
+    if (headTitle) headTitle.textContent = 'Anonymiser vos données avant usage';
     const headSub = document.querySelector('.agf-head p');
-    if (headSub) {
-      headSub.innerHTML = 'Traitement sécurisé de fichiers Office et PDF.<br><span class="agf-ai-hint" role="note">Traitement par notre IA locale. Pensez à relire le résultat.</span>';
-    }
+    if (headSub) headSub.remove();
 
     const fileTabSub = document.querySelector('#agfTab-file .agf-tab-content span');
     if (fileTabSub) fileTabSub.textContent = 'PDF, Word, Excel, PowerPoint, CSV';
 
-    const dropzone = document.getElementById('agfDropzone');
-    if (dropzone) {
-      const title = dropzone.querySelector('h4');
-      if (title) title.textContent = 'Cliquez ou glissez-déposez des fichiers';
-      const paragraphs = dropzone.querySelectorAll('p');
-      if (paragraphs[0]) paragraphs[0].textContent = '12 documents maximum — 256 Mo max / fichier.';
-      if (paragraphs[1]) paragraphs[1].textContent = 'Formats pris en charge : PDF, Word, Excel, PowerPoint, CSV, TXT, JSON et FEC.';
-    }
+    normalizeDropzoneMarkup();
 
     const pseudoModeButton = document.getElementById('agfPseudoMode');
     if (pseudoModeButton && pseudoModeButton.parentNode) {
@@ -312,8 +358,6 @@
     if (betaOverlay) betaOverlay.remove();
     const pseudoModal = document.getElementById('agfModalPseudoWrap');
     if (pseudoModal) pseudoModal.remove();
-    const inclusionHint = document.getElementById('agfInclusionAvailabilityHint');
-    if (inclusionHint) inclusionHint.textContent = 'Listes disponibles pour affiner les détections.';
 
     const grid = document.getElementById('agfTypeGrid');
     if (grid) {
@@ -3737,6 +3781,8 @@
       ui.saveInclusion.disabled = !inclusionEnabled;
       ui.saveInclusion.textContent = inclusionEnabled ? 'Enregistrer les listes' : 'Activation backend en attente';
     }
+
+    syncInclusionUiVisibility();
   }
 
   function shouldCallApiMeta() {

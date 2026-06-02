@@ -91,18 +91,27 @@
     display: grid;
     gap: var(--space-1);
     padding: 0;
+    text-align: center;
   }
 
   .agf-head h2 {
-    font-size: 1.35rem;
+    font-size: 1.5rem;
     line-height: 1.25;
     font-weight: 600;
     letter-spacing: -0.01em;
   }
 
-  .agf-head p {
-    color: var(--agilo-text-secondary);
-    font-size: 0.9375rem;
+  .agf-ui-hidden {
+    display: none !important;
+  }
+
+  .agf-beta-disclaimer {
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--agilo-text);
+    margin: var(--space-3) 0 0;
+    padding: 0 var(--space-2);
   }
 
   .agf-tabs {
@@ -298,15 +307,22 @@
   .agf-dropzone h4,
   .agf-dropzone p { pointer-events: none; }
   .agf-dropzone a { pointer-events: auto; }
-  .agf-dropzone h4 {
+  .agf-dropzone h4,
+  .agf-dropzone .agf-dropzone-lead {
     font-size: 1rem;
     font-weight: 600;
   }
 
-  .agf-dropzone p {
+  .agf-dropzone p,
+  .agf-dropzone .agf-dropzone-meta {
     margin-top: var(--space-1);
     font-size: 0.8125rem;
     color: var(--agilo-text-secondary);
+  }
+
+  .agf-dropzone .agf-dropzone-lead {
+    margin-top: 0;
+    color: var(--agilo-text);
   }
 
   .agf-dropzone .agf-formats-explicit {

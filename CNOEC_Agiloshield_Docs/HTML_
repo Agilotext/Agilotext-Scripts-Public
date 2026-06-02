@@ -46,13 +46,6 @@
     cursor: not-allowed;
     opacity: 0.75;
   }
-  .agf-head .agf-ai-hint {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 0.8125rem;
-    line-height: 1.35;
-    color: color-mix(in srgb, var(--agilo-text-secondary, #5c6570) 88%, transparent);
-  }
   .agf-roadmap-vote {
     display: flex;
     align-items: center;
@@ -100,15 +93,14 @@
     word-break: break-word;
   }
 </style>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@68a0bb4a27733442328d834f7e0a1189c780946d/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agiloshield-embed-styles-2026-02-22.css?v=2.4.14-prod1">
 
 <form id="agfForm" ms-code-anonymisation="form" novalidate>
   <input type="hidden" name="memberEmail" data-ms-member-email="" ms-code-member-email>
 
   <section class="agf-shell" aria-label="Anonymisation avancée">
     <header class="agf-head">
-      <h2>Anonymisation documentaire</h2>
-      <p>Traitement sécurisé de fichiers Office et PDF.<br><span class="agf-ai-hint" role="note">Traitement par notre IA locale. Pensez à relire le résultat.</span></p>
+      <h2>Anonymiser vos données avant usage</h2>
     </header>
 
     <div class="agf-tabs" role="tablist" aria-label="Modes de traitement">
@@ -129,11 +121,9 @@
     <div class="agf-grid">
       <div class="agf-main">
         <section id="agfPanel-file" class="agf-panel" role="tabpanel" aria-labelledby="agfTab-file" aria-hidden="false">
-          <h3 class="agf-section-title">Sélectionnez les fichiers</h3>
           <div id="agfDropzone" class="agf-dropzone" role="button" tabindex="0" aria-label="Zone de dépôt fichiers">
-            <h4>Cliquez ou glissez-déposez des fichiers</h4>
-            <p>12 documents maximum — 256 Mo max / fichier.</p>
-            <p class="agf-formats-explicit">Formats pris en charge : CSV, Word (doc, docx), PowerPoint (ppt, pptx), Excel (xls, xlsx), PDF, TXT, JSON et FEC.</p>
+            <p class="agf-dropzone-lead">Cliquez ou glissez-déposez des fichiers — 12 documents max — 256 Mo max / fichier</p>
+            <p class="agf-dropzone-meta">PDF, Word, Excel, PowerPoint, CSV, TXT, JSON, FEC</p>
           </div>
           <input id="agfFileInput" type="file" name="fileUpload[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.json,.fec,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/json">
 
@@ -230,6 +220,7 @@
             <span>Types de données</span>
             <span class="agf-chip-count" id="agfTypesCount">9</span>
           </button>
+          <!-- Inclusion / Exclusion : conservé pour le dev, masqué côté JS tant que le backend n'est pas prêt -->
           <button id="agfOpenInclusion" type="button" class="agf-item-btn"><span>Inclusion / Exclusion</span><span id="agfInclusionChip" class="agf-chip">0 / 0</span></button>
           <label class="agf-checkbox-line agf-checkbox-line--locked" title="Les images sont toujours retirées lors du traitement">
             <input type="checkbox" id="agfRemoveImages" checked disabled aria-disabled="true">
@@ -256,6 +247,8 @@
         </div>
       </aside>
     </div>
+
+    <p class="agf-beta-disclaimer" role="note">L'IA peut faire des erreurs. Vérifiez les résultats.</p>
 
     <section class="agf-hist-standalone" id="agfAnonJobsWrap" aria-label="Historique des documents anonymisés">
       <div class="agf-hist-header">
