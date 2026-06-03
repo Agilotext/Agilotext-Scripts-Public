@@ -26,7 +26,7 @@
   "use strict";
 
   var EMBED_CDN =
-    "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html";
+    "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8d394d7/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html";
 
   var system = document.getElementById("ags-drawer-system");
   var mount = document.getElementById("ags-drawer-mount");
@@ -37,14 +37,34 @@
 
   function rehydrateScripts(container) {
     var scripts = Array.prototype.slice.call(container.querySelectorAll("script"));
-    scripts.forEach(function (old) {
-      var s = document.createElement("script");
-      if (old.src) {
-        s.src = old.src;
-      } else {
-        s.textContent = old.textContent;
+    return new Promise(function (resolve) {
+      function runNext(i) {
+        if (i >= scripts.length) return resolve();
+        var old = scripts[i];
+        var type = (old.getAttribute("type") || "").toLowerCase();
+        if (type === "application/json" || type === "text/json") {
+          return runNext(i + 1);
+        }
+        var s = document.createElement("script");
+        if (old.src) {
+          s.src = old.src;
+          s.onload = function () {
+            old.remove();
+            runNext(i + 1);
+          };
+          s.onerror = function () {
+            console.error("[Agiloshield skill drawer] script load failed", old.src);
+            old.remove();
+            runNext(i + 1);
+          };
+          old.parentNode.replaceChild(s, old);
+        } else {
+          s.textContent = old.textContent;
+          old.parentNode.replaceChild(s, old);
+          runNext(i + 1);
+        }
       }
-      old.parentNode.replaceChild(s, old);
+      runNext(0);
     });
   }
 
@@ -64,7 +84,9 @@
         var wrap = document.createElement("div");
         wrap.innerHTML = html;
         while (wrap.firstChild) mount.appendChild(wrap.firstChild);
-        rehydrateScripts(mount);
+        return rehydrateScripts(mount);
+      })
+      .then(function () {
         embedLoaded = true;
       })
       .catch(function (e) {
