@@ -24,6 +24,36 @@
   </aside>
 </div>
 
+<div id="ags-upsell-overlay" class="ags-upsell-overlay" hidden aria-hidden="true">
+  <div class="ags-upsell-backdrop" data-ags-upsell-close tabindex="-1"></div>
+  <div
+    class="ags-upsell-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="ags-upsell-title"
+  >
+    <button type="button" class="ags-upsell-close" data-ags-upsell-close aria-label="Fermer">×</button>
+    <img
+      class="ags-upsell-logo"
+      src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png"
+      alt=""
+      width="48"
+      height="48"
+      decoding="async"
+    />
+    <h2 id="ags-upsell-title" class="ags-upsell-title">Intégration Claude Cowork</h2>
+    <p class="ags-upsell-text">
+      La génération de skill Agiloshield est réservée aux abonnés
+      <strong>Agiloshield Classic</strong>.
+    </p>
+    <p class="ags-upsell-text ags-upsell-text--muted">
+      Pseudonymisez vos documents dans Claude avant toute analyse — sans exposer vos données sensibles.
+    </p>
+    <a class="ags-upsell-cta" href="/tools/agiloshield/tarifs">Voir les tarifs Agiloshield →</a>
+    <button type="button" class="ags-upsell-ghost" data-ags-upsell-close">Fermer</button>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -31,12 +61,19 @@
   var EMBED_CDN =
     "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bf4ac55/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html";
 
+  var AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
+  var ACTIVE_STATUSES = { ACTIVE: true, TRIALING: true, GRACE: true };
+  var PRICING_BASE = "/tools/agiloshield/tarifs";
+  var RETURN_PATH = "/tools/agiloshield/premium/anonymisation";
+
   var system = document.getElementById("ags-drawer-system");
   var mount = document.getElementById("ags-drawer-mount");
+  var upsellOverlay = document.getElementById("ags-upsell-overlay");
   if (!system || !mount) return;
 
   var embedLoaded = false;
   var embedLoading = false;
+  var gateClickInProgress = false;
 
   function rehydrateScripts(container) {
     var scripts = Array.prototype.slice.call(container.querySelectorAll("script"));
@@ -120,12 +157,149 @@
     document.documentElement.classList.remove("ags-drawer-open");
   }
 
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  function normalizeStatus(s) {
+    return String(s || "").toUpperCase();
+  }
+
+  function getConnections(m) {
+    return Array.isArray(m && m.planConnections) ? m.planConnections : [];
+  }
+
+  function getPlans(m) {
+    return Array.isArray(m && m.plans) ? m.plans : [];
+  }
+
+  function getPlanId(p) {
+    return String((p && (p.planId || (p.plan && p.plan.id) || p.id)) || "");
+  }
+
+  function getPriceId(p) {
+    var pay = (p && p.payment) || {};
+    return String(pay.priceId || (p && p.priceId) || "");
+  }
+
+  function getPlanLabel(p) {
+    var pay = (p && p.payment) || {};
+    return [p && p.planId, p && p.planName, p && p.name, p && p.priceName, pay.priceName, pay.priceId]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  }
+
+  function isPlanObjectActive(p) {
+    var st = normalizeStatus(p && p.status);
+    if (st) return !!ACTIVE_STATUSES[st];
+    if (typeof (p && p.active) === "boolean") return p.active;
+    return false;
+  }
+
+  function hasAgiloshieldClassic(member) {
+    function matches(plan) {
+      var planId = getPlanId(plan);
+      var priceId = getPriceId(plan);
+      var label = getPlanLabel(plan);
+      return (
+        planId.indexOf("pln_agiloshield") === 0 ||
+        planId.indexOf("pln_agiloshield-classic") === 0 ||
+        priceId === AGILOSHIELD_CLASSIC_PRICE_ID ||
+        label.indexOf("agiloshield") !== -1 ||
+        label.indexOf("classic mensuel") !== -1
+      );
+    }
+    var connections = getConnections(member);
+    if (connections.length > 0) {
+      return connections.some(function (p) {
+        return ACTIVE_STATUSES[normalizeStatus(p && p.status)] && matches(p);
+      });
+    }
+    return getPlans(member).some(function (p) {
+      return isPlanObjectActive(p) && matches(p);
+    });
+  }
+
+  function waitForMemberstack(timeoutMs) {
+    var start = Date.now();
+    function poll() {
+      if (window.$memberstackDom) return Promise.resolve(window.$memberstackDom);
+      if (Date.now() - start >= timeoutMs) return Promise.resolve(null);
+      return sleep(120).then(poll);
+    }
+    return poll();
+  }
+
+  function fetchMember(ms, useCache) {
+    return ms
+      .getCurrentMember({ useCache: useCache !== false })
+      .then(function (res) {
+        return (res && res.data) || null;
+      })
+      .catch(function (e) {
+        console.warn("[Agiloshield skill gate] getCurrentMember failed", e);
+        return null;
+      });
+  }
+
+  function buildPricingUrl() {
+    var ret = encodeURIComponent(RETURN_PATH + "?upgraded=1");
+    return PRICING_BASE + "?return=" + ret;
+  }
+
+  function checkClassicAccess() {
+    return waitForMemberstack(8000).then(function (ms) {
+      if (!ms) return true;
+      return fetchMember(ms, false).then(function (member) {
+        if (!member) return false;
+        return hasAgiloshieldClassic(member);
+      });
+    });
+  }
+
+  function showUpsellOverlay() {
+    if (!upsellOverlay) return;
+    var pricingLink = upsellOverlay.querySelector(".ags-upsell-cta");
+    if (pricingLink) pricingLink.href = buildPricingUrl();
+    upsellOverlay.hidden = false;
+    upsellOverlay.setAttribute("aria-hidden", "false");
+    upsellOverlay.classList.add("ags-upsell-overlay--open");
+    document.documentElement.classList.add("ags-upsell-open");
+    var closeBtn = upsellOverlay.querySelector(".ags-upsell-close");
+    if (closeBtn) closeBtn.focus();
+  }
+
+  function hideUpsellOverlay() {
+    if (!upsellOverlay) return;
+    upsellOverlay.classList.remove("ags-upsell-overlay--open");
+    upsellOverlay.hidden = true;
+    upsellOverlay.setAttribute("aria-hidden", "true");
+    document.documentElement.classList.remove("ags-upsell-open");
+  }
+
+  function openDrawerWithGate() {
+    return checkClassicAccess().then(function (hasAccess) {
+      if (!hasAccess) {
+        showUpsellOverlay();
+        return false;
+      }
+      openDrawer();
+      return true;
+    });
+  }
+
   function onOpenClick(e) {
     var t = e.target.closest("[data-ags-open-drawer]");
-    if (!t) return;
+    if (!t || gateClickInProgress) return;
     e.preventDefault();
     e.stopPropagation();
-    openDrawer();
+    gateClickInProgress = true;
+    openDrawerWithGate().finally(function () {
+      gateClickInProgress = false;
+    });
   }
 
   document.addEventListener("click", onOpenClick, true);
@@ -134,23 +308,44 @@
     el.addEventListener("click", closeDrawer);
   });
 
+  if (upsellOverlay) {
+    upsellOverlay.querySelectorAll("[data-ags-upsell-close]").forEach(function (el) {
+      el.addEventListener("click", hideUpsellOverlay);
+    });
+  }
+
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && system.classList.contains("ags-drawer-system--open")) {
+    if (e.key !== "Escape") return;
+    if (upsellOverlay && upsellOverlay.classList.contains("ags-upsell-overlay--open")) {
+      hideUpsellOverlay();
+      return;
+    }
+    if (system.classList.contains("ags-drawer-system--open")) {
       closeDrawer();
     }
   });
 
   var params = new URLSearchParams(window.location.search);
-  if (
-    params.get("upgraded") === "1" ||
-    params.get("upgraded") === "true" ||
+  var upgraded =
+    params.get("upgraded") === "1" || params.get("upgraded") === "true";
+  var hashOpen =
     window.location.hash === "#open-skill-gen" ||
-    window.location.hash === "#ags-open-drawer"
-  ) {
+    window.location.hash === "#ags-open-drawer";
+
+  if (upgraded) {
     openDrawer();
+  } else if (hashOpen) {
+    openDrawerWithGate();
   }
 
-  window.AgsSkillDrawer = { open: openDrawer, close: closeDrawer };
+  window.AgsSkillDrawer = {
+    open: openDrawer,
+    close: closeDrawer,
+    openWithGate: openDrawerWithGate,
+    showUpsell: showUpsellOverlay,
+    hideUpsell: hideUpsellOverlay,
+    checkClassicAccess: checkClassicAccess,
+  };
 })();
 </script>
 
@@ -275,8 +470,121 @@
   font-size: 0.875rem;
   font-family: "Inter", "SF Pro Text", "Segoe UI", sans-serif;
 }
-html.ags-drawer-open {
+html.ags-drawer-open,
+html.ags-upsell-open {
   overflow: hidden;
+}
+.ags-upsell-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.ags-upsell-overlay--open {
+  pointer-events: auto;
+  opacity: 1;
+}
+.ags-upsell-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(9, 20, 44, 0.45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  cursor: pointer;
+}
+.ags-upsell-panel {
+  position: relative;
+  z-index: 1;
+  width: min(26rem, 100%);
+  padding: 1.75rem 1.5rem 1.5rem;
+  border-radius: 0.85rem;
+  background: #fff;
+  box-shadow: 0 20px 50px rgba(9, 20, 44, 0.22);
+  text-align: center;
+  font-family: "Inter", "SF Pro Text", "Segoe UI", sans-serif;
+  transform: translateY(8px) scale(0.98);
+  transition: transform 0.22s ease;
+}
+.ags-upsell-overlay--open .ags-upsell-panel {
+  transform: translateY(0) scale(1);
+}
+.ags-upsell-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.55rem;
+  border: 0;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: #525252;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.35rem;
+}
+.ags-upsell-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.ags-upsell-logo {
+  display: block;
+  margin: 0 auto 0.75rem;
+}
+.ags-upsell-title {
+  margin: 0 0 0.65rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #020202;
+}
+.ags-upsell-text {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #020202;
+}
+.ags-upsell-text--muted {
+  color: #525252;
+  font-size: 0.875rem;
+  margin-bottom: 1.25rem;
+}
+.ags-upsell-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border-radius: 0.5rem;
+  background: #174a96;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  margin-bottom: 0.65rem;
+}
+.ags-upsell-cta:hover {
+  background: color-mix(in srgb, #174a96 88%, #000);
+}
+.ags-upsell-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 0.55rem 1rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #525252;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ags-upsell-ghost:hover {
+  background: rgba(0, 0, 0, 0.05);
 }
 @media (max-width: 1024px) {
   .ags-drawer-panel {
