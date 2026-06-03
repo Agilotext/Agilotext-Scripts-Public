@@ -127,7 +127,7 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
 </div>
 
 <script type="application/json" id="ags-inline-assets">__ASSETS_JSON__</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -547,10 +547,15 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     }
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function boot() {
     applyDrawerMode();
     resolveAccess();
-  });
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();
 </script>
 <style>

@@ -36,16 +36,15 @@
   var embedLoading = false;
 
   function rehydrateScripts(container) {
-    container.querySelectorAll("script").forEach(function (old) {
+    var scripts = Array.prototype.slice.call(container.querySelectorAll("script"));
+    scripts.forEach(function (old) {
       var s = document.createElement("script");
       if (old.src) {
         s.src = old.src;
-        if (old.defer) s.defer = true;
-        if (old.async) s.async = true;
       } else {
         s.textContent = old.textContent;
       }
-      old.replaceWith(s);
+      old.parentNode.replaceChild(s, old);
     });
   }
 
