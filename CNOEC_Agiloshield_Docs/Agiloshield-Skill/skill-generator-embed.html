@@ -39,6 +39,110 @@
     <button type="button" class="ags-btn ags-btn--primary" id="ags-reload-pending">Recharger</button>
   </div>
 
+  <div id="ags-screen-installed" class="ags-screen" hidden>
+    <div class="ags-installed-header">
+      <div class="ags-brand ags-brand--row">
+        <img class="ags-claude-logo" src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png" alt="Claude" width="32" height="32" decoding="async">
+        <div>
+          <p class="ags-brand-tag">Skill installé</p>
+          <h2 class="ags-title ags-title--sm">Intégration Claude Cowork</h2>
+        </div>
+      </div>
+    </div>
+    <div class="ags-installed-config" id="ags-installed-config"></div>
+    <div class="ags-actions ags-actions--installed">
+      <button type="button" class="ags-btn ags-btn--ghost" id="ags-edit-config">Modifier mes paramètres</button>
+      <button type="button" class="ags-btn ags-btn--primary" id="ags-redownload">Re-télécharger le skill</button>
+    </div>
+    <div class="ags-installed-sep"></div>
+    <div class="ags-install-guide">
+      <h3 class="ags-install-guide-title">Comment installer le skill</h3>
+      <ol class="ags-install-steps-visual">
+        <li class="ags-install-step">
+          <div class="ags-install-step-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </div>
+          <div class="ags-install-step-body">
+            <strong class="ags-install-step-label">Importer le fichier <code>.skill</code></strong>
+            <p class="ags-install-step-desc">Dans Claude Cowork, allez dans <em>Settings → Customize</em>, onglet <em>Skills</em>. Cliquez sur <strong>+</strong>, puis <em>Téléverser une compétence</em> et sélectionnez le fichier téléchargé.</p>
+          </div>
+        </li>
+        <li class="ags-install-step">
+          <div class="ags-install-step-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          </div>
+          <div class="ags-install-step-body">
+            <strong class="ags-install-step-label">Autoriser la sortie réseau</strong>
+            <p class="ags-install-step-desc">Allez dans <em>Settings → Capabilities</em>. Activez <strong>Autoriser la sortie réseau</strong>, puis ajoutez <code>api.agilotext.com</code> dans les domaines autorisés.</p>
+          </div>
+        </li>
+        <li class="ags-install-step">
+          <div class="ags-install-step-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <div class="ags-install-step-body">
+            <strong class="ags-install-step-label">Démarrer une conversation</strong>
+            <p class="ags-install-step-desc">Ouvrez une nouvelle conversation et mentionnez un fichier local. Claude Agiloshield le pseudonymisera automatiquement avant toute analyse.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </div>
+
+  <div id="ags-screen-success" class="ags-screen" hidden>
+    <div class="ags-success-header">
+      <div class="ags-success-check" aria-hidden="true">
+        <svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><circle cx="24" cy="24" r="24" fill="currentColor" opacity=".12"/><path d="M14 25l7 7 14-14" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2 class="ags-title">Votre skill est prêt !</h2>
+      <p class="ags-text ags-text--muted">Le fichier <code id="ags-success-filename"></code> vient d'être téléchargé.</p>
+    </div>
+
+    <ol class="ags-install-steps-visual">
+      <li class="ags-install-step">
+        <div class="ags-install-step-icon ags-install-step-icon--done">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <div class="ags-install-step-body">
+          <strong class="ags-install-step-label">Fichier téléchargé <span class="ags-badge ags-badge--success">Fait</span></strong>
+          <p class="ags-install-step-desc">Le fichier <code>.skill</code> est dans votre dossier Téléchargements.</p>
+        </div>
+      </li>
+      <li class="ags-install-step">
+        <div class="ags-install-step-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        </div>
+        <div class="ags-install-step-body">
+          <strong class="ags-install-step-label">Importer dans Claude Cowork</strong>
+          <p class="ags-install-step-desc"><em>Settings → Customize → Skills → <strong>+</strong> → Téléverser une compétence</em> → sélectionnez le fichier.</p>
+        </div>
+      </li>
+      <li class="ags-install-step">
+        <div class="ags-install-step-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M4.93 4.93l14.14 14.14"/></svg>
+        </div>
+        <div class="ags-install-step-body">
+          <strong class="ags-install-step-label">Autoriser la sortie réseau</strong>
+          <p class="ags-install-step-desc"><em>Settings → Capabilities → Autoriser la sortie réseau → Domaines →</em> ajouter <code>api.agilotext.com</code>.</p>
+        </div>
+      </li>
+      <li class="ags-install-step">
+        <div class="ags-install-step-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="ags-install-step-body">
+          <strong class="ags-install-step-label">Lancer une conversation</strong>
+          <p class="ags-install-step-desc">Nouvelle conversation → mentionnez un fichier. Agiloshield le pseudonymise avant toute lecture.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="ags-actions ags-actions--success">
+      <button type="button" class="ags-btn ags-btn--ghost" id="ags-success-edit">Modifier mes paramètres</button>
+      <button type="button" class="ags-btn ags-btn--primary" id="ags-success-redownload">Re-télécharger</button>
+    </div>
+  </div>
+
   <div id="ags-screen-form" class="ags-screen" hidden>
     <header class="ags-head">
       <div class="ags-brand ags-brand--row">
@@ -150,6 +254,8 @@
     console.error("[AGS_SKILL_GEN] inline assets parse failed", e);
   }
 
+  const STORAGE_KEY = "ags_skill_config";
+
   const state = {
     step: 1,
     profile: "",
@@ -157,8 +263,34 @@
     mode: "pseudonymize",
     email: "",
     member: null,
-    hasAccess: false
+    hasAccess: false,
+    lastFilename: ""
   };
+
+  function saveConfig() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        profile: state.profile,
+        types: state.types,
+        mode: state.mode,
+        email: state.email,
+        filename: state.lastFilename,
+        savedAt: new Date().toISOString()
+      }));
+    } catch (_) {}
+  }
+
+  function loadConfig() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (_) { return null; }
+  }
+
+  function clearConfig() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+  }
 
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
   const $$ = (sel, ctx) => Array.from((ctx || document).querySelectorAll(sel));
@@ -278,8 +410,17 @@
     if (pricingLink) pricingLink.href = buildPricingUrl();
 
     if (hasAccess) {
-      initForm();
-      showScreen("ags-screen-form");
+      const saved = loadConfig();
+      if (saved && saved.profile && saved.types && saved.types.length >= MIN_TYPES) {
+        restoreFromSaved(saved);
+        buildTypeCheckboxes();
+        buildProfileCards();
+        bindFormEvents();
+        showInstalledScreen(saved);
+      } else {
+        initForm();
+        showScreen("ags-screen-form");
+      }
       return;
     }
 
@@ -508,6 +649,10 @@
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      state.lastFilename = name;
+      saveConfig();
+      showSuccessScreen(name);
     } catch (e) {
       console.error("[AGS_SKILL_GEN] zip failed", e);
       if (errEl) {
@@ -517,6 +662,53 @@
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = "Télécharger mon skill"; }
     }
+  }
+
+  function showSuccessScreen(filename) {
+    const filenameEl = $("#ags-success-filename");
+    if (filenameEl) filenameEl.textContent = filename;
+    showScreen("ags-screen-success");
+  }
+
+  function showInstalledScreen(saved) {
+    const container = $("#ags-installed-config");
+    if (container) {
+      const profileLabel = PROFILE_LABELS[saved.profile] || saved.profile || "—";
+      const modeLabel = saved.mode === "anonymize" ? "Anonymiser" : "Pseudonymiser";
+      const typesHtml = (saved.types || []).map((t) =>
+        "<span class=\"ags-type-badge\">" + (TYPE_LABELS[t] ? "<strong>" + t + "</strong> " + TYPE_LABELS[t] : t) + "</span>"
+      ).join("");
+      const dateStr = saved.savedAt
+        ? new Date(saved.savedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+        : "";
+      container.innerHTML =
+        "<div class=\"ags-installed-row\"><span class=\"ags-installed-label\">Profil</span><span>" + profileLabel + "</span></div>" +
+        "<div class=\"ags-installed-row\"><span class=\"ags-installed-label\">Mode</span><span>" + modeLabel + "</span></div>" +
+        (dateStr ? "<div class=\"ags-installed-row\"><span class=\"ags-installed-label\">Généré le</span><span>" + dateStr + "</span></div>" : "") +
+        "<div class=\"ags-installed-types\">" + typesHtml + "</div>";
+    }
+    showScreen("ags-screen-installed");
+  }
+
+  function restoreFromSaved(saved) {
+    state.profile = saved.profile || "";
+    state.types = saved.types || [];
+    state.mode = saved.mode || "pseudonymize";
+  }
+
+  function goToConfigForm() {
+    initForm();
+    showScreen("ags-screen-form");
+    goToStep(1);
+    const zone = $("#ags-inline-types");
+    if (state.profile) {
+      highlightProfileCard(state.profile);
+      syncTypeCheckboxes();
+      if (zone) zone.hidden = false;
+    }
+    const modeInput = $('input[name="ags-mode"][value="' + state.mode + '"]');
+    if (modeInput) modeInput.checked = true;
+    validateTypes();
   }
 
   function bindFormEvents() {
@@ -533,6 +725,11 @@
     }));
     $("#ags-reload-access")?.addEventListener("click", () => window.location.reload());
     $("#ags-reload-pending")?.addEventListener("click", () => window.location.reload());
+
+    $("#ags-edit-config")?.addEventListener("click", () => goToConfigForm());
+    $("#ags-redownload")?.addEventListener("click", () => downloadSkill());
+    $("#ags-success-edit")?.addEventListener("click", () => goToConfigForm());
+    $("#ags-success-redownload")?.addEventListener("click", () => downloadSkill());
   }
 
   function applyDrawerMode() {
@@ -786,5 +983,77 @@
 }
 #ags-skill-generator .ags-install-title { margin: 0 0 0.75rem; font-size: 1rem; }
 #ags-skill-generator .ags-install-steps { margin: 0; padding-left: 1.25rem; line-height: 1.6; font-size: 0.9rem; }
-#ags-skill-generator code { font-size: 0.85em; background: rgba(0,0,0,0.05); padding: 0.1em 0.35em; border-radius: 0.25em; }
+#ags-skill-generator code { font-size: 0.85em; background: rgba(0,0,0,0.05); padding: 0.1em 0.35em; border-radius: 0.25em; font-family: "SF Mono", "Fira Code", monospace; }
+#ags-skill-generator .ags-install-steps-visual {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 1.25rem;
+}
+#ags-skill-generator .ags-install-step {
+  display: flex; gap: 1rem; align-items: flex-start;
+}
+#ags-skill-generator .ags-install-step-icon {
+  flex-shrink: 0;
+  width: 2.25rem; height: 2.25rem;
+  border-radius: 50%;
+  background: var(--agilo-surface-2);
+  border: 1px solid var(--agilo-border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--agilo-primary);
+}
+#ags-skill-generator .ags-install-step-icon svg { width: 1.1rem; height: 1.1rem; }
+#ags-skill-generator .ags-install-step-icon--done {
+  background: color-mix(in srgb, #22c55e 15%, #fff);
+  border-color: color-mix(in srgb, #22c55e 35%, transparent);
+  color: #16a34a;
+}
+#ags-skill-generator .ags-install-step-body { flex: 1; min-width: 0; padding-top: 0.15rem; }
+#ags-skill-generator .ags-install-step-label { display: block; font-size: 0.9rem; margin-bottom: 0.3rem; }
+#ags-skill-generator .ags-install-step-desc { margin: 0; font-size: 0.8125rem; line-height: 1.55; color: var(--agilo-text-secondary); }
+#ags-skill-generator .ags-badge--success {
+  background: color-mix(in srgb, #22c55e 18%, #fff);
+  color: #16a34a; border: 1px solid color-mix(in srgb, #22c55e 30%, transparent);
+  font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 1rem; font-weight: 600;
+}
+#ags-skill-generator .ags-success-header {
+  text-align: center; margin-bottom: 1.75rem;
+}
+#ags-skill-generator .ags-success-check {
+  color: #22c55e; margin: 0 auto 0.85rem;
+  width: 3.25rem; height: 3.25rem; display: flex; align-items: center; justify-content: center;
+}
+#ags-skill-generator .ags-success-check svg { width: 100%; height: 100%; }
+#ags-skill-generator .ags-title--sm { font-size: 1.15rem; margin: 0; }
+#ags-skill-generator .ags-actions--success, #ags-skill-generator .ags-actions--installed {
+  margin-top: 1.75rem;
+}
+#ags-skill-generator .ags-installed-header {
+  margin-bottom: 1.25rem;
+}
+#ags-skill-generator .ags-installed-config {
+  background: var(--agilo-surface-2); border: 1px solid var(--agilo-border);
+  border-radius: 0.75rem; padding: 0.85rem 1rem;
+  margin-bottom: 0.25rem;
+}
+#ags-skill-generator .ags-installed-row {
+  display: flex; gap: 0.5rem; align-items: baseline;
+  font-size: 0.875rem; margin-bottom: 0.35rem;
+}
+#ags-skill-generator .ags-installed-label {
+  font-weight: 600; color: var(--agilo-text-secondary); min-width: 5rem; flex-shrink: 0;
+}
+#ags-skill-generator .ags-installed-types {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.65rem;
+}
+#ags-skill-generator .ags-type-badge {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 0.35rem;
+  background: var(--agilo-primary-soft); color: var(--agilo-primary);
+  border: 1px solid color-mix(in srgb, var(--agilo-primary) 22%, transparent);
+}
+#ags-skill-generator .ags-installed-sep {
+  border: 0; border-top: 1px solid var(--agilo-border); margin: 1.5rem 0;
+}
+#ags-skill-generator .ags-install-guide-title {
+  font-size: 0.95rem; font-weight: 700; margin: 0 0 1rem; color: var(--agilo-text);
+}
 </style>
