@@ -1,0 +1,82 @@
+<!-- Carte CTA sidebar — à coller dans dashboard-left (Webflow Designer) -->
+<!-- Option A : lien page dédiée | Option B : ouvre le drawer (nécessite skill-generator-launcher.html sur la page) -->
+<div class="ags-sidebar-cta-wrap">
+  <a
+    href="/tools/agiloshield/generate-skill"
+    class="ags-sidebar-cta"
+    data-ags-open-drawer
+    title="Configurer votre skill Claude Cowork"
+  >
+    <img
+      class="ags-sidebar-cta-logo"
+      src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png"
+      alt=""
+      width="32"
+      height="32"
+      decoding="async"
+    />
+    <span class="ags-sidebar-cta-text">
+      <strong class="ags-sidebar-cta-title">Intégration Claude Cowork</strong>
+      <span class="ags-sidebar-cta-sub">Pseudonymisez vos fichiers dans Claude avant analyse</span>
+    </span>
+    <span class="ags-sidebar-cta-action">Configurer mon skill →</span>
+  </a>
+</div>
+
+<style>
+.ags-sidebar-cta-wrap {
+  width: 100%;
+  margin: 0.75rem 0 0.5rem;
+  padding: 0 0.5rem;
+  box-sizing: border-box;
+}
+.ags-sidebar-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in srgb, #174a96 22%, rgba(52, 58, 64, 0.12));
+  background: linear-gradient(180deg, color-mix(in srgb, #174a96 10%, #fff) 0%, #fff 100%);
+  text-decoration: none;
+  color: #020202;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-sizing: border-box;
+}
+.ags-sidebar-cta:hover {
+  border-color: color-mix(in srgb, #174a96 40%, transparent);
+  box-shadow: 0 4px 14px rgba(23, 74, 150, 0.12);
+}
+.ags-sidebar-cta-logo {
+  display: block;
+  flex-shrink: 0;
+}
+.ags-sidebar-cta-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.ags-sidebar-cta-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #174a96;
+}
+.ags-sidebar-cta-sub {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #525252;
+  font-weight: 400;
+}
+.ags-sidebar-cta-action {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #174a96;
+}
+.dashboard-left.is-collapsed .ags-sidebar-cta-wrap {
+  display: none;
+}
+</style>

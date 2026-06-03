@@ -77,6 +77,47 @@
     line-height: 1;
     opacity: 0.9;
   }
+  .agf-skill-cta-wrap {
+    flex-shrink: 0;
+    margin-top: 0.35rem;
+    margin-bottom: 0.25rem;
+  }
+  .agf-skill-cta {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--agilo-primary, #174a96) 22%, rgba(52, 58, 64, 0.12));
+    background: color-mix(in srgb, var(--agilo-primary, #174a96) 6%, #fff);
+    font-size: 0.8125rem;
+    line-height: 1.35;
+    font-weight: 600;
+    color: var(--agilo-primary, #174a96);
+    text-decoration: none;
+    transition: background 0.15s ease, border-color 0.15s ease;
+    box-sizing: border-box;
+  }
+  .agf-skill-cta:hover {
+    background: color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent);
+    border-color: color-mix(in srgb, var(--agilo-primary, #174a96) 35%, transparent);
+  }
+  .agf-skill-cta:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--agilo-primary, #174a96) 40%, transparent);
+    outline-offset: 2px;
+  }
+  .agf-skill-cta-logo {
+    flex-shrink: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-top: 0.1rem;
+  }
+  .agf-skill-cta-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
   form[ms-code-anonymisation="form"] .agf-side {
     max-height: min(80vh, 42rem);
     padding-bottom: 1.25rem;
@@ -227,6 +268,25 @@
             <span>Retirer les images</span>
           </label>
           <p id="agfInclusionAvailabilityHint" class="agf-small">Listes disponibles pour affiner les détections.</p>
+        </div>
+
+        <div class="agf-group agf-skill-cta-wrap">
+          <a
+            href="/tools/agiloshield/generate-skill"
+            class="agf-skill-cta"
+            data-ags-open-drawer
+            title="Générer votre skill Claude Cowork"
+          >
+            <img
+              class="agf-skill-cta-logo"
+              src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png"
+              alt=""
+              width="20"
+              height="20"
+              decoding="async"
+            />
+            <span class="agf-skill-cta-text">Générer mon skill Claude →</span>
+          </a>
         </div>
 
         <div class="agf-group agf-roadmap-vote-wrap">

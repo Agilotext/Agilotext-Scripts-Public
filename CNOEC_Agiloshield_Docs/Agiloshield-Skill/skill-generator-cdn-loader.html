@@ -1,0 +1,34 @@
+<!-- Webflow : coller ce snippet seul (~650 car.) si skill-generator-embed.html dépasse la limite -->
+<div id="ags-skill-cdn-mount"></div>
+<script>
+(function () {
+  var CDN =
+    "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html";
+  fetch(CDN)
+    .then(function (r) {
+      if (!r.ok) throw new Error("CDN " + r.status);
+      return r.text();
+    })
+    .then(function (html) {
+      var mount = document.getElementById("ags-skill-cdn-mount");
+      if (!mount) return;
+      var wrap = document.createElement("div");
+      wrap.innerHTML = html;
+      while (wrap.firstChild) mount.appendChild(wrap.firstChild);
+      mount.querySelectorAll("script").forEach(function (old) {
+        var s = document.createElement("script");
+        if (old.src) {
+          s.src = old.src;
+          if (old.async) s.async = true;
+          if (old.defer) s.defer = true;
+        } else {
+          s.textContent = old.textContent;
+        }
+        old.replaceWith(s);
+      });
+    })
+    .catch(function (e) {
+      console.error("[Agiloshield skill CDN]", e);
+    });
+})();
+</script>

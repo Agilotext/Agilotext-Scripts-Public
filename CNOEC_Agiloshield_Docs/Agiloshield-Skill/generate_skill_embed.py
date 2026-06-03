@@ -14,20 +14,36 @@ skill_md = (SKILL_SRC / "SKILL.md").read_text(encoding="utf-8")
 agilo_py = (SKILL_SRC / "scripts" / "agiloshield.py").read_text(encoding="utf-8")
 assets_json = json.dumps({"SKILL_MD": skill_md, "AGILOSHIELD_PY": agilo_py}, ensure_ascii=False)
 
-HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
+CLAUDE_LOGO_URL = (
+    "https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/"
+    "6a1f116a08744afd7c5e0ee9_claude-color.png"
+)
+
+HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
 <div id="ags-skill-generator" class="ags-root" data-ms-code-skill-generator="form">
   <div id="ags-screen-loading" class="ags-screen ags-screen--active" aria-live="polite">
+    <div class="ags-brand" aria-hidden="true">
+      <img class="ags-claude-logo" src="__CLAUDE_LOGO__" alt="" width="40" height="40" decoding="async">
+    </div>
     <div class="ags-spinner" aria-hidden="true"></div>
     <p class="ags-lead">Vérification de votre accès…</p>
   </div>
 
   <div id="ags-screen-noauth" class="ags-screen" hidden>
+    <div class="ags-brand">
+      <img class="ags-claude-logo" src="__CLAUDE_LOGO__" alt="Claude" width="40" height="40" decoding="async">
+      <p class="ags-brand-tag">Intégration Claude Cowork</p>
+    </div>
     <h2 class="ags-title">Connexion requise</h2>
     <p class="ags-text">Connectez-vous à votre compte Agilotext pour générer votre skill Agiloshield.</p>
     <a class="ags-btn ags-btn--primary" href="/auth/login">Se connecter</a>
   </div>
 
   <div id="ags-screen-upsell" class="ags-screen" hidden>
+    <div class="ags-brand">
+      <img class="ags-claude-logo" src="__CLAUDE_LOGO__" alt="Claude" width="48" height="48" decoding="async">
+      <p class="ags-brand-tag">Intégration Claude Cowork</p>
+    </div>
     <h2 class="ags-title">Générez votre skill Agiloshield</h2>
     <p class="ags-text">Cette fonctionnalité est réservée aux abonnés <strong>Agiloshield Classic</strong>.</p>
     <p class="ags-text ags-text--muted">Pseudonymisez vos documents dans Claude Cowork avant toute analyse — sans exposer vos données sensibles.</p>
@@ -36,6 +52,9 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
   </div>
 
   <div id="ags-screen-pending" class="ags-screen" hidden>
+    <div class="ags-brand">
+      <img class="ags-claude-logo" src="__CLAUDE_LOGO__" alt="Claude" width="40" height="40" decoding="async">
+    </div>
     <h2 class="ags-title">Votre abonnement est en cours d'activation</h2>
     <p class="ags-text">Cela peut prendre 1 à 2 minutes après le paiement. Rechargez la page dans un instant.</p>
     <button type="button" class="ags-btn ags-btn--primary" id="ags-reload-pending">Recharger</button>
@@ -43,8 +62,13 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
 
   <div id="ags-screen-form" class="ags-screen" hidden>
     <header class="ags-head">
-      <h2 class="ags-title">Générateur de skill Agiloshield</h2>
-      <p class="ags-text ags-text--muted">Configurez votre skill Claude Cowork en 3 étapes.</p>
+      <div class="ags-brand ags-brand--row">
+        <img class="ags-claude-logo" src="__CLAUDE_LOGO__" alt="Claude" width="36" height="36" decoding="async">
+        <div>
+          <h2 class="ags-title">Générateur de skill Agiloshield</h2>
+          <p class="ags-text ags-text--muted ags-head-sub">Configurez votre skill Claude Cowork en 3 étapes.</p>
+        </div>
+      </div>
     </header>
 
     <nav class="ags-stepper" aria-label="Étapes">
@@ -512,7 +536,18 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
     $("#ags-reload-pending")?.addEventListener("click", () => window.location.reload());
   }
 
-  document.addEventListener("DOMContentLoaded", resolveAccess);
+  function applyDrawerMode() {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("drawer") === "1" || p.get("embed") === "drawer") {
+      const root = document.getElementById(ROOT_ID);
+      if (root) root.classList.add("ags--drawer");
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    applyDrawerMode();
+    resolveAccess();
+  });
 })();
 </script>
 <style>
@@ -537,7 +572,29 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
 #ags-skill-generator .ags-screen--active { display: block; }
 #ags-skill-generator #ags-screen-form.ags-screen--active { text-align: left; }
 #ags-skill-generator .ags-title { font-size: 1.5rem; font-weight: 700; margin: 0 0 0.75rem; text-align: center; }
-#ags-skill-generator #ags-screen-form .ags-title { text-align: left; }
+#ags-skill-generator #ags-screen-form .ags-title { text-align: left; margin: 0; }
+#ags-skill-generator .ags-head-sub { margin: 0.25rem 0 0; }
+#ags-skill-generator .ags-brand {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+#ags-skill-generator .ags-brand--row {
+  flex-direction: row; align-items: flex-start; text-align: left;
+  margin-bottom: 0;
+}
+#ags-skill-generator .ags-brand-tag {
+  margin: 0; font-size: 0.8rem; font-weight: 600;
+  color: var(--agilo-text-secondary); text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+#ags-skill-generator .ags-claude-logo { display: block; flex-shrink: 0; }
+#ags-skill-generator.ags--drawer {
+  max-width: none; margin: 0; min-height: 100%;
+  padding: 1.25rem 1.25rem 2rem;
+}
+#ags-skill-generator.ags--drawer .ags-screen--active {
+  text-align: left;
+}
 #ags-skill-generator .ags-text { margin: 0 0 1rem; line-height: 1.5; color: var(--agilo-text-secondary); }
 #ags-skill-generator .ags-text--muted { font-size: 0.9rem; }
 #ags-skill-generator .ags-lead { color: var(--agilo-text-secondary); }
@@ -647,8 +704,8 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v1 -->
 </style>
 '''
 
-OUT.write_text(
-    HTML_TEMPLATE.replace("__ASSETS_JSON__", assets_json),
-    encoding="utf-8",
+html_out = HTML_TEMPLATE.replace("__ASSETS_JSON__", assets_json).replace(
+    "__CLAUDE_LOGO__", CLAUDE_LOGO_URL
 )
+OUT.write_text(html_out, encoding="utf-8")
 print(f"Written: {OUT} ({OUT.stat().st_size} bytes)")
