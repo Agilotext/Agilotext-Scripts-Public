@@ -53,7 +53,7 @@ https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agilos
 https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-sidebar-cta.html
 ```
 
-Après commit, vous pouvez épingler `@<sha>` dans `skill-generator-dashboard.html` (constante `EMBED_CDN`).
+Après chaque mise à jour : **recoller les 2 embeds** (sidebar + drawer), publier Webflow. Le drawer charge l’embed via `EMBED_CDN` (épinglé sur `@<sha>` dans le repo).
 
 ---
 
