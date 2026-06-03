@@ -289,7 +289,8 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     member: null,
     hasAccess: false,
     lastFilename: "",
-    skillToken: ""
+    skillToken: "",
+    sessionEdition: ""
   };
 
   function saveConfig() {
@@ -635,13 +636,26 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     return "" + y + m + day;
   }
 
-  function getSessionEdition() {
+  function getSessionEdition(sessionToken) {
     const embed = window.__AGILO_EMBED_STATE__;
     if (embed && embed.transcriptionEdition) return String(embed.transcriptionEdition);
-    if (embed && embed.edition && embed.edition !== "agiloshield") return String(embed.edition);
+    if (state.sessionEdition) return state.sessionEdition;
+    const email = (state.email || "").trim().toLowerCase();
+    const token = sessionToken
+      || window.globalToken
+      || (embed && embed.token)
+      || "";
+    if (email && token) {
+      for (const ed of ["ent", "pro", "free"]) {
+        try {
+          const k = "agilo:token:" + ed + ":" + email;
+          if (localStorage.getItem(k) === token) return ed;
+        } catch (_) {}
+      }
+    }
     try {
       const stored = localStorage.getItem("agilo:edition");
-      if (stored) return stored;
+      if (stored && stored !== "agiloshield") return stored;
     } catch (_) {}
     return "free";
   }
@@ -677,7 +691,7 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     const body = new URLSearchParams({
       username: state.email,
       token: sessionToken,
-      edition: getSessionEdition()
+      edition: getSessionEdition(sessionToken)
     });
     if (rotate) body.set("rotate", "true");
     try {
@@ -862,8 +876,14 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     }
   }
 
+  function onAgiloToken(ev) {
+    const ed = ev && ev.detail && ev.detail.edition;
+    if (ed && ed !== "agiloshield") state.sessionEdition = String(ed);
+  }
+
   function boot() {
     applyDrawerMode();
+    window.addEventListener("agilo:token", onAgiloToken);
     resolveAccess();
   }
   if (document.readyState === "loading") {
