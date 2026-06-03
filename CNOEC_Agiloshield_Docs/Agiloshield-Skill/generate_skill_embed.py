@@ -160,6 +160,7 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
 
     <div class="ags-actions ags-actions--success">
       <button type="button" class="ags-btn ags-btn--ghost" id="ags-success-edit">Modifier mes paramètres</button>
+      <button type="button" class="ags-btn ags-btn--ghost" id="ags-rotate-token">Régénérer ma clé</button>
       <button type="button" class="ags-btn ags-btn--primary" id="ags-success-redownload">Re-télécharger</button>
     </div>
   </div>
@@ -241,6 +242,8 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
   const RETURN_PATH = "/tools/agiloshield/premium/dashboard";
   const SKILL_ZIP_PREFIX = "agiloshield-skill";
   const MIN_TYPES = 2;
+  const API_BASE = "https://api.agilotext.com/api/v1";
+  const SKILL_TOKEN_STORAGE_PREFIX = "ags_skill_token_";
 
   const PROFILE_TYPES = {
     ma: ["PER", "ORG", "ADR", "IDN"],
@@ -285,7 +288,8 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     email: "",
     member: null,
     hasAccess: false,
-    lastFilename: ""
+    lastFilename: "",
+    skillToken: ""
   };
 
   function saveConfig() {
@@ -600,11 +604,12 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     return '"""Configuration Agiloshield — générée automatiquement."""\n\n' +
       'API_BASE = "https://api.agilotext.com/api/v1"\n\n' +
       'USERNAME = "' + email + '"\n' +
-      "USE_GET_TOKEN = True\n" +
+      'SKILL_TOKEN = "' + (state.skillToken || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"\n' +
+      "USE_GET_TOKEN = False\n" +
       'AUTOMATION_TOKEN = ""\n' +
       'TOKEN = ""\n' +
       'PASSWORD = ""\n' +
-      'EDITION = "ent"\n\n' +
+      'EDITION = "agiloshield"\n\n' +
       'PROFILE = "' + profile + '"\n' +
       "ENTITY_TYPES = " + typesRepr + "\n" +
       'MODE = "' + state.mode + '"\n\n' +
@@ -630,7 +635,86 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     return "" + y + m + day;
   }
 
-  async function downloadSkill() {
+  function getSessionEdition() {
+    const embed = window.__AGILO_EMBED_STATE__;
+    if (embed && embed.transcriptionEdition) return String(embed.transcriptionEdition);
+    if (embed && embed.edition && embed.edition !== "agiloshield") return String(embed.edition);
+    try {
+      const stored = localStorage.getItem("agilo:edition");
+      if (stored) return stored;
+    } catch (_) {}
+    return "free";
+  }
+
+  async function waitForSessionToken(timeoutMs) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const t = window.globalToken
+        || (window.__AGILO_EMBED_STATE__ && window.__AGILO_EMBED_STATE__.token);
+      if (t) return t;
+      await sleep(200);
+    }
+    return null;
+  }
+
+  async function mintSkillToken(rotate) {
+    if (!state.email) return false;
+    const cachedKey = SKILL_TOKEN_STORAGE_PREFIX + state.email;
+    if (!rotate) {
+      try {
+        const cached = localStorage.getItem(cachedKey);
+        if (cached) {
+          state.skillToken = cached;
+          return true;
+        }
+      } catch (_) {}
+    }
+    const sessionToken = await waitForSessionToken(8000);
+    if (!sessionToken) {
+      console.warn("[AGS_SKILL_GEN] session token unavailable");
+      return false;
+    }
+    const body = new URLSearchParams({
+      username: state.email,
+      token: sessionToken,
+      edition: getSessionEdition()
+    });
+    if (rotate) body.set("rotate", "true");
+    try {
+      const resp = await fetch(API_BASE + "/getAgiloshieldSkillToken", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body
+      });
+      const data = await resp.json();
+      if (data.status === "OK" && data.skillToken) {
+        state.skillToken = data.skillToken;
+        try { localStorage.setItem(cachedKey, data.skillToken); } catch (_) {}
+        return true;
+      }
+      console.warn("[AGS_SKILL_GEN] getAgiloshieldSkillToken failed", data);
+    } catch (e) {
+      console.error("[AGS_SKILL_GEN] getAgiloshieldSkillToken error", e);
+    }
+    return false;
+  }
+
+  function showMintError(msg) {
+    const errEl = $("#ags-gen-error");
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.hidden = false;
+      const formScreen = $("#ags-screen-form");
+      if (formScreen && formScreen.hidden) {
+        goToConfigForm();
+        goToStep(2);
+      }
+      return;
+    }
+    alert(msg);
+  }
+
+  async function downloadSkill(rotate) {
     const errEl = $("#ags-gen-error");
     if (errEl) { errEl.hidden = true; errEl.textContent = ""; }
 
@@ -647,10 +731,20 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
       return;
     }
 
-    const btn = $("#ags-download");
-    if (btn) { btn.disabled = true; btn.textContent = "Génération…"; }
+    const btn = $("#ags-download") || $("#ags-success-redownload") || $("#ags-redownload");
+    const prevLabel = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "Obtention de votre clé…"; }
 
     try {
+      const ok = await mintSkillToken(!!rotate);
+      if (!ok) {
+        showMintError(
+          "Impossible d'obtenir votre clé Agiloshield. Rechargez la page (le module d'anonymisation doit être chargé) et réessayez."
+        );
+        return;
+      }
+      if (btn) btn.textContent = "Génération…";
+
       const zip = new JSZip();
       const root = zip.folder(SKILL_ZIP_PREFIX);
       const scripts = root.folder("scripts");
@@ -681,7 +775,10 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
         errEl.hidden = false;
       }
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = "Télécharger mon skill"; }
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevLabel || "Télécharger mon skill";
+      }
     }
   }
 
@@ -739,7 +836,7 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
       goToStep(2);
     });
     $("#ags-back-2")?.addEventListener("click", () => goToStep(1));
-    $("#ags-download")?.addEventListener("click", downloadSkill);
+    $("#ags-download")?.addEventListener("click", () => downloadSkill(false));
     $$("#ags-types-grid input").forEach((cb) => cb.addEventListener("change", onTypeChange));
     $$('input[name="ags-mode"]').forEach((r) => r.addEventListener("change", () => {
       state.mode = r.value;
@@ -748,9 +845,10 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
     $("#ags-reload-pending")?.addEventListener("click", () => window.location.reload());
 
     $("#ags-edit-config")?.addEventListener("click", () => goToConfigForm());
-    $("#ags-redownload")?.addEventListener("click", () => downloadSkill());
+    $("#ags-redownload")?.addEventListener("click", () => downloadSkill(false));
     $("#ags-success-edit")?.addEventListener("click", () => goToConfigForm());
-    $("#ags-success-redownload")?.addEventListener("click", () => downloadSkill());
+    $("#ags-success-redownload")?.addEventListener("click", () => downloadSkill(false));
+    $("#ags-rotate-token")?.addEventListener("click", () => downloadSkill(true));
   }
 
   function applyDrawerMode() {

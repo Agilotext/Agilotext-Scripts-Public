@@ -159,7 +159,7 @@ class AgiloshieldClient:
         password = getattr(config, "PASSWORD", "") or ""
         if not password.strip():
             die(
-                "Auth manquante dans config.py — USE_GET_TOKEN, AUTOMATION_TOKEN, TOKEN ou PASSWORD requis"
+                "Auth manquante dans config.py — SKILL_TOKEN, USE_GET_TOKEN, AUTOMATION_TOKEN, TOKEN ou PASSWORD requis"
             )
 
         body = urllib.parse.urlencode(
@@ -191,6 +191,14 @@ class AgiloshieldClient:
         return self._token
 
     def _auth_fields(self) -> dict[str, str]:
+        skill_token = getattr(config, "SKILL_TOKEN", "") or ""
+        if skill_token.strip():
+            return {
+                "username": config.USERNAME,
+                "skillToken": skill_token.strip(),
+                "edition": getattr(config, "EDITION", "agiloshield"),
+            }
+
         auto_token = getattr(config, "AUTOMATION_TOKEN", "") or ""
         if auto_token.strip():
             return {
@@ -520,7 +528,9 @@ def cmd_restore(args: argparse.Namespace) -> None:
 
 def cmd_settings(_: argparse.Namespace) -> None:
     auth_method = "getToken"
-    if getattr(config, "AUTOMATION_TOKEN", ""):
+    if getattr(config, "SKILL_TOKEN", ""):
+        auth_method = "skillToken"
+    elif getattr(config, "AUTOMATION_TOKEN", ""):
         auth_method = "automationToken"
     elif not uses_get_token() and getattr(config, "PASSWORD", ""):
         auth_method = "getAuthToken"
