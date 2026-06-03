@@ -1,209 +1,118 @@
-# Déploiement Webflow — Générateur de skill Agiloshield
+# Déploiement Webflow — Générateur de skill (popup dashboard)
+
+## Principe
+
+- **Pas de page `/generate-skill`** pour l’usage courant.
+- **Panneau latéral** sur `/tools/agiloshield/premium/dashboard` : clic pill « Claude » → popup avec formulaire.
+- **Gros fichier** (`skill-generator-embed.html`, ~55 Ko) **uniquement sur jsDelivr** — jamais collé en entier dans Webflow.
+
+## Limite Webflow (50 000 caractères)
+
+| Zone | Limite | Usage |
+|------|--------|--------|
+| **Embed** (élément `</>`) | 50 000 car. max | HTML + CSS + JS comptent ensemble |
+| Head / footer site | Autre quota | Éviter pour ce feature |
+
+Référence : [Webflow Help — Custom code embed](https://help.webflow.com/hc/en-us/articles/33961332238611-Custom-code-embed)
+
+`skill-generator-embed.html` ≈ **55 Ko** → **dépasse** la limite.  
+→ Charger via [`skill-generator-dashboard.html`](skill-generator-dashboard.html) (fetch lazy au clic).
+
+---
 
 ## Fichiers du repo
 
-| Fichier | Rôle |
-|---------|------|
-| `skill-generator-embed.html` | Embed principal (~52 Ko) — page dédiée **ou** iframe drawer |
-| `skill-generator-launcher.html` | Panneau latéral Marvin (dashboard) — lazy-load iframe |
-| `skill-generator-sidebar-cta.html` | Carte CTA pour `dashboard-left` |
-| `generate_skill_embed.py` | Régénère l'embed après modification de `SKILL.md` ou `agiloshield.py` |
+| Fichier | Où le coller dans Webflow |
+|---------|---------------------------|
+| [`skill-generator-sidebar-cta.html`](skill-generator-sidebar-cta.html) | Embed dans **`dashboard-left`** (~600 car.) — pill « Claude » |
+| [`skill-generator-dashboard.html`](skill-generator-dashboard.html) | **1 embed** en bas du dashboard, hors anonymisation (~5 Ko) |
+| [`skill-generator-embed.html`](skill-generator-embed.html) | **Ne pas coller** — servi par jsDelivr |
+| [`generate_skill_embed.py`](generate_skill_embed.py) | Régénère l’embed après changement SKILL.md / agiloshield.py |
 
-**Ne pas fusionner** le générateur dans `HTML_` (réservé à l'anonymisation). Un lien discret optionnel existe dans `aside.agf-side` de `HTML_`.
-
-### Régénérer l'embed
-
-```bash
-cd CNOEC_Agiloshield_Docs/Agiloshield-Skill
-python3 generate_skill_embed.py
-```
-
-Puis recopier `skill-generator-embed.html` dans Webflow (ou republier si vous servez la page iframe depuis le même domaine).
-
-**Logo Claude (CDN Webflow) :**  
-`https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png`
+**Dépréciés** (ne plus utiliser) : `skill-generator-launcher.html`, `skill-generator-cdn-loader.html`, page dédiée `generate-skill`.
 
 ---
 
-## Niveau 1 — Page dédiée (prioritaire)
+## CDN jsDelivr (branche `1.09`)
 
-**URL :** `/tools/agiloshield/generate-skill`
-
-1. Dupliquer la structure du dashboard premium (navbar / sidebar si souhaité).
-2. **Un seul bloc Embed** : coller **tout** `skill-generator-embed.html`.
-3. Memberstack : **Members only** (comme le dashboard).
-4. Publier.
-
-Cette page sert de :
-
-- URL de retour Stripe : `?upgraded=1`
-- Lien direct doc / emails
-- Cible iframe du drawer (`?drawer=1`)
-
----
-
-## Niveau 2 — Expérience Marvin (dashboard premium)
-
-Trois blocs Webflow sur `/tools/agiloshield/premium/dashboard` :
-
-| Emplacement | Fichier | Détail |
-|-------------|---------|--------|
-| **A. Sidebar** (`dashboard-left`) | `skill-generator-sidebar-cta.html` | Carte logo Claude + lien ; `data-ags-open-drawer` ouvre le panneau si le launcher est présent |
-| **B. Bas de page** (hors embed anonymisation) | `skill-generator-launcher.html` | Drawer + iframe lazy vers `/generate-skill?drawer=1` |
-| **C. Page dédiée** | `skill-generator-embed.html` | Contenu chargé dans l'iframe (mode drawer via `?drawer=1`) |
-
-**Alternative rapide (sans drawer) :** carte sidebar avec lien seul vers `/generate-skill` — retirer `data-ags-open-drawer` du snippet ou ne pas coller le launcher.
-
-**Hash d'ouverture :** `#open-skill-gen` ou `#ags-open-drawer` ouvre le drawer au chargement.
-
----
-
-## Stripe / tarifs
-
-### Success URL (obligatoire)
-
-Sur `/tools/agiloshield/tarifs`, après paiement Classic :
-
-```
-/tools/agiloshield/generate-skill?upgraded=1
-```
-
-Configurer dans Stripe / Webflow Memberships comme **success URL** par défaut si aucun `?return=` n'est fourni.
-
-### Lien « Voir les tarifs » (généré par l'embed upsell)
-
-```
-/tools/agiloshield/tarifs?return=%2Ftools%2Fagiloshield%2Fgenerate-skill%3Fupgraded%3D1
-```
-
-La page tarifs doit lire `?return=` et le transmettre à Stripe comme success URL.
-
-### Comportement post-paiement
-
-L'embed sur `?upgraded=1` :
-
-- affiche « Vérification de votre accès… »
-- relance `getCurrentMember({ useCache: false })` jusqu'à **3×** (2 s d'intervalle)
-- débloque le formulaire si Classic actif
-- sinon « abonnement en cours d'activation » + Recharger
-
----
-
-## Gate paywall (Agiloshield Classic uniquement)
-
-- `priceId` : `prc_classic-mensuel-3u5vr0uq5`
-- ou `planId` commençant par `pln_agiloshield`
-- Statuts : `ACTIVE`, `TRIALING`, `GRACE`
-
-| Situation | Écran |
-|-----------|--------|
-| Non connecté | Connexion → `/auth/login` |
-| Sans Classic | Upsell + tarifs |
-| `?upgraded=1`, plan pas encore actif | Activation en cours |
-| Classic actif | Formulaire 3 étapes + `.skill` |
-
-**CTA visible pour tous** (free inclus) : le paywall est géré en JS dans l'embed — ne pas masquer le CTA avec `data-ms-content` seul.
-
----
-
-## Premium vs free
-
-| Contexte | Mise en place |
-|----------|----------------|
-| Dashboard premium | Sidebar CTA + launcher (optionnel) + page dédiée |
-| Utilisateur Classic | Formulaire + download automatique |
-| Free / legacy | Même CTA → upsell dans embed ou drawer |
-| Variante free dashboard | Dupliquer la carte CTA + lien ou embed identique |
-
----
-
-## Lien dans la colonne anonymisation (`HTML_`)
-
-Au-dessus de « Voter pour la prochaine fonctionnalité » : lien **Générer mon skill Claude →** avec `data-ags-open-drawer` (nécessite `skill-generator-launcher.html` sur la page dashboard).
-
-Sans launcher : le lien navigue vers `/tools/agiloshield/generate-skill`.
-
----
-
-## Mode drawer (`?drawer=1`)
-
-L'embed ajoute la classe `ags--drawer` (pleine hauteur, pas de `max-width` centré) quand :
-
-- l'URL contient `?drawer=1`, ou
-- la page est dans une iframe (`window.self !== window.top`)
-
-Utilisé par `skill-generator-launcher.html` pour l'iframe.
-
----
-
-## Contenu du `.skill` généré
-
-```
-agiloshield-skill/
-  SKILL.md
-  scripts/
-    agiloshield.py
-    config.py
-    __init__.py
-```
-
-- Nom : `agiloshield-{profil}-{YYYYMMDD}.skill`
-- Auth : `USE_GET_TOKEN = True`, `EDITION = "ent"`
-
----
-
-## Checklist Webflow
-
-### Page `/tools/agiloshield/generate-skill`
-
-- [ ] Slug `generate-skill`, dossier `tools/agiloshield`
-- [ ] Memberstack members only
-- [ ] 1 embed = `skill-generator-embed.html` complet
-- [ ] Test Classic → download OK
-- [ ] Test sans Classic → upsell
-
-### Stripe
-
-- [ ] Success URL → `/tools/agiloshield/generate-skill?upgraded=1`
-- [ ] `?return=` depuis upsell testé bout en bout
-
-### Dashboard premium
-
-- [ ] Carte CTA : `skill-generator-sidebar-cta.html` dans `dashboard-left`
-- [ ] Option Marvin : `skill-generator-launcher.html` en bas de page
-- [ ] Embed anonymisation inchangé (`HTML_` seul)
-
-### Free / teasing
-
-- [ ] Même carte CTA sur variante free (si existante)
-
-### Optionnel
-
-- [ ] Republier embed anonymisation après mise à jour `HTML_` (lien skill dans `agf-side`)
-
----
-
-## Limite de caractères Webflow (CDN)
-
-Si l’embed complet (~55 Ko) dépasse la limite Webflow, coller **`skill-generator-cdn-loader.html`** (~650 caractères) à la place. Il charge le HTML depuis jsDelivr ; Memberstack reste sur la page parent (même origine).
-
-**Fichier complet sur GitHub (branche `1.09`) :**
-
-https://github.com/Agilotext/Agilotext-Scripts-Public/blob/1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html
-
-**CDN jsDelivr (contenu servi au loader) :**
+**Embed générateur (chargé dans le panneau) :**
 
 ```
 https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-embed.html
 ```
 
-Après un nouveau commit, mettre à jour la version dans `skill-generator-cdn-loader.html` (`@1.09` ou `@<sha>`).
+**Dashboard (drawer + lazy load) :**
 
-**Alternative sans fetch :** page `/generate-skill` + iframe (voir `skill-generator-launcher.html`).
+```
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-dashboard.html
+```
+
+**Pill sidebar :**
+
+```
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Agiloshield-Skill/skill-generator-sidebar-cta.html
+```
+
+Après commit, vous pouvez épingler `@<sha>` dans `skill-generator-dashboard.html` (constante `EMBED_CDN`).
+
+---
+
+## Checklist Webflow — dashboard premium
+
+### À faire
+
+- [ ] **Supprimer** le 2e embed qui contient tout `skill-generator-embed.html` collé (visible en pleine page).
+- [ ] Embed sidebar : contenu de `skill-generator-sidebar-cta.html` (bouton, **pas de lien** vers une autre page).
+- [ ] Embed fin de page : contenu de `skill-generator-dashboard.html` (drawer seul).
+- [ ] Embed anonymisation : `HTML_` inchangé côté skill (lien retiré dans la colonne droite).
+- [ ] Stripe / tarifs : success URL → `/tools/agiloshield/premium/dashboard?upgraded=1`
+- [ ] Lien upsell `?return=` pointe vers le dashboard (généré automatiquement par l’embed).
+
+### Tests
+
+- [ ] Clic pill → panneau droit, **pas** de navigation
+- [ ] Compte Classic → formulaire 3 étapes + `.skill`
+- [ ] Compte free → upsell dans le panneau
+- [ ] Retour paiement `?upgraded=1` → panneau ouvert + activation Memberstack
+
+---
+
+## Stripe / tarifs
+
+**Success URL par défaut :**
+
+```
+/tools/agiloshield/premium/dashboard?upgraded=1
+```
+
+**Return depuis upsell (généré par JS) :**
+
+```
+/tools/agiloshield/tarifs?return=%2Ftools%2Fagiloshield%2Fpremium%2Fdashboard%3Fupgraded%3D1
+```
+
+---
+
+## Gate paywall
+
+Agiloshield Classic : `prc_classic-mensuel-3u5vr0uq5` — géré dans l’embed, Memberstack sur la page parent (fetch dans le drawer, même origine).
+
+---
+
+## Régénérer l’embed
+
+```bash
+cd CNOEC_Agiloshield_Docs/Agiloshield-Skill
+python3 generate_skill_embed.py
+git add -f skill-generator-embed.html
+# commit + push 1.09
+```
+
+Le dashboard charge la nouvelle version au prochain clic (cache jsDelivr : utiliser `@sha` si besoin immédiat).
 
 ---
 
 ## Support
 
-- Build CLI équipe : `python3 build.py --user email@...`
-- Auth Claude : whitelist `api.agilotext.com`, `agiloshield.py settings`
+- Build CLI : `python3 build.py --user email@...`
+- Auth Claude : whitelist `api.agilotext.com`

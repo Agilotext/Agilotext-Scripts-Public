@@ -136,7 +136,7 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
   const ACTIVE_STATUSES = new Set(["ACTIVE", "TRIALING", "GRACE"]);
   const PRICING_BASE = "/tools/agiloshield/tarifs";
-  const RETURN_PATH = "/tools/agiloshield/generate-skill";
+  const RETURN_PATH = "/tools/agiloshield/premium/dashboard";
   const SKILL_ZIP_PREFIX = "agiloshield-skill";
   const MIN_TYPES = 2;
 
@@ -537,10 +537,13 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
   }
 
   function applyDrawerMode() {
+    const root = document.getElementById(ROOT_ID);
+    if (!root) return;
+    const inDrawer = !!root.closest("#ags-drawer-mount");
     const p = new URLSearchParams(window.location.search);
-    if (p.get("drawer") === "1" || p.get("embed") === "drawer") {
-      const root = document.getElementById(ROOT_ID);
-      if (root) root.classList.add("ags--drawer");
+    if (inDrawer || p.get("drawer") === "1" || p.get("embed") === "drawer") {
+      root.classList.add("ags--drawer");
+      if (inDrawer) root.setAttribute("data-ags-in-drawer", "");
     }
   }
 
@@ -594,6 +597,12 @@ HTML_TEMPLATE = r'''<!-- Agiloshield Skill Generator — embed Webflow v2 -->
 }
 #ags-skill-generator.ags--drawer .ags-screen--active {
   text-align: left;
+}
+#ags-skill-generator.ags--drawer .ags-head {
+  display: none;
+}
+#ags-skill-generator.ags--drawer .ags-brand-tag {
+  display: none;
 }
 #ags-skill-generator .ags-text { margin: 0 0 1rem; line-height: 1.5; color: var(--agilo-text-secondary); }
 #ags-skill-generator .ags-text--muted { font-size: 0.9rem; }
