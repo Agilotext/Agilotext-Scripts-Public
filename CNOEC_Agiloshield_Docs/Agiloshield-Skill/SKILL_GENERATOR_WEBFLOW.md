@@ -24,8 +24,8 @@ Référence : [Webflow Help — Custom code embed](https://help.webflow.com/hc/e
 
 | Fichier | Où le coller dans Webflow |
 |---------|---------------------------|
-| [`skill-generator-sidebar-cta.html`](skill-generator-sidebar-cta.html) | Embed dans **`dashboard-left`** (~600 car.) — pill « Claude » |
-| [`skill-generator-dashboard.html`](skill-generator-dashboard.html) | **1 embed** en bas du dashboard, hors anonymisation (~5 Ko) |
+| [`skill-generator-sidebar-cta.html`](skill-generator-sidebar-cta.html) | Embed dans **`dashboard-left`** — CTA centré « Intégration Claude Cowork » |
+| [`skill-generator-dashboard.html`](skill-generator-dashboard.html) | **1 embed** en bas du dashboard — panneau **75 %** largeur (88 % tablette, 100 % mobile) |
 | [`skill-generator-embed.html`](skill-generator-embed.html) | **Ne pas coller** — servi par jsDelivr |
 | [`generate_skill_embed.py`](generate_skill_embed.py) | Régénère l’embed après changement SKILL.md / agiloshield.py |
 
