@@ -45,52 +45,50 @@
         <img class="ags-claude-logo" src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6a1f116a08744afd7c5e0ee9_claude-color.png" alt="Claude" width="36" height="36" decoding="async">
         <div>
           <h2 class="ags-title">Générateur de skill Agiloshield</h2>
-          <p class="ags-text ags-text--muted ags-head-sub">Configurez votre skill Claude Cowork en 3 étapes.</p>
+          <p class="ags-text ags-text--muted ags-head-sub">Configurez votre skill Claude Cowork en 2 étapes.</p>
         </div>
       </div>
     </header>
 
     <nav class="ags-stepper" aria-label="Étapes">
-      <div class="ags-stepper-track" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1">
+      <div class="ags-stepper-track" role="progressbar" aria-valuemin="1" aria-valuemax="2" aria-valuenow="1">
         <div class="ags-stepper-fill" id="ags-stepper-fill"></div>
       </div>
       <ol class="ags-stepper-labels">
-        <li class="ags-stepper-label ags-stepper-label--active" data-step="1">Profil</li>
-        <li class="ags-stepper-label" data-step="2">Types</li>
-        <li class="ags-stepper-label" data-step="3">Télécharger</li>
+        <li class="ags-stepper-label ags-stepper-label--active" data-step="1">Configurer</li>
+        <li class="ags-stepper-label" data-step="2">Télécharger</li>
       </ol>
     </nav>
 
     <section class="ags-panel ags-panel--active" data-panel="1">
       <h3 class="ags-panel-title">Quel est votre profil métier ?</h3>
       <div class="ags-profile-grid" id="ags-profile-grid" role="radiogroup" aria-label="Profil métier"></div>
-      <div class="ags-actions">
-        <button type="button" class="ags-btn ags-btn--primary" id="ags-next-1" disabled>Continuer</button>
+
+      <div id="ags-inline-types" class="ags-inline-types" hidden>
+        <div class="ags-inline-types-head">
+          <h3 class="ags-panel-title">Types de données à masquer</h3>
+          <p class="ags-text ags-text--muted">Cochez au minimum 2 types. Ajustez librement — le profil passera en « Personnalisé ».</p>
+        </div>
+        <div class="ags-types-grid" id="ags-types-grid"></div>
+        <fieldset class="ags-mode-field">
+          <legend class="ags-panel-title">Mode</legend>
+          <label class="ags-radio"><input type="radio" name="ags-mode" value="pseudonymize" checked> Pseudonymiser <span class="ags-badge">recommandé</span></label>
+          <label class="ags-radio"><input type="radio" name="ags-mode" value="anonymize"> Anonymiser <span class="ags-text--muted">(irréversible)</span></label>
+        </fieldset>
+        <p class="ags-error" id="ags-types-error" hidden>Sélectionnez au moins 2 types.</p>
+      </div>
+
+      <div class="ags-actions ags-actions--configure">
+        <button type="button" class="ags-btn ags-btn--primary" id="ags-next-1" disabled>Voir le récapitulatif</button>
       </div>
     </section>
 
     <section class="ags-panel" data-panel="2" hidden>
-      <h3 class="ags-panel-title">Types de données à masquer</h3>
-      <p class="ags-text ags-text--muted">Cochez au minimum 2 types. Vous pouvez ajuster le profil choisi.</p>
-      <div class="ags-types-grid" id="ags-types-grid"></div>
-      <fieldset class="ags-mode-field">
-        <legend class="ags-panel-title">Mode</legend>
-        <label class="ags-radio"><input type="radio" name="ags-mode" value="pseudonymize" checked> Pseudonymiser <span class="ags-badge">recommandé</span></label>
-        <label class="ags-radio"><input type="radio" name="ags-mode" value="anonymize"> Anonymiser <span class="ags-text--muted">(irréversible)</span></label>
-      </fieldset>
-      <p class="ags-error" id="ags-types-error" hidden>Sélectionnez au moins 2 types.</p>
-      <div class="ags-actions">
-        <button type="button" class="ags-btn ags-btn--ghost" id="ags-back-2">Retour</button>
-        <button type="button" class="ags-btn ags-btn--primary" id="ags-next-2">Continuer</button>
-      </div>
-    </section>
-
-    <section class="ags-panel" data-panel="3" hidden>
       <h3 class="ags-panel-title">Récapitulatif</h3>
       <dl class="ags-recap" id="ags-recap"></dl>
       <p class="ags-error" id="ags-gen-error" hidden></p>
-      <div class="ags-actions">
-        <button type="button" class="ags-btn ags-btn--ghost" id="ags-back-3">Retour</button>
+      <div class="ags-actions ags-actions--recap">
+        <button type="button" class="ags-btn ags-btn--ghost" id="ags-back-2">Retour</button>
         <button type="button" class="ags-btn ags-btn--primary" id="ags-download">Télécharger mon skill</button>
       </div>
       <div class="ags-install">
@@ -311,27 +309,54 @@
     Object.keys(PROFILE_LABELS).forEach((key) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "ags-profile-card";
+      btn.className = "ags-profile-card" + (key === "custom" ? " ags-profile-card--custom" : "");
       btn.setAttribute("role", "radio");
       btn.setAttribute("aria-checked", "false");
       btn.dataset.profile = key;
+      const meta = key === "custom"
+        ? "Choix libre — cochez les types ci-dessous"
+        : (PROFILE_TYPES[key].length ? PROFILE_TYPES[key].join(", ") : "");
       btn.innerHTML = "<span class=\"ags-profile-card-title\">" + PROFILE_LABELS[key] + "</span>" +
-        "<span class=\"ags-profile-card-meta\">" + (PROFILE_TYPES[key].length ? PROFILE_TYPES[key].join(", ") : "Choix libre") + "</span>";
+        "<span class=\"ags-profile-card-meta\">" + meta + "</span>";
       btn.addEventListener("click", () => selectProfile(key));
       grid.appendChild(btn);
+    });
+  }
+
+  function highlightProfileCard(key) {
+    $$(".ags-profile-card", $("#ags-profile-grid")).forEach((c) => {
+      const on = c.dataset.profile === key;
+      c.classList.toggle("ags-profile-card--selected", on);
+      c.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  function revealInlineTypes() {
+    const zone = $("#ags-inline-types");
+    if (!zone) return;
+    zone.hidden = false;
+    requestAnimationFrame(() => {
+      zone.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }
 
   function selectProfile(key) {
     state.profile = key;
     state.types = PROFILE_TYPES[key].slice();
-    $$(".ags-profile-card", $("#ags-profile-grid")).forEach((c) => {
-      const on = c.dataset.profile === key;
-      c.classList.toggle("ags-profile-card--selected", on);
-      c.setAttribute("aria-checked", on ? "true" : "false");
-    });
-    $("#ags-next-1").disabled = !key;
+    highlightProfileCard(key);
+    revealInlineTypes();
     syncTypeCheckboxes();
+    validateTypes();
+  }
+
+  function onTypeChange() {
+    readTypesFromUI();
+    const preset = PROFILE_TYPES[state.profile] || [];
+    if (state.profile !== "custom" && !arraysEqual(state.types, preset)) {
+      state.profile = "custom";
+      highlightProfileCard("custom");
+    }
+    validateTypes();
   }
 
   function buildTypeCheckboxes() {
@@ -359,10 +384,11 @@
 
   function validateTypes() {
     readTypesFromUI();
-    const ok = state.types.length >= MIN_TYPES;
+    const ok = state.profile && state.types.length >= MIN_TYPES;
     const err = $("#ags-types-error");
     if (err) err.hidden = ok;
-    $("#ags-next-2").disabled = !ok;
+    const nextBtn = $("#ags-next-1");
+    if (nextBtn) nextBtn.disabled = !ok;
     return ok;
   }
 
@@ -379,10 +405,10 @@
       l.classList.toggle("ags-stepper-label--done", s < n);
     });
     const fill = $("#ags-stepper-fill");
-    if (fill) fill.style.width = ((n - 1) / 2 * 100) + "%";
+    if (fill) fill.style.width = ((n - 1) * 100) + "%";
     const track = $(".ags-stepper-track");
     if (track) track.setAttribute("aria-valuenow", String(n));
-    if (n === 3) renderRecap();
+    if (n === 2) renderRecap();
   }
 
   function renderRecap() {
@@ -495,19 +521,13 @@
 
   function bindFormEvents() {
     $("#ags-next-1")?.addEventListener("click", () => {
-      if (!state.profile) return;
-      syncTypeCheckboxes();
+      if (!validateTypes()) return;
+      state.mode = $('input[name="ags-mode"]:checked')?.value || "pseudonymize";
       goToStep(2);
     });
     $("#ags-back-2")?.addEventListener("click", () => goToStep(1));
-    $("#ags-next-2")?.addEventListener("click", () => {
-      if (!validateTypes()) return;
-      state.mode = $('input[name="ags-mode"]:checked')?.value || "pseudonymize";
-      goToStep(3);
-    });
-    $("#ags-back-3")?.addEventListener("click", () => goToStep(2));
     $("#ags-download")?.addEventListener("click", downloadSkill);
-    $$("#ags-types-grid input").forEach((cb) => cb.addEventListener("change", validateTypes));
+    $$("#ags-types-grid input").forEach((cb) => cb.addEventListener("change", onTypeChange));
     $$('input[name="ags-mode"]').forEach((r) => r.addEventListener("change", () => {
       state.mode = r.value;
     }));
@@ -592,20 +612,39 @@
   font-size: 0.85rem;
 }
 #ags-skill-generator.ags--drawer .ags-profile-grid {
-  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem;
 }
 #ags-skill-generator.ags--drawer .ags-types-grid {
-  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(9.75rem, 1fr));
+}
+@media (max-width: 900px) {
+  #ags-skill-generator .ags-profile-grid,
+  #ags-skill-generator.ags--drawer .ags-profile-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 @media (max-width: 480px) {
   #ags-skill-generator.ags--drawer {
     padding: 1.25rem 1rem 1.75rem;
   }
+  #ags-skill-generator .ags-profile-grid,
   #ags-skill-generator.ags--drawer .ags-profile-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
+  #ags-skill-generator .ags-types-grid,
   #ags-skill-generator.ags--drawer .ags-types-grid {
     grid-template-columns: 1fr;
+  }
+  #ags-skill-generator .ags-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  #ags-skill-generator .ags-actions .ags-btn--ghost {
+    margin-right: 0;
+  }
+  #ags-skill-generator .ags-actions .ags-btn {
+    width: 100%;
   }
 }
 #ags-skill-generator .ags-text { margin: 0 0 1rem; line-height: 1.5; color: var(--agilo-text-secondary); }
@@ -635,7 +674,7 @@
 #ags-skill-generator .ags-btn--ghost {
   background: transparent; color: var(--agilo-primary);
   border-color: color-mix(in srgb, var(--agilo-primary) 30%, transparent);
-  margin-top: 0.75rem;
+  margin-top: 0;
 }
 #ags-skill-generator .ags-head { margin-bottom: 1.5rem; }
 #ags-skill-generator .ags-stepper { margin-bottom: 1.5rem; }
@@ -657,25 +696,54 @@
 #ags-skill-generator .ags-panel--active { display: block; }
 #ags-skill-generator .ags-panel-title { font-size: 1.1rem; margin: 0 0 1rem; }
 #ags-skill-generator .ags-profile-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  gap: 0.75rem; margin-bottom: 1.25rem;
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 0.65rem; margin-bottom: 0;
+  align-items: stretch;
 }
 #ags-skill-generator .ags-profile-card {
-  text-align: left; padding: 0.85rem; border-radius: 0.75rem;
+  display: flex; flex-direction: column; align-items: flex-start;
+  text-align: left; padding: 0.75rem 0.8rem; border-radius: 0.75rem;
   border: 1px solid var(--agilo-border); background: var(--agilo-surface);
-  cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  min-height: 4.25rem; width: 100%;
+}
+#ags-skill-generator .ags-profile-card--custom {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--agilo-primary) 28%, var(--agilo-border));
+  background: color-mix(in srgb, var(--agilo-primary) 4%, var(--agilo-surface));
 }
 #ags-skill-generator .ags-profile-card--selected {
   border-color: var(--agilo-primary);
+  border-style: solid;
   background: var(--agilo-primary-soft);
+  box-shadow: 0 2px 10px rgba(23, 74, 150, 0.1);
 }
-#ags-skill-generator .ags-profile-card-title { display: block; font-weight: 600; font-size: 0.9rem; }
+#ags-skill-generator .ags-profile-card-title { display: block; font-weight: 600; font-size: 0.875rem; line-height: 1.3; }
 #ags-skill-generator .ags-profile-card-meta {
-  display: block; font-size: 0.7rem; color: var(--agilo-text-secondary);
-  margin-top: 0.35rem; word-break: break-word;
+  display: block; font-size: 0.68rem; color: var(--agilo-text-secondary);
+  margin-top: 0.3rem; word-break: break-word; line-height: 1.35;
+}
+#ags-skill-generator .ags-inline-types {
+  margin-top: 1.35rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--agilo-border);
+  animation: ags-fadein 0.22s ease;
+}
+#ags-skill-generator .ags-inline-types-head {
+  margin-bottom: 0.85rem;
+}
+#ags-skill-generator .ags-inline-types-head .ags-panel-title {
+  margin-bottom: 0.35rem;
+}
+#ags-skill-generator .ags-inline-types-head .ags-text--muted {
+  margin-bottom: 0;
+}
+@keyframes ags-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 #ags-skill-generator .ags-types-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
   gap: 0.5rem; margin-bottom: 1rem;
 }
 #ags-skill-generator .ags-type-chip {
@@ -694,8 +762,16 @@
   background: var(--agilo-primary-soft); color: var(--agilo-primary);
 }
 #ags-skill-generator .ags-actions {
-  display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;
-  margin-top: 1rem;
+  display: flex; flex-wrap: nowrap; gap: 0.75rem; align-items: center;
+  justify-content: flex-end;
+  margin-top: 1.35rem;
+  width: 100%;
+}
+#ags-skill-generator .ags-actions .ags-btn--ghost {
+  margin-right: auto;
+}
+#ags-skill-generator .ags-actions--configure {
+  padding-top: 0.25rem;
 }
 #ags-skill-generator .ags-recap {
   display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem;
@@ -711,7 +787,4 @@
 #ags-skill-generator .ags-install-title { margin: 0 0 0.75rem; font-size: 1rem; }
 #ags-skill-generator .ags-install-steps { margin: 0; padding-left: 1.25rem; line-height: 1.6; font-size: 0.9rem; }
 #ags-skill-generator code { font-size: 0.85em; background: rgba(0,0,0,0.05); padding: 0.1em 0.35em; border-radius: 0.25em; }
-@media (max-width: 480px) {
-  #ags-skill-generator .ags-profile-grid { grid-template-columns: 1fr 1fr; }
-}
 </style>
