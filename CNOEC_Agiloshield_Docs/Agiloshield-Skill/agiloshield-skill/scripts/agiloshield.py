@@ -15,6 +15,8 @@ import os
 import re
 import sys
 import time
+import zipfile
+import zlib
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -42,6 +44,22 @@ SUPPORTED_EXTENSIONS = {
 
 POLL_INTERVAL_INITIAL = 2.5
 POLL_INTERVAL_MAX = 5.0
+
+TOKEN_PATTERN = re.compile(r"<[A-Z]{2,4}_[A-Z0-9]{1,4}>")
+EMAIL_RE = re.compile(
+    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+    re.IGNORECASE,
+)
+PHONE_FR_RE = re.compile(
+    r"(?:\+33|0033|0)\s*[1-9](?:[\s.\-]?\d{2}){4}\b"
+)
+SIREN_RE = re.compile(r"\b\d{3}\s?\d{3}\s?\d{3}\b")
+SIRET_RE = re.compile(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b")
+IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}[\s]?(?:[A-Z0-9]{4}[\s]?){2,7}[A-Z0-9]{1,4}\b")
+NIR_RE = re.compile(
+    r"\b[12]\s?\d{2}\s?\d{2}\s?\d{2}\s?\d{3}\s?\d{3}\s?\d{2}\b"
+)
+MAX_LEAK_SAMPLES = 5
 
 
 def die(message: str, exit_code: int = 1) -> None:
@@ -416,6 +434,151 @@ def unique_output_path(directory: Path, base: str, suffix: str, ext: str) -> Pat
         index += 1
 
 
+def is_safe_output_path(path: Path) -> bool:
+    name = path.name.lower()
+    return ".pseudonymized." in name or ".anonymized." in name or name.endswith(
+        (".pseudonymized", ".anonymized")
+    )
+
+
+def luhn_check(number: str) -> bool:
+    digits = [int(c) for c in number if c.isdigit()]
+    if len(digits) < 2:
+        return False
+    total = 0
+    parity = len(digits) % 2
+    for index, digit in enumerate(digits):
+        if index % 2 == parity:
+            digit *= 2
+            if digit > 9:
+                digit -= 9
+        total += digit
+    return total % 10 == 0
+
+
+def iban_mod97(iban: str) -> bool:
+    cleaned = re.sub(r"\s+", "", iban.upper())
+    if len(cleaned) < 15 or len(cleaned) > 34:
+        return False
+    if not re.match(r"^[A-Z]{2}\d{2}[A-Z0-9]+$", cleaned):
+        return False
+    rearranged = cleaned[4:] + cleaned[:4]
+    numeric = ""
+    for char in rearranged:
+        if char.isdigit():
+            numeric += char
+        elif "A" <= char <= "Z":
+            numeric += str(ord(char) - 55)
+        else:
+            return False
+    try:
+        return int(numeric) % 97 == 1
+    except ValueError:
+        return False
+
+
+def mask_sample(value: str, visible: int = 4) -> str:
+    compact = value.strip()
+    if len(compact) <= visible:
+        return "***"
+    return compact[:visible] + "…"
+
+
+def append_leak(
+    leaks: list[dict[str, str]],
+    leak_type: str,
+    sample: str,
+    seen: set[tuple[str, str]],
+) -> None:
+    if len(leaks) >= MAX_LEAK_SAMPLES:
+        return
+    key = (leak_type, sample[:80])
+    if key in seen:
+        return
+    seen.add(key)
+    leaks.append({"type": leak_type, "sample": mask_sample(sample)})
+
+
+def extract_office_xml_text(path: Path) -> str:
+    parts: list[str] = []
+    with zipfile.ZipFile(path) as archive:
+        for name in archive.namelist():
+            if not name.endswith(".xml"):
+                continue
+            if not any(
+                fragment in name
+                for fragment in ("word/", "xl/", "ppt/", "docProps/", "content.xml")
+            ):
+                continue
+            try:
+                parts.append(archive.read(name).decode("utf-8", errors="ignore"))
+            except KeyError:
+                continue
+    return "\n".join(parts)
+
+
+def extract_pdf_text_best_effort(data: bytes) -> str:
+    chunks: list[str] = []
+    for match in re.finditer(rb"[\x20-\x7e]{8,}", data):
+        chunks.append(match.group().decode("ascii", errors="ignore"))
+    for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", data, re.DOTALL):
+        stream = match.group(1).strip(b"\r\n")
+        if not stream:
+            continue
+        try:
+            decompressed = zlib.decompress(stream)
+            chunks.append(decompressed.decode("latin-1", errors="ignore"))
+        except zlib.error:
+            continue
+    return "\n".join(chunks)
+
+
+def extract_text_for_verify(path: Path) -> tuple[str, str]:
+    ext = path.suffix.lstrip(".").lower()
+    data = path.read_bytes()
+
+    if ext in {"txt", "csv", "json", "fec"}:
+        return data.decode("utf-8", errors="ignore"), ext
+    if ext in {"doc", "docx", "xls", "xlsx", "ppt", "pptx"}:
+        try:
+            return extract_office_xml_text(path), ext
+        except zipfile.BadZipFile:
+            return data.decode("latin-1", errors="ignore"), f"{ext}_raw"
+    if ext == "pdf":
+        return extract_pdf_text_best_effort(data), "pdf_best_effort"
+    return data.decode("latin-1", errors="ignore"), ext
+
+
+def scan_potential_leaks(text: str) -> list[dict[str, str]]:
+    leaks: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for match in EMAIL_RE.finditer(text):
+        append_leak(leaks, "email", match.group(0), seen)
+
+    for match in PHONE_FR_RE.finditer(text):
+        append_leak(leaks, "phone_fr", match.group(0), seen)
+
+    for match in SIRET_RE.finditer(text):
+        digits = re.sub(r"\D", "", match.group(0))
+        if len(digits) == 14 and luhn_check(digits):
+            append_leak(leaks, "siret", match.group(0), seen)
+
+    for match in SIREN_RE.finditer(text):
+        digits = re.sub(r"\D", "", match.group(0))
+        if len(digits) == 9 and luhn_check(digits):
+            append_leak(leaks, "siren", match.group(0), seen)
+
+    for match in IBAN_RE.finditer(text):
+        if iban_mod97(match.group(0)):
+            append_leak(leaks, "iban", match.group(0), seen)
+
+    for match in NIR_RE.finditer(text):
+        append_leak(leaks, "nir", match.group(0), seen)
+
+    return leaks
+
+
 def save_saved_defaults(data: dict[str, Any]) -> dict[str, Any]:
     raw = data.get("anon2OptionsJson")
     if isinstance(raw, list):
@@ -490,9 +653,54 @@ def cmd_pseudonymize(args: argparse.Namespace) -> None:
             except Exception as exc:
                 die(f"Clé .properties indisponible — restauration impossible: {exc}")
 
+        result["next_step"] = "verify"
+        result["verify_command"] = (
+            f'python3 agiloshield.py verify "{result["pseudonymized"]}"'
+        )
+        result["gate"] = (
+            "STOP: lancer verify, presenter le recap, attendre l'accord explicite "
+            "de l'utilisateur avant toute lecture du fichier pseudonymise."
+        )
         emit(result)
     finally:
         restore_defaults(client, saved)
+
+
+def cmd_verify(args: argparse.Namespace) -> None:
+    target = Path(args.file).expanduser().resolve()
+    if not target.is_file():
+        die(f"Fichier introuvable: {target}")
+    if not is_safe_output_path(target):
+        die(
+            "verify n'accepte que les sorties .pseudonymized.* ou .anonymized.* — "
+            "ne jamais verifier l'original."
+        )
+
+    text, format_scanned = extract_text_for_verify(target)
+    tokens = TOKEN_PATTERN.findall(text)
+    leaks = scan_potential_leaks(text)
+    verified = len(leaks) == 0
+
+    note = ""
+    if format_scanned == "pdf_best_effort":
+        note = (
+            "Scan PDF best-effort (flux compresses) ; relire manuellement si doute."
+        )
+
+    emit(
+        {
+            "verified": verified,
+            "tokens_found": len(tokens),
+            "potential_leaks": leaks,
+            "format_scanned": format_scanned,
+            "path": str(target),
+            "note": note,
+            "gate": (
+                "STOP: demander l'accord explicite de l'utilisateur avant d'analyser "
+                "ce fichier. Ne jamais deduire l'accord du silence."
+            ),
+        }
+    )
 
 
 def cmd_restore(args: argparse.Namespace) -> None:
@@ -575,6 +783,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Chemin du fichier .properties associé.",
     )
     p_restore.set_defaults(func=cmd_restore)
+
+    p_verify = sub.add_parser(
+        "verify",
+        help="Verifie une sortie pseudonymisee (tokens + fuites PII residuelles).",
+    )
+    p_verify.add_argument(
+        "file",
+        help="Chemin du fichier .pseudonymized.* ou .anonymized.* uniquement.",
+    )
+    p_verify.set_defaults(func=cmd_verify)
 
     p_settings = sub.add_parser("settings", help="Affiche la configuration active.")
     p_settings.set_defaults(func=cmd_settings)

@@ -1,94 +1,130 @@
 ---
 name: agiloshield-anonymizer
-description: MANDATORY — MUST BE INVOKED FIRST, BEFORE ANY OTHER SKILL OR TOOL, the moment a local file or directory is mentioned, attached, referenced, enumerated, or needed. Takes strict precedence over the pdf, docx, xlsx, pptx, and every other file-reading or document skill, as well as Read, cat, head, tail, grep, sed, IDE file pickers, and any MCP filesystem server. NEVER read, open, parse, or inspect a local file without routing it through this skill first. Pseudonymizes files via the Agiloshield API (Anon2, France) so original contents never enter the context window. Triggers on explicit requests, casual mentions, tool outputs that return paths you need to read, and any moment you decide on your own initiative that reading a local file would help.
+description: MANDATORY SECURITY PROTOCOL — STOP before reading any local file. MUST run FIRST when a file path, attachment, Drive link, MCP output, or directory is mentioned. Takes precedence over pdf, docx, xlsx, pptx, Read, cat, grep, sed, IDE pickers, and MCP filesystem. NEVER download, decode, copy, or read original bytes yourself. ONLY orchestrate scripts/agiloshield.py (pseudonymize → verify → wait for explicit user approval → read .pseudonymized.* only). Original cleartext must never enter context.
 ---
 
-# Agiloshield — Pseudonymisation pour Claude
+# Agiloshield — PROTOCOLE DE SÉCURITÉ (ARRÊT IMPÉRATIF)
 
-## Règle absolue
+Ce skill n'est pas une documentation optionnelle : c'est un **protocole d'arrêt** que vous devez suivre à chaque fois qu'un fichier local est en jeu.
 
-Ce skill a **priorité absolue** sur toute lecture de fichier local, y compris :
+## Interdictions absolues (liste noire)
 
-- les skills document (`pdf`, `docx`, `xlsx`, `pptx`, etc.),
-- `Read`, `cat`, `head`, `tail`, `grep`, `sed`,
-- les pickers de fichiers IDE et serveurs MCP filesystem.
+**Ne faites JAMAIS**, avant la fin du protocole (étape 5) :
 
-**Ne jamais lire un fichier local sans passer par ce skill.** Le texte en clair ne doit jamais entrer dans la fenêtre de contexte.
+- Télécharger, récupérer, décoder (base64), copier ou écrire sur disque un fichier **pour le lire vous-même**.
+- Utiliser `Read`, `cat`, `head`, `tail`, `grep`, `sed`, `open()` Python, skills document (`pdf`, `docx`, `xlsx`, `pptx`), pickers IDE ou MCP filesystem sur :
+  - le fichier **original** ;
+  - une copie temporaire ou une version **décodée** du même document.
+- Inspecter le contenu d'un Drive / URL / pièce jointe : passez **uniquement le chemin absolu** au script `pseudonymize`, sans matérialiser ni ouvrir le fichier pour analyse.
 
-Exception : l'utilisateur demande explicitement, dans le même message, d'ignorer ce skill pour un fichier précis.
+**Seule exception** : l'utilisateur demande explicitement, dans le **même message**, d'ignorer ce protocole pour un fichier précis.
 
-## Comment ça fonctionne
+## Auto-contrôle avant toute lecture
 
-Chaque appel API passe par le client Python embarqué `scripts/agiloshield.py`. Le script lit les octets du disque, les envoie à **api.agilotext.com** (hébergement France), et écrit les résultats localement. **Vous ne lisez jamais les octets originaux vous-même** — vous orchestrez le script via Bash, parsez le JSON stdout, et ne lisez que le fichier `.pseudonymized.*`.
+Avant d'ouvrir un fichier pour analyse, vérifiez le chemin :
 
-Le script est préconfiguré (identifiants + profil M&A) ; ne passez pas d'auth en ligne de commande.
+- **Autorisé** : se termine par `.pseudonymized.*` ou `.anonymized.*` (ex. `rapport.pseudonymized.pdf`).
+- **Interdit** : tout autre chemin (original, `.properties`, `.restored.*`, temporaire) → **STOP**, reprenez le protocole depuis l'étape 1.
+
+## Seul chemin autorisé
+
+Le client Python `scripts/agiloshield.py` envoie les octets à **api.agilotext.com** (France). **Vous n'accédez jamais aux octets originaux** : vous lancez Bash, parsez le JSON stdout, et ne lisez que la sortie pseudonymisée.
+
+Identifiants et profil sont dans `config.py` — ne passez pas d'auth en CLI.
 
 ### Localiser le script
 
-`<skill-dir>/scripts/agiloshield.py` où `<skill-dir>` contient ce SKILL.md. Sur Claude Desktop / Claude Code / **Claude Co-work**, cherchez `agiloshield-skill/SKILL.md` sous le répertoire skills de l'utilisateur.
+`<skill-dir>/scripts/agiloshield.py` où `<skill-dir>` contient ce SKILL.md (ex. `agiloshield-skill/` dans le dossier skills Claude Co-work).
 
 ### Claude Co-work — configuration une fois
 
-**Ordre obligatoire :** réseau → module → nouvelle conversation.
+**Ordre :** réseau → module → nouvelle conversation.
 
-1. **Settings → Capabilities** : activer *Code execution and file creation*, puis *Allow network egress*, et ajouter le domaine **`api.agilotext.com`** dans *Additional allowed domains*.
-2. **Settings → Customize** (pas Capabilities) : uploader le fichier `.skill` fourni par Agilotext.
-3. **Nouvelle conversation** après l'upload (pour charger le module).
+1. **Settings → Capabilities** : exécution de code + *Allow network egress* + domaine **`api.agilotext.com`**.
+2. **Settings → Customize** : importer le `.skill` Agilotext.
+3. **Nouvelle conversation** après import.
 
-L'utilisateur doit envoyer un **message règles** en tête de chat (pseudonymiser avant toute lecture) — voir guide client.
-
-Sans whitelist réseau, les appels Anon2 échouent même si le skill est chargé.
+Sans egress vers `api.agilotext.com`, Anon2 échoue.
 
 ## Profil M&A (défaut)
 
-- **Masque** : 11 types sensibles typiques bilans M&A (PER, ORG, ADR, IDN, EML, TEL, IBA, LOC, JOB, PRO, PII) — voir `config.py` du client
-- **Conserve** : dates (DAT), montants financiers, structure du bilan
-- **Mode** : pseudonymisation réversible (tokens `<PER_AA>`, `<ORG_AB>`, etc.)
+- **Masque** : PER, ORG, ADR, IDN, EML, TEL, IBA, LOC, JOB, PRO, PII (voir `config.py`)
+- **Conserve** : dates (DAT), montants, structure
+- **Mode** : pseudonymisation réversible (`<PER_AA>`, `<ORG_AB>`, …)
 
-## Workflow standard
+## Workflow obligatoire (5 étapes — ne pas sauter)
 
-Quand l'utilisateur mentionne un fichier (bilan, liasse, PDF, DOCX…) :
+Quand l'utilisateur mentionne un fichier (bilan, PDF, DOCX, chemin Drive, etc.) :
 
-1. **Prévenir** : « Je pseudonymise votre document via Agiloshield avant analyse (25–80 s selon le format). »
-2. **Exécuter** :
-   ```bash
-   python3 <skill-dir>/scripts/agiloshield.py pseudonymize "/chemin/absolu/vers/document.pdf"
-   ```
-3. **Parser le JSON stdout** — champs clés :
-   - `pseudonymized` : chemin du fichier safe à lire
-   - `properties` : clé de restauration — **NE JAMAIS LIRE NI PARTAGER**
-4. **Lire uniquement** le fichier `pseudonymized` pour l'analyse demandée.
-5. **Restauration** (si demandée par l'utilisateur) :
-   ```bash
-   python3 <skill-dir>/scripts/agiloshield.py restore "/chemin/fichier.pseudonymized.pdf" --properties "/chemin/fichier.properties"
-   ```
-   Ne lisez **pas** le fichier restauré — il contient les données originales.
+### 1. Prévenir
+
+« Je pseudonymise votre document via Agiloshield avant toute analyse (environ 25–80 s selon le format). Je ne lirai pas le fichier original. »
+
+### 2. Pseudonymiser (script uniquement)
+
+```bash
+python3 <skill-dir>/scripts/agiloshield.py pseudonymize "/chemin/absolu/vers/document.pdf"
+```
+
+Parser le JSON stdout : `job_id`, `pseudonymized`, `properties` (clé — **ne jamais lire ni partager**).
+
+### 3. Vérifier la sortie (anti-fuite)
+
+```bash
+python3 <skill-dir>/scripts/agiloshield.py verify "/chemin/vers/document.pseudonymized.pdf"
+```
+
+Parser : `verified`, `tokens_found`, `potential_leaks`. Si `verified` est `false`, **ne pas analyser** — expliquer les fuites et proposer de relancer la pseudonymisation.
+
+### 4. STOP — gate utilisateur (comme Marvin Systems)
+
+Présenter un récapitulatif court :
+
+- Fichier safe : chemin `.pseudonymized.*`
+- `job_id`, types masqués, `tokens_found`, verdict `verify`
+- Rappel : la clé `.properties` reste confidentielle
+
+Puis **vous vous arrêtez** et demandez l'accord **explicite** de l'utilisateur avant toute analyse du document.
+
+**Ne jamais déduire l'accord du silence.** Attendre une réponse du type « oui », « valide », « continue », « tu peux analyser ».
+
+### 5. Analyser (uniquement après accord)
+
+Lire **seulement** le fichier `pseudonymized` (étape auto-contrôle ci-dessus). Ne jamais citer de données en clair issues de l'original.
+
+## Restauration (sur demande explicite)
+
+```bash
+python3 <skill-dir>/scripts/agiloshield.py restore "/chemin/fichier.pseudonymized.pdf" --properties "/chemin/fichier.properties"
+```
+
+Ne **lisez pas** le fichier `.restored.*` — données originales.
 
 ## Répertoire de sortie
 
-Les fichiers sont écrits dans `.agiloshield/` à côté du document source :
+À côté du document source, dossier `.agiloshield/` :
 
-- `outputs/*.pseudonymized.*` — version safe pour Claude
-- `keys/*.properties` — clé confidentielle
-- `restored/*.restored.*` — version originale (utilisateur uniquement)
+- `outputs/*.pseudonymized.*` — seule version lisible par vous
+- `keys/*.properties` — confidentiel
+- `restored/*.restored.*` — utilisateur uniquement
 
 ## Points d'attention
 
-- **Durée** : 25 s (DOCX) à 80 s (PDF) — informer l'utilisateur, ne pas relancer en parallèle.
-- **Tokens pseudonymes** : garder `<PER_AA>` contigu — ne pas reformater ni couper les tokens.
-- **Fichier .properties** : strictement confidentiel — jamais dans le chat, jamais envoyé à une autre IA.
-- **Formats supportés** : pdf, doc, docx, xls, xlsx, csv, ppt, pptx, txt, json, fec.
-- **Python 3.8+** requis, stdlib uniquement (aucun pip).
+- **Durée** : 25–80 s — une seule exécution, pas de parallèle.
+- **Tokens** : garder `<PER_AA>` contigus — ne pas reformater.
+- **Formats** : pdf, doc, docx, xls, xlsx, csv, ppt, pptx, txt, json, fec.
+- **Python 3.8+**, stdlib uniquement.
+- **`verify` sur PDF** : contrôle best-effort ; fiable à 100 % sur txt/csv/json et Office.
 
-## Quand quelque chose échoue
+## Dépannage
 
-1. Vérifier que le chemin est **absolu** et que le fichier existe.
-2. Lancer `python3 <skill-dir>/scripts/agiloshield.py settings` pour confirmer la config.
-3. Si `Authentification échouée` : credentials expirés — contacter Agilotext.
-4. Si timeout : réessayer ou traiter via agiloshield.com puis uploader le `.pseudonymized.*` manuellement.
+1. Chemin **absolu**, fichier existant.
+2. `python3 <skill-dir>/scripts/agiloshield.py settings`
+3. Auth échouée → contacter Agilotext.
+4. Timeout → réessayer ou pseudonymiser sur agiloshield.com puis fournir le `.pseudonymized.*`.
 
-## Exemples de prompts utilisateur
+## Exemples
 
-- « Analyse mon bilan PDF » → pseudonymize puis analyse du `.pseudonymized.pdf`
-- « Protège ce DOCX avant de l'envoyer à Claude » → pseudonymize, donner le chemin safe
-- « Restaure la version originale » → restore avec le `.properties` du même job
+- « Analyse mon bilan PDF » → pseudonymize → verify → STOP → accord → lire `.pseudonymized.pdf` seulement
+- « Fichier dans mon Drive » → obtenir le chemin absolu local → pseudonymize (sans télécharger/décoder vous-même pour lecture)
+- « Restaure l'original » → `restore` ; ne pas lire le restauré
