@@ -739,6 +739,61 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
   }
 }
 
+/* ===== V06 — indicateur thinking + logo Mistral ===== */
+.mistral-thinking {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mistral-thinking__visual {
+  position: relative;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mistral-thinking__avatar {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: #ff8a00;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.mistral-thinking__avatar svg {
+  display: block;
+}
+
+.mistral-thinking__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid color-mix(in srgb, var(--agilo-border, #343a4040) 40%, transparent);
+  border-top-color: #ff8a00;
+  animation: mistral-thinking-spin 0.9s linear infinite;
+  box-sizing: border-box;
+}
+
+.mistral-thinking__label {
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--color--gris, #6b7280);
+}
+
+@keyframes mistral-thinking-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Petite animation d'arrivée */
 @keyframes chat-slide-in{
   from{ opacity:0; transform:translateY(10px); }
@@ -757,6 +812,10 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 
 /* Respecte "réduire les animations" */
 @media (prefers-reduced-motion: reduce){
+  .mistral-thinking__ring {
+    animation: none;
+    border-top-color: #ff8a00;
+  }
   *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition:none !important; }
 }
 
