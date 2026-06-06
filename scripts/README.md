@@ -21,6 +21,12 @@ scripts/
 │   └── editor/             # Scripts de la page Éditeur
 │       └── relance-compte-rendu.js  # Relance/régénération compte-rendu
 │   │
+│   └── auth/               # Pages authentification Webflow
+│       ├── login.js        # Login email/password + Google SSO (v7)
+│       ├── post-login-router.js
+│       ├── global-invite-handler.js
+│       └── join-team.js
+│   │
 │   └── profile/            # Mon compte — studio prompts (bundles IIFE)
 │       ├── agilo-prompt-studio.js
 │       └── agilo-prompt-studio.css
@@ -67,6 +73,16 @@ Snippet **copier-coller** dans un composant **Embed** Webflow (HTML + styles + s
 ```html
 <script src="https://raw.githubusercontent.com/Agilotext/Client/main/scripts/pages/dashboard/free.js"></script>
 ```
+
+### Page Login (`/auth/login`) — Google SSO v7
+
+Remplacer le contenu de l'embed `code-login_script` (avant jQuery/Webflow IX2 en bas de page) :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/auth/login.js"></script>
+```
+
+Procédure QA + correctif Designer Tabs : [`scripts/pages/auth/login-WEBFLOW-QA.md`](pages/auth/login-WEBFLOW-QA.md)
 
 ### Page Éditeur (Relance Compte-Rendu)
 ```html
