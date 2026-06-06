@@ -262,6 +262,7 @@
         use_google: 'Ce compte utilise Google. Cliquez sur\u00a0«\u00a0Se connecter avec Google\u00a0».',
         wrong_password: 'Mot de passe incorrect. Vérifiez vos identifiants ou réinitialisez votre mot de passe.',
         popup_closed: 'Connexion Google annulée. Réessayez et validez la fenêtre Google.',
+        popup_blocked: 'Votre navigateur a bloqué la fenêtre Google. Autorisez les popups pour ce site dans la barre d\u2019adresse (icône 🔒), puis réessayez.',
         network: 'Problème réseau. Vérifiez votre connexion internet puis réessayez.',
         offline: 'Vous n\'êtes pas connecté à internet. Vérifiez votre connexion puis réessayez.',
         email_invalid: 'Adresse email invalide. Vérifiez le format (ex\u00a0: nom@exemple.com).',
@@ -445,12 +446,24 @@
             }
 
             log('google_login_start');
+
+            /* Détection popup bloqué : si aucune redirection ni erreur en 5 s,
+               Chrome a probablement tué le popup silencieusement.           */
+            var _popupGuardTimer = setTimeout(function () {
+                if (!isAuthInFlight) return;
+                log('google_login_popup_timeout');
+                showInlineError(MSG.popup_blocked);
+                setLoading(false);
+            }, 5000);
+
             ms.loginWithProvider({ provider: 'google', allowSignup: false })
                 .then(function () {
+                    clearTimeout(_popupGuardTimer);
                     log('google_login_success');
                     window.location.replace('/auth/post-login');
                 })
                 .catch(function (err) {
+                    clearTimeout(_popupGuardTimer);
                     lastErrorAt = Date.now();
                     var kind = classifyError(err);
                     showInlineError(googleLoginErrorLabel(err, kind));
@@ -477,5 +490,5 @@
         });
     });
 
-    log('script_ready', { version: 'v7' });
+    log('script_ready', { version: 'v7.1' });
 })();
