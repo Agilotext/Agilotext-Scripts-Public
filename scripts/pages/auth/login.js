@@ -262,7 +262,7 @@
         use_google: 'Ce compte utilise Google. Cliquez sur\u00a0«\u00a0Se connecter avec Google\u00a0».',
         wrong_password: 'Mot de passe incorrect. Vérifiez vos identifiants ou réinitialisez votre mot de passe.',
         popup_closed: 'Connexion Google annulée. Réessayez et validez la fenêtre Google.',
-        popup_blocked: 'Votre navigateur a bloqué la fenêtre Google. Autorisez les popups pour ce site dans la barre d\u2019adresse (icône 🔒), puis réessayez.',
+        popup_blocked: 'La connexion Google n\u2019a pas abouti. Causes possibles\u00a0: popups bloqués (autorisez-les via l\u2019icône 🔒 dans la barre d\u2019adresse), ou protocole réseau QUIC bloqué par votre réseau/antivirus (voir notre aide en ligne). Vous pouvez aussi vous connecter avec email\u00a0+\u00a0mot de passe.',
         network: 'Problème réseau. Vérifiez votre connexion internet puis réessayez.',
         offline: 'Vous n\'êtes pas connecté à internet. Vérifiez votre connexion puis réessayez.',
         email_invalid: 'Adresse email invalide. Vérifiez le format (ex\u00a0: nom@exemple.com).',
@@ -490,5 +490,5 @@
         });
     });
 
-    log('script_ready', { version: 'v7.1' });
+    log('script_ready', { version: 'v7.2' });
 })();
