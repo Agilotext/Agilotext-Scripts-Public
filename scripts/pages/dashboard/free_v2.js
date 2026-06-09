@@ -554,7 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
         if (readyAnimDiv) readyAnimDiv.style.display = 'none';
         showError('timeout');
-        alert('Le traitement prend plus de temps que prévu (plus de 2 heures). Veuillez réessayer plus tard ou contacter le support si le problème persiste.');
+        alert('Le traitement prend plus de temps que prévu (plus de 3 heures). Veuillez réessayer plus tard ou contacter le support si le problème persiste.');
         return;
       }
 
@@ -716,12 +716,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log(`🌐 Envoi vers: ${url} (YouTube: ${isYouTube})`);
 
-    /* Timeout upload adaptatif — 20 min min, 60 min max selon taille estimée */
+    /* Timeout transport réseau uniquement — identique tous plans ; limites métier côté API */
     const uploadTimeoutMs = (() => {
       const file = !isYouTube && typeof data.get === 'function' ? data.get('fileUpload1') : null;
       const bytes = file && file.size ? file.size : 0;
       const bySpeed = bytes > 0 ? Math.ceil(bytes / (150 * 1024)) * 1000 : 0; // 150 KB/s conservateur
-      return Math.max(20 * 60 * 1000, Math.min(bySpeed, 60 * 60 * 1000));
+      return Math.max(60 * 60 * 1000, Math.min(bySpeed, 2 * 60 * 60 * 1000));
     })();
     const fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
 

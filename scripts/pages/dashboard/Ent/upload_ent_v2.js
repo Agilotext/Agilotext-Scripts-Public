@@ -586,7 +586,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (loadingAnimDiv) loadingAnimDiv.style.display = 'none';
         if (readyAnimDiv) readyAnimDiv.style.display = 'none';
         showError('timeout');
-        alert('Le traitement prend plus de temps que prévu (plus de 2 heures). Veuillez réessayer plus tard ou contacter le support si le problème persiste.');
+        alert('Le traitement prend plus de temps que prévu (plus de 3 heures). Veuillez réessayer plus tard ou contacter le support si le problème persiste.');
         return;
       }
 
@@ -704,7 +704,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var url = isYouTube ? 'https://api.agilotext.com/api/v1/sendYoutubeUrl' : 'https://api.agilotext.com/api/v1/sendMultipleAudio';
     console.log('🌐 Envoi vers: ' + url + ' (YouTube: ' + !!isYouTube + ')');
 
-    /* Timeout upload adaptatif (Business) — 60 min min, 2h max selon taille estimée */
+    /* Timeout transport réseau uniquement — identique tous plans ; limites métier côté API */
     var uploadTimeoutMs = (function () {
       var file = (!isYouTube && typeof data.get === 'function') ? data.get('fileUpload1') : null;
       var bytes = file && file.size ? file.size : 0;
