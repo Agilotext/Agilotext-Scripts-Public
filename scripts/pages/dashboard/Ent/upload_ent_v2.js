@@ -570,7 +570,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!globalToken) { console.error('Token manquant'); return; }
     if (window._agiloStatusInt) clearInterval(window._agiloStatusInt);
 
-    var GLOBAL_TIMEOUT = 2 * 60 * 60 * 1000;
+    var GLOBAL_TIMEOUT = 3 * 60 * 60 * 1000; // aligné sur le message Webflow "3 heures"
     var startTime = Date.now();
     var fetched = false;
     var consecutiveErrors = 0;
@@ -704,7 +704,14 @@ document.addEventListener('DOMContentLoaded', function () {
     var url = isYouTube ? 'https://api.agilotext.com/api/v1/sendYoutubeUrl' : 'https://api.agilotext.com/api/v1/sendMultipleAudio';
     console.log('🌐 Envoi vers: ' + url + ' (YouTube: ' + !!isYouTube + ')');
 
-    var fetchOptions = { method: 'POST', timeout: 10 * 60 * 1000 };
+    /* Timeout upload adaptatif (Business) — 60 min min, 2h max selon taille estimée */
+    var uploadTimeoutMs = (function () {
+      var file = (!isYouTube && typeof data.get === 'function') ? data.get('fileUpload1') : null;
+      var bytes = file && file.size ? file.size : 0;
+      var bySpeed = bytes > 0 ? Math.ceil(bytes / (150 * 1024)) * 1000 : 0; // 150 KB/s conservateur
+      return Math.max(60 * 60 * 1000, Math.min(bySpeed, 2 * 60 * 60 * 1000));
+    })();
+    var fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
     if (isYouTube) {
       var body = new URLSearchParams();
       Object.keys(data).forEach(function (key) { body.append(key, String(data[key] || '')); });
@@ -940,7 +947,19 @@ document.addEventListener('DOMContentLoaded', function () {
           .catch(function (err) {
             console.error('Erreur lors de l\'envoi:', err);
             document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (err && err.message) || '' } }));
-            showError((err && err.type) || 'default');
+            if (err && err.type === 'timeout') {
+              /* Upload interrompu (pas un timeout de traitement) — message explicite */
+              if (defaultErrorTextNode) {
+                defaultErrorTextNode.innerHTML =
+                  '<strong>Envoi interrompu — fichier trop volumineux</strong><br>' +
+                  'Votre fichier n\u2019a pas pu être envoyé dans le délai imparti. ' +
+                  'Essayez de le compresser en MP3 (moins de 500\u202fMo) ou de le découper en segments. ' +
+                  'Vous pouvez aussi partager un lien Drive/Dropbox via l\u2019onglet Automatisations.';
+              }
+              showError('default');
+            } else {
+              showError((err && err.type) || 'default');
+            }
           })
           .finally(function () {
             if (formLoadingDiv) formLoadingDiv.style.display = 'none';
