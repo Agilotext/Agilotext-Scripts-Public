@@ -537,7 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!globalToken) return console.error('Token manquant');
     if (window._agiloStatusInt) clearInterval(window._agiloStatusInt);
 
-    const GLOBAL_TIMEOUT = 2 * 60 * 60 * 1000;
+    const GLOBAL_TIMEOUT = 3 * 60 * 60 * 1000; // aligné sur le message Webflow "3 heures"
     const startTime = Date.now();
     let fetched = false;
     let consecutiveErrors = 0;
@@ -716,7 +716,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log(`🌐 Envoi vers: ${url} (YouTube: ${isYouTube})`);
 
-    const fetchOptions = { method: 'POST', timeout: 10 * 60 * 1000 };
+    /* Timeout upload adaptatif — 20 min min, 60 min max selon taille estimée */
+    const uploadTimeoutMs = (() => {
+      const file = !isYouTube && typeof data.get === 'function' ? data.get('fileUpload1') : null;
+      const bytes = file && file.size ? file.size : 0;
+      const bySpeed = bytes > 0 ? Math.ceil(bytes / (150 * 1024)) * 1000 : 0; // 150 KB/s conservateur
+      return Math.max(20 * 60 * 1000, Math.min(bySpeed, 60 * 60 * 1000));
+    })();
+    const fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
 
     if (isYouTube) {
       const body = new URLSearchParams();
@@ -1007,8 +1014,19 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch(err => {
           console.error('Erreur lors de l\'envoi:', err);
           document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: err && err.message || '' } }));
-          if ((err && err.type) === 'default') showDefaultError();
-          else showError(err.type || 'default');
+          if (err && err.type === 'timeout') {
+            if (defaultErrorTextNode) {
+              defaultErrorTextNode.innerHTML =
+                '<strong>Envoi interrompu\u00a0— fichier trop volumineux</strong><br>' +
+                'Votre fichier n\u2019a pas pu être envoyé dans le délai imparti. ' +
+                'Essayez de le compresser en MP3 ou de le découper en segments.';
+            }
+            showError('default');
+          } else if ((err && err.type) === 'default') {
+            showDefaultError();
+          } else {
+            showError(err.type || 'default');
+          }
         })
         .finally(() => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
