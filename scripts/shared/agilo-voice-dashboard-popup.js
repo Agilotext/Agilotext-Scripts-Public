@@ -24,7 +24,7 @@
     badge: 'Empreinte vocale',
     title: 'Configurez votre voix',
     description:
-      'Enregistrez 10 à 30 secondes de votre voix pour être reconnu(e) automatiquement dans vos transcriptions.',
+      'Enregistrez 15 à 45 secondes de votre voix pour être reconnu(e) automatiquement dans vos transcriptions.',
     meta: 'Configuration en 1 minute · Mon compte',
     primaryCta: 'Configurer maintenant',
     secondaryCta: 'Plus tard'
@@ -53,7 +53,8 @@
   }
 
   function isDashboardPath() {
-    return /^\/app\/[^/]+\/dashboard$/.test(normalizedPathname());
+    var p = normalizedPathname();
+    return /^\/app\/(premium|business)\/dashboard$/.test(p);
   }
 
   function inferEditionFromPath() {
