@@ -44,6 +44,27 @@ function tagToFillsMissingInHtml(html, prompt) {
     const fromPrompt = extractTagToFillsFromPrompt(prompt);
     return fromPrompt.filter((p) => !inHtml.has(p));
 }
+/** Aligné sur TemplatePlaceholderExtractor.java 4.0.38 */
+const LEGACY_PLACEHOLDER = "${CONTENT}";
+function classifyPlaceholders(html) {
+    const all = extractPlaceholdersFromHtml(html);
+    const filled = all.filter((p) => p.endsWith("-filled}"));
+    const legacy = all.filter((p) => p === LEGACY_PLACEHOLDER);
+    const invalid = all.filter((p) => !p.endsWith("-filled}") && p !== LEGACY_PLACEHOLDER);
+    const mode = filled.length > 0 ? "structured" : legacy.length > 0 ? "legacy" : "none";
+    return { filled, legacy, invalid, mode };
+}
+function validationEntryToText(entry) {
+    if (entry == null)
+        return "";
+    if (typeof entry === "string")
+        return entry;
+    if (typeof entry === "object") {
+        const msg = entry.message ?? entry.code ?? entry.errorMessage ?? "";
+        return String(msg);
+    }
+    return String(entry);
+}
 
 
 function downloadTextFile(filename, content, mime = "text/plain;charset=utf-8") {
@@ -172,6 +193,27 @@ function humanizeTemplateKoMessage(errorMessage) {
     }
     if (norm.includes("forbidden") || norm.includes("unauthorized") || norm.includes("access_denied")) {
         return "Vous n’avez pas les droits nécessaires pour récupérer ce template HTML. Reconnectez-vous ou contactez votre administrateur.";
+    }
+    if (norm === "error_template_no_valid_placeholder" || norm.includes("no_valid_placeholder")) {
+        return "Votre modèle ne contient aucune zone valide. Utilisez ${nom-filled} ou ${CONTENT}.";
+    }
+    if (norm === "error_invalid_template_file_format") {
+        return "Le fichier doit être au format .html.";
+    }
+    const javaPat = [
+        [/Unexpected template placeholder.*?:\s*(\$\{[^}]+\})/,
+            (_, t) => `Zone non reconnue dans votre modèle : « ${t} ». Vérifiez vos placeholders (-filled).`],
+        [/No \$\{[^}]+-filled\} placeholder/,
+            () => "Votre modèle ne contient aucune zone valide."],
+        [/Unresolved placeholders remain/,
+            () => "Des zones n'ont pas été remplies dans le compte-rendu généré."],
+        [/legacy \$\{CONTENT\} placeholder was not replaced/,
+            () => "Le contenu principal (${CONTENT}) n'a pas pu être inséré dans votre modèle."],
+    ];
+    for (const [re, fn] of javaPat) {
+        const m = raw.match(re);
+        if (m)
+            return fn(...m);
     }
     /* Code machine seul (ex. error_xyz) → phrase générique sans jargon inutile */
     if (/^error_[a-z0-9_]+$/i.test(raw.split(/\s/)[0] ?? "")) {
@@ -375,6 +417,15 @@ class AgilotextPromptsClient {
     async updateTemplateFile(promptId, promptContent, promptName, html) {
         const blob = new Blob([html], { type: "text/html;charset=utf-8" });
         return this.postMultipart("/updatePromptModelFileUser", { promptId, promptContent, promptName }, "fileUpload", blob, "template.html", "text/html");
+    }
+    async validateTemplateHtml(html) {
+        const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+        try {
+            return await this.postMultipart("/validatePromptTemplate", {}, "fileUpload", blob, "template.html", "text/html");
+        }
+        catch (_e) {
+            return null;
+        }
     }
     async getPromptStatus(promptId) {
         const res = await this.postUrlEncoded("/getPromptModelUserStatus", { promptId });
@@ -666,8 +717,20 @@ class StudioApp {
         }
         const onlyHtml = placeholdersOnlyInHtml(html, promptText);
         const missing = tagToFillsMissingInHtml(html, promptText);
-        const allPh = extractPlaceholdersFromHtml(html);
-        mount.append(el("p", "agilo-ps-muted", `${allPh.length} placeholder(s) dans le HTML (texte courant).`), el("h4", "agilo-ps-h4", "Dans le HTML mais peu ou pas cités comme tag-to-fill dans le prompt"), renderList(onlyHtml), el("h4", "agilo-ps-h4", "Cités dans le prompt (tag-to-fill) mais absents du HTML"), renderList(missing));
+        const { filled, legacy, invalid, mode } = classifyPlaceholders(html);
+        if (mode === "none") {
+            mount.append(el("p", "agilo-ps-error", "Aucun placeholder valide — ce modèle ne peut pas générer de compte-rendu."));
+        }
+        else if (mode === "legacy") {
+            mount.append(el("p", "agilo-ps-warning", `Mode ancien (${LEGACY_PLACEHOLDER}) — fonctionne mais préférez \${nom-filled}.`));
+        }
+        else {
+            mount.append(el("p", "agilo-ps-muted", `${filled.length} zone(s) structurée(s) détectée(s) — mode structured.`));
+        }
+        if (invalid.length > 0) {
+            mount.append(el("h4", "agilo-ps-h4", "Tags non reconnus par le backend (à corriger)"), renderList(invalid.map((p) => `${p} → renommer en ${p.replace("}", "-filled}")}`)));
+        }
+        mount.append(el("p", "agilo-ps-muted", `${filled.length + legacy.length + invalid.length} placeholder(s) dans le HTML (texte courant).`), el("h4", "agilo-ps-h4", "Dans le HTML mais peu ou pas cités comme tag-to-fill dans le prompt"), renderList(onlyHtml), el("h4", "agilo-ps-h4", "Cités dans le prompt (tag-to-fill) mais absents du HTML"), renderList(missing));
     }
     installModalKeyboardNav(panel) {
         const trap = (e) => {
@@ -1414,25 +1477,44 @@ class StudioApp {
             this.setSaving(false);
         }
     }
+    async runTemplateValidation(html, errBox) {
+        this.setStatus("Vérification du modèle…", true);
+        const vr = await this.client.validateTemplateHtml(html);
+        if (vr !== null && !vr.valid) {
+            const errs = (vr.errors || [])
+                .map((e) => humanizeTemplateKoMessage(validationEntryToText(e)))
+                .filter(Boolean)
+                .join(" ");
+            errBox.hidden = false;
+            errBox.textContent = errs || "Votre modèle ne contient aucune zone valide.";
+            this.setStatus("", false);
+            return false;
+        }
+        if (vr?.mode === "legacy") {
+            errBox.hidden = false;
+            errBox.textContent = "Attention : votre modèle utilise le format ancien (${CONTENT}). Il fonctionne mais préférez ${nom-filled}.";
+        }
+        else if (vr?.warnings?.length) {
+            errBox.hidden = false;
+            errBox.textContent = (vr.warnings || [])
+                .map((w) => validationEntryToText(w))
+                .filter(Boolean)
+                .join(" ");
+        }
+        else {
+            errBox.hidden = true;
+        }
+        this.setStatus("", false);
+        return true;
+    }
     async saveHtml(errBox) {
         const s = this.state;
         if (!s || this.saving)
             return;
         const html = this.getCurrentHtml();
         const promptText = this.getCurrentPromptText();
-        const onlyHtml = placeholdersOnlyInHtml(html, promptText);
-        const missing = tagToFillsMissingInHtml(html, promptText);
-        if (onlyHtml.length > 0 || missing.length > 0) {
-            const detail = [
-                onlyHtml.length ? `${onlyHtml.length} placeholder(s) dans le HTML non reflétés dans le prompt.` : "",
-                missing.length ? `${missing.length} tag(s)-to-fill manquant(s) dans le HTML.` : "",
-            ]
-                .filter(Boolean)
-                .join(" ");
-            if (!window.confirm(`Incohérences détectées : ${detail}\n\nCorriger le HTML ou le prompt est recommandé. Enregistrer quand même ?`)) {
-                return;
-            }
-        }
+        if (!(await this.runTemplateValidation(html, errBox)))
+            return;
         if (!window.confirm("Modifier le fichier HTML peut casser les exports ou la génération. Confirmer l’enregistrement ?")) {
             return;
         }
@@ -1463,7 +1545,7 @@ class StudioApp {
             errBox.hidden = false;
             errBox.textContent = isLikelyAuthError(msg)
                 ? `Session ou authentification : ${msg}. Reconnectez-vous si besoin.`
-                : msg;
+                : humanizeTemplateKoMessage(msg);
             this.setStatus("", false);
         }
         finally {
@@ -1495,21 +1577,11 @@ class StudioApp {
             s.promptText = text;
             const html = this.getCurrentHtml();
             const promptText = this.getCurrentPromptText();
-            const onlyHtml = placeholdersOnlyInHtml(html, promptText);
-            const missing = tagToFillsMissingInHtml(html, promptText);
-            if (onlyHtml.length > 0 || missing.length > 0) {
-                const detail = [
-                    onlyHtml.length ? `${onlyHtml.length} incohérence(s) placeholders.` : "",
-                    missing.length ? `${missing.length} tag(s) manquant(s).` : "",
-                ]
-                    .filter(Boolean)
-                    .join(" ");
-                if (!window.confirm(`Incohérences : ${detail}\n\nContinuer l’enregistrement du HTML ?`)) {
-                    this.setStatus("Prompt enregistré. HTML non envoyé.", false);
-                    this.setSaving(false);
-                    this.updateDirtyIndicator();
-                    return;
-                }
+            if (!(await this.runTemplateValidation(html, errBox))) {
+                this.setStatus("Prompt enregistré. HTML non envoyé.", false);
+                this.setSaving(false);
+                this.updateDirtyIndicator();
+                return;
             }
             if (!window.confirm("Étape 2/2 : envoyer le fichier HTML ? Cela peut affecter la génération.")) {
                 this.setStatus("Prompt enregistré. HTML non envoyé.", false);
@@ -1541,7 +1613,7 @@ class StudioApp {
             errBox.hidden = false;
             errBox.textContent = isLikelyAuthError(msg)
                 ? `Session ou authentification : ${msg}. Reconnectez-vous si besoin.`
-                : msg;
+                : humanizeTemplateKoMessage(msg);
             this.setStatus("", false);
         }
         finally {

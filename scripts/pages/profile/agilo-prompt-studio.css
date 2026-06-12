@@ -317,6 +317,16 @@
   font-size: 0.85rem;
 }
 
+.agilo-ps-warning {
+  padding: var(--agilo-ps-space-md);
+  background: var(--agilo-ps-warn-bg);
+  color: inherit;
+  border: 1px solid var(--agilo-ps-warn-border);
+  border-radius: var(--agilo-ps-radius);
+  margin-bottom: var(--agilo-ps-space-sm);
+  font-size: 0.85rem;
+}
+
 .agilo-ps-banner {
   display: flex;
   flex-wrap: wrap;
