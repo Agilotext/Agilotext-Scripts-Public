@@ -93,7 +93,7 @@
   }
 
   function profileUrl() {
-    return '/app/' + inferEditionFromPath() + '/profile#agilo-voice-settings';
+    return '/app/' + inferEditionFromPath() + '/profile?tab=profile#agilo-voice-settings';
   }
 
   function readTs(key) {

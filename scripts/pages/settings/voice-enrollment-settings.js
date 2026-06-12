@@ -49,7 +49,23 @@
   const ICON_TRASH = '<svg class="agilo-voice-btn-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const ICON_EMPTY_MIC = '<svg class="agilo-voice-empty-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const STOP_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>';
-  const SAVE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class="icon-1x1-small white" aria-hidden="true"><path d="M15.25 4.5C15.25 4.22386 15.0261 4 14.75 4H9.25C8.97386 4 8.75 4.22386 8.75 4.5V7.59998C8.75 7.73805 8.86193 7.84998 9 7.84998H15C15.1381 7.84998 15.25 7.73805 15.25 7.59998V4.5Z" fill="currentColor"></path><path d="M8.25 20C8.25 20.2761 8.47386 20.5 8.75 20.5H15.25C15.5261 20.5 15.75 20.2761 15.75 20V15C15.75 14.8619 15.6381 14.75 15.5 14.75H8.5C8.36193 14.75 8.25 14.8619 8.25 15V20Z" fill="currentColor"></path><path d="M6.75 8.25C6.75 8.02513 6.92513 7.85 7.15 7.85H16.85C17.0749 7.85 17.25 8.02513 17.25 8.25V19.35C17.25 19.5749 17.0749 19.75 16.85 19.75H7.15C6.92513 19.75 6.75 19.5749 6.75 19.35V8.25Z" stroke="currentColor" stroke-width="1.5"></path></svg>';
+  const WEBFLOW_SAVE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" class="icon-1x1-small white" aria-hidden="true"><path d="M15.25 4.5C15.25 4.22386 15.0261 4 14.75 4H9.25C8.97386 4 8.75 4.22386 8.75 4.5V7.59998C8.75 7.73805 8.86193 7.84998 9 7.84998H15C15.1381 7.84998 15.25 7.73805 15.25 7.59998V4.5Z" fill="currentColor"></path><path d="M8.25 20C8.25 20.2761 8.47386 20.5 8.75 20.5H15.25C15.5261 20.5 15.75 20.2761 15.75 20V15C15.75 14.8619 15.6381 14.75 15.5 14.75H8.5C8.36193 14.75 8.25 14.8619 8.25 15V20Z" fill="currentColor"></path><path d="M7.25 7.59998C7.25 8.56647 8.0335 9.34998 9 9.34998H15C15.9665 9.34998 16.75 8.56647 16.75 7.59998V4.27627C16.75 4.12369 16.8737 4 17.0263 4C17.1722 4 17.3108 4.06373 17.4058 4.17448L20.3685 7.62867C20.7791 8.1074 20.9936 8.72364 20.9689 9.35387L20.6273 18.0976C20.5749 19.4393 19.4719 20.5 18.1292 20.5H17.75C17.4739 20.5 17.25 20.2761 17.25 20V15C17.25 14.0335 16.4665 13.25 15.5 13.25H8.5C7.5335 13.25 6.75 14.0335 6.75 15V20C6.75 20.2761 6.52614 20.5 6.25 20.5H6.11291C4.90908 20.5 3.89276 19.6055 3.73989 18.4114C3.24597 14.5534 3.2247 10.6495 3.67653 6.78632L3.73742 6.26575C3.8885 4.97395 4.983 4 6.28361 4H6.75C7.02614 4 7.25 4.22386 7.25 4.5V7.59998Z" fill="currentColor"></path></svg>';
+
+  function getWebflowSaveIconHtml() {
+    var svgs = document.querySelectorAll('.button.save svg.icon-1x1-small, button.save svg.icon-1x1-small');
+    for (var i = 0; i < svgs.length; i++) {
+      if (svgs[i].closest('#agilo-voice-submit, #agilo-voice-settings .button.save')) continue;
+      var clone = svgs[i].cloneNode(true);
+      clone.setAttribute('aria-hidden', 'true');
+      return clone.outerHTML;
+    }
+    return WEBFLOW_SAVE_ICON;
+  }
+
+  function applyWebflowSaveButton(el, label) {
+    if (!el) return;
+    el.innerHTML = getWebflowSaveIconHtml() + '<div>' + escapeHtml(label) + '</div>';
+  }
 
   const sleep = function (ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
@@ -385,13 +401,42 @@
     return '?';
   }
 
+  function isVoiceSettingsDeepLink() {
+    return (window.location.hash || '').replace(/^#/, '') === 'agilo-voice-settings';
+  }
+
+  function activateProfileTabIfNeeded() {
+    if (typeof window.ensureTab === 'function') {
+      window.ensureTab('profile');
+      return;
+    }
+    var link = document.querySelector('.account-link[data-tab="profile"]');
+    if (link) link.click();
+  }
+
   function scrollToVoiceSectionIfNeeded() {
-    if ((window.location.hash || '') !== '#agilo-voice-settings') return;
-    var target = document.getElementById('agilo-voice-settings');
-    if (!target) return;
-    setTimeout(function () {
-      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 120);
+    if (!isVoiceSettingsDeepLink()) return;
+
+    activateProfileTabIfNeeded();
+
+    function doScroll(attempt) {
+      var target = document.getElementById('agilo-voice-settings');
+      if (!target) {
+        if (attempt < 24) setTimeout(function () { doScroll(attempt + 1); }, 150);
+        return;
+      }
+
+      var panel = target.closest('#profile, [data-panel="profile"]');
+      if (panel && panel.hidden) activateProfileTabIfNeeded();
+
+      requestAnimationFrame(function () {
+        var offset = 88;
+        var top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+        window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      });
+    }
+
+    setTimeout(function () { doScroll(0); }, 180);
   }
 
   function formatVoiceDate(raw) {
@@ -415,6 +460,7 @@
     style.textContent = [
       '@keyframes agilo-voice-pulse{0%{transform:scale(.92);opacity:.55}70%{transform:scale(1.35);opacity:0}100%{transform:scale(1.35);opacity:0}}',
       '.agilo-voice-wrap{max-width:100%;width:100%;font-family:inherit;color:var(--color--gris_foncé,#020202)}',
+      '#agilo-voice-settings{scroll-margin-top:5.5rem}',
       '.agilo-voice-card{background:transparent;border:none;border-radius:0;padding:0;margin-bottom:0}',
       '.agilo-voice-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-bottom:18px}',
       '.agilo-voice-title{margin:0;font-size:inherit;font-weight:inherit;color:inherit}',
@@ -429,10 +475,10 @@
       '.agilo-voice-item-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}',
       '.agilo-voice-rename-row{display:none;flex-direction:column;gap:.5rem;margin-top:12px}',
       '.agilo-voice-rename-row.is-open{display:flex}',
-      '.agilo-voice-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}',
+      '.agilo-voice-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}',
       '.agilo-voice-section{margin-top:22px;padding-top:22px;border-top:1px solid rgba(82,82,82,.1)}',
-      '.agilo-voice-section-title{margin:0 0 8px;font-size:1rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
-      '.agilo-voice-section-desc{margin:0 0 14px;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-section-title{margin:0 0 10px;font-size:1rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
+      '.agilo-voice-section-desc{margin:0 0 1.25rem;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
       '.agilo-voice-empty{margin:0;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
       '.agilo-voice-empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;padding:28px 16px 20px;margin-bottom:8px}',
       '.agilo-voice-empty-icon{width:52px;height:52px;border-radius:50%;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96);display:flex;align-items:center;justify-content:center;margin-bottom:12px}',
@@ -440,8 +486,8 @@
       '.agilo-voice-empty-title{margin:0 0 6px;font-weight:600;font-size:1rem;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;cursor:pointer;transition:transform .15s ease}',
       '.agilo-voice-hero:hover{transform:scale(1.03)}',
-      '.agilo-voice-hero-wrap{text-align:center;margin:0 0 1rem}',
-      '.agilo-voice-hero-label{margin:.65rem 0 0;font-size:.88rem;color:var(--color--gris,#525252);line-height:1.4}',
+      '.agilo-voice-hero-wrap{text-align:center;margin:1.25rem 0 1.5rem}',
+      '.agilo-voice-hero-label{margin:.75rem 0 0;font-size:.88rem;color:var(--color--gris,#525252);line-height:1.4}',
       '.agilo-voice-timer-compact{display:none;margin-top:.5rem;font-size:1rem;font-weight:700;color:var(--color--rouge,#a82633);letter-spacing:.02em}',
       '.agilo-voice-timer-compact.is-visible{display:block}',
       '.agilo-voice-rerecord-link{display:none;margin:.5rem auto 0;text-align:center;font-size:.85rem;color:var(--color--blue,#174a96);cursor:pointer;background:none;border:none;font:inherit;text-decoration:underline}',
@@ -450,11 +496,11 @@
       '.agilo-voice-play-btn{width:36px;height:36px;border-radius:50%;border:1px solid rgba(82,82,82,.22);background:#fff;color:var(--color--gris_foncé,#020202);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center}',
       '.agilo-voice-play-time{font-size:.85rem;color:var(--color--gris,#525252);font-weight:600}',
       '.agilo-voice-audio{display:none}',
-      '.agilo-voice-drop-zone{margin:1.25rem 0 0;border:2px dashed #9eb4d7;border-radius:10px;padding:24px 16px;text-align:center;background:#f8fbff;color:var(--color--gris,#525252);cursor:pointer;transition:border-color .15s,background-color .15s;font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-drop-zone{margin:1.5rem 0 0;border:2px dashed #9eb4d7;border-radius:10px;padding:24px 16px;text-align:center;background:#f8fbff;color:var(--color--gris,#525252);cursor:pointer;transition:border-color .15s,background-color .15s;font-size:.88rem;line-height:1.5}',
       '.agilo-voice-drop-zone strong{display:block;margin-bottom:6px;color:var(--color--gris_foncé,#020202);font-size:1rem}',
       '.agilo-voice-drop-zone.is-dragover{border-color:var(--color--blue,#174a96);background:#edf4ff}',
       '.agilo-voice-drop-zone.is-filled{border-style:solid;border-color:rgba(23,74,150,.35);background:rgba(23,74,150,.04)}',
-      '.agilo-voice-submit-row{margin-top:1.25rem}',
+      '.agilo-voice-submit-row{margin-top:1.75rem}',
       '.agilo-voice-free-upsell-block{display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 0 4px}',
       '.agilo-voice-benefits{margin:14px 0 18px;padding:0 0 0 1.1rem;text-align:left;color:var(--color--gris,#525252);font-size:.9rem;line-height:1.55}',
       '.agilo-voice-benefits li{margin-bottom:6px}',
@@ -470,12 +516,12 @@
       '.agilo-voice-wave{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(168,38,51,.35);animation:agilo-voice-pulse 2s ease-out infinite}',
       '.agilo-voice-wave:nth-child(2){animation-delay:.55s}',
       '.agilo-voice-wave:nth-child(3){animation-delay:1.1s}',
-      '.agilo-voice-record-area{display:flex;flex-direction:column;gap:.75rem}',
-      '.agilo-voice-label{display:block;margin:0;font-size:.9rem;font-weight:500}',
+      '.agilo-voice-record-area{display:flex;flex-direction:column;gap:1.25rem}',
+      '.agilo-voice-label{display:block;margin:0 0 .45rem;font-size:.9rem;font-weight:500}',
       '.agilo-voice-input{width:100%;box-sizing:border-box;border:1px solid rgba(82,82,82,.25);border-radius:' + AGILO_RADIUS + ';background:#fff;padding:10px 12px;font:inherit}',
       '.agilo-voice-input:disabled{opacity:.7;background:#f5f5f5}',
       '.agilo-voice-input:focus{outline:none;border-color:var(--color--blue,#174a96);box-shadow:0 0 0 2px rgba(23,74,150,.12)}',
-      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:0;text-align:center;line-height:1.45}',
+      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:.75rem 0 0;text-align:center;line-height:1.45}',
       '.agilo-voice-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;border-radius:' + AGILO_RADIUS + ';padding:8px 14px;font:inherit;font-size:.88rem;font-weight:600;border:1px solid rgba(82,82,82,.22);background:#fff;color:var(--color--gris_foncé,#020202);transition:background .15s,border-color .15s,transform .15s,box-shadow .15s}',
       '.agilo-voice-btn-ghost{background:transparent}',
       '.agilo-voice-btn-ghost:hover{background:rgba(23,74,150,.05);border-color:rgba(23,74,150,.25)}',
@@ -497,7 +543,7 @@
       '.agilo-voice-free-badge{margin-top:12px;padding:10px 14px;background:rgba(23,74,150,.08);border:1px solid rgba(23,74,150,.2);border-radius:' + AGILO_RADIUS + '}',
       '.agilo-voice-free-badge a{color:var(--color--blue,#174a96);font-weight:600;text-decoration:none}',
       '.agilo-voice-panel{display:none}',
-      '.agilo-voice-panel.is-open{display:block}',
+      '.agilo-voice-panel.is-open{display:block;margin-top:1.5rem}',
       '@media(max-width:560px){.agilo-voice-name-grid{grid-template-columns:1fr}}'
     ].join('');
     document.head.appendChild(style);
@@ -556,7 +602,7 @@
       '  </div>',
       '  <input class="agilo-voice-file" id="agilo-voice-file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/webm,audio/*" hidden>',
       '  <div class="agilo-voice-submit-row">',
-      '    <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">' + SAVE_ICON + ' Enregistrer cette voix</button>',
+      '    <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer cette voix</button>',
       '  </div>',
       '</div>'
     ].join('');
@@ -580,6 +626,8 @@
       fileInput: container.querySelector('#agilo-voice-file'),
       submitBtn: container.querySelector('#agilo-voice-submit')
     };
+
+    applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
 
     function formatTime(ms) {
       var sec = Math.floor(ms / 1000);
@@ -864,7 +912,7 @@
       '    <li>Distinction claire entre les intervenants en réunion</li>',
       '    <li>Invitez vos collègues à enregistrer leur empreinte vocale</li>',
       '  </ul>',
-      '  <a href="/pricing" class="button save">' + SAVE_ICON + ' Essayer Pro gratuitement</a>',
+      '  <a href="/pricing" class="button save agilo-voice-free-cta">Essayer Pro gratuitement</a>',
       '  <a href="/pricing" class="agilo-voice-free-link">Voir les offres Pro et Business</a>',
       '</div>'
     ].join('') : '';
@@ -952,6 +1000,10 @@
     container.innerHTML = buildMainMarkup(data, creds);
     var statusEl = container.querySelector('#agilo-voice-main-status');
     var isFree = normEdition(creds.edition) === 'free';
+
+    if (isFree) {
+      applyWebflowSaveButton(container.querySelector('.agilo-voice-free-cta'), 'Essayer Pro gratuitement');
+    }
 
     container.querySelectorAll('.agilo-voice-rename-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1073,6 +1125,10 @@
   }
 
   async function init() {
+    if (isVoiceSettingsDeepLink()) {
+      activateProfileTabIfNeeded();
+    }
+
     var container = document.getElementById(AGILO_VOICE_CONFIG.containerId);
     if (!container) {
       console.warn('[agilo-voice-settings] Container #' + AGILO_VOICE_CONFIG.containerId + ' introuvable.');
@@ -1107,6 +1163,8 @@
 
     await reload();
   }
+
+  window.addEventListener('hashchange', scrollToVoiceSectionIfNeeded);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
