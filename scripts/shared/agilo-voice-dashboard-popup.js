@@ -61,6 +61,68 @@
     return inferEditionFromPath() === 'free';
   }
 
+  var TARIFS_URL = 'https://www.agilotext.com/tarifs';
+
+  function isCgvModalVisible() {
+    var wrapper = document.querySelector('.cgv-onboarding-wrapper');
+    if (!wrapper) return false;
+    var cs = window.getComputedStyle(wrapper);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    if (parseFloat(cs.opacity || '1') <= 0.05) return false;
+    var rect = wrapper.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function isCgvAccepted() {
+    try {
+      if (typeof window.checkCGVAccepted === 'function') return !!window.checkCGVAccepted();
+    } catch (e) { /* ignore */ }
+    return false;
+  }
+
+  function waitUntilCgvDismissed(maxMs) {
+    if (isCgvAccepted() || !isCgvModalVisible()) {
+      return Promise.resolve(true);
+    }
+
+    return new Promise(function (resolve) {
+      var started = Date.now();
+      var observer = null;
+      var intervalId = null;
+      var wrapper = document.querySelector('.cgv-onboarding-wrapper');
+
+      function done() {
+        if (observer) observer.disconnect();
+        if (intervalId) clearInterval(intervalId);
+        resolve(true);
+      }
+
+      function check() {
+        if (isCgvAccepted() || !isCgvModalVisible()) {
+          done();
+          return;
+        }
+        if (Date.now() - started >= (maxMs || 600000)) {
+          if (observer) observer.disconnect();
+          if (intervalId) clearInterval(intervalId);
+          resolve(false);
+        }
+      }
+
+      window.addEventListener('agilo:cgv-dismissed', function onDismiss() {
+        window.removeEventListener('agilo:cgv-dismissed', onDismiss);
+        setTimeout(done, 350);
+      });
+
+      if (wrapper && typeof MutationObserver !== 'undefined') {
+        observer = new MutationObserver(check);
+        observer.observe(wrapper, { attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+      }
+
+      intervalId = setInterval(check, 250);
+    });
+  }
+
   function getPopupContent() {
     if (isFreeDashboard()) {
       return {
@@ -69,7 +131,8 @@
         description: 'Enregistrez votre voix et celles de vos collègues pour être reconnu(e) automatiquement dans vos transcriptions.',
         meta: 'Inclus dans Pro et Business · Essai gratuit',
         primaryCta: 'Découvrir Pro',
-        primaryUrl: '/pricing'
+        primaryUrl: TARIFS_URL,
+        openInNewTab: true
       };
     }
     return {
@@ -253,7 +316,12 @@
   function onClickCta() {
     removePopup();
     var content = getPopupContent();
-    window.location.href = content.primaryUrl || profileUrl();
+    var url = content.primaryUrl || profileUrl();
+    if (content.openInNewTab) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.location.href = url;
   }
 
   function buildPopup() {
@@ -307,12 +375,14 @@
 
   function boot() {
     if (!document.body) return;
-    var delay = getTestMode() ? cfg.showDelayTestMs : cfg.showDelayMs;
-    setTimeout(function () {
-      showPopup().catch(function (e) {
-        console.warn('[agilo-voice-popup] show failed', e);
-      });
-    }, delay);
+    waitUntilCgvDismissed(600000).then(function () {
+      var delay = getTestMode() ? cfg.showDelayTestMs : cfg.showDelayMs;
+      setTimeout(function () {
+        showPopup().catch(function (e) {
+          console.warn('[agilo-voice-popup] show failed', e);
+        });
+      }, delay);
+    });
   }
 
   if (document.readyState === 'loading') {
