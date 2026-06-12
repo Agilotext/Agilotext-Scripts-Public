@@ -38,15 +38,13 @@
 
   function clickFinishButton() {
     var activeStep = getVisibleOnboardingStep();
-    var submitBtn = (activeStep && activeStep.querySelector('[data-form="submit-btn"]'))
-      || document.querySelector('[data-form="submit-btn"]');
-    var nextBtn = (activeStep && activeStep.querySelector('[data-form="next-btn"]'))
+    var btn = (activeStep && activeStep.querySelector('[data-form="submit-btn"]'))
+      || document.querySelector('[data-form="submit-btn"]')
+      || (activeStep && activeStep.querySelector('[data-form="next-btn"]'))
       || document.querySelector('[data-form="next-btn"]');
-    if (submitBtn) {
-      submitBtn.click();
-      return;
+    if (btn) {
+      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     }
-    if (nextBtn) nextBtn.click();
   }
 
   const AGILO_VOICE_CONFIG = {
@@ -509,7 +507,6 @@
       '  </div>',
       '  <div class="agilo-voice-free-upsell">',
       '    <p>La reconnaissance vocale est incluse dans les abonnements <a href="/pricing">Pro et Business</a>. Vous pourrez configurer votre voix depuis Mon compte après votre upgrade.</p>',
-      '    <button type="button" class="agilo-voice-record-btn button-wp2024 next w-button" id="agilo-voice-free-continue">Continuer</button>',
       '  </div>',
       '  <div class="agilo-voice-status" id="agilo-voice-status" role="status"></div>',
       '</div>'
@@ -519,19 +516,7 @@
   function mountFreeUI(container, creds) {
     injectStyles();
     container.innerHTML = buildFreeMarkup();
-    var continueBtn = container.querySelector('#agilo-voice-free-continue');
-    var statusEl = container.querySelector('#agilo-voice-status');
-    continueBtn.addEventListener('click', async function () {
-      continueBtn.disabled = true;
-      await updateVoiceEnrolledFlag(creds.memberstack, 'skipped');
-      if (statusEl) {
-        statusEl.className = 'agilo-voice-status is-info';
-        statusEl.textContent = 'Étape ignorée.';
-      }
-      setTimeout(function () {
-        if (typeof AGILO_VOICE_CONFIG.afterSkip === 'function') AGILO_VOICE_CONFIG.afterSkip();
-      }, 250);
-    });
+    updateVoiceEnrolledFlag(creds.memberstack, 'skipped');
   }
 
   function mountUI(container, creds) {
