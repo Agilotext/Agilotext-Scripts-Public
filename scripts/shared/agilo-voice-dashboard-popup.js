@@ -54,7 +54,32 @@
 
   function isDashboardPath() {
     var p = normalizedPathname();
-    return /^\/app\/(premium|business)\/dashboard$/.test(p);
+    return /^\/app\/(free|premium|business)\/dashboard$/.test(p);
+  }
+
+  function isFreeDashboard() {
+    return inferEditionFromPath() === 'free';
+  }
+
+  function getPopupContent() {
+    if (isFreeDashboard()) {
+      return {
+        badge: 'Empreinte vocale',
+        title: 'Identifiez chaque intervenant',
+        description: 'Enregistrez votre voix et celles de vos collègues pour être reconnu(e) automatiquement dans vos transcriptions.',
+        meta: 'Inclus dans Pro et Business · Essai gratuit',
+        primaryCta: 'Découvrir Pro',
+        primaryUrl: '/pricing'
+      };
+    }
+    return {
+      badge: cfg.badge,
+      title: cfg.title,
+      description: cfg.description,
+      meta: cfg.meta,
+      primaryCta: cfg.primaryCta,
+      primaryUrl: profileUrl()
+    };
   }
 
   function inferEditionFromPath() {
@@ -132,6 +157,8 @@
     if (!testMode && isDismissedRecently()) return false;
 
     if (testMode) return true;
+
+    if (isFreeDashboard()) return true;
 
     var voiceEnrolled = await readVoiceEnrolledFlag();
     if (voiceEnrolled === 'true' || voiceEnrolled === 'skipped') return false;
@@ -225,31 +252,33 @@
 
   function onClickCta() {
     removePopup();
-    window.location.href = profileUrl();
+    var content = getPopupContent();
+    window.location.href = content.primaryUrl || profileUrl();
   }
 
   function buildPopup() {
     if (document.getElementById(cfg.popupId)) return null;
     injectStyles();
 
+    var content = getPopupContent();
     var root = document.createElement('aside');
     root.id = cfg.popupId;
     root.setAttribute('role', 'dialog');
-    root.setAttribute('aria-label', cfg.title);
+    root.setAttribute('aria-label', content.title);
     root.innerHTML =
       '<div class="agilo-voice-popup__header">' +
       '<div class="agilo-voice-popup__badge">' +
       '<span class="agilo-voice-popup__badge-icon">' + MIC_ICON + '</span>' +
-      cfg.badge +
+      content.badge +
       '</div>' +
       '<button type="button" class="agilo-voice-popup__close" aria-label="Fermer">&times;</button>' +
       '</div>' +
       '<div class="agilo-voice-popup__content">' +
-      '<h3 class="agilo-voice-popup__title">' + cfg.title + '</h3>' +
-      '<p class="agilo-voice-popup__desc">' + cfg.description + '</p>' +
-      '<p class="agilo-voice-popup__meta">' + cfg.meta + '</p>' +
+      '<h3 class="agilo-voice-popup__title">' + content.title + '</h3>' +
+      '<p class="agilo-voice-popup__desc">' + content.description + '</p>' +
+      '<p class="agilo-voice-popup__meta">' + content.meta + '</p>' +
       '<div class="agilo-voice-popup__actions">' +
-      '<button type="button" class="agilo-voice-popup__cta agilo-voice-popup__cta--primary">' + cfg.primaryCta + '</button>' +
+      '<button type="button" class="agilo-voice-popup__cta agilo-voice-popup__cta--primary">' + content.primaryCta + '</button>' +
       '<button type="button" class="agilo-voice-popup__cta agilo-voice-popup__cta--secondary">' + cfg.secondaryCta + '</button>' +
       '</div>' +
       '</div>';

@@ -92,6 +92,8 @@
   const MIC_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const TEASER_MIC_SVG = '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const CHECK_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.75"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const STOP_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>';
+  const SAVE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" class="icon-1x1-small white" aria-hidden="true"><path d="M15.25 4.5C15.25 4.22386 15.0261 4 14.75 4H9.25C8.97386 4 8.75 4.22386 8.75 4.5V7.59998C8.75 7.73805 8.86193 7.84998 9 7.84998H15C15.1381 7.84998 15.25 7.73805 15.25 7.59998V4.5Z" fill="currentColor"></path><path d="M8.25 20C8.25 20.2761 8.47386 20.5 8.75 20.5H15.25C15.5261 20.5 15.75 20.2761 15.75 20V15C15.75 14.8619 15.6381 14.75 15.5 14.75H8.5C8.36193 14.75 8.25 14.8619 8.25 15V20Z" fill="currentColor"></path><path d="M6.75 8.25C6.75 8.02513 6.92513 7.85 7.15 7.85H16.85C17.0749 7.85 17.25 8.02513 17.25 8.25V19.35C17.25 19.5749 17.0749 19.75 16.85 19.75H7.15C6.92513 19.75 6.75 19.5749 6.75 19.35V8.25Z" stroke="currentColor" stroke-width="1.5"></path></svg>';
   const AGILO_RADIUS = 'var(--0-5_radius,0.5rem)';
 
   const ERROR_MESSAGES = {
@@ -376,7 +378,23 @@
       '.agilo-voice-intro{margin:0 0 1.25rem;text-align:center}',
       '.agilo-voice-intro-title{margin:0 0 .35rem;font-size:1.05rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-intro-sub{margin:0;color:var(--color--gris,#525252);line-height:1.5}',
-      '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto 1.25rem}',
+      '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;cursor:pointer;transition:transform .15s ease}',
+      '.agilo-voice-hero:hover{transform:scale(1.03)}',
+      '.agilo-voice-hero-wrap{text-align:center;margin:0 0 1rem}',
+      '.agilo-voice-hero-label{margin:.65rem 0 0;font-size:.88rem;color:var(--color--gris,#525252);line-height:1.4}',
+      '.agilo-voice-timer-compact{display:none;margin-top:.5rem;font-size:1rem;font-weight:700;color:var(--color--rouge,#a82633)}',
+      '.agilo-voice-timer-compact.is-visible{display:block}',
+      '.agilo-voice-rerecord-link{display:none;margin:.5rem auto 0;text-align:center;font-size:.85rem;color:var(--color--blue,#174a96);cursor:pointer;background:none;border:none;font:inherit;text-decoration:underline}',
+      '.agilo-voice-mini-player{display:none;align-items:center;justify-content:center;gap:10px;margin-top:.75rem}',
+      '.agilo-voice-mini-player.is-visible{display:flex}',
+      '.agilo-voice-play-btn{width:36px;height:36px;border-radius:50%;border:1px solid rgba(82,82,82,.22);background:#fff;color:var(--color--gris_foncé,#020202);cursor:pointer;font-size:.75rem}',
+      '.agilo-voice-play-time{font-size:.85rem;color:var(--color--gris,#525252);font-weight:600}',
+      '.agilo-voice-drop-zone{margin:1.25rem 0 0;border:2px dashed #9eb4d7;border-radius:10px;padding:24px 16px;text-align:center;background:#f8fbff;color:var(--color--gris,#525252);cursor:pointer;font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-drop-zone strong{display:block;margin-bottom:6px;color:var(--color--gris_foncé,#020202);font-size:1rem}',
+      '.agilo-voice-drop-zone.is-dragover{border-color:var(--color--blue,#174a96);background:#edf4ff}',
+      '.agilo-voice-drop-zone.is-filled{border-style:solid;border-color:rgba(23,74,150,.35);background:rgba(23,74,150,.04)}',
+      '.agilo-voice-submit-row{margin-top:1.25rem}',
+      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:0;text-align:center;line-height:1.45}',
       '.agilo-voice-hero-ring{position:absolute;inset:0;border-radius:50%;background:rgba(23,74,150,.1);border:1px solid rgba(23,74,150,.18);transition:background .25s,border-color .25s}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-ring{background:rgba(168,38,51,.1);border-color:rgba(168,38,51,.25)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-ring{background:rgba(28,102,26,.1);border-color:rgba(28,102,26,.22)}',
@@ -391,27 +409,10 @@
       '.agilo-voice-label{display:block;margin:0;font-size:.9rem;font-weight:500;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-input.agilo-voice-input{width:100%;box-sizing:border-box;margin:0;border:1px solid var(--color--noir_25,rgba(82,82,82,.25));border-radius:' + AGILO_RADIUS + ';background:var(--color--white,#fff);padding:10px 12px;font:inherit;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-input.agilo-voice-input:focus{outline:none;border-color:var(--color--blue,#174a96);box-shadow:0 0 0 2px rgba(23,74,150,.12)}',
-      '.agilo-voice-record-btn.agilo-voice-record-btn{display:inline-flex;align-items:center;justify-content:center;gap:.5rem;width:100%;min-height:52px;padding:.75rem 1.25rem;border:none;border-radius:' + AGILO_RADIUS + ';background:var(--color--blue,#174a96);color:var(--color--white,#fff);font:inherit;font-weight:600;font-size:.95rem;cursor:pointer;transition:background .2s,filter .15s;box-shadow:inset 0 6px 12px #ffffff1f,inset 0 1px 1px #fff3,0 4px 4px #08080814,0 1px 2px #08080833}',
-      '.agilo-voice-record-btn.agilo-voice-record-btn:hover:not(:disabled){filter:brightness(1.05)}',
-      '.agilo-voice-record-btn.agilo-voice-record-btn:disabled{opacity:.45;cursor:not-allowed}',
-      '.agilo-voice-record-btn.agilo-voice-record-btn.is-recording{background:var(--color--rouge,#a82633)}',
-      '.agilo-voice-record-btn-icon{display:inline-flex;width:18px;height:18px}',
-      '.agilo-voice-bar-row{display:none;flex-direction:column;gap:.35rem}',
-      '.agilo-voice-bar-row.is-visible{display:flex}',
-      '.agilo-voice-timer-inline{font-size:.85rem;font-weight:600;color:var(--color--gris,#525252);text-align:center}',
-      '.agilo-voice-progress{height:5px;background:rgba(82,82,82,.15);border-radius:999px;overflow:hidden}',
-      '.agilo-voice-progress-bar{height:100%;width:0;background:var(--color--blue,#174a96);transition:width .1s linear}',
-      '.agilo-voice-hero.is-recording~.agilo-voice-record-area .agilo-voice-progress-bar{background:var(--color--rouge,#a82633)}',
-      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:0;text-align:center;line-height:1.45}',
-      '.agilo-voice-audio{width:100%;margin:0}',
-      '.agilo-voice-file-link{display:block;margin:.5rem auto 0;text-align:center;font-size:.85rem;color:var(--color--blue,#174a96);text-decoration:underline;cursor:pointer}',
-      '.agilo-voice-file-link:hover{color:var(--color--gris_foncé,#020202)}',
-      '.agilo-voice-file-panel{display:none;margin-top:.5rem}',
-      '.agilo-voice-file-panel.is-open{display:block}',
-      '.agilo-voice-file{width:100%;box-sizing:border-box;padding:8px;border:1px solid var(--color--noir_25,rgba(82,82,82,.25));border-radius:' + AGILO_RADIUS + ';background:var(--color--white,#fff)}',
+      '.agilo-voice-audio{display:none}',
       '.agilo-voice-actions{margin-top:1rem;display:flex;flex-direction:column;align-items:stretch;gap:.75rem}',
-      '.agilo-voice-btn-submit{display:none;width:100%}',
-      '.agilo-voice-btn-submit.is-visible{display:inline-block}',
+      '.agilo-voice-btn-submit{display:none}',
+      '.agilo-voice-btn-submit.is-visible{display:inline-flex}',
       '.agilo-voice-status{margin-top:.5rem;padding:10px 12px;border-radius:' + AGILO_RADIUS + ';font-size:.9rem;display:none}',
       '.agilo-voice-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
       '.agilo-voice-status.is-success{display:block;background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
@@ -486,15 +487,6 @@
       '    <p class="agilo-voice-intro-title">Faites reconnaître votre voix</p>',
       '    <p class="agilo-voice-intro-sub text-size-small">15 à 45 secondes suffisent pour apparaître automatiquement dans vos transcriptions.</p>',
       '  </div>',
-      '  <div class="agilo-voice-hero is-idle" id="agilo-voice-hero">',
-      '    <div class="agilo-voice-waves" id="agilo-voice-waves" style="display:none" aria-hidden="true">',
-      '      <span class="agilo-voice-wave"></span>',
-      '      <span class="agilo-voice-wave"></span>',
-      '      <span class="agilo-voice-wave"></span>',
-      '    </div>',
-      '    <div class="agilo-voice-hero-ring"></div>',
-      '    <div id="agilo-voice-hero-icon">' + MIC_SVG + '</div>',
-      '  </div>',
       '  <div class="agilo-voice-record-area">',
       '    <div class="agilo-voice-name-grid">',
       '      <div><label class="agilo-voice-label" for="agilo-voice-first-name">Prénom</label>',
@@ -502,26 +494,34 @@
       '      <div><label class="agilo-voice-label" for="agilo-voice-last-name">Nom</label>',
       '      <input class="agilo-voice-input select-input input-field w-input" id="agilo-voice-last-name" type="text" maxlength="80" value="' + escapeHtml(lastName) + '" placeholder="Ex. Dupont"></div>',
       '    </div>',
-      '    <button type="button" class="agilo-voice-record-btn button-wp2024 next w-button" id="agilo-voice-record-btn">',
-      '      <span class="agilo-voice-record-btn-icon" id="agilo-voice-record-btn-icon" aria-hidden="true">',
-      '        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><circle cx="12" cy="12" r="6"/></svg>',
-      '      </span>',
-      '      <span id="agilo-voice-record-btn-label">Démarrer l\'enregistrement</span>',
-      '    </button>',
-      '    <div class="agilo-voice-bar-row" id="agilo-voice-bar-row">',
-      '      <div class="agilo-voice-timer-inline" id="agilo-voice-timer"></div>',
-      '      <div class="agilo-voice-progress"><div class="agilo-voice-progress-bar" id="agilo-voice-progress"></div></div>',
+      '    <div class="agilo-voice-hero-wrap">',
+      '      <div class="agilo-voice-hero is-idle" id="agilo-voice-hero" role="button" tabindex="0" aria-label="Démarrer l\'enregistrement vocal">',
+      '        <div class="agilo-voice-waves" id="agilo-voice-waves" style="display:none" aria-hidden="true">',
+      '          <span class="agilo-voice-wave"></span><span class="agilo-voice-wave"></span><span class="agilo-voice-wave"></span>',
+      '        </div>',
+      '        <div class="agilo-voice-hero-ring"></div>',
+      '        <div id="agilo-voice-hero-icon">' + MIC_SVG + '</div>',
+      '      </div>',
+      '      <p class="agilo-voice-hero-label" id="agilo-voice-hero-label">Appuyez pour enregistrer votre voix</p>',
+      '      <div class="agilo-voice-timer-compact" id="agilo-voice-timer"></div>',
+      '      <button type="button" class="agilo-voice-rerecord-link" id="agilo-voice-rerecord">Réenregistrer</button>',
+      '      <div class="agilo-voice-mini-player" id="agilo-voice-mini-player">',
+      '        <button type="button" class="agilo-voice-play-btn" id="agilo-voice-play-btn" aria-label="Écouter">▶</button>',
+      '        <span class="agilo-voice-play-time" id="agilo-voice-play-time">0:00 / 0:00</span>',
+      '      </div>',
       '    </div>',
-      '    <audio class="agilo-voice-audio" id="agilo-voice-preview" controls style="display:none"></audio>',
+      '    <audio class="agilo-voice-audio" id="agilo-voice-preview"></audio>',
       '    <p class="agilo-voice-hint text-size-small" id="agilo-voice-hint">Parlez clairement, seul(e), dans un endroit calme.</p>',
-      '  </div>',
-      '  <a class="agilo-voice-file-link" id="agilo-voice-toggle-file" href="#" role="button">Importer un fichier audio à la place</a>',
-      '  <div class="agilo-voice-file-panel" id="agilo-voice-file-panel">',
-      '    <input class="agilo-voice-file select-input input-field w-input" id="agilo-voice-file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/*,video/*">',
-      '    <p class="agilo-voice-hint text-size-small">Formats recommandés : MP3, WAV, webm ou mp4 — 15 à 45 secondes de votre voix seule.</p>',
+      '    <div class="agilo-voice-drop-zone" id="agilo-voice-drop-zone" role="button" tabindex="0">',
+      '      <strong>Glissez votre fichier audio ici</strong>',
+      '      <span>ou cliquez pour sélectionner · MP3, WAV, webm, mp4 · 15 à 45 s</span>',
+      '    </div>',
+      '    <input class="agilo-voice-file" id="agilo-voice-file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/webm,audio/*,video/*" hidden>',
       '  </div>',
       '  <div class="agilo-voice-actions">',
-      '    <button type="button" class="agilo-voice-btn-submit button-wp2024 next w-button" id="agilo-voice-submit">Enregistrer ma voix</button>',
+      '    <div class="agilo-voice-submit-row">',
+      '      <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">' + SAVE_ICON + ' Enregistrer ma voix</button>',
+      '    </div>',
       '    <div class="agilo-voice-status" id="agilo-voice-status" role="status"></div>',
       '    <a class="agilo-voice-skip-link" id="agilo-voice-skip" href="#" role="button">Passer cette étape</a>',
       '  </div>',
@@ -564,33 +564,30 @@
       recordedBlob: null,
       recordedFileName: 'voice-enrollment.webm',
       fileMode: false,
+      previewDurationMs: 0,
       credentials: creds
     };
 
     var els = {
       hero: container.querySelector('#agilo-voice-hero'),
       heroIcon: container.querySelector('#agilo-voice-hero-icon'),
+      heroLabel: container.querySelector('#agilo-voice-hero-label'),
       waves: container.querySelector('#agilo-voice-waves'),
       firstName: container.querySelector('#agilo-voice-first-name'),
       lastName: container.querySelector('#agilo-voice-last-name'),
-      recordBtn: container.querySelector('#agilo-voice-record-btn'),
-      recordBtnLabel: container.querySelector('#agilo-voice-record-btn-label'),
-      recordBtnIcon: container.querySelector('#agilo-voice-record-btn-icon'),
-      barRow: container.querySelector('#agilo-voice-bar-row'),
       timer: container.querySelector('#agilo-voice-timer'),
-      progress: container.querySelector('#agilo-voice-progress'),
+      rerecord: container.querySelector('#agilo-voice-rerecord'),
+      miniPlayer: container.querySelector('#agilo-voice-mini-player'),
+      playBtn: container.querySelector('#agilo-voice-play-btn'),
+      playTime: container.querySelector('#agilo-voice-play-time'),
       hint: container.querySelector('#agilo-voice-hint'),
       preview: container.querySelector('#agilo-voice-preview'),
-      fileLink: container.querySelector('#agilo-voice-toggle-file'),
-      filePanel: container.querySelector('#agilo-voice-file-panel'),
+      dropZone: container.querySelector('#agilo-voice-drop-zone'),
       fileInput: container.querySelector('#agilo-voice-file'),
       submitBtn: container.querySelector('#agilo-voice-submit'),
       skipBtn: container.querySelector('#agilo-voice-skip'),
       status: container.querySelector('#agilo-voice-status')
     };
-
-    var PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><circle cx="12" cy="12" r="6"/></svg>';
-    var STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>';
 
     function setStatus(type, message) {
       els.status.className = 'agilo-voice-status';
@@ -601,7 +598,8 @@
 
     function setBusy(busy) {
       els.submitBtn.disabled = busy;
-      els.recordBtn.disabled = busy && state.uiState !== 'recording';
+      if (busy && state.uiState !== 'recording') els.hero.style.pointerEvents = 'none';
+      else els.hero.style.pointerEvents = '';
       els.skipBtn.style.pointerEvents = busy ? 'none' : '';
       els.skipBtn.style.opacity = busy ? '0.5' : '';
     }
@@ -611,115 +609,101 @@
       return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
     }
 
-    function updateTimerUI() {
-      if (state.uiState === 'recording' || state.uiState === 'preview') {
-        els.barRow.classList.add('is-visible');
-        els.timer.textContent = formatTime(state.elapsedMs) + ' / 00:45';
-        var pct = Math.min(100, (state.elapsedMs / (MAX_RECORD_SEC * 1000)) * 100);
-        els.progress.style.width = pct + '%';
-      } else {
-        els.barRow.classList.remove('is-visible');
-        els.progress.style.width = '0%';
+    function updateDropZoneLabel(fileName) {
+      if (!fileName) {
+        els.dropZone.classList.remove('is-filled');
+        els.dropZone.innerHTML = '<strong>Glissez votre fichier audio ici</strong><span>ou cliquez pour sélectionner · MP3, WAV, webm, mp4 · 15 à 45 s</span>';
+        return;
       }
+      els.dropZone.classList.add('is-filled');
+      els.dropZone.innerHTML = '<strong>Fichier sélectionné</strong><span>' + escapeHtml(fileName) + '</span>';
+    }
+
+    function updatePlayTimeLabel() {
+      var cur = els.preview.currentTime ? Math.floor(els.preview.currentTime * 1000) : 0;
+      var total = state.previewDurationMs || (els.preview.duration ? Math.floor(els.preview.duration * 1000) : state.elapsedMs);
+      els.playTime.textContent = formatTime(cur) + ' / ' + formatTime(total);
     }
 
     function updateUIState() {
       els.hero.classList.remove('is-idle', 'is-recording', 'is-preview');
+      els.timer.classList.remove('is-visible');
+      els.rerecord.style.display = 'none';
+      els.miniPlayer.classList.remove('is-visible');
+      els.hero.style.opacity = '';
 
       if (state.uiState === 'recording') {
         els.hero.classList.add('is-recording');
-        els.heroIcon.innerHTML = MIC_SVG;
+        els.heroIcon.innerHTML = STOP_SVG;
         els.waves.style.display = 'block';
-        els.recordBtn.classList.add('is-recording');
-        els.recordBtnLabel.textContent = 'Arrêter';
-        els.recordBtnIcon.innerHTML = STOP_ICON;
-        els.recordBtn.disabled = state.elapsedMs < MIN_RECORD_SEC * 1000;
+        els.heroLabel.textContent = 'Appuyez pour arrêter';
+        els.timer.classList.add('is-visible');
+        els.timer.textContent = formatTime(state.elapsedMs) + ' / 00:45';
         els.hint.textContent = 'Parlez naturellement — minimum 15 secondes.';
-        els.preview.style.display = 'none';
         els.submitBtn.classList.remove('is-visible');
-      } else if (state.uiState === 'preview') {
+        if (state.elapsedMs < MIN_RECORD_SEC * 1000) {
+          els.hero.style.opacity = '0.55';
+          els.hero.style.pointerEvents = 'none';
+        }
+      } else if (state.uiState === 'preview' || state.uiState === 'file') {
         els.hero.classList.add('is-preview');
         els.heroIcon.innerHTML = CHECK_SVG;
         els.waves.style.display = 'none';
-        els.recordBtn.classList.remove('is-recording');
-        els.recordBtnLabel.textContent = 'Réenregistrer';
-        els.recordBtnIcon.innerHTML = PLAY_ICON;
-        els.recordBtn.disabled = false;
-        els.hint.textContent = 'Écoutez votre enregistrement, puis validez.';
-        els.preview.style.display = 'block';
-        els.submitBtn.classList.add('is-visible');
-      } else if (state.uiState === 'file') {
-        els.hero.classList.add('is-preview');
-        els.heroIcon.innerHTML = CHECK_SVG;
-        els.waves.style.display = 'none';
-        els.recordBtn.classList.remove('is-recording');
-        els.recordBtnLabel.textContent = 'Démarrer l\'enregistrement';
-        els.recordBtnIcon.innerHTML = PLAY_ICON;
-        els.recordBtn.disabled = false;
-        els.hint.textContent = 'Fichier sélectionné — vous pouvez l\'enregistrer ou utiliser le micro.';
-        els.preview.style.display = 'none';
+        els.heroLabel.textContent = state.uiState === 'preview' ? 'Enregistrement prêt' : 'Fichier prêt à envoyer';
+        els.rerecord.style.display = state.uiState === 'preview' ? 'block' : 'none';
+        if (state.uiState === 'preview') {
+          els.miniPlayer.classList.add('is-visible');
+          updatePlayTimeLabel();
+        }
+        els.hint.textContent = state.uiState === 'preview' ? 'Écoutez votre enregistrement, puis validez.' : 'Validez pour enregistrer votre voix.';
         els.submitBtn.classList.add('is-visible');
       } else {
         els.hero.classList.add('is-idle');
         els.heroIcon.innerHTML = MIC_SVG;
         els.waves.style.display = 'none';
-        els.recordBtn.classList.remove('is-recording');
-        els.recordBtnLabel.textContent = 'Démarrer l\'enregistrement';
-        els.recordBtnIcon.innerHTML = PLAY_ICON;
-        els.recordBtn.disabled = false;
+        els.heroLabel.textContent = 'Appuyez pour enregistrer votre voix';
         els.hint.textContent = 'Parlez clairement, seul(e), dans un endroit calme.';
-        els.preview.style.display = 'none';
         els.submitBtn.classList.remove('is-visible');
       }
-
-      updateTimerUI();
     }
 
     function cleanupStream() {
-      if (state.mediaStream) {
-        state.mediaStream.getTracks().forEach(function (t) { t.stop(); });
-      }
+      if (state.mediaStream) state.mediaStream.getTracks().forEach(function (t) { t.stop(); });
       state.mediaStream = null;
       state.mediaRecorder = null;
     }
 
-    function resetRecording() {
+    function resetRecordingState() {
       if (state.timerId) clearInterval(state.timerId);
       state.timerId = null;
       state.recording = false;
-      state.elapsedMs = 0;
-      state.audioChunks = [];
       state.recordedBlob = null;
-      state.fileMode = false;
-      cleanupStream();
+      state.previewDurationMs = 0;
+      els.preview.pause();
       els.preview.removeAttribute('src');
-      els.fileInput.value = '';
-      els.filePanel.classList.remove('is-open');
-      state.uiState = 'idle';
+      els.playBtn.textContent = '▶';
+      cleanupStream();
+      if (!state.fileMode) state.uiState = 'idle';
       updateUIState();
     }
 
-    function openFileImportPanel() {
-      if (!els.filePanel || els.filePanel.classList.contains('is-open')) return;
-      els.filePanel.classList.add('is-open');
-      if (els.fileLink) {
-        els.fileLink.textContent = 'Masquer l\'import de fichier';
-      }
-    }
-
-    function toggleFilePanel(e) {
-      if (e) e.preventDefault();
-      if (state.recording) return;
-      var open = els.filePanel.classList.toggle('is-open');
-      els.fileLink.textContent = open
-        ? 'Masquer l\'import de fichier'
-        : 'Importer un fichier audio à la place';
-      if (!open) {
+    async function applySelectedFile(file) {
+      setStatus('', '');
+      try {
+        await validateVoiceFileDuration(file);
+        state.fileMode = true;
+        state.recordedBlob = null;
+        els.preview.removeAttribute('src');
+        updateDropZoneLabel(file.name);
+        state.uiState = 'file';
+        updateUIState();
+      } catch (err) {
         els.fileInput.value = '';
-        if (!state.recordedBlob) {
-          state.uiState = 'idle';
-          updateUIState();
-        }
+        state.fileMode = false;
+        updateDropZoneLabel('');
+        state.uiState = 'idle';
+        updateUIState();
+        setStatus('error', err.message || ERROR_MESSAGES.error_invalid_audio_file_content);
       }
     }
 
@@ -733,16 +717,11 @@
         setStatus('error', 'Enregistrement micro non supporté. Importez un fichier audio à la place.');
         return;
       }
-
       try {
-        if (state.uiState === 'preview') {
-          state.recordedBlob = null;
-          els.preview.removeAttribute('src');
-          els.preview.style.display = 'none';
-        }
         els.fileInput.value = '';
         state.fileMode = false;
-
+        updateDropZoneLabel('');
+        if (state.uiState === 'preview') resetRecordingState();
         var stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         state.mediaStream = stream;
         var mimeType = getSupportedMimeType();
@@ -752,78 +731,58 @@
           state.mediaRecorder = new MediaRecorder(stream);
           mimeType = state.mediaRecorder.mimeType || 'audio/webm';
         }
-
         state.recordedFileName = getEnrollmentFileName(mimeType);
         state.audioChunks = [];
         state.mediaRecorder.ondataavailable = function (ev) {
           if (ev.data && ev.data.size > 0) state.audioChunks.push(ev.data);
         };
         state.mediaRecorder.onstop = function () {
-          if (state.audioChunks.length) {
-            state.recordedBlob = new Blob(state.audioChunks, { type: mimeType });
-            var url = URL.createObjectURL(state.recordedBlob);
-            els.preview.src = url;
-            state.uiState = 'preview';
-            updateUIState();
-          }
+          if (!state.audioChunks.length) return;
+          state.recordedBlob = new Blob(state.audioChunks, { type: mimeType });
+          els.preview.src = URL.createObjectURL(state.recordedBlob);
+          state.previewDurationMs = state.elapsedMs;
+          state.uiState = 'preview';
+          updateUIState();
         };
-
         state.mediaRecorder.start(250);
         state.recording = true;
         state.elapsedMs = 0;
         state.uiState = 'recording';
         updateUIState();
-
         state.timerId = setInterval(function () {
           state.elapsedMs += 100;
           updateUIState();
-          if (state.elapsedMs >= MAX_RECORD_SEC * 1000) {
-            stopRecording();
-          }
+          if (state.elapsedMs >= MAX_RECORD_SEC * 1000) stopRecording();
         }, 100);
       } catch (e) {
         console.error('[agilo-voice-onboarding] startRecording', e);
         setStatus('error', 'Accès micro refusé ou indisponible. Importez un fichier audio à la place.');
-        resetRecording();
+        cleanupStream();
       }
     }
 
     function stopRecording() {
-      if (!state.recording || !state.mediaRecorder) return;
-      if (state.elapsedMs < MIN_RECORD_SEC * 1000) return;
+      if (!state.recording || !state.mediaRecorder || state.elapsedMs < MIN_RECORD_SEC * 1000) return;
       state.recording = false;
-      if (state.timerId) clearInterval(state.timerId);
+      clearInterval(state.timerId);
       state.timerId = null;
-      try {
-        if (state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
-      } catch (e) { /* noop */ }
+      try { if (state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop(); } catch (e) { /* noop */ }
       cleanupStream();
     }
 
-    function handleRecordButtonClick() {
-      if (state.uiState === 'recording') {
-        stopRecording();
-        return;
-      }
-      if (state.uiState === 'preview') {
-        startRecording();
-        return;
-      }
-      startRecording();
+    function handleHeroClick() {
+      if (state.uiState === 'recording') stopRecording();
+      else if (state.uiState === 'idle') startRecording();
+    }
+
+    function getVoiceFile() {
+      if (state.fileMode && els.fileInput.files && els.fileInput.files[0]) return els.fileInput.files[0];
+      if (state.recordedBlob) return new File([state.recordedBlob], state.recordedFileName, { type: state.recordedBlob.type || 'audio/webm' });
+      return null;
     }
 
     function validateSpeakerLabel() {
       return validateNames(els.firstName.value, els.lastName.value);
-    }
-
-    function getVoiceFile() {
-      if (state.fileMode && els.fileInput.files && els.fileInput.files[0]) {
-        return els.fileInput.files[0];
-      }
-      if (state.recordedBlob) {
-        return new File([state.recordedBlob], state.recordedFileName, { type: state.recordedBlob.type || 'audio/webm' });
-      }
-      return null;
     }
 
     async function enrollVoice() {
@@ -894,7 +853,7 @@
         }
         logVoiceApiError('[agilo-voice-onboarding] enrollSpeakerVoice failed', d);
         setStatus('error', formatApiError(d, 'Impossible d\'enregistrer votre voix. Réessayez avec un enregistrement plus long et plus clair.'));
-        if (isInvalidAudioApiError(d)) openFileImportPanel();
+        if (isInvalidAudioApiError(d)) els.dropZone.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } catch (e) {
         console.error('[agilo-voice-onboarding] enrollVoice', e);
         setStatus('error', 'Erreur de connexion. Vérifiez votre connexion et réessayez.');
@@ -916,31 +875,46 @@
       }, 250);
     }
 
-    els.recordBtn.addEventListener('click', handleRecordButtonClick);
+    els.hero.addEventListener('click', handleHeroClick);
+    els.hero.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroClick(); }
+    });
+    els.rerecord.addEventListener('click', function () {
+      if (state.recording) return;
+      resetRecordingState();
+      startRecording();
+    });
+    els.playBtn.addEventListener('click', function () {
+      if (!els.preview.src) return;
+      if (els.preview.paused) { els.preview.play(); els.playBtn.textContent = '❚❚'; }
+      else { els.preview.pause(); els.playBtn.textContent = '▶'; }
+    });
+    els.preview.addEventListener('timeupdate', updatePlayTimeLabel);
+    els.preview.addEventListener('ended', function () { els.playBtn.textContent = '▶'; });
+    els.dropZone.addEventListener('click', function () { if (!state.recording) els.fileInput.click(); });
+    els.dropZone.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!state.recording) els.fileInput.click(); }
+    });
+    els.dropZone.addEventListener('dragover', function (e) { e.preventDefault(); els.dropZone.classList.add('is-dragover'); });
+    els.dropZone.addEventListener('dragleave', function () { els.dropZone.classList.remove('is-dragover'); });
+    els.dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      els.dropZone.classList.remove('is-dragover');
+      if (state.recording) return;
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) applySelectedFile(file);
+    });
     els.submitBtn.addEventListener('click', enrollVoice);
     els.skipBtn.addEventListener('click', skipStep);
-    els.fileLink.addEventListener('click', toggleFilePanel);
     els.fileInput.addEventListener('change', async function () {
-      setStatus('', '');
-      if (els.fileInput.files && els.fileInput.files[0]) {
-        try {
-          await validateVoiceFileDuration(els.fileInput.files[0]);
-          state.fileMode = true;
-          state.recordedBlob = null;
-          els.preview.removeAttribute('src');
-          els.preview.style.display = 'none';
-          state.uiState = 'file';
-        } catch (err) {
-          els.fileInput.value = '';
-          state.fileMode = false;
-          state.uiState = 'idle';
-          setStatus('error', err.message || ERROR_MESSAGES.error_invalid_audio_file_content);
-        }
-      } else if (!state.recordedBlob) {
+      if (!els.fileInput.files || !els.fileInput.files[0]) {
         state.fileMode = false;
-        state.uiState = 'idle';
+        updateDropZoneLabel('');
+        if (!state.recordedBlob) state.uiState = 'idle';
+        updateUIState();
+        return;
       }
-      updateUIState();
+      await applySelectedFile(els.fileInput.files[0]);
     });
 
     updateUIState();
