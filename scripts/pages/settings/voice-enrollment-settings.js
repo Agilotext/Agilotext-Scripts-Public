@@ -40,8 +40,14 @@
     error_speaker_voice_not_found: 'Cette voix est introuvable. Rechargez la page.',
     error_speaker_voice_label_already_exists: 'Une voix existe déjà avec ce prénom et ce nom.',
     error_invalid_recipient_email: 'L\'adresse email du destinataire est invalide.',
-    error_invalid_recipient_name: 'Le nom du destinataire est invalide.'
+    error_invalid_recipient_name: 'Le nom du destinataire est invalide.',
+    error_speaker_voice_invite_not_found: 'L\'invitation n\'a pas pu être confirmée par le serveur. Vérifiez si l\'email est arrivé avant de réessayer.'
   };
+
+  const ICON_EDIT = '<svg class="agilo-voice-btn-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_MIC_SM = '<svg class="agilo-voice-btn-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_TRASH = '<svg class="agilo-voice-btn-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const ICON_EMPTY_MIC = '<svg class="agilo-voice-empty-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   const sleep = function (ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
@@ -363,7 +369,27 @@
     });
     var d = await parseApiResponse(r);
     if (d.status === 'OK') return d;
+    console.warn('[agilo-voice-settings] createSpeakerVoiceInvite failed', { httpStatus: r.status, response: d });
     throw new Error(formatApiError(d, 'Impossible d\'envoyer l\'invitation.'));
+  }
+
+  function voiceInitials(firstName, lastName, speakerLabel) {
+    var fn = String(firstName || '').trim();
+    var ln = String(lastName || '').trim();
+    if (fn || ln) return ((fn.charAt(0) || '') + (ln.charAt(0) || '')).toUpperCase() || '?';
+    var parts = String(speakerLabel || '').trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return '?';
+  }
+
+  function scrollToVoiceSectionIfNeeded() {
+    if ((window.location.hash || '') !== '#agilo-voice-settings') return;
+    var target = document.getElementById('agilo-voice-settings');
+    if (!target) return;
+    setTimeout(function () {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
   }
 
   function formatVoiceDate(raw) {
@@ -386,23 +412,30 @@
     style.id = 'agilo-voice-enroll-styles';
     style.textContent = [
       '@keyframes agilo-voice-pulse{0%{transform:scale(.92);opacity:.55}70%{transform:scale(1.35);opacity:0}100%{transform:scale(1.35);opacity:0}}',
-      '.agilo-voice-wrap{max-width:100%;width:100%;font-family:inherit;color:var(--color--gris_foncé,#020202);margin-bottom:1rem}',
-      '.agilo-voice-card{background:var(--color--blanc_gris,#f8f9fa);border:1px solid rgba(82,82,82,.12);border-radius:' + AGILO_RADIUS + ';padding:20px;margin-bottom:16px}',
-      '.agilo-voice-title{margin:0 0 6px;font-size:1.25rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
-      '.agilo-voice-quota{margin:0 0 16px;font-size:.9rem;color:var(--color--gris,#525252)}',
-      '.agilo-voice-list{list-style:none;margin:0 0 16px;padding:0}',
-      '.agilo-voice-item{padding:14px 0;border-bottom:1px solid rgba(82,82,82,.12)}',
+      '.agilo-voice-wrap{max-width:100%;width:100%;font-family:inherit;color:var(--color--gris_foncé,#020202)}',
+      '.agilo-voice-card{background:transparent;border:none;border-radius:0;padding:0;margin-bottom:0}',
+      '.agilo-voice-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-bottom:18px}',
+      '.agilo-voice-title{margin:0;font-size:inherit;font-weight:inherit;color:inherit}',
+      '.agilo-voice-quota-badge{display:inline-flex;align-items:center;padding:4px 11px;font-size:.78rem;font-weight:600;color:var(--color--blue,#174a96);background:rgba(23,74,150,.08);border-radius:999px;line-height:1.3}',
+      '.agilo-voice-list{list-style:none;margin:0 0 8px;padding:0}',
+      '.agilo-voice-item{display:flex;gap:14px;align-items:flex-start;padding:16px 0;border-bottom:1px solid rgba(82,82,82,.1)}',
       '.agilo-voice-item:last-child{border-bottom:none}',
-      '.agilo-voice-item-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}',
-      '.agilo-voice-item-label{font-weight:600;color:var(--color--gris_foncé,#020202)}',
-      '.agilo-voice-item-meta{font-size:.82rem;color:var(--color--gris,#525252);margin-top:4px}',
-      '.agilo-voice-item-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}',
-      '.agilo-voice-rename-row{display:none;flex-direction:column;gap:.5rem;margin-top:10px}',
+      '.agilo-voice-avatar{flex-shrink:0;width:44px;height:44px;border-radius:50%;background:rgba(23,74,150,.1);color:var(--color--blue,#174a96);font-weight:700;font-size:.82rem;letter-spacing:.02em;display:flex;align-items:center;justify-content:center}',
+      '.agilo-voice-item-body{flex:1;min-width:0}',
+      '.agilo-voice-item-label{font-weight:600;font-size:1rem;color:var(--color--gris_foncé,#020202);line-height:1.3}',
+      '.agilo-voice-item-meta{font-size:.8rem;color:var(--color--gris,#525252);margin-top:4px}',
+      '.agilo-voice-item-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}',
+      '.agilo-voice-rename-row{display:none;flex-direction:column;gap:.5rem;margin-top:12px}',
       '.agilo-voice-rename-row.is-open{display:flex}',
-      '.agilo-voice-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}',
-      '.agilo-voice-section{margin-top:18px;padding-top:18px;border-top:1px solid rgba(82,82,82,.12)}',
-      '.agilo-voice-section-title{margin:0 0 10px;font-size:1rem;font-weight:600}',
-      '.agilo-voice-empty{margin:0 0 12px;color:var(--color--gris,#525252);font-size:.9rem;line-height:1.45}',
+      '.agilo-voice-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}',
+      '.agilo-voice-section{margin-top:22px;padding-top:22px;border-top:1px solid rgba(82,82,82,.1)}',
+      '.agilo-voice-section-title{margin:0 0 8px;font-size:1rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
+      '.agilo-voice-section-desc{margin:0 0 14px;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-empty{margin:0;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;padding:28px 16px 20px;margin-bottom:8px}',
+      '.agilo-voice-empty-icon{width:52px;height:52px;border-radius:50%;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96);display:flex;align-items:center;justify-content:center;margin-bottom:12px}',
+      '.agilo-voice-empty-icon-svg{width:26px;height:26px}',
+      '.agilo-voice-empty-title{margin:0 0 6px;font-weight:600;font-size:1rem;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto 1.25rem}',
       '.agilo-voice-hero-ring{position:absolute;inset:0;border-radius:50%;background:rgba(23,74,150,.1);border:1px solid rgba(23,74,150,.18)}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-ring{background:rgba(168,38,51,.1);border-color:rgba(168,38,51,.25)}',
@@ -433,12 +466,20 @@
       '.agilo-voice-file-panel{display:none;margin-top:.5rem}',
       '.agilo-voice-file-panel.is-open{display:block}',
       '.agilo-voice-file{width:100%;box-sizing:border-box;padding:8px;border:1px solid rgba(82,82,82,.25);border-radius:' + AGILO_RADIUS + ';background:#fff}',
-      '.agilo-voice-btn{display:inline-block;cursor:pointer;border-radius:' + AGILO_RADIUS + ';padding:8px 14px;font:inherit;font-weight:600;border:1px solid rgba(82,82,82,.25);background:#fff;color:var(--color--gris_foncé,#020202)}',
-      '.agilo-voice-btn-primary{background:var(--color--blue,#174a96);color:#fff;border-color:transparent;width:100%}',
-      '.agilo-voice-btn-danger{color:var(--color--rouge,#a82633);border-color:rgba(168,38,51,.25)}',
-      '.agilo-voice-btn:disabled{opacity:.45;cursor:not-allowed}',
-      '.agilo-voice-btn-submit{display:none;width:100%}',
-      '.agilo-voice-btn-submit.is-visible{display:inline-block}',
+      '.agilo-voice-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;border-radius:' + AGILO_RADIUS + ';padding:8px 14px;font:inherit;font-size:.88rem;font-weight:600;border:1px solid rgba(82,82,82,.22);background:#fff;color:var(--color--gris_foncé,#020202);transition:background .15s,border-color .15s,transform .15s,box-shadow .15s}',
+      '.agilo-voice-btn-ghost{background:transparent}',
+      '.agilo-voice-btn-ghost:hover{background:rgba(23,74,150,.05);border-color:rgba(23,74,150,.25)}',
+      '.agilo-voice-btn-primary{background:var(--color--blue,#174a96);color:#fff;border-color:transparent;box-shadow:0 1px 2px rgba(23,74,150,.18)}',
+      '.agilo-voice-btn-primary:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(23,74,150,.22)}',
+      '.agilo-voice-btn-primary.agilo-voice-btn-block{width:100%}',
+      '.agilo-voice-btn-icon{font-size:1.05rem;line-height:1;font-weight:700}',
+      '.agilo-voice-btn-svg{width:14px;height:14px;flex-shrink:0}',
+      '.agilo-voice-btn-danger{color:var(--color--rouge,#a82633);border-color:rgba(168,38,51,.22);background:transparent}',
+      '.agilo-voice-btn-danger:hover{background:rgba(168,38,51,.06)}',
+      '.agilo-voice-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}',
+      '.agilo-voice-btn-submit{display:none}',
+      '.agilo-voice-btn-submit.is-visible{display:inline-flex}',
+      '.agilo-voice-invite-actions{display:flex;justify-content:flex-end;margin-top:14px}',
       '.agilo-voice-status{margin-top:.5rem;padding:10px 12px;border-radius:' + AGILO_RADIUS + ';font-size:.9rem;display:none}',
       '.agilo-voice-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
       '.agilo-voice-status.is-success{display:block;background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
@@ -501,7 +542,7 @@
       '  <input class="agilo-voice-file" id="agilo-voice-file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/webm,audio/*">',
       '  <p class="agilo-voice-hint">MP3, WAV, webm ou mp4 — 15 à 45 secondes de votre voix seule.</p>',
       '</div>',
-      '<button type="button" class="agilo-voice-btn agilo-voice-btn-primary agilo-voice-btn-submit button-wp2024 next w-button" id="agilo-voice-submit">Enregistrer cette voix</button>'
+      '<button type="button" class="agilo-voice-btn agilo-voice-btn-primary agilo-voice-btn-submit agilo-voice-btn-block button-wp2024 next w-button" id="agilo-voice-submit">Enregistrer cette voix</button>'
     ].join('');
 
     var state = { uiState: 'idle', recording: false, elapsedMs: 0, timerId: null, mediaRecorder: null, mediaStream: null, audioChunks: [], recordedBlob: null, recordedFileName: 'voice-enrollment.webm', fileMode: false };
@@ -735,58 +776,71 @@
       ? voices.map(function (v) {
           var label = escapeHtml(v.speakerLabel || ((v.firstName || '') + ' ' + (v.lastName || '')).trim() || '—');
           var date = formatVoiceDate(v.dtUpdate);
+          var initials = escapeHtml(voiceInitials(v.firstName, v.lastName, v.speakerLabel));
           return [
             '<li class="agilo-voice-item" data-voice-id="' + escapeHtml(String(v.voiceId)) + '">',
-            '  <div class="agilo-voice-item-head">',
-            '    <div><div class="agilo-voice-item-label">' + label + '</div>',
-            date ? ('      <div class="agilo-voice-item-meta">Mise à jour : ' + date + '</div>') : '',
-            '    </div></div>',
-            '  <div class="agilo-voice-item-actions">',
-            '    <button type="button" class="agilo-voice-btn agilo-voice-rename-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">Renommer</button>',
-            '    <button type="button" class="agilo-voice-btn agilo-voice-replace-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">Remplacer l\'audio</button>',
-            '    <button type="button" class="agilo-voice-btn agilo-voice-btn-danger agilo-voice-delete-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-label="' + label + '">Supprimer</button>',
-            '  </div>',
-            '  <div class="agilo-voice-rename-row" id="agilo-voice-rename-' + escapeHtml(String(v.voiceId)) + '">',
-            '    <div class="agilo-voice-name-grid">',
-            '      <div><label class="agilo-voice-label">Prénom</label><input class="agilo-voice-input agilo-voice-rename-first" type="text" value="' + escapeHtml(v.firstName || '') + '"></div>',
-            '      <div><label class="agilo-voice-label">Nom</label><input class="agilo-voice-input agilo-voice-rename-last" type="text" value="' + escapeHtml(v.lastName || '') + '"></div>',
+            '  <div class="agilo-voice-avatar" aria-hidden="true">' + initials + '</div>',
+            '  <div class="agilo-voice-item-body">',
+            '    <div class="agilo-voice-item-label">' + label + '</div>',
+            date ? ('    <div class="agilo-voice-item-meta">Mise à jour : ' + date + '</div>') : '',
+            '    <div class="agilo-voice-item-actions">',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-rename-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">' + ICON_EDIT + ' Renommer</button>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-replace-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">' + ICON_MIC_SM + ' Remplacer l\'audio</button>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-danger agilo-voice-delete-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-label="' + label + '">' + ICON_TRASH + ' Supprimer</button>',
             '    </div>',
-            '    <button type="button" class="agilo-voice-btn agilo-voice-btn-primary agilo-voice-save-rename" data-voice-id="' + escapeHtml(String(v.voiceId)) + '">Enregistrer le nom</button>',
+            '    <div class="agilo-voice-rename-row" id="agilo-voice-rename-' + escapeHtml(String(v.voiceId)) + '">',
+            '      <div class="agilo-voice-name-grid">',
+            '        <div><label class="agilo-voice-label">Prénom</label><input class="agilo-voice-input agilo-voice-rename-first" type="text" value="' + escapeHtml(v.firstName || '') + '"></div>',
+            '        <div><label class="agilo-voice-label">Nom</label><input class="agilo-voice-input agilo-voice-rename-last" type="text" value="' + escapeHtml(v.lastName || '') + '"></div>',
+            '      </div>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary agilo-voice-save-rename" data-voice-id="' + escapeHtml(String(v.voiceId)) + '">Enregistrer le nom</button>',
+            '    </div>',
+            '    <div class="agilo-voice-panel agilo-voice-replace-panel" id="agilo-voice-replace-' + escapeHtml(String(v.voiceId)) + '"></div>',
             '  </div>',
-            '  <div class="agilo-voice-panel agilo-voice-replace-panel" id="agilo-voice-replace-' + escapeHtml(String(v.voiceId)) + '"></div>',
             '</li>'
           ].join('');
         }).join('')
-      : '<p class="agilo-voice-empty">Aucune voix enregistrée pour le moment.</p>';
+      : [
+        '<div class="agilo-voice-empty-state">',
+        '  <div class="agilo-voice-empty-icon">' + ICON_EMPTY_MIC + '</div>',
+        '  <p class="agilo-voice-empty-title">Aucune voix configurée</p>',
+        '  <p class="agilo-voice-empty">Enregistrez la vôtre ou invitez un collègue pour identifier automatiquement chaque intervenant dans vos transcriptions.</p>',
+        '</div>'
+      ].join('');
 
-    var quotaText = isFree
-      ? 'Disponible avec un abonnement Pro ou Business.'
-      : (voices.length + ' / ' + maxVoices + ' voix enregistrées (' + editionLabel(creds.edition) + ')');
+    var quotaBadge = isFree
+      ? 'Pro ou Business'
+      : (voices.length + ' / ' + maxVoices + ' voix');
 
     return [
       '<div class="agilo-voice-wrap">',
       '  <div class="agilo-voice-card">',
-      '    <h2 class="agilo-voice-title heading-style-h2">Empreinte vocale</h2>',
-      '    <p class="agilo-voice-quota">' + escapeHtml(quotaText) + '</p>',
+      '    <div class="agilo-voice-head">',
+      '      <h2 class="agilo-voice-title h1-small">Empreinte vocale</h2>',
+      '      <span class="agilo-voice-quota-badge">' + escapeHtml(quotaBadge) + '</span>',
+      '    </div>',
       '    <div class="agilo-voice-list-wrap">' + (voices.length ? '<ul class="agilo-voice-list">' + listHtml + '</ul>' : listHtml) + '</div>',
       '    <div class="agilo-voice-status" id="agilo-voice-main-status" role="status"></div>',
       isFree ? '<div class="agilo-voice-free-badge text-size-small">La reconnaissance automatique de votre voix dans les transcriptions est disponible avec un abonnement <a href="/pricing">Pro ou Business</a>.</div>' : '',
       !isFree && !atQuota ? [
         '    <div class="agilo-voice-section">',
         '      <h3 class="agilo-voice-section-title">Ajouter une voix</h3>',
-        '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add">+ Ajouter une voix</button>',
+        '      <p class="agilo-voice-section-desc">Enregistrez un nouvel intervenant pour qu\'Agilotext le reconnaisse dans vos réunions.</p>',
+        '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add"><span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix</button>',
         '      <div class="agilo-voice-panel" id="agilo-voice-add-panel"></div>',
         '    </div>',
         '    <div class="agilo-voice-section">',
         '      <h3 class="agilo-voice-section-title">Inviter par email</h3>',
-        '      <p class="agilo-voice-empty">Agilotext enverra un email avec un lien d\'enregistrement — aucun compte requis pour l\'invité.</p>',
+        '      <p class="agilo-voice-section-desc">Agilotext enverra un email avec un lien d\'enregistrement — aucun compte requis pour l\'invité.</p>',
         '      <div class="agilo-voice-name-grid">',
         '        <div><label class="agilo-voice-label" for="agilo-voice-invite-name">Nom affiché</label>',
         '        <input class="agilo-voice-input" id="agilo-voice-invite-name" type="text" placeholder="Ex. Marie Dupont"></div>',
         '        <div><label class="agilo-voice-label" for="agilo-voice-invite-email">Email</label>',
         '        <input class="agilo-voice-input" id="agilo-voice-invite-email" type="email" placeholder="collegue@entreprise.com"></div>',
         '      </div>',
-        '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-send-invite" style="margin-top:10px">Envoyer l\'invitation</button>',
+        '      <div class="agilo-voice-invite-actions">',
+        '        <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-send-invite">Envoyer l\'invitation</button>',
+        '      </div>',
         '    </div>'
       ].join('') : '',
       atQuota ? '<p class="agilo-voice-empty">Quota atteint. Supprimez une voix pour en ajouter ou inviter quelqu\'un.</p>' : '',
@@ -876,7 +930,9 @@
       if (toggleAdd && addPanel) {
         toggleAdd.addEventListener('click', function () {
           var isOpen = addPanel.classList.toggle('is-open');
-          toggleAdd.textContent = isOpen ? 'Masquer le formulaire' : '+ Ajouter une voix';
+          toggleAdd.innerHTML = isOpen
+            ? 'Masquer le formulaire'
+            : '<span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix';
           if (isOpen && !addPanel.dataset.mounted) {
             addPanel.dataset.mounted = '1';
             mountRecordForm(addPanel, creds, { onSuccess: reload }, statusEl);
@@ -914,6 +970,8 @@
         });
       }
     }
+
+    scrollToVoiceSectionIfNeeded();
   }
 
   async function init() {

@@ -36,6 +36,23 @@
     return null;
   }
 
+  function findUnansweredRadioInStep(step) {
+    if (!step) return null;
+    var groups = {};
+    var radios = step.querySelectorAll('input[type="radio"][name]');
+    for (var i = 0; i < radios.length; i++) {
+      var name = radios[i].name;
+      if (!name) continue;
+      if (!groups[name]) groups[name] = { answered: false, firstEl: radios[i] };
+      if (radios[i].checked) groups[name].answered = true;
+    }
+    var key;
+    for (key in groups) {
+      if (!groups[key].answered) return groups[key].firstEl;
+    }
+    return null;
+  }
+
   function clickFinishButton() {
     var activeStep = getVisibleOnboardingStep();
     var btn = (activeStep && activeStep.querySelector('[data-form="submit-btn"]'))
@@ -47,10 +64,23 @@
     }
   }
 
+  function finishOnboardingWithGuard(statusEl, pendingMessage) {
+    var activeStep = getVisibleOnboardingStep();
+    var unanswered = findUnansweredRadioInStep(activeStep);
+    if (unanswered) {
+      if (statusEl) {
+        statusEl.className = 'agilo-voice-status is-info';
+        statusEl.textContent = pendingMessage || 'Répondez à la question ci-dessus puis cliquez sur Terminer.';
+      }
+      unanswered.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return false;
+    }
+    clickFinishButton();
+    return true;
+  }
+
   const AGILO_VOICE_CONFIG = {
-    containerId: 'agilo-voice-onboarding',
-    afterEnroll: clickFinishButton,
-    afterSkip: clickFinishButton
+    containerId: 'agilo-voice-onboarding'
   };
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -852,9 +882,13 @@
         var d = await parseApiResponse(r);
         if (d.status === 'OK' && d.voiceId) {
           await updateVoiceEnrolledFlag(creds.memberstack, 'true');
-          setStatus('success', 'Empreinte vocale enregistrée. Redirection…');
+          setStatus('success', 'Empreinte vocale enregistrée.');
           setTimeout(function () {
-            if (typeof AGILO_VOICE_CONFIG.afterEnroll === 'function') AGILO_VOICE_CONFIG.afterEnroll();
+            var advanced = finishOnboardingWithGuard(
+              els.status,
+              'Empreinte enregistrée. Répondez à la question ci-dessus puis cliquez sur Terminer.'
+            );
+            if (advanced) setStatus('success', 'Empreinte vocale enregistrée. Redirection…');
           }, 600);
           return;
         }
@@ -875,7 +909,10 @@
       await updateVoiceEnrolledFlag(state.credentials.memberstack, 'skipped');
       setStatus('info', 'Étape ignorée.');
       setTimeout(function () {
-        if (typeof AGILO_VOICE_CONFIG.afterSkip === 'function') AGILO_VOICE_CONFIG.afterSkip();
+        finishOnboardingWithGuard(
+          els.status,
+          'Répondez à la question ci-dessus puis cliquez sur Terminer.'
+        );
       }, 250);
     }
 

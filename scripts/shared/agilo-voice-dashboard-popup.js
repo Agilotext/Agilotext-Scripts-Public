@@ -68,7 +68,7 @@
   }
 
   function profileUrl() {
-    return '/app/' + inferEditionFromPath() + '/profile';
+    return '/app/' + inferEditionFromPath() + '/profile#agilo-voice-settings';
   }
 
   function readTs(key) {
