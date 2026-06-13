@@ -4,7 +4,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
-        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b876cc7/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice14"></script>
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@{SHA}/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice15"></script>
    ================================================================ */
 
 (function () {
@@ -1222,7 +1222,7 @@
     return [
       '<div class="agilo-voice-wrap">',
       '  <div class="agilo-voice-card">',
-      '    <h2 class="h1-small">Empreinte</h2>',
+      '    <h2 class="h1-small">Empreinte vocale</h2>',
       '    <div class="spacer-10"></div>',
       '    <div class="agilo-voice-head">',
       '      <span class="agilo-voice-quota-badge">' + escapeHtml(quotaBadge) + '</span>',
