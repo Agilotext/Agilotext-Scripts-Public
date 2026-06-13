@@ -51,6 +51,7 @@
   const ICON_EMPTY_MIC = '<svg class="agilo-voice-empty-icon-svg" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const STOP_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>';
   const WEBFLOW_SAVE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" class="icon-1x1-small white" aria-hidden="true"><path d="M15.25 4.5C15.25 4.22386 15.0261 4 14.75 4H9.25C8.97386 4 8.75 4.22386 8.75 4.5V7.59998C8.75 7.73805 8.86193 7.84998 9 7.84998H15C15.1381 7.84998 15.25 7.73805 15.25 7.59998V4.5Z" fill="currentColor"></path><path d="M8.25 20C8.25 20.2761 8.47386 20.5 8.75 20.5H15.25C15.5261 20.5 15.75 20.2761 15.75 20V15C15.75 14.8619 15.6381 14.75 15.5 14.75H8.5C8.36193 14.75 8.25 14.8619 8.25 15V20Z" fill="currentColor"></path><path d="M7.25 7.59998C7.25 8.56647 8.0335 9.34998 9 9.34998H15C15.9665 9.34998 16.75 8.56647 16.75 7.59998V4.27627C16.75 4.12369 16.8737 4 17.0263 4C17.1722 4 17.3108 4.06373 17.4058 4.17448L20.3685 7.62867C20.7791 8.1074 20.9936 8.72364 20.9689 9.35387L20.6273 18.0976C20.5749 19.4393 19.4719 20.5 18.1292 20.5H17.75C17.4739 20.5 17.25 20.2761 17.25 20V15C17.25 14.0335 16.4665 13.25 15.5 13.25H8.5C7.5335 13.25 6.75 14.0335 6.75 15V20C6.75 20.2761 6.52614 20.5 6.25 20.5H6.11291C4.90908 20.5 3.89276 19.6055 3.73989 18.4114C3.24597 14.5534 3.2247 10.6495 3.67653 6.78632L3.73742 6.26575C3.8885 4.97395 4.983 4 6.28361 4H6.75C7.02614 4 7.25 4.22386 7.25 4.5V7.59998Z" fill="currentColor"></path></svg>';
+  const WEBFLOW_UPGRADE_ICON = '<svg xmlns="http://www.w3.org/2000/svg" enable-background="new 0 0 24 24" viewBox="0 0 24 24" class="icon-1x1-small white" aria-hidden="true"><rect fill="none" height="24" width="24"></rect><path d="M9.68,13.69L12,11.93l2.31,1.76l-0.88-2.85L15.75,9h-2.84L12,6.19L11.09,9H8.25l2.31,1.84L9.68,13.69z M20,10 c0-4.42-3.58-8-8-8s-8,3.58-8,8c0,2.03,0.76,3.87,2,5.28V23l6-2l6,2v-7.72C19.24,13.87,20,12.03,20,10z M12,4c3.31,0,6,2.69,6,6 s-2.69,6-6,6s-6-2.69-6-6S8.69,4,12,4z" fill="currentColor"></path></svg>';
 
   function getWebflowSaveIconHtml() {
     var svgs = document.querySelectorAll('.button.save svg.icon-1x1-small, button.save svg.icon-1x1-small');
@@ -63,9 +64,25 @@
     return WEBFLOW_SAVE_ICON;
   }
 
+  function getWebflowUpgradeIconHtml() {
+    var svgs = document.querySelectorAll('.button.upgrade svg.icon-1x1-small, button.upgrade svg.icon-1x1-small');
+    for (var i = 0; i < svgs.length; i++) {
+      if (svgs[i].closest('#agilo-voice-settings')) continue;
+      var clone = svgs[i].cloneNode(true);
+      clone.setAttribute('aria-hidden', 'true');
+      return clone.outerHTML;
+    }
+    return WEBFLOW_UPGRADE_ICON;
+  }
+
   function applyWebflowSaveButton(el, label) {
     if (!el) return;
     el.innerHTML = getWebflowSaveIconHtml() + '<div>' + escapeHtml(label) + '</div>';
+  }
+
+  function applyWebflowUpgradeButton(el, label) {
+    if (!el) return;
+    el.innerHTML = getWebflowUpgradeIconHtml() + '<div>' + escapeHtml(label) + '</div>';
   }
 
   const sleep = function (ms) {
@@ -912,7 +929,7 @@
       '    <li>Distinction claire entre les intervenants en réunion</li>',
       '    <li>Invitez vos collègues à enregistrer leur empreinte vocale</li>',
       '  </ul>',
-      '  <a href="' + TARIFS_URL + '" target="_blank" rel="noopener noreferrer" class="button save agilo-voice-free-cta">Essayer Pro gratuitement</a>',
+      '  <a href="' + TARIFS_URL + '" target="_blank" rel="noopener noreferrer" class="button upgrade agilo-voice-free-cta">Essayer Pro gratuitement</a>',
       '  <a href="' + TARIFS_URL + '" target="_blank" rel="noopener noreferrer" class="agilo-voice-free-link">Voir les offres Pro et Business</a>',
       '</div>'
     ].join('') : '';
@@ -1003,7 +1020,7 @@
     var isFree = normEdition(creds.edition) === 'free';
 
     if (isFree) {
-      applyWebflowSaveButton(container.querySelector('.agilo-voice-free-cta'), 'Essayer Pro gratuitement');
+      applyWebflowUpgradeButton(container.querySelector('.agilo-voice-free-cta'), 'Essayer Pro gratuitement');
     }
 
     container.querySelectorAll('.agilo-voice-rename-btn').forEach(function (btn) {
