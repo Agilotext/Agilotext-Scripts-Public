@@ -2,10 +2,9 @@
 <!-- ORDRE IMPORTANT : code-cgv AVANT code-agilo-voice-dashboard-popup -->
 
 <!-- 1. Modale CGU (obligatoire en premier) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-cgv-modal.js?v=1.09-voice10"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9928b80/scripts/shared/agilo-cgv-modal.js?v=1.09-voice10"></script>
 
 <!-- 2. Popup empreinte vocale (attend CGU acceptées + modale fermée) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice10"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9928b80/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice10"></script>
 
-<!-- Fallback si CDN indisponible : remettre le script CGU inline avec notifyCgvDismissed()
-     (voir commentaires dans scripts/shared/agilo-cgv-modal.js pour la logique équivalente) -->
+<!-- Après propagation jsDelivr sur @1.09, remplacer 9928b80 par 1.09 -->
