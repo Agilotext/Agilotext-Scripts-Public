@@ -3,7 +3,8 @@
    Pages : /app/free/profile, /app/premium/profile, /app/business/profile
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
-     2. Coller ce script dans "Before </body>" de la page
+     2. Script (pin SHA après push) :
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@{SHA}/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice14"></script>
    ================================================================ */
 
 (function () {
@@ -20,6 +21,9 @@
   const MAX_RECORD_SEC = 45;
   const RESERVED_LABELS = new Set(['S1', 'S2', 'UU']);
   const TARIFS_URL = 'https://www.agilotext.com/tarifs';
+  const INVITE_STORAGE_VERSION = 'v1';
+  const INVITE_MAX_COUNT = 50;
+  const INVITE_EXPIRE_MS = 30 * 24 * 60 * 60 * 1000;
 
   const MIC_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const CHECK_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.75"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -145,6 +149,18 @@
 
   function logVoiceApiError(tag, data) {
     console.warn(tag, data);
+  }
+
+  function extractApiErrorCode(data) {
+    if (!data) return '';
+    if (data.exceptionName) return String(data.exceptionName);
+    var raw = data.errorMessage || data.message || data.error || '';
+    if (typeof raw !== 'string') raw = String(raw);
+    var codes = Object.keys(ERROR_MESSAGES);
+    for (var i = 0; i < codes.length; i++) {
+      if (raw.indexOf(codes[i]) !== -1) return codes[i];
+    }
+    return '';
   }
 
   function formatApiError(data, fallback) {
@@ -406,7 +422,227 @@
     var d = await parseApiResponse(r);
     if (d.status === 'OK') return d;
     console.warn('[agilo-voice-settings] createSpeakerVoiceInvite failed', { httpStatus: r.status, response: d });
-    throw new Error(formatApiError(d, 'Impossible d\'envoyer l\'invitation.'));
+    var inviteErr = new Error(formatApiError(d, 'Impossible d\'envoyer l\'invitation.'));
+    inviteErr.agiloCode = extractApiErrorCode(d);
+    throw inviteErr;
+  }
+
+  async function getSpeakerVoiceInvites(creds) {
+    var body = buildAuthBody(creds);
+    var r = await fetch(API_BASE + '/getSpeakerVoiceInvites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body: body.toString(),
+      credentials: 'omit'
+    });
+    if (r.status === 404) throw new Error('endpoint_not_available');
+    var d = await parseApiResponse(r);
+    if (d.status === 'OK') return d;
+    throw new Error(formatApiError(d, 'Impossible de charger les invitations.'));
+  }
+
+  function getInviteStorageKey(creds) {
+    return 'agilo:voice-invites:' + INVITE_STORAGE_VERSION + ':' + normEdition(creds.edition) + ':' + String(creds.username || '').toLowerCase();
+  }
+
+  function loadLocalInvites(creds) {
+    try {
+      var raw = localStorage.getItem(getInviteStorageKey(creds));
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveLocalInvites(creds, list) {
+    try {
+      localStorage.setItem(getInviteStorageKey(creds), JSON.stringify(list.slice(0, INVITE_MAX_COUNT)));
+    } catch (e) {
+      console.warn('[agilo-voice-settings] saveLocalInvites failed', e);
+    }
+  }
+
+  function normalizeInviteLabel(str) {
+    return String(str || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+
+  function voiceDisplayLabel(v) {
+    return normalizeInviteLabel(v.speakerLabel || ((v.firstName || '') + ' ' + (v.lastName || '')).trim());
+  }
+
+  function inviteMatchesVoice(invite, voices) {
+    var target = normalizeInviteLabel(invite.recipientName);
+    if (!target) return false;
+    for (var i = 0; i < voices.length; i++) {
+      if (voiceDisplayLabel(voices[i]) === target) return true;
+    }
+    return false;
+  }
+
+  function reconcileLocalInvites(invites, voices) {
+    var now = Date.now();
+    var result = invites.map(function (inv) {
+      var copy = Object.assign({}, inv);
+      if (copy.status === 'completed') return copy;
+      if (inviteMatchesVoice(copy, voices || [])) {
+        copy.status = 'completed';
+        return copy;
+      }
+      if (copy.status === 'pending' && copy.sentAt && (now - copy.sentAt) > INVITE_EXPIRE_MS) {
+        copy.status = 'expired';
+      }
+      return copy;
+    });
+    result.sort(function (a, b) { return (b.sentAt || 0) - (a.sentAt || 0); });
+    return result.slice(0, INVITE_MAX_COUNT);
+  }
+
+  function syncAndSaveLocalInvites(creds, voices) {
+    var reconciled = reconcileLocalInvites(loadLocalInvites(creds), voices);
+    saveLocalInvites(creds, reconciled);
+    return reconciled;
+  }
+
+  function upsertLocalInvite(creds, recipientName, recipientEmail) {
+    var list = loadLocalInvites(creds);
+    var emailKey = String(recipientEmail || '').toLowerCase().trim();
+    var now = Date.now();
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].recipientEmail || '').toLowerCase().trim() === emailKey) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) {
+      list[idx].recipientName = String(recipientName).trim();
+      list[idx].sentAt = now;
+      list[idx].status = 'pending';
+      list[idx].source = 'local';
+    } else {
+      list.unshift({
+        id: 'inv_' + now + '_' + Math.random().toString(36).slice(2, 8),
+        recipientName: String(recipientName).trim(),
+        recipientEmail: emailKey,
+        sentAt: now,
+        status: 'pending',
+        source: 'local'
+      });
+    }
+    list.sort(function (a, b) { return (b.sentAt || 0) - (a.sentAt || 0); });
+    saveLocalInvites(creds, list);
+    return list;
+  }
+
+  function removeLocalInvite(creds, inviteId) {
+    var list = loadLocalInvites(creds).filter(function (inv) { return inv.id !== inviteId; });
+    saveLocalInvites(creds, list);
+    return list;
+  }
+
+  async function loadInvites(creds, voices) {
+    try {
+      var d = await getSpeakerVoiceInvites(creds);
+      if (d && Array.isArray(d.invites)) {
+        return {
+          source: 'api',
+          invites: d.invites.map(function (inv) {
+            return {
+              id: String(inv.inviteId || inv.id || ''),
+              recipientName: inv.recipientName || '',
+              recipientEmail: inv.recipientEmail || '',
+              sentAt: inv.dtSent ? new Date(inv.dtSent).getTime() : (inv.sentAt || 0),
+              status: inv.status || 'pending',
+              source: 'api'
+            };
+          })
+        };
+      }
+    } catch (e) {
+      console.warn('[agilo-voice-settings] invites API fallback local', e);
+    }
+    return { source: 'local', invites: syncAndSaveLocalInvites(creds, voices || []) };
+  }
+
+  function inviteStatusLabel(status) {
+    if (status === 'completed') return 'Enregistrée';
+    if (status === 'expired') return 'Expirée';
+    return 'En attente';
+  }
+
+  function inviteStatusClass(status) {
+    if (status === 'completed') return 'agilo-voice-invite-status--completed';
+    if (status === 'expired') return 'agilo-voice-invite-status--expired';
+    return 'agilo-voice-invite-status--pending';
+  }
+
+  function buildInviteHistoryHtml(inviteData) {
+    var invites = (inviteData && inviteData.invites) || [];
+    var source = (inviteData && inviteData.source) || 'local';
+    var noteHtml = source === 'api'
+      ? ''
+      : '<p class="agilo-voice-invite-history-note">Historique local à cet appareil — synchronisation serveur prochaine.</p>';
+
+    if (!invites.length) {
+      return [
+        '<div class="agilo-voice-invite-history" id="agilo-voice-invite-history">',
+        '  <h4 class="agilo-voice-invite-history-title">Invitations envoyées</h4>',
+        '  <p class="agilo-voice-empty">Aucune invitation enregistrée sur cet appareil.</p>',
+        noteHtml,
+        '</div>'
+      ].join('');
+    }
+
+    var items = invites.map(function (inv) {
+      var initials = escapeHtml(voiceInitials('', '', inv.recipientName));
+      var name = escapeHtml(inv.recipientName || '—');
+      var email = escapeHtml(inv.recipientEmail || '');
+      var date = inv.sentAt ? formatVoiceDate(new Date(inv.sentAt).toISOString()) : '';
+      var status = inv.status || 'pending';
+      var actionsHtml = status === 'completed' ? '' : [
+        '    <div class="agilo-voice-item-actions">',
+        '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-resend-invite" data-name="' + escapeHtml(inv.recipientName || '') + '" data-email="' + escapeHtml(inv.recipientEmail || '') + '">Renvoyer</button>',
+        inv.source !== 'api' ? '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-remove-invite" data-invite-id="' + escapeHtml(inv.id) + '">Retirer</button>' : '',
+        '    </div>'
+      ].join('');
+      return [
+        '<li class="agilo-voice-item agilo-voice-invite-item" data-invite-id="' + escapeHtml(inv.id) + '">',
+        '  <div class="agilo-voice-avatar" aria-hidden="true">' + initials + '</div>',
+        '  <div class="agilo-voice-item-body">',
+        '    <div class="agilo-voice-item-label">' + name + ' <span class="agilo-voice-invite-status ' + inviteStatusClass(status) + '">' + escapeHtml(inviteStatusLabel(status)) + '</span></div>',
+        '    <div class="agilo-voice-item-meta">' + email + (date ? ' · Envoyée le ' + date : '') + '</div>',
+        actionsHtml,
+        '  </div>',
+        '</li>'
+      ].join('');
+    }).join('');
+
+    return [
+      '<div class="agilo-voice-invite-history" id="agilo-voice-invite-history">',
+      '  <h4 class="agilo-voice-invite-history-title">Invitations envoyées</h4>',
+      '  <ul class="agilo-voice-list">' + items + '</ul>',
+      noteHtml,
+      '</div>'
+    ].join('');
+  }
+
+  async function sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl) {
+    try {
+      await createSpeakerVoiceInvite(creds, recipientName, recipientEmail);
+      upsertLocalInvite(creds, recipientName, recipientEmail);
+      setStatusEl(statusEl, 'success', 'Invitation envoyée à ' + recipientEmail + '. Votre collègue recevra un email Agilotext pour enregistrer sa voix.');
+      return true;
+    } catch (e) {
+      if (e && e.agiloCode === 'error_speaker_voice_invite_not_found') {
+        upsertLocalInvite(creds, recipientName, recipientEmail);
+        setStatusEl(statusEl, 'info', 'Email probablement envoyé à ' + recipientEmail + '. Vérifiez la boîte de votre collègue avant de réessayer.');
+        return true;
+      }
+      setStatusEl(statusEl, 'error', e.message || 'Impossible d\'envoyer l\'invitation.');
+      return false;
+    }
   }
 
   function voiceInitials(firstName, lastName, speakerLabel) {
@@ -553,6 +789,13 @@
       '.agilo-voice-btn-submit{display:none}',
       '.agilo-voice-btn-submit.is-visible{display:inline-flex}',
       '.agilo-voice-invite-actions{display:flex;justify-content:flex-end;margin-top:14px}',
+      '.agilo-voice-invite-history{margin-top:20px;padding-top:18px;border-top:1px solid rgba(82,82,82,.08)}',
+      '.agilo-voice-invite-history-title{margin:0 0 12px;font-size:.95rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
+      '.agilo-voice-invite-history-note{margin:10px 0 0;font-size:.78rem;color:var(--color--gris,#525252);line-height:1.45}',
+      '.agilo-voice-invite-status{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;font-size:.72rem;font-weight:600;border-radius:999px;vertical-align:middle}',
+      '.agilo-voice-invite-status--pending{color:var(--color--blue,#174a96);background:rgba(23,74,150,.1)}',
+      '.agilo-voice-invite-status--completed{color:var(--color--vert,#1c661a);background:rgba(28,102,26,.1)}',
+      '.agilo-voice-invite-status--expired{color:var(--color--gris,#525252);background:rgba(82,82,82,.12)}',
       '.agilo-voice-status{margin-top:.5rem;padding:10px 12px;border-radius:' + AGILO_RADIUS + ';font-size:.9rem;display:none}',
       '.agilo-voice-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
       '.agilo-voice-status.is-success{display:block;background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
@@ -914,7 +1157,7 @@
     updateUIState();
   }
 
-  function buildMainMarkup(data, creds) {
+  function buildMainMarkup(data, creds, inviteData) {
     var isFree = normEdition(creds.edition) === 'free';
     var voices = data.voices || [];
     var maxVoices = data.maxVoices || 0;
@@ -1006,6 +1249,7 @@
         '      <div class="agilo-voice-invite-actions">',
         '        <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-send-invite">Envoyer l\'invitation</button>',
         '      </div>',
+        buildInviteHistoryHtml(inviteData),
         '    </div>'
       ].join('') : '',
       '  </div>',
@@ -1013,9 +1257,9 @@
     ].join('');
   }
 
-  function renderMainView(container, creds, data, reload) {
+  function renderMainView(container, creds, data, reload, inviteData) {
     injectStyles();
-    container.innerHTML = buildMainMarkup(data, creds);
+    container.innerHTML = buildMainMarkup(data, creds, inviteData);
     var statusEl = container.querySelector('#agilo-voice-main-status');
     var isFree = normEdition(creds.edition) === 'free';
 
@@ -1125,18 +1369,38 @@
           }
           inviteBtn.disabled = true;
           setStatusEl(statusEl, 'info', 'Envoi de l\'invitation…');
-          try {
-            await createSpeakerVoiceInvite(creds, recipientName, recipientEmail);
-            setStatusEl(statusEl, 'success', 'Invitation envoyée à ' + recipientEmail + '. Votre collègue recevra un email Agilotext pour enregistrer sa voix.');
+          var sent = await sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl);
+          inviteBtn.disabled = false;
+          if (sent) {
             if (nameInput) nameInput.value = '';
             if (emailInput) emailInput.value = '';
-          } catch (e) {
-            setStatusEl(statusEl, 'error', e.message);
-          } finally {
-            inviteBtn.disabled = false;
+            await reload();
           }
         });
       }
+
+      container.querySelectorAll('.agilo-voice-resend-invite').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          var recipientName = String(btn.getAttribute('data-name') || '').trim();
+          var recipientEmail = String(btn.getAttribute('data-email') || '').trim();
+          if (!recipientName || !recipientEmail) return;
+          btn.disabled = true;
+          setStatusEl(statusEl, 'info', 'Renvoi de l\'invitation…');
+          var sent = await sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl);
+          btn.disabled = false;
+          if (sent) await reload();
+        });
+      });
+
+      container.querySelectorAll('.agilo-voice-remove-invite').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+          var inviteId = btn.getAttribute('data-invite-id');
+          if (!inviteId) return;
+          removeLocalInvite(creds, inviteId);
+          setStatusEl(statusEl, 'success', 'Invitation retirée de la liste.');
+          await reload();
+        });
+      });
     }
 
     scrollToVoiceSectionIfNeeded();
@@ -1167,12 +1431,13 @@
     async function reload() {
       try {
         if (normEdition(creds.edition) === 'free') {
-          renderMainView(container, creds, { voices: [], maxVoices: 0 }, reload);
+          renderMainView(container, creds, { voices: [], maxVoices: 0 }, reload, { source: 'local', invites: [] });
           return;
         }
         var data = await getSpeakerVoices(creds);
+        var inviteData = await loadInvites(creds, data.voices || []);
         await updateVoiceEnrolledFlag(creds.memberstack, (data.voices || []).length);
-        renderMainView(container, creds, data, reload);
+        renderMainView(container, creds, data, reload, inviteData);
       } catch (e) {
         console.error('[agilo-voice-settings] reload failed', e);
         container.innerHTML = '<p style="color:#580808">Impossible de charger les empreintes vocales. Rechargez la page.</p>';
