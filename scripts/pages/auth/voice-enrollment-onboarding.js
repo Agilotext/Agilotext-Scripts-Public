@@ -98,6 +98,10 @@
       voiceStatus.className = 'agilo-voice-status is-error';
       voiceStatus.textContent = message;
     }
+
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:onboarding-validation-error', { detail: { message: message } }));
+    } catch (err) { /* noop */ }
   }
 
   function hideSetupStepError(step) {

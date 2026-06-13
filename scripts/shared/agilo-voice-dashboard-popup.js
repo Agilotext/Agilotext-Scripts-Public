@@ -2,8 +2,8 @@
  * agilo-voice-dashboard-popup.js
  * Popup dashboard pour inciter à configurer l'empreinte vocale.
  *
- * Intégration Webflow (pages dashboard) :
- * <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-voice-dashboard-popup.js"></script>
+ * Intégration Webflow (pages dashboard, après code-cgv) :
+ * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice10"></script>
  *
  * Mode test :
  *   ?agilo_voice_popup_test=1
@@ -73,6 +73,10 @@
     return rect.width > 0 && rect.height > 0;
   }
 
+  function hasCgvFlow() {
+    return !!document.querySelector('.cgv-onboarding-wrapper');
+  }
+
   function isCgvAccepted() {
     try {
       if (typeof window.checkCGVAccepted === 'function') return !!window.checkCGVAccepted();
@@ -80,8 +84,31 @@
     return false;
   }
 
+  function isCgvFlowComplete() {
+    if (!hasCgvFlow()) return true;
+    return isCgvAccepted() && !isCgvModalVisible();
+  }
+
+  function waitForModalHidden(maxMs) {
+    return new Promise(function (resolve) {
+      if (!isCgvModalVisible()) {
+        resolve(true);
+        return;
+      }
+      var started = Date.now();
+      var id = setInterval(function () {
+        if (!isCgvModalVisible() || Date.now() - started >= (maxMs || 8000)) {
+          clearInterval(id);
+          resolve(true);
+        }
+      }, 100);
+    });
+  }
+
   function waitUntilCgvDismissed(maxMs) {
-    if (isCgvAccepted() || !isCgvModalVisible()) {
+    maxMs = maxMs || 600000;
+
+    if (isCgvFlowComplete()) {
       return Promise.resolve(true);
     }
 
@@ -90,28 +117,42 @@
       var observer = null;
       var intervalId = null;
       var wrapper = document.querySelector('.cgv-onboarding-wrapper');
+      var settled = false;
 
-      function done() {
+      function finish(ok) {
+        if (settled) return;
+        settled = true;
         if (observer) observer.disconnect();
         if (intervalId) clearInterval(intervalId);
-        resolve(true);
+        resolve(ok !== false);
+      }
+
+      function done() {
+        waitForModalHidden(8000).then(function () {
+          finish(true);
+        });
       }
 
       function check() {
-        if (isCgvAccepted() || !isCgvModalVisible()) {
+        if (isCgvFlowComplete()) {
           done();
           return;
         }
-        if (Date.now() - started >= (maxMs || 600000)) {
-          if (observer) observer.disconnect();
-          if (intervalId) clearInterval(intervalId);
-          resolve(false);
+        if (Date.now() - started >= maxMs) {
+          finish(false);
         }
       }
 
       window.addEventListener('agilo:cgv-dismissed', function onDismiss() {
         window.removeEventListener('agilo:cgv-dismissed', onDismiss);
-        setTimeout(done, 350);
+        setTimeout(done, 400);
+      });
+
+      window.addEventListener('agilo:cgv-ready', function onReady(ev) {
+        window.removeEventListener('agilo:cgv-ready', onReady);
+        if (ev && ev.detail && ev.detail.accepted) {
+          setTimeout(check, 50);
+        }
       });
 
       if (wrapper && typeof MutationObserver !== 'undefined') {
@@ -120,6 +161,7 @@
       }
 
       intervalId = setInterval(check, 250);
+      check();
     });
   }
 
@@ -363,19 +405,26 @@
   }
 
   async function showPopup() {
+    if (!isCgvFlowComplete()) return;
     var ok = await shouldShow();
     if (!ok) return;
+    if (isCgvModalVisible()) return;
     var root = buildPopup();
     if (!root) return;
     document.body.appendChild(root);
     requestAnimationFrame(function () {
+      if (isCgvModalVisible()) {
+        removePopup();
+        return;
+      }
       root.classList.add('agilo-voice-popup--visible');
     });
   }
 
   function boot() {
     if (!document.body) return;
-    waitUntilCgvDismissed(600000).then(function () {
+    waitUntilCgvDismissed(600000).then(function (cgvOk) {
+      if (!cgvOk || !isCgvFlowComplete()) return;
       var delay = getTestMode() ? cfg.showDelayTestMs : cfg.showDelayMs;
       setTimeout(function () {
         showPopup().catch(function (e) {
