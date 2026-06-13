@@ -1008,7 +1008,7 @@
           setTimeout(function () {
             var advanced = finishOnboardingWithGuard(
               els.status,
-              'Empreinte enregistrée. Répondez à la question ci-dessus puis cliquez sur Terminer.'
+              'Empreinte vocale enregistrée. Répondez à la question ci-dessus puis cliquez sur Terminer.'
             );
             if (advanced) setStatus('success', 'Empreinte vocale enregistrée. Redirection…');
           }, 600);

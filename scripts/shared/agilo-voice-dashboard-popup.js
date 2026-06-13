@@ -3,7 +3,7 @@
  * Popup dashboard pour inciter à configurer l'empreinte vocale.
  *
  * Intégration Webflow (pages dashboard, après code-cgv) :
- * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice10"></script>
+ * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice11"></script>
  *
  * Mode test :
  *   ?agilo_voice_popup_test=1
@@ -22,11 +22,11 @@
     popupId: 'agilo-voice-popup',
     styleId: 'agilo-voice-popup-styles',
     badge: 'Empreinte vocale',
-    title: 'Configurez votre voix',
+    title: 'Configurez votre empreinte vocale',
     description:
-      'Enregistrez 15 à 45 secondes de votre voix pour être reconnu(e) automatiquement dans vos transcriptions.',
+      'Enregistrez 15 à 45 secondes de votre empreinte vocale pour être reconnu(e) automatiquement dans vos transcriptions.',
     meta: 'Configuration en 1 minute · Mon compte',
-    primaryCta: 'Configurer maintenant',
+    primaryCta: 'Configurer mon empreinte vocale',
     secondaryCta: 'Plus tard'
   };
 

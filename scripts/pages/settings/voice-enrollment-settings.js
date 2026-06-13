@@ -4,7 +4,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
-        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9869c1b/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice15"></script>
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@{SHA}/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice16"></script>
    ================================================================ */
 
 (function () {
@@ -566,6 +566,16 @@
     return { source: 'local', invites: syncAndSaveLocalInvites(creds, voices || []) };
   }
 
+  function countPendingInvites(inviteData) {
+    return ((inviteData && inviteData.invites) || [])
+      .filter(function (i) { return i.status === 'pending'; }).length;
+  }
+
+  function formatQuotaBadge(used, max) {
+    var label = max === 1 ? 'empreinte vocale' : 'empreintes vocales';
+    return used + ' / ' + max + ' ' + label;
+  }
+
   function inviteStatusLabel(status) {
     if (status === 'completed') return 'Enregistrée';
     if (status === 'expired') return 'Expirée';
@@ -732,6 +742,7 @@
       '.agilo-voice-section{margin-top:22px;padding-top:22px;border-top:1px solid rgba(82,82,82,.1)}',
       '.agilo-voice-section-title{margin:0 0 10px;font-size:1rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-section-desc{margin:0 0 1.25rem;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-lead{margin-top:0;margin-bottom:1rem;color:var(--color--gris,#525252);font-size:.9rem;line-height:1.5}',
       '.agilo-voice-empty{margin:0;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
       '.agilo-voice-empty-state{display:flex;flex-direction:column;align-items:center;text-align:center;padding:28px 16px 20px;margin-bottom:8px}',
       '.agilo-voice-empty-icon{width:52px;height:52px;border-radius:50%;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96);display:flex;align-items:center;justify-content:center;margin-bottom:12px}',
@@ -1161,12 +1172,15 @@
     var isFree = normEdition(creds.edition) === 'free';
     var voices = data.voices || [];
     var maxVoices = data.maxVoices || 0;
-    var atQuota = !isFree && maxVoices > 0 && voices.length >= maxVoices;
+    var pendingCount = countPendingInvites(inviteData);
+    var usedCount = voices.length + pendingCount;
+    var atQuotaEnroll = !isFree && maxVoices > 0 && voices.length >= maxVoices;
+    var atQuotaFull = !isFree && maxVoices > 0 && usedCount >= maxVoices;
 
     var freeContentHtml = isFree ? [
       '<div class="agilo-voice-free-upsell-block">',
       '  <div class="agilo-voice-empty-icon">' + ICON_EMPTY_MIC + '</div>',
-      '  <p class="agilo-voice-empty-title">Reconnaissance des intervenants</p>',
+      '  <p class="agilo-voice-empty-title">Empreinte vocale</p>',
       '  <ul class="agilo-voice-benefits">',
       '    <li>Identifiez automatiquement votre voix dans chaque transcription</li>',
       '    <li>Distinction claire entre les intervenants en réunion</li>',
@@ -1210,48 +1224,71 @@
       : [
         '<div class="agilo-voice-empty-state">',
         '  <div class="agilo-voice-empty-icon">' + ICON_EMPTY_MIC + '</div>',
-        '  <p class="agilo-voice-empty-title">Aucune voix configurée</p>',
+        '  <p class="agilo-voice-empty-title">Aucune empreinte vocale configurée</p>',
         '  <p class="agilo-voice-empty">Enregistrez la vôtre ou invitez un collègue pour identifier automatiquement chaque intervenant dans vos transcriptions.</p>',
         '</div>'
       ].join(''));
 
     var quotaBadge = isFree
       ? 'Pro ou Business'
-      : (voices.length + ' / ' + maxVoices + ' voix');
+      : formatQuotaBadge(usedCount, maxVoices);
+
+    var leadHtml = isFree
+      ? ''
+      : '<p class="agilo-voice-section-desc agilo-voice-lead">Identifiez automatiquement chaque intervenant dans vos transcriptions.</p>';
+
+    var quotaMsgHtml = '';
+    if (!isFree && atQuotaEnroll && !atQuotaFull) {
+      quotaMsgHtml = '<p class="agilo-voice-empty">Quota d\'enregistrements directs atteint. Invitez un collègue par email ou attendez qu\'une invitation en cours soit finalisée.</p>';
+    } else if (!isFree && atQuotaFull) {
+      quotaMsgHtml = '<p class="agilo-voice-empty">Quota atteint (empreintes + invitations en attente). Supprimez une empreinte ou attendez qu\'un invité termine son enregistrement.</p>';
+    }
+
+    var addSectionHtml = !isFree && !atQuotaEnroll ? [
+      '    <div class="agilo-voice-section">',
+      '      <h3 class="agilo-voice-section-title">Ajouter une voix</h3>',
+      '      <p class="agilo-voice-section-desc">Enregistrez directement la voix d\'un collègue présent avec vous — prénom, nom et extrait audio de 15 à 45 secondes.</p>',
+      '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add"><span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix</button>',
+      '      <div class="agilo-voice-panel" id="agilo-voice-add-panel"></div>',
+      '    </div>'
+    ].join('') : '';
+
+    var inviteQuotaNote = atQuotaFull
+      ? '<p class="agilo-voice-status is-info agilo-voice-invite-quota-info" role="status">Impossible d\'envoyer une nouvelle invitation : quota atteint. Vous pouvez renvoyer une invitation existante.</p>'
+      : '';
+
+    var inviteSectionHtml = !isFree ? [
+      '    <div class="agilo-voice-section">',
+      '      <h3 class="agilo-voice-section-title">Inviter par email</h3>',
+      '      <p class="agilo-voice-section-desc">Envoyez un lien par email à un collègue distant — aucun compte Agilotext requis pour l\'invité.</p>',
+      '      <div class="agilo-voice-name-grid">',
+      '        <div><label class="agilo-voice-label" for="agilo-voice-invite-name">Nom affiché</label>',
+      '        <input class="agilo-voice-input" id="agilo-voice-invite-name" type="text" placeholder="Ex. Marie Dupont"' + (atQuotaFull ? ' disabled' : '') + '></div>',
+      '        <div><label class="agilo-voice-label" for="agilo-voice-invite-email">Email</label>',
+      '        <input class="agilo-voice-input" id="agilo-voice-invite-email" type="email" placeholder="collegue@entreprise.com"' + (atQuotaFull ? ' disabled' : '') + '></div>',
+      '      </div>',
+      inviteQuotaNote,
+      '      <div class="agilo-voice-invite-actions">',
+      '        <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-send-invite"' + (atQuotaFull ? ' disabled' : '') + '>Envoyer l\'invitation</button>',
+      '      </div>',
+      buildInviteHistoryHtml(inviteData),
+      '    </div>'
+    ].join('') : '';
 
     return [
-      '<div class="agilo-voice-wrap">',
+      '<div class="agilo-voice-wrap"' + (atQuotaFull ? ' data-quota-full="1"' : '') + '>',
       '  <div class="agilo-voice-card">',
       '    <h2 class="h1-small">Empreinte vocale</h2>',
       '    <div class="spacer-10"></div>',
+      leadHtml,
       '    <div class="agilo-voice-head">',
       '      <span class="agilo-voice-quota-badge">' + escapeHtml(quotaBadge) + '</span>',
       '    </div>',
       '    <div class="agilo-voice-list-wrap">' + (voices.length ? '<ul class="agilo-voice-list">' + listHtml + '</ul>' : listHtml) + '</div>',
       '    <div class="agilo-voice-status" id="agilo-voice-main-status" role="status"></div>',
-      !isFree && atQuota ? '<p class="agilo-voice-empty">Quota atteint. Supprimez une voix pour en ajouter ou inviter quelqu\'un.</p>' : '',
-      !isFree && !atQuota ? [
-        '    <div class="agilo-voice-section">',
-        '      <h3 class="agilo-voice-section-title">Ajouter une voix</h3>',
-        '      <p class="agilo-voice-section-desc">Enregistrez un nouvel intervenant pour qu\'Agilotext le reconnaisse dans vos réunions.</p>',
-        '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add"><span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix</button>',
-        '      <div class="agilo-voice-panel" id="agilo-voice-add-panel"></div>',
-        '    </div>',
-        '    <div class="agilo-voice-section">',
-        '      <h3 class="agilo-voice-section-title">Inviter par email</h3>',
-        '      <p class="agilo-voice-section-desc">Agilotext enverra un email avec un lien d\'enregistrement — aucun compte requis pour l\'invité.</p>',
-        '      <div class="agilo-voice-name-grid">',
-        '        <div><label class="agilo-voice-label" for="agilo-voice-invite-name">Nom affiché</label>',
-        '        <input class="agilo-voice-input" id="agilo-voice-invite-name" type="text" placeholder="Ex. Marie Dupont"></div>',
-        '        <div><label class="agilo-voice-label" for="agilo-voice-invite-email">Email</label>',
-        '        <input class="agilo-voice-input" id="agilo-voice-invite-email" type="email" placeholder="collegue@entreprise.com"></div>',
-        '      </div>',
-        '      <div class="agilo-voice-invite-actions">',
-        '        <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-send-invite">Envoyer l\'invitation</button>',
-        '      </div>',
-        buildInviteHistoryHtml(inviteData),
-        '    </div>'
-      ].join('') : '',
+      quotaMsgHtml,
+      addSectionHtml,
+      inviteSectionHtml,
       '  </div>',
       '</div>'
     ].join('');
@@ -1322,12 +1359,12 @@
       btn.addEventListener('click', async function () {
         var id = btn.getAttribute('data-voice-id');
         var label = btn.getAttribute('data-label') || 'cette voix';
-        if (!window.confirm('Supprimer la voix « ' + label + ' » ?')) return;
+        if (!window.confirm('Supprimer l\'empreinte vocale « ' + label + ' » ?')) return;
         btn.disabled = true;
         setStatusEl(statusEl, 'info', 'Suppression…');
         try {
           await deleteSpeakerVoice(creds, id);
-          setStatusEl(statusEl, 'success', 'Voix supprimée.');
+          setStatusEl(statusEl, 'success', 'Empreinte vocale supprimée.');
           await reload();
         } catch (e) {
           setStatusEl(statusEl, 'error', e.message);
@@ -1367,6 +1404,10 @@
             setStatusEl(statusEl, 'error', ERROR_MESSAGES.error_invalid_recipient_email);
             return;
           }
+          if (container.querySelector('.agilo-voice-wrap[data-quota-full="1"]')) {
+            setStatusEl(statusEl, 'info', 'Impossible d\'envoyer une nouvelle invitation : quota atteint. Vous pouvez renvoyer une invitation existante.');
+            return;
+          }
           inviteBtn.disabled = true;
           setStatusEl(statusEl, 'info', 'Envoi de l\'invitation…');
           var sent = await sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl);
@@ -1396,6 +1437,7 @@
         btn.addEventListener('click', async function () {
           var inviteId = btn.getAttribute('data-invite-id');
           if (!inviteId) return;
+          if (!window.confirm('Retirer cette invitation de la liste ?')) return;
           removeLocalInvite(creds, inviteId);
           setStatusEl(statusEl, 'success', 'Invitation retirée de la liste.');
           await reload();
