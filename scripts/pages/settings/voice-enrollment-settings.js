@@ -464,7 +464,6 @@
       '#agilo-voice-settings{scroll-margin-top:5.5rem}',
       '.agilo-voice-card{background:transparent;border:none;border-radius:0;padding:0;margin-bottom:0}',
       '.agilo-voice-head{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;margin-bottom:18px}',
-      '.agilo-voice-title{margin:0;font-size:inherit;font-weight:inherit;color:inherit}',
       '.agilo-voice-quota-badge{display:inline-flex;align-items:center;padding:4px 11px;font-size:.78rem;font-weight:600;color:var(--color--blue,#174a96);background:rgba(23,74,150,.08);border-radius:999px;line-height:1.3}',
       '.agilo-voice-list{list-style:none;margin:0 0 8px;padding:0}',
       '.agilo-voice-item{display:flex;gap:14px;align-items:flex-start;padding:16px 0;border-bottom:1px solid rgba(82,82,82,.1)}',
@@ -963,8 +962,9 @@
     return [
       '<div class="agilo-voice-wrap">',
       '  <div class="agilo-voice-card">',
+      '    <h2 class="h1-small">Empreinte</h2>',
+      '    <div class="spacer-10"></div>',
       '    <div class="agilo-voice-head">',
-      '      <h2 class="agilo-voice-title h1-small">Empreinte vocale</h2>',
       '      <span class="agilo-voice-quota-badge">' + escapeHtml(quotaBadge) + '</span>',
       '    </div>',
       '    <div class="agilo-voice-list-wrap">' + (voices.length ? '<ul class="agilo-voice-list">' + listHtml + '</ul>' : listHtml) + '</div>',
