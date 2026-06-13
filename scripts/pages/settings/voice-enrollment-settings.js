@@ -19,6 +19,7 @@
   const MIN_RECORD_SEC = 15;
   const MAX_RECORD_SEC = 45;
   const RESERVED_LABELS = new Set(['S1', 'S2', 'UU']);
+  const TARIFS_URL = 'https://www.agilotext.com/tarifs';
 
   const MIC_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   const CHECK_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.75"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -912,8 +913,8 @@
       '    <li>Distinction claire entre les intervenants en réunion</li>',
       '    <li>Invitez vos collègues à enregistrer leur empreinte vocale</li>',
       '  </ul>',
-      '  <a href="/pricing" class="button save agilo-voice-free-cta">Essayer Pro gratuitement</a>',
-      '  <a href="/pricing" class="agilo-voice-free-link">Voir les offres Pro et Business</a>',
+      '  <a href="' + TARIFS_URL + '" target="_blank" rel="noopener noreferrer" class="button save agilo-voice-free-cta">Essayer Pro gratuitement</a>',
+      '  <a href="' + TARIFS_URL + '" target="_blank" rel="noopener noreferrer" class="agilo-voice-free-link">Voir les offres Pro et Business</a>',
       '</div>'
     ].join('') : '';
 
