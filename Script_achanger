@@ -5,6 +5,4 @@
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9928b80/scripts/shared/agilo-cgv-modal.js?v=1.09-voice10"></script>
 
 <!-- 2. Popup empreinte vocale (attend CGU acceptées + modale fermée) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9928b80/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice10"></script>
-
-<!-- Après propagation jsDelivr sur @1.09, remplacer 9928b80 par 1.09 -->
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@af8d0d0/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice11"></script>
