@@ -539,21 +539,25 @@
       '.agilo-voice-intro-sub{margin:0;color:var(--color--gris,#525252);line-height:1.5}',
       '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;cursor:pointer;transition:transform .15s ease}',
       '.agilo-voice-hero:hover{transform:scale(1.03)}',
-      '.agilo-voice-hero-wrap{text-align:center;margin:1.25rem 0 1.5rem}',
+      '.agilo-voice-hero-wrap{text-align:center;margin:.75rem 0 .5rem}',
       '.agilo-voice-hero-label{margin:.75rem 0 0;font-size:.88rem;color:var(--color--gris,#525252);line-height:1.4}',
       '.agilo-voice-timer-compact{display:none;margin-top:.5rem;font-size:1rem;font-weight:700;color:var(--color--rouge,#a82633)}',
       '.agilo-voice-timer-compact.is-visible{display:block}',
       '.agilo-voice-rerecord-link{display:none;margin:.5rem auto 0;text-align:center;font-size:.85rem;color:var(--color--blue,#174a96);cursor:pointer;background:none;border:none;font:inherit;text-decoration:underline}',
-      '.agilo-voice-mini-player{display:none;align-items:center;justify-content:center;gap:10px;margin-top:.75rem}',
+      '.agilo-voice-mini-player{display:none;align-items:center;justify-content:center;gap:10px;margin-top:.5rem}',
       '.agilo-voice-mini-player.is-visible{display:flex}',
       '.agilo-voice-play-btn{width:36px;height:36px;border-radius:50%;border:1px solid rgba(82,82,82,.22);background:#fff;color:var(--color--gris_foncé,#020202);cursor:pointer;font-size:.75rem}',
       '.agilo-voice-play-time{font-size:.85rem;color:var(--color--gris,#525252);font-weight:600}',
-      '.agilo-voice-drop-zone{margin:1.5rem 0 0;border:2px dashed #9eb4d7;border-radius:10px;padding:24px 16px;text-align:center;background:#f8fbff;color:var(--color--gris,#525252);cursor:pointer;font-size:.88rem;line-height:1.5}',
+      '.agilo-voice-drop-zone{margin:.5rem 0 0;border:2px dashed #9eb4d7;border-radius:10px;padding:18px 14px;text-align:center;background:#f8fbff;color:var(--color--gris,#525252);cursor:pointer;font-size:.88rem;line-height:1.5}',
       '.agilo-voice-drop-zone strong{display:block;margin-bottom:6px;color:var(--color--gris_foncé,#020202);font-size:1rem}',
       '.agilo-voice-drop-zone.is-dragover{border-color:var(--color--blue,#174a96);background:#edf4ff}',
       '.agilo-voice-drop-zone.is-filled{border-style:solid;border-color:rgba(23,74,150,.35);background:rgba(23,74,150,.04)}',
-      '.agilo-voice-submit-row{margin-top:1.75rem}',
-      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:.75rem 0 0;text-align:center;line-height:1.45}',
+      '.agilo-voice-submit-row{margin-top:.5rem}',
+      '.agilo-voice-hint{font-size:.85rem;color:var(--color--gris,#525252);margin:.35rem 0 0;text-align:center;line-height:1.45}',
+      '.agilo-voice-file-alt{display:none;margin:.35rem 0 0;text-align:center;font-size:.82rem;color:var(--color--blue,#174a96);cursor:pointer;background:none;border:none;font:inherit;text-decoration:underline;width:100%;padding:0}',
+      '.agilo-voice-file-alt:hover{text-decoration:underline}',
+      '.agilo-voice-record-area.is-preview-ready .agilo-voice-drop-zone{display:none}',
+      '.agilo-voice-record-area.is-preview-ready .agilo-voice-file-alt{display:block}',
       '.agilo-voice-hero-ring{position:absolute;inset:0;border-radius:50%;background:rgba(23,74,150,.1);border:1px solid rgba(23,74,150,.18);transition:background .25s,border-color .25s}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-ring{background:rgba(168,38,51,.1);border-color:rgba(168,38,51,.25)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-ring{background:rgba(28,102,26,.1);border-color:rgba(28,102,26,.22)}',
@@ -564,12 +568,12 @@
       '.agilo-voice-wave{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(168,38,51,.35);animation:agilo-voice-pulse 2s ease-out infinite}',
       '.agilo-voice-wave:nth-child(2){animation-delay:.55s}',
       '.agilo-voice-wave:nth-child(3){animation-delay:1.1s}',
-      '.agilo-voice-record-area{display:flex;flex-direction:column;align-items:stretch;gap:1.25rem}',
+      '.agilo-voice-record-area{display:flex;flex-direction:column;align-items:stretch;gap:.75rem}',
       '.agilo-voice-label{display:block;margin:0 0 .45rem;font-size:.9rem;font-weight:500;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-input.agilo-voice-input{width:100%;box-sizing:border-box;margin:0;border:1px solid var(--color--noir_25,rgba(82,82,82,.25));border-radius:' + AGILO_RADIUS + ';background:var(--color--white,#fff);padding:10px 12px;font:inherit;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-input.agilo-voice-input:focus{outline:none;border-color:var(--color--blue,#174a96);box-shadow:0 0 0 2px rgba(23,74,150,.12)}',
       '.agilo-voice-audio{display:none}',
-      '.agilo-voice-actions{margin-top:1.5rem;display:flex;flex-direction:column;align-items:stretch;gap:1rem}',
+      '.agilo-voice-actions{margin-top:.75rem;display:flex;flex-direction:column;align-items:stretch;gap:.75rem}',
       '.agilo-voice-btn-submit{display:none}',
       '.agilo-voice-btn-submit.is-visible{display:inline-flex}',
       '.agilo-voice-status{margin-top:.5rem;padding:10px 12px;border-radius:' + AGILO_RADIUS + ';font-size:.9rem;display:none}',
@@ -673,6 +677,10 @@
       '    </div>',
       '    <audio class="agilo-voice-audio" id="agilo-voice-preview"></audio>',
       '    <p class="agilo-voice-hint text-size-small" id="agilo-voice-hint">Parlez clairement, seul(e), dans un endroit calme.</p>',
+      '    <div class="agilo-voice-submit-row">',
+      '      <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer ma voix</button>',
+      '    </div>',
+      '    <button type="button" class="agilo-voice-file-alt" id="agilo-voice-file-alt">Importer un fichier audio à la place</button>',
       '    <div class="agilo-voice-drop-zone" id="agilo-voice-drop-zone" role="button" tabindex="0">',
       '      <strong>Glissez votre fichier audio ici</strong>',
       '      <span>ou cliquez pour sélectionner · MP3, WAV, webm, mp4 · 15 à 45 s</span>',
@@ -680,9 +688,6 @@
       '    <input class="agilo-voice-file" id="agilo-voice-file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/webm,audio/*,video/*" hidden>',
       '  </div>',
       '  <div class="agilo-voice-actions">',
-      '    <div class="agilo-voice-submit-row">',
-      '      <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer ma voix</button>',
-      '    </div>',
       '    <div class="agilo-voice-status" id="agilo-voice-status" role="status"></div>',
       '    <a class="agilo-voice-skip-link" id="agilo-voice-skip" href="#" role="button">Passer cette étape</a>',
       '  </div>',
@@ -743,7 +748,9 @@
       playTime: container.querySelector('#agilo-voice-play-time'),
       hint: container.querySelector('#agilo-voice-hint'),
       preview: container.querySelector('#agilo-voice-preview'),
+      recordArea: container.querySelector('.agilo-voice-record-area'),
       dropZone: container.querySelector('#agilo-voice-drop-zone'),
+      fileAlt: container.querySelector('#agilo-voice-file-alt'),
       fileInput: container.querySelector('#agilo-voice-file'),
       submitBtn: container.querySelector('#agilo-voice-submit'),
       skipBtn: container.querySelector('#agilo-voice-skip'),
@@ -793,21 +800,29 @@
       els.timer.classList.remove('is-visible');
       els.rerecord.style.display = 'none';
       els.miniPlayer.classList.remove('is-visible');
+      els.hero.style.pointerEvents = '';
       els.hero.style.opacity = '';
+      if (els.recordArea) {
+        els.recordArea.classList.toggle('is-preview-ready', state.uiState === 'preview');
+      }
 
       if (state.uiState === 'recording') {
         els.hero.classList.add('is-recording');
         els.heroIcon.innerHTML = STOP_SVG;
         els.waves.style.display = 'block';
-        els.heroLabel.textContent = 'Appuyez pour arrêter';
-        els.timer.classList.add('is-visible');
-        els.timer.textContent = formatTime(state.elapsedMs) + ' / 00:45';
-        els.hint.textContent = 'Parlez naturellement — minimum 15 secondes.';
-        els.submitBtn.classList.remove('is-visible');
+        var remainingSec = Math.max(1, Math.ceil((MIN_RECORD_SEC * 1000 - state.elapsedMs) / 1000));
         if (state.elapsedMs < MIN_RECORD_SEC * 1000) {
+          els.heroLabel.textContent = 'Encore ' + remainingSec + ' s minimum…';
+          els.hint.textContent = 'Le bouton s\'active à 15 secondes.';
           els.hero.style.opacity = '0.55';
           els.hero.style.pointerEvents = 'none';
+        } else {
+          els.heroLabel.textContent = 'Appuyez pour arrêter';
+          els.hint.textContent = 'Parlez naturellement — vous pouvez arrêter l\'enregistrement.';
         }
+        els.timer.classList.add('is-visible');
+        els.timer.textContent = formatTime(state.elapsedMs) + ' / 00:45';
+        els.submitBtn.classList.remove('is-visible');
       } else if (state.uiState === 'preview' || state.uiState === 'file') {
         els.hero.classList.add('is-preview');
         els.heroIcon.innerHTML = CHECK_SVG;
@@ -1058,6 +1073,12 @@
     els.dropZone.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!state.recording) els.fileInput.click(); }
     });
+    if (els.fileAlt) {
+      els.fileAlt.addEventListener('click', function () {
+        if (state.recording) return;
+        els.fileInput.click();
+      });
+    }
     els.dropZone.addEventListener('dragover', function (e) { e.preventDefault(); els.dropZone.classList.add('is-dragover'); });
     els.dropZone.addEventListener('dragleave', function () { els.dropZone.classList.remove('is-dragover'); });
     els.dropZone.addEventListener('drop', function (e) {
