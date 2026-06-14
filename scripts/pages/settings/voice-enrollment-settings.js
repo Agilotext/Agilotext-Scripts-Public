@@ -986,6 +986,8 @@
       els.playTime.textContent = formatTime(cur) + ' / ' + formatTime(total);
     }
 
+    var _lastIconState = null;
+
     function updateUIState() {
       els.hero.classList.remove('is-idle', 'is-recording', 'is-preview');
       els.timer.classList.remove('is-visible');
@@ -999,7 +1001,10 @@
 
       if (state.uiState === 'recording') {
         els.hero.classList.add('is-recording');
-        els.heroIcon.innerHTML = STOP_SVG;
+        if (_lastIconState !== 'recording') {
+          els.heroIcon.innerHTML = STOP_SVG;
+          _lastIconState = 'recording';
+        }
         els.waves.style.display = 'block';
         var remainingSec = Math.max(1, Math.ceil((MIN_RECORD_SEC * 1000 - state.elapsedMs) / 1000));
         if (state.elapsedMs < MIN_RECORD_SEC * 1000) {
@@ -1016,7 +1021,10 @@
         els.submitBtn.classList.remove('is-visible');
       } else if (state.uiState === 'preview' || state.uiState === 'file') {
         els.hero.classList.add('is-preview');
-        els.heroIcon.innerHTML = CHECK_SVG;
+        if (_lastIconState !== 'preview') {
+          els.heroIcon.innerHTML = CHECK_SVG;
+          _lastIconState = 'preview';
+        }
         els.waves.style.display = 'none';
         els.heroLabel.textContent = state.uiState === 'preview' ? 'Enregistrement prêt' : 'Fichier prêt à envoyer';
         els.rerecord.style.display = state.uiState === 'preview' ? 'block' : 'none';
@@ -1028,7 +1036,10 @@
         els.submitBtn.classList.add('is-visible');
       } else {
         els.hero.classList.add('is-idle');
-        els.heroIcon.innerHTML = MIC_SVG;
+        if (_lastIconState !== 'idle') {
+          els.heroIcon.innerHTML = MIC_SVG;
+          _lastIconState = 'idle';
+        }
         els.waves.style.display = 'none';
         els.heroLabel.textContent = 'Appuyez pour enregistrer votre voix';
         els.hint.textContent = 'Parlez clairement, seul(e), 15 à 45 secondes.';
@@ -1233,11 +1244,15 @@
       setStatusEl(statusEl, 'info', 'Envoi de l\'empreinte vocale…');
       try {
         await enrollSpeakerVoice(creds, split.firstName, split.lastName, voiceFile);
-        setStatusEl(statusEl, 'success', 'Voix enregistrée.');
-        if (typeof options.onSuccess === 'function') await options.onSuccess();
+        setStatusEl(statusEl, 'success', 'Voix enregistrée avec succès !');
+        await new Promise(function (r) { setTimeout(r, 1500); });
+        if (typeof options.onSuccess === 'function') {
+          await options.onSuccess();
+          var section = document.getElementById('agilo-voice-settings');
+          if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       } catch (e) {
         setStatusEl(statusEl, 'error', e.message || 'Impossible d\'enregistrer cette voix.');
-      } finally {
         els.submitBtn.disabled = false;
         els.hero.style.pointerEvents = '';
         updateUIState();
