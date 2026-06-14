@@ -204,14 +204,39 @@
     return 'voice-enrollment.webm';
   }
 
-  function validateName(firstName, lastName) {
-    var fn = String(firstName || '').trim();
-    var ln = String(lastName || '').trim();
-    if (!fn || !ln) return 'Le prénom et le nom sont obligatoires.';
-    if (RESERVED_LABELS.has(fn.toUpperCase()) || RESERVED_LABELS.has(ln.toUpperCase())) {
-      return ERROR_MESSAGES.error_reserved_speaker_label;
+  function validateDisplayName(full) {
+    var name = String(full || '').trim().replace(/\s+/g, ' ');
+    if (name.length < 2) return 'Indiquez le prénom et le nom de la personne.';
+    if (RESERVED_LABELS.has(name.toUpperCase())) return ERROR_MESSAGES.error_reserved_speaker_label;
+    var parts = name.split(' ');
+    for (var i = 0; i < parts.length; i++) {
+      if (RESERVED_LABELS.has(parts[i].toUpperCase())) return ERROR_MESSAGES.error_reserved_speaker_label;
     }
     return '';
+  }
+
+  function splitDisplayName(full) {
+    var name = String(full || '').trim().replace(/\s+/g, ' ');
+    if (!name) return { firstName: '', lastName: '' };
+    var idx = name.indexOf(' ');
+    if (idx === -1) return { firstName: name, lastName: name };
+    var lastName = name.slice(idx + 1).trim();
+    return { firstName: name.slice(0, idx), lastName: lastName || name.slice(0, idx) };
+  }
+
+  function formatDisplayName(voiceOrFirst, lastName) {
+    if (voiceOrFirst && typeof voiceOrFirst === 'object') {
+      var v = voiceOrFirst;
+      if (v.speakerLabel) return String(v.speakerLabel).trim();
+      var fn = String(v.firstName || '').trim();
+      var ln = String(v.lastName || '').trim();
+      return (fn + ' ' + ln).trim();
+    }
+    return (String(voiceOrFirst || '').trim() + ' ' + String(lastName || '').trim()).trim();
+  }
+
+  function buildDefaultDisplayName(creds) {
+    return formatDisplayName(creds) || '';
   }
 
   function measureAudioDuration(file) {
@@ -407,6 +432,35 @@
     var d = await parseApiResponse(r);
     if (d.status === 'OK') return d;
     throw new Error(formatApiError(d, 'Impossible de supprimer cette voix.'));
+  }
+
+  async function fetchSpeakerVoiceAudio(creds, voiceId) {
+    var body = buildAuthBody(creds);
+    body.append('voiceId', String(voiceId));
+    var r = await fetch(API_BASE + '/getSpeakerVoiceAudio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'audio/*, application/json' },
+      body: body.toString(),
+      credentials: 'omit'
+    });
+    var ct = String(r.headers.get('content-type') || '').toLowerCase();
+    if (ct.indexOf('audio/') !== -1) {
+      if (!r.ok) throw new Error('Impossible de lire l\'audio enregistré.');
+      return r.blob();
+    }
+    if (r.status === 404) {
+      var missing = new Error('Lecture indisponible — mise à jour API en cours.');
+      missing.agiloCode = 'endpoint_not_found';
+      throw missing;
+    }
+    var d = await parseApiResponse(r);
+    if (d.status === 'OK' && d.audioBase64) {
+      var bin = atob(String(d.audioBase64));
+      var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: d.mimeType || 'audio/mpeg' });
+    }
+    throw new Error(formatApiError(d, 'Impossible de lire l\'audio enregistré.'));
   }
 
   async function createSpeakerVoiceInvite(creds, recipientName, recipientEmail) {
@@ -739,6 +793,12 @@
       '.agilo-voice-rename-row{display:none;flex-direction:column;gap:.5rem;margin-top:12px}',
       '.agilo-voice-rename-row.is-open{display:flex}',
       '.agilo-voice-name-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}',
+      '.agilo-voice-name-single{display:flex;flex-direction:column;gap:.45rem}',
+      '.agilo-voice-listen-panel{display:none;flex-direction:column;gap:.5rem;margin-top:10px}',
+      '.agilo-voice-listen-panel.is-open{display:flex}',
+      '.agilo-voice-listen-status{font-size:.82rem;color:var(--color--gris,#525252);margin:0}',
+      '.agilo-voice-listen-player{display:none;align-items:center;gap:10px}',
+      '.agilo-voice-listen-player.is-visible{display:flex}',
       '.agilo-voice-section{margin-top:22px;padding-top:22px;border-top:1px solid rgba(82,82,82,.1)}',
       '.agilo-voice-section-title{margin:0 0 10px;font-size:1rem;font-weight:600;color:var(--color--gris_foncé,#020202)}',
       '.agilo-voice-section-desc{margin:0 0 1.25rem;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
@@ -844,16 +904,15 @@
   function mountRecordForm(container, creds, options, statusEl) {
     options = options || {};
     var locked = !!options.lockNames;
-    var firstName = options.firstName || creds.firstName || '';
-    var lastName = options.lastName || creds.lastName || '';
+    var displayName = options.displayName != null
+      ? String(options.displayName).trim()
+      : buildDefaultDisplayName(creds);
 
     container.innerHTML = [
       '<div class="agilo-voice-record-area">',
-      '  <div class="agilo-voice-name-grid">',
-      '    <div><label class="agilo-voice-label" for="agilo-voice-first-name">Prénom</label>',
-      '    <input class="agilo-voice-input" id="agilo-voice-first-name" type="text" maxlength="80" value="' + escapeHtml(firstName) + '"' + (locked ? ' disabled' : '') + '></div>',
-      '    <div><label class="agilo-voice-label" for="agilo-voice-last-name">Nom</label>',
-      '    <input class="agilo-voice-input" id="agilo-voice-last-name" type="text" maxlength="80" value="' + escapeHtml(lastName) + '"' + (locked ? ' disabled' : '') + '></div>',
+      '  <div class="agilo-voice-name-single">',
+      '    <label class="agilo-voice-label" for="agilo-voice-display-name">Prénom &amp; Nom</label>',
+      '    <input class="agilo-voice-input" id="agilo-voice-display-name" type="text" maxlength="160" placeholder="Ex. Marie Dupont" value="' + escapeHtml(displayName) + '"' + (locked ? ' disabled' : '') + '>',
       '  </div>',
       '  <div class="agilo-voice-hero-wrap">',
       '    <div class="agilo-voice-hero is-idle" id="agilo-voice-hero" role="button" tabindex="0" aria-label="Démarrer l\'enregistrement vocal">',
@@ -889,8 +948,7 @@
       heroIcon: container.querySelector('#agilo-voice-hero-icon'),
       heroLabel: container.querySelector('#agilo-voice-hero-label'),
       waves: container.querySelector('#agilo-voice-waves'),
-      firstName: container.querySelector('#agilo-voice-first-name'),
-      lastName: container.querySelector('#agilo-voice-last-name'),
+      displayName: container.querySelector('#agilo-voice-display-name'),
       timer: container.querySelector('#agilo-voice-timer'),
       rerecord: container.querySelector('#agilo-voice-rerecord'),
       miniPlayer: container.querySelector('#agilo-voice-mini-player'),
@@ -1148,11 +1206,12 @@
 
     els.submitBtn.addEventListener('click', async function () {
       setStatusEl(statusEl, '', '');
-      var nameErr = validateName(els.firstName.value, els.lastName.value);
+      var nameErr = validateDisplayName(els.displayName.value);
       if (nameErr) {
         setStatusEl(statusEl, 'error', nameErr);
         return;
       }
+      var split = splitDisplayName(els.displayName.value);
       var voiceFile = getVoiceFile();
       if (!voiceFile) {
         setStatusEl(statusEl, 'error', 'Enregistrez votre voix ou importez un fichier.');
@@ -1173,7 +1232,7 @@
       els.hero.style.pointerEvents = 'none';
       setStatusEl(statusEl, 'info', 'Envoi de l\'empreinte vocale…');
       try {
-        await enrollSpeakerVoice(creds, els.firstName.value, els.lastName.value, voiceFile);
+        await enrollSpeakerVoice(creds, split.firstName, split.lastName, voiceFile);
         setStatusEl(statusEl, 'success', 'Voix enregistrée.');
         if (typeof options.onSuccess === 'function') await options.onSuccess();
       } catch (e) {
@@ -1215,7 +1274,8 @@
       ? freeContentHtml
       : (voices.length
       ? voices.map(function (v) {
-          var label = escapeHtml(v.speakerLabel || ((v.firstName || '') + ' ' + (v.lastName || '')).trim() || '—');
+          var displayName = formatDisplayName(v);
+          var label = escapeHtml(displayName || '—');
           var date = formatVoiceDate(v.dtUpdate);
           var initials = escapeHtml(voiceInitials(v.firstName, v.lastName, v.speakerLabel));
           return [
@@ -1225,14 +1285,23 @@
             '    <div class="agilo-voice-item-label">' + label + '</div>',
             date ? ('    <div class="agilo-voice-item-meta">Mise à jour : ' + date + '</div>') : '',
             '    <div class="agilo-voice-item-actions">',
-            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-rename-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">' + ICON_EDIT + ' Renommer</button>',
-            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-replace-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-first="' + escapeHtml(v.firstName || '') + '" data-last="' + escapeHtml(v.lastName || '') + '">' + ICON_MIC_SM + ' Remplacer l\'audio</button>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-listen-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '">▶ Écouter l\'audio</button>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-rename-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-display-name="' + escapeHtml(displayName) + '">' + ICON_EDIT + ' Renommer</button>',
+            '      <button type="button" class="agilo-voice-btn agilo-voice-btn-ghost agilo-voice-replace-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-display-name="' + escapeHtml(displayName) + '">' + ICON_MIC_SM + ' Remplacer l\'audio</button>',
             '      <button type="button" class="agilo-voice-btn agilo-voice-btn-danger agilo-voice-delete-btn" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" data-label="' + label + '">' + ICON_TRASH + ' Supprimer</button>',
             '    </div>',
+            '    <div class="agilo-voice-listen-panel" id="agilo-voice-listen-' + escapeHtml(String(v.voiceId)) + '">',
+            '      <p class="agilo-voice-listen-status" id="agilo-voice-listen-status-' + escapeHtml(String(v.voiceId)) + '"></p>',
+            '      <div class="agilo-voice-listen-player" id="agilo-voice-listen-player-' + escapeHtml(String(v.voiceId)) + '">',
+            '        <button type="button" class="agilo-voice-play-btn agilo-voice-listen-play" data-voice-id="' + escapeHtml(String(v.voiceId)) + '" aria-label="Écouter">▶</button>',
+            '        <span class="agilo-voice-play-time agilo-voice-listen-time" id="agilo-voice-listen-time-' + escapeHtml(String(v.voiceId)) + '">0:00 / 0:00</span>',
+            '      </div>',
+            '      <audio class="agilo-voice-audio agilo-voice-listen-audio" id="agilo-voice-listen-audio-' + escapeHtml(String(v.voiceId)) + '"></audio>',
+            '    </div>',
             '    <div class="agilo-voice-rename-row" id="agilo-voice-rename-' + escapeHtml(String(v.voiceId)) + '">',
-            '      <div class="agilo-voice-name-grid">',
-            '        <div><label class="agilo-voice-label">Prénom</label><input class="agilo-voice-input agilo-voice-rename-first" type="text" value="' + escapeHtml(v.firstName || '') + '"></div>',
-            '        <div><label class="agilo-voice-label">Nom</label><input class="agilo-voice-input agilo-voice-rename-last" type="text" value="' + escapeHtml(v.lastName || '') + '"></div>',
+            '      <div class="agilo-voice-name-single">',
+            '        <label class="agilo-voice-label">Prénom &amp; Nom</label>',
+            '        <input class="agilo-voice-input agilo-voice-rename-display" type="text" maxlength="160" placeholder="Ex. Marie Dupont" value="' + escapeHtml(displayName) + '">',
             '      </div>',
             '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary agilo-voice-save-rename" data-voice-id="' + escapeHtml(String(v.voiceId)) + '">Enregistrer le nom</button>',
             '    </div>',
@@ -1267,7 +1336,7 @@
     var addSectionHtml = !isFree && !atQuotaEnroll ? [
       '    <div class="agilo-voice-section">',
       '      <h3 class="agilo-voice-section-title">Ajouter une voix</h3>',
-      '      <p class="agilo-voice-section-desc">Enregistrez directement la voix d\'un collègue présent avec vous — prénom, nom et extrait audio de 15 à 45 secondes.</p>',
+      '      <p class="agilo-voice-section-desc">Enregistrez directement la voix d\'un collègue présent avec vous — nom affiché et extrait audio de 15 à 45 secondes.</p>',
       '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add"><span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix</button>',
       '      <div class="agilo-voice-panel" id="agilo-voice-add-panel"></div>',
       '    </div>'
@@ -1336,21 +1405,113 @@
       btn.addEventListener('click', async function () {
         var id = btn.getAttribute('data-voice-id');
         var row = container.querySelector('#agilo-voice-rename-' + id);
-        var fn = row.querySelector('.agilo-voice-rename-first').value;
-        var ln = row.querySelector('.agilo-voice-rename-last').value;
-        var nameErr = validateName(fn, ln);
+        var displayInput = row.querySelector('.agilo-voice-rename-display');
+        var nameErr = validateDisplayName(displayInput.value);
         if (nameErr) {
           setStatusEl(statusEl, 'error', nameErr);
           return;
         }
+        var split = splitDisplayName(displayInput.value);
         btn.disabled = true;
         setStatusEl(statusEl, 'info', 'Mise à jour du nom…');
         try {
-          await updateSpeakerVoice(creds, id, fn, ln);
+          await updateSpeakerVoice(creds, id, split.firstName, split.lastName);
           setStatusEl(statusEl, 'success', 'Nom mis à jour.');
           await reload();
         } catch (e) {
           setStatusEl(statusEl, 'error', e.message);
+          btn.disabled = false;
+        }
+      });
+    });
+
+    var listenState = { objectUrl: '', voiceId: '' };
+
+    function formatListenTime(sec) {
+      sec = Math.floor(sec || 0);
+      return String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+    }
+
+    function closeListenPanels(exceptId) {
+      container.querySelectorAll('.agilo-voice-listen-panel.is-open').forEach(function (panel) {
+        var id = panel.id.replace('agilo-voice-listen-', '');
+        if (exceptId && id === String(exceptId)) return;
+        panel.classList.remove('is-open');
+        var audio = panel.querySelector('.agilo-voice-listen-audio');
+        if (audio) {
+          audio.pause();
+          audio.removeAttribute('src');
+        }
+        var player = panel.querySelector('.agilo-voice-listen-player');
+        if (player) player.classList.remove('is-visible');
+        var status = panel.querySelector('.agilo-voice-listen-status');
+        if (status) status.textContent = '';
+        var playBtn = panel.querySelector('.agilo-voice-listen-play');
+        if (playBtn) playBtn.textContent = '▶';
+      });
+      if (listenState.objectUrl && (!exceptId || listenState.voiceId !== String(exceptId))) {
+        URL.revokeObjectURL(listenState.objectUrl);
+        listenState.objectUrl = '';
+        listenState.voiceId = '';
+      }
+    }
+
+    container.querySelectorAll('.agilo-voice-listen-btn').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var id = btn.getAttribute('data-voice-id');
+        var panel = container.querySelector('#agilo-voice-listen-' + id);
+        if (!panel) return;
+        if (panel.classList.contains('is-open')) {
+          closeListenPanels();
+          return;
+        }
+        closeListenPanels(id);
+        panel.classList.add('is-open');
+        var statusNode = panel.querySelector('.agilo-voice-listen-status');
+        var player = panel.querySelector('.agilo-voice-listen-player');
+        var audio = panel.querySelector('.agilo-voice-listen-audio');
+        var playBtn = panel.querySelector('.agilo-voice-listen-play');
+        var timeEl = panel.querySelector('.agilo-voice-listen-time');
+        if (statusNode) statusNode.textContent = 'Chargement de l\'audio…';
+        if (player) player.classList.remove('is-visible');
+        btn.disabled = true;
+        try {
+          var blob = await fetchSpeakerVoiceAudio(creds, id);
+          if (listenState.objectUrl) URL.revokeObjectURL(listenState.objectUrl);
+          listenState.objectUrl = URL.createObjectURL(blob);
+          listenState.voiceId = String(id);
+          audio.src = listenState.objectUrl;
+          if (statusNode) statusNode.textContent = '';
+          if (player) player.classList.add('is-visible');
+          if (timeEl) timeEl.textContent = '0:00 / 0:00';
+          audio.onloadedmetadata = function () {
+            if (timeEl && isFinite(audio.duration)) {
+              timeEl.textContent = '0:00 / ' + formatListenTime(audio.duration);
+            }
+          };
+          audio.ontimeupdate = function () {
+            if (!timeEl) return;
+            var total = isFinite(audio.duration) ? audio.duration : 0;
+            timeEl.textContent = formatListenTime(audio.currentTime) + ' / ' + formatListenTime(total);
+          };
+          audio.onended = function () {
+            if (playBtn) playBtn.textContent = '▶';
+          };
+          if (playBtn) {
+            playBtn.textContent = '▶';
+            playBtn.onclick = function () {
+              if (audio.paused) {
+                audio.play();
+                playBtn.textContent = '❚❚';
+              } else {
+                audio.pause();
+                playBtn.textContent = '▶';
+              }
+            };
+          }
+        } catch (e) {
+          if (statusNode) statusNode.textContent = e.message || 'Impossible de lire l\'audio enregistré.';
+        } finally {
           btn.disabled = false;
         }
       });
@@ -1368,8 +1529,7 @@
         }
         mountRecordForm(panel, creds, {
           lockNames: true,
-          firstName: btn.getAttribute('data-first') || '',
-          lastName: btn.getAttribute('data-last') || '',
+          displayName: btn.getAttribute('data-display-name') || '',
           onSuccess: reload
         }, statusEl);
       });
