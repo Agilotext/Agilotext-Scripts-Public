@@ -8,7 +8,7 @@
      1. Embed (w-embed) dans le DERNIER form_step, AVANT button-group.is-form :
         <div id="agilo-voice-onboarding"></div>
      2. Ce script dans Before </body> (ou symbole Code-Onboarding_V1), PAS dans l'Embed
-        Copier scripts/pages/auth/voice-enrollment-onboarding.js depuis @552f642 (fix voice19)
+        Copier scripts/pages/auth/voice-enrollment-onboarding.js depuis voice20 (fix arrêt blindé)
      3. Ne pas placer l'Embed après Terminer ni en dehors des form_step
    ================================================================ */
 
@@ -562,7 +562,8 @@
       '.agilo-voice-hero-ring{position:absolute;inset:0;border-radius:50%;background:rgba(23,74,150,.1);border:1px solid rgba(23,74,150,.18);transition:background .25s,border-color .25s}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-ring{background:rgba(168,38,51,.1);border-color:rgba(168,38,51,.25)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-ring{background:rgba(28,102,26,.1);border-color:rgba(28,102,26,.22)}',
-      '.agilo-voice-hero-icon{position:relative;z-index:2;width:44px;height:44px;color:var(--color--blue,#174a96)}',
+      '.agilo-voice-hero-icon{position:relative;z-index:2;width:44px;height:44px;color:var(--color--blue,#174a96);pointer-events:none}',
+      '#agilo-voice-hero-icon{pointer-events:none}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-icon{color:var(--color--rouge,#a82633)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-icon{color:var(--color--vert,#1c661a)}',
       '.agilo-voice-waves{position:absolute;inset:0;pointer-events:none}',
@@ -960,9 +961,17 @@
       cleanupStream();
     }
 
-    function handleHeroClick() {
-      if (state.uiState === 'recording') stopRecording();
-      else if (state.uiState === 'idle') startRecording();
+    var heroBusy = false;
+
+    function handleHeroAction() {
+      if (heroBusy) return;
+      if (state.uiState === 'recording') {
+        heroBusy = true;
+        stopRecording();
+        setTimeout(function () { heroBusy = false; }, 300);
+      } else if (state.uiState === 'idle') {
+        startRecording();
+      }
     }
 
     function getVoiceFile() {
@@ -1065,9 +1074,15 @@
       }, 250);
     }
 
-    els.hero.addEventListener('click', handleHeroClick);
+    els.hero.addEventListener('click', handleHeroAction);
+    els.hero.addEventListener('mousedown', function (e) {
+      if (state.uiState === 'recording') {
+        e.preventDefault();
+        handleHeroAction();
+      }
+    });
     els.hero.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroClick(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroAction(); }
     });
     els.rerecord.addEventListener('click', function () {
       if (state.recording) return;

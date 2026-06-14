@@ -4,7 +4,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
-        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@552f642/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice19"></script>
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PLACEHOLDER_SHA/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice20"></script>
    ================================================================ */
 
 (function () {
@@ -692,20 +692,29 @@
     ].join('');
   }
 
-  async function sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl) {
+  async function sendInviteAndPersist(creds, recipientName, recipientEmail) {
     try {
       await createSpeakerVoiceInvite(creds, recipientName, recipientEmail);
       upsertLocalInvite(creds, recipientName, recipientEmail);
-      setStatusEl(statusEl, 'success', 'Invitation envoyée à ' + recipientEmail + '. Votre collègue recevra un email Agilotext pour enregistrer sa voix.');
-      return true;
+      return {
+        ok: true,
+        type: 'success',
+        message: 'Invitation envoyée à ' + recipientEmail + '. Votre collègue recevra un email Agilotext pour enregistrer sa voix.'
+      };
     } catch (e) {
       if (e && e.agiloCode === 'error_speaker_voice_invite_not_found') {
         upsertLocalInvite(creds, recipientName, recipientEmail);
-        setStatusEl(statusEl, 'info', 'Email probablement envoyé à ' + recipientEmail + '. Vérifiez la boîte de votre collègue avant de réessayer.');
-        return true;
+        return {
+          ok: true,
+          type: 'info',
+          message: 'Email probablement envoyé à ' + recipientEmail + '. Vérifiez la boîte de votre collègue avant de réessayer.'
+        };
       }
-      setStatusEl(statusEl, 'error', e.message || 'Impossible d\'envoyer l\'invitation.');
-      return false;
+      return {
+        ok: false,
+        type: 'error',
+        message: e.message || 'Impossible d\'envoyer l\'invitation.'
+      };
     }
   }
 
@@ -833,7 +842,8 @@
       '.agilo-voice-hero-ring{position:absolute;inset:0;border-radius:50%;background:rgba(23,74,150,.1);border:1px solid rgba(23,74,150,.18)}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-ring{background:rgba(168,38,51,.1);border-color:rgba(168,38,51,.25)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-ring{background:rgba(28,102,26,.1);border-color:rgba(28,102,26,.22)}',
-      '.agilo-voice-hero-icon{position:relative;z-index:2;width:44px;height:44px;color:var(--color--blue,#174a96)}',
+      '.agilo-voice-hero-icon{position:relative;z-index:2;width:44px;height:44px;color:var(--color--blue,#174a96);pointer-events:none}',
+      '#agilo-voice-hero-icon{pointer-events:none}',
       '.agilo-voice-hero.is-recording .agilo-voice-hero-icon{color:var(--color--rouge,#a82633)}',
       '.agilo-voice-hero.is-preview .agilo-voice-hero-icon{color:var(--color--vert,#1c661a)}',
       '.agilo-voice-waves{position:absolute;inset:0;pointer-events:none}',
@@ -875,6 +885,13 @@
       '.agilo-voice-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
       '.agilo-voice-status.is-success{display:block;background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
       '.agilo-voice-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
+      '.agilo-voice-form-toast[hidden]{display:none}',
+      '.agilo-voice-form-toast{margin-top:.75rem;padding:10px 12px;border-radius:' + AGILO_RADIUS + ';font-size:.9rem}',
+      '.agilo-voice-form-toast.is-success{background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
+      '.agilo-voice-form-toast.is-error{background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
+      '.agilo-voice-form-toast.is-info{background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
+      '.agilo-voice-item.is-new{background:rgba(23,74,150,.06);transition:background 3s ease}',
+      '@media (prefers-reduced-motion:reduce){.agilo-voice-item.is-new{transition:none}}',
       '.agilo-voice-free-badge{margin-top:12px;padding:10px 14px;background:rgba(23,74,150,.08);border:1px solid rgba(23,74,150,.2);border-radius:' + AGILO_RADIUS + '}',
       '.agilo-voice-free-badge a{color:var(--color--blue,#174a96);font-weight:600;text-decoration:none}',
       '.agilo-voice-panel{display:none}',
@@ -899,6 +916,103 @@
     if (!message) return;
     el.classList.add(type === 'success' ? 'is-success' : type === 'error' ? 'is-error' : 'is-info');
     el.textContent = message;
+  }
+
+  var FLASH_KEY = 'agilo-voice-flash';
+  var FLASH_DELAY_MS = 1200;
+  var SCROLL_OFFSET = 88;
+
+  function delay(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  function cssEscape(value) {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') return CSS.escape(String(value));
+    return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  function scrollToEl(el, offset) {
+    if (!el) return;
+    requestAnimationFrame(function () {
+      var top = el.getBoundingClientRect().top + window.pageYOffset - (offset || SCROLL_OFFSET);
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduceMotion ? 'auto' : 'smooth' });
+    });
+  }
+
+  function setVoiceFlash(payload) {
+    try { sessionStorage.setItem(FLASH_KEY, JSON.stringify(payload)); } catch (e) { /* noop */ }
+  }
+
+  function consumeVoiceFlash() {
+    try {
+      var raw = sessionStorage.getItem(FLASH_KEY);
+      sessionStorage.removeItem(FLASH_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function flashAndReload(flashPayload, reloadFn) {
+    setVoiceFlash(flashPayload);
+    await delay(FLASH_DELAY_MS);
+    if (typeof reloadFn === 'function') await reloadFn();
+  }
+
+  function findVoiceItemByFlash(container, flash) {
+    if (!container || !flash) return null;
+    if (flash.voiceId) {
+      var byId = container.querySelector('li[data-voice-id="' + cssEscape(String(flash.voiceId)) + '"]');
+      if (byId) return byId;
+    }
+    if (flash.voiceName) {
+      var target = String(flash.voiceName).trim();
+      var labels = container.querySelectorAll('.agilo-voice-item-label');
+      for (var i = 0; i < labels.length; i++) {
+        if (labels[i].textContent.trim() === target) return labels[i].closest('li.agilo-voice-item');
+      }
+    }
+    return null;
+  }
+
+  function applyVoiceFlashUI(container, statusEl, flash) {
+    if (!flash || !flash.message) return;
+    setStatusEl(statusEl, flash.type || 'success', flash.message);
+    if (statusEl) statusEl.setAttribute('aria-live', 'polite');
+
+    var highlightEl = findVoiceItemByFlash(container, flash);
+    if (highlightEl) {
+      highlightEl.classList.add('is-new');
+      setTimeout(function () { highlightEl.classList.remove('is-new'); }, 3000);
+    }
+
+    setTimeout(function () {
+      scrollToEl(highlightEl || statusEl, SCROLL_OFFSET);
+    }, 100);
+  }
+
+  function showFormToast(formRoot, type, message) {
+    if (!formRoot) return null;
+    var toast = formRoot.querySelector('.agilo-voice-form-toast');
+    if (!toast) return null;
+    toast.hidden = false;
+    toast.className = 'agilo-voice-form-toast';
+    toast.classList.add(type === 'success' ? 'is-success' : type === 'error' ? 'is-error' : 'is-info');
+    toast.textContent = message;
+    return toast;
+  }
+
+  function closeVoiceFormPanels(container) {
+    var addPanel = document.getElementById('agilo-voice-add-panel');
+    if (addPanel) addPanel.classList.remove('is-open');
+    var toggleAdd = document.getElementById('agilo-voice-toggle-add');
+    if (toggleAdd) {
+      toggleAdd.innerHTML = '<span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix';
+    }
+    if (container && container.classList && container.classList.contains('agilo-voice-panel')) {
+      container.classList.remove('is-open');
+    }
   }
 
   function mountRecordForm(container, creds, options, statusEl) {
@@ -933,6 +1047,7 @@
       '  <div class="agilo-voice-submit-row">',
       '    <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer cette voix</button>',
       '  </div>',
+      '  <div class="agilo-voice-form-toast" role="status" hidden></div>',
       '  <button type="button" class="agilo-voice-file-alt" id="agilo-voice-file-alt">Importer un fichier audio à la place</button>',
       '  <div class="agilo-voice-drop-zone" id="agilo-voice-drop-zone" role="button" tabindex="0">',
       '    <strong>Glissez votre fichier audio ici</strong>',
@@ -1147,14 +1262,28 @@
       cleanupStream();
     }
 
-    function handleHeroClick() {
-      if (state.uiState === 'recording') stopRecording();
-      else if (state.uiState === 'idle') startRecording();
+    var heroBusy = false;
+
+    function handleHeroAction() {
+      if (heroBusy) return;
+      if (state.uiState === 'recording') {
+        heroBusy = true;
+        stopRecording();
+        setTimeout(function () { heroBusy = false; }, 300);
+      } else if (state.uiState === 'idle') {
+        startRecording();
+      }
     }
 
-    els.hero.addEventListener('click', handleHeroClick);
+    els.hero.addEventListener('click', handleHeroAction);
+    els.hero.addEventListener('mousedown', function (e) {
+      if (state.uiState === 'recording') {
+        e.preventDefault();
+        handleHeroAction();
+      }
+    });
     els.hero.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroClick(); }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHeroAction(); }
     });
 
     els.rerecord.addEventListener('click', function () {
@@ -1241,20 +1370,25 @@
       }
       els.submitBtn.disabled = true;
       els.hero.style.pointerEvents = 'none';
+      applyWebflowSaveButton(els.submitBtn, 'Envoi en cours…');
       setStatusEl(statusEl, 'info', 'Envoi de l\'empreinte vocale…');
       try {
-        await enrollSpeakerVoice(creds, split.firstName, split.lastName, voiceFile);
-        setStatusEl(statusEl, 'success', 'Voix enregistrée avec succès !');
-        await new Promise(function (r) { setTimeout(r, 1500); });
-        if (typeof options.onSuccess === 'function') {
-          await options.onSuccess();
-          var section = document.getElementById('agilo-voice-settings');
-          if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        var result = await enrollSpeakerVoice(creds, split.firstName, split.lastName, voiceFile);
+        var successMsg = 'Voix enregistrée avec succès !';
+        var toastEl = showFormToast(els.recordArea, 'success', successMsg);
+        scrollToEl(toastEl, SCROLL_OFFSET);
+        closeVoiceFormPanels(container);
+        await flashAndReload({
+          type: 'success',
+          message: successMsg,
+          voiceId: result.voiceId,
+          voiceName: els.displayName.value.trim()
+        }, options.onSuccess);
       } catch (e) {
         setStatusEl(statusEl, 'error', e.message || 'Impossible d\'enregistrer cette voix.');
         els.submitBtn.disabled = false;
         els.hero.style.pointerEvents = '';
+        applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
         updateUIState();
       }
     });
@@ -1389,7 +1523,7 @@
       '      <span class="agilo-voice-quota-badge">' + escapeHtml(quotaBadge) + '</span>',
       '    </div>',
       '    <div class="agilo-voice-list-wrap">' + (voices.length ? '<ul class="agilo-voice-list">' + listHtml + '</ul>' : listHtml) + '</div>',
-      '    <div class="agilo-voice-status" id="agilo-voice-main-status" role="status"></div>',
+      '    <div class="agilo-voice-status" id="agilo-voice-main-status" role="status" aria-live="polite"></div>',
       quotaMsgHtml,
       addSectionHtml,
       inviteSectionHtml,
@@ -1402,7 +1536,10 @@
     injectStyles();
     container.innerHTML = buildMainMarkup(data, creds, inviteData);
     var statusEl = container.querySelector('#agilo-voice-main-status');
+    var flash = consumeVoiceFlash();
     var isFree = normEdition(creds.edition) === 'free';
+
+    if (flash) applyVoiceFlashUI(container, statusEl, flash);
 
     if (isFree) {
       applyWebflowUpgradeButton(container.querySelector('.agilo-voice-free-cta'), 'Essayer Pro gratuitement');
@@ -1431,8 +1568,11 @@
         setStatusEl(statusEl, 'info', 'Mise à jour du nom…');
         try {
           await updateSpeakerVoice(creds, id, split.firstName, split.lastName);
-          setStatusEl(statusEl, 'success', 'Nom mis à jour.');
-          await reload();
+          await flashAndReload({
+            type: 'success',
+            message: 'Nom mis à jour.',
+            voiceId: id
+          }, reload);
         } catch (e) {
           setStatusEl(statusEl, 'error', e.message);
           btn.disabled = false;
@@ -1559,8 +1699,10 @@
         setStatusEl(statusEl, 'info', 'Suppression…');
         try {
           await deleteSpeakerVoice(creds, id);
-          setStatusEl(statusEl, 'success', 'Empreinte vocale supprimée.');
-          await reload();
+          await flashAndReload({
+            type: 'success',
+            message: 'Empreinte vocale supprimée.'
+          }, reload);
         } catch (e) {
           setStatusEl(statusEl, 'error', e.message);
           btn.disabled = false;
@@ -1605,13 +1747,18 @@
           }
           inviteBtn.disabled = true;
           setStatusEl(statusEl, 'info', 'Envoi de l\'invitation…');
-          var sent = await sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl);
+          var inviteResult = await sendInviteAndPersist(creds, recipientName, recipientEmail);
           inviteBtn.disabled = false;
-          if (sent) {
-            if (nameInput) nameInput.value = '';
-            if (emailInput) emailInput.value = '';
-            await reload();
+          if (!inviteResult.ok) {
+            setStatusEl(statusEl, inviteResult.type || 'error', inviteResult.message);
+            return;
           }
+          if (nameInput) nameInput.value = '';
+          if (emailInput) emailInput.value = '';
+          await flashAndReload({
+            type: inviteResult.type || 'success',
+            message: inviteResult.message
+          }, reload);
         });
       }
 
@@ -1622,9 +1769,16 @@
           if (!recipientName || !recipientEmail) return;
           btn.disabled = true;
           setStatusEl(statusEl, 'info', 'Renvoi de l\'invitation…');
-          var sent = await sendInviteAndPersist(creds, recipientName, recipientEmail, statusEl);
+          var resendResult = await sendInviteAndPersist(creds, recipientName, recipientEmail);
           btn.disabled = false;
-          if (sent) await reload();
+          if (!resendResult.ok) {
+            setStatusEl(statusEl, resendResult.type || 'error', resendResult.message);
+            return;
+          }
+          await flashAndReload({
+            type: resendResult.type || 'success',
+            message: resendResult.message
+          }, reload);
         });
       });
 
@@ -1634,13 +1788,15 @@
           if (!inviteId) return;
           if (!window.confirm('Retirer cette invitation de la liste ?')) return;
           removeLocalInvite(creds, inviteId);
-          setStatusEl(statusEl, 'success', 'Invitation retirée de la liste.');
-          await reload();
+          await flashAndReload({
+            type: 'success',
+            message: 'Invitation retirée de la liste.'
+          }, reload);
         });
       });
     }
 
-    scrollToVoiceSectionIfNeeded();
+    if (!flash) scrollToVoiceSectionIfNeeded();
   }
 
   async function init() {
