@@ -8,7 +8,7 @@
      1. Embed (w-embed) dans le DERNIER form_step, AVANT button-group.is-form :
         <div id="agilo-voice-onboarding"></div>
      2. Ce script dans Before </body> (ou symbole Code-Onboarding_V1), PAS dans l'Embed
-        Copier scripts/pages/auth/voice-enrollment-onboarding.js depuis voice20 (fix arrêt blindé)
+        Copier scripts/pages/auth/voice-enrollment-onboarding.js depuis @c42e9f5 (voice20)
      3. Ne pas placer l'Embed après Terminer ni en dehors des form_step
    ================================================================ */
 
