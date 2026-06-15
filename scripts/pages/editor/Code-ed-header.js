@@ -312,14 +312,19 @@
 
   function isExpiredJob(job) {
     const je = String(job?.javaException || '').toLowerCase();
-    if (je.includes('error_summary_transcript_file_not_exists')) return true;
+    if (je.includes('error_duration_is_too_long')) return false;
+    if (je.includes('error_summary_transcript_file_not_exists')) {
+      const pid = Number(job?.promptid ?? job?.promptId);
+      if (pid === -1) return false;
+      return true;
+    }
     const st = String(job?.transcriptStatus || '').toUpperCase();
     return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
   }
 
   function expiredJobMessage(job) {
     const edition = String(AUTH?.edition || $('#editorRoot')?.dataset?.edition || EDITION_DEFAULT).toLowerCase();
-    const audioDays = edition === 'ent' || edition === 'business' ? 90 : (edition === 'pro' ? 30 : 1);
+    const audioDays = edition === 'ent' || edition === 'business' ? 30 : (edition === 'pro' ? 30 : 1);
     return `Ce fichier a été archivé conformément à la politique de conservation (audio ${audioDays} j). Le contenu n'est plus accessible.`;
   }
 

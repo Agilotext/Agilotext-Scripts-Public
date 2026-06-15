@@ -9,6 +9,7 @@
 !scripts/README.md
 !docs/styled-transcript-pdf/*.md
 !docs/integration-titres-dossiers-1.05/**/*.md
+!docs/CERVEAU_AGILOTEXT/**/*.md
 
 # Scripts d'aide (pas besoin dans le repo)
 setup-github-repo.sh

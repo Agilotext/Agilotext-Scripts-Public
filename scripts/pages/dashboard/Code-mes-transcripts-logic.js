@@ -13,7 +13,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '1.09';
+  window.__agiloMesTranscriptsLogicVersion = '1.10';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
@@ -163,6 +163,50 @@
     });
   }
 
+  function jobJavaException(job) {
+    return String(
+      job?.javaException || job?.exceptionMessage || job?.errorMessage || ''
+    ).toLowerCase();
+  }
+
+  function isNoSummaryRequested(job) {
+    const pid = Number(job?.promptid ?? job?.promptId);
+    return pid === -1;
+  }
+
+  function isDurationTooLongError(job) {
+    return jobJavaException(job).includes('error_duration_is_too_long');
+  }
+
+  function retentionAudioDays(edition) {
+    const e = String(edition || getEdition()).toLowerCase();
+    if (e === 'free') return 1;
+    if (e === 'pro') return 30;
+    return 30;
+  }
+
+  function isExpiredJob(job) {
+    if (!job || isDurationTooLongError(job)) return false;
+    const ex = jobJavaException(job);
+    if (ex.includes('error_summary_transcript_file_not_exists')) {
+      if (isNoSummaryRequested(job)) return false;
+      return true;
+    }
+    const st = String(job?.transcriptStatus || '').toUpperCase();
+    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+  }
+
+  function isNoSummaryCase(job) {
+    if (!job || isExpiredJob(job) || isDurationTooLongError(job)) return false;
+    if (isNoSummaryRequested(job)) return true;
+    return false;
+  }
+
+  function archivedJobMessage(job) {
+    const days = retentionAudioDays(getEdition());
+    return `Ce fichier audio a été archivé (conservation : ${days} j max). Le contenu n'est plus accessible.`;
+  }
+
   function isSummaryReadyForDownload(transcriptStatus) {
     return String(transcriptStatus || '').toUpperCase() === 'READY_SUMMARY_READY';
   }
@@ -180,24 +224,31 @@
         title: 'Le compte-rendu est en cours de génération.'
       };
     }
-    if (status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+    if (isNoSummaryCase(job)) {
       return {
         downloadable: false,
         label: 'Non demandé',
-        title: "Aucun compte-rendu n’a été demandé pour cette transcription."
+        title: "Aucun compte-rendu n'a été demandé pour cette transcription."
+      };
+    }
+    if (isExpiredJob(job) || status === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') {
+      return {
+        downloadable: false,
+        label: 'Archivé',
+        title: archivedJobMessage(job)
       };
     }
     if (status === 'READY_SUMMARY_ON_ERROR' || status === 'ERROR_SUMMARY_ON_ERROR') {
       return {
         downloadable: false,
         label: 'Indisponible',
-        title: detail || 'Le compte-rendu n’a pas pu être généré.'
+        title: detail || "Le compte-rendu n'a pas pu être généré."
       };
     }
     return {
       downloadable: false,
       label: 'Indisponible',
-      title: detail || 'Le compte-rendu n’est pas disponible pour cette transcription.'
+      title: detail || "Le compte-rendu n'est pas disponible pour cette transcription."
     };
   }
 
@@ -238,6 +289,13 @@
     const errMsg = job && (job.errorMessage || job.exceptionMessage || '').toString().trim();
     let line = '';
 
+    if (job && isExpiredJob(job)) {
+      return archivedJobMessage(job);
+    }
+    if (job && isNoSummaryCase(job)) {
+      return "Compte rendu non demandé pour cette transcription.";
+    }
+
     switch (up) {
       case 'PENDING':
         line = 'En attente de traitement';
@@ -254,19 +312,23 @@
         line = 'Transcription et compte rendu prêts';
         break;
       case 'READY_SUMMARY_ON_ERROR':
-        line = 'Le compte rendu n’a pas pu être généré';
+        if (job && isDurationTooLongError(job)) {
+          line = "Le compte rendu n'a pas pu être généré : audio trop long pour votre offre.";
+        } else {
+          line = "Le compte rendu n'a pas pu être généré";
+        }
         break;
       case 'ERROR_SUMMARY_ON_ERROR':
-        line = 'Le compte rendu n’a pas pu être généré';
+        line = "Le compte rendu n'a pas pu être généré";
         break;
       case 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS':
-        line = "Aucun compte rendu : il n’a pas été demandé pour cette transcription";
+        line = archivedJobMessage(job || {});
         break;
       case 'ERROR_TOO_MANY_LANGUAGES_CODE':
-        line = 'Erreur : trop de langues détectées dans l’audio';
+        line = "Erreur : trop de langues détectées dans l'audio";
         break;
       case 'ON_ERROR':
-        line = 'Le traitement n’a pas pu aboutir';
+        line = "Le traitement n'a pas pu aboutir";
         break;
       case 'UNKNOWN':
         line = 'État inconnu';
@@ -282,9 +344,12 @@
         else line = 'Traitement en cours';
     }
 
-    if (up.includes('ERROR') || up === 'READY_SUMMARY_ON_ERROR') {
+    if ((up.includes('ERROR') || up === 'READY_SUMMARY_ON_ERROR') && !isNoSummaryCase(job) && !isExpiredJob(job)) {
       if (userMsg) line += ` — ${userMsg}`;
       else if (errMsg) line += ` — ${errMsg}`;
+      else if (job && jobJavaException(job) && up === 'READY_SUMMARY_ON_ERROR') {
+        line += ` — ${job.javaException}`;
+      }
     }
 
     return line;
@@ -375,10 +440,21 @@
     }
 
     let shown = null;
-    for (const sel in map) {
-      if (map[sel].includes(st)) {
-        shown = show(sel);
-        break;
+
+    if (
+      job &&
+      (isExpiredJob(job) || isNoSummaryCase(job)) &&
+      (st.includes('ERROR') || st === 'READY_SUMMARY_ON_ERROR' || st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS')
+    ) {
+      shown = show('.icon-ready_summary_pending');
+    }
+
+    if (!shown) {
+      for (const sel in map) {
+        if (map[sel].includes(st)) {
+          shown = show(sel);
+          break;
+        }
       }
     }
 
