@@ -44,6 +44,7 @@
     'Code-editor-auth-sync.js',
     'Code-chat.js',
     'Code-ed-header.js',
+    'Code-job-id.js',
     'Code-questions-ia.js',
     'Code-copy-paste-text.js',
     'Code-save_transcript.js',

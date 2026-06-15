@@ -6,7 +6,7 @@
  * exposer window.agiloJobErrorParts. Sinon les scripts peuvent contenir une copie tolérée
  * du bloc ensureAgiloJobErrorParts ci-dessous.
  *
- * @version 1.07
+ * @version 1.08
  */
 (function (w) {
   'use strict';
@@ -26,11 +26,19 @@
    * @returns {{ primary: string, technical: string, alertText: string }}
    */
   function jobErrorParts(data, fallbackPrimary) {
+    var jEx = trimStr(data && data.javaException);
+    if (jEx && jEx.toLowerCase().indexOf('error_summary_transcript_file_not_exists') !== -1) {
+      return {
+        primary: 'Fichier archivé — politique de conservation des données.',
+        technical: '',
+        alertText: 'Ce fichier a été supprimé conformément à la politique de conservation. Il n\'est plus accessible.'
+      };
+    }
+
     var primary = trimStr(data && data.userErrorMessage);
     if (!primary) primary = trimStr(fallbackPrimary) || 'Une erreur est survenue.';
 
     var parts = [];
-    var jEx = trimStr(data && data.javaException);
     if (jEx) parts.push(jEx);
     var st = trimStr(data && (data.javaStackTrace || data.exceptionStackTrace));
     if (st) parts.push(st);

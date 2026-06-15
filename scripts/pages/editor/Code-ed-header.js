@@ -16,9 +16,16 @@
         if (!s || !mx || s.length <= mx) return s || '';
         return String(s).slice(0, mx - 3) + '...';
       }
+      const ex = ts(data && data.javaException);
+      if (ex && ex.toLowerCase().includes('error_summary_transcript_file_not_exists')) {
+        return {
+          primary: 'Fichier archivé — politique de conservation des données.',
+          technical: '',
+          alertText: 'Ce fichier a été supprimé conformément à la politique de conservation. Il n\'est plus accessible.'
+        };
+      }
       const primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
       const chunks = [];
-      const ex = ts(data && data.javaException);
       if (ex) chunks.push(ex);
       const stk = ts(data && (data.javaStackTrace || data.exceptionStackTrace));
       if (stk) chunks.push(stk);
@@ -303,7 +310,20 @@
     }
   }
 
-  function updateStatusIcons(status) {
+  function isExpiredJob(job) {
+    const je = String(job?.javaException || '').toLowerCase();
+    if (je.includes('error_summary_transcript_file_not_exists')) return true;
+    const st = String(job?.transcriptStatus || '').toUpperCase();
+    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+  }
+
+  function expiredJobMessage(job) {
+    const edition = String(AUTH?.edition || $('#editorRoot')?.dataset?.edition || EDITION_DEFAULT).toLowerCase();
+    const audioDays = edition === 'ent' || edition === 'business' ? 90 : (edition === 'pro' ? 30 : 1);
+    return `Ce fichier a été archivé conformément à la politique de conservation (audio ${audioDays} j). Le contenu n'est plus accessible.`;
+  }
+
+  function updateStatusIcons(status, job) {
     const wrap = $('.state._100'); if (!wrap) return;
     const map = {
       '.icon-error': ['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE'],
@@ -315,6 +335,10 @@
     };
     wrap.querySelectorAll('svg[class^="icon-"]').forEach((n) => { n.style.display = 'none'; });
     const up = String(status || '').toUpperCase();
+    if ((up === 'READY_SUMMARY_ON_ERROR' || up === 'ON_ERROR' || up === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS') && isExpiredJob(job)) {
+      const archived = wrap.querySelector('.icon-ready_summary_pending');
+      if (archived) { archived.style.display = 'block'; return; }
+    }
     for (const sel in map) {
       if (map[sel].includes(up)) { const n = wrap.querySelector(sel); if (n) { n.style.display = 'block'; return; } }
     }
@@ -435,6 +459,10 @@
 
   function statusGuardMessages(job) {
     const st = String(job?.transcriptStatus || '').toUpperCase();
+    if (isExpiredJob(job)) {
+      const retentionMsg = expiredJobMessage(job);
+      return { st, msgErr: retentionMsg, msgWaitT: retentionMsg, msgWaitS: retentionMsg };
+    }
     const eb = agiloFmt(job || {}, '');
     const line1 = `Le traitement a échoué : ${eb.primary}`;
     const msgErr = eb.technical ? `${line1}\n— ${eb.technical}` : line1;
@@ -520,6 +548,8 @@
       `${API_BASE}/receive${type === 'summary' ? 'Summary' : 'Text'}?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(AUTH.email)}&token=${encodeURIComponent(AUTH.token)}&edition=${encodeURIComponent(AUTH.edition)}&format=${fmt}`;
 
     const { st, msgErr, msgWaitT, msgWaitS } = statusGuardMessages(job);
+    const expired = isExpiredJob(job);
+    const expiredMsg = expired ? expiredJobMessage(job) : '';
 
     ['txt', 'rtf', 'doc', 'docx', 'pdf'].forEach((fmt) => {
       const links = document.querySelectorAll(`.download_link-options a.download_wrapper-link_transcript_${fmt}`);
@@ -528,6 +558,8 @@
 
         if (!isProPlus && (fmt === 'doc' || fmt === 'pdf')) {
           setDownloadLink(a, '#', 'Déverrouillez ces formats exclusifs avec la version Pro.');
+        } else if (expired) {
+          setDownloadLink(a, '#', expiredMsg, { hard: true });
         } else if (['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TRANSLATE_ON_ERROR'].includes(st)) {
           setDownloadLink(a, '#', msgErr);
         } else if (['PENDING', 'IN_PROGRESS', 'QUEUED', 'UPLOADING'].includes(st)) {
@@ -549,6 +581,11 @@
 
         if (!isProPlus && (c === 'doc' || c === 'pdf')) {
           setDownloadLink(a, '#', 'Déverrouillez ces formats exclusifs avec la version Pro.');
+          return;
+        }
+
+        if (expired) {
+          setDownloadLink(a, '#', expiredMsg, { hard: true });
           return;
         }
 
@@ -746,7 +783,7 @@
 
     if (job && (job.filename || job.jobTitle)) {
       applyHeaderFromJob(job);
-      updateStatusIcons(job.transcriptStatus);
+      updateStatusIcons(job.transcriptStatus, job);
     } else {
       fallbackFromRail();
     }
