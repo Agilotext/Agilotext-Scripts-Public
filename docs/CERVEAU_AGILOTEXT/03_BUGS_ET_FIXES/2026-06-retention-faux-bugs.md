@@ -41,4 +41,4 @@
 
 ## Déploiement
 
-Voir [WEBFLOW_DEPLOIEMENT.md](../04_PROCESS/WEBFLOW_DEPLOIEMENT.md) — hash commit à renseigner après push.
+Hash GitHub : `0de4923` (branche `1.09`) — voir [WEBFLOW_DEPLOIEMENT.md](../04_PROCESS/WEBFLOW_DEPLOIEMENT.md)

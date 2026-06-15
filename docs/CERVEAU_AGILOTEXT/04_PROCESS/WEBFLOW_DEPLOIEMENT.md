@@ -1,7 +1,7 @@
 # Déploiement Webflow — Rétention juin 2026
 
 **Branche :** `1.09`  
-**Hash commit :** _(à renseigner après push — voir `git rev-parse --short HEAD`)_
+**Hash commit :** `0de4923` (branche `1.09`, 15/06/2026)
 
 Base CDN :
 
@@ -49,4 +49,4 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 
 | Date | Hash | Pages | Notes |
 |------|------|-------|-------|
-| 2026-06-15 | _pending_ | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
+| 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
