@@ -3,7 +3,7 @@
 **Statut :** test uniquement — prod reste sur v1 `@0de4923`.
 
 **Branche GitHub :** `1.09`  
-**Hash commit :** `aadc13c` (remplacer après push — voir `git log -1 --oneline`)
+**Hash commit :** `aadc13c` (branche `1.09`, 16/06/2026)
 
 ---
 
@@ -114,7 +114,18 @@ Pages test :
 
 ---
 
-## Rollback
+## Actions Webflow Designer (agilotext-test — manuel)
+
+1. Ouvrir le site **agilotext-test** dans Webflow Designer.
+2. Pour chaque page **Mes transcripts** (Free, Pro, Business) :
+   - Vider l’embed inline `script-mes_transcripts_*` (si présent).
+   - Vider l’embed inline `code-open-editor-bulk-select` (si présent).
+   - Coller le contenu de [`mes-transcripts-pagination-v2-embed.html`](mes-transcripts-pagination-v2-embed.html) dans l’embed jsDelivr (remplace les scripts v1).
+3. Symbole **dashboard** (layout partagé) : remplacer `Code-sidebar-folders.js` par `-v2.js` (garder `Code-sidebar-folders-css.js` v1).
+4. Pour chaque page **Éditeur** (×3) : coller [`editor-pagination-v2-embed.html`](editor-pagination-v2-embed.html) à la place de `ready-count.js` + `Code-changement-audio.js` v1.
+5. **Publier** agilotext-test (pas www.agilotext.com).
+6. Smoke test console + checklist ci-dessus.
+
 
 Revenir aux embeds v1 avec hash prod connu :
 
