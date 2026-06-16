@@ -6,7 +6,7 @@
 Base CDN :
 
 ```
-https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/
 ```
 
 ## Head (toutes pages éditeur)
@@ -14,7 +14,7 @@ https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/
 Remplacer `agilo-api-error-format.js` :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/scripts/shared/agilo-api-error-format.js?v=<HASH>"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/shared/agilo-api-error-format.js?v=aadc13c"></script>
 ```
 
 ## Pages Éditeur (Free / Pro / Business)
@@ -25,8 +25,8 @@ Remplacer `agilo-api-error-format.js` :
 | `code-job-id` (nouveau — supprimer inline Job ID) | `scripts/pages/editor/Code-job-id.js` |
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/scripts/pages/editor/Code-ed-header.js?v=<HASH>"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/scripts/pages/editor/Code-job-id.js?v=<HASH>"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/editor/Code-ed-header.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/editor/Code-job-id.js?v=aadc13c"></script>
 ```
 
 ## Pages Mes transcripts (Free / Pro / Business)
@@ -36,7 +36,7 @@ Remplacer `agilo-api-error-format.js` :
 | logic mes-transcripts | `scripts/pages/dashboard/Code-mes-transcripts-logic.js` |
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<HASH>/scripts/pages/dashboard/Code-mes-transcripts-logic.js?v=<HASH>"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-mes-transcripts-logic.js?v=aadc13c"></script>
 ```
 
 ## Vérification jsDelivr
@@ -50,7 +50,7 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 | Date | Hash | Pages | Notes |
 |------|------|-------|-------|
 | 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
-| 2026-06-16 | `<HASH>` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
+| 2026-06-16 | `aadc13c` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
 
 ## Pagination v2 (test only)
 
