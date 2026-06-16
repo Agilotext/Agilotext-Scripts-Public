@@ -11,6 +11,19 @@ Pages : `/app/free/`, `/app/pro/`, `/app/business/` (mes-transcripts, upload, si
 | `Code-mes-transcripts-folder-url-bridge.js` | — | Bridge URL dossiers |
 | `Code-open-editor-bulk-select.js` | — | Sélection bulk |
 
+### Pagination v2 (test agilotext-test — prod inchangée)
+
+| Fichier v2 | Remplace v1 | Notes |
+|------------|-------------|-------|
+| `Code-mes-transcripts-logic-v2.js` | logic.js | PAGE_SIZE 25, version console `2.0` |
+| `Code-mes-transcripts-folder-url-bridge-v2.js` | bridge.js | limit 200, version `2.2.0` |
+| `Code-open-editor-bulk-select-v2.js` | bulk-select.js | hint page courante |
+| `Code-sidebar-folders-v2.js` | sidebar-folders.js | reset `?page` dossier |
+| `ready-count-v2.js` | ready-count.js | limit 200, badge `200+` |
+| `Code-changement-audio-v2.js` | changement-audio.js | rail limit 50 + charger plus |
+
+Doc embeds : [`docs/webflow-embeds/mes-transcripts-pagination-v2.md`](../../webflow-embeds/mes-transcripts-pagination-v2.md)
+
 ### `Code-mes-transcripts-logic.js` — fonctions clés
 
 - `getStatusTooltipFrench()` — message clic colonne État

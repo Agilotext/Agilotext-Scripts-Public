@@ -50,3 +50,10 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 | Date | Hash | Pages | Notes |
 |------|------|-------|-------|
 | 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
+| 2026-06-16 | `<HASH>` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
+
+## Pagination v2 (test only)
+
+Voir [`docs/webflow-embeds/mes-transcripts-pagination-v2.md`](../../webflow-embeds/mes-transcripts-pagination-v2.md).
+
+Prod **www.agilotext.com** : ne pas modifier (reste `@0de4923` + fichiers v1).
