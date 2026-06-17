@@ -1,0 +1,935 @@
+/* WORD-BOOST v2 – 2026-06-17 • r14
+   - Ligatures (œ→oe), typographic fi/fl, 6 mots max
+   - CSV/txt multi-encodage, guide Excel
+   - Toasts détaillés, ON_ERROR mot suspect
+   - Min 2 car., alerte streaming 2500 car.
+   - Gestion complète WordBoost (chantier corrigé)
+   - CSV + import massif + nettoyage + validation
+   - UX renforcée : nom de thème ET au moins 1 mot obligatoires
+   - Blocage explicite avec messages clairs (nom manquant / liste vide)
+   - Anti-double save + anti-confusion
+   - Correction des thèmes sans nom
+   - Correction des chips, import, supersets
+   - Code consolidé & fiabilisé
+*/
+(() => {
+  const API = "https://api.agilotext.com/api/v1",
+        EDITION = "ent",
+        LIMIT = 100;
+
+  // Timers
+  const POLL_DOM = 200,
+        SAVE_GAP = 6000,
+        STATUS_POLL = 5000,
+        STATUS_MAX = 120000,
+        RETRY_3S = 3000;
+
+  // Helpers
+  const $  = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  const trim  = s => (s || "").trim().replace(/\s+/g, " ");
+  const lower = s => (s || "").toLocaleLowerCase("fr");
+  const norm  = a => (Array.isArray(a) ? a : []).map(w => trim(w)).filter(Boolean);
+  const canon = a => norm(a).map(lower).sort();
+  const sameWords = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+  const MIN_WORD_LEN = 2;
+  const STREAMING_CHAR_WARN = 2400;
+  const LIGATURE_MAP = {
+    œ: "oe", Œ: "Oe", æ: "ae", Æ: "Ae", ß: "ss", ĳ: "ij", Ĳ: "IJ",
+    "\uFB01": "fi", "\uFB02": "fl", "\uFB00": "ff", "\uFB03": "ffi", "\uFB04": "ffl",
+  };
+  const LIGATURE_RE = /[œŒæÆßĳĲ\uFB01\uFB02\uFB00\uFB03\uFB04]/g;
+  const normalizeLigatures = w => String(w ?? "").replace(LIGATURE_RE, c => LIGATURE_MAP[c] ?? c);
+  const SEG = "[A-Za-zÀ-ÖØ-öø-ÿ0-9''\\-]+";
+  const WORD_RE = new RegExp(`^${SEG}(\\s+${SEG}){0,5}$`);
+
+  const validateWordLocal = raw => {
+    const trimmed = trim(raw);
+    const normalized = normalizeLigatures(trimmed);
+    const corrected = normalized !== trimmed;
+    if (normalized.length < MIN_WORD_LEN) return { ok: false, reason: "trop_court", normalized, corrected };
+    if (normalized.length > 100) return { ok: false, reason: "trop_long", normalized, corrected };
+    if (!WORD_RE.test(normalized)) return { ok: false, reason: "invalide", normalized, corrected };
+    return { ok: true, normalized, corrected };
+  };
+
+  const looksLikeMojibake = text => /[\uFFFD]/.test(text) || /(?:Ã.|Â.)/.test(text);
+
+  const formatImportStatsMessage = (stats, prefix = "") => {
+    let msg = `${prefix}${stats.added} terme(s) ajouté(s).`;
+    if (stats.corrected?.length) {
+      const sample = stats.corrected.slice(0, 5).map(x => `« ${x.from} »→« ${x.to} »`).join(", ");
+      msg += ` ${stats.corrected.length} normalisé(s) : ${sample}${stats.corrected.length > 5 ? "…" : ""}.`;
+    }
+    const skipped = stats.total - stats.added;
+    if (skipped > 0) {
+      const reasons = [];
+      if (stats.duplicate) reasons.push(`${stats.duplicate} doublon(s)`);
+      if (stats.tooShort) reasons.push(`${stats.tooShort} trop court(s)`);
+      if (stats.invalid) reasons.push(`${stats.invalid} invalide(s)`);
+      if (stats.limit) reasons.push(`limite ${LIMIT} atteinte`);
+      msg += ` ${skipped} ignoré(s) : ${reasons.join(", ")}.`;
+      if (stats.rejected?.length) {
+        const rej = stats.rejected.slice(0, 5).map(x => `« ${x.word} » (${x.reason.replace("_", " ")})`).join(", ");
+        msg += ` Ex. : ${rej}${stats.rejected.length > 5 ? "…" : ""}.`;
+      }
+    }
+    return msg;
+  };
+
+  const errorDetailFromApi = userErrorMessage => {
+    const match = String(userErrorMessage || "").match(/got "([^"]+)"/);
+    return match ? ` — mot suspect : « ${match[1]} »` : "";
+  };
+
+  const LAST_KEY = "wb2:lastThemeId";
+
+  // Toast UX
+  const toast = (msg, extra = null, ms = 2600) => {
+    const el = document.createElement("div");
+    el.innerHTML = msg;
+    el.style.cssText = `
+      position:fixed;bottom:20px;left:20px;
+      background:#111;color:#fff;
+      padding:10px 16px;border-radius:6px;
+      font-size:15px;z-index:999999;
+      max-width:92vw;opacity:0;
+      transition:opacity .25s;
+    `;
+    if (extra) el.appendChild(extra);
+    document.body.appendChild(el);
+    requestAnimationFrame(() => (el.style.opacity = 1));
+    if (ms !== Infinity) {
+      setTimeout(() => {
+        el.style.opacity = 0;
+        setTimeout(() => el.remove(), 350);
+      }, ms);
+    }
+    return el;
+  };
+
+  // API
+  const post = async (route, params) => {
+    const res = await fetch(`${API}/${route}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params).toString(),
+      credentials: "omit"
+    });
+    const txt = await res.text();
+    try {
+      return JSON.parse(txt);
+    } catch (e) {
+      console.error(txt);
+      throw e;
+    }
+  };
+
+  const parseWB = r => (r?.status === "OK" ? (r.wordBoost ?? r.word_boost ?? []) : []);
+
+  // Identity
+  const getEmail = () => {
+    const byName  = $('[name="memberEmail"]')?.value;
+    const byData  = $("#mots-cles")?.dataset.memberEmail;
+    const byGlobal = window.globalEmail;
+    const byMeta  = document.querySelector('meta[name="user-email"]')?.content;
+    return trim(byName || byData || byGlobal || byMeta || "");
+  };
+
+  const fetchToken = async email => {
+    if (window.globalToken) return window.globalToken;
+    if (!email) return null;
+    try {
+      const r = await post("getToken", { username: email, edition: EDITION });
+      if (r.status === "OK" && r.token) {
+        window.globalToken = r.token;
+        return r.token;
+      }
+    } catch (_e) {}
+    return null;
+  };
+
+  // State
+  let email = "",
+      token = "",
+      catalog = { defaultId: 0, list: [] };
+
+  let current = { id: 0, name: "", words: [] };
+  let savedWords = [];
+  let loaded = false;
+  let lastSaveOK = 0;
+
+  // DOM refs
+  let $select,
+      $def,
+      $new,
+      $del,
+      $name,
+      $statusReady,
+      $statusPending,
+      $statusError,
+      $inp,
+      $btnAdd,
+      $chips,
+      $tpl,
+      $count,
+      $save,
+      $spin,
+      $ok,
+      $bulkTextarea,
+      $bulkBtn,
+      $bulkReplace,
+      $bulkPanel,
+      $bulkToggle,
+      $bulkOpen,
+      $bulkClose,
+      $csvBtn,
+      $csvInput,
+      $csvMsg;
+
+  // Status UI
+  const setStatus = k => {
+    const sh = (el, on) => {
+      if (el) el.style.display = on ? "flex" : "none";
+    };
+    sh($statusReady,   k === "ready");
+    sh($statusPending, k === "pending");
+    sh($statusError,   k === "error");
+  };
+
+  const spinOn = on => {
+    if ($spin) $spin.style.display = on ? "inline-block" : "none";
+    if ($ok)   $ok.style.display   = on ? "none" : "inline-block";
+  };
+
+  // API wrappers
+  const apiSet    = p => post("setWordBoost2", p);
+  const apiGet    = p => post("getWordBoost2", p);
+  const apiInfo   = p => post("getWordBoostInfo2", p);
+  const apiRename = p => post("renameWordBoost2", p);
+  const apiDef    = p => post("setWordBoostDefault2", p);
+  const apiDel    = p => post("deleteWordBoost2", p);
+  const apiStat   = p => post("getStatusWordBoost2", p);
+
+  // Template
+  const pickChipTemplate = () => {
+    const all = $$(".chip-template");
+    return all.find(x => !x.closest(".chips-container")) || all[0];
+  };
+
+  // Rendering
+  const render = list => {
+    const map = new Map();
+    norm(list).forEach(w => {
+      const lw = lower(w);
+      if (!map.has(lw)) map.set(lw, w);
+    });
+    current.words = [...map.values()].sort((a, b) =>
+      lower(a).localeCompare(lower(b), "fr", { sensitivity: "base" })
+    );
+
+    if (!$chips) return;
+
+    $chips.innerHTML = "";
+    current.words.forEach(w => {
+      const n = $tpl.cloneNode(true);
+      n.style.display = "flex";
+      n.dataset.word = w;
+      const slot = n.querySelector(".mots_cles_raw");
+      if (slot) {
+        if (/^(INPUT|TEXTAREA)$/.test(slot.tagName)) {
+          slot.value = w;
+          slot.readOnly = true;
+          slot.setAttribute("aria-readonly", "true");
+          if (slot.id) slot.removeAttribute("id");
+        } else {
+          slot.textContent = w;
+        }
+      }
+      $chips.appendChild(n);
+    });
+
+    if ($count) $count.textContent = `${current.words.length} / ${LIMIT}`;
+    const full = current.words.length >= LIMIT;
+    if ($btnAdd) $btnAdd.disabled = full;
+    if ($inp)   $inp.disabled = full;
+
+    if ($save) {
+      const nameNow = trim($name?.value || "");
+      const noChange =
+        current.id > 0 &&
+        sameWords(current.words, savedWords) &&
+        nameNow === current.name;
+
+      // Le bouton reste cliquable même si nom manquant ou liste vide :
+      // les validations sont faites dans doSave() avec un message clair.
+      $save.disabled = !loaded || noChange;
+    }
+    if ($def) $def.disabled = !(current.id > 0);
+    if ($del) $del.disabled = !(current.id > 0);
+  };
+
+  // Select
+  const fillSelect = () => {
+    if (!$select) return;
+    $select.innerHTML = "";
+    const cur = current.id;
+
+    if (catalog.list.length === 0) {
+      const opt = new Option("Aucun thème — créez-en un", "0", true, true);
+      opt.disabled = true;
+      $select.add(opt);
+      if ($def) $def.disabled = true;
+      return;
+    }
+
+    for (const { id, name } of catalog.list) {
+      const lab = id === catalog.defaultId ? `${name} (défaut)` : name;
+      $select.add(new Option(lab, String(id), false, id === cur));
+    }
+
+    if (!$select.value && catalog.list[0]) {
+      $select.value = String(catalog.list[0].id);
+    }
+    if ($def) $def.disabled = false;
+  };
+
+  // Catalog
+  const loadCatalog = async (keepCurrent = false) => {
+    if (!email || !token) return;
+    try {
+      const r = await apiInfo({ username: email, token, edition: EDITION });
+      if (r.status !== "OK") throw new Error(r.errorMessage);
+      catalog.defaultId = +r.defaultBoostId || 0;
+      catalog.list = (r.boostNamesDTOList || []).map(x => ({
+        id: +x.boostId,
+        name: String(x.boostName || "Sans nom")
+      }));
+    } catch (e) {
+      console.error(e);
+      toast("Impossible de charger les thèmes.");
+      catalog = { defaultId: 0, list: [] };
+    }
+
+    if (!keepCurrent) {
+      const last = +(localStorage.getItem(LAST_KEY) || 0);
+      const pick =
+        catalog.list.find(x => x.id === catalog.defaultId)?.id ||
+        catalog.list.find(x => x.id === last)?.id ||
+        (catalog.list[0]?.id || 0);
+
+      current.id = pick;
+      current.name = (catalog.list.find(x => x.id === pick)?.name) || "";
+    }
+    fillSelect();
+  };
+
+  // Theme load
+  const loadTheme = async id => {
+    current.id = +id || 0;
+    const ent = catalog.list.find(x => x.id === current.id);
+    current.name = ent ? ent.name : "";
+    if ($name) $name.value = current.name;
+    setStatus("ready");
+    savedWords = [];
+
+    if (current.id === 0) {
+      current.words = [];
+      render([]);
+      return;
+    }
+
+    try {
+      const r = await apiGet({
+        username: email,
+        token,
+        edition: EDITION,
+        boostId: current.id
+      });
+      savedWords = norm(parseWB(r));
+    } catch (e) {
+      console.error(e);
+      toast("Erreur lors du chargement des mots.");
+      savedWords = [];
+    }
+    render(savedWords);
+  };
+
+  // ------- Add from text (textarea or CSV) ----------
+  const addFromText = (text, { replace = false, silent = false } = {}) => {
+    const parts = String(text || "")
+      .split(/[\n\r;,\t]+/g)
+      .map(trim)
+      .filter(Boolean);
+
+    const stats = {
+      total: parts.length,
+      added: 0,
+      tooShort: 0,
+      invalid: 0,
+      duplicate: 0,
+      limit: 0,
+      corrected: [],
+      rejected: [],
+    };
+
+    if (parts.length === 0) return stats;
+
+    let list = replace ? [] : [...current.words];
+    const seen = list.map(lower);
+
+    for (const raw of parts) {
+      const v = validateWordLocal(raw);
+      const w = v.normalized;
+      const lw = lower(w);
+
+      if (!v.ok) {
+        if (v.reason === "trop_court") stats.tooShort++;
+        else stats.invalid++;
+        stats.rejected.push({ word: trim(raw), reason: v.reason });
+        continue;
+      }
+      if (v.corrected) stats.corrected.push({ from: trim(raw), to: w });
+      if (seen.includes(lw)) {
+        stats.duplicate++;
+        continue;
+      }
+      if (list.length >= LIMIT) {
+        stats.limit++;
+        stats.rejected.push({ word: w, reason: "limite" });
+        break;
+      }
+      list.push(w);
+      seen.push(lw);
+      stats.added++;
+    }
+
+    render(list);
+    if (!silent && stats.added && stats.corrected.length) {
+      const sample = stats.corrected.slice(0, 3).map(x => `« ${x.from} »→« ${x.to} »`).join(", ");
+      toast(`Normalisé : ${sample}`, null, 4000);
+    }
+    return stats;
+  };
+
+  // UI add simple
+  const addWord = () => {
+    if (!$inp) return;
+    addFromText($inp.value, { replace: false });
+    $inp.value = "";
+  };
+
+  // Delete chip
+  const hookDeleteChip = () => {
+    $chips?.addEventListener("click", e => {
+      const x = e.target.closest(".wrapper-close");
+      if (!x) return;
+      const w = x.closest("[data-word]")?.dataset.word;
+      if (!w) return;
+      const prev = [...current.words];
+      render(prev.filter(v => lower(v) !== lower(w)));
+      const undo = document.createElement("button");
+      undo.textContent = "Annuler";
+      undo.style.cssText =
+        "margin-left:8px;background:#fff;color:#111;border:none;padding:2px 6px;border-radius:4px;font-size:12px;cursor:pointer";
+      const t = toast(`« ${w} » supprimé`, undo, 5500);
+      undo.onclick = () => {
+        render(prev);
+        t.remove();
+      };
+    });
+  };
+
+  // Status polling
+  const pollStatus = async boostId => {
+    setStatus("pending");
+    const start = Date.now();
+
+    const loop = async () => {
+      try {
+        const r = await apiStat({
+          username: email,
+          token,
+          edition: EDITION,
+          boostId
+        });
+        if (r.status === "OK") {
+          const st = (r.wordboostStatus || "").toUpperCase();
+          if (st === "READY") {
+            setStatus("ready");
+            toast("C’est prêt ✓");
+            try {
+              const g = await apiGet({
+                username: email,
+                token,
+                edition: EDITION,
+                boostId
+              });
+              savedWords = norm(parseWB(g));
+              render(savedWords);
+            } catch (_e) {}
+            return;
+          }
+          if (st === "ON_ERROR") {
+            setStatus("error");
+            toast((r.userErrorMessage || "Erreur serveur") + errorDetailFromApi(r.userErrorMessage) + ". Vérifiez votre liste et réessayez.", null, 7000);
+            return;
+          }
+        }
+      } catch (_e) {}
+      if (Date.now() - start < STATUS_MAX) {
+        setTimeout(loop, STATUS_POLL);
+      } else {
+        setStatus("ready");
+        toast("Toujours en cours côté serveur.");
+      }
+    };
+    loop();
+  };
+
+  // ------- SAVE -------
+  const doSave = async () => {
+    if (!$save || $save.disabled) return;
+
+    // Ajout du mot en cours de saisie (input texte)
+    if ($inp && $inp.value.trim()) {
+      addWord();
+      await new Promise(r => setTimeout(r, 80));
+    }
+
+    const listSent = [...current.words];
+    const nameNow = trim($name?.value || "");
+
+    // 1) Validation : nom obligatoire
+    if (!nameNow) {
+      toast("⚠️ Veuillez donner un nom à votre liste avant de sauvegarder.");
+      if ($name) $name.focus();
+      return;
+    }
+
+    // 2) Validation : au moins 1 terme dans la liste
+    if (listSent.length === 0) {
+      toast(
+        "⚠️ Votre liste doit contenir au moins un terme avant d’être enregistrée."
+      );
+      if ($inp) $inp.focus();
+      return;
+    }
+
+    const totalChars = listSent.join("").length;
+    if (totalChars > STREAMING_CHAR_WARN) {
+      toast(`⚠️ Votre liste est longue (${totalChars} car.). Certains mots pourraient ne pas être pris en compte en enregistrement direct.`, null, 5000);
+    }
+
+    // 3) Anti double-save rapprochée
+    if (Date.now() - lastSaveOK < SAVE_GAP) {
+      toast("⏳ Patientez un instant avant de sauvegarder à nouveau.");
+      return;
+    }
+
+    // 4) Identité
+    if (!email) {
+      toast("Impossible d’identifier votre compte.");
+      return;
+    }
+
+    if (!token) {
+      token = await fetchToken(email);
+      if (!token) {
+        toast("Impossible d’obtenir un jeton API.");
+        return;
+      }
+    }
+
+    // 5) Cas rename uniquement (même liste, nom différent)
+    const onlyRename =
+      current.id > 0 &&
+      nameNow &&
+      nameNow !== current.name &&
+      sameWords(listSent, savedWords);
+
+    if (onlyRename) {
+      try {
+        spinOn(true);
+        $save.disabled = true;
+        const rn = await apiRename({
+          username: email,
+          token,
+          edition: EDITION,
+          boostId: current.id,
+          boost_name: nameNow,
+          boostName: nameNow,
+          name: nameNow
+        });
+        if (rn.status !== "OK") throw new Error(rn.errorMessage);
+        current.name = nameNow;
+        const ent = catalog.list.find(x => x.id === current.id);
+        if (ent) ent.name = nameNow;
+        fillSelect();
+        toast("Nom mis à jour ✓");
+        lastSaveOK = Date.now();
+        if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
+      } catch (e) {
+        console.error(e);
+        toast("Erreur : " + e.message);
+      } finally {
+        spinOn(false);
+        $save.disabled = false;
+      }
+      return;
+    }
+
+    // 6) FULL SAVE
+    spinOn(true);
+    $save.disabled = true;
+
+    try {
+      // rename éventuel avant envoi
+      if (current.id > 0 && nameNow && nameNow !== current.name) {
+        await apiRename({
+          username: email,
+          token,
+          edition: EDITION,
+          boostId: current.id,
+          boost_name: nameNow,
+          boostName: nameNow,
+          name: nameNow
+        });
+        current.name = nameNow;
+        const ent = catalog.list.find(x => x.id === current.id);
+        if (ent) ent.name = nameNow;
+        fillSelect();
+      }
+
+      const payload = {
+        username: email,
+        token,
+        edition: EDITION,
+        boostId: current.id > 0 ? current.id : 0,
+        boostName: nameNow || current.name || "Sans nom",
+        wordBoost: JSON.stringify({ wordBoost: listSent })
+      };
+
+      let r = await apiSet(payload);
+
+      if (r.status !== "OK") {
+        const err = r.errorMessage;
+        if (err === "error_too_many_calls") {
+          toast("Serveur occupé… nouvelle tentative.");
+          await new Promise(res => setTimeout(res, RETRY_3S));
+          r = await apiSet(payload);
+          if (r.status !== "OK") throw new Error(r.errorMessage);
+        } else if (err === "error_word_boost_not_ready") {
+          toast("Modifications enregistrées ✓");
+          setStatus("pending");
+          await loadCatalog(true);
+          pollStatus(current.id || r.boostId);
+          lastSaveOK = Date.now();
+          if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
+          return;
+        } else {
+          throw new Error(err);
+        }
+      }
+
+      // Nouveau boost créé
+      if (+r.boostId && +r.boostId !== current.id) {
+        current.id = +r.boostId;
+        await loadCatalog(true);
+        if ($select) $select.value = String(current.id);
+      } else if (current.id === 0) {
+        current.id = +r.boostId || 0;
+        await loadCatalog(true);
+        if ($select) $select.value = String(current.id);
+      }
+
+      lastSaveOK = Date.now();
+      savedWords = norm(current.words);
+
+      toast("Enregistré ✓");
+      if (current.id > 0) pollStatus(current.id);
+      render(current.words);
+
+      if (current.id > 0) localStorage.setItem(LAST_KEY, String(current.id));
+    } catch (e) {
+      console.error(e);
+      toast("Erreur : " + e.message);
+      setStatus("error");
+    } finally {
+      spinOn(false);
+      $save.disabled = false;
+    }
+  };
+
+  // Default
+  const setDefault = async () => {
+    if (!(current.id > 0)) {
+      toast("Aucun thème sélectionné.");
+      return;
+    }
+    if (!email || !token) {
+      if (!email) email = getEmail();
+      if (!token) token = await fetchToken(email);
+      if (!token) {
+        toast("Jeton manquant.");
+        return;
+      }
+    }
+    try {
+      const r = await apiDef({
+        username: email,
+        token,
+        edition: EDITION,
+        boostId: current.id
+      });
+      if (r.status === "OK") {
+        toast("Défini comme thème par défaut ✓");
+        await loadCatalog(true);
+        fillSelect();
+        localStorage.setItem(LAST_KEY, String(current.id));
+      } else {
+        toast(r.errorMessage);
+      }
+    } catch (e) {
+      toast("Erreur défaut : " + e.message);
+    }
+  };
+
+  // New theme
+  const newTheme = () => {
+    current = { id: 0, name: "", words: [] };
+    if ($select) $select.value = "0";
+    if ($name) {
+      $name.value = "";
+      $name.focus();
+    }
+    savedWords = [];
+    setStatus("ready");
+    render([]);
+    toast("Nouveau thème : saisissez un nom et ajoutez des termes puis cliquez sur Sauvegarder.");
+  };
+
+  // Delete
+  const deleteTheme = async () => {
+    if (!(current.id > 0)) {
+      toast("Aucun thème à supprimer.");
+      return;
+    }
+    if (!email || !token) {
+      if (!email) email = getEmail();
+      if (!token) token = await fetchToken(email);
+      if (!token) {
+        toast("Jeton manquant.");
+        return;
+      }
+    }
+    if (!confirm("Supprimer définitivement ce thème ?")) return;
+
+    try {
+      const r = await apiDel({
+        username: email,
+        token,
+        edition: EDITION,
+        boostId: current.id
+      });
+      if (r.status === "OK") {
+        toast("Thème supprimé 🗑️");
+        await loadCatalog(false);
+        await loadTheme(current.id);
+      } else {
+        toast(r.errorMessage);
+      }
+    } catch (e) {
+      toast("Erreur suppression : " + e.message);
+    }
+  };
+
+  // INIT
+  document.addEventListener("DOMContentLoaded", async () => {
+    // attendre Webflow
+    while (!$("#save-wordboost") || !$("#add-chip") || !$(".chips-container")) {
+      await new Promise(r => setTimeout(r, POLL_DOM));
+    }
+
+    // map DOM
+    $select = $("#wb2-select");
+    $def = $("#wb2-default");
+    $new = $("#wb2-new");
+    $del = $("#wb2-delete");
+    $name = $("#wb2-name-edit");
+    $statusReady = $("#status-ready");
+    $statusPending = $("#status-pending");
+    $statusError = $("#status-error");
+    $inp = $(".chip-input");
+    $btnAdd = $("#add-chip");
+    $chips = $(".chips-container");
+    $tpl = pickChipTemplate();
+    if ($tpl) $tpl.style.display = "none";
+    $count = $("#wb-count");
+    $save = $("#save-wordboost");
+    $spin = $save ? $save.querySelector("#loading-wordboost") : $("#loading-wordboost");
+    $ok = $("#done-wordboost");
+
+    // bulk
+    $bulkTextarea = $("#wb2-bulk-textarea");
+    $bulkBtn = $("#wb2-bulk-apply");
+    $bulkReplace = $("#wb2-bulk-replace");
+    $bulkPanel = $("#wb2-bulk-panel");
+    $bulkToggle = $("#wb2-root .link-like");
+    $bulkOpen = $("#wb2-root .open-link");
+    $bulkClose = $("#wb2-root .close-link");
+
+    // csv
+    $csvBtn = $("#wb2-upload-btn");
+    $csvInput = $("#wb2-file-input");
+    $csvMsg = $("#wb2-upload-msg");
+
+    if (!$tpl) {
+      toast("Erreur : Template chip manquant !");
+      return;
+    }
+
+    // identity
+    email = getEmail();
+    token = window.globalToken || (await fetchToken(email));
+
+    if ($inp) $inp.placeholder = "Ex : Grand Maître, Jean-François, 261B…";
+
+    // Input simple
+    $btnAdd?.addEventListener("click", addWord);
+    $inp?.addEventListener("input", e => {
+      if (!$btnAdd) return;
+      $btnAdd.style.animation =
+        e.target.value.trim() && !$btnAdd.disabled ? "pulse 1s infinite" : "";
+    });
+    $inp?.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addWord();
+      }
+    });
+    $inp?.addEventListener("paste", e => {
+      e.preventDefault();
+      const t = e.clipboardData.getData("text");
+      addFromText(t);
+    });
+
+    // Bulk panel
+    $bulkToggle?.addEventListener("click", () => {
+      const show = $bulkPanel.style.display === "none" || !$bulkPanel.style.display;
+      $bulkPanel.style.display = show ? "flex" : "none";
+      if ($bulkOpen)  $bulkOpen.style.display  = show ? "flex" : "none";
+      if ($bulkClose) $bulkClose.style.display = show ? "none" : "flex";
+    });
+
+    // Bulk import
+    $bulkBtn?.addEventListener("click", () => {
+      if (!$bulkTextarea) return;
+      const raw = $bulkTextarea.value;
+      if (!trim(raw)) {
+        toast("Aucun terme à importer.");
+        return;
+      }
+
+      const replace = !!$bulkReplace?.checked;
+      const stats = addFromText(raw, { replace, silent: true });
+      const skipped = stats.total - stats.added;
+
+      toast(formatImportStatsMessage(stats), null, 6500);
+    });
+
+    // CSV upload
+    $csvBtn?.addEventListener("click", () => $csvInput?.click());
+    $csvInput?.addEventListener("change", e => {
+      const file = e.target.files[0];
+      if (!file) {
+        if ($csvMsg) $csvMsg.textContent = "";
+        return;
+      }
+      if (!/\.(csv|txt)$/i.test(file.name)) {
+        toast(
+          "Format Excel non supporté directement. Dans Excel : sélectionnez la colonne de mots → Ctrl+C, puis collez dans la zone « Importer une liste » ci-dessous.",
+          null,
+          8000
+        );
+        if ($csvMsg) $csvMsg.textContent = "Utilisez .csv/.txt ou copier-coller depuis Excel";
+        e.target.value = "";
+        return;
+      }
+      if (file.size > 300 * 1024) {
+        toast("Fichier trop volumineux (>300Ko).");
+        if ($csvMsg) $csvMsg.textContent = "Fichier trop volumineux.";
+        e.target.value = "";
+        return;
+      }
+
+      if ($csvMsg) $csvMsg.textContent = `Lecture de ${file.name}…`;
+
+      const processFileText = (text) => {
+        const replace = !!$bulkReplace?.checked;
+        const stats = addFromText(text, { replace, silent: true });
+        const msg = formatImportStatsMessage(stats, `Depuis ${file.name} : `);
+        toast(msg, null, 6500);
+        if ($csvMsg) $csvMsg.textContent = msg;
+        e.target.value = "";
+      };
+
+      const reader = new FileReader();
+      reader.onerror = () => {
+        toast("Erreur lecture fichier");
+        if ($csvMsg) $csvMsg.textContent = "Erreur fichier";
+      };
+      reader.onload = () => {
+        let text = String(reader.result || "");
+        if (looksLikeMojibake(text)) {
+          const r2 = new FileReader();
+          r2.onerror = () => processFileText(text);
+          r2.onload = () => processFileText(String(r2.result || ""));
+          r2.readAsText(file, "windows-1252");
+          return;
+        }
+        processFileText(text);
+      };
+      reader.readAsText(file, "utf-8");
+    });
+
+    // Select theme
+    $select?.addEventListener("change", e => {
+      const id = e.target.value;
+      if (id !== "0") localStorage.setItem(LAST_KEY, id);
+      loadTheme(id);
+    });
+
+    // Name input
+    $name?.addEventListener("input", () => {
+      if (current.id === 0) {
+        current.name = trim($name.value);
+      }
+      if ($save) {
+        const nameNow = trim($name.value || "");
+        const noChange =
+          current.id > 0 &&
+          sameWords(current.words, savedWords) &&
+          nameNow === current.name;
+        $save.disabled = !loaded || noChange;
+      }
+    });
+
+    // Buttons
+    $$(".rename-btn").forEach(b =>
+      b.addEventListener("click", () => $name?.focus())
+    );
+    $save?.addEventListener("click", doSave);
+    $def?.addEventListener("click", setDefault);
+    $new?.addEventListener("click", newTheme);
+    $del?.addEventListener("click", deleteTheme);
+    hookDeleteChip();
+
+    // Load catalog
+    await loadCatalog(false);
+    await loadTheme(current.id);
+
+    loaded = true;
+    render(current.words);
+  });
+})();
