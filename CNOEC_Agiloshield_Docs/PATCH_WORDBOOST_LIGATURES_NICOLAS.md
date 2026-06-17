@@ -1,12 +1,24 @@
-# Patch WordBoost — ligatures (pour Nicolas)
+# Proposition patch WordBoost — ligatures (pour Nicolas, non appliqué)
 
-**Contexte :** `ToWordNoSpecialCharsConverter.sanitize()` rejette `œ` car NFD ne décompose pas les ligatures → `ON_ERROR` sur tout le boost, email d'exception, utilisateur bloqué.
+**Statut :** PROPOSITION UNIQUEMENT — le backend Java n'a **pas** été modifié par Florian. Nicolas gère le déploiement API.
 
-**Exemple :** `Sœurs` → IllegalArgumentException → job 118 ON_ERROR pour bauerwebpro@gmail.com (17/06/2026).
+**Contournement actuel côté Agilotext :** le front Webflow (`wordboost2.js` r14) et les scripts admin (`wordboost-sanitize.mjs`) normalisent les ligatures **avant** l'appel API — compatible avec le code Java actuel de Nicolas.
 
-## Fichiers à patcher en prod
+---
 
-### 1. `ToWordNoSpecialCharsConverter.java`
+## Contexte
+
+`ToWordNoSpecialCharsConverter.sanitize()` rejette `œ` car NFD ne décompose pas les ligatures → `ON_ERROR` sur tout le boost.
+
+**Exemple :** `Sœurs` → IllegalArgumentException → job 118 ON_ERROR (17/06/2026).
+
+**Fix côté scripts (déjà en place) :** `Sœurs` → `Soeurs` avant `setWordBoost2` → passe le backend tel quel.
+
+---
+
+## Proposition optionnelle backend (si Nicolas le souhaite)
+
+### `ToWordNoSpecialCharsConverter.java`
 
 Après le `trim()`, avant NFD :
 
@@ -19,30 +31,19 @@ cleaned = cleaned
     .replace("\uFB00", "ff");
 ```
 
-Patch déjà appliqué dans ce repo : `AgiloTextApi-github-2.0.5/.../ToWordNoSpecialCharsConverter.java`
+### `ApiGetStatusWordBoost2.getUserErrorMessage()`
 
-### 2. `ApiGetStatusWordBoost2.getUserErrorMessage()`
+Message ON_ERROR plus explicite + extraction du terme fautif.
 
-Message ON_ERROR plus explicite + extraction du terme fautif depuis `javaException` :
+### `FutureSetWordBoost2.java`
 
-```java
-if (wordBoostStatus == WordBoostStatus.ON_ERROR) {
-    errorMessage = "Un terme de votre liste contient un caractère non supporté.";
-    Matcher m = Pattern.compile("got \"([^\"]+)\"").matcher(javaException);
-    if (m.find()) {
-        errorMessage += " Terme concerné : « " + m.group(1) + " ».";
-    }
-}
-```
+Stocker `throwable.getMessage()` pour les `IllegalArgumentException`.
 
-### 3. `FutureSetWordBoost2.java`
+---
 
-Stocker `throwable.getMessage()` pour les `IllegalArgumentException` (plus lisible que `toString()`).
+## Côté Agilotext (sans toucher au backend)
 
-## Front-end
-
-Déployé côté Webflow : `scripts/pages/profile/wordboost2.js` r14 — normalise les ligatures avant envoi API.
-
-## Scripts admin Agilotext
-
-`scripts/shared/wordboost-sanitize.mjs` — utilisé par les scripts deploy client (ex. GODF).
+| Fichier | Rôle |
+|---------|------|
+| `scripts/shared/wordboost-sanitize.mjs` | Normalisation Node (scripts deploy client) |
+| `scripts/pages/profile/wordboost2.js` r14 | Normalisation front Webflow avant sauvegarde |

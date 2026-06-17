@@ -40,6 +40,8 @@ Ou coller le contenu de `Script a changer` (inline).
 
 Voir aussi `docs/WEBFLOW_WORDBOOST_UX.md` pour les textes à ajouter dans Webflow.
 
-## Patch backend (Nicolas)
+## Backend Java (Nicolas uniquement)
 
-Voir `CNOEC_Agiloshield_Docs/PATCH_WORDBOOST_LIGATURES_NICOLAS.md`.
+Le backend **n'est pas modifié** dans ce repo. Les scripts front/admin normalisent les termes avant envoi pour rester compatibles avec `ToWordNoSpecialCharsConverter` actuel.
+
+Proposition optionnelle pour Nicolas : `CNOEC_Agiloshield_Docs/PATCH_WORDBOOST_LIGATURES_NICOLAS.md`
