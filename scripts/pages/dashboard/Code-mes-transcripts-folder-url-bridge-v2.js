@@ -1,5 +1,5 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions" (v2)
-// Version 2.2.1 — délègue le tri date à logic-v2 en pagination serveur
+// Version 2.2.2 — compat logic v2.2.0-fullclient (tri délégué à logic-v2)
 // Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
 //
 // Objectif:
@@ -13,7 +13,7 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.2.1';
+  const BRIDGE_VERSION = '2.2.2';
   const JOBS_MAP_LIMIT = 200;
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';

@@ -1,6 +1,7 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.1.0-sort (pagination PAGE_SIZE=25)
-   v2.1.0-sort — tri serveur sortDir + clic toggle date desc/asc + filet client
+   AGILOTEXT — Mes transcripts logic v2.2.0-fullclient
+   v2.2.0-fullclient — fetch all (progressive 100→2000), tri/pagination client,
+   cache invalidation, polling 60s (API ignore sortDir)
    Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
    =============================================================================
    AGILOTEXT DASHBOARD LOGIC (UNIFIED NICKEL VERSION)
@@ -17,11 +18,21 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.1.0-sort';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.0-fullclient';
 
   const PAGE_SIZE = 25;
+  const FETCH_LIMIT_TOTAL = 2000;
+  const FETCH_LIMIT_INITIAL = 100;
+  const POLLING_INTERVAL_MS = 60000;
   const DEFAULT_SORT_DIR = 'desc';
   const JOBS_MAP_TOTAL_KEYS = ['total', 'totalCount', 'totalJobs', 'jobsCount', 'nbJobs'];
+
+  let allJobsCache = null;
+  let cacheKey = '';
+  let cacheTotalKnown = false;
+  let pollTimer = null;
+  let loadPageFromCacheFn = null;
+  let currentPollingEdition = 'ent';
 
   function readSortDirFromUrl() {
     const v = new URLSearchParams(window.location.search).get('sortDir');
@@ -112,10 +123,22 @@
           url.searchParams.delete('page');
           history.replaceState(null, '', url.pathname + url.search + url.hash);
         } catch (_) {}
-        if (window.__agiloMesTranscriptsReload) window.__agiloMesTranscriptsReload(0);
+        if (loadPageFromCacheFn) loadPageFromCacheFn(0);
+        else if (window.__agiloMesTranscriptsReload) window.__agiloMesTranscriptsReload(0);
       });
     });
   }
+
+  function invalidateCache(reason) {
+    console.info('[Agilo] cache invalidated:', reason);
+    allJobsCache = null;
+    cacheKey = '';
+    cacheTotalKnown = false;
+    const bar = document.getElementById('agilo-refresh-banner');
+    if (bar) bar.remove();
+  }
+
+  window.__agiloMesTranscriptsInvalidate = invalidateCache;
 
   function cleanupBulkPageHint() {
     const hint = document.getElementById('agilo-bulk-page-hint');
@@ -155,10 +178,13 @@
     mount.hidden = false;
     const totalPages =
       totalJobs != null ? Math.max(1, Math.ceil(totalJobs / PAGE_SIZE)) : hasMore ? currentPage + 2 : currentPage + 1;
-    const pageLabel =
+    const suffix =
       totalJobs != null
-        ? `Page ${currentPage + 1} / ${totalPages} — ${totalJobs} fichier${totalJobs > 1 ? 's' : ''}`
-        : `Page ${currentPage + 1}${hasMore ? '+' : ''}`;
+        ? cacheTotalKnown
+          ? ` — ${totalJobs} fichier${totalJobs > 1 ? 's' : ''}`
+          : ' — chargement...'
+        : '';
+    const pageLabel = `Page ${currentPage + 1} / ${totalPages}${suffix}`;
 
     mount.innerHTML =
       `<button type="button" id="agilo-prev" ${currentPage <= 0 ? 'disabled' : ''}>← Précédent</button>` +
@@ -179,14 +205,16 @@
       totalJobs,
       hasMore,
       hasMultiplePages: showPager,
-      apiSortSupported: true,
+      apiSortSupported: false,
+      clientPagination: true,
+      cacheTotalKnown,
       sortDir: currentSortDir
     };
   }
 
-  function renderLoadingState(container) {
+  function renderLoadingState(container, label) {
     if (!container) return;
-    container.innerHTML = '<div class="agilo-loading-row">Chargement...</div>';
+    container.innerHTML = `<div class="agilo-loading-row">${label || 'Chargement de vos transcripts...'}</div>`;
     const mount = document.getElementById('agilo-pagination');
     if (mount) {
       mount.innerHTML = '';
@@ -946,6 +974,56 @@
     pageItemCount: 0
   };
 
+  function sortJobsByCreation(jobs) {
+    return (jobs || []).slice().sort((a, b) => {
+      const ta = convertDateStringToDate(a.dtCreation)?.getTime() || 0;
+      const tb = convertDateStringToDate(b.dtCreation)?.getTime() || 0;
+      return currentSortDir === 'asc' ? ta - tb : tb - ta;
+    });
+  }
+
+  function showRefreshBanner(count) {
+    if (document.getElementById('agilo-refresh-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'agilo-refresh-banner';
+    bar.style.cssText =
+      'position:sticky;top:0;background:#fef3c7;padding:8px 12px;text-align:center;cursor:pointer;font-size:13px;z-index:50';
+    bar.textContent = `${count} nouveau(x) fichier(s) disponible(s) — cliquez pour actualiser`;
+    bar.onclick = () => {
+      invalidateCache('refresh-banner');
+      if (lastKnownToken) mainScriptExecution(lastKnownToken, 0);
+      bar.remove();
+    };
+    document.getElementById('jobs-container')?.parentElement?.prepend(bar);
+  }
+
+  function startPolling(ed, userEmail, token) {
+    if (pollTimer) clearInterval(pollTimer);
+    if (localStorage.getItem('agilo:no-poll') === '1') return;
+    currentPollingEdition = ed;
+    pollTimer = setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const folderId = new URLSearchParams(window.location.search).get('folderId');
+        let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(
+          userEmail
+        )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(
+          ed
+        )}&limit=${FETCH_LIMIT_INITIAL}&offset=0`;
+        if (folderId) url += `&folderId=${encodeURIComponent(folderId)}`;
+        const r = await fetch(url);
+        const data = await r.json();
+        if (data.status !== 'OK') return;
+        const newIds = new Set((data.jobsInfoDtos || []).map((j) => String(j.jobid)));
+        const oldIds = new Set(
+          (allJobsCache || []).slice(0, FETCH_LIMIT_INITIAL).map((j) => String(j.jobid))
+        );
+        const delta = [...newIds].filter((id) => !oldIds.has(id));
+        if (delta.length > 0) showRefreshBanner(delta.length);
+      } catch (_) {}
+    }, POLLING_INTERVAL_MS);
+  }
+
   async function mainScriptExecution(token, forcedPage) {
     const emailInput = document.querySelector('[name="memberEmail"]');
     const userEmail = (
@@ -974,126 +1052,182 @@
       typeof forcedPage === 'number' && forcedPage >= 0 ? forcedPage : readPageFromUrl();
     paginationState.currentPage = page;
 
-    renderLoadingState(container);
+    const folderId = new URLSearchParams(window.location.search).get('folderId') || '';
+    const newCacheKey = `${edition}|${folderId}`;
 
-    async function getJobs(ed, pageIndex) {
-      const urlParams = new URLSearchParams(window.location.search);
-      const folderId = urlParams.get('folderId');
-      const offset = pageIndex * PAGE_SIZE;
+    async function fetchJobsBatch(ed, offset, limit, skipFreeFallback) {
       let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(
         userEmail
-      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=${PAGE_SIZE}&offset=${offset}&sortDir=${encodeURIComponent(currentSortDir)}`;
-      if (folderId) {
-        url += `&folderId=${encodeURIComponent(folderId)}`;
-      }
+      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(
+        ed
+      )}&limit=${limit}&offset=${offset}`;
+      if (folderId) url += `&folderId=${encodeURIComponent(folderId)}`;
       const r = await fetch(url);
-      return await r.json();
+      const data = await r.json();
+      if (
+        !skipFreeFallback &&
+        ed === 'free' &&
+        offset === 0 &&
+        data.status === 'OK' &&
+        (!data.jobsInfoDtos || data.jobsInfoDtos.length === 0)
+      ) {
+        return fetchJobsBatch('ent', offset, limit, true);
+      }
+      return { data, editionUsed: ed };
     }
 
-    function sortJobsByCreation(jobs) {
-      return jobs.slice().sort((a, b) => {
-        const ta = convertDateStringToDate(a.dtCreation)?.getTime() || 0;
-        const tb = convertDateStringToDate(b.dtCreation)?.getTime() || 0;
-        return currentSortDir === 'asc' ? ta - tb : tb - ta;
-      });
+    async function fetchRemainingBatches(ed) {
+      let offset = FETCH_LIMIT_INITIAL;
+      while (offset < FETCH_LIMIT_TOTAL && activeLoadToken === loadId) {
+        const { data } = await fetchJobsBatch(ed, offset, FETCH_LIMIT_INITIAL, true);
+        if (activeLoadToken !== loadId) return;
+        const batch = data.jobsInfoDtos || [];
+        if (batch.length === 0) break;
+        allJobsCache = (allJobsCache || []).concat(batch);
+        await loadPageFromCache(paginationState.currentPage, { keepRender: true });
+        if (batch.length < FETCH_LIMIT_INITIAL) break;
+        offset += FETCH_LIMIT_INITIAL;
+      }
+      if (activeLoadToken === loadId) {
+        cacheTotalKnown = true;
+        console.info('[Agilo] fetch all complete', allJobsCache?.length || 0, 'jobs');
+        await loadPageFromCache(paginationState.currentPage, { keepRender: true });
+      }
     }
 
-    async function loadPage(pageIndex) {
+    function renderRows(jobs) {
+      container.innerHTML = '';
+      if (jobs.length === 0) {
+        renderEmptyState(container);
+        return;
+      }
+      jobs.forEach((job) =>
+        buildJobRow({
+          job,
+          userEmail,
+          token,
+          edition,
+          template: templateEl.content,
+          container
+        })
+      );
+      initializeBulkActions();
+    }
+
+    async function loadPageFromCache(pageIndex, opts = {}) {
       if (activeLoadToken !== loadId) return;
+      if (!allJobsCache) return;
 
       page = Math.max(0, pageIndex);
       paginationState.currentPage = page;
       updateUrlPage(page);
-      renderLoadingState(container);
 
-      try {
-        let data = await getJobs(edition, page);
+      const sorted = sortJobsByCreation(allJobsCache);
+      const start = page * PAGE_SIZE;
+      const pageJobs = sorted.slice(start, start + PAGE_SIZE);
 
-        if (activeLoadToken !== loadId) return;
+      if (pageJobs.length === 0 && page > 0) {
+        return loadPageFromCache(0);
+      }
 
-        // FALLBACK LOGIQUE : Si vide en "free", on regarde en "ent" (Business)
-        if ((!data.jobsInfoDtos || data.jobsInfoDtos.length === 0) && edition === 'free') {
-          console.log("[Agilo] Aucun job en 'free', tentative de secours en 'ent' pour :", userEmail);
-          const fallbackData = await getJobs('ent', page);
-          if (fallbackData.status === 'OK' && fallbackData.jobsInfoDtos?.length > 0) {
-            data = fallbackData;
-            edition = 'ent';
-          }
-        }
+      paginationState.totalJobs = sorted.length;
+      paginationState.hasMore = start + PAGE_SIZE < sorted.length;
+      paginationState.pageItemCount = pageJobs.length;
 
-        if (activeLoadToken !== loadId) return;
-
-        if (data.status !== 'OK') {
-          container.innerHTML =
-            '<div class="agilo-loading-row">Impossible de charger vos transcriptions.</div>';
-          return;
-        }
-
-        const jobs = sortJobsByCreation(data.jobsInfoDtos || []);
-
-        if (jobs.length === 0 && page > 0) {
-          return loadPage(0);
-        }
-
-        paginationState.totalJobs = extractTotalFromResponse(data);
-        paginationState.hasMore = jobs.length >= PAGE_SIZE;
-        paginationState.pageItemCount = jobs.length;
-
-        container.innerHTML = '';
-
-        if (jobs.length === 0) {
-          renderEmptyState(container);
-          renderPaginationWidget(paginationState, (nextPage) => {
-            if (nextPage < 0) return;
-            loadPage(nextPage);
-          });
-          try {
-            window.__agiloMesTranscriptsFolderBridge?.apply?.();
-          } catch (_) {}
-          return;
-        }
-
-        jobs.forEach((job) =>
-          buildJobRow({
-            job,
-            userEmail,
-            token,
-            edition,
-            template: templateEl.content,
-            container
-          })
-        );
-
-        initializeBulkActions();
+      if (!opts.keepRender) {
+        renderRows(pageJobs);
         bindSortToggle();
-
-        renderPaginationWidget(paginationState, (nextPage) => {
-          if (nextPage < 0) return;
-          loadPage(nextPage);
-          container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-
         try {
           window.__agiloMesTranscriptsFolderBridge?.apply?.();
         } catch (_) {}
-      } catch (err) {
-        if (activeLoadToken !== loadId) return;
-        console.error('[Agilo] Execution error:', err);
-        container.innerHTML =
-          '<div class="agilo-loading-row">Erreur lors du chargement. Réessayez.</div>';
       }
+
+      renderPaginationWidget(paginationState, (nextPage) => {
+        if (nextPage < 0) return;
+        loadPageFromCache(nextPage);
+        if (!opts.keepRender) container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
+    loadPageFromCacheFn = loadPageFromCache;
+
+    async function ensureJobsLoaded() {
+      if (newCacheKey === cacheKey && allJobsCache) {
+        await loadPageFromCache(page);
+        return allJobsCache;
+      }
+
+      invalidateCache('new-load');
+      cacheKey = newCacheKey;
+      cacheTotalKnown = false;
+      renderLoadingState(container);
+
+      const t0 = performance.now();
+      let batchResult;
+      try {
+        batchResult = await fetchJobsBatch(edition, 0, FETCH_LIMIT_INITIAL, false);
+      } catch (err) {
+        console.warn('[Agilo] fetch retry after error', err);
+        batchResult = await fetchJobsBatch(edition, 0, FETCH_LIMIT_INITIAL, false);
+      }
+
+      if (activeLoadToken !== loadId) return null;
+
+      const { data, editionUsed } = batchResult;
+      if (editionUsed === 'ent' && edition === 'free') {
+        edition = 'ent';
+        cacheKey = `${edition}|${folderId}`;
+      }
+
+      if (data.status !== 'OK') {
+        container.innerHTML =
+          '<div class="agilo-loading-row">Erreur de chargement. <button type="button" onclick="location.reload()" style="margin-left:8px;padding:4px 10px;cursor:pointer;">Réessayer</button></div>';
+        return null;
+      }
+
+      allJobsCache = data.jobsInfoDtos || [];
+      console.info(
+        '[Agilo] fetch all start',
+        allJobsCache.length,
+        'in',
+        Math.round(performance.now() - t0),
+        'ms'
+      );
+
+      await loadPageFromCache(page);
+
+      if (allJobsCache.length >= FETCH_LIMIT_INITIAL) {
+        fetchRemainingBatches(edition).catch((e) =>
+          console.warn('[Agilo] bg fetch err', e)
+        );
+      } else {
+        cacheTotalKnown = true;
+        await loadPageFromCache(page, { keepRender: true });
+      }
+
+      startPolling(edition, userEmail, token);
+      return allJobsCache;
     }
 
     window.__agiloMesTranscriptsReload = (nextPage) => {
+      invalidateCache('manual-reload');
       const p =
         typeof nextPage === 'number' && nextPage >= 0 ? nextPage : readPageFromUrl();
       if (lastKnownToken) return mainScriptExecution(lastKnownToken, p);
     };
 
-    await loadPage(page);
+    try {
+      await ensureJobsLoaded();
+    } catch (err) {
+      if (activeLoadToken !== loadId) return;
+      console.error('[Agilo] fetch all failed', err);
+      container.innerHTML =
+        '<div class="agilo-loading-row">Erreur de chargement. <button type="button" onclick="location.reload()" style="margin-left:8px;padding:4px 10px;cursor:pointer;">Réessayer</button></div>';
+    }
   }
 
   function resetPaginationOnNavigation() {
+    invalidateCache('folder-nav');
     updateUrlPage(0);
     if (lastKnownToken) mainScriptExecution(lastKnownToken, 0);
   }
@@ -1106,6 +1240,34 @@
   window.addEventListener('agilo:nav-folder-url-changed', () => {
     if (!/\/mes-transcripts(\/|$)/.test(location.pathname || '')) return;
     resetPaginationOnNavigation();
+  });
+
+  window.addEventListener('agilo:job-deleted', (e) => {
+    if (allJobsCache && e.detail?.jobId) {
+      allJobsCache = allJobsCache.filter(
+        (j) => String(j.jobid) !== String(e.detail.jobId)
+      );
+      if (loadPageFromCacheFn) loadPageFromCacheFn(paginationState.currentPage);
+    }
+  });
+
+  window.addEventListener('agilo:job-renamed', (e) => {
+    if (allJobsCache && e.detail?.jobId) {
+      const job = allJobsCache.find((j) => String(j.jobid) === String(e.detail.jobId));
+      if (job && e.detail.jobTitle != null) job.jobTitle = e.detail.jobTitle;
+      if (loadPageFromCacheFn) loadPageFromCacheFn(paginationState.currentPage);
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (
+      e.target.closest('.delete-job-button_to-confirm, #agilo-bulk-folder-apply, .delete-job-button')
+    ) {
+      setTimeout(() => invalidateCache('dom-action'), 800);
+      setTimeout(() => {
+        if (lastKnownToken) mainScriptExecution(lastKnownToken, paginationState.currentPage);
+      }, 1000);
+    }
   });
 
   const tmr = setInterval(() => {

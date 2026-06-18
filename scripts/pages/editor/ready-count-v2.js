@@ -1,8 +1,10 @@
-// Agilotext - Ready Count v2 (limit=200, affichage 200+)
+// Agilotext - Ready Count v2.2.0-fullclient (limit=2000, vrai compteur)
 // Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
 
 (function () {
   'use strict';
+
+  window.__agiloReadyCountVersion = '2.2.0-fullclient';
 
   let checkTokenInterval = null;
 
@@ -72,7 +74,7 @@
       encodeURIComponent(token) +
       '&edition=' +
       encodeURIComponent(edition) +
-      '&limit=200&offset=0';
+      '&limit=2000&offset=0';
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
@@ -96,11 +98,9 @@
               readyCount++;
             }
           });
-          const isSaturated = jobs.length >= 200;
           const countEl = document.getElementById('readyCount');
           if (countEl) {
-            countEl.textContent =
-              isSaturated && readyCount >= 200 ? '200+' : String(readyCount);
+            countEl.textContent = String(readyCount);
           }
         } else {
           if (window.AGILO_DEBUG) console.error('[ready-count] API:', data.errorMessage);

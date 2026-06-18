@@ -4,12 +4,12 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.8.1-v2' };
+  window.__agiloRail = { version: '4.9.0-fullclient' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
-  const RAIL_PAGE_SIZE = 50;
+  const RAIL_FETCH_LIMIT = 2000;
   // Anti-clics frénétiques : n'expédier que le dernier changement
 const DISPATCH_DEBOUNCE_MS = 500;
 let __pendingLoadTimer = null;
@@ -372,8 +372,8 @@ let __pendingLoadTimer = null;
   async function fetchJobs(auth, retried = false, overrideFilter, options = {}){
     const ff = overrideFilter !== undefined ? overrideFilter : state.folderFilter;
     const offset = Number(options.offset) >= 0 ? Number(options.offset) : 0;
-    const limit = Number(options.limit) > 0 ? Number(options.limit) : RAIL_PAGE_SIZE;
-    let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=${limit}&offset=${offset}&sortDir=desc`;
+    const limit = Number(options.limit) > 0 ? Number(options.limit) : RAIL_FETCH_LIMIT;
+    let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=${limit}&offset=${offset}`;
     if (ff === 'root') {
       url += '&folderId=0';
     } else if (typeof ff === 'number' && ff > 0) {
@@ -663,7 +663,7 @@ let __pendingLoadTimer = null;
     if (state.folderFilter === 'all') {
       const hint = document.createElement('div');
       hint.className = 'rail-empty-hint';
-      hint.textContent = 'Les compteurs sur les dossiers peuvent inclure des transcripts au-delà des 50 derniers affichés dans cette liste.';
+      hint.textContent = 'Les compteurs sur les dossiers peuvent inclure des transcripts au-delà de la fenêtre affichée.';
       rail.list.appendChild(hint);
     }
     rail.list.removeAttribute('aria-busy');
@@ -760,36 +760,6 @@ let __pendingLoadTimer = null;
 
   function updateRailLoadMoreButton() {
     removeRailLoadMore();
-    if (!state.railHasMore || !rail.list) return;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'agilo-rail-load-more';
-    btn.className = 'agilo-rail-load-more';
-    btn.style.cssText =
-      'display:block;width:calc(100% - 16px);margin:8px auto;padding:10px 12px;border:1px solid rgba(82,82,82,.2);border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#525252;';
-    btn.textContent = state.railLoadingMore ? 'Chargement…' : `Charger ${RAIL_PAGE_SIZE} de plus`;
-    btn.disabled = !!state.railLoadingMore;
-    btn.addEventListener('click', async () => {
-      if (state.railLoadingMore) return;
-      state.railLoadingMore = true;
-      updateRailLoadMoreButton();
-      try {
-        const auth = await ensureAuth();
-        const batch = await fetchJobs(auth, false, state.folderFilter, {
-          offset: state.railOffset,
-          limit: RAIL_PAGE_SIZE
-        });
-        appendRailItems(batch);
-        state.railOffset += batch.length;
-        state.railHasMore = !!batch.__hasMore;
-      } catch (e) {
-        if (state.debug) console.warn('[Rail] load more', e);
-      } finally {
-        state.railLoadingMore = false;
-        updateRailLoadMoreButton();
-      }
-    });
-    rail.list.appendChild(btn);
   }
 
   function appendRailItems(jobs) {
@@ -815,7 +785,7 @@ let __pendingLoadTimer = null;
     });
 
     state.railOffset = jobs.length;
-    state.railHasMore = !!jobs.__hasMore;
+    state.railHasMore = false;
 
     const saved = localStorage.getItem('agilo:rail:sort') || 'desc';
     sortRail(saved === 'asc');
