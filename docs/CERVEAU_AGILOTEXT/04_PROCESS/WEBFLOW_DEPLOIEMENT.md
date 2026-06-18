@@ -51,8 +51,16 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 |------|------|-------|-------|
 | 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
 | 2026-06-16 | `aadc13c` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
+| 2026-06-18 | `2b4de42` | agilotext-test uniquement | v2.2.0-fullclient — fetch all + pagination client (API ignore sortDir) |
 
-## Pagination v2 (test only)
+## Pagination v2 — rollback chain (agilotext-test)
+
+| Hash | Version | Usage |
+|------|---------|-------|
+| `2b4de42` | v2.2.0-fullclient | **Actuel test** — fetch 100→2000, tri client |
+| `510e365` | v2.1.0-sort | Hotfix tri (pagination serveur, bug ordre) |
+| `aadc13c` | v2.0 | Pagination serveur initiale |
+| `0de4923` | v1 prod | Rollback total (limit 2000, tri inline Webflow) |
 
 Voir [`docs/webflow-embeds/mes-transcripts-pagination-v2.md`](../../webflow-embeds/mes-transcripts-pagination-v2.md).
 
