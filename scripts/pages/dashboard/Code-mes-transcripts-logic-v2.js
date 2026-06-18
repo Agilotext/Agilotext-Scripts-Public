@@ -40,7 +40,8 @@
       '#agilo-pagination .agilo-page-info{color:#6b7280;}' +
       '.agilo-loading-row{grid-column:1/-1;padding:40px 20px;text-align:center;color:#6b7280;font-size:14px;}' +
       '#sort-button[data-agilo-pagination-hidden],.sort-wrapper[data-agilo-pagination-hidden]{display:none!important;}' +
-      '#agilo-bulk-page-hint{font-size:12px;color:#6b7280;margin-left:8px;font-weight:400;}';
+      '.agilo-bulk-count-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.1;}' +
+      '#agilo-bulk-page-hint{font-size:11px;color:#9ca3af;font-weight:400;letter-spacing:.01em;font-style:italic;}';
     document.head.appendChild(style);
   })();
 
@@ -88,12 +89,20 @@
       return;
     }
     if (!hint && bar) {
-      hint = document.createElement('span');
+      hint = document.createElement('small');
       hint.id = 'agilo-bulk-page-hint';
-      hint.textContent = 'Sélection limitée à la page courante';
+      hint.title = 'La sélection se limite aux 25 lignes de la page actuelle.';
+      hint.textContent = 'Cette page uniquement';
       const countEl = document.getElementById('selected-count');
-      if (countEl && countEl.parentNode) countEl.parentNode.insertBefore(hint, countEl.nextSibling);
-      else bar.appendChild(hint);
+      if (countEl && countEl.parentNode) {
+        const wrap = countEl.closest('.bulk-actions-count-wrap') || countEl.parentNode;
+        if (!wrap.classList.contains('agilo-bulk-count-wrap')) {
+          wrap.classList.add('agilo-bulk-count-wrap');
+        }
+        wrap.appendChild(hint);
+      } else {
+        bar.appendChild(hint);
+      }
     }
   }
 

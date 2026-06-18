@@ -422,17 +422,12 @@
       const s = String(val ?? '');
       return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;
     }
-    function paginationHint() {
-      const p = window.__agiloMesTranscriptsPagination;
-      if (p && p.enabled && p.hasMultiplePages) return ' (page courante)';
-      return '';
-    }
     function setSelectAllState() {
       const all = Array.from(document.querySelectorAll(`${SELECTORS.container} ${SELECTORS.row} .job-select`));
       const checked = all.filter(i => i.checked);
       const selectAll = document.querySelector(SELECTORS.selectAll);
       const countEl = document.querySelector(SELECTORS.selectedCount);
-      if (countEl) countEl.textContent = `${checked.length} sélectionné(s)${paginationHint()}`;
+      if (countEl) countEl.textContent = `${checked.length} sélectionné(s)`;
       if (!selectAll) return;
       if (checked.length === 0) { selectAll.checked = false; selectAll.indeterminate = false; }
       else if (checked.length === all.length) { selectAll.checked = true; selectAll.indeterminate = false; }
