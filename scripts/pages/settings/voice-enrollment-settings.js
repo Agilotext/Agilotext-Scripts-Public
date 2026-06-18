@@ -5,7 +5,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
-        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@eb5f3b0/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice21"></script>
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@2d0a8ee/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice22"></script>
    ================================================================ */
 
 (function () {
