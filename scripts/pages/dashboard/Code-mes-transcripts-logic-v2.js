@@ -39,10 +39,9 @@
       '#agilo-pagination button:disabled{opacity:.4;cursor:default;}' +
       '#agilo-pagination .agilo-page-info{color:#6b7280;}' +
       '.agilo-loading-row{grid-column:1/-1;padding:40px 20px;text-align:center;color:#6b7280;font-size:14px;}' +
-      '#sort-button[data-agilo-pagination-hidden],.sort-wrapper[data-agilo-pagination-hidden]{display:none!important;}' +
-      '.agilo-bulk-count-wrap{display:inline-flex;flex-direction:column;align-items:flex-start;gap:2px;line-height:1.1;}' +
-      '#agilo-bulk-page-hint{font-size:11px;color:#9ca3af;font-weight:400;letter-spacing:.01em;font-style:italic;}';
+      '#sort-button[data-agilo-pagination-hidden],.sort-wrapper[data-agilo-pagination-hidden]{display:none!important;}';
     document.head.appendChild(style);
+    cleanupBulkPageHint();
   })();
 
   function readPageFromUrl() {
@@ -81,29 +80,12 @@
     });
   }
 
-  function ensureBulkPageHint(hasMultiplePages) {
-    let hint = document.getElementById('agilo-bulk-page-hint');
-    const bar = document.querySelector('.bulk-actions-bar');
-    if (!hasMultiplePages) {
-      if (hint) hint.remove();
-      return;
-    }
-    if (!hint && bar) {
-      hint = document.createElement('small');
-      hint.id = 'agilo-bulk-page-hint';
-      hint.title = 'La sélection se limite aux 25 lignes de la page actuelle.';
-      hint.textContent = 'Cette page uniquement';
-      const countEl = document.getElementById('selected-count');
-      if (countEl && countEl.parentNode) {
-        const wrap = countEl.closest('.bulk-actions-count-wrap') || countEl.parentNode;
-        if (!wrap.classList.contains('agilo-bulk-count-wrap')) {
-          wrap.classList.add('agilo-bulk-count-wrap');
-        }
-        wrap.appendChild(hint);
-      } else {
-        bar.appendChild(hint);
-      }
-    }
+  function cleanupBulkPageHint() {
+    const hint = document.getElementById('agilo-bulk-page-hint');
+    if (hint) hint.remove();
+    document.querySelectorAll('.agilo-bulk-count-wrap').forEach((el) => {
+      el.classList.remove('agilo-bulk-count-wrap');
+    });
   }
 
   function getPaginationMount() {
@@ -130,7 +112,6 @@
     if (!showPager && pageItemCount === 0) {
       mount.innerHTML = '';
       mount.hidden = true;
-      ensureBulkPageHint(false);
       return;
     }
 
@@ -152,7 +133,6 @@
     if (prev) prev.addEventListener('click', () => onPageChange(currentPage - 1));
     if (next) next.addEventListener('click', () => onPageChange(currentPage + 1));
 
-    ensureBulkPageHint(showPager);
     hideSortControlsForPagination();
 
     window.__agiloMesTranscriptsPagination = {
