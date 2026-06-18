@@ -4,7 +4,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
-        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@c42e9f5/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice20"></script>
+        <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@COMMIT_SHA/scripts/pages/settings/voice-enrollment-settings.js?v=1.09-voice21"></script>
    ================================================================ */
 
 (function () {
@@ -235,8 +235,25 @@
     return (String(voiceOrFirst || '').trim() + ' ' + String(lastName || '').trim()).trim();
   }
 
-  function buildDefaultDisplayName(creds) {
+  function buildDefaultDisplayName(creds, opts) {
+    opts = opts || {};
+    if (opts.batchActive) return '';
+    if (opts.forceEmpty) return '';
     return formatDisplayName(creds) || '';
+  }
+
+  function getRemainingSlots(voices, maxVoices) {
+    if (!maxVoices) return Infinity;
+    return Math.max(0, maxVoices - (voices ? voices.length : 0));
+  }
+
+  function trackVoiceEnrollmentEvent(creds, payload) {
+    if (!window.posthog || typeof window.posthog.capture !== 'function') return;
+    try {
+      window.posthog.capture('voice_enrollment_succeeded', Object.assign({
+        edition: creds && creds.edition ? creds.edition : ''
+      }, payload || {}));
+    } catch (e) { /* noop */ }
   }
 
   function measureAudioDuration(file) {
@@ -833,7 +850,14 @@
       '.agilo-voice-drop-zone strong{display:block;margin-bottom:6px;color:var(--color--gris_foncé,#020202);font-size:1rem}',
       '.agilo-voice-drop-zone.is-dragover{border-color:var(--color--blue,#174a96);background:#edf4ff}',
       '.agilo-voice-drop-zone.is-filled{border-style:solid;border-color:rgba(23,74,150,.35);background:rgba(23,74,150,.04)}',
-      '.agilo-voice-submit-row{margin-top:.5rem}',
+      '.agilo-voice-submit-row{margin-top:.5rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
+      '.agilo-voice-submit-row .agilo-voice-btn-submit{margin:0}',
+      '.agilo-voice-submit-row .agilo-voice-submit-and-next{margin:0}',
+      '.agilo-voice-batch-banner{margin:12px 0;padding:12px 14px;border-radius:' + AGILO_RADIUS + ';background:rgba(23,74,150,.06);border:1px solid rgba(23,74,150,.18)}',
+      '.agilo-voice-batch-banner-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}',
+      '.agilo-voice-batch-count{font-size:.85rem;color:var(--color--blue,#174a96);font-weight:600}',
+      '.agilo-voice-batch-list{margin:8px 0 12px;padding-left:1.2rem;font-size:.9rem}',
+      '.agilo-voice-batch-list li{margin-bottom:2px}',
       '.agilo-voice-free-upsell-block{display:flex;flex-direction:column;align-items:center;text-align:center;padding:8px 0 4px}',
       '.agilo-voice-benefits{margin:14px 0 18px;padding:0 0 0 1.1rem;text-align:left;color:var(--color--gris,#525252);font-size:.9rem;line-height:1.55}',
       '.agilo-voice-benefits li{margin-bottom:6px}',
@@ -960,6 +984,58 @@
     if (typeof reloadFn === 'function') await reloadFn();
   }
 
+  var BATCH_KEY = 'agilo-voice-batch';
+
+  var VoiceBatchSession = {
+    read: function () {
+      try {
+        var raw = sessionStorage.getItem(BATCH_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (e) {
+        return null;
+      }
+    },
+    isActive: function () {
+      var s = this.read();
+      return !!(s && s.active);
+    },
+    start: function (creds) {
+      var payload = {
+        active: true,
+        username: creds.username,
+        edition: creds.edition,
+        addedVoices: [],
+        startedAt: Date.now()
+      };
+      try { sessionStorage.setItem(BATCH_KEY, JSON.stringify(payload)); } catch (e) { /* noop */ }
+      return payload;
+    },
+    push: function (voice) {
+      var s = this.read();
+      if (!s || !s.active) return;
+      s.addedVoices.push({ voiceId: voice.voiceId, name: voice.voiceName });
+      try { sessionStorage.setItem(BATCH_KEY, JSON.stringify(s)); } catch (e) { /* noop */ }
+    },
+    count: function () {
+      var s = this.read();
+      return s && s.addedVoices ? s.addedVoices.length : 0;
+    },
+    list: function () {
+      var s = this.read();
+      return s && s.addedVoices ? s.addedVoices.slice() : [];
+    },
+    end: function () {
+      try { sessionStorage.removeItem(BATCH_KEY); } catch (e) { /* noop */ }
+    }
+  };
+
+  function ensureVoiceBatchSessionForUser(creds) {
+    var existing = VoiceBatchSession.read();
+    if (existing && existing.username && existing.username !== creds.username) {
+      VoiceBatchSession.end();
+    }
+  }
+
   function findVoiceItemByFlash(container, flash) {
     if (!container || !flash) return null;
     if (flash.voiceId) {
@@ -981,13 +1057,21 @@
     setStatusEl(statusEl, flash.type || 'success', flash.message);
     if (statusEl) statusEl.setAttribute('aria-live', 'polite');
 
-    var highlightEl = findVoiceItemByFlash(container, flash);
-    if (highlightEl) {
-      highlightEl.classList.add('is-new');
-      setTimeout(function () { highlightEl.classList.remove('is-new'); }, 3000);
+    var highlightEl = null;
+    if (!flash.batchActive) {
+      highlightEl = findVoiceItemByFlash(container, flash);
+      if (highlightEl) {
+        highlightEl.classList.add('is-new');
+        setTimeout(function () { highlightEl.classList.remove('is-new'); }, 3000);
+      }
     }
 
     setTimeout(function () {
+      if (flash.batchActive) {
+        var batchBanner = container.querySelector('.agilo-voice-batch-banner');
+        scrollToEl(batchBanner || statusEl, SCROLL_OFFSET);
+        return;
+      }
       scrollToEl(highlightEl || statusEl, SCROLL_OFFSET);
     }, 100);
   }
@@ -1003,11 +1087,12 @@
     return toast;
   }
 
-  function closeVoiceFormPanels(container) {
+  function closeVoiceFormPanels(container, opts) {
+    opts = opts || {};
     var addPanel = document.getElementById('agilo-voice-add-panel');
-    if (addPanel) addPanel.classList.remove('is-open');
+    if (addPanel && !opts.keepAddPanelOpen) addPanel.classList.remove('is-open');
     var toggleAdd = document.getElementById('agilo-voice-toggle-add');
-    if (toggleAdd) {
+    if (toggleAdd && !opts.keepAddPanelOpen) {
       toggleAdd.innerHTML = '<span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix';
     }
     if (container && container.classList && container.classList.contains('agilo-voice-panel')) {
@@ -1015,12 +1100,76 @@
     }
   }
 
+  function mountBatchBanner(container, reload) {
+    var addSection = container.querySelector('#agilo-voice-add-panel');
+    if (!addSection || !addSection.parentNode) return null;
+
+    var existing = addSection.parentNode.querySelector('.agilo-voice-batch-banner');
+    if (existing) existing.remove();
+
+    var added = VoiceBatchSession.list();
+    var batchBanner = document.createElement('div');
+    batchBanner.className = 'agilo-voice-batch-banner';
+    batchBanner.setAttribute('role', 'status');
+    batchBanner.setAttribute('aria-live', 'polite');
+    batchBanner.innerHTML = [
+      '<div class="agilo-voice-batch-banner-head">',
+      '  <strong>Session d\'enregistrement</strong>',
+      '  <span class="agilo-voice-batch-count">' + added.length + ' voix ajoutée' + (added.length > 1 ? 's' : '') + '</span>',
+      '</div>',
+      added.length ? ('<ul class="agilo-voice-batch-list">' + added.map(function (v) {
+        return '<li>' + escapeHtml(v.name) + '</li>';
+      }).join('') + '</ul>') : '',
+      '<button type="button" class="agilo-voice-btn agilo-voice-btn-ghost" id="agilo-voice-batch-end">Terminer la session</button>'
+    ].join('');
+    addSection.parentNode.insertBefore(batchBanner, addSection);
+
+    var endBtn = batchBanner.querySelector('#agilo-voice-batch-end');
+    if (endBtn) {
+      endBtn.addEventListener('click', function () {
+        VoiceBatchSession.end();
+        reload();
+      });
+    }
+    return batchBanner;
+  }
+
+  function mountBatchAddPanel(container, creds, reload, statusEl, remainingSlots) {
+    var addPanel = container.querySelector('#agilo-voice-add-panel');
+    var toggleAdd = container.querySelector('#agilo-voice-toggle-add');
+    if (!addPanel || !toggleAdd) return;
+
+    addPanel.classList.add('is-open');
+    addPanel.dataset.mounted = '1';
+    toggleAdd.innerHTML = 'Masquer le formulaire';
+    mountBatchBanner(container, reload);
+    mountRecordForm(addPanel, creds, {
+      onSuccess: reload,
+      remainingSlots: remainingSlots
+    }, statusEl);
+
+    setTimeout(function () {
+      var nameInput = addPanel.querySelector('#agilo-voice-display-name');
+      if (nameInput) nameInput.focus();
+    }, 50);
+  }
+
   function mountRecordForm(container, creds, options, statusEl) {
     options = options || {};
     var locked = !!options.lockNames;
+    var batchActive = VoiceBatchSession.isActive();
+    var remainingSlots = options.remainingSlots != null ? options.remainingSlots : Infinity;
     var displayName = options.displayName != null
       ? String(options.displayName).trim()
-      : buildDefaultDisplayName(creds);
+      : buildDefaultDisplayName(creds, { batchActive: batchActive });
+
+    var submitPrimaryLabel = (batchActive && remainingSlots <= 1)
+      ? 'Enregistrer cette voix'
+      : (batchActive ? 'Enregistrer et continuer' : 'Enregistrer cette voix');
+    var submitSecondaryLabel = batchActive ? 'Terminer' : 'Enregistrer et en ajouter une autre';
+    var submitPrimaryClass = 'agilo-voice-btn-submit button save';
+    var submitSecondaryClass = 'agilo-voice-btn agilo-voice-btn-ghost agilo-voice-submit-and-next';
+    var showSecondarySubmit = !locked;
 
     container.innerHTML = [
       '<div class="agilo-voice-record-area">',
@@ -1045,7 +1194,8 @@
       '  <audio class="agilo-voice-audio" id="agilo-voice-preview"></audio>',
       '  <p class="agilo-voice-hint" id="agilo-voice-hint">Parlez clairement, seul(e), 15 à 45 secondes.</p>',
       '  <div class="agilo-voice-submit-row">',
-      '    <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer cette voix</button>',
+      '    <button type="button" class="' + submitPrimaryClass + '" id="agilo-voice-submit">' + submitPrimaryLabel + '</button>',
+      showSecondarySubmit ? ('    <button type="button" class="' + submitSecondaryClass + '" id="agilo-voice-submit-and-next">' + submitSecondaryLabel + '</button>') : '',
       '  </div>',
       '  <div class="agilo-voice-form-toast" role="status" hidden></div>',
       '  <button type="button" class="agilo-voice-file-alt" id="agilo-voice-file-alt">Importer un fichier audio à la place</button>',
@@ -1075,10 +1225,20 @@
       dropZone: container.querySelector('#agilo-voice-drop-zone'),
       fileAlt: container.querySelector('#agilo-voice-file-alt'),
       fileInput: container.querySelector('#agilo-voice-file'),
-      submitBtn: container.querySelector('#agilo-voice-submit')
+      submitBtn: container.querySelector('#agilo-voice-submit'),
+      submitAndNextBtn: container.querySelector('#agilo-voice-submit-and-next')
     };
 
-    applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
+    applyWebflowSaveButton(els.submitBtn, submitPrimaryLabel);
+
+    if (els.submitAndNextBtn && remainingSlots <= 1 && !locked) {
+      els.submitAndNextBtn.disabled = true;
+      if (batchActive) {
+        els.submitAndNextBtn.style.display = 'none';
+      } else {
+        els.submitAndNextBtn.title = 'Dernière voix disponible — cliquez sur « Enregistrer cette voix »';
+      }
+    }
 
     function formatTime(ms) {
       var sec = Math.floor(ms / 1000);
@@ -1344,7 +1504,7 @@
       await applySelectedFile(els.fileInput.files[0]);
     });
 
-    els.submitBtn.addEventListener('click', async function () {
+    async function submitVoice(continueBatch) {
       setStatusEl(statusEl, '', '');
       var nameErr = validateDisplayName(els.displayName.value);
       if (nameErr) {
@@ -1368,30 +1528,78 @@
         setStatusEl(statusEl, 'error', ERROR_MESSAGES.error_voice_file_duration_too_short);
         return;
       }
+
+      var wasBatchActive = VoiceBatchSession.isActive();
+      var endBatchAfterSubmit = wasBatchActive && !continueBatch;
+      var startBatchAfterSubmit = continueBatch && !wasBatchActive;
+
       els.submitBtn.disabled = true;
+      if (els.submitAndNextBtn) els.submitAndNextBtn.disabled = true;
       els.hero.style.pointerEvents = 'none';
       applyWebflowSaveButton(els.submitBtn, 'Envoi en cours…');
       setStatusEl(statusEl, 'info', 'Envoi de l\'empreinte vocale…');
       try {
         var result = await enrollSpeakerVoice(creds, split.firstName, split.lastName, voiceFile);
-        var successMsg = 'Voix enregistrée avec succès !';
-        var toastEl = showFormToast(els.recordArea, 'success', successMsg);
-        scrollToEl(toastEl, SCROLL_OFFSET);
-        closeVoiceFormPanels(container);
+        var voiceName = els.displayName.value.trim();
+
+        var batchCountForEvent = 0;
+        if (startBatchAfterSubmit || continueBatch || wasBatchActive) {
+          if (startBatchAfterSubmit) VoiceBatchSession.start(creds);
+          VoiceBatchSession.push({ voiceId: result.voiceId, voiceName: voiceName });
+          batchCountForEvent = VoiceBatchSession.count();
+        }
+
+        if (endBatchAfterSubmit || (VoiceBatchSession.isActive() && remainingSlots <= 1)) {
+          VoiceBatchSession.end();
+        }
+
+        var batchStillActive = VoiceBatchSession.isActive();
+        var totalBatch = batchStillActive ? VoiceBatchSession.count() : batchCountForEvent;
+        var successMsg = batchStillActive || continueBatch
+          ? 'Voix « ' + voiceName + ' » ajoutée (' + totalBatch + ' au total).'
+          : (wasBatchActive && !batchStillActive
+            ? 'Voix « ' + voiceName + ' » ajoutée. Session terminée.'
+            : 'Voix enregistrée avec succès !');
+
+        trackVoiceEnrollmentEvent(creds, {
+          batch_active: batchStillActive,
+          batch_count: batchCountForEvent
+        });
+
+        showFormToast(els.recordArea, 'success', successMsg);
+        closeVoiceFormPanels(container, { keepAddPanelOpen: batchStillActive });
         await flashAndReload({
           type: 'success',
           message: successMsg,
           voiceId: result.voiceId,
-          voiceName: els.displayName.value.trim()
+          voiceName: voiceName,
+          batchActive: batchStillActive
         }, options.onSuccess);
       } catch (e) {
         setStatusEl(statusEl, 'error', e.message || 'Impossible d\'enregistrer cette voix.');
         els.submitBtn.disabled = false;
+        if (els.submitAndNextBtn && !(remainingSlots <= 1 && !locked)) {
+          els.submitAndNextBtn.disabled = false;
+        }
         els.hero.style.pointerEvents = '';
-        applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
+        applyWebflowSaveButton(els.submitBtn, submitPrimaryLabel);
         updateUIState();
       }
-    });
+    }
+
+    if (batchActive && remainingSlots <= 1 && !locked) {
+      els.submitBtn.addEventListener('click', function () { submitVoice(false); });
+    } else if (batchActive) {
+      els.submitBtn.addEventListener('click', function () { submitVoice(true); });
+      if (els.submitAndNextBtn) {
+        els.submitAndNextBtn.addEventListener('click', function () { submitVoice(false); });
+      }
+    } else {
+      els.submitBtn.addEventListener('click', function () { submitVoice(false); });
+      if (els.submitAndNextBtn) {
+        els.submitAndNextBtn.addEventListener('click', function () { submitVoice(true); });
+      }
+    }
 
     updateUIState();
   }
@@ -1485,7 +1693,7 @@
     var addSectionHtml = !isFree && !atQuotaEnroll ? [
       '    <div class="agilo-voice-section">',
       '      <h3 class="agilo-voice-section-title">Ajouter une voix</h3>',
-      '      <p class="agilo-voice-section-desc">Enregistrez directement la voix d\'un collègue présent avec vous — nom affiché et extrait audio de 15 à 45 secondes.</p>',
+      '      <p class="agilo-voice-section-desc">Enregistrez directement la voix d\'un collègue présent avec vous — nom affiché et extrait audio de 15 à 45 secondes. Enregistrez plusieurs collègues d\'affilée avec « Enregistrer et en ajouter une autre ».</p>',
       '      <button type="button" class="agilo-voice-btn agilo-voice-btn-primary" id="agilo-voice-toggle-add"><span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix</button>',
       '      <div class="agilo-voice-panel" id="agilo-voice-add-panel"></div>',
       '    </div>'
@@ -1497,7 +1705,7 @@
 
     var inviteSectionHtml = !isFree ? [
       '    <div class="agilo-voice-section">',
-      '      <h3 class="agilo-voice-section-title">Inviter par email</h3>',
+      '      <h3 class="agilo-voice-section-title">Inviter un collègue à distance par email</h3>',
       '      <p class="agilo-voice-section-desc">Envoyez un lien par email à un collègue distant — aucun compte Agilotext requis pour l\'invité.</p>',
       '      <div class="agilo-voice-name-grid">',
       '        <div><label class="agilo-voice-label" for="agilo-voice-invite-name">Nom affiché</label>',
@@ -1538,6 +1746,15 @@
     var statusEl = container.querySelector('#agilo-voice-main-status');
     var flash = consumeVoiceFlash();
     var isFree = normEdition(creds.edition) === 'free';
+    var voices = data.voices || [];
+    var maxVoices = data.maxVoices || 0;
+    var remainingSlots = getRemainingSlots(voices, maxVoices);
+    var atQuotaEnroll = !isFree && maxVoices > 0 && voices.length >= maxVoices;
+
+    if (VoiceBatchSession.isActive() && remainingSlots === 0) {
+      VoiceBatchSession.end();
+      setStatusEl(statusEl, 'info', 'Quota atteint — nombre maximum de voix atteint sur votre offre. Session terminée.');
+    }
 
     if (flash) applyVoiceFlashUI(container, statusEl, flash);
 
@@ -1677,6 +1894,10 @@
         var id = btn.getAttribute('data-voice-id');
         var panel = container.querySelector('#agilo-voice-replace-' + id);
         if (!panel) return;
+        if (VoiceBatchSession.isActive()) {
+          if (!window.confirm('Terminer la session d\'enregistrement multiple avant de remplacer un audio ?')) return;
+          VoiceBatchSession.end();
+        }
         var isOpen = panel.classList.toggle('is-open');
         if (!isOpen) {
           panel.innerHTML = '';
@@ -1721,9 +1942,17 @@
             : '<span class="agilo-voice-btn-icon" aria-hidden="true">+</span> Ajouter une voix';
           if (isOpen && !addPanel.dataset.mounted) {
             addPanel.dataset.mounted = '1';
-            mountRecordForm(addPanel, creds, { onSuccess: reload }, statusEl);
+            if (VoiceBatchSession.isActive()) mountBatchBanner(container, reload);
+            mountRecordForm(addPanel, creds, {
+              onSuccess: reload,
+              remainingSlots: remainingSlots
+            }, statusEl);
           }
         });
+      }
+
+      if (VoiceBatchSession.isActive() && !atQuotaEnroll) {
+        mountBatchAddPanel(container, creds, reload, statusEl, remainingSlots);
       }
 
       var inviteBtn = container.querySelector('#agilo-voice-send-invite');
@@ -1820,6 +2049,8 @@
       container.innerHTML = '<p style="color:#580808">Impossible de charger vos informations. Rechargez la page.</p>';
       return;
     }
+
+    ensureVoiceBatchSessionForUser(creds);
 
     async function reload() {
       try {
