@@ -1,0 +1,358 @@
+/* Sidebar dashboard — réduction / réouverture (Webflow .dashboard-left) */
+
+.dashboard-left {
+  transition: width 0.25s ease, min-width 0.25s ease;
+}
+
+/*
+ * Webflow empile .wrapper-menu AU-DESSUS du bouton (position:absolute).
+ * Le JS est OK, mais les clics n'atteignaient jamais le bouton en mode ouvert.
+ */
+.dashboard-menu.menu-app {
+  position: relative !important;
+}
+
+.dashboard-menu.menu-app > .button-sidebar,
+.dashboard-menu.menu-app > [data-sidebar-toggle] {
+  position: relative !important;
+  inset: auto !important;
+  z-index: 30 !important;
+  width: auto !important;
+  min-width: 2.75rem !important;
+  height: 2.75rem !important;
+  margin: 0 0 0.5rem auto !important;
+  padding: 0.25rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  pointer-events: auto !important;
+  /* Zone de hit-test opaque (sinon elementFromPoint traverse le fond transparent) */
+  background: rgba(255, 255, 255, 0.01) !important;
+  cursor: pointer !important;
+}
+
+.dashboard-menu.menu-app > .wrapper-menu {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/*
+ * Webflow CSS responsive (≤991px) pose display:none sur .wrapper-menu.
+ * Le dashboard-app n'est pas un navbar marketing — forcer visible sur toutes tailles.
+ */
+.dashboard-left .wrapper-menu {
+  display: flex !important;
+}
+
+/*
+ * Ancien contournement (pointer-events:none sur le logo) — SUPPRIMÉ v1.9.1
+ * Le toggle est désormais position:relative + width:auto (plus de bandeau 100% en absolute
+ * Webflow). Le logo .nav_logo-link redevient cliquable.
+ * Si le toggle redevient difficile à cliquer : ne pas recouper le logo — ajuster
+ * .button-sidebar { width: 2.75rem; margin-left: auto; } uniquement.
+ */
+.dashboard-menu.menu-app .nav_logo-link {
+  position: relative;
+  z-index: 1;
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+.dashboard-menu.menu-app .nav_logo-link .nav_logo,
+.dashboard-menu.menu-app img.nav_logo {
+  pointer-events: none; /* clics sur le <a>, pas l'img */
+}
+
+.dashboard-left.is-collapsed {
+  width: 4.75rem !important;
+  min-width: 4.75rem !important;
+  overflow-x: hidden !important;
+}
+
+/*
+ * BUG ICÔNES INVISIBLES :
+ * Webflow CSS desktop pose min-width:15rem sur .dashboard-menu.menu-app.
+ * Sans override, le container fait 15rem même quand la sidebar est à 4.75rem.
+ * Les .dashboard-link (3rem) centrés via margin:auto se retrouvent à ~6rem du bord
+ * gauche → clippés par overflow-x:hidden. On annule min-width et max-width ici.
+ */
+.dashboard-left.is-collapsed .dashboard-menu,
+.dashboard-left.is-collapsed .wrapper-menu,
+.dashboard-left.is-collapsed .full-width {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+/* Bouton toggle : toujours cliquable en mode réduit (override Webflow mobile display:none) */
+.dashboard-left.is-collapsed .button-sidebar,
+.dashboard-left.is-collapsed [data-sidebar-toggle] {
+  position: relative !important;
+  inset: auto !important;
+  width: 2.75rem !important;
+  height: 2.75rem !important;
+  padding: 0 !important;
+  margin: 0.5rem auto 0.75rem !important;
+  display: grid !important;
+  place-items: center !important;
+  justify-content: center !important;
+  align-items: center !important;
+  border-radius: 0.625rem !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  z-index: 30 !important;
+  background: rgba(255, 255, 255, 0.01) !important;
+  cursor: pointer !important;
+}
+
+.dashboard-left.is-collapsed .button-sidebar:hover,
+.dashboard-left.is-collapsed [data-sidebar-toggle]:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+
+.dashboard-left.is-collapsed .button-sidebar svg,
+.dashboard-left.is-collapsed [data-sidebar-toggle] svg {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+}
+
+.button-sidebar svg.hide,
+[data-sidebar-toggle] svg.hide {
+  display: none !important;
+}
+
+.dashboard-left.is-collapsed .nav_logo-link,
+.dashboard-left.is-collapsed .dashboard-member,
+.dashboard-left.is-collapsed .modal_small,
+.dashboard-left.is-collapsed .custom_button,
+.dashboard-left.is-collapsed .text-cr,
+.dashboard-left.is-collapsed .anonymiser-text,
+.dashboard-left.is-collapsed .wrapper-new-button {
+  display: none !important;
+}
+
+.dashboard-left.is-collapsed .dashboard-link {
+  display: flex !important;
+  width: 3rem !important;
+  min-height: 2.5rem !important;
+  margin: 0 0 0.375rem !important;
+  padding: 0.5rem !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 0 !important;
+}
+
+/* Forcer la visibilité des icônes (défense contre tout inline-style posé par Webflow IX/JS) */
+.dashboard-left.is-collapsed .icon-small,
+.dashboard-left.is-collapsed .icon-1x1-small {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex-shrink: 0 !important;
+}
+
+/* Règle générique : exclure Dossiers (summary + wrapper .folder Webflow) */
+.dashboard-left.is-collapsed .dashboard-link:not(.agilo-nav-folders__summary):not(.folder) .wrapper-link,
+.dashboard-left.is-collapsed .dashboard-link:not(.agilo-nav-folders__summary):not(.folder) > :not(.icon-small):not(svg):not(.icon-1x1-small):not(.icon-1x1-semi-medium) {
+  display: none !important;
+}
+
+/*
+ * Wrapper Webflow : div.dashboard-link.folder > .embed-code-dossier > #agilo-nav-folders-root
+ * Sans ça, la règle générique masque .embed-code-dossier (enfant direct, pas une icône).
+ */
+.dashboard-left.is-collapsed .dashboard-link.folder {
+  padding: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dashboard-left.is-collapsed .dashboard-link.folder > .embed-code-dossier,
+.dashboard-left.is-collapsed .dashboard-link.folder > .w-embed {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* ── Dossiers : l'icône est dans .summary-main, pas enfant direct de .dashboard-link ── */
+.dashboard-left.is-collapsed #agilo-nav-folders-root,
+.dashboard-left.is-collapsed .agilo-nav-folders-details {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.dashboard-left.is-collapsed summary.agilo-nav-folders__summary {
+  display: flex !important;
+  width: 3rem !important;
+  min-height: 2.5rem !important;
+  margin: 0 !important;
+  padding: 0.5rem !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 0 !important;
+  cursor: pointer !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-main {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  min-width: 0 !important;
+  flex: 0 0 auto !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-icon-root,
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-main .icon-small {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 1.5rem !important;
+  height: 1.5rem !important;
+  flex-shrink: 0 !important;
+}
+
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-icon-root svg {
+  width: 1.125rem !important;
+  height: 1.125rem !important;
+  display: block !important;
+  color: var(--agilo-text, #020202) !important;
+  fill: currentColor !important;
+}
+
+/* Masquer texte, chevron, bouton +, liste dossiers */
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-text,
+.dashboard-left.is-collapsed .agilo-nav-folders__chev,
+.dashboard-left.is-collapsed .agilo-nav-folders__summary-actions,
+.dashboard-left.is-collapsed .agilo-nav-folders-details > :not(summary) {
+  display: none !important;
+}
+
+/* ── Badge « N » Mes fichiers : sorti de .wrapper-link masqué, positionné sur l'icône ── */
+.dashboard-left.is-collapsed a.dashboard-link[data-tour="nav-transcripts"] {
+  position: relative !important;
+}
+
+.dashboard-left.is-collapsed a.dashboard-link[data-tour="nav-transcripts"] #readyCount,
+.dashboard-left.is-collapsed a.dashboard-link[data-tour="nav-transcripts"] .readycount {
+  display: flex !important;
+  visibility: visible !important;
+  position: absolute !important;
+  top: 0.1rem !important;
+  right: 0.1rem !important;
+  min-width: 1rem !important;
+  height: 1rem !important;
+  padding: 0 0.2rem !important;
+  font-size: 0.55rem !important;
+  font-weight: 600 !important;
+  line-height: 1rem !important;
+  border-radius: 999px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  pointer-events: none !important;
+  z-index: 2 !important;
+  background: var(--color--blue, #174a96) !important;
+  color: #fff !important;
+}
+
+/* ── v1.9 UX : hover, actif, focus (collapsed only) ── */
+.dashboard-left.is-collapsed a.dashboard-link:not(.folder):hover,
+.dashboard-left.is-collapsed .dashboard-link.folder:hover,
+.dashboard-left.is-collapsed summary.agilo-nav-folders__summary:hover {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-radius: 0.625rem !important;
+}
+
+.dashboard-left.is-collapsed a.dashboard-link.w--current,
+.dashboard-left.is-collapsed a.dashboard-link[aria-current="page"] {
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  border-radius: 0.625rem !important;
+}
+
+.dashboard-left.is-collapsed .dashboard-link.folder:has(.agilo-nav-folders__row.is-active) summary,
+.dashboard-left.is-collapsed .dashboard-link.folder:has(.agilo-nav-folders__row.is-active),
+.dashboard-left.is-collapsed .dashboard-link.folder.is-nav-active summary,
+.dashboard-left.is-collapsed .dashboard-link.folder.is-nav-active {
+  background: rgba(255, 255, 255, 0.96) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  border-radius: 0.625rem !important;
+}
+
+.dashboard-left.is-collapsed a.dashboard-link:focus-visible,
+.dashboard-left.is-collapsed summary.agilo-nav-folders__summary:focus-visible {
+  outline: 2px solid var(--color--blue, #174a96) !important;
+  outline-offset: 2px !important;
+}
+
+/* ── v1.9 Flyout labels (injecté par JS, position fixed) ── */
+#agilo-sidebar-flyout {
+  position: fixed;
+  z-index: 10050;
+  pointer-events: none;
+  padding: 0.35rem 0.55rem;
+  font-size: 0.8125rem;
+  line-height: 1.25;
+  color: #fff;
+  background: rgba(2, 2, 2, 0.92);
+  border-radius: 0.375rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+  max-width: min(16rem, calc(100vw - 1rem));
+}
+
+#agilo-sidebar-flyout.is-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+#agilo-sidebar-flyout[hidden] {
+  display: block !important;
+}
+
+.agilo-sidebar-flyout__hint {
+  display: block;
+  font-size: 0.6875rem;
+  opacity: 0.75;
+  margin-top: 0.1rem;
+}
+
+#agilo-sidebar-flyout::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  margin-top: -4px;
+  border: 4px solid transparent;
+  border-right-color: rgba(2, 2, 2, 0.92);
+}
+
+#agilo-sidebar-flyout.is-flip-left::before {
+  left: auto;
+  right: -4px;
+  border-right-color: transparent;
+  border-left-color: rgba(2, 2, 2, 0.92);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #agilo-sidebar-flyout {
+    transition: none !important;
+  }
+
+  .dashboard-left {
+    transition: none !important;
+  }
+}
