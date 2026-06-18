@@ -3,7 +3,7 @@
 **Statut :** test uniquement — prod reste sur v1 `@0de4923`.
 
 **Branche GitHub :** `1.09`  
-**Hash commit :** `aadc13c` (branche `1.09`, 16/06/2026)
+**Hash commit :** `510e365` (hotfix tri desc + toggle date, branche `1.09`, 18/06/2026)
 
 ---
 
@@ -30,15 +30,15 @@ Ordre de chargement strict :
 
 ```html
 <!-- 1. CSS sidebar dossiers (v1 inchangé) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-sidebar-folders-css.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-sidebar-folders-css.js?v=sort-510e365"></script>
 <!-- 2. Sidebar dossiers v2 -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-sidebar-folders-v2.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-sidebar-folders-v2.js?v=sort-510e365"></script>
 <!-- 3. Bulk v2 (AVANT logic) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-open-editor-bulk-select-v2.js?v=aadc13c"></script>
-<!-- 4. Logic v2 (pagination) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-open-editor-bulk-select-v2.js?v=sort-510e365"></script>
+<!-- 4. Logic v2 (pagination + tri) -->
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=sort-510e365"></script>
 <!-- 5. Bridge v2 (APRÈS logic) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-mes-transcripts-folder-url-bridge-v2.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-mes-transcripts-folder-url-bridge-v2.js?v=sort-510e365"></script>
 ```
 
 Pages Webflow : **Mes transcripts** Free, Pro, Business + symbole dashboard (sidebar dossiers).
@@ -48,8 +48,8 @@ Pages Webflow : **Mes transcripts** Free, Pro, Business + symbole dashboard (sid
 ## Lot Éditeur v2 (indépendant)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/editor/ready-count-v2.js?v=aadc13c"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/editor/Code-changement-audio-v2.js?v=aadc13c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/editor/ready-count-v2.js?v=sort-510e365"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/editor/Code-changement-audio-v2.js?v=sort-510e365"></script>
 ```
 
 Pages : Éditeur Free, Pro, Business.
@@ -72,7 +72,7 @@ Pages : Éditeur Free, Pro, Business.
 ## Vérification CDN
 
 ```
-https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=aadc13c
+https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@510e365/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=sort-510e365
 ```
 
 Doit contenir : `window.__agiloMesTranscriptsLogicVersion = '2.1.0-sort'`
