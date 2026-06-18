@@ -1,7 +1,7 @@
 # Guide Nicolas — Lister les invitations empreinte vocale
 
 **Date :** 13 juin 2026  
-**Contexte :** Mon compte Agilotext (`/app/*/profile`) — section « Inviter par email »  
+**Contexte :** Empreinte vocale Agilotext (`/app/*/voice`, legacy `/app/*/profile`) — section « Inviter par email »  
 **Front :** [`scripts/pages/settings/voice-enrollment-settings.js`](../../scripts/pages/settings/voice-enrollment-settings.js)
 
 ---

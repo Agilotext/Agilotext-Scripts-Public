@@ -183,13 +183,13 @@
       description: cfg.description,
       meta: cfg.meta,
       primaryCta: cfg.primaryCta,
-      primaryUrl: profileUrl()
+      primaryUrl: voiceUrl()
     };
   }
 
   function inferEditionFromPath() {
     var p = normalizedPathname();
-    var m = p.match(/^\/app\/([^/]+)\/dashboard$/);
+    var m = p.match(/^\/app\/([^/]+)\/(dashboard|voice|profile)$/);
     if (!m) return 'free';
     var seg = String(m[1] || '').toLowerCase();
     if (seg === 'business' || seg === 'ent' || seg === 'enterprise') return 'business';
@@ -197,8 +197,12 @@
     return 'free';
   }
 
+  function voiceUrl() {
+    return '/app/' + inferEditionFromPath() + '/voice';
+  }
+
   function profileUrl() {
-    return '/app/' + inferEditionFromPath() + '/profile?tab=profile#agilo-voice-settings';
+    return voiceUrl();
   }
 
   function readTs(key) {
@@ -358,7 +362,7 @@
   function onClickCta() {
     removePopup();
     var content = getPopupContent();
-    var url = content.primaryUrl || profileUrl();
+    var url = content.primaryUrl || voiceUrl();
     if (content.openInNewTab) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return;

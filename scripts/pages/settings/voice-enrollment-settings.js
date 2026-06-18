@@ -1,6 +1,7 @@
 /* ================================================================
    AGILOTEXT - VOICE ENROLLMENT SETTINGS (API V2)
    Pages : /app/free/profile, /app/premium/profile, /app/business/profile
+             /app/free/voice, /app/premium/voice, /app/business/voice
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-settings"></div>
      2. Script (pin SHA après push) :
@@ -10,7 +11,7 @@
 (function () {
   'use strict';
 
-  if (!/^\/app\/(free|premium|business)\/profile\/?$/.test(window.location.pathname || '')) return;
+  if (!/^\/app\/(free|premium|business)\/(profile|voice)\/?$/.test(window.location.pathname || '')) return;
   if (window.__agiloVoiceSettingsInit) return;
   window.__agiloVoiceSettingsInit = true;
 
@@ -749,7 +750,12 @@
     return (window.location.hash || '').replace(/^#/, '') === 'agilo-voice-settings';
   }
 
+  function isVoicePage() {
+    return /^\/app\/(free|premium|business)\/voice\/?$/.test(window.location.pathname || '');
+  }
+
   function activateProfileTabIfNeeded() {
+    if (isVoicePage()) return;
     if (typeof window.ensureTab === 'function') {
       window.ensureTab('profile');
       return;
@@ -759,9 +765,9 @@
   }
 
   function scrollToVoiceSectionIfNeeded() {
-    if (!isVoiceSettingsDeepLink()) return;
+    if (!isVoiceSettingsDeepLink() && !isVoicePage()) return;
 
-    activateProfileTabIfNeeded();
+    if (!isVoicePage()) activateProfileTabIfNeeded();
 
     function doScroll(attempt) {
       var target = document.getElementById('agilo-voice-settings');
@@ -1127,6 +1133,8 @@
     var endBtn = batchBanner.querySelector('#agilo-voice-batch-end');
     if (endBtn) {
       endBtn.addEventListener('click', function () {
+        endBtn.disabled = true;
+        endBtn.textContent = 'Fermeture…';
         VoiceBatchSession.end();
         reload();
       });
@@ -1166,10 +1174,10 @@
     var submitPrimaryLabel = (batchActive && remainingSlots <= 1)
       ? 'Enregistrer cette voix'
       : (batchActive ? 'Enregistrer et continuer' : 'Enregistrer cette voix');
-    var submitSecondaryLabel = batchActive ? 'Terminer' : 'Enregistrer et en ajouter une autre';
+    var submitSecondaryLabel = 'Enregistrer et en ajouter une autre';
     var submitPrimaryClass = 'agilo-voice-btn-submit button save';
     var submitSecondaryClass = 'agilo-voice-btn agilo-voice-btn-ghost agilo-voice-submit-and-next';
-    var showSecondarySubmit = !locked;
+    var showSecondarySubmit = !locked && !batchActive;
 
     container.innerHTML = [
       '<div class="agilo-voice-record-area">',
@@ -1231,13 +1239,9 @@
 
     applyWebflowSaveButton(els.submitBtn, submitPrimaryLabel);
 
-    if (els.submitAndNextBtn && remainingSlots <= 1 && !locked) {
+    if (els.submitAndNextBtn && remainingSlots <= 1 && !locked && !batchActive) {
       els.submitAndNextBtn.disabled = true;
-      if (batchActive) {
-        els.submitAndNextBtn.style.display = 'none';
-      } else {
-        els.submitAndNextBtn.title = 'Dernière voix disponible — cliquez sur « Enregistrer cette voix »';
-      }
+      els.submitAndNextBtn.title = 'Dernière voix disponible — cliquez sur « Enregistrer cette voix »';
     }
 
     function formatTime(ms) {
@@ -1591,9 +1595,6 @@
       els.submitBtn.addEventListener('click', function () { submitVoice(false); });
     } else if (batchActive) {
       els.submitBtn.addEventListener('click', function () { submitVoice(true); });
-      if (els.submitAndNextBtn) {
-        els.submitAndNextBtn.addEventListener('click', function () { submitVoice(false); });
-      }
     } else {
       els.submitBtn.addEventListener('click', function () { submitVoice(false); });
       if (els.submitAndNextBtn) {
@@ -2029,7 +2030,7 @@
   }
 
   async function init() {
-    if (isVoiceSettingsDeepLink()) {
+    if (isVoiceSettingsDeepLink() && !isVoicePage()) {
       activateProfileTabIfNeeded();
     }
 

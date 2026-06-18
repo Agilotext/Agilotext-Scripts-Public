@@ -1,7 +1,7 @@
 # Guide Nicolas — Lire l'audio d'une empreinte vocale
 
 **Date :** 14 juin 2026  
-**Contexte :** Mon compte Agilotext (`/app/*/profile`) — liste des empreintes vocales  
+**Contexte :** Empreinte vocale Agilotext (`/app/*/voice`, legacy `/app/*/profile`) — liste des empreintes vocales  
 **Front :** [`scripts/pages/settings/voice-enrollment-settings.js`](../../scripts/pages/settings/voice-enrollment-settings.js)
 
 ---

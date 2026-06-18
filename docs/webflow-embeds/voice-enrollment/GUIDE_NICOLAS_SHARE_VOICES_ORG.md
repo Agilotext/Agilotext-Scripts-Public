@@ -3,7 +3,7 @@
 **Date :** 18 juin 2026  
 **Contexte :** retour cliente Clarence (réunion 18/06) — voix enregistrées sur le compte admin (Muriel) non visibles sur les comptes collègues  
 **Front :** [`scripts/pages/settings/voice-enrollment-settings.js`](../../scripts/pages/settings/voice-enrollment-settings.js)  
-**Complément court terme front :** voice21 — enregistrement multiple sur un même compte (session batch, sans partage inter-comptes)
+**Pages :** `/app/{free|premium|business}/voice` (dédiée, voice22) · `/app/*/profile` (legacy tab Profil)
 
 ---
 
