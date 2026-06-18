@@ -60,12 +60,12 @@ Pages : Éditeur Free, Pro, Business.
 
 | Composant | v1 prod | v2 test |
 |-----------|---------|---------|
-| Logic | `Code-mes-transcripts-logic.js` v1.10, limit 2000 | `Code-mes-transcripts-logic-v2.js` v2.0, PAGE_SIZE 25 |
-| Bridge | limit 9999, tri client | limit 200, tri masqué si pagination |
+| Logic | `Code-mes-transcripts-logic.js` v1.10, limit 2000 | `Code-mes-transcripts-logic-v2.js` v2.1.0-sort, PAGE_SIZE 25, tri desc + toggle |
+| Bridge | limit 9999, tri client | limit 200, tri délégué à logic-v2 |
 | Bulk | sans hint page | hint « page courante » |
 | Sidebar folders | sans reset `?page` | supprime `?page` au changement dossier |
 | Ready count | limit 1000 | limit 200, affiche `200+` |
-| Rail audio | limit 200 | limit 50 + « Charger 50 de plus » |
+| Rail audio | limit 200 | limit 50 + « Charger 50 de plus », tri desc |
 
 ---
 
@@ -75,7 +75,11 @@ Pages : Éditeur Free, Pro, Business.
 https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@aadc13c/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=aadc13c
 ```
 
-Doit contenir : `window.__agiloMesTranscriptsLogicVersion = '2.0'`
+Doit contenir : `window.__agiloMesTranscriptsLogicVersion = '2.1.0-sort'`
+
+Remplacer `@HASH` par le hash du commit hotfix tri (voir `git log -1 --oneline` sur `1.09`).
+
+Cache bust recommandé : `?v=sort-HASH`
 
 ---
 
@@ -89,7 +93,7 @@ Doit contenir : `window.__agiloMesTranscriptsLogicVersion = '2.0'`
   pagination: window.__agiloMesTranscriptsPagination?.enabled,
   rail: window.__agiloRail?.version
 })
-// Attendu : logic '2.0', bridge '2.2.0', bulk '2.0', pagination true, rail '4.8.0-v2'
+// Attendu : logic '2.1.0-sort', bridge '2.2.1', bulk '2.0', pagination true + sortDir, rail '4.8.1-v2'
 ```
 
 ---
@@ -98,10 +102,12 @@ Doit contenir : `window.__agiloMesTranscriptsLogicVersion = '2.0'`
 
 | Test | URL | Attendu |
 |------|-----|---------|
-| Chargement | `/app/business/mes-transcripts` | 1 appel getJobsInfo `limit=25` (Network) |
+| Chargement | `/app/business/mes-transcripts` | 1 appel getJobsInfo `limit=25&sortDir=desc` (Network) |
 | Pagination | `?page=2` | Widget `#agilo-pagination` |
 | Dossier sidebar | clic dossier | URL sans `?page`, page 1 |
-| Tri | bouton tri | Masqué ou tooltip pagination |
+| Tri desc (défaut) | chargement | Plus récent en haut, bouton Date visible |
+| Tri asc | clic colonne Date | `?sortDir=asc`, page 1, plus ancien en haut |
+| Tri toggle | 2e clic Date | Retour desc, URL sans sortDir |
 | Bulk | sélection | Hint page courante, ≤25 lignes |
 | Bridge move | bulk → dossier | OK sur page courante |
 | Badge menu | éditeur | readyCount `200+` si saturé |
@@ -139,5 +145,14 @@ Réactiver inline legacy **uniquement** si vous retirez jsDelivr logic-v2.
 
 ## API Nicolas (non bloquant)
 
-Confirmer si `getJobsInfo` renvoie `total` / `totalCount` et supporte `sortDir`.  
-Si oui : passer `API_SORT_SUPPORTED = true` dans `Code-mes-transcripts-logic-v2.js`.
+**Message à envoyer à Nicolas :**
+
+> Hello Nicolas — urgence pagination Mes transcripts v2 : la liste s'affiche à l'envers (plus anciens en page 1) et on a perdu le clic sur la colonne Date pour trier. Je hotfix : tri client desc + clic toggle desc/asc qui recharge page 1 + envoi `sortDir` à `getJobsInfo`. Trois confirmations rapides : (a) `getJobsInfo` supporte-t-il `sortDir=desc|asc` ? (b) Le tri serveur est-il appliqué AVANT le `offset` ? (c) Sinon quel param ? Merci !
+
+**Probe curl (18/06/2026) :** sans token valide, l'API renvoie `error_invalid_token`. Le hotfix envoie quand même `sortDir` + tri client dtCreation comme filet de sécurité.
+
+**Implémenté v2.1.0-sort :**
+- `sortDir=desc|asc` toujours envoyé à `getJobsInfo`
+- Tri client dtCreation après fetch (page courante)
+- Clic colonne Date : toggle desc ↔ asc, reset page 1, `?sortDir=asc` dans l'URL
+- Bridge v2.2.1 délègue le tri à logic-v2 en pagination

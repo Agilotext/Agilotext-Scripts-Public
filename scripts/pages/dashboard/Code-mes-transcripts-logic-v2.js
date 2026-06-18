@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2 (pagination serveur PAGE_SIZE=25)
+   AGILOTEXT — Mes transcripts logic v2.1.0-sort (pagination PAGE_SIZE=25)
+   v2.1.0-sort — tri serveur sortDir + clic toggle date desc/asc + filet client
    Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
    =============================================================================
    AGILOTEXT DASHBOARD LOGIC (UNIFIED NICKEL VERSION)
@@ -16,12 +17,18 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.0';
+  window.__agiloMesTranscriptsLogicVersion = '2.1.0-sort';
 
   const PAGE_SIZE = 25;
-  /** Passer à true quand Nicolas confirme sortDir côté getJobsInfo */
-  const API_SORT_SUPPORTED = false;
+  const DEFAULT_SORT_DIR = 'desc';
   const JOBS_MAP_TOTAL_KEYS = ['total', 'totalCount', 'totalJobs', 'jobsCount', 'nbJobs'];
+
+  function readSortDirFromUrl() {
+    const v = new URLSearchParams(window.location.search).get('sortDir');
+    return v === 'asc' ? 'asc' : DEFAULT_SORT_DIR;
+  }
+
+  let currentSortDir = readSortDirFromUrl();
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
 
@@ -38,8 +45,7 @@
       '#agilo-pagination button{height:34px;padding:0 14px;border:1px solid rgba(82,82,82,.2);border-radius:8px;background:#fff;cursor:pointer;font-size:13px;color:#374151;}' +
       '#agilo-pagination button:disabled{opacity:.4;cursor:default;}' +
       '#agilo-pagination .agilo-page-info{color:#6b7280;}' +
-      '.agilo-loading-row{grid-column:1/-1;padding:40px 20px;text-align:center;color:#6b7280;font-size:14px;}' +
-      '#sort-button[data-agilo-pagination-hidden],.sort-wrapper[data-agilo-pagination-hidden]{display:none!important;}';
+      '.agilo-loading-row{grid-column:1/-1;padding:40px 20px;text-align:center;color:#6b7280;font-size:14px;}';
     document.head.appendChild(style);
     cleanupBulkPageHint();
   })();
@@ -73,10 +79,41 @@
     return null;
   }
 
-  function hideSortControlsForPagination() {
-    document.querySelectorAll('#sort-button, .sort-wrapper').forEach((el) => {
-      el.setAttribute('data-agilo-pagination-hidden', '1');
-      el.style.display = 'none';
+  function updateUrlSortDir(sortDir) {
+    try {
+      const url = new URL(window.location.href);
+      if (sortDir === DEFAULT_SORT_DIR) url.searchParams.delete('sortDir');
+      else url.searchParams.set('sortDir', sortDir);
+      history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch (_) {}
+  }
+
+  function bindSortToggle() {
+    const nodes = document.querySelectorAll('#sort-button, .sort-wrapper');
+    nodes.forEach((el) => {
+      el.style.display = '';
+      el.removeAttribute('data-agilo-pagination-hidden');
+      el.setAttribute('data-sort-dir', currentSortDir);
+      el.setAttribute(
+        'title',
+        currentSortDir === 'desc'
+          ? "Date — plus récent d'abord (clic pour inverser)"
+          : "Date — plus ancien d'abord (clic pour inverser)"
+      );
+      if (el.getAttribute('data-agilo-sort-bound') === '1') return;
+      el.setAttribute('data-agilo-sort-bound', '1');
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        currentSortDir = currentSortDir === 'desc' ? 'asc' : 'desc';
+        updateUrlSortDir(currentSortDir);
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('page');
+          history.replaceState(null, '', url.pathname + url.search + url.hash);
+        } catch (_) {}
+        if (window.__agiloMesTranscriptsReload) window.__agiloMesTranscriptsReload(0);
+      });
     });
   }
 
@@ -133,7 +170,7 @@
     if (prev) prev.addEventListener('click', () => onPageChange(currentPage - 1));
     if (next) next.addEventListener('click', () => onPageChange(currentPage + 1));
 
-    hideSortControlsForPagination();
+    bindSortToggle();
 
     window.__agiloMesTranscriptsPagination = {
       enabled: true,
@@ -142,7 +179,8 @@
       totalJobs,
       hasMore,
       hasMultiplePages: showPager,
-      apiSortSupported: API_SORT_SUPPORTED
+      apiSortSupported: true,
+      sortDir: currentSortDir
     };
   }
 
@@ -924,6 +962,7 @@
     }
 
     lastKnownToken = token;
+    currentSortDir = readSortDirFromUrl();
     const loadId = Symbol('load');
     activeLoadToken = loadId;
 
@@ -940,19 +979,23 @@
     async function getJobs(ed, pageIndex) {
       const urlParams = new URLSearchParams(window.location.search);
       const folderId = urlParams.get('folderId');
-      const sortDir = urlParams.get('sortDir') || 'desc';
       const offset = pageIndex * PAGE_SIZE;
       let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(
         userEmail
-      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=${PAGE_SIZE}&offset=${offset}`;
+      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(ed)}&limit=${PAGE_SIZE}&offset=${offset}&sortDir=${encodeURIComponent(currentSortDir)}`;
       if (folderId) {
         url += `&folderId=${encodeURIComponent(folderId)}`;
       }
-      if (API_SORT_SUPPORTED) {
-        url += `&sortDir=${encodeURIComponent(sortDir)}`;
-      }
       const r = await fetch(url);
       return await r.json();
+    }
+
+    function sortJobsByCreation(jobs) {
+      return jobs.slice().sort((a, b) => {
+        const ta = convertDateStringToDate(a.dtCreation)?.getTime() || 0;
+        const tb = convertDateStringToDate(b.dtCreation)?.getTime() || 0;
+        return currentSortDir === 'asc' ? ta - tb : tb - ta;
+      });
     }
 
     async function loadPage(pageIndex) {
@@ -986,7 +1029,7 @@
           return;
         }
 
-        const jobs = data.jobsInfoDtos || [];
+        const jobs = sortJobsByCreation(data.jobsInfoDtos || []);
 
         if (jobs.length === 0 && page > 0) {
           return loadPage(0);
@@ -1022,7 +1065,7 @@
         );
 
         initializeBulkActions();
-        hideSortControlsForPagination();
+        bindSortToggle();
 
         renderPaginationWidget(paginationState, (nextPage) => {
           if (nextPage < 0) return;

@@ -1,5 +1,5 @@
 // Agilotext — pont autonome URL ?folderId= -> tableau "Mes transcriptions" (v2)
-// Version 2.2.0 — jobs map limit 200 (pagination serveur sur Mes transcripts)
+// Version 2.2.1 — délègue le tri date à logic-v2 en pagination serveur
 // Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
 //
 // Objectif:
@@ -13,7 +13,7 @@
 
   if (window.__agiloMesTranscriptsFolderBridge && window.__agiloMesTranscriptsFolderBridge.version) return;
 
-  const BRIDGE_VERSION = '2.2.0';
+  const BRIDGE_VERSION = '2.2.1';
   const JOBS_MAP_LIMIT = 200;
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const EDITION_FALLBACK = 'ent';
@@ -373,14 +373,11 @@
   }
 
   function bindSort() {
-    const nodes = document.querySelectorAll('#sort-button, .sort-wrapper');
     if (isServerPaginationActive()) {
-      nodes.forEach((el) => {
-        el.style.display = 'none';
-        el.setAttribute('title', 'Tri indisponible avec la pagination (tri serveur à venir)');
-      });
+      // Logic-v2 gère le toggle desc/asc en pagination serveur
       return;
     }
+    const nodes = document.querySelectorAll('#sort-button, .sort-wrapper');
     nodes.forEach((el) => {
       el.style.display = '';
       if (el.getAttribute('data-agilo-sort-bound') === '1') return;

@@ -4,7 +4,7 @@
 (function(){
   // Singleton
   if (window.__agiloRail) return;
-  window.__agiloRail = { version: '4.8.0-v2' };
+  window.__agiloRail = { version: '4.8.1-v2' };
 
   /* ================== CONFIG ================== */
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -373,7 +373,7 @@ let __pendingLoadTimer = null;
     const ff = overrideFilter !== undefined ? overrideFilter : state.folderFilter;
     const offset = Number(options.offset) >= 0 ? Number(options.offset) : 0;
     const limit = Number(options.limit) > 0 ? Number(options.limit) : RAIL_PAGE_SIZE;
-    let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=${limit}&offset=${offset}`;
+    let url = `${API_BASE}/getJobsInfo?username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}&limit=${limit}&offset=${offset}&sortDir=desc`;
     if (ff === 'root') {
       url += '&folderId=0';
     } else if (typeof ff === 'number' && ff > 0) {
@@ -427,7 +427,7 @@ let __pendingLoadTimer = null;
         ts: Date.parse(iso) || 0,
         status: x.transcriptStatus || 'PENDING'
       };
-    });
+    }).sort((a, b) => b.ts - a.ts);
     mapped.__hasMore = j.jobsInfoDtos.length >= limit;
     mapped.__offset = offset;
     return mapped;
