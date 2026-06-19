@@ -6,10 +6,14 @@
  * exposer window.agiloJobErrorParts. Sinon les scripts peuvent contenir une copie tolérée
  * du bloc ensureAgiloJobErrorParts ci-dessous.
  *
- * @version 1.08
+ * @version 1.09
  */
 (function (w) {
   'use strict';
+
+  var AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
+  var AUDIO_EXPIRED_MESSAGE = 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  var TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
 
   function trimStr(s) {
     return (s === undefined || s === null) ? '' : String(s).trim();
@@ -20,18 +24,66 @@
     return String(s).slice(0, max - 3) + '...';
   }
 
+  function safeJsonParse(s) {
+    try { return JSON.parse(s); } catch (_) { return null; }
+  }
+
+  function payloadContainsCode(payload, code, depth, seen) {
+    if (!payload || !code) return false;
+    if (!depth) depth = 0;
+    if (!seen) seen = [];
+    if (depth > 4) return false;
+
+    if (typeof payload === 'string') {
+      var txt = trimStr(payload);
+      if (!txt) return false;
+      if (txt.toLowerCase().indexOf(String(code).toLowerCase()) !== -1) return true;
+      var parsed = safeJsonParse(txt);
+      return parsed ? payloadContainsCode(parsed, code, depth + 1, seen) : false;
+    }
+
+    if (typeof payload !== 'object') return false;
+    if (seen.indexOf(payload) !== -1) return false;
+    seen.push(payload);
+
+    if (Array.isArray(payload)) {
+      for (var i = 0; i < payload.length; i++) {
+        if (payloadContainsCode(payload[i], code, depth + 1, seen)) return true;
+      }
+      return false;
+    }
+
+    var keys = Object.keys(payload);
+    for (var k = 0; k < keys.length; k++) {
+      if (payloadContainsCode(payload[keys[k]], code, depth + 1, seen)) return true;
+    }
+    return false;
+  }
+
+  function isAudioExpiredPayload(payload) {
+    return payloadContainsCode(payload, AUDIO_EXPIRED_CODE);
+  }
+
   /**
    * @param {{ userErrorMessage?: string, javaException?: string, javaStackTrace?: string, exceptionStackTrace?: string }} data
    * @param {string} [fallbackPrimary] Libellé si userErrorMessage absent
    * @returns {{ primary: string, technical: string, alertText: string }}
    */
   function jobErrorParts(data, fallbackPrimary) {
+    var audioExpired = isAudioExpiredPayload(data) || isAudioExpiredPayload(fallbackPrimary);
     var jEx = trimStr(data && data.javaException);
+    if (audioExpired) {
+      return {
+        primary: AUDIO_EXPIRED_MESSAGE,
+        technical: '',
+        alertText: AUDIO_EXPIRED_MESSAGE
+      };
+    }
     if (jEx && jEx.toLowerCase().indexOf('error_summary_transcript_file_not_exists') !== -1) {
       return {
-        primary: 'Fichier archivé — politique de conservation des données.',
+        primary: 'Transcription ou compte rendu archivé — politique de conservation des données.',
         technical: '',
-        alertText: 'Ce fichier a été supprimé conformément à la politique de conservation. Il n\'est plus accessible.'
+        alertText: TEXT_ASSET_EXPIRED_MESSAGE
       };
     }
 
@@ -58,6 +110,9 @@
 
   /** Idempotent pour ré-inclusion ou copie tolérée en tête d’autre bundle. */
   function ensureInstall() {
+    if (!w.AGILO_AUDIO_EXPIRED_CODE) w.AGILO_AUDIO_EXPIRED_CODE = AUDIO_EXPIRED_CODE;
+    if (!w.agiloAudioExpiredMessage) w.agiloAudioExpiredMessage = AUDIO_EXPIRED_MESSAGE;
+    if (typeof w.agiloIsAudioExpiredPayload !== 'function') w.agiloIsAudioExpiredPayload = isAudioExpiredPayload;
     if (typeof w.agiloJobErrorParts !== 'function') {
       w.agiloJobErrorParts = jobErrorParts;
     }

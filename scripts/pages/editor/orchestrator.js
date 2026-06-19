@@ -198,6 +198,102 @@
   // On force toujours un getToken frais puis on reconstruit l’URL (évite Invalid Token sur receiveText / receiveSummary).
   const AGILO_API_V1 = 'https://api.agilotext.com/api/v1';
   const FREE_RESTRICTED_FORMATS = new Set(['doc', 'pdf']);
+  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
+
+  function tryParseJson(text) {
+    try { return JSON.parse(text); } catch (_) { return null; }
+  }
+
+  function isAudioExpiredPayload(payload) {
+    if (typeof window.agiloIsAudioExpiredPayload === 'function') {
+      try { return !!window.agiloIsAudioExpiredPayload(payload); } catch (_) {}
+    }
+    const txt = (payload == null) ? '' : String(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    return txt.toLowerCase().includes('error_audio_file_expired');
+  }
+
+  function isAuthPayload(payload, statusCode) {
+    if (statusCode === 401 || statusCode === 403) return true;
+    if (!payload) return false;
+    const txt = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    return AUTH_HINT_RE.test(String(txt || ''));
+  }
+
+  function formatFailureMessage(payload, fallbackPrimary) {
+    if (typeof window.agiloJobErrorParts === 'function') {
+      try {
+        const parts = window.agiloJobErrorParts(
+          typeof payload === 'object' && payload ? payload : { userErrorMessage: String(payload || '') },
+          fallbackPrimary
+        );
+        return parts?.primary || fallbackPrimary;
+      } catch (_) {}
+    }
+    return fallbackPrimary;
+  }
+
+  function isAudioReceiveUrl(url) {
+    return /\/receiveAudio(?:[/?#]|$)/i.test(String(url || ''));
+  }
+
+  async function verifyAudioAsset(url) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: ctrl.signal,
+        headers: {
+          Range: 'bytes=0-0',
+          Accept: 'audio/*,application/octet-stream,application/json,text/plain,text/html;q=0.9'
+        }
+      });
+      clearTimeout(timer);
+
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const cd = r.headers.get('content-disposition') || '';
+      const binaryOk = r.ok && (
+        ct.indexOf('audio/') === 0 ||
+        ct.indexOf('application/octet-stream') === 0 ||
+        /attachment|filename=/i.test(cd)
+      );
+
+      if (binaryOk) {
+        try { await r.body?.cancel?.(); } catch (_) {}
+        return { ok: true };
+      }
+
+      const text = await r.text().catch(() => '');
+      const payload = tryParseJson(text) || text;
+
+      if (isAudioExpiredPayload(payload)) {
+        return { ok: false, type: 'audio_expired', message: AUDIO_EXPIRED_MESSAGE };
+      }
+      if (isAuthPayload(payload, r.status)) {
+        return { ok: false, type: 'auth' };
+      }
+      if (typeof payload === 'object' && payload && String(payload.status || '').toUpperCase() === 'OK') {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        type: 'generic',
+        message: formatFailureMessage(payload, 'Impossible de récupérer cet audio pour le moment.')
+      };
+    } catch (err) {
+      if (window.AGILO_DEBUG) console.error('[Orch] verifyAudioAsset error:', err);
+      return {
+        ok: false,
+        type: 'generic',
+        message: 'Impossible de récupérer cet audio pour le moment.'
+      };
+    }
+  }
 
   const downloadClickHandler = (e) => {
     const a = e.target.closest?.(
@@ -279,7 +375,31 @@
         if (email) u.searchParams.set('username', email);
         const root = document.getElementById('editorRoot');
         if (root?.dataset?.edition) u.searchParams.set('edition', root.dataset.edition);
-        openWithHref(u.toString());
+        const nextUrl = u.toString();
+
+        if (isAudioReceiveUrl(nextUrl)) {
+          const check = await verifyAudioAsset(nextUrl);
+          if (!check.ok) {
+            if (check.type === 'audio_expired') {
+              const jobId = u.searchParams.get('jobId') || '';
+              window.dispatchEvent(new CustomEvent('agilo:audioUnavailable', {
+                detail: { jobId, code: 'error_audio_file_expired', message: check.message || AUDIO_EXPIRED_MESSAGE }
+              }));
+              window.alert(check.message || AUDIO_EXPIRED_MESSAGE);
+              return;
+            }
+            if (check.type === 'auth') {
+              window.alert(
+                'Impossible de renouveler votre accès Agilotext (jeton invalide ou expiré). Rechargez la page puis réessayez le téléchargement.'
+              );
+              return;
+            }
+            window.alert(check.message || 'Impossible de récupérer cet audio pour le moment.');
+            return;
+          }
+        }
+
+        openWithHref(nextUrl);
       } catch (err) {
         if (window.AGILO_DEBUG) console.error('[Orch] URL téléchargement:', err);
         openWithHref(href);
@@ -300,4 +420,3 @@
   
   if (window.AGILO_DEBUG) console.log('[Orch] Initié. Auth + Orchestration active.');
 })();
-

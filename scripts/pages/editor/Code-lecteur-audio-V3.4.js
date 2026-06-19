@@ -21,6 +21,11 @@
   const autoplayParam = qs.get('autoplay') === '1';
   const DEBUG = qs.get('debugAudio') === '1' || window.AGILO_DEBUG;
   const log = (...a) => { if (DEBUG) console.log('[agilo:audio]', ...a); };
+  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  const AUDIO_AUTH_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
+  const AUDIO_GENERIC_MESSAGE = 'Impossible de charger cet audio pour le moment.';
+  const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
 
   const SPEED_STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2];
   let edition = 'ent';
@@ -117,6 +122,186 @@
     if (wrap) wrap.classList.toggle('is-locked', !!lock);
   }
 
+  function tryParseJson(text) {
+    try { return JSON.parse(text); } catch (_) { return null; }
+  }
+
+  function isAudioExpiredPayload(payload) {
+    if (typeof window.agiloIsAudioExpiredPayload === 'function') {
+      try { return !!window.agiloIsAudioExpiredPayload(payload); } catch (_) {}
+    }
+    const txt = payload == null ? '' : String(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    return txt.toLowerCase().includes('error_audio_file_expired');
+  }
+
+  function isAuthPayload(payload, statusCode) {
+    if (statusCode === 401 || statusCode === 403) return true;
+    if (!payload) return false;
+    const txt = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    return AUTH_HINT_RE.test(String(txt || ''));
+  }
+
+  function getPrimaryMessage(payload, fallbackPrimary) {
+    if (typeof window.agiloJobErrorParts === 'function') {
+      try {
+        const parts = window.agiloJobErrorParts(
+          typeof payload === 'object' && payload ? payload : { userErrorMessage: String(payload || '') },
+          fallbackPrimary
+        );
+        return parts?.primary || fallbackPrimary;
+      } catch (_) {}
+    }
+    return fallbackPrimary;
+  }
+
+  function ensureUnavailableNote() {
+    if (!wrap) return null;
+    let note = wrap.querySelector('.agilo-audio-unavailable');
+    if (!note) {
+      note = document.createElement('div');
+      note.className = 'agilo-audio-unavailable';
+      note.setAttribute('role', 'status');
+      note.setAttribute('aria-live', 'polite');
+      note.style.cssText = 'display:none;margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid #f1d3a5;background:#fff7ed;color:#7c3f00;font-size:14px;line-height:1.5;';
+      wrap.appendChild(note);
+    }
+    return note;
+  }
+
+  function setDlBtnDisabled(message, hidden) {
+    if (!dlBtn) return;
+
+    if (dlBtn.__agiloDisabledClick) {
+      dlBtn.removeEventListener('click', dlBtn.__agiloDisabledClick);
+      dlBtn.__agiloDisabledClick = null;
+    }
+
+    if (!message) {
+      dlBtn.removeAttribute('aria-disabled');
+      dlBtn.removeAttribute('title');
+      dlBtn.style.pointerEvents = '';
+      dlBtn.style.opacity = '';
+      if (hidden === false) dlBtn.style.display = '';
+      return;
+    }
+
+    dlBtn.setAttribute('aria-disabled', 'true');
+    dlBtn.setAttribute('title', message);
+    dlBtn.style.pointerEvents = hidden ? 'none' : 'auto';
+    dlBtn.style.opacity = hidden ? '0.55' : '0.7';
+    dlBtn.style.display = hidden ? 'none' : '';
+    dlBtn.__agiloDisabledClick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.alert(message);
+    };
+    if (!hidden) dlBtn.addEventListener('click', dlBtn.__agiloDisabledClick);
+  }
+
+  function clearAudioUnavailable() {
+    const note = wrap?.querySelector('.agilo-audio-unavailable');
+    if (note) note.style.display = 'none';
+    if (wrap) wrap.removeAttribute('data-audio-unavailable');
+    setDlBtnDisabled('', false);
+  }
+
+  function setAudioUnavailable(message, opts) {
+    const cfg = opts || {};
+    const finalMessage = message || AUDIO_GENERIC_MESSAGE;
+    const note = ensureUnavailableNote();
+    if (note) {
+      note.textContent = finalMessage;
+      note.style.display = 'block';
+    }
+    if (wrap) wrap.dataset.audioUnavailable = cfg.code || 'unavailable';
+    try { audio?.pause(); } catch (_) {}
+    try {
+      if (audio) {
+        audio.removeAttribute('src');
+        audio.load();
+      }
+    } catch (_) {}
+    seekLocked = true;
+    lockControls(true);
+    if (playBtn) {
+      playBtn.textContent = 'Audio indisponible';
+      playBtn.setAttribute('aria-pressed', 'false');
+    }
+    if (timeEl) {
+      const txt = '0:00 / 0:00 ';
+      timeEl.firstChild ? (timeEl.firstChild.nodeValue = txt) : (timeEl.textContent = txt);
+    }
+    if (currentVisEl) currentVisEl.textContent = '0:00';
+    if (remainingVisEl) remainingVisEl.textContent = '–0:00';
+    if (prog) prog.style.width = '0%';
+    if (buff) buff.style.width = '0%';
+    if (thumb) thumb.style.left = '0%';
+    setDlBtnDisabled(finalMessage, cfg.hideDownload !== false);
+    updatePlayUI();
+    if (cfg.emitEvent !== false) {
+      window.dispatchEvent(new CustomEvent('agilo:audioUnavailable', {
+        detail: { jobId: activeJobId, code: cfg.code || 'unavailable', message: finalMessage }
+      }));
+    }
+  }
+
+  function makeAudioError(code, message) {
+    const err = new Error(message || AUDIO_GENERIC_MESSAGE);
+    err.code = code || 'audio_unavailable';
+    return err;
+  }
+
+  function classifyAudioFailure(payload, statusCode, fallbackMessage) {
+    if (isAudioExpiredPayload(payload)) {
+      return { ok: false, code: 'error_audio_file_expired', message: AUDIO_EXPIRED_MESSAGE };
+    }
+    if (isAuthPayload(payload, statusCode)) {
+      return { ok: false, code: 'auth', message: AUDIO_AUTH_MESSAGE };
+    }
+    return {
+      ok: false,
+      code: 'generic',
+      message: getPrimaryMessage(payload, fallbackMessage || AUDIO_GENERIC_MESSAGE)
+    };
+  }
+
+  async function probeAudioUrl(url) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        signal: ctrl.signal,
+        headers: {
+          Range: 'bytes=0-0',
+          Accept: 'audio/*,application/octet-stream,application/json,text/plain,text/html;q=0.9'
+        }
+      });
+      clearTimeout(timer);
+
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const cd = r.headers.get('content-disposition') || '';
+      const isBinary = r.ok && (
+        ct.indexOf('audio/') === 0 ||
+        ct.indexOf('application/octet-stream') === 0 ||
+        /attachment|filename=/i.test(cd)
+      );
+
+      if (isBinary) {
+        try { await r.body?.cancel?.(); } catch (_) {}
+        return { ok: true };
+      }
+
+      const text = await r.text().catch(() => '');
+      const payload = tryParseJson(text) || text;
+      return classifyAudioFailure(payload, r.status, AUDIO_GENERIC_MESSAGE);
+    } catch (err) {
+      log('probeAudioUrl failed:', err?.message || err);
+      return { ok: false, code: 'generic', message: AUDIO_GENERIC_MESSAGE };
+    }
+  }
+
   // ---------- Overlay local ----------
   function makeLocalOverlay() {
     let ov = wrap.querySelector('.agilo-preload');
@@ -175,6 +360,14 @@
 
   function updatePlayUI() {
     if (!audio) return;
+    if (wrap?.dataset?.audioUnavailable) {
+      if (playBtn) {
+        playBtn.textContent = 'Audio indisponible';
+        playBtn.setAttribute('aria-pressed', 'false');
+        playBtn.dataset.state = 'unavailable';
+      }
+      return;
+    }
     const playing = !audio.paused && !audio.ended;
     if (playBtn) {
       playBtn.textContent = playing ? '⏸︎ Pause' : '▶︎ Lire';
@@ -266,6 +459,19 @@
       const timer = setTimeout(() => ctrl.abort(), 10 * 60 * 1000);
       const res = await fetch(url, { signal: ctrl.signal });
       clearTimeout(timer);
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      const cd = res.headers.get('content-disposition') || '';
+      const isBinary = res.ok && (
+        ct.indexOf('audio/') === 0 ||
+        ct.indexOf('application/octet-stream') === 0 ||
+        /attachment|filename=/i.test(cd)
+      );
+      if (!isBinary) {
+        const text = await res.text().catch(() => '');
+        const payload = tryParseJson(text) || text;
+        const failure = classifyAudioFailure(payload, res.status, AUDIO_GENERIC_MESSAGE);
+        throw makeAudioError(failure.code, failure.message);
+      }
       const total = +(res.headers.get('content-length') || 0);
       const type = res.headers.get('content-type') || 'audio/mpeg';
       const chunks = []; let loaded = 0;
@@ -306,7 +512,10 @@
   async function ensureSeekableFor(url, { resumeTime = 0, autoplay = false } = {}) {
     const mySeq = ++__agiloLoadSeq;
     if (lastBlobUrl) { try { URL.revokeObjectURL(lastBlobUrl); } catch { } lastBlobUrl = ''; }
+    clearAudioUnavailable();
     lockControls(true);
+    const availability = await probeAudioUrl(url);
+    if (!availability.ok) throw makeAudioError(availability.code, availability.message);
     const ok = await serverSupportsRange(url);
     if (mySeq !== __agiloLoadSeq) return;
 
@@ -349,6 +558,10 @@
         syncBuffered();
         if (DEBUG) log('durationchange:', audio.duration, 'safe:', getSafeDuration());
       };
+      const errorHandler = () => {
+        if (wrap?.dataset?.audioUnavailable) return;
+        setAudioUnavailable(AUDIO_GENERIC_MESSAGE, { code: 'generic', hideDownload: false });
+      };
 
       audio.addEventListener('play', playHandler);
       audio.addEventListener('pause', pauseHandler);
@@ -357,6 +570,7 @@
       audio.addEventListener('progress', progressHandler);
       audio.addEventListener('loadedmetadata', metaHandler);
       audio.addEventListener('durationchange', durationHandler);
+      audio.addEventListener('error', errorHandler);
 
       addCleanup(() => {
         audio.removeEventListener('play', playHandler);
@@ -366,6 +580,7 @@
         audio.removeEventListener('progress', progressHandler);
         audio.removeEventListener('loadedmetadata', metaHandler);
         audio.removeEventListener('durationchange', durationHandler);
+        audio.removeEventListener('error', errorHandler);
       });
 
       let tLastSave = 0;
@@ -555,10 +770,18 @@
       dlBtn.href = url;
       dlBtn.download = `audio-${activeJobId}.mp3`;
       dlBtn.target = '_blank';
+      dlBtn.rel = 'noopener';
       if (email && token) dlBtn.style.display = ''; else dlBtn.style.display = 'none';
     }
 
-    await ensureSeekableFor(url, { resumeTime: resume, autoplay: autoplayParam });
+    try {
+      await ensureSeekableFor(url, { resumeTime: resume, autoplay: autoplayParam });
+    } catch (err) {
+      const code = err?.code || 'generic';
+      const hideDownload = code === 'error_audio_file_expired';
+      setAudioUnavailable(err?.message || AUDIO_GENERIC_MESSAGE, { code, hideDownload });
+      return;
+    }
 
     setRate(getSavedRate());
 
@@ -634,15 +857,39 @@
             dlBtn.href = url;
             dlBtn.download = `audio-${activeJobId}.mp3`;
             dlBtn.target = '_blank';
+            dlBtn.rel = 'noopener';
             dlBtn.style.display = '';
           }
-          await ensureSeekableFor(url, { resumeTime: 0, autoplay: wantPlay });
+          try {
+            await ensureSeekableFor(url, { resumeTime: 0, autoplay: wantPlay });
+          } catch (err) {
+            const code = err?.code || 'generic';
+            const hideDownload = code === 'error_audio_file_expired';
+            setAudioUnavailable(err?.message || AUDIO_GENERIC_MESSAGE, { code, hideDownload });
+            return;
+          }
           setRate(getSavedRate());
         }
       };
       window.addEventListener('agilo:load', loadHandler);
       addCleanup(() => window.removeEventListener('agilo:load', loadHandler));
       window.__agiloAudioLoadBound = true;
+    }
+
+    if (!window.__agiloAudioUnavailableBound) {
+      const unavailableHandler = (ev) => {
+        const jobId = String(ev?.detail?.jobId || '');
+        if (jobId && activeJobId && jobId !== activeJobId) return;
+        const code = ev?.detail?.code || 'unavailable';
+        setAudioUnavailable(ev?.detail?.message || AUDIO_GENERIC_MESSAGE, {
+          code,
+          hideDownload: code === 'error_audio_file_expired',
+          emitEvent: false
+        });
+      };
+      window.addEventListener('agilo:audioUnavailable', unavailableHandler);
+      addCleanup(() => window.removeEventListener('agilo:audioUnavailable', unavailableHandler));
+      window.__agiloAudioUnavailableBound = true;
     }
   }
 

@@ -18,7 +18,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.0-fullclient';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.1-fullclient';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -26,6 +26,189 @@
   const POLLING_INTERVAL_MS = 60000;
   const DEFAULT_SORT_DIR = 'desc';
   const JOBS_MAP_TOTAL_KEYS = ['total', 'totalCount', 'totalJobs', 'jobsCount', 'nbJobs'];
+  const API_BASE = 'https://api.agilotext.com/api/v1';
+  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  const AUTH_AUDIO_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
+  const AUDIO_GENERIC_MESSAGE = 'Impossible de récupérer cet audio pour le moment.';
+  const AUDIO_AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
+  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+
+  function tryParseJson(text) {
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function isAudioExpiredPayload(payload) {
+    if (typeof window.agiloIsAudioExpiredPayload === 'function') {
+      try {
+        return !!window.agiloIsAudioExpiredPayload(payload);
+      } catch (_) {}
+    }
+    const txt =
+      payload == null ? '' : String(typeof payload === 'string' ? payload : JSON.stringify(payload));
+    return txt.toLowerCase().includes('error_audio_file_expired');
+  }
+
+  function isAudioAuthPayload(payload, statusCode) {
+    if (statusCode === 401 || statusCode === 403) return true;
+    if (!payload) return false;
+    const txt = typeof payload === 'string' ? payload : JSON.stringify(payload);
+    return AUDIO_AUTH_HINT_RE.test(String(txt || ''));
+  }
+
+  function getAudioFailureMessage(payload, fallbackPrimary) {
+    if (typeof window.agiloJobErrorParts === 'function') {
+      try {
+        const parts = window.agiloJobErrorParts(
+          typeof payload === 'object' && payload ? payload : { userErrorMessage: String(payload || '') },
+          fallbackPrimary
+        );
+        return parts?.primary || fallbackPrimary;
+      } catch (_) {}
+    }
+    return fallbackPrimary;
+  }
+
+  async function refreshTokenForAudioDownload(userEmail, edition) {
+    const email = String(userEmail || '').trim();
+    const ed = String(edition || getEdition() || 'ent').trim();
+    if (!email) return '';
+    const tokenBefore = String(window.globalToken || '');
+
+    try {
+      if (typeof window.getToken === 'function') {
+        await window.getToken(email, ed, true);
+      }
+    } catch (err) {
+      console.warn('[Agilo][MesTranscripts][v2] window.getToken failed before audio download', err);
+    }
+
+    for (let i = 0; i < 8; i++) {
+      if (window.globalToken && String(window.globalToken) !== tokenBefore) return window.globalToken;
+      if (window.globalToken && !tokenBefore) return window.globalToken;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+
+    if (window.globalToken) return window.globalToken;
+
+    try {
+      const url = `${API_BASE}/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(ed)}`;
+      const r = await fetch(url, { cache: 'no-store', credentials: 'omit' });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data?.status === 'OK' && data?.token) {
+        window.globalToken = data.token;
+        return data.token;
+      }
+    } catch (err) {
+      console.warn('[Agilo][MesTranscripts][v2] getToken fallback failed', err);
+    }
+
+    return window.globalToken || '';
+  }
+
+  function buildAudioDownloadUrl({ jobId, userEmail, token, edition }) {
+    return `${API_BASE}/receiveAudio?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(
+      userEmail
+    )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+  }
+
+  async function verifyAudioDownloadUrl(url) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 12000);
+      const r = await fetch(url, {
+        method: 'GET',
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: ctrl.signal,
+        headers: {
+          Range: 'bytes=0-0',
+          Accept: 'audio/*,application/octet-stream,application/json,text/plain,text/html;q=0.9'
+        }
+      });
+      clearTimeout(timer);
+
+      const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const cd = r.headers.get('content-disposition') || '';
+      const binaryOk = r.ok && (
+        ct.indexOf('audio/') === 0 ||
+        ct.indexOf('application/octet-stream') === 0 ||
+        /attachment|filename=/i.test(cd)
+      );
+
+      if (binaryOk) {
+        try {
+          await r.body?.cancel?.();
+        } catch (_) {}
+        return { ok: true };
+      }
+
+      const text = await r.text().catch(() => '');
+      const payload = tryParseJson(text) || text;
+
+      if (isAudioExpiredPayload(payload)) {
+        return { ok: false, type: 'audio_expired', message: AUDIO_EXPIRED_MESSAGE };
+      }
+      if (isAudioAuthPayload(payload, r.status)) {
+        return { ok: false, type: 'auth', message: AUTH_AUDIO_MESSAGE };
+      }
+      if (typeof payload === 'object' && payload && String(payload.status || '').toUpperCase() === 'OK') {
+        return { ok: true };
+      }
+
+      return {
+        ok: false,
+        type: 'generic',
+        message: getAudioFailureMessage(payload, AUDIO_GENERIC_MESSAGE)
+      };
+    } catch (err) {
+      console.warn('[Agilo][MesTranscripts][v2] verifyAudioDownloadUrl failed', err);
+      return { ok: false, type: 'generic', message: AUDIO_GENERIC_MESSAGE };
+    }
+  }
+
+  function bindAudioDownloadGuard(anchorEl, { job, userEmail, edition }) {
+    if (!anchorEl || anchorEl.__agiloAudioGuardBound) return;
+    anchorEl.__agiloAudioGuardBound = true;
+    anchorEl.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const freshToken = await refreshTokenForAudioDownload(userEmail, edition);
+      if (!freshToken) {
+        window.alert(AUTH_AUDIO_MESSAGE);
+        return;
+      }
+
+      const freshUrl = buildAudioDownloadUrl({
+        jobId: job.jobid,
+        userEmail,
+        token: freshToken,
+        edition
+      });
+      const check = await verifyAudioDownloadUrl(freshUrl);
+
+      if (!check.ok) {
+        window.alert(check.message || AUDIO_GENERIC_MESSAGE);
+        return;
+      }
+
+      anchorEl.href = freshUrl;
+      const tempLink = document.createElement('a');
+      tempLink.href = freshUrl;
+      tempLink.target = '_blank';
+      tempLink.rel = 'noopener noreferrer';
+      tempLink.download = anchorEl.getAttribute('download') || '';
+      tempLink.style.display = 'none';
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+    });
+  }
 
   let allJobsCache = null;
   let cacheKey = '';
@@ -40,8 +223,6 @@
   }
 
   let currentSortDir = readSortDirFromUrl();
-
-  const API_BASE = 'https://api.agilotext.com/api/v1';
 
   (function injectAgiloMesTranscriptsLockStyles() {
     if (document.getElementById('agilo-mes-transcripts-lock-style')) return;
@@ -407,8 +588,7 @@
   }
 
   function archivedJobMessage(job) {
-    const days = retentionAudioDays(getEdition());
-    return `Ce fichier audio a été archivé (conservation : ${days} j max). Le contenu n'est plus accessible.`;
+    return TEXT_ASSET_EXPIRED_MESSAGE;
   }
 
   function isSummaryReadyForDownload(transcriptStatus) {
@@ -860,10 +1040,14 @@
     if (fileNameAnchor) {
       fileNameAnchor.textContent = displayJobTitle(job);
       fileNameAnchor.title = 'Fichier original : ' + (job.filename || 'Inconnu');
-      fileNameAnchor.href = `${API_BASE}/receiveAudio?jobId=${job.jobid}&username=${encodeURIComponent(
-        userEmail
-      )}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}`;
+      fileNameAnchor.href = buildAudioDownloadUrl({
+        jobId: job.jobid,
+        userEmail,
+        token,
+        edition
+      });
       fileNameAnchor.setAttribute('download', job.filename || `${displayJobTitle(job)}.mp3`);
+      bindAudioDownloadGuard(fileNameAnchor, { job, userEmail, edition });
     }
 
     const tier = location.pathname.match(/^\/app\/([^/]+)/)?.[1] || 'business';

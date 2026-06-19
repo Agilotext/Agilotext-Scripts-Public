@@ -6,6 +6,11 @@
   if (window.__agiloEditorHeader_v5) return;
   window.__agiloEditorHeader_v5 = true;
 
+  const AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
+  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+
   /** @returns {typeof window.agiloJobErrorParts} */
   function ensureJobErrorFmt() {
     if (typeof window.agiloJobErrorParts === 'function') return window.agiloJobErrorParts;
@@ -16,12 +21,41 @@
         if (!s || !mx || s.length <= mx) return s || '';
         return String(s).slice(0, mx - 3) + '...';
       }
+      function sj(x) { try { return JSON.parse(x); } catch (_) { return null; } }
+      function hasCode(payload, code, depth, seen) {
+        if (!payload || !code) return false;
+        if (!depth) depth = 0;
+        if (!seen) seen = [];
+        if (depth > 4) return false;
+        if (typeof payload === 'string') {
+          const txt = ts(payload);
+          if (!txt) return false;
+          if (txt.toLowerCase().includes(String(code).toLowerCase())) return true;
+          const parsed = sj(txt);
+          return parsed ? hasCode(parsed, code, depth + 1, seen) : false;
+        }
+        if (typeof payload !== 'object') return false;
+        if (seen.includes(payload)) return false;
+        seen.push(payload);
+        if (Array.isArray(payload)) return payload.some((entry) => hasCode(entry, code, depth + 1, seen));
+        return Object.keys(payload).some((key) => hasCode(payload[key], code, depth + 1, seen));
+      }
+      function isAudioExpiredPayload(payload) {
+        return hasCode(payload, AUDIO_EXPIRED_CODE);
+      }
       const ex = ts(data && data.javaException);
+      if (isAudioExpiredPayload(data) || isAudioExpiredPayload(fb)) {
+        return {
+          primary: AUDIO_EXPIRED_MESSAGE,
+          technical: '',
+          alertText: AUDIO_EXPIRED_MESSAGE
+        };
+      }
       if (ex && ex.toLowerCase().includes('error_summary_transcript_file_not_exists')) {
         return {
-          primary: 'Fichier archivé — politique de conservation des données.',
+          primary: 'Transcription ou compte rendu archivé — politique de conservation des données.',
           technical: '',
-          alertText: 'Ce fichier a été supprimé conformément à la politique de conservation. Il n\'est plus accessible.'
+          alertText: TEXT_ASSET_EXPIRED_MESSAGE
         };
       }
       const primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
@@ -34,6 +68,15 @@
       if (!ts(tech)) tech = '';
       const alertText = tech ? `${primary}\n\n— Détails techniques —\n${tr(tech, 2000)}` : primary;
       return { primary, technical: tech, alertText };
+    }
+    if (!window.AGILO_AUDIO_EXPIRED_CODE) window.AGILO_AUDIO_EXPIRED_CODE = AUDIO_EXPIRED_CODE;
+    if (!window.agiloAudioExpiredMessage) window.agiloAudioExpiredMessage = AUDIO_EXPIRED_MESSAGE;
+    if (typeof window.agiloIsAudioExpiredPayload !== 'function') {
+      window.agiloIsAudioExpiredPayload = function (payload) {
+        return String(typeof payload === 'string' ? payload : JSON.stringify(payload || ''))
+          .toLowerCase()
+          .includes(AUDIO_EXPIRED_CODE);
+      };
     }
     window.agiloJobErrorParts = jobErr;
     return jobErr;
@@ -323,9 +366,7 @@
   }
 
   function expiredJobMessage(job) {
-    const edition = String(AUTH?.edition || $('#editorRoot')?.dataset?.edition || EDITION_DEFAULT).toLowerCase();
-    const audioDays = edition === 'ent' || edition === 'business' ? 30 : (edition === 'pro' ? 30 : 1);
-    return `Ce fichier a été archivé conformément à la politique de conservation (audio ${audioDays} j). Le contenu n'est plus accessible.`;
+    return TEXT_ASSET_EXPIRED_MESSAGE;
   }
 
   function updateStatusIcons(status, job) {
