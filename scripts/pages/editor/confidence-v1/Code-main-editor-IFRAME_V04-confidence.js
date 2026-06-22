@@ -1,0 +1,2952 @@
+// Agilotext - Main Editor (Transcript Editor Principal)
+// BRANCHE TEST CONFIDENCE — ne pas remplacer V04 prod
+// Prod : ../Code-main-editor-IFRAME_V04.js (inchangé)
+// ⚠️ Ce fichier est chargé depuis GitHub (confidence-v1)
+// Correspond à: code-main-editor dans Webflow
+
+(function ready(fn) {
+  if (document.readyState !== 'loading') fn();
+  else document.addEventListener('DOMContentLoaded', fn, { once: true });
+})(() => {
+  'use strict';
+
+  const API_BASE = 'https://api.agilotext.com/api/v1';
+  const editorRoot = document.getElementById('editorRoot');
+  const SOFT_CANCEL = true;
+
+  const EDITION = (function () {
+    const raw = window.AGILO_EDITION
+      || new URLSearchParams(location.search).get('edition')
+      || editorRoot?.dataset.edition
+      || localStorage.getItem('agilo:edition')
+      || 'ent';
+    const v = String(raw || '').toLowerCase().trim();
+    if (['enterprise', 'entreprise', 'business', 'team', 'ent'].includes(v)) return 'ent';
+    if (v.startsWith('pro')) return 'pro';
+    if (v.startsWith('free') || v === 'gratuit') return 'free';
+    return 'ent';
+  })();
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const byId = (id) => document.getElementById(id);
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const waitFrames = (n = 1) => new Promise(res => {
+    const step = i => i ? requestAnimationFrame(() => step(i - 1)) : res();
+    step(Math.max(1, n));
+  });
+
+  // JSON Nico -> UI
+  const msToSec = ms => Math.max(0, Math.floor((+ms || 0) / 1000));
+  const decodeNL = s => String(s || '')
+    .replace(/\\n/g, '\n')
+    .replace(/<br\s*\/?>/gi, '\n');
+  function mapNicoJsonToSegments(j) {
+    const arr = Array.isArray(j?.segments) ? j.segments : [];
+    return arr.map((r, i) => ({
+      id: r.id || `s${i}`,
+      start: msToSec(r.milli_start),
+      end: Number.isFinite(r.milli_end) ? msToSec(r.milli_end) : null,
+      speaker: String(r.speaker || '').trim(),
+      text: decodeNL(r.text)
+    }));
+  }
+
+
+  function isVisible(el) {
+    if (!el) return false;
+    const cs = getComputedStyle(el);
+    return !el.hasAttribute('hidden') && cs.display !== 'none' && cs.visibility !== 'hidden';
+  }
+  function tokenKey(email, edition) {
+    return `agilo:token:${String(edition || 'ent').toLowerCase()}:${String(email || '').toLowerCase()}`;
+  }
+
+  // ⚡️ CUSTOM SCROLL HELPER
+  function agiloFindScrollContainer(el) {
+    for (let p = el?.parentElement; p; p = p.parentElement) {
+      if (p === document.body || p === document.documentElement) break;
+      const cs = getComputedStyle(p);
+      const oy = cs.overflowY || cs.overflow;
+      const ox = cs.overflowX || cs.overflow;
+      const scrollableY = (oy === 'auto' || oy === 'scroll' || oy === 'overlay') && p.scrollHeight > p.clientHeight + 2;
+      const scrollableX = (ox === 'auto' || ox === 'scroll' || ox === 'overlay') && p.scrollWidth > p.clientWidth + 2;
+      if (scrollableY || scrollableX) return p;
+    }
+    return null;
+  }
+  function agiloIsOutOfView(el, container, { top = 100, bottom = 120 } = {}) {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    if (!container || container === document.body || container === document.documentElement) {
+      return (r.top < top) || (r.bottom > innerHeight - bottom);
+    }
+    const c = container.getBoundingClientRect();
+    return (r.top < c.top + top) || (r.bottom > c.bottom - bottom);
+  }
+  function agiloScrollIntoView(el, { behavior = 'smooth', block = 'center', allowWindow = true } = {}) {
+    if (!el) return;
+    const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
+    const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
+    if (container && container !== document.body && container !== document.documentElement) {
+      const r = el.getBoundingClientRect();
+      const c = container.getBoundingClientRect();
+      const currentScroll = container.scrollTop;
+      const relTop = r.top - c.top;
+      const desiredRelTop = (container.clientHeight / 2) - (el.offsetHeight / 2);
+      container.scrollTo({ top: currentScroll + relTop - desiredRelTop, behavior });
+      return;
+    }
+    if (allowWindow) {
+      el.scrollIntoView({ behavior, block });
+    }
+  }
+
+  function pickTranscriptEl() {
+    return byId('transcriptEditor') || byId('ag-transcript') || document.querySelector('[data-editor="transcript"]') || null;
+  }
+  function pickSummaryEl() {
+    return byId('summaryEditor') || byId('ag-summary') || document.querySelector('[data-editor="summary"]') || null;
+  }
+  const editors = {
+    transcript: pickTranscriptEl(),
+    summary: pickSummaryEl(),
+    conversation: byId('conversationEditor') || byId('ag-conversation') || null
+  };
+
+  if (!window.__agiloSummaryMailCopyListener) {
+    window.__agiloSummaryMailCopyListener = true;
+    window.addEventListener('message', (ev) => {
+      try {
+        const d = ev.data;
+        if (!d || typeof d !== 'object') return;
+        if (d.type === 'agilo:summary-mail-copy' && d.ok) {
+          if (typeof window.toast === 'function') {
+            window.toast(d.mode === 'html' ? 'HTML du mail copié dans le presse-papier' : 'Texte du mail copié');
+          }
+          return;
+        }
+        if (d.type === 'agilo:summary-open-chat') {
+          if (typeof openChatTab === 'function') openChatTab();
+        }
+      } catch (_) { }
+    });
+  }
+
+  /** Clés V3_STRUCT (templates type Valtus) : hors de cette liste, les lignes sont du corps multi-lignes. */
+  const __AGILO_V3_STRUCT_KEYS = new Set([
+    'candidate_name', 'candidate_gender', 'client_name', 'client_company', 'mission_title', 'role_title',
+    'years_exp', 'tjm', 'dispo', 'dispo_literal', 'mobility',
+    'bullet1_title', 'bullet1_body', 'bullet2_title', 'bullet2_body', 'bullet3_title', 'bullet3_body',
+    'closing_reco'
+  ]);
+
+  function agiloParseV3StructInner(raw) {
+    if (!raw || !String(raw).trim()) return null;
+    const lines = String(raw).replace(/\r/g, '').split('\n');
+    const out = {};
+    let curKey = null;
+    const buf = [];
+    const flush = () => {
+      if (curKey) out[curKey] = buf.join('\n').trim();
+      buf.length = 0;
+    };
+    for (const line of lines) {
+      const m = line.match(/^([a-z][a-z0-9_]*)\s*:\s*(.*)$/i);
+      const key = m && m[1] ? m[1].toLowerCase() : '';
+      if (m && __AGILO_V3_STRUCT_KEYS.has(key)) {
+        flush();
+        curKey = key;
+        buf.push(m[2] != null ? m[2] : '');
+      } else if (curKey) {
+        buf.push(line);
+      }
+    }
+    flush();
+    return out;
+  }
+
+  /** Document iframe ou nœud racine du compte-rendu (ex. #summaryEditor en injection directe). */
+  function agiloFindV3StructInRoot(root) {
+    if (!root) return null;
+    const walkTop = root.nodeType === 9
+      ? (root.body || root.documentElement)
+      : root;
+    if (!walkTop) return null;
+    const doc = root.nodeType === 9 ? root : root.ownerDocument;
+    if (!doc) return null;
+    try {
+      const w = doc.createTreeWalker(walkTop, NodeFilter.SHOW_COMMENT, null, false);
+      let n;
+      while ((n = w.nextNode())) {
+        const d = n.data || '';
+        if (d.indexOf('V3_STRUCT') !== -1) {
+          return d
+            .replace(/^\s*V3_STRUCT\s*/i, '')
+            .replace(/\s*END_V3_STRUCT\s*$/i, '')
+            .trim();
+        }
+      }
+    } catch (e) { /* ignore */ }
+    try {
+      const html = root.nodeType === 9
+        ? (root.documentElement && root.documentElement.innerHTML)
+        : (walkTop.innerHTML || (walkTop.textContent && String(root.outerHTML || '')) || '');
+      if (html) {
+        const m = String(html).match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
+        if (m) return m[1].trim();
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  /** Chaîne complète côté API (le round-trip innerHTML de sanitizeHtml efface souvent les commentaires). */
+  function agiloFindV3StructInHtmlString(s) {
+    if (!s || typeof s !== 'string') return null;
+    const m = s.match(/<!--\s*V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT\s*-->/i) ||
+      s.match(/V3_STRUCT\s*([\s\S]*?)\s*END_V3_STRUCT/);
+    return m ? m[1].trim() : null;
+  }
+
+  function agiloEnsureCompteRenduEmailBlockCss(idoc) {
+    try {
+      if (!idoc.head || idoc.querySelector('link[data-agilo-email-block-css]')) return;
+      const link = idoc.createElement('link');
+      link.rel = 'stylesheet';
+      link.setAttribute('data-agilo-email-block-css', '1');
+      link.href = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/editor/agilo-iframe-email-block.css?v=3';
+      idoc.head.appendChild(link);
+    } catch (e) {
+      if (window.AGILO_DEBUG) console.warn('[agilo] email block css', e);
+    }
+  }
+
+  function agiloV3DataToSubjectLine(data) {
+    const segs = ['Présentation de profil'];
+    if (data.candidate_name) segs.push('— ' + data.candidate_name);
+    if (data.role_title) segs.push('— ' + data.role_title);
+    if (data.client_company) segs.push('— ' + data.client_company);
+    return segs.join(' ');
+  }
+
+  function agiloV3DataToBodyPlain(data) {
+    if (!data) return '';
+    const lines = ['Bonjour,', ''];
+    for (let i = 1; i <= 3; i++) {
+      const t = data['bullet' + i + '_title'];
+      const b = data['bullet' + i + '_body'];
+      if (t) {
+        lines.push(t);
+        if (b) lines.push(b);
+        lines.push('');
+      } else if (b) {
+        lines.push(b, '');
+      }
+    }
+    const info = [];
+    if (data.tjm) info.push('TJM (indicatif) : ' + data.tjm + ' €/jour');
+    if (data.dispo_literal || data.dispo) info.push('Disponibilité : ' + (data.dispo_literal || data.dispo));
+    if (data.mobility) info.push('Mobilité : ' + data.mobility);
+    if (info.length) {
+      lines.push(info.join(' · '));
+      lines.push('');
+    }
+    if (data.closing_reco) {
+      lines.push(data.closing_reco);
+      lines.push('');
+    }
+    lines.push('Cordialement,');
+    return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+
+  function agiloEscHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function agiloSimpleMdInline(text) {
+    return agiloEscHtml(text)
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
+  }
+
+  function agiloSimpleMarkdownToHtml(md) {
+    const src = String(md == null ? '' : md).replace(/\r/g, '');
+    if (!src.trim()) return '';
+    const lines = src.split('\n');
+    const out = [];
+    let inUl = false;
+    let inOl = false;
+    const closeLists = function () {
+      if (inUl) { out.push('</ul>'); inUl = false; }
+      if (inOl) { out.push('</ol>'); inOl = false; }
+    };
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i] || '';
+      const line = raw.trim();
+      if (!line) { closeLists(); continue; }
+      const hu = line.match(/^(#{1,6})\s+(.*)$/);
+      if (hu) {
+        closeLists();
+        const lvl = Math.min(6, hu[1].length);
+        out.push('<h' + lvl + '>' + agiloSimpleMdInline(hu[2]) + '</h' + lvl + '>');
+        continue;
+      }
+      const lu = line.match(/^[-*]\s+(.*)$/);
+      if (lu) {
+        if (inOl) { out.push('</ol>'); inOl = false; }
+        if (!inUl) { out.push('<ul>'); inUl = true; }
+        out.push('<li>' + agiloSimpleMdInline(lu[1]) + '</li>');
+        continue;
+      }
+      const lo = line.match(/^\d+\.\s+(.*)$/);
+      if (lo) {
+        if (inUl) { out.push('</ul>'); inUl = false; }
+        if (!inOl) { out.push('<ol>'); inOl = true; }
+        out.push('<li>' + agiloSimpleMdInline(lo[1]) + '</li>');
+        continue;
+      }
+      closeLists();
+      out.push('<p>' + agiloSimpleMdInline(line) + '</p>');
+    }
+    closeLists();
+    return out.join('\n');
+  }
+
+  function agiloV3DataToBodyDisplayHtml(data) {
+    if (!data) return '';
+    const parts = ['<p>' + agiloEscHtml('Bonjour,') + '</p>'];
+    for (let i = 1; i <= 3; i++) {
+      const t = data['bullet' + i + '_title'];
+      const b = data['bullet' + i + '_body'];
+      if (t) parts.push('<p><strong>' + agiloSimpleMdInline(t) + '</strong></p>');
+      if (b) parts.push('<div class="agilo-v3-mail-bodypre">' + agiloSimpleMarkdownToHtml(b) + '</div>');
+    }
+    const info = [];
+    if (data.tjm) info.push('TJM (indicatif) : ' + data.tjm + ' €/jour');
+    if (data.dispo_literal || data.dispo) info.push('Disponibilité : ' + (data.dispo_literal || data.dispo));
+    if (data.mobility) info.push('Mobilité : ' + data.mobility);
+    if (info.length) parts.push('<p>' + agiloEscHtml(info.join(' · ')) + '</p>');
+    if (data.closing_reco) parts.push('<div class="agilo-v3-mail-bodypre">' + agiloSimpleMarkdownToHtml(data.closing_reco) + '</div>');
+    parts.push('<p>' + agiloEscHtml('Cordialement,') + '</p>');
+    return parts.join('\n');
+  }
+
+  function agiloWireCompteRenduEmailBlock(targetDoc, block, subject, bodyPlain) {
+    if (!targetDoc || !block) return;
+    const su = String(subject || '').trim();
+    const bt = String(bodyPlain || '');
+    const copyText = 'Objet : ' + su + '\n\n' + bt;
+    const gmailUrl = 'https://mail.google.com/mail/?view=cm&fs=1&su=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
+    const outlookUrl = 'https://outlook.office.com/mail/deeplink/compose?subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
+    const mailtoUrl = 'mailto:?subject=' + encodeURIComponent(su) + '&body=' + encodeURIComponent(bt);
+    const copyBtn = block.querySelector('.agilo-email-btn-copy');
+    const openConversationBtn = block.querySelector('.agilo-summary-open-chat-btn');
+    const directGmail = block.querySelector('a[data-agilo-mail-app="gmail"]');
+    const directOutlook = block.querySelector('a[data-agilo-mail-app="outlook"]');
+    const directDefault = block.querySelector('a[data-agilo-mail-app="default"]');
+    const copyIconDefault = copyBtn ? copyBtn.innerHTML : '';
+    const copyIconChecked = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon paste"><path fill="none" d="M0 0h24v24H0z"></path><path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"></path></svg>';
+    const toastFn = typeof window.toast === 'function' ? window.toast : function () { };
+    if (copyBtn) copyBtn.addEventListener('click', function (e) {
+      e.preventDefault();
+      (async function () {
+        try {
+          const copyPlainText = async function () {
+            if (navigator.clipboard && window.isSecureContext && typeof navigator.clipboard.writeText === 'function') {
+              await navigator.clipboard.writeText(copyText);
+              return;
+            }
+            const ta = document.createElement('textarea');
+            ta.value = copyText;
+            ta.style.cssText = 'position:fixed;left:-9999px;';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          };
+
+          let copyMode = 'text';
+          const bodyNode = block.querySelector('.agilo-email-block-body');
+          const htmlBody = bodyNode ? String(bodyNode.innerHTML || '').trim() : '';
+          const htmlPayload = '<div>'
+            + '<p><strong>Objet :</strong> ' + agiloEscHtml(su) + '</p>'
+            + htmlBody
+            + '</div>';
+
+          if (
+            navigator.clipboard && window.isSecureContext
+            && typeof navigator.clipboard.write === 'function'
+            && typeof window.ClipboardItem !== 'undefined'
+            && htmlBody
+          ) {
+            const item = new ClipboardItem({
+              'text/plain': new Blob([copyText], { type: 'text/plain' }),
+              'text/html': new Blob([htmlPayload], { type: 'text/html' })
+            });
+            await navigator.clipboard.write([item]);
+            copyMode = 'html';
+          } else {
+            await copyPlainText();
+          }
+
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage({ type: 'agilo:summary-mail-copy', ok: true, mode: copyMode }, '*');
+            }
+          } catch (err) { }
+          copyBtn.classList.add('agilo-email-btn-copied');
+          copyBtn.innerHTML = copyIconChecked;
+          toastFn(copyMode === 'html' ? 'Mail copié (mise en forme conservée)' : 'Texte du mail copié');
+          setTimeout(function () {
+            copyBtn.classList.remove('agilo-email-btn-copied');
+            copyBtn.innerHTML = copyIconDefault;
+          }, 2000);
+        } catch (err) {
+          toastFn('Échec de la copie');
+        }
+      })();
+    });
+    if (openConversationBtn) {
+      openConversationBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        try {
+          if (typeof openChatTab === 'function') {
+            openChatTab();
+            return;
+          }
+        } catch (_) { }
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'agilo:summary-open-chat' }, '*');
+          }
+        } catch (_) { }
+      });
+    }
+    if (directGmail) {
+      directGmail.href = gmailUrl;
+      directGmail.target = '_blank';
+      directGmail.rel = 'noopener noreferrer';
+    }
+    if (directOutlook) {
+      directOutlook.href = outlookUrl;
+      directOutlook.target = '_blank';
+      directOutlook.rel = 'noopener noreferrer';
+    }
+    if (directDefault) {
+      directDefault.href = mailtoUrl;
+      directDefault.removeAttribute('target');
+    }
+  }
+
+  /**
+   * Même présentation que l’e-mail de l’onglet Conversation (carte, copie, menu Gmail/Outlook/mailto).
+   */
+  function agiloBuildCompteRenduConversationEmailFromV3(targetDoc, data, subject, bodyPlain) {
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    const block = targetDoc.createElement('div');
+    block.className = 'mail-ready agilo-email-block agilo-email-block--in-summary';
+    block.setAttribute('data-agilo-mail-from', 'v3-struct');
+    block.setAttribute('data-agilo-v3-compte-rendu-mail', '1');
+
+    const header = targetDoc.createElement('div');
+    header.className = 'agilo-email-block-header';
+    const label = targetDoc.createElement('span');
+    label.className = 'agilo-email-block-label';
+    label.textContent = 'Email';
+    const tools = targetDoc.createElement('div');
+    tools.className = 'agilo-email-block-tools';
+    const copyBtn = targetDoc.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'agilo-email-btn agilo-email-btn-copy';
+    copyBtn.setAttribute('aria-label', 'Copier le mail');
+    copyBtn.setAttribute('title', 'Copier le mail');
+    copyBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" class="agilo-email-icon copy-icon"><path fill="none" d="M0 0h24v24H0z"></path><rect fill="none" height="24" width="24"></rect><path fill="currentColor" d="M18,2H9C7.9,2,7,2.9,7,4v12c0,1.1,0.9,2,2,2h9c1.1,0,2-0.9,2-2V4C20,2.9,19.1,2,18,2z M18,16H9V4h9V16z M3,15v-2h2v2H3z M3,9.5h2v2H3V9.5z M10,20h2v2h-2V20z M3,18.5v-2h2v2H3z M5,22c-1.1,0-2-0.9-2-2h2V22z M8.5,22h-2v-2h2V22z M13.5,22L13.5,22l0-2h2v0C15.5,21.1,14.6,22,13.5,22z M5,6L5,6l0,2H3v0C3,6.9,3.9,6,5,6z"></path></svg>';
+    const directWrap = targetDoc.createElement('div');
+    directWrap.className = 'agilo-email-direct-links';
+    const gmailSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="52 42 88 66" width="20" height="20" class="agilo-email-logo-gmail"><path fill="#4285f4" d="M58 108h14V74L52 59v43c0 3.32 2.69 6 6 6"/><path fill="#34a853" d="M120 108h14c3.32 0 6-2.69 6-6V59l-20 15"/><path fill="#fbbc04" d="M120 48v26l20-15v-8c0-7.42-8.47-11.65-14.4-7.2"/><path fill="#ea4335" d="M72 74V48l24 18 24-18v26L96 92"/><path fill="#c5221f" d="M52 51v8l20 15V48l-5.6-4.2c-5.94-4.45-14.4-.22-14.4 7.2"/></svg>';
+    const outlookSvg = '<img src="https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6995e36911a4849150741ca6_Microsoft_Office_Outlook_(2018%E2%80%932024).svg" width="20" height="20" alt="" class="agilo-email-logo-outlook">';
+    const defaultMailSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" class="agilo-email-logo-default"><path fill-rule="evenodd" clip-rule="evenodd" fill="currentColor" d="M3.75 5.25L3 6V18L3.75 18.75H20.25L21 18V6L20.25 5.25H3.75ZM4.5 7.6955V17.25H19.5V7.69525L11.9999 14.5136L4.5 7.6955ZM18.3099 6.75H5.68986L11.9999 12.4864L18.3099 6.75Z"/></svg>';
+    [
+      { app: 'gmail', label: 'Gmail', icon: gmailSvg },
+      { app: 'outlook', label: 'Outlook', icon: outlookSvg },
+      { app: 'default', label: 'Mail', icon: defaultMailSvg }
+    ].forEach(function (item) {
+      const a = targetDoc.createElement('a');
+      a.href = '#';
+      a.className = 'agilo-email-btn agilo-email-btn-link';
+      a.setAttribute('data-agilo-mail-app', item.app);
+      a.setAttribute('aria-label', item.label);
+      a.setAttribute('title', item.label);
+      a.innerHTML = '<span class="agilo-email-icon">' + item.icon + '</span><span class="agilo-email-link-label">' + item.label + '</span>';
+      directWrap.appendChild(a);
+    });
+    tools.appendChild(copyBtn);
+    tools.appendChild(directWrap);
+    header.appendChild(label);
+    header.appendChild(tools);
+    const subjLine = targetDoc.createElement('div');
+    subjLine.className = 'agilo-email-block-subject';
+    subjLine.innerHTML = '<span class="agilo-email-block-subject-label">Objet</span> ' + esc(subject);
+    const bodyWrap = targetDoc.createElement('div');
+    bodyWrap.className = 'agilo-email-block-body agilo-email-block-body--md';
+    bodyWrap.innerHTML = agiloV3DataToBodyDisplayHtml(data);
+    const hint = targetDoc.createElement('div');
+    hint.className = 'agilo-email-summary-hint';
+    hint.innerHTML = '<p class="agilo-email-summary-hint__text">Pour modifier / copier-coller avant envoi, ouvrez l\'onglet Conversation.</p>';
+    const openConversationBtn = targetDoc.createElement('button');
+    openConversationBtn.type = 'button';
+    openConversationBtn.className = 'agilo-email-btn agilo-summary-open-chat-btn';
+    openConversationBtn.setAttribute('aria-label', 'Ouvrir la conversation');
+    openConversationBtn.textContent = 'Ouvrir Conversation';
+    hint.appendChild(openConversationBtn);
+    block.appendChild(header);
+    block.appendChild(subjLine);
+    block.appendChild(bodyWrap);
+    block.appendChild(hint);
+    agiloWireCompteRenduEmailBlock(targetDoc, block, subject, bodyPlain);
+    return block;
+  }
+
+  /**
+   * Comptes rendus avec mail uniquement dans &lt;!--V3_STRUCT--&gt; (souvent effacé par sanitizeHtml) :
+   * construit la carte e-mail (comme l’onglet Conversation).
+   * @param {Document|Element} ctx Document iframe ou conteneur du compte-rendu.
+   * @param {string} [rawHtml] HTML brut reçu (injection directe, pour retrouver le bloc si le DOM a perdu les commentaires).
+   */
+  function agiloMaterializeV3StructMailIfMissing(ctx, rawHtml) {
+    try {
+      if (!ctx) return;
+      const isDoc = ctx.nodeType === 9;
+      const searchRoot = isDoc ? (ctx.body || ctx.documentElement) : ctx;
+      if (!searchRoot) return;
+      if (searchRoot.querySelector('[data-agilo-v3-compte-rendu-mail]')) return;
+      if (searchRoot.querySelector('.mail-ready .agilo-email-block')) return;
+
+      var shells = searchRoot.querySelectorAll('.mail-ready');
+      for (var si = 0; si < shells.length; si++) {
+        var s = shells[si];
+        if (s.querySelector('.agilo-email-block')) continue;
+        if (s.getAttribute('data-agilo-v3-compte-rendu-mail')) continue;
+        var t = (s.textContent || '').replace(/\s/g, ' ').trim();
+        if (t.length < 2) s.remove();
+      }
+
+      var src = agiloFindV3StructInRoot(isDoc ? ctx : searchRoot);
+      if (!src && rawHtml) src = agiloFindV3StructInHtmlString(rawHtml);
+      if (!src) return;
+      const data = agiloParseV3StructInner(src);
+      if (!data) return;
+      if (!data.candidate_name && !data.bullet1_title && !data.bullet1_body) return;
+      const internal = searchRoot.querySelector('.internal-report');
+      if (!internal || !internal.parentNode) return;
+      const targetDoc = isDoc ? ctx : (ctx.ownerDocument || document);
+      agiloEnsureCompteRenduEmailBlockCss(targetDoc);
+      const subject = agiloV3DataToSubjectLine(data);
+      const bodyPlain = agiloV3DataToBodyPlain(data);
+      const block = agiloBuildCompteRenduConversationEmailFromV3(targetDoc, data, subject, bodyPlain);
+      internal.parentNode.insertBefore(block, internal);
+      const ab = searchRoot.querySelector('.report-card > .actions-bar');
+      if (ab) ab.style.setProperty('display', 'none');
+    } catch (e) {
+      if (window.AGILO_DEBUG) console.warn('[agilo] materialize v3 struct mail', e);
+    }
+  }
+
+  /**
+   * Compte-rendu HTML (document complet) : le bloc .mail-ready doit apparaître tôt
+   * (souvent déplacé sous le long .internal-report par erreur de génération).
+   */
+  function agiloReorderCompteRenduMailBlock(idoc) {
+    try {
+      if (!idoc || !idoc.body) return;
+      const mail = idoc.querySelector('.mail-ready');
+      const internal = idoc.querySelector('.internal-report');
+      if (!mail || !internal) return;
+      if (internal.compareDocumentPosition(mail) & Node.DOCUMENT_POSITION_FOLLOWING) {
+        internal.parentNode.insertBefore(mail, internal);
+      }
+    } catch (e) {
+      if (window.AGILO_DEBUG) console.warn('[agilo] reorder mail block', e);
+    }
+  }
+
+  /**
+   * Surcharge copyMailText / copyMailHtml (templates Valtus & co.) : sélecteur élargi + feedback.
+   * S’exécute dans le document de l’iframe.
+   */
+  function agiloInjectCompteRenduCopyBridge(idoc) {
+    if (!idoc || !idoc.body) return;
+    const s = idoc.createElement('script');
+    s.setAttribute('data-agilo', 'compte-rendu-copy-bridge');
+    s.textContent = [
+      '(function(){',
+      'function _find(){',
+      '  var a=document.querySelector(".mail-ready"); if(a) return a;',
+      '  a=document.querySelector("[data-agilo-summary-mail]"); if(a) return a;',
+      '  var q=document.querySelectorAll(".zone-title, .report-card h2, .report-card h3, .v3-notes h2, .v3-notes h3");',
+      '  for(var i=0;i<q.length;i++){ var tx=(q[i].textContent||"").toLowerCase();',
+      '    if(/mail|e-?mail|courrier|message|objet\\s*:/.test(tx)&&/pr[eê]t|cop|adress|cher\\s+/.test(tx)){',
+      '      var p=q[i].closest("section,article,div"); if(p) return p; } }',
+      '  return null;',
+      '}',
+      'function _ok(mode){ try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"agilo:summary-mail-copy",ok:true,mode:mode||"text"},"*");}catch(e){} }',
+      'function _fail(){ try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:"agilo:summary-mail-copy",ok:false,mode:"text"},"*");}catch(e){} }',
+      'function _cb(t,mode){ if(navigator.clipboard&&window.isSecureContext) return navigator.clipboard.writeText(t).then(function(){_ok(mode);}).catch(function(){_legacy(t,mode);}); _legacy(t,mode); }',
+      'function _legacy(t,mode){ var ta=document.createElement("textarea"); ta.value=t; ta.style.cssText="position:fixed;left:-9999px;"; document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); _ok(mode);}catch(e){} document.body.removeChild(ta); }',
+      'window.copyMailText=function(){ var el=_find(); if(!el){ alert("Aucun bloc « mail prêt à copier » détecté (souvent la classe .mail-ready manque dans le HTML généré).\\nSélectionnez le texte à la main, ou corrigez le modèle côté serveur."); _fail(); return; }',
+      '  try{ el.scrollIntoView({block:"nearest",behavior:"smooth"});}catch(x){} var t=(el.innerText||el.textContent||"").replace(/\\r\\n/g,"\\n").trim(); _cb(t,"text"); };',
+      'window.copyMailHtml=function(){ var el=_find(); if(!el){ window.copyMailText(); return; } try{ el.scrollIntoView({block:"nearest",behavior:"smooth"});}catch(x){} var h=(el.outerHTML||"").trim(); _cb(h,"html"); };',
+      '})();'
+    ].join('');
+    idoc.body.appendChild(s);
+  }
+
+  // ✅ ISOLATION : Fonction pour injecter le summary dans un iframe si contient des styles globaux
+  // ⚠️ IMPORTANT : Placée APRÈS la déclaration de editors et pickSummaryEl()
+  function injectSummaryContent(html) {
+    const el = editors.summary || pickSummaryEl();
+    if (!el || !html) return;
+
+    // Détecter si le HTML contient des styles globaux problématiques
+    const hasGlobalStyles = html.includes('<head') ||
+      html.includes('<body') ||
+      /\*\s*\{/.test(html) ||
+      /body\s*\{/.test(html);
+
+    if (hasGlobalStyles) {
+      // ✅ STOCKER le HTML brut pour le PDF (Aspose ne peut pas accéder à l'iframe)
+      el.setAttribute('data-raw-html', html);
+      el.setAttribute('data-is-iframe', 'true');
+
+      // Isoler dans un iframe
+      const iframe = document.createElement('iframe');
+      iframe.className = 'ag-summary-iframe';
+      iframe.style.cssText = 'width:100%; border:none; min-height:max(600px,100svh); background:white;';
+
+      // Vider summaryEditor avant d'ajouter l'iframe
+      el.innerHTML = '';
+      el.appendChild(iframe);
+
+      // Écrire le contenu dans l'iframe (plus fiable que srcdoc)
+      iframe.onload = function () {
+        try {
+          const idoc = this.contentDocument || this.contentWindow.document;
+          idoc.open();
+          idoc.write(html);
+          idoc.close();
+
+          agiloMaterializeV3StructMailIfMissing(idoc);
+          agiloReorderCompteRenduMailBlock(idoc);
+          agiloInjectCompteRenduCopyBridge(idoc);
+
+          const ifr = this;
+          const resolveSummarySvhFloorPx = () => {
+            try {
+              const probe = document.createElement('div');
+              probe.style.cssText = 'position:fixed;left:-10000px;top:0;width:1px;height:100svh;visibility:hidden;pointer-events:none;';
+              document.documentElement.appendChild(probe);
+              const h = Math.round(probe.getBoundingClientRect().height);
+              probe.remove();
+              if (h > 200) return h;
+            } catch (e) { /* ignore */ }
+            return Math.round(
+              typeof window !== 'undefined' && window.innerHeight ? window.innerHeight : 880
+            );
+          };
+          const summarySvhFloorPx = resolveSummarySvhFloorPx();
+          const scheduleSummaryIframeFit = () => {
+            try {
+              const body = idoc.body;
+              if (!body) return;
+              const root = idoc.documentElement;
+              const measured = Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                root ? root.scrollHeight : 0,
+                root ? root.offsetHeight : 0
+              );
+              const nextH = Math.max(measured + 24, summarySvhFloorPx);
+              ifr.style.height = nextH + 'px';
+              ifr.style.minHeight = summarySvhFloorPx + 'px';
+            } catch (e) {
+              console.warn('[Editor] Erreur ajustement hauteur iframe:', e);
+            }
+          };
+          [0, 120, 450, 1400].forEach((ms) => setTimeout(scheduleSummaryIframeFit, ms));
+        } catch (e) {
+          console.error('[Editor] Erreur écriture iframe:', e);
+          // Fallback : utiliser srcdoc si contentDocument ne fonctionne pas
+          try {
+            this.srcdoc = html;
+          } catch (e2) {
+            console.error('[Editor] Erreur srcdoc fallback:', e2);
+            // Dernier recours : injection directe
+            el.innerHTML = html;
+          }
+        }
+      };
+
+      // Déclencher le chargement si l'iframe est déjà chargé
+      if (iframe.contentDocument) {
+        iframe.onload();
+      }
+    } else {
+      // ✅ STOCKER aussi le HTML brut pour les templates simples (cohérence)
+      el.setAttribute('data-raw-html', html);
+      el.setAttribute('data-is-iframe', 'false');
+
+      // ✅ Injection directe (templates simples) - Sanitizer UNIQUEMENT ici
+      el.innerHTML = sanitizeHtml(html);
+      agiloMaterializeV3StructMailIfMissing(el, html);
+    }
+
+    // Appliquer les attributs readonly
+    el.setAttribute('contenteditable', 'false');
+    el.setAttribute('readonly', 'true');
+    el.style.userSelect = 'text';
+    el.style.cursor = 'default';
+    el.classList.add('ag-summary-readonly');
+  }
+
+  // ✅ DÉTECTION ET CORRECTION DU PROBLÈME DE CACHE
+  // Vérifie si le HTML devrait être dans un iframe mais ne l'est pas (problème de cache)
+  function checkAndFixCacheIssue(html) {
+    // Ne vérifier qu'une seule fois par chargement de page
+    if (window.__agiloCacheCheckDone) return false;
+
+    const summaryEl = editors.summary || pickSummaryEl();
+    if (!summaryEl || !html) return false;
+
+    // Vérifier si on a déjà été rechargé à cause du cache (éviter les boucles infinies)
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('_cache_bust') || urlParams.has('_force_reload')) {
+      window.__agiloCacheCheckDone = true;
+      return false;
+    }
+
+    // Détecter si le HTML devrait être dans un iframe
+    const shouldBeIframe = html.includes('<head') ||
+      html.includes('<body') ||
+      /\*\s*\{/.test(html) ||
+      /body\s*\{/.test(html);
+
+    if (!shouldBeIframe) return false; // Pas de problème si pas besoin d'iframe
+
+    // Vérifier l'état actuel
+    const isIframe = summaryEl.getAttribute('data-is-iframe');
+    const hasIframeElement = summaryEl.querySelector('iframe.ag-summary-iframe');
+
+    // Si le HTML devrait être dans un iframe mais ne l'est pas → problème de cache
+    if (shouldBeIframe && (isIframe !== 'true' || !hasIframeElement)) {
+      console.warn('[Editor] ⚠️ Problème de cache détecté : iframe manquant alors que requis. Rechargement avec cache-buster...');
+
+      // Afficher un message à l'utilisateur (optionnel)
+      if (window.toast) {
+        window.toast('Mise à jour nécessaire, rechargement en cours...', { duration: 2000 });
+      }
+
+      // Marquer comme fait pour éviter les appels multiples
+      window.__agiloCacheCheckDone = true;
+
+      // Recharger avec cache-buster après un court délai
+      setTimeout(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('_cache_bust', Date.now().toString());
+        url.searchParams.set('_force_reload', '1');
+        // Utiliser replace pour éviter d'ajouter une entrée dans l'historique
+        window.location.replace(url.toString());
+      }, 500);
+
+      return true;
+    }
+
+    return false;
+  }
+
+  // ✅ FONCTION GLOBALE : Récupérer le HTML brut pour le PDF (Aspose)
+  // Cette fonction est utilisée par le backend pour récupérer le HTML complet
+  // même si le contenu est dans un iframe
+  window.getSummaryContentForPDF = function () {
+    const summaryEditor = document.getElementById('summaryEditor') ||
+      document.getElementById('ag-summary') ||
+      document.querySelector('[data-editor="summary"]');
+
+    if (!summaryEditor) return '';
+
+    // Priorité 1 : HTML brut stocké dans data-raw-html (recommandé)
+    const rawHtml = summaryEditor.getAttribute('data-raw-html');
+    if (rawHtml) {
+      return rawHtml;
+    }
+
+    // Priorité 2 : Essayer d'extraire de l'iframe (fallback)
+    const iframe = summaryEditor.querySelector('.ag-summary-iframe');
+    if (iframe && iframe.contentDocument) {
+      try {
+        const doc = iframe.contentDocument;
+        return doc.documentElement.outerHTML;
+      } catch (e) {
+        console.warn('[Editor] Impossible d\'extraire le contenu de l\'iframe:', e);
+      }
+    }
+
+    // Priorité 3 : innerHTML normal (templates simples sans iframe)
+    return summaryEditor.innerHTML;
+  };
+
+  function toast(msg) {
+    let tRoot = byId('toaster') || byId('ag-toasts');
+    if (!tRoot) { tRoot = document.createElement('div'); tRoot.id = 'toaster'; tRoot.className = 'toaster ag-toasts'; document.body.appendChild(tRoot); }
+    const div = document.createElement('div'); div.className = 'toast'; div.textContent = msg; tRoot.appendChild(div);
+    setTimeout(() => { div.style.opacity = 0; setTimeout(() => div.remove(), 220); }, 2200);
+  }
+  window.toast = window.toast || toast;
+
+
+  const fmtHMS = (s) => {
+    s = Math.max(0, Math.floor(Number(s) || 0));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    const HH = String(h).padStart(2, '0'), MM = String(m).padStart(2, '0'), SS = String(sec).padStart(2, '0');
+    return h ? `${HH}:${MM}:${SS}` : `${MM}:${SS}`;
+  };
+
+
+
+
+  /* ====================== Errors / Alerts ====================== */
+  function parseMaybeJson(raw, contentType = '') {
+    const looksJson =
+      (contentType || '').includes('application/json') ||
+      /^\s*\{/.test(raw || '');
+    if (!looksJson) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  function normCode(code = '') {
+    const s = String(code || '')
+      .replace(/\s+/g, '_')
+      .replace(/[^\w\-.]/g, '_')
+      .toUpperCase();
+    return s || 'UNKNOWN_ERROR';
+  }
+
+  /** Détails techniques pour bloc <details> : javaException, stack, complété par raw si nécessaire. */
+  function technicalDetailsFromJson(json, rawFallback = '') {
+    if (!json || typeof json !== 'object')
+      return String(rawFallback || '').trim();
+    const chunks = [];
+    const ex = String(json.javaException || '').trim();
+    const en = String(json.exceptionName || '').trim();
+    if (ex) chunks.push(ex);
+    else if (en) chunks.push(en);
+    const st = String(json.javaStackTrace || json.exceptionStackTrace || '').trim();
+    if (st) chunks.push(st);
+    let s = chunks.filter(Boolean).join('\n\n').trim();
+    const um = String(json.userErrorMessage || '').trim();
+    if (um && s.startsWith(um)) s = s.slice(um.length).replace(/^[\s:]+/, '').trim();
+    if (!s && rawFallback) s = String(rawFallback).trim();
+    return s;
+  }
+
+  function humanizeError({ where = 'summary', code = '', json = null, httpStatus = 0 }) {
+    const um = String(json?.userErrorMessage || '').trim();
+    if (um) return um;
+
+    const C = normCode(code);
+    const isSummary = where === 'summary';
+
+    const tech = `${json?.exceptionName || json?.javaException || ''} ${json?.exceptionStackTrace || json?.javaStackTrace || ''}`;
+
+    if (/CLIENTABORTEXCEPTION|BROKEN PIPE/i.test(tech)) {
+      return "La connexion a été interrompue pendant le téléchargement. Réessayez.";
+    }
+    if (/CONNEXION.*RE-?INITIALIS[ÉE]E/i.test(tech)) {
+      return "Connexion ré-initialisée par le correspondant. Réessayez.";
+    }
+
+    if (C === 'HTTP_ERROR' && isSummary && (httpStatus === 404 || httpStatus === 204)) {
+      return "Aucun compte-rendu disponible pour ce transcript (pas encore généré).";
+    }
+
+    const M = {
+      ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS: "Vous n'avez pas demandé de compte-rendu pour cette transcription.",
+      READY_SUMMARY_PENDING: "Résumé en préparation…",
+      NOT_READY: "Résumé en préparation…",
+      READY_SUMMARY_ON_ERROR: "La génération du compte-rendu a échoué.",
+      /** receiveSummary KO utilise error_message = error_summary_on_error (distinct du transcript_status READY_SUMMARY_ON_ERROR). */
+      ERROR_SUMMARY_ON_ERROR: "La génération du compte-rendu a échoué.",
+      ERROR_TRANSCRIPT_NOT_READY: "Le transcript n'est pas encore prêt.",
+      ON_ERROR: "Le serveur a signalé une erreur.",
+      ERROR_INVALID_TOKEN: "Session expirée ou invalide. Veuillez vous reconnecter.",
+      NETWORK_ERROR: "Problème réseau lors de la récupération des données. Veuillez réessayer.",
+      BODY_READ_ERROR: "Le chargement du document a été interrompu. Nouvelle tentative en cours…",
+      HTTP_ERROR: `Réponse serveur inattendue (HTTP ${httpStatus || '???'})`,
+      CANCELLED: "Chargement interrompu (changement de transcript).",
+      UNKNOWN_ERROR: "Une erreur est survenue."
+    };
+
+    return M[C] || M.UNKNOWN_ERROR;
+  }
+
+  // Toujours afficher les sauts de ligne dans le contenteditable
+  (function ensurePrewrap() {
+    if (!document.getElementById('ag-prewrap')) {
+      const s = document.createElement('style'); s.id = 'ag-prewrap';
+      s.textContent = '.ag-seg__text{white-space:pre-wrap}';
+      document.head.appendChild(s);
+    }
+  })();
+  // Canon CE -> texte visible (div/br -> \n), NBSP -> espace
+  window.visibleTextFromBox = window.visibleTextFromBox || function (box) {
+    if (!box) return '';
+    const clone = box.cloneNode(true);
+    clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+    const BLOCKS = 'div,p,li,blockquote,pre,section,article,header,footer,h1,h2,h3,h4,h5,h6,ul,ol';
+    clone.querySelectorAll(BLOCKS).forEach((el, i) => {
+      if (i > 0 || el.previousSibling) el.before('\n');
+    });
+    return (clone.textContent || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\u00A0/g, ' ');
+  };
+
+
+  function renderAlert(htmlMsg, details = '') {
+    const safe = document.createElement('div');
+    safe.className = 'ag-alert ag-alert--warn';
+    const esc = s => String(s).replace(/[<>&]/g, m => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[m]));
+    safe.innerHTML = `
+    <div class="ag-alert__title">${esc(htmlMsg)}</div>
+    ${details ? `<details class="ag-alert__details"><summary>Détails techniques</summary><pre>${esc(details)}</pre></details>` : ''}
+  `;
+    return safe;
+  }
+
+
+  async function resolveEmail() {
+    // 1. Essayer d'abord les sources directes
+    const fromAttr = document.querySelector('[name="memberEmail"]')?.getAttribute('value') || '';
+    const fromText = document.querySelector('[data-ms-member="email"]')?.textContent || '';
+    let now = (byId('memberEmail')?.value || fromAttr || fromText || window.memberEmail || localStorage.getItem('agilo:username') || '').trim();
+    if (now) return now;
+
+    // 2. Essayer Memberstack avec timeout et gestion d'erreur améliorée
+    if (window.$memberstackDom?.getMember) {
+      try {
+        // Timeout pour éviter d'attendre trop longtemps en cas de connexion instable
+        const memberstackPromise = window.$memberstackDom.getMember();
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Memberstack timeout')), 5000)
+        );
+
+        const r = await Promise.race([memberstackPromise, timeoutPromise]);
+        now = (r?.data?.email || '').trim();
+        if (now) {
+          // Sauvegarder dans localStorage pour les prochaines fois
+          try {
+            localStorage.setItem('agilo:username', now);
+          } catch (e) { }
+          return now;
+        }
+      } catch (err) {
+        // Détecter les erreurs réseau spécifiques
+        const isNetworkError = err?.code === 'ERR_NETWORK'
+          || err?.message?.includes('Network Error')
+          || err?.message?.includes('ERR_ADDRESS_UNREACHABLE')
+          || err?.message?.includes('timeout')
+          || err?.name === 'NetworkError';
+
+        if (window.AGILO_DEBUG || isNetworkError) {
+          console.warn('[agilo] getMember error (Memberstack non accessible):', err);
+        }
+        // En cas d'erreur réseau, on continue avec les fallbacks
+      }
+    }
+
+    // 3. Dernier recours : vérifier localStorage
+    const lastChance = localStorage.getItem('agilo:username');
+    if (lastChance) return lastChance.trim();
+
+    return '';
+  }
+  function readAuthSnapshot() {
+    const edition = (editorRoot?.dataset.edition || EDITION || 'ent').trim();
+    const email = editorRoot?.dataset.username
+      || byId('memberEmail')?.value
+      || document.querySelector('[name="memberEmail"]')?.value
+      || localStorage.getItem('agilo:username')
+      || window.memberEmail
+      || '';
+    const key = tokenKey(email, edition);
+    const token = editorRoot?.dataset.token
+      || window.globalToken
+      || localStorage.getItem(key)
+      || localStorage.getItem('agilo:token')
+      || '';
+    return { username: (email || '').trim(), token: token || '', edition, KEY: key };
+  }
+  function waitForTokenEvent(ms = 8000, email = '', edition = '') {
+    return new Promise(res => {
+      let done = false;
+      const timer = setTimeout(() => { if (!done) { done = true; res(null); } }, ms);
+      const h = (e) => {
+        if (done) return;
+        const d = e?.detail || {};
+        const okEmail = email ? (String(d.email || '').toLowerCase() === String(email).toLowerCase()) : true;
+        const okEd = edition ? (String(d.edition || '').toLowerCase() === String(edition).toLowerCase()) : true;
+        if (d.token && okEmail && okEd) {
+          done = true; clearTimeout(timer);
+          res({ username: d.email, token: d.token, edition: String(d.edition || edition) });
+        }
+      };
+      window.addEventListener('agilo:token', h, { once: true, passive: true });
+    });
+  }
+  async function ensureAuth() {
+    let auth = readAuthSnapshot();
+    if (!auth.username) auth.username = await resolveEmail();
+
+    if (!auth.token && auth.username) {
+      if (typeof window.getToken === 'function') {
+        try { window.getToken(auth.username, auth.edition); } catch { }
+      }
+      const fromEvt = await waitForTokenEvent(8000, auth.username, auth.edition);
+      if (fromEvt?.token) {
+        auth.token = fromEvt.token;
+        try { localStorage.setItem(auth.KEY, auth.token); } catch { }
+        window.globalToken = auth.token;
+      } else {
+        const snap = readAuthSnapshot();
+        if (snap.token) auth = snap;
+      }
+    }
+
+    if (auth.username) { try { localStorage.setItem('agilo:username', auth.username); } catch { } }
+    try { localStorage.setItem('agilo:edition', auth.edition); } catch { }
+    return auth;
+  }
+  async function refreshToken(auth) {
+    if (!auth?.username) return '';
+    try { localStorage.removeItem(auth.KEY); } catch { }
+    if (typeof window.getToken === 'function') {
+      try { window.getToken(auth.username, auth.edition); } catch { }
+    }
+    const evt = await waitForTokenEvent(8000, auth.username, auth.edition);
+    const tok = evt?.token || window.globalToken || '';
+    if (tok) {
+      try { localStorage.setItem(auth.KEY, tok); } catch { }
+      window.globalToken = tok;
+    }
+    return tok || '';
+  }
+
+  async function fetchWithTimeout(url, opts = {}) {
+    const { timeout = 20000, signal } = opts;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), timeout);
+    const composite = new AbortController();
+    function linkAbort(src) {
+      if (!src) return;
+      if (src.aborted) composite.abort();
+      src.addEventListener('abort', () => composite.abort(), { once: true });
+    }
+    linkAbort(signal);
+    linkAbort(ctrl.signal);
+    try {
+      return await fetch(url, { ...opts, signal: composite.signal, credentials: 'omit', cache: 'no-store' });
+    } finally { clearTimeout(t); }
+  }
+
+  let lastNetToast = 0;
+  const netToast = msg => { const now = Date.now(); if (now - lastNetToast > 15000) { lastNetToast = now; toast(msg); } };
+
+  async function apiGetWithRetry(kind, jobId, auth, retryCount = 0, signal) {
+    const base =
+      (kind === 'summary')
+        ? `${API_BASE}/receiveSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`
+        : `${API_BASE}/receiveTextJson?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+
+    const url = (kind === 'summary') ? (base + '&format=html') : base;
+
+    let r, raw;
+    try {
+      const TIMEOUT_MS = (kind === 'transcript') ? 45000 : 20000;
+      r = await fetchWithTimeout(url, { signal, timeout: TIMEOUT_MS });
+      raw = await r.text();
+    } catch (e) {
+      const errDetail = `${e?.name}: ${e?.message}`;
+      console.error(`[agilo:fetch] ${kind} job=${jobId} retry=${retryCount}: ${errDetail}`);
+      if (e?.name === 'AbortError') {
+        return { ok: false, code: 'CANCELLED', httpStatus: 0, json: null, raw: '' };
+      }
+      if (retryCount < 2) {
+        netToast('Connexion instable, nouvelle tentative…');
+        await wait(2000 * Math.pow(2, retryCount));
+        return apiGetWithRetry(kind, jobId, auth, retryCount + 1, signal);
+      }
+      return { ok: false, code: 'NETWORK_ERROR', httpStatus: 0, json: null, raw: '', _debug: errDetail };
+    }
+
+    if (!r.ok) {
+      if ((r.status === 401 || r.status === 403) && retryCount < 3) {
+        const nt = await refreshToken(auth);
+        if (nt) {
+          auth.token = nt;
+          await wait(400 * Math.pow(1.5, retryCount));
+          return apiGetWithRetry(kind, jobId, auth, retryCount + 1, signal);
+        }
+      }
+      return { ok: false, code: 'HTTP_ERROR', httpStatus: r.status, json: parseMaybeJson(raw, r.headers.get('content-type') || ''), raw };
+    }
+
+    const ct = r.headers.get('content-type') || '';
+    const json = parseMaybeJson(raw, ct);
+
+    // ⚠️ PROTECTION : Si le JSON est mal formé mais contient une erreur explicite, on force le KO
+    if (!json && (raw.includes('"status": "KO"') || raw.includes('"status":"KO"') || raw.includes('"errorMessage"'))) {
+      const fallbackJson = { status: 'KO', errorMessage: 'INVALID_JSON_RESPONSE', exceptionStackTrace: raw };
+      return { ok: false, code: 'API_ERROR_BAD_JSON', httpStatus: r.status, json: fallbackJson, raw };
+    }
+
+    if (json && (json.status === 'KO' || json.errorMessage)) {
+      const code = String(json.errorMessage || json.status || '').toLowerCase();
+      const tech = (json?.exceptionName || json?.javaException || '') + ' ' + (json?.exceptionStackTrace || json?.javaStackTrace || '');
+      if (retryCount < 3) {
+        if (/invalid[_-]?token/.test(code)) {
+          const nt = await refreshToken(auth);
+          if (nt) {
+            auth.token = nt;
+            await wait(500 * Math.pow(1.5, retryCount));
+            return apiGetWithRetry(kind, jobId, auth, retryCount + 1, signal);
+          }
+        } else if (/CLIENTABORTEXCEPTION|BROKEN PIPE/i.test(tech) || /CONNEXION.*RE-?INITIALIS[ÉE]E/i.test(tech)) {
+          netToast('Connexion interrompue détectée. Réessai automatique...');
+          await wait(1000 * Math.pow(2, retryCount));
+          return apiGetWithRetry(kind, jobId, auth, retryCount + 1, signal);
+        }
+      }
+      return { ok: false, code: json.errorMessage || json.status || 'UNKNOWN_ERROR', json, raw };
+    }
+
+    return { ok: true, payload: raw, contentType: ct };
+  }
+
+
+  function sanitizeHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = html || '';
+    div.querySelectorAll('script, style, link[rel="stylesheet"], iframe, object, embed').forEach(n => n.remove());
+    div.querySelectorAll('*').forEach(n => {
+      [...n.attributes].forEach(a => {
+        const name = a.name.toLowerCase();
+        const val = String(a.value || '');
+        if (name.startsWith('on') || /^javascript:/i.test(val)) n.removeAttribute(a.name);
+      });
+    });
+    return div.innerHTML;
+  }
+  function isBlankHtml(html) {
+    const s = String(html || '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, '').replace(/\s+/g, '').trim();
+    return s.length === 0;
+  }
+
+  function enableLink(el, href) {
+    if (!el) return;
+    if (el.__agiloBlocker) { el.removeEventListener('click', el.__agiloBlocker); el.__agiloBlocker = null; }
+    el.classList.remove('is-disabled');
+    el.removeAttribute('aria-disabled');
+    el.removeAttribute('title');
+    el.setAttribute('href', href);
+    el.setAttribute('target', '_blank');
+  }
+  function disableLink(el, msg = 'Indisponible') {
+    if (!el) return;
+    if (el.__agiloBlocker) el.removeEventListener('click', el.__agiloBlocker);
+    el.__agiloBlocker = (e) => { e.preventDefault(); toast(msg); };
+    el.addEventListener('click', el.__agiloBlocker);
+    el.classList.add('is-disabled');
+    el.setAttribute('aria-disabled', 'true');
+    el.setAttribute('title', msg);
+    el.removeAttribute('target');
+    el.setAttribute('href', 'javascript:void(0)');
+  }
+  function updateDownloadLinks(jobId, auth, { summaryEmpty = false } = {}) {
+    const dl = {
+      t_txt: $('.download_wrapper-link_transcript_txt'),
+      t_rtf: $('.download_wrapper-link_transcript_rtf'),
+      t_doc: $('.download_wrapper-link_transcript_doc'),
+      t_docx: $('.download_wrapper-link_transcript_docx'),
+      t_pdf: $('.download_wrapper-link_transcript_pdf'),
+      s_txt: $('.download_wrapper-link_summary_txt'),
+      s_rtf: $('.download_wrapper-link_summary_rtf'),
+      s_doc: $('.download_wrapper-link_summary_doc'),
+      s_docx: $('.download_wrapper-link_summary_docx'),
+      s_pdf: $('.download_wrapper-link_summary_pdf')
+    };
+    if (!jobId || !auth?.username || !auth?.token) return;
+
+    const baseQ = `jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+
+    enableLink(dl.t_txt, `${API_BASE}/receiveText?${baseQ}&format=txt`);
+    enableLink(dl.t_rtf, `${API_BASE}/receiveText?${baseQ}&format=rtf`);
+    enableLink(dl.t_doc, `${API_BASE}/receiveText?${baseQ}&format=doc`);
+    enableLink(dl.t_docx, `${API_BASE}/receiveText?${baseQ}&format=docx`);
+    enableLink(dl.t_pdf, `${API_BASE}/receiveText?${baseQ}&format=pdf`);
+
+    if (summaryEmpty) {
+      ['s_txt', 's_rtf', 's_doc', 's_docx', 's_pdf'].forEach(k => disableLink(dl[k], 'Résumé non disponible pour le moment'));
+    } else {
+      enableLink(dl.s_txt, `${API_BASE}/receiveSummary?${baseQ}&format=html`);
+      enableLink(dl.s_rtf, `${API_BASE}/receiveSummary?${baseQ}&format=rtf`);
+      enableLink(dl.s_doc, `${API_BASE}/receiveSummary?${baseQ}&format=doc`);
+      enableLink(dl.s_docx, `${API_BASE}/receiveSummary?${baseQ}&format=docx`);
+      enableLink(dl.s_pdf, `${API_BASE}/receiveSummary?${baseQ}&format=pdf`);
+    }
+
+    const share = byId('shareLink');
+    if (share) {
+      const u = new URL(share.href || location.href);
+      u.searchParams.set('jobId', jobId);
+      u.searchParams.set('edition', auth.edition);
+      share.href = u.toString();
+    }
+  }
+
+  window._segments = Array.isArray(window._segments) ? window._segments : [];
+  let _activeSeg = -1;
+  let _selectedSegs = new Set();
+  let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
+  let __mode = 'plain';
+
+  function syncDomToModel() {
+    const root = editors.transcript;
+    if (!root || !Array.isArray(window._segments) || !window._segments.length) return;
+    if (__mode === 'structured') {
+      Array.from(root.querySelectorAll(':scope > .ag-seg')).forEach((segEl, idx) => {
+        const box = segEl.querySelector('.ag-seg__text');
+        if (box && window._segments[idx]) {
+          window._segments[idx].text = window.visibleTextFromBox(box);
+        }
+      });
+    } else {
+      const plain = root.querySelector('.ag-plain');
+      if (plain && window._segments[0]) {
+        window._segments[0].text = window.visibleTextFromBox(plain);
+      }
+    }
+  }
+  window.syncDomToModel = syncDomToModel;
+
+  function buildRenameBtn() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Renommer');
+    btn.className = 'rename-btn absolute';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small-5"><path d="M0 0h24v24H0z" fill="none"></path><path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path></svg>';
+    return btn;
+  }
+
+  /* --- COULEURS AUTOMATIQUES LOCUTEURS (Palette Agilotext Extended) --- */
+  /* Gère une infinité de participants par rotation modulo 20 */
+  const SPK_COLORS = [
+    // 1. Les Piliers (Marque)
+    '#174a96', '#fd7e14', '#1c661a', '#a82633',
+    // 2. Les Secondaires "Corporate"
+    '#6f42c1', '#0891b2', '#b45309', '#be185d',
+    // 3. Les Complémentaires "Soft"
+    '#0ea5e9', '#15803d', '#d946ef', '#854d0e',
+    '#4b5563', '#4338ca', '#0f766e', '#9f1239',
+    '#a16207', '#7c2d12', '#374151', '#1d4ed8'
+  ];
+
+  function getSpeakerColor(name) {
+    if (!name) return '#666';
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    const c = SPK_COLORS[Math.abs(hash) % SPK_COLORS.length];
+    return c;
+  }
+
+  const UNDO_MAX = 20;
+  const _undoStack = [];
+  let _undoSaveTimer = null;
+
+  function getSegList(root) {
+    if (!root) return [];
+    return root.querySelectorAll(':scope > .ag-seg');
+  }
+  function getSegIndex(root, segEl) {
+    return Array.prototype.indexOf.call(getSegList(root), segEl);
+  }
+
+  function hideUndoToasts() {
+    const tRoot = byId('toaster') || byId('ag-toasts');
+    if (tRoot) tRoot.querySelectorAll('.toast--undo').forEach(n => n.remove());
+  }
+  function hideUndoBar() { hideUndoToasts(); }
+
+  function scheduleUndoExpiry() {
+    clearTimeout(_undoSaveTimer);
+    if (_undoStack.length === 0) return;
+    _undoSaveTimer = setTimeout(() => {
+      _undoStack.length = 0;
+      hideUndoBar();
+      if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+    }, 4500);
+  }
+
+  function showUndoBar() {
+    hideUndoToasts();
+    const entry = _undoStack[_undoStack.length - 1];
+    if (!entry) return;
+    const msg = entry.label || 'Action effectuée';
+    const t = toast(msg + ' — <button class="ag-undo-link" style="color:#fff;text-decoration:underline;background:none;border:none;padding:0;cursor:pointer;font:inherit;">Annuler</button>', 4000);
+    if (t) {
+      t.classList.add('toast--undo');
+      const btn = t.querySelector('.ag-undo-link');
+      if (btn) btn.onclick = (e) => { e.preventDefault(); applyUndo(); };
+    }
+  }
+
+  function syncSelectedClasses() {
+    const root = editors.transcript; if (!root) return;
+    const segs = getSegList(root);
+    segs.forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.forEach((i) => { if (segs[i]) segs[i].classList.add('is-selected'); });
+  }
+
+  function clearSegSelection() {
+    const root = editors.transcript;
+    if (root) root.querySelectorAll('.ag-seg.is-selected').forEach((el) => { el.classList.remove('is-selected'); });
+    _selectedSegs.clear();
+    if (_bulkBar) _bulkBar.setAttribute('hidden', '');
+  }
+
+  function updateBulkBar() {
+    if (!_bulkBar) ensureBulkBar();
+    if (!_bulkBar) return;
+    if (_selectedSegs.size === 0) {
+      _bulkBar.setAttribute('hidden', '');
+      return;
+    }
+    if (_bulkBarCount) _bulkBarCount.textContent = `${_selectedSegs.size} segment(s) sélectionné(s)`;
+    _bulkBar.removeAttribute('hidden');
+  }
+
+  function ensureBulkBar() {
+    if (_bulkBar) return;
+    const root = editors.transcript; if (!root) return;
+    const host = root.closest('#pane-transcript, .edtr-pane, [id$="transcript"]') || document.body;
+    _bulkBar = document.createElement('div');
+    _bulkBar.id = 'agilo-bulk-bar';
+    _bulkBar.setAttribute('hidden', '');
+    _bulkBar.setAttribute('role', 'status');
+    _bulkBar.setAttribute('aria-live', 'polite');
+    _bulkBarCount = document.createElement('span');
+    _bulkBarCount.className = 'agilo-bulk-bar__count';
+    _bulkDelBtn = document.createElement('button');
+    _bulkDelBtn.type = 'button';
+    _bulkDelBtn.className = 'agilo-bulk-bar__btn';
+    _bulkDelBtn.textContent = 'Supprimer la sélection';
+    _bulkDelBtn.addEventListener('click', () => { deleteSelectedSegments({ requireConfirm: true }); });
+    _bulkBar.appendChild(_bulkBarCount);
+    _bulkBar.appendChild(_bulkDelBtn);
+    host.appendChild(_bulkBar);
+  }
+
+  function deleteSelectedSegments({ requireConfirm = true } = {}) {
+    const root = editors.transcript; if (!root) return false;
+    if (_selectedSegs.size === 0) return false;
+    const asc = Array.from(_selectedSegs).sort((a, b) => a - b);
+    const nSel = asc.length;
+    if (!window._segments || window._segments.length - nSel < 1) {
+      toast('Impossible : suppression vide le transcript.');
+      return false;
+    }
+    if (requireConfirm && !confirm(`Supprimer ${nSel} segment(s) ?`)) return false;
+    const snapshots = asc.map((i) => Object.assign({}, window._segments[i]));
+    for (let k = asc.length - 1; k >= 0; k--) {
+      window._segments.splice(asc[k], 1);
+    }
+    clearSegSelection();
+    pushUndo({ type: 'bulk', snapshots, indices: asc, label: `${nSel} segment(s) supprimés` });
+    _activeSeg = -1;
+    renderSegments(window._segments);
+    return true;
+  }
+
+  function pushUndo(entry) {
+    _undoStack.push(entry);
+    if (_undoStack.length > UNDO_MAX) _undoStack.shift();
+    scheduleUndoExpiry();
+    showUndoBar();
+  }
+
+  function applyUndo() {
+    const entry = _undoStack.pop();
+    if (!entry) return;
+    if (entry.type === 'one') {
+      window._segments.splice(entry.indices[0], 0, entry.snapshots[0]);
+    } else if (entry.type === 'bulk') {
+      for (let k = entry.indices.length - 1; k >= 0; k--) {
+        window._segments.splice(entry.indices[k], 0, entry.snapshots[k]);
+      }
+    }
+    _activeSeg = -1;
+    clearSegSelection();
+    renderSegments(window._segments);
+    hideUndoToasts();
+    toast(entry.label ? `Annulé : ${entry.label}` : 'Action annulée');
+    if (_undoStack.length === 0) {
+      clearTimeout(_undoSaveTimer);
+    }
+  }
+
+  function deleteSegEl(segEl) {
+    const root = editors.transcript; if (!root) return;
+    if (!window._segments || window._segments.length <= 1) {
+      toast('Impossible de supprimer le dernier segment.');
+      return;
+    }
+    const idx = getSegIndex(root, segEl);
+    if (idx < 0) return;
+    const snapshot = Object.assign({}, window._segments[idx]);
+    window._segments.splice(idx, 1);
+    segEl.remove();
+    if (_activeSeg === idx) _activeSeg = -1;
+    else if (_activeSeg > idx) _activeSeg--;
+    const next = new Set();
+    _selectedSegs.forEach((i) => {
+      if (i === idx) return;
+      next.add(i > idx ? i - 1 : i);
+    });
+    _selectedSegs = next;
+    updateBulkBar();
+    
+    pushUndo({ type: 'one', snapshots: [snapshot], indices: [idx], label: 'Segment supprimé' });
+    syncSelectedClasses();
+  }
+
+  function buildDeleteBtn() {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Supprimer ce segment (annulable 4 s)');
+    btn.setAttribute('aria-keyshortcuts', 'Control+Shift+Backspace');
+    btn.className = 'delete-seg-btn absolute';
+    btn.dataset.action = 'delete-seg';
+    btn.title = 'Supprimer ce segment — annulable pendant 4 s\nRaccourci : Ctrl+Maj+Retour Arrière';
+    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M0 0h24v24H0z" fill="none"/><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>';
+    return btn;
+  }
+
+  function setSpeakerStyle(el, name) {
+    if (!el) return;
+    el.style.color = getSpeakerColor(name);
+    el.style.fontWeight = '600';
+  }
+
+  function renderSegments(segments) {
+    const root = editors.transcript; if (!root) return;
+
+    root.innerHTML = '';
+    root.dataset.mode = __mode;
+
+    if (!segments || !segments.length) {
+      const box = document.createElement('div');
+      box.className = 'ag-plain';
+      box.contentEditable = 'true';
+      box.spellcheck = false;
+      box.textContent = '';
+      root.appendChild(box);
+      root.setAttribute('contenteditable', 'false');
+      _selectedSegs.clear();
+      if (_bulkBar) _bulkBar.setAttribute('hidden', '');
+      return;
+    }
+
+    const frag = document.createDocumentFragment();
+
+    segments.forEach((s, i) => {
+      const art = document.createElement('article');
+      art.className = 'ag-seg';
+
+      art.dataset.id = s.id || `s${i}`;
+      if (Number.isFinite(s.start)) art.dataset.start = String(s.start);
+      if (Number.isFinite(s.end)) art.dataset.end = String(s.end);
+      art.dataset.speaker = s.speaker || '';
+
+      if (__mode === 'structured') {
+        const header = document.createElement('header');
+        header.className = 'ag-seg__head';
+
+        const btnTime = document.createElement('button');
+        btnTime.className = 'time';
+        btnTime.type = 'button';
+        const hasStart = Number.isFinite(s.start);
+        const tText = hasStart ? fmtHMS(s.start) : '00:00';
+        btnTime.textContent = tText;
+        btnTime.dataset.action = 'seek';
+        btnTime.dataset.t = hasStart ? String(s.start) : '0';
+        btnTime.title = hasStart ? `Aller à ${tText}` : 'Aller au début (00:00)';
+        header.appendChild(btnTime);
+
+        const spanSpk = document.createElement('span');
+        spanSpk.className = 'speaker';
+        const spkName = (s.speaker || '').trim();
+        spanSpk.textContent = spkName;
+        setSpeakerStyle(spanSpk, spkName);
+        header.appendChild(spanSpk);
+
+        const rename = buildRenameBtn();
+        header.appendChild(rename);
+        const delBtn = buildDeleteBtn();
+        header.appendChild(delBtn);
+        art.appendChild(header);
+      }
+
+      const body = document.createElement('div');
+      body.className = 'ag-seg__text';
+      body.contentEditable = 'true';
+      body.spellcheck = false;
+      body.textContent = s.text || '';
+      art.appendChild(body);
+
+      frag.appendChild(art);
+    });
+
+    root.appendChild(frag);
+    root.setAttribute('contenteditable', 'false');
+    _selectedSegs.clear();
+    if (_bulkBar) _bulkBar.setAttribute('hidden', '');
+
+    if (!root.__bound) {
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured' || !e.shiftKey) return;
+        const art = e.target.closest('.ag-seg');
+        if (!art || e.target.closest('button, .speaker')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = getSegIndex(root, art);
+        if (idx < 0) return;
+        if (_selectedSegs.has(idx)) {
+          _selectedSegs.delete(idx);
+          art.classList.remove('is-selected');
+        } else {
+          _selectedSegs.add(idx);
+          art.classList.add('is-selected');
+        }
+        updateBulkBar();
+      });
+
+      root.addEventListener('click', (e) => {
+        const btn = e.target.closest('button.time[data-action="seek"]');
+        if (!btn || __mode !== 'structured') return;
+        const t = parseFloat(btn.dataset.t || '0');
+        const audio = byId('agilo-audio');
+        if (!audio) { toast('Lecteur audio introuvable.'); return; }
+        try { audio.currentTime = t; if (audio.paused) audio.play().catch(() => { }); } catch { }
+      });
+
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured') return;
+        const btn = e.target.closest('.rename-btn');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        try { window.getSelection()?.removeAllRanges(); } catch { }
+        try { document.activeElement?.blur?.(); } catch { }
+        const segEl = btn.closest('.ag-seg');
+        if (!segEl) return;
+        doRenameFor(segEl, {
+          triggerEl: btn,
+          renameAllEmpty: !!(e.shiftKey || e.altKey),
+          keyState: { shift: e.shiftKey, alt: e.altKey }
+        });
+      });
+
+      root.addEventListener('click', (e) => {
+        if (__mode !== 'structured') return;
+        const btn = e.target.closest('[data-action="delete-seg"]');
+        if (!btn) return;
+        e.preventDefault(); e.stopPropagation();
+        const segEl = btn.closest('.ag-seg');
+        if (!segEl) return;
+        const idx = getSegIndex(root, segEl);
+        if (_selectedSegs.size > 1 && idx >= 0 && _selectedSegs.has(idx)) {
+          deleteSelectedSegments({ requireConfirm: true });
+          return;
+        }
+        deleteSegEl(segEl);
+      });
+
+      root.addEventListener('dblclick', (e) => {
+        if (__mode !== 'structured') return;
+        const sp = e.target.closest('.speaker'); if (!sp) return;
+        e.preventDefault(); e.stopPropagation();
+        try { window.getSelection()?.removeAllRanges(); } catch { }
+        doRenameFor(sp.closest('.ag-seg'), { triggerEl: sp });
+      });
+
+      root.addEventListener('input', (e) => {
+        const node = e.target.closest('.ag-seg__text'); if (!node) return;
+        const segEl = node.closest('.ag-seg');
+        const idx = Array.prototype.indexOf.call(root.children, segEl);
+        if (idx > -1 && window._segments[idx]) {
+          window._segments[idx].text = window.visibleTextFromBox(node);
+          if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
+            window.AgiloConfidence.markSegmentModified(idx);
+          }
+        }
+      });
+
+      root.addEventListener('keydown', (e) => {
+        const node = e.target.closest('.ag-seg__text'); if (!node) return;
+        if (e.key === 'Backspace' || e.key === 'Delete') {
+          const textContent = (node.innerText || node.textContent || '').trim();
+          const selection = window.getSelection();
+          const range = selection?.rangeCount > 0 ? selection.getRangeAt(0) : null;
+          if (textContent.length <= 1) {
+            const isAtStart = range && range.startOffset === 0 && range.startContainer === node;
+            const isAtEnd = range && range.endOffset === (node.textContent?.length || 0) && range.endContainer === node;
+            if ((e.key === 'Backspace' && isAtStart) || (e.key === 'Delete' && isAtEnd)) {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!textContent) {
+                node.textContent = ' ';
+                const newRange = document.createRange();
+                newRange.selectNodeContents(node);
+                newRange.collapse(false);
+                selection?.removeAllRanges();
+                selection?.addRange(newRange);
+              }
+              return false;
+            }
+          }
+        }
+      });
+
+      if (!root.__agiloDocKeys) {
+        root.__agiloDocKeys = true;
+        document.addEventListener('keydown', (e) => {
+          const tr = editors.transcript;
+          if (!tr) return;
+          if (__mode !== 'structured') return;
+          if (e.key === 'Escape' && _selectedSegs.size > 0) {
+            e.preventDefault();
+            clearSegSelection();
+            return;
+          }
+
+          const key = String(e.key || '');
+          const target = e.target;
+          const targetIsEditable = !!(target && (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.contentEditable === 'true' ||
+            target.closest?.('.ag-seg__text')
+          ));
+
+          if (_selectedSegs.size > 0 && (key === 'Backspace' || key === 'Delete') && !targetIsEditable) {
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSelectedSegments({ requireConfirm: true });
+            return;
+          }
+          
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'Backspace') {
+            const segEl = e.target && e.target.closest && e.target.closest('.ag-seg');
+            if (!segEl || !tr.contains(segEl)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            deleteSegEl(segEl);
+            return;
+          }
+          if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (key === 'z' || key === 'Z') && _undoStack.length > 0) {
+            // Vérifier si le focus est dans un champ texte
+            const active = document.activeElement;
+            if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.contentEditable === 'true')) {
+              // On laisse le navigateur gérer l'undo natif SI on est dans le texte du segment
+              // sauf si on veut vraiment notre propre undo global.
+              // Ici on laisse passer pour le texte.
+              return;
+            }
+            e.preventDefault();
+            applyUndo();
+          }
+        }, true);
+      }
+
+      root.__bound = true;
+    }
+  }
+  window.renderSegments = renderSegments;
+
+
+  function normalizeName(name) {
+    let s = String(name || '').trim();
+    s = s.replace(/^\d{1,2}:\d{2}(?::\d{2})?\s*/, '').replace(/[,;:—-]+$/, '').replace(/\s+/g, ' ');
+    if (s.length % 2 === 0) {
+      const a = s.slice(0, s.length / 2), b = s.slice(s.length / 2);
+      if (a.localeCompare(b, undefined, { sensitivity: 'accent' }) === 0) s = a;
+    }
+    return s;
+  }
+
+  const toolbar = {
+    srch: byId('srchQuery') || byId('ag-search'),
+    prev: byId('srchPrev') || document.querySelector('[data-action="search-prev"]'),
+    next: byId('srchNext') || document.querySelector('[data-action="search-next"]'),
+    repl: byId('replText') || byId('ag-replace'),
+    btnRepl: byId('btnReplace') || document.querySelector('[data-action="replace-one"]'),
+    btnReplAll: byId('btnReplaceAll') || document.querySelector('[data-action="replace-all"]')
+  };
+
+  let HITS = [], CUR = -1, chip = null;
+  if (toolbar.srch && !byId('srchCountChip')) {
+    chip = document.createElement('span'); chip.id = 'srchCountChip'; chip.className = 'srch-count-chip'; chip.textContent = '0';
+    toolbar.srch.insertAdjacentElement('afterend', chip);
+  } else { chip = byId('srchCountChip'); }
+  const updChip = () => { if (chip) chip.textContent = HITS.length ? `${CUR + 1}/${HITS.length}` : '0'; };
+
+  function getActivePaneRoot() {
+    const chatPane = byId('pane-chat');
+    const chatViewEl = byId('chatView');
+    if (isVisible(chatPane) && chatViewEl) return chatViewEl;
+    const active = document.querySelector('.edtr-pane.is-active') || document.querySelector('.ag-panel.is-active')
+      || document.querySelector('.edtr-pane:not([hidden])') || document.querySelector('.ag-panel:not([hidden])');
+    if (!active) return editors.transcript || editors.summary || editors.conversation;
+    if (/(^|-)summary$/.test(active.id)) return editors.summary || active;
+    if (/(^|-)conversation$/.test(active.id)) return editors.conversation || active;
+    return editors.transcript || active;
+  }
+  function getScopes() {
+    const pane = getActivePaneRoot(); if (!pane) return [];
+    if (pane.id === 'chatView') {
+      const bubbles = Array.from(pane.querySelectorAll('.msg-bubble'));
+      return bubbles.length ? bubbles : [pane];
+    }
+    const inTranscript = $$('.ag-seg__text', pane);
+    return inTranscript.length ? inTranscript : [pane];
+  }
+  function clearScope(scope) {
+    scope.querySelectorAll('.search-hit').forEach(span => span.replaceWith(document.createTextNode(span.textContent || '')));
+    scope.normalize();
+  }
+  function clearAll() { getScopes().forEach(clearScope); HITS = []; CUR = -1; updChip(); }
+
+  function buildRx(q) {
+    if (!q) return null;
+    const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(esc, 'gi');
+  }
+
+  function highlight() {
+    const q = (toolbar.srch?.value || '').trim();
+    const rx = buildRx(q);
+    clearAll();
+    if (!rx) return;
+
+    const scopes = getScopes(); const collector = [];
+    scopes.forEach(scope => {
+      scope.normalize();
+      const w = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          if (!n?.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
+          if (n.parentNode?.closest('.search-hit,script,style,iframe')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let nodes = [], n; while (n = w.nextNode()) nodes.push(n);
+      nodes.forEach(node => {
+        const text = node.textContent || ''; if (!text) return;
+        rx.lastIndex = 0; let last = 0, m = null; const frag = document.createDocumentFragment();
+        while ((m = rx.exec(text)) !== null) {
+          const i = m.index, j = i + m[0].length;
+          if (i > last) frag.appendChild(document.createTextNode(text.slice(last, i)));
+          const span = document.createElement('span'); span.className = 'search-hit'; span.textContent = text.slice(i, j);
+          frag.appendChild(span); collector.push(span); last = j; if (!m[0].length) break;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        node.replaceWith(frag);
+      });
+    });
+    HITS = collector; CUR = HITS.length ? 0 : -1;
+    if (CUR >= 0) {
+      HITS[CUR].classList.add('is-current');
+      agiloScrollIntoView(HITS[CUR], { allowWindow: false });
+    }
+    updChip();
+  }
+
+  function goto(delta) {
+    if (!HITS.length) return;
+    HITS.forEach(h => h.classList.remove('is-current'));
+    CUR = (CUR + delta + HITS.length) % HITS.length;
+    const el = HITS[CUR];
+    el.classList.add('is-current');
+    agiloScrollIntoView(el, { allowWindow: false });
+    updChip();
+    const pos = toolbar.srch?.value.length || 0;
+    toolbar.srch?.focus({ preventScroll: true });
+    try { toolbar.srch?.setSelectionRange(pos, pos); } catch { }
+  }
+
+  function replaceOne() {
+    if (getActivePaneRoot()?.id === 'chatView') { toast('Remplacement désactivé dans Conversation'); return; }
+    if (CUR < 0 || !HITS[CUR]) return;
+    const repl = toolbar.repl?.value ?? '';
+    const el = HITS[CUR];
+    el.textContent = repl;
+    el.parentNode?.normalize?.();
+    syncDomToModel();
+    const keep = CUR; highlight();
+    if (HITS.length) { CUR = Math.min(keep, HITS.length - 1); HITS[CUR]?.classList.add('is-current'); updChip(); }
+  }
+
+  function replaceAll() {
+    if (getActivePaneRoot()?.id === 'chatView') { toast('Remplacement désactivé dans Conversation'); return; }
+    const q = (toolbar.srch?.value || '').trim(); if (!q) return;
+    const rx = buildRx(q); if (!rx) return;
+    const repl = toolbar.repl?.value ?? '';
+    getScopes().forEach(scope => {
+      const w = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
+        acceptNode(n) {
+          if (!n?.nodeValue?.trim()) return NodeFilter.FILTER_REJECT;
+          if (n.parentNode?.closest('script,style,iframe')) return NodeFilter.FILTER_REJECT;
+          return NodeFilter.FILTER_ACCEPT;
+        }
+      });
+      let n, nodes = []; while (n = w.nextNode()) nodes.push(n);
+      nodes.forEach(node => { node.textContent = node.textContent.replace(rx, repl); });
+      scope.normalize();
+    });
+    syncDomToModel();
+    highlight(); toast('Remplacements effectués');
+  }
+
+  let tDeb = null; const deb = (fn, d = 110) => { clearTimeout(tDeb); tDeb = setTimeout(fn, d); };
+  toolbar.srch?.addEventListener('input', () => deb(highlight));
+  toolbar.next?.addEventListener('click', () => goto(+1));
+  toolbar.prev?.addEventListener('click', () => goto(-1));
+  toolbar.btnRepl?.addEventListener('click', replaceOne);
+  toolbar.btnReplAll?.addEventListener('click', replaceAll);
+  toolbar.srch?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? goto(-1) : goto(+1); } });
+
+  function ag_countOccurrencesByName(name) {
+    const target = String(name || '').trim();
+    return window._segments.reduce((n, s) => n + (+((s.speaker || '').trim() === target)), 0);
+  }
+  function ag_contiguousRangeFrom(idx, name) {
+    const target = String(name || '').trim();
+    let start = idx, end = idx;
+    while (start - 1 >= 0 && (String(window._segments[start - 1].speaker || '').trim() === target)) start--;
+    while (end + 1 < window._segments.length && (String(window._segments[end + 1].speaker || '').trim() === target)) end++;
+    return { start, end, count: Math.max(0, end - start + 1) };
+  }
+  function ag_applyRenameScope({ scope, oldName, newName, idx }) {
+    const root = editors.transcript; if (!root) return 0;
+    const targets = [];
+    if (scope === 'one') targets.push(idx);
+    else if (scope === 'contiguous') {
+      const { start, end } = ag_contiguousRangeFrom(idx, oldName);
+      for (let i = start; i <= end; i++) targets.push(i);
+    } else if (scope === 'all') {
+      window._segments.forEach((s, i) => { if ((s.speaker || '').trim() === String(oldName || '').trim()) targets.push(i); });
+    } else if (scope === 'empty') {
+      window._segments.forEach((s, i) => { if (!String(s.speaker || '').trim()) targets.push(i); });
+    }
+    const max = root.children.length;
+    const unique = Array.from(new Set(targets)).filter(i => i >= 0 && i < max);
+    unique.forEach(i => {
+      (window._segments || (window._segments = []))[i] = (window._segments[i] || {});
+      window._segments[i].speaker = newName;
+      const el = root.children[i];
+      if (!el) return;
+      el.dataset.speaker = newName;
+      const sp = el.querySelector('.speaker');
+      if (sp) { sp.textContent = newName; sp.classList.remove('is-placeholder'); setSpeakerStyle(sp, newName); }
+    });
+    return unique.length;
+  }
+  function ag_showRenameMenu(anchor, { oldName, counts, onSelect, forEmpty = false }) {
+    document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach(n => n.remove());
+    const menu = document.createElement('div'); menu.className = 'ag-rename-menu'; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-modal', 'true');
+    const hd = document.createElement('div'); hd.className = 'ag-rename-menu__hd'; hd.textContent = 'Appliquer le renommage à…';
+    const mk = (label, scope, suffix = '') => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'ag-rename-menu__row';
+      b.innerHTML = `${label}${suffix ? ` <span class="ag-rename-menu__muted">${suffix}</span>` : ''}`;
+      b.addEventListener('click', () => { onSelect(scope); close(); }); return b;
+    };
+    const rows = [];
+    rows.push(mk('Ce segment uniquement', 'one'));
+    if (!forEmpty && counts.contig > 1) rows.push(mk('Ce groupe continu', 'contiguous', `${counts.contig} seg.`));
+    if (!forEmpty && counts.total > 1) rows.push(mk(`Toutes les occurrences de "${oldName}"`, 'all', `${counts.total} seg.`));
+    if (forEmpty && counts.empty > 1) rows.push(mk('Tous les segments sans nom', 'empty', `${counts.empty} seg.`));
+    if (rows.length === 1) rows.push(mk(forEmpty ? 'Tous les segments sans nom' : 'Toutes les occurrences', forEmpty ? 'empty' : 'all'));
+    const backdrop = document.createElement('div'); backdrop.className = 'ag-rename-backdrop';
+    const off = []; const on = (t, ev, fn, opt) => { t.addEventListener(ev, fn, opt || false); off.push(() => t.removeEventListener(ev, fn, opt || false)); };
+    function close() { off.forEach(fn => fn()); menu.remove(); backdrop.remove(); }
+    on(backdrop, 'click', close); on(document, 'keydown', e => { if (e.key === 'Escape') close(); });
+    menu.style.visibility = 'hidden'; menu.appendChild(hd); rows.forEach(r => menu.appendChild(r));
+    document.body.appendChild(backdrop); document.body.appendChild(menu);
+    function place() {
+      const r = (anchor?.getBoundingClientRect?.() || { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2 });
+      const mw = menu.offsetWidth, mh = menu.offsetHeight;
+      let top = r.bottom + 8, left = r.left;
+      left = Math.max(8, Math.min(left, innerWidth - mw - 8));
+      if (top + mh > innerHeight - 8) top = r.top - mh - 8;
+      top = Math.max(8, Math.min(top, innerHeight - mh - 8));
+      menu.style.top = top + 'px'; menu.style.left = left + 'px';
+    }
+    place(); menu.style.visibility = ''; try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
+  }
+  function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
+    const root = editors.transcript; if (!root) return;
+    try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
+    const idx = Array.prototype.indexOf.call(root.children, segEl); if (idx < 0) return;
+
+    const oldName = String(segEl.dataset.speaker || '').trim();
+    const proposed = oldName || 'Intervenant';
+    const rawName = (prompt('Renommer le locuteur :', proposed) || '');
+    const newName = normalizeName(rawName);
+    if (!newName || newName === oldName) return;
+
+    const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
+    const counts = {
+      total: oldName ? ag_countOccurrencesByName(oldName) : 0,
+      contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
+      empty: emptyCount
+    };
+
+    const shift = !!keyState.shift;
+    const alt = !!keyState.alt;
+
+    if (oldName) {
+      if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
+      if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
+    } else if (renameAllEmpty) {
+      const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
+      toast(`Segments sans nom → "${newName}" (${n} seg.)`);
+      return;
+    }
+
+    const anchor = triggerEl || segEl;
+    const forEmpty = !oldName;
+
+    ag_showRenameMenu(anchor, {
+      oldName, counts, forEmpty,
+      onSelect(scope) {
+        const n = ag_applyRenameScope({ scope, oldName, newName, idx });
+        toast(
+          scope === 'one' ? 'Locuteur mis à jour' :
+            scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
+              scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
+                `Segments sans nom → "${newName}" (${n} seg.)`
+        );
+      }
+    });
+  }
+
+
+
+
+  function attachAudioSync() {
+    const root = editors.transcript; if (!root) return;
+    const audio = byId('agilo-audio'); if (!audio) return;
+    if (root.__syncBound) return;
+
+    audio.addEventListener('timeupdate', () => {
+      if (__mode !== 'structured' || !window._segments.length) return;
+      const t = audio.currentTime || 0;
+      let k = _activeSeg;
+      const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
+      if (k < 0 || !inSeg(window._segments[k])) k = window._segments.findIndex(inSeg);
+      if (k !== _activeSeg) {
+        if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+        _activeSeg = k;
+        const el = root.children[k];
+        if (el) {
+          el.classList.add('is-active');
+          // ⚡️ SAFE SCROLL: Utiliser le helper qui gère le conteneur
+          const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
+          const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
+          if (agiloIsOutOfView(el, container, { top: 100, bottom: 120 })) {
+            agiloScrollIntoView(el, { allowWindow: false });
+          }
+        }
+      }
+    });
+
+    root.__syncBound = true;
+  }
+  window.attachAudioSync = attachAudioSync;
+
+  /* ====================== Fonctions Lottie pour le chargement du compte-rendu ====================== */
+
+  /**
+   * Cache simple pour getTranscriptStatus (évite les appels multiples)
+   */
+  const __statusCache = new Map();
+  const STATUS_CACHE_TTL = 2000; // 2 secondes
+
+  /**
+   * Appeler l'API getTranscriptStatus pour obtenir le statut
+   * ⚠️ AMÉLIORATION : Ajout de retry et cache
+   */
+  async function getTranscriptStatus(jobId, auth, retryCount = 0) {
+    // Vérifier le cache
+    const cacheKey = `${jobId}:${auth.username}:${auth.edition}`;
+    const cached = __statusCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < STATUS_CACHE_TTL) {
+      if (window.AGILO_DEBUG) console.log('[Editor] Statut depuis cache:', cached.status);
+      return cached.status;
+    }
+
+    try {
+      const url = `${API_BASE}/getTranscriptStatus?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(auth.username)}&token=${encodeURIComponent(auth.token)}&edition=${encodeURIComponent(auth.edition)}`;
+
+      const response = await fetchWithTimeout(url, { timeout: 10000 });
+
+      if (!response.ok) {
+        // Retry pour les erreurs 5xx (erreurs serveur)
+        if ((response.status >= 500 || response.status === 0) && retryCount < 2) {
+          if (window.AGILO_DEBUG) console.log(`[Editor] Retry getTranscriptStatus (${retryCount + 1}/2) pour erreur ${response.status}`);
+          await wait(500 * Math.pow(2, retryCount));
+          return getTranscriptStatus(jobId, auth, retryCount + 1);
+        }
+        if (window.AGILO_DEBUG) console.error('[Editor] Erreur HTTP getTranscriptStatus:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      let status = null;
+
+      if (data.status === 'OK' && data.transcriptStatus) {
+        status = data.transcriptStatus;
+      } else if (data.status === 'KO') {
+        if (window.AGILO_DEBUG) console.error('[Editor] Erreur API getTranscriptStatus:', data.errorMessage);
+        // Vérifier si c'est l'erreur "fichier manquant"
+        if (data.errorMessage && /ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(data.errorMessage)) {
+          status = 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+        }
+      }
+
+      // Mettre en cache
+      if (status !== null) {
+        __statusCache.set(cacheKey, { status, timestamp: Date.now() });
+        // Nettoyer le cache après 10 secondes pour éviter la croissance infinie
+        setTimeout(() => __statusCache.delete(cacheKey), 10000);
+      }
+
+      return status;
+    } catch (error) {
+      // Retry pour les erreurs réseau
+      if (retryCount < 2 && (error?.name === 'AbortError' || error?.message?.includes('timeout') || error?.message?.includes('network'))) {
+        if (window.AGILO_DEBUG) console.log(`[Editor] Retry getTranscriptStatus (${retryCount + 1}/2) pour erreur réseau`);
+        await wait(500 * Math.pow(2, retryCount));
+        return getTranscriptStatus(jobId, auth, retryCount + 1);
+      }
+      if (window.AGILO_DEBUG) console.error('[Editor] Erreur réseau getTranscriptStatus:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Initialiser l'animation Lottie avec Webflow
+   */
+  function initLottieAnimation(element) {
+    // Méthode 1: Utiliser Webflow IX2 si disponible
+    if (window.Webflow && window.Webflow.require) {
+      try {
+        const ix2 = window.Webflow.require('ix2');
+        if (ix2 && typeof ix2.init === 'function') {
+          setTimeout(() => {
+            ix2.init();
+          }, 100);
+        }
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.log('[Editor] Webflow IX2 non disponible');
+      }
+    }
+
+    // Méthode 2: Utiliser directement la bibliothèque Lottie si disponible
+    if (window.lottie && typeof window.lottie.loadAnimation === 'function') {
+      try {
+        const animationData = {
+          container: element,
+          renderer: 'svg',
+          loop: true,
+          autoplay: true,
+          path: 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json'
+        };
+
+        if (!element._lottie) {
+          element._lottie = window.lottie.loadAnimation(animationData);
+        }
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.log('[Editor] Lottie direct non disponible:', e);
+      }
+    }
+
+    // Méthode 3: Attendre que Webflow charge l'animation
+    setTimeout(() => {
+      if (window.Webflow && window.Webflow.require) {
+        try {
+          window.Webflow.require('ix2').init();
+        } catch (e) { }
+      }
+    }, 200);
+  }
+
+  function isSummaryUiContextCurrent(context = {}) {
+    if (!editorRoot) return true;
+    const currentId = String(editorRoot.dataset.jobId || '').trim();
+    const ctxId = String(context.jobId || '').trim();
+    if (ctxId && currentId && ctxId !== currentId) return false;
+    if (context.seq !== undefined && context.seq !== null && context.seq !== __loadSeq) return false;
+    return true;
+  }
+
+  /**
+   * Afficher un indicateur de chargement dans l'onglet Compte-rendu
+   * Utilise l'animation Lottie existante
+   */
+  function showSummaryLoading(context = {}) {
+    const ctxJobId = String(context?.jobId || '').trim();
+    const ctxSeq = typeof context?.seq === 'number' ? String(context.seq) : '';
+    const force = context?.force === true;
+
+    if (!force) {
+      if (ctxJobId && __lastLoadJobId && ctxJobId !== __lastLoadJobId) return;
+      if (!isSummaryUiContextCurrent({ jobId: ctxJobId || __lastLoadJobId, seq: context?.seq ?? null })) return;
+    }
+
+    const summaryEditor = editors.summary || pickSummaryEl();
+    if (!summaryEditor) return;
+
+    // Créer le conteneur de chargement
+    let loaderContainer = summaryEditor.querySelector('.summary-loading-indicator');
+
+    if (!loaderContainer) {
+      loaderContainer = document.createElement('div');
+      loaderContainer.className = 'summary-loading-indicator';
+
+      // Chercher l'élément Lottie existant dans le DOM (peut être ailleurs)
+      let lottieElement = document.querySelector('#loading-summary');
+
+      // Si l'élément Lottie n'existe pas, le créer
+      if (!lottieElement) {
+        lottieElement = document.createElement('div');
+        lottieElement.id = 'loading-summary';
+        lottieElement.className = 'lottie-check-statut';
+        lottieElement.setAttribute('data-w-id', '3f0ed4f9-0ff3-907d-5d6d-28f23fb3783f');
+        lottieElement.setAttribute('data-animation-type', 'lottie');
+        lottieElement.setAttribute('data-src', 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json');
+        lottieElement.setAttribute('data-loop', '1');
+        lottieElement.setAttribute('data-direction', '1');
+        lottieElement.setAttribute('data-autoplay', '1');
+        lottieElement.setAttribute('data-is-ix2-target', '0');
+        lottieElement.setAttribute('data-renderer', 'svg');
+        lottieElement.setAttribute('data-default-duration', '2');
+        lottieElement.setAttribute('data-duration', '0');
+      } else {
+        // Si l'élément existe ailleurs, le cloner
+        const clonedLottie = lottieElement.cloneNode(true);
+        clonedLottie.id = 'loading-summary-clone';
+        lottieElement = clonedLottie;
+      }
+
+      // Ajouter les textes
+      const loadingText = document.createElement('p');
+      loadingText.className = 'loading-text';
+      loadingText.textContent = 'Génération du compte-rendu en cours...';
+
+      const loadingSubtitle = document.createElement('p');
+      loadingSubtitle.className = 'loading-subtitle';
+      loadingSubtitle.textContent = 'Cela peut prendre quelques instants';
+
+      summaryEditor.innerHTML = '';
+      // Réinitialiser les attributs de lecture seule pendant le chargement
+      summaryEditor.removeAttribute('contenteditable');
+      summaryEditor.removeAttribute('readonly');
+      summaryEditor.style.userSelect = '';
+      summaryEditor.style.cursor = '';
+      summaryEditor.classList.remove('ag-summary-readonly');
+      summaryEditor.appendChild(loaderContainer);
+      loaderContainer.appendChild(lottieElement);
+      loaderContainer.appendChild(loadingText);
+      loaderContainer.appendChild(loadingSubtitle);
+
+      // Initialiser l'animation Lottie après l'ajout au DOM
+      setTimeout(() => {
+        initLottieAnimation(lottieElement);
+
+        // Fallback: Si après 1 seconde l'animation ne s'affiche pas, afficher un spinner CSS
+        setTimeout(() => {
+          const hasLottieContent = lottieElement.querySelector('svg, canvas') || lottieElement._lottie;
+          if (!hasLottieContent) {
+            if (window.AGILO_DEBUG) console.log('[Editor] Lottie ne s\'est pas chargé, utilisation du fallback');
+            const fallback = document.createElement('div');
+            fallback.className = 'lottie-fallback';
+            lottieElement.style.display = 'none';
+            loaderContainer.insertBefore(fallback, lottieElement);
+          }
+        }, 1000);
+      }, 100);
+
+    } else {
+      // Si le conteneur existe déjà, juste l'afficher
+      loaderContainer.style.display = 'flex';
+
+      // Réinitialiser l'animation Lottie
+      const lottieElement = loaderContainer.querySelector('#loading-summary, #loading-summary-clone');
+      if (lottieElement) {
+        setTimeout(() => {
+          initLottieAnimation(lottieElement);
+        }, 100);
+      }
+    }
+
+    // Afficher le conteneur
+    loaderContainer.style.display = 'flex';
+  }
+
+  /**
+   * Masquer l'indicateur de chargement
+   * ⚠️ AMÉLIORATION : Cherche uniquement dans editors.summary pour éviter les conflits
+   */
+  function hideSummaryLoading(context = {}) {
+    const ctxJobId = String(context?.jobId || '').trim();
+    const ctxSeq = typeof context?.seq === 'number' ? String(context.seq) : '';
+    const force = context?.force === true;
+
+    if (!force) {
+      if (ctxJobId && __lastLoadJobId && ctxJobId !== __lastLoadJobId) return;
+      if (!isSummaryUiContextCurrent({ jobId: ctxJobId || __lastLoadJobId, seq: context?.seq ?? null })) return;
+    }
+
+    const summaryEditor = editors.summary || pickSummaryEl();
+    if (!summaryEditor) return;
+
+    // Chercher uniquement dans summaryEditor, pas dans tout le document
+    const loader = summaryEditor.querySelector('.summary-loading-indicator');
+    const lottieElement = summaryEditor.querySelector('#loading-summary, #loading-summary-clone');
+
+    if (loader) {
+      loader.style.display = 'none';
+    }
+
+    if (lottieElement) {
+      lottieElement.style.display = 'none';
+    }
+  }
+
+  /* ====================== Summary repoll (annulable) ====================== */
+  /**
+   * ⚠️ AMÉLIORATION : Fonction pure qui ne gère plus l'UI directement
+   * La gestion du loader est faite dans loadJob()
+   */
+  async function pollSummaryUntilReady(jobId, auth, { max = 50, baseDelay = 900, signal, seq } = {}) {
+    const ref = seq ?? __loadSeq;
+    for (let i = 0; i < max; i++) {
+      if (signal?.aborted || isStale(ref)) {
+        return { ok: false, code: 'CANCELLED' };
+      }
+      const r = await apiGetWithRetry('summary', jobId, { ...auth }, 0, signal);
+      if (r.ok) {
+        const raw = r.payload || '';
+        // ✅ CORRECTION : Vérifier si non-vide APRÈS sanitization (pour la logique)
+        // mais retourner le HTML BRUT pour permettre la détection des styles globaux
+        if (!isBlankHtml(sanitizeHtml(raw))) {
+          return { ok: true, html: raw };  // ✅ Retourner le HTML BRUT
+        }
+      } else if (!/READY_SUMMARY_PENDING|NOT_READY|PENDING/i.test(String(r.code || ''))) {
+        return r;
+      }
+      await wait(baseDelay * Math.pow(1.3, i));
+    }
+    return { ok: false, code: 'READY_SUMMARY_PENDING' };
+  }
+
+  let __lastLoadJobId = null;
+  let __loadSeq = 0;
+  let __activeFetchCtl = null;
+  function computeSeq() { return (++__loadSeq); }
+  function isStale(seq) { return (seq !== __loadSeq); }
+
+
+  let __wdTimer;
+  let __wdToken = 0;
+
+  window.addEventListener('agilo:beforeload', (e) => {
+    try { window.AgiloConfidence?.resetSessionState?.(); } catch { }
+    // ⚠️ AMÉLIORATION : Nettoyer immédiatement tous les états précédents
+    try { __activeFetchCtl?.abort?.(); } catch { }
+    clearTimeout(__wdTimer);
+    __wdToken++;
+
+    editors.transcript = pickTranscriptEl();
+    editors.summary = pickSummaryEl();
+
+    const tr = editors.transcript, sm = editors.summary;
+
+    // ⚠️ AMÉLIORATION : Toujours réinitialiser le contenu pour éviter les messages qui restent
+    if (tr) {
+      tr.setAttribute('aria-busy', 'true');
+      tr.innerHTML = '<div class="ag-loader">Chargement du transcript…</div>';
+    }
+    if (sm) {
+      sm.setAttribute('aria-busy', 'true');
+      hideSummaryLoading({ force: true });
+      sm.innerHTML = '<div class="ag-loader">Chargement du compte-rendu…</div>';
+    }
+
+    const my = __wdToken;
+    __wdTimer = setTimeout(() => {
+      if (my !== __wdToken) return;
+      const trL = tr?.querySelector('.ag-loader');
+      if (tr?.getAttribute('aria-busy') === 'true' && trL) trL.textContent = 'Chargement plus long que prévu…';
+      const smL = sm?.querySelector('.ag-loader');
+      if (sm?.getAttribute('aria-busy') === 'true' && smL) smL.textContent = 'Chargement plus long que prévu…';
+    }, 8000);
+  });
+
+
+  async function loadJob(jobId) {
+    // ✅ CORRECTION : Déclarer isSummaryPending au début de la fonction pour qu'elle soit accessible dans le finally
+    let isSummaryPending = false;
+    const id = String(jobId || '').trim();
+    if (!id) return;
+
+    // ⚠️ AMÉLIORATION : Nettoyer immédiatement le timer précédent
+    clearTimeout(__wdTimer);
+    __wdToken++;
+
+    __lastLoadJobId = id;
+    if (editorRoot) {
+      editorRoot.dataset.jobId = id;
+    }
+
+    if (!SOFT_CANCEL) { try { __activeFetchCtl?.abort?.(); } catch { } }
+    __activeFetchCtl = new AbortController();
+
+    // ⚠️ AMÉLIORATION : S'assurer que les éditeurs sont à jour
+    editors.transcript = pickTranscriptEl();
+    editors.summary = pickSummaryEl();
+
+    if (window.__agiloOrchestrator && !window.__agiloOrchestrator.__editorSubscribed) {
+      window.__agiloOrchestrator.subscribe('editor', {
+        cancel() {
+          try { __activeFetchCtl?.abort?.(); } catch { }
+          if (window.AGILO_DEBUG) console.log('[Editor] Cancelled by orchestrator (no DOM reset)');
+        }
+      });
+      window.__agiloOrchestrator.__editorSubscribed = true;
+    }
+
+    const seq = computeSeq();
+    const showSummaryLoadingScoped = () => showSummaryLoading({ jobId: id, seq });
+    const hideSummaryLoadingScoped = (opts = {}) => hideSummaryLoading({ jobId: id, seq, ...opts });
+
+    await waitFrames(1);
+
+    editors.transcript = pickTranscriptEl();
+    editors.summary = pickSummaryEl();
+
+    try { clearAll(); } catch { }
+    try { window.AgiloConfidence?.resetSessionState?.(); } catch { }
+
+    const auth = await ensureAuth();
+    if (isStale(seq)) {
+      // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+      clearTimeout(__wdTimer);
+      __wdToken++;
+      editors.transcript?.removeAttribute('aria-busy');
+      editors.summary?.removeAttribute('aria-busy');
+      hideSummaryLoadingScoped();
+      return;
+    }
+
+    if (!auth.username || !auth.token) {
+      clearTimeout(__wdTimer);
+      __wdToken++;
+      try { window.__agiloLoadPendingToken = id; } catch { }
+
+      toast('Authentification manquante');
+      editors.transcript?.removeAttribute('aria-busy');
+      editors.summary?.removeAttribute('aria-busy');
+      hideSummaryLoadingScoped({ force: true });
+      return;
+    }
+    try { window.__agiloLoadPendingToken = ''; } catch { }
+    try {
+      const settle = (promise) => promise.then(
+        (value) => ({ status: 'fulfilled', value }),
+        (reason) => ({ status: 'rejected', reason })
+      );
+      const transcriptReq = apiGetWithRetry('transcript', id, { ...auth }, 0, __activeFetchCtl.signal);
+      const summaryReq = apiGetWithRetry('summary', id, { ...auth }, 0, __activeFetchCtl.signal);
+
+      const tRes = await settle(transcriptReq);
+      if (isStale(seq)) {
+        // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+        clearTimeout(__wdTimer);
+        __wdToken++;
+        editors.transcript?.removeAttribute('aria-busy');
+        editors.summary?.removeAttribute('aria-busy');
+        hideSummaryLoadingScoped();
+        return;
+      }
+
+      if (tRes.status === 'fulfilled' && tRes.value.ok) {
+
+        const raw = tRes.value.payload || '';
+        const json = parseMaybeJson(raw, tRes.value.contentType || '');
+
+        try {
+          if (json && Array.isArray(json.segments)) {
+            window._segments = mapNicoJsonToSegments(json);
+          } else {
+            const plain = String(raw || '').replace(/\r\n?/g, '\n').trim();
+            window._segments = plain ? [{ id: 's0', start: 0, end: null, speaker: '', text: plain }] : [];
+          }
+        } catch (e) {
+          if (window.AGILO_DEBUG) console.error('[mapJson] crash', e);
+          window._segments = []
+        }
+
+        _activeSeg = -1;
+        __mode = (window._segments.length && window._segments.every(s => Number.isFinite(s.start)))
+          ? 'structured'
+          : 'plain';
+
+        if (!window._segments.length && editors.transcript) {
+          renderSegments([]);
+          const box = editors.transcript.querySelector('.ag-plain');
+          if (box) box.textContent = (json ? '' : (raw || ''));
+        } else {
+          renderSegments(window._segments);
+          attachAudioSync();
+        }
+
+        if (window.AgiloConfidence && __mode === 'structured' && editors.transcript && window._segments?.length) {
+          try {
+            const mainForConf = {
+              segments: window._segments.map((s, i) => ({
+                id: String(s.id || `s${i}`),
+                text: String(s.text || '')
+              }))
+            };
+            await window.AgiloConfidence.applyAfterTranscriptLoad({
+              apiBaseUrl: API_BASE,
+              credentials: {
+                username: auth.username,
+                token: auth.token,
+                edition: auth.edition
+              },
+              jobId: id,
+              mainJson: mainForConf,
+              transcriptRoot: editors.transcript,
+              signal: __activeFetchCtl.signal
+            });
+          } catch (confErr) {
+            if (confErr?.name !== 'AbortError' && window.AGILO_DEBUG) {
+              console.warn('[agilo:confidence] apply failed', confErr);
+            }
+          }
+        }
+
+        if (window._segments?.length) {
+          const ends = window._segments.filter(s => Number.isFinite(s.end)).map(s => s.end);
+          if (ends.length) window.__agiloExpectedDuration = Math.max(...ends);
+        }
+
+        if ((toolbar.srch?.value || '').trim()) highlight();
+      } else {
+        const val = (tRes.status === 'fulfilled' ? tRes.value : null);
+        if (val?.code === 'CANCELLED') return;
+        const msg = val ? humanizeError({ where: 'transcript', code: val.code, json: val.json, httpStatus: val.httpStatus })
+          : "Chargement du transcript annulé (veuillez recharger la page)";
+        if (editors.transcript) {
+          editors.transcript.innerHTML = '';
+          editors.transcript.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, val?.raw || '') || ''));
+        }
+        window._segments = []
+      }
+      editors.transcript?.removeAttribute('aria-busy');
+
+      const sRes = await settle(summaryReq);
+      if (isStale(seq)) {
+        // ⚠️ AMÉLIORATION : Nettoyer aria-busy même si stale
+        clearTimeout(__wdTimer);
+        __wdToken++;
+        editors.transcript?.removeAttribute('aria-busy');
+        editors.summary?.removeAttribute('aria-busy');
+        hideSummaryLoadingScoped();
+        return;
+      }
+      let summaryEmpty = true;
+
+      // ⚠️ NOUVEAU : Vérifier le statut avec getTranscriptStatus pour savoir si le compte-rendu est en cours
+      // ⚠️ OPTIMISATION : Ne vérifier que si on n'a pas déjà le compte-rendu
+      let transcriptStatus = null;
+      // ✅ CORRECTION : isSummaryPending est maintenant déclaré au début de loadJob()
+
+      // Vérifier le statut seulement si nécessaire (pas de compte-rendu reçu ou vide)
+      const needsStatusCheck = !(sRes.status === 'fulfilled' && sRes.value.ok && !isBlankHtml(sanitizeHtml(sRes.value.payload || '')));
+
+      if (needsStatusCheck) {
+        try {
+          transcriptStatus = await getTranscriptStatus(id, auth);
+          if (window.AGILO_DEBUG) console.log('[Editor] Statut transcript:', transcriptStatus);
+          isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
+
+          // ⚠️ AMÉLIORATION : Si le statut est READY_SUMMARY_PENDING, afficher le loader Lottie
+          // Remplacer le loader simple de beforeload par le loader Lottie
+          if (isSummaryPending && editors.summary) {
+            // Vérifier si on a encore le loader simple de beforeload
+            const simpleLoader = editors.summary.querySelector('.ag-loader');
+            if (simpleLoader) {
+              // Remplacer par le loader Lottie
+              editors.summary.innerHTML = '';
+              // Réinitialiser les attributs de lecture seule (pendant le chargement)
+              editors.summary.removeAttribute('contenteditable');
+              editors.summary.removeAttribute('readonly');
+              editors.summary.style.userSelect = '';
+              editors.summary.style.cursor = '';
+              editors.summary.classList.remove('ag-summary-readonly');
+            }
+            showSummaryLoadingScoped();
+          }
+        } catch (e) {
+          if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus:', e);
+        }
+      }
+
+      if (sRes.status === 'fulfilled' && sRes.value.ok) {
+        // ✅ CORRECTION : Garder le HTML brut pour la détection des styles globaux
+        let rawHtml = sRes.value.payload || '';
+        let cleaned = sanitizeHtml(rawHtml);  // Pour vérifier si vide
+        if (isBlankHtml(cleaned)) {
+          // Si le statut est PENDING, garder le loader affiché pendant le polling
+          if (!isSummaryPending && editors.summary) {
+            showSummaryLoadingScoped(); // Afficher le loader si pas déjà affiché
+          }
+
+          const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
+          if (polled.ok) {
+            rawHtml = polled.html || '';  // ✅ polled.html est maintenant brut
+            cleaned = sanitizeHtml(rawHtml);  // Pour vérifier si vide
+            hideSummaryLoadingScoped(); // Cacher le loader une fois le compte-rendu prêt
+          } else if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
+            // Si toujours en cours après polling, garder le loader affiché
+            if (editors.summary && !editors.summary.querySelector('.summary-loading-indicator')) {
+              showSummaryLoadingScoped();
+            }
+          } else {
+            // ⚠️ AMÉLIORATION : Cacher le loader en cas d'erreur définitive
+            hideSummaryLoadingScoped();
+          }
+        }
+        if (!isBlankHtml(cleaned)) {
+          if (isStale(seq) || !isSummaryUiContextCurrent({ jobId: id, seq })) return;
+          summaryEmpty = false;
+          hideSummaryLoadingScoped(); // S'assurer que le loader est caché
+          if (editors.summary) {
+            // ✅ ISOLATION : Passer le HTML BRUT pour permettre la détection des styles globaux
+            injectSummaryContent(rawHtml);
+
+            // ✅ VÉRIFICATION CACHE : Détecter et corriger les problèmes de cache après injection
+            if (!checkAndFixCacheIssue(rawHtml)) {
+              // Si pas de problème de cache, continuer normalement
+            }
+          }
+        } else if (editors.summary && !isSummaryPending) {
+          // Afficher le loader seulement si pas déjà affiché (statut PENDING)
+          if (!editors.summary.querySelector('.summary-loading-indicator')) {
+            editors.summary.replaceChildren(
+              renderAlert("Résumé en préparation…", "Le serveur n'a pas encore publié le HTML du compte-rendu.")
+            );
+            // Réinitialiser les attributs de lecture seule si pas de contenu
+            editors.summary.removeAttribute('contenteditable');
+            editors.summary.removeAttribute('readonly');
+            editors.summary.style.userSelect = '';
+            editors.summary.style.cursor = '';
+            editors.summary.classList.remove('ag-summary-readonly');
+          }
+        }
+
+      } else {
+        const val = (sRes.status === 'fulfilled' ? sRes.value : null);
+        if (val?.code === 'CANCELLED') return;
+
+        const code = String(val?.code || '');
+        const looksPending = /READY_SUMMARY_PENDING|NOT_READY|PENDING|ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS/i.test(code);
+        const httpLooksPending = (val?.httpStatus === 404 || val?.httpStatus === 204);
+
+        if (looksPending || httpLooksPending) {
+          // Si le statut est PENDING, afficher le loader Lottie
+          if (!isSummaryPending && editors.summary) {
+            // Vérifier à nouveau le statut si on ne l'a pas déjà fait
+            if (!transcriptStatus) {
+              try {
+                transcriptStatus = await getTranscriptStatus(id, auth);
+                isSummaryPending = transcriptStatus === 'READY_SUMMARY_PENDING';
+              } catch (e) {
+                if (window.AGILO_DEBUG) console.error('[Editor] Erreur getTranscriptStatus (retry):', e);
+              }
+            }
+            if (isSummaryPending || looksPending) {
+              showSummaryLoadingScoped();
+            }
+          } else if (isSummaryPending && editors.summary) {
+            showSummaryLoadingScoped(); // S'assurer que le loader est affiché
+          }
+
+          const polled = await pollSummaryUntilReady(id, { ...auth }, { signal: __activeFetchCtl.signal, seq });
+          if (polled.ok && !isBlankHtml(sanitizeHtml(polled.html || ''))) {
+            if (isStale(seq) || !isSummaryUiContextCurrent({ jobId: id, seq })) return;
+            summaryEmpty = false;
+            hideSummaryLoadingScoped(); // Cacher le loader une fois le compte-rendu prêt
+            if (editors.summary) {
+              // ✅ ISOLATION : polled.html est maintenant brut (non sanitizé)
+              injectSummaryContent(polled.html);
+
+              // ✅ VÉRIFICATION CACHE : Détecter et corriger les problèmes de cache après injection
+              if (!checkAndFixCacheIssue(polled.html)) {
+                // Si pas de problème de cache, continuer normalement
+              }
+            }
+          } else if (editors.summary) {
+            // Si toujours en cours, garder le loader, sinon afficher l'erreur
+            if (polled.code === 'READY_SUMMARY_PENDING' || isSummaryPending) {
+              if (!editors.summary.querySelector('.summary-loading-indicator')) {
+                showSummaryLoadingScoped();
+              }
+            } else {
+              // ⚠️ AMÉLIORATION : Toujours cacher le loader en cas d'erreur définitive
+              hideSummaryLoadingScoped();
+              const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
+              editors.summary.innerHTML = '';
+              // Réinitialiser les attributs de lecture seule en cas d'erreur
+              editors.summary.removeAttribute('contenteditable');
+              editors.summary.removeAttribute('readonly');
+              editors.summary.style.userSelect = '';
+              editors.summary.style.cursor = '';
+              editors.summary.classList.remove('ag-summary-readonly');
+              editors.summary.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, '') || ''));
+            }
+          }
+        } else if (editors.summary) {
+          hideSummaryLoadingScoped(); // Cacher le loader en cas d'erreur
+          const msg = humanizeError({ where: 'summary', code: val?.code, json: val?.json, httpStatus: val?.httpStatus });
+          editors.summary.innerHTML = '';
+          editors.summary.appendChild(renderAlert(msg, technicalDetailsFromJson(val?.json, '') || ''));
+        }
+      }
+      updateDownloadLinks(id, auth, { summaryEmpty });
+      if (editorRoot) {
+        editorRoot.dataset.jobId = id;
+        editorRoot.dataset.summaryEmpty = summaryEmpty ? '1' : '0';
+      }
+    } catch (e) {
+      if (e?.name === 'AbortError') return;
+      hideSummaryLoadingScoped({ force: true }); // S'assurer que le loader est caché en cas d'erreur
+      const errBox = renderAlert("Erreur de chargement.", e?.message || '');
+      if (editors.transcript) editors.transcript.replaceChildren(errBox.cloneNode(true));
+      if (editors.summary) editors.summary.replaceChildren(errBox.cloneNode(true));
+      if (window.AGILO_DEBUG) console.error(e);
+    } finally {
+      // ⚠️ AMÉLIORATION : Toujours nettoyer le timer et les états, même si stale
+      clearTimeout(__wdTimer);
+      __wdToken++;
+
+      // ⚠️ AMÉLIORATION : Toujours retirer aria-busy, même si stale (évite les états bloqués)
+      // Seule exception : si vraiment en cours de chargement d'un autre job
+      const currentJobId = String(id || '').trim();
+      const editorJobId = editorRoot?.dataset?.jobId || '';
+
+      // Si le jobId correspond toujours, on peut retirer aria-busy
+      // Sinon, c'est qu'un autre job est en cours, on laisse le beforeload gérer
+      if (!currentJobId || currentJobId === editorJobId || isStale(seq)) {
+        editors.transcript?.removeAttribute('aria-busy');
+        editors.summary?.removeAttribute('aria-busy');
+      }
+
+      // S'assurer que le loader est toujours caché à la fin (sauf si vraiment en cours)
+      if (!isSummaryPending) {
+        hideSummaryLoadingScoped();
+      }
+    }
+  }
+
+  (function init() {
+    setupInsightShortcuts();
+
+    const urlJob = new URLSearchParams(location.search).get('jobId');
+    const dataJob = editorRoot?.dataset.jobId || '';
+    const seed = (urlJob || dataJob || '').trim();
+    if (seed) loadJob(seed);
+  })();
+
+  window.addEventListener('agilo:load', (e) => {
+    const raw = e?.detail?.jobId ?? e?.detail ?? '';
+    const id = String(raw || '').trim();
+    if (!id) return;
+
+    // ⚠️ AMÉLIORATION : Nettoyer le timer précédent au cas où
+    clearTimeout(__wdTimer);
+    __wdToken++;
+
+    const uiReadySameJob =
+      id === __lastLoadJobId &&
+      editors.transcript?.getAttribute('aria-busy') !== 'true' &&
+      editorRoot?.dataset.jobId === id;
+
+    if (uiReadySameJob) {
+      // ⚠️ AMÉLIORATION : S'assurer que aria-busy est bien retiré même si on skip
+      editors.transcript?.removeAttribute('aria-busy');
+      editors.summary?.removeAttribute('aria-busy');
+      return;
+    }
+    loadJob(id);
+  });
+
+
+  window.addEventListener('agilo:token', () => {
+    const jid =
+      (editorRoot?.dataset.jobId ||
+        new URLSearchParams(location.search).get('jobId') ||
+        '').trim();
+    const pending = String(window.__agiloLoadPendingToken || '').trim();
+    const targetJob = pending || jid;
+    if (!targetJob) return;
+
+    const auth = readAuthSnapshot();
+    const summaryEmpty = editorRoot?.dataset.summaryEmpty === '1';
+    updateDownloadLinks(jid || targetJob, auth, { summaryEmpty });
+
+    if (auth.username && auth.token && pending) {
+      try { window.__agiloLoadPendingToken = ''; } catch { }
+      try {
+        loadJob(pending);
+      } catch (e) {
+        if (window.AGILO_DEBUG) console.warn('[Editor] reload après agilo:token:', e);
+      }
+    }
+  });
+
+  // Ajouter les styles CSS pour le loader Lottie
+  (function injectSummaryLoadingStyles() {
+    if (document.querySelector('#agilo-summary-loading-styles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'agilo-summary-loading-styles';
+    style.textContent = `
+      /* Conteneur de chargement - utilise vos variables CSS */
+      .summary-loading-indicator {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+        text-align: center;
+        min-height: 300px;
+        background: var(--agilo-surface, var(--color--white, #ffffff));
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+      }
+      
+      /* Animation Lottie centrée */
+      .summary-loading-indicator #loading-summary,
+      .summary-loading-indicator #loading-summary-clone {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        display: block;
+      }
+      
+      /* Fallback si Lottie ne charge pas - spinner CSS */
+      .summary-loading-indicator .lottie-fallback {
+        width: 88px;
+        height: 88px;
+        margin: 0 auto 24px;
+        border: 4px solid var(--agilo-border, rgba(0,0,0,0.12));
+        border-top: 4px solid var(--agilo-primary, var(--color--blue, #174a96));
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Texte de chargement */
+      .summary-loading-indicator .loading-text {
+        font: 500 16px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-text, var(--color--gris_foncé, #020202));
+        margin-top: 8px;
+        margin-bottom: 4px;
+      }
+      
+      .summary-loading-indicator .loading-subtitle {
+        font: 400 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+        color: var(--agilo-dim, var(--color--gris, #525252));
+        margin-top: 8px;
+      }
+      
+      /* Animation d'apparition douce */
+      .summary-loading-indicator {
+        animation: fadeIn 0.3s ease-out;
+      }
+      
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      /* Respecte "réduire les animations" */
+      @media (prefers-reduced-motion: reduce) {
+        .summary-loading-indicator {
+          animation: none;
+        }
+        .summary-loading-indicator .lottie-fallback {
+          animation: none;
+        }
+      }
+      
+      /* Iframe pour isolation des styles du compte-rendu */
+      .ag-summary-iframe {
+        width: 100%;
+        border: none;
+        min-height: max(600px, 100svh);
+        background: white;
+        display: block;
+      }
+      
+      #summaryEditor.ag-summary-readonly {
+        overflow: auto;
+      }
+
+      /* =====================================================================
+         MENU DE PORTÉE — Renommage locuteur (version FIXED + responsive)
+         ===================================================================== */
+      .ag-rename-backdrop{
+        position:fixed;
+        inset:0;
+        z-index:99998;
+        background:transparent;
+      }
+
+      .ag-rename-menu{
+        position:fixed;
+        z-index:99999;
+        min-width:240px;
+        max-width:min(92vw, 420px);
+        max-height:calc(100vh - 16px);
+        overflow:auto;
+        background:var(--agilo-surface, #fff);
+        color:var(--agilo-text, #111);
+        border:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        border-radius:var(--agilo-radius, .5rem);
+        box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
+      }
+
+      .ag-rename-menu__hd{
+        padding:10px 12px;
+        font-weight:600;
+        border-bottom:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        background:var(--agilo-surface-2, #f8f9fa);
+      }
+
+      .ag-rename-menu__row{
+        display:block;
+        width:100%;
+        text-align:left;
+        padding:10px 12px;
+        background:transparent;
+        border:0;
+        cursor:pointer;
+        color:inherit;
+        font:500 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto;
+      }
+
+      .ag-rename-menu__row:hover,
+      .ag-rename-menu__row:focus-visible{
+        background: color-mix(in srgb,
+                    var(--agilo-surface-2, #f8f9fa) 86%,
+                    var(--agilo-primary, #174a96) 14%);
+        outline:none;
+      }
+
+      .ag-rename-menu__muted{
+        color:var(--agilo-dim, #525252);
+        font-size:12px;
+        margin-left:.4rem;
+      }
+    `;
+    document.head.appendChild(style);
+  })();
+
+  window.addEventListener('online', () => {
+    const jid = (editorRoot?.dataset.jobId || new URLSearchParams(location.search).get('jobId') || '').trim();
+    if (jid) loadJob(jid);
+  });
+  function serializeSmart() { return ''; }
+  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart };
+
+  function openChatTab() {
+    if (window.AgiloChat?.openConversation) { try { window.AgiloChat.openConversation(); } catch { } }
+
+    const tab = document.querySelector('#tab-chat,[data-tab="chat"][role="tab"],button[aria-controls="pane-chat"]');
+    const pane = byId('pane-chat');
+
+    if (tab) {
+      tab.removeAttribute('disabled');
+      if (tab.getAttribute('aria-selected') !== 'true') {
+        tab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      }
+    }
+    setTimeout(() => {
+      if (pane && (pane.hasAttribute('hidden') || !pane.classList.contains('is-active'))) {
+        document.querySelectorAll('[role="tab"]').forEach(t => {
+          const isChat = t === tab || t.getAttribute('aria-controls') === 'pane-chat' || t.dataset.tab === 'chat';
+          t.setAttribute('aria-selected', isChat ? 'true' : 'false');
+          t.tabIndex = isChat ? 0 : -1;
+        });
+        document.querySelectorAll('.edtr-pane, .ag-panel').forEach(p => {
+          if (p.id === 'pane-chat') { p.classList.add('is-active'); p.removeAttribute('hidden'); }
+          else { p.classList.remove('is-active'); p.setAttribute('hidden', ''); }
+        });
+      }
+      const view = byId('chatView'); if (view) view.scrollTop = view.scrollHeight;
+    }, 20);
+  }
+  function setupInsightShortcuts() {
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('button, a');
+      if (!btn) return;
+      const label = (btn.innerText || btn.textContent || '').toLowerCase().trim();
+      const wantsChat =
+        btn.dataset.open === 'conversation'
+        || btn.dataset.action === 'open-conversation'
+        || btn.dataset.action === 'open-chat'
+        || /analyse[\s-]*émotionnelle|analyse[\s-]*emotion|émotion|emotion|question\s*ia/i.test(label)
+        || /insight|emotion/i.test(btn.dataset.insight || '');
+
+      if (wantsChat) openChatTab();
+    }, { passive: true });
+  }
+});

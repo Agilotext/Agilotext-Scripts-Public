@@ -1,4 +1,4 @@
-# Webflow — Confidence Speechmatics V2 (segment-level, test isolé)
+# Webflow — Confidence transcript V2 (segment-level, test isolé)
 
 > **Important :** la prod Webflow ne doit **pas** être modifiée. Les scripts prod (`Code-main-editor-IFRAME_V04.js`, `editor-main.js`, etc.) restent inchangés.
 
@@ -8,11 +8,7 @@ Toute l'expérimentation confidence vit dans :
 scripts/pages/editor/confidence-v1/
 ```
 
-Source de vérité : `PLAN_CONFIDENCE_CLIENT_v2.md` (Nicolas).
-
 ## Prod (inchangé)
-
-Continuer d'utiliser l'embed actuel :
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/Code-main-editor-IFRAME_V04.js"></script>
@@ -24,6 +20,12 @@ Continuer d'utiliser l'embed actuel :
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js"></script>
 ```
+
+Debug : `?agilo_cdn_branch=1.09&debug=1`
+
+## Rollback staging
+
+Retirer les 2 lignes `<script>` ci-dessus → retour immédiat à l’éditeur prod.
 
 ## API backend
 
@@ -73,15 +75,16 @@ Si `available !== true` : transcript normal, aucun message utilisateur.
 - `summary.globalScore` utilisé tel quel (pondéré back par `wordCount`)
 - Sauvegarde : JSON principal seul — jamais de champs confidence
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
+- Textes UX neutres : « Confiance audio », « Confidence transcription »
 
 ## API publique client
 
 ```js
 window.AgiloConfidence = {
-  reload,              // recharger confidence pour le job courant
-  clear,                 // nettoyer UI confidence
-  markSegmentModified,   // appelé à l'édition d'un segment
-  toggle                 // masquer / afficher badges + panneau
+  reload,
+  clear,
+  markSegmentModified,
+  toggle
 };
 ```
 
@@ -90,18 +93,17 @@ window.AgiloConfidence = {
 | Fichier | Rôle |
 |---------|------|
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
-| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hook confidence |
-| `confidence-v1/agilo-confidence-speechmatics.js` | Module V2 segment-level |
-| `confidence-v1/agilo-confidence-speechmatics.css.js` | Styles badges + panneau |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence |
+| `confidence-v1/agilo-confidence.js` | Module V2 segment-level |
+| `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 
 ## Tests
 
 ```bash
-node scripts/pages/editor/confidence-v1/agilo-confidence-speechmatics.test.mjs
+node scripts/pages/editor/confidence-v1/agilo-confidence.test.mjs
 ```
 
-## Documentation
+## Checklist validation (Nicolas)
 
-- [`confidence-v1/README.md`](../../scripts/pages/editor/confidence-v1/README.md)
-- [`docs/analysis/confidence-speechmatics-brief-codex-nicolas.md`](../analysis/confidence-speechmatics-brief-codex-nicolas.md)
+Voir [`confidence-v1/README.md`](../../scripts/pages/editor/confidence-v1/README.md) — section « Checklist validation manuelle ».
