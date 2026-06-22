@@ -127,6 +127,11 @@ async function run() {
   assert(map.size === 3, '3 segments réconciliés');
   assert(map.get('s1')?.level === 'low', 's1 level low');
   assert(map.get('s1')?.textModified === true, 's1 textModified');
+  assert(AC.badgeLabel('low', false, 'pending') === 'À vérifier en priorité', 'low => À vérifier en priorité');
+  assert(!AC.badgeLabel('low', false, 'pending').includes('Faible confiance'), 'label visible sans Faible confiance');
+  assert(AC.badgeLabel('verify', false, 'pending') === 'À vérifier', 'verify => À vérifier');
+  assert(AC.badgeLabel('normal', true, 'pending') === 'Modifié depuis transcription', 'normal modifié => libellé modifié');
+  assert(AC.badgeLabel('low', false, 'verified') === 'Vérifié', 'état vérifié prioritaire sur risk label');
 
   const badId = AC.reconcileConfidenceSegments(mainSegments, {
     available: true,
@@ -163,6 +168,38 @@ async function run() {
   const nav = AC.buildNavigationOrder(map);
   assert(nav[0] === 's1', 'navigation: low en premier (priorité UI)');
   assert(nav.includes('s2'), 'navigation: verify inclus');
+
+  const textWithIssue = 'S’est passé climatisé. ASH.';
+  const lowWordStart = textWithIssue.indexOf('climatisé');
+  const itemWithIssues = {
+    segmentId: 's1',
+    score: 0.52,
+    level: 'low',
+    issues: [
+      {
+        text: 'climatisé',
+        score: 0.6,
+        level: 'low',
+        startChar: lowWordStart,
+        endChar: lowWordStart + 'climatisé'.length,
+        startTime: 20,
+        endTime: 21,
+        wordIndex: 2
+      }
+    ],
+    originalTextHash: AC.textHash(textWithIssue)
+  };
+  assert(AC.areIssuesCompatible(itemWithIssues, textWithIssue) === true, 'issues[] compatibles avec texte original');
+  assert(AC.normalizeWordIssues(itemWithIssues, textWithIssue, false).length === 1, 'highlight mot-à-mot possible si compatible');
+  assert(AC.normalizeWordIssues({ ...itemWithIssues, originalTextHash: 'bad-hash' }, textWithIssue, false).length === 0, 'highlight supprimé si hash incompatible');
+  assert(AC.normalizeWordIssues(itemWithIssues, textWithIssue.replace('climatisé', 'chauffé'), false).length === 0, 'highlight supprimé si texte incompatible');
+  assert(AC.normalizeWordIssues(itemWithIssues, textWithIssue, true).length === 0, 'highlight supprimé si segment modifié');
+
+  const fallbackSegmentOnly = AC.reconcileConfidenceSegments(mainSegments, {
+    available: true,
+    segmentsConfidence: [{ segmentId: 's1', score: 0.52, level: 'low', wordCount: 6 }]
+  });
+  assert(fallbackSegmentOnly.size === 1 && !fallbackSegmentOnly.get('s1')?.issues, 'fallback segment-level si issues[] absent');
 
   const dom = makeDom();
   const root = dom.createElement('div');

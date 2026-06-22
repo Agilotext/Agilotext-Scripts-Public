@@ -1,6 +1,6 @@
-# confidence-v1 — branche test Confidence transcript V2
+# confidence-v1 — branche test Confidence transcript V2.1/V3
 
-Stack éditeur **isolé** pour tester la confidence segment-level sans modifier les scripts prod Webflow.
+Stack éditeur **isolé** pour tester la confidence segment-level et préparer le mot-à-mot V3 sans modifier les scripts prod Webflow.
 
 ## Prod (ne pas toucher)
 
@@ -26,8 +26,8 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 
 | Fichier | Rôle |
 |---------|------|
-| `agilo-confidence.js` | Fetch POST, réconciliation segment, badges, panneau, navigation |
-| `agilo-confidence.css.js` | Styles badges + panneau |
+| `agilo-confidence.js` | Fetch POST, réconciliation segment, badges, états de revue, panneau, navigation, issues V3 |
+| `agilo-confidence.css.js` | Styles badges + panneau + highlights |
 | `Code-main-editor-IFRAME_V04-confidence.js` | Fork V04 + hooks confidence (~40 lignes de diff) |
 | `editor-main-confidence.js` | Loader staging (scripts prod via PARENT_ONLY) |
 | `agilo-confidence.test.mjs` | Tests unitaires |
@@ -35,20 +35,24 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 
 Les autres scripts éditeur sont chargés depuis `../` (prod) pour éviter la duplication.
 
-## Comportement V2
+## Comportement V2.1/V3
 
-- Confidence **segment-level** (badges dans `.ag-seg__head`)
-- Scores conservés après édition + badge « Texte modifié »
-- Panneau global : score, compteurs, « Zone suivante », « Masquer »
+- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond léger sur `.ag-seg__text`
+- Wording visible : « À vérifier » / « À vérifier en priorité » (pas « Faible confiance »)
+- Score `%` en tooltip, pas dans le badge principal
+- Scores conservés après édition + badge « Modifié depuis transcription »
+- États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
+- Panneau global : qualité transcription, zones à vérifier, prioritaires, modifiées, « Zone suivante », « Masquer »
+- Extension V3 : `segmentsConfidence[].issues[]` surligne les mots si les offsets correspondent encore au texte
 - `summary.globalScore` utilisé tel quel
 - Mode `plain` (transcript non structuré) : confidence désactivée
-- Navigation : priorité UI `low → verify → textModified`
+- Navigation : priorité UI `low → verify → textModified`, en excluant les zones vérifiées/ignorées
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
 
 ## API publique
 
 ```js
-window.AgiloConfidence = { reload, clear, markSegmentModified, toggle };
+window.AgiloConfidence = { reload, clear, markSegmentModified, setReviewState, toggle };
 ```
 
 ## Tests
@@ -68,14 +72,15 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 
 ## Checklist validation manuelle (sign-off Nicolas)
 
-1. [ ] Job récent `available:true` : badges `low` / `verify` visibles dans `.ag-seg__head`
-2. [ ] Panneau global avec `summary.globalScore` correct
-3. [ ] Édition locale : score conservé + « Texte modifié » immédiat
+1. [ ] Job récent `available:true` : badges « À vérifier » / « À vérifier en priorité » visibles
+2. [ ] Panneau global avec « Qualité transcription » + `summary.globalScore` correct
+3. [ ] Édition locale : score conservé + « Modifié depuis transcription » immédiat
 4. [ ] Sauvegarde + reload : `textModified:true` revient du backend
-5. [ ] Changement rapide de job : aucun badge résiduel
-6. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
+5. [ ] Boutons « Vérifié » / « Ignorer » retirent la zone de la navigation courante
+6. [ ] Changement rapide de job : aucun badge résiduel
+7. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
 
-**Go/no-go prod :** les 6 scénarios OK + accord Nicolas sur navigation UI.
+**Go/no-go prod :** les 7 scénarios OK + accord Nicolas sur navigation UI.
 
 ## Promotion prod (après sign-off Nicolas)
 
@@ -90,5 +95,6 @@ Voir [`docs/webflow-embeds/editor-confidence-SIGNOFF_NICOLAS.md`](../../../docs/
 ## Edge cases documentés
 
 - Suppression/fusion de segment : badges peuvent être désalignés jusqu’au prochain reload job
-- Segment sans score confidence édité : pas de badge « Texte modifié » (normal)
+- Segment sans score confidence édité : pas de badge « Modifié depuis transcription » (normal)
+- Issues V3 incompatibles avec le texte courant : pas de surlignage mot-à-mot, fallback segment-level
 - jsDelivr : attendre 5–10 min après push avant test CDN

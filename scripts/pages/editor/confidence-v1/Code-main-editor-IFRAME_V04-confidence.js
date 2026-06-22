@@ -1797,14 +1797,25 @@
     try { toolbar.srch?.setSelectionRange(pos, pos); } catch { }
   }
 
+  function markConfidenceModifiedForScope(scope) {
+    if (!window.AgiloConfidence || typeof window.AgiloConfidence.markSegmentModified !== 'function') return;
+    const root = editors.transcript;
+    const segEl = scope?.closest?.('.ag-seg');
+    if (!root || !segEl) return;
+    const idx = Array.prototype.indexOf.call(root.children, segEl);
+    if (idx >= 0) window.AgiloConfidence.markSegmentModified(idx);
+  }
+
   function replaceOne() {
     if (getActivePaneRoot()?.id === 'chatView') { toast('Remplacement désactivé dans Conversation'); return; }
     if (CUR < 0 || !HITS[CUR]) return;
     const repl = toolbar.repl?.value ?? '';
     const el = HITS[CUR];
+    const scope = el.closest?.('.ag-seg__text');
     el.textContent = repl;
     el.parentNode?.normalize?.();
     syncDomToModel();
+    markConfidenceModifiedForScope(scope);
     const keep = CUR; highlight();
     if (HITS.length) { CUR = Math.min(keep, HITS.length - 1); HITS[CUR]?.classList.add('is-current'); updChip(); }
   }
@@ -1814,6 +1825,7 @@
     const q = (toolbar.srch?.value || '').trim(); if (!q) return;
     const rx = buildRx(q); if (!rx) return;
     const repl = toolbar.repl?.value ?? '';
+    const changedScopes = new Set();
     getScopes().forEach(scope => {
       const w = document.createTreeWalker(scope, NodeFilter.SHOW_TEXT, {
         acceptNode(n) {
@@ -1823,10 +1835,18 @@
         }
       });
       let n, nodes = []; while (n = w.nextNode()) nodes.push(n);
-      nodes.forEach(node => { node.textContent = node.textContent.replace(rx, repl); });
+      nodes.forEach(node => {
+        const before = node.textContent || '';
+        const after = before.replace(rx, repl);
+        if (after !== before) {
+          node.textContent = after;
+          changedScopes.add(scope);
+        }
+      });
       scope.normalize();
     });
     syncDomToModel();
+    changedScopes.forEach(markConfidenceModifiedForScope);
     highlight(); toast('Remplacements effectués');
   }
 

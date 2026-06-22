@@ -1,4 +1,4 @@
-// Agilotext — Confidence transcript V2 (segment-level)
+// Agilotext — Confidence transcript V2.1/V3 (segment-level + optional word issues)
 (function () {
   'use strict';
 
@@ -7,6 +7,7 @@
 
   const DEFAULT_API_BASE = 'https://api.agilotext.com/api/v1';
   const LEVELS = new Set(['normal', 'verify', 'low']);
+  const REVIEW_STATES = new Set(['pending', 'verified', 'ignored']);
 
   let __fetchController = null;
   let __currentJobId = '';
@@ -14,6 +15,7 @@
   let __confidenceJson = null;
   let __reconciledMap = new Map();
   let __localModified = new Set();
+  let __reviewStates = new Map();
   let __navIndex = -1;
   let __navKeys = [];
   let __transcriptRoot = null;
@@ -34,19 +36,189 @@
     return Math.max(0, Math.min(100, Math.round(n * 100)));
   }
 
-  function badgeLabel(level, score) {
-    const p = pct(score);
-    if (level === 'low') return `Faible confiance · ${p}%`;
-    if (level === 'verify') return `À vérifier · ${p}%`;
-    return `${p}%`;
+  function badgeLabel(level, modified, reviewState) {
+    if (reviewState === 'verified') return 'Vérifié';
+    if (reviewState === 'ignored') return 'Ignoré';
+    if (level === 'low') return 'À vérifier en priorité';
+    if (level === 'verify') return 'À vérifier';
+    if (modified) return 'Modifié depuis transcription';
+    return 'À vérifier';
   }
 
-  function tooltipFor(item, modified) {
+  function reviewStateFor(segId) {
+    return __reviewStates.get(String(segId || '')) || 'pending';
+  }
+
+  function reviewLabel(state) {
+    if (state === 'verified') return 'Vérifié';
+    if (state === 'ignored') return 'Ignoré';
+    return 'À vérifier';
+  }
+
+  function isReviewed(segId) {
+    const state = reviewStateFor(segId);
+    return state === 'verified' || state === 'ignored';
+  }
+
+  function textHash(text) {
+    const s = String(text || '');
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  }
+
+  function normText(s) {
+    return String(s || '').normalize('NFC').trim().toLowerCase();
+  }
+
+  function getSegmentTextBox(art) {
+    return art?.querySelector?.('.ag-seg__text') || null;
+  }
+
+  function getSegmentText(art) {
+    return getSegmentTextBox(art)?.textContent || '';
+  }
+
+  function unwrapWordIssueDecorations(scope) {
+    if (!scope?.querySelectorAll) return;
+    scope.querySelectorAll('mark.ag-confidence-word').forEach((mark) => {
+      mark.replaceWith(document.createTextNode(mark.textContent || ''));
+    });
+    try { scope.normalize?.(); } catch { /* ignore */ }
+  }
+
+  function isIssueShapeValid(issue, text) {
+    if (!issue || !LEVELS.has(issue.level)) return false;
+    if (issue.level === 'normal') return false;
+    if (typeof issue.score !== 'number' || issue.score < 0 || issue.score > 1) return false;
+    if (!Number.isInteger(issue.startChar) || !Number.isInteger(issue.endChar)) return false;
+    if (issue.startChar < 0 || issue.endChar <= issue.startChar || issue.endChar > text.length) return false;
+
+    const expected = String(issue.text || '');
+    if (!expected) return true;
+    const slice = text.slice(issue.startChar, issue.endChar);
+    return normText(slice) === normText(expected);
+  }
+
+  function areIssuesCompatible(item, text) {
+    const issues = Array.isArray(item?.issues) ? item.issues : [];
+    if (!issues.length) return false;
+
+    const everyIssueMatchesText = issues.every(issue => isIssueShapeValid(issue, text));
+    if (!everyIssueMatchesText) return false;
+
+    const backendHash = String(item.originalTextHash || '').trim();
+    if (!backendHash) return true;
+
+    const localHash = textHash(text);
+    return backendHash === localHash || backendHash === `fnv1a:${localHash}`;
+  }
+
+  function normalizeWordIssues(item, text, modified) {
+    if (modified || !areIssuesCompatible(item, text)) return [];
+
+    const sorted = item.issues
+      .filter(issue => isIssueShapeValid(issue, text))
+      .sort((a, b) => a.startChar - b.startChar || b.endChar - a.endChar);
+
+    const out = [];
+    let lastEnd = -1;
+    sorted.forEach((issue) => {
+      if (issue.startChar < lastEnd) return;
+      out.push({
+        ...issue,
+        text: text.slice(issue.startChar, issue.endChar)
+      });
+      lastEnd = issue.endChar;
+    });
+    return out;
+  }
+
+  function applyWordIssueHighlights(body, issues) {
+    if (!body) return 0;
+    unwrapWordIssueDecorations(body);
+    if (!Array.isArray(issues) || !issues.length) return 0;
+
+    const text = body.textContent || '';
+    const frag = document.createDocumentFragment();
+    let cursor = 0;
+
+    issues.forEach((issue) => {
+      if (issue.startChar > cursor) {
+        frag.appendChild(document.createTextNode(text.slice(cursor, issue.startChar)));
+      }
+
+      const mark = document.createElement('mark');
+      mark.className = `ag-confidence-word ag-confidence-word--${issue.level}`;
+      mark.dataset.confidenceLevel = issue.level;
+      mark.dataset.confidenceScore = String(issue.score);
+      if (Number.isFinite(issue.startTime)) mark.dataset.startTime = String(issue.startTime);
+      if (Number.isFinite(issue.endTime)) mark.dataset.endTime = String(issue.endTime);
+      mark.title = `À vérifier dans ce mot · confiance audio ${pct(issue.score)}%`;
+      mark.textContent = text.slice(issue.startChar, issue.endChar);
+      frag.appendChild(mark);
+      cursor = issue.endChar;
+    });
+
+    if (cursor < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(cursor)));
+    }
+
+    body.replaceChildren(frag);
+    return issues.length;
+  }
+
+  function tooltipFor(item, modified, reviewState) {
     const p = pct(item.score);
     if (modified) {
-      return `Confiance audio : ${p}% · texte modifié manuellement`;
+      return `Confiance audio : ${p}% · segment modifié depuis la transcription originale · statut : ${reviewLabel(reviewState)}`;
     }
-    return `Confiance audio : ${p}% · calculée sur l'audio original`;
+    return `Confiance audio : ${p}% · calculée sur la transcription originale · statut : ${reviewLabel(reviewState)}`;
+  }
+
+  function riskCount(summary) {
+    const verify = Number(summary?.verifySegments) || 0;
+    const low = Number(summary?.lowSegments) || 0;
+    return verify + low;
+  }
+
+  function effectivePanelSummary(summary) {
+    const base = {
+      globalScore: summary?.globalScore ?? 0,
+      totalSegments: summary?.totalSegments ?? 0,
+      verifySegments: summary?.verifySegments ?? 0,
+      lowSegments: summary?.lowSegments ?? 0,
+      modifiedSegments: summary?.modifiedSegments ?? 0
+    };
+
+    if (!__reconciledMap?.size) return base;
+
+    let pendingVerifySegments = 0;
+    let pendingPrioritySegments = 0;
+    __reconciledMap.forEach((item, segId) => {
+      if (isReviewed(segId)) return;
+      if (item.level === 'verify') pendingVerifySegments++;
+      if (item.level === 'low') pendingPrioritySegments++;
+    });
+
+    return {
+      ...base,
+      verifySegments: pendingVerifySegments,
+      lowSegments: pendingPrioritySegments
+    };
+  }
+
+  function escapeAttr(s) {
+    return String(s || '').replace(/[&<>"']/g, (ch) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[ch]));
   }
 
   function abortCurrentConfidenceFetch() {
@@ -62,12 +234,39 @@
       null;
   }
 
+  function setReviewState(segId, state) {
+    const key = String(segId || '');
+    if (!key || !REVIEW_STATES.has(state)) return;
+    if (state === 'pending') __reviewStates.delete(key);
+    else __reviewStates.set(key, state);
+
+    const root = getTranscriptRoot();
+    const item = __reconciledMap.get(key);
+    const art = root?.querySelector?.(`.ag-seg[data-id="${CSS.escape(key)}"]`);
+    if (art && item) decorateSegmentWithConfidence(art, item, item.segmentIndex);
+
+    __navIndex = -1;
+    __navKeys = buildNavigationOrder(__reconciledMap);
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    if (summary && root) renderConfidencePanel(root, summary);
+  }
+
   function removeSegmentConfidenceDecorations(art) {
     if (!art) return;
-    art.classList.remove('ag-confidence-normal', 'ag-confidence-verify', 'ag-confidence-low', 'is-confidence-nav-active');
+    unwrapWordIssueDecorations(art);
+    art.classList.remove(
+      'ag-confidence-normal',
+      'ag-confidence-verify',
+      'ag-confidence-low',
+      'ag-confidence-reviewed',
+      'ag-confidence-ignored',
+      'is-confidence-nav-active'
+    );
     art.removeAttribute('data-confidence-level');
     art.removeAttribute('data-confidence-local-modified');
-    art.querySelectorAll('.ag-confidence-badge, .ag-confidence-modified').forEach(el => el.remove());
+    art.removeAttribute('data-confidence-review-state');
+    art.removeAttribute('data-confidence-word-issues');
+    art.querySelectorAll('.ag-confidence-badge, .ag-confidence-modified, .ag-confidence-review').forEach(el => el.remove());
   }
 
   function clearConfidenceUi() {
@@ -80,6 +279,7 @@
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
+    __reviewStates = new Map();
     __navIndex = -1;
     __navKeys = [];
   }
@@ -131,7 +331,8 @@
       result.set(key, {
         ...item,
         segmentId: key,
-        segmentIndex: match.index
+        segmentIndex: match.index,
+        text: String(match.segment.text || '')
       });
     });
 
@@ -195,29 +396,62 @@
 
     const level = item.level;
     const modified = isSegmentModified(item, segmentIndex);
+    const segId = item.segmentId || art.dataset.id || '';
+    const reviewState = reviewStateFor(segId);
+    const reviewed = reviewState === 'verified';
+    const ignored = reviewState === 'ignored';
 
-    if (level === 'normal' && !modified) return;
+    if (level === 'normal' && !modified && reviewState === 'pending') return;
 
     art.classList.add(`ag-confidence-${level}`);
     art.dataset.confidenceLevel = level;
+    art.dataset.confidenceReviewState = reviewState;
     if (modified) {
       art.dataset.confidenceLocalModified = 'true';
     }
+    if (reviewed) art.classList.add('ag-confidence-reviewed');
+    if (ignored) art.classList.add('ag-confidence-ignored');
+
+    const body = getSegmentTextBox(art);
+    const issues = normalizeWordIssues(item, getSegmentText(art), modified || reviewed || ignored);
+    const issueCount = applyWordIssueHighlights(body, issues);
+    if (issueCount > 0) art.dataset.confidenceWordIssues = String(issueCount);
 
     const head = art.querySelector('.ag-seg__head');
     if (!head) return;
 
     const badge = document.createElement('span');
     badge.className = 'ag-confidence-badge';
-    badge.title = tooltipFor(item, modified);
-    badge.textContent = badgeLabel(level, item.score);
+    badge.title = tooltipFor(item, modified, reviewState);
+    badge.textContent = badgeLabel(level, modified, reviewState);
     head.appendChild(badge);
 
     if (modified) {
       const mod = document.createElement('span');
       mod.className = 'ag-confidence-modified';
-      mod.textContent = 'Texte modifié';
+      mod.textContent = 'Modifié depuis transcription';
       head.appendChild(mod);
+    }
+
+    if (level === 'low' || level === 'verify') {
+      const review = document.createElement('span');
+      review.className = 'ag-confidence-review';
+      if (reviewState === 'pending') {
+        review.innerHTML =
+          `<button type="button" class="ag-confidence-review__btn" data-confidence-review="verified" data-confidence-seg-id="${escapeAttr(segId)}">Vérifié</button>` +
+          `<button type="button" class="ag-confidence-review__btn ag-confidence-review__btn--ghost" data-confidence-review="ignored" data-confidence-seg-id="${escapeAttr(segId)}">Ignorer</button>`;
+      } else {
+        review.innerHTML =
+          `<button type="button" class="ag-confidence-review__btn ag-confidence-review__btn--ghost" data-confidence-review="pending" data-confidence-seg-id="${escapeAttr(segId)}">Réouvrir</button>`;
+      }
+      review.querySelectorAll('[data-confidence-review]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setReviewState(btn.dataset.confidenceSegId, btn.dataset.confidenceReview);
+        });
+      });
+      head.appendChild(review);
     }
   }
 
@@ -256,6 +490,7 @@
 
     return entries
       .filter(([_, item]) => {
+        if (isReviewed(item.segmentId)) return false;
         if (item.level === 'low' || item.level === 'verify') return true;
         return isSegmentModified(item, item.segmentIndex);
       })
@@ -302,12 +537,14 @@
       transcriptRoot.parentElement?.insertBefore(panel, transcriptRoot);
     }
 
-    const globalPct = pct(summary.globalScore);
+    const display = effectivePanelSummary(summary);
+    const globalPct = pct(display.globalScore);
+    const pendingRisk = riskCount(display);
     panel.innerHTML =
-      `<span class="ag-confidence-panel__score">Confidence globale : <strong>${globalPct}%</strong></span>` +
-      `<span class="ag-confidence-panel__stat">${summary.verifySegments} zone${summary.verifySegments !== 1 ? 's' : ''} à vérifier</span>` +
-      `<span class="ag-confidence-panel__stat">${summary.lowSegments} faible${summary.lowSegments !== 1 ? 's' : ''} confiance${summary.lowSegments !== 1 ? 's' : ''}</span>` +
-      `<span class="ag-confidence-panel__stat">${summary.modifiedSegments} segment${summary.modifiedSegments !== 1 ? 's' : ''} modifié${summary.modifiedSegments !== 1 ? 's' : ''}</span>` +
+      `<span class="ag-confidence-panel__score">Qualité transcription : <strong>${globalPct}%</strong></span>` +
+      `<span class="ag-confidence-panel__stat">${pendingRisk} zone${pendingRisk !== 1 ? 's' : ''} à vérifier</span>` +
+      `<span class="ag-confidence-panel__stat">${display.lowSegments} prioritaire${display.lowSegments !== 1 ? 's' : ''}</span>` +
+      `<span class="ag-confidence-panel__stat">${display.modifiedSegments} modifiée${display.modifiedSegments !== 1 ? 's' : ''}</span>` +
       '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-next">Zone suivante</button>' +
       '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--ghost" id="ag-confidence-toggle">Masquer</button>' +
       '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>';
@@ -395,7 +632,11 @@
     const item = __reconciledMap.get(segId);
     if (!item) return;
 
+    __reviewStates.delete(segId);
+    unwrapWordIssueDecorations(art);
     decorateSegmentWithConfidence(art, item, idx);
+    __navIndex = -1;
+    __navKeys = buildNavigationOrder(__reconciledMap);
 
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary) renderConfidencePanel(root, summary);
@@ -428,6 +669,7 @@
     __confidenceJson = confidenceJson;
     __reconciledMap = reconciled;
     __localModified = new Set();
+    __reviewStates = new Map();
     __navIndex = -1;
     __navKeys = buildNavigationOrder(reconciled);
     __transcriptRoot = transcriptRoot;
@@ -549,6 +791,7 @@
     reload: reloadConfidenceForCurrentJob,
     clear: clearConfidenceUi,
     markSegmentModified,
+    setReviewState,
     toggle: setConfidenceVisible,
     // API interne / tests
     isConfidenceEnabled,
@@ -556,6 +799,10 @@
     reconcileConfidenceSegments,
     computeSummaryFallback,
     buildNavigationOrder,
+    badgeLabel,
+    textHash,
+    normalizeWordIssues,
+    areIssuesCompatible,
     applyConfidenceData,
     applyAfterTranscriptLoad,
     resetSessionState,

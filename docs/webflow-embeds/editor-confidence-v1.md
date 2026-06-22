@@ -1,4 +1,4 @@
-# Webflow — Confidence transcript V2 (segment-level, test isolé)
+# Webflow — Confidence transcript V2.1/V3 (test isolé)
 
 > **Important :** la prod Webflow ne doit **pas** être modifiée. Les scripts prod (`Code-main-editor-IFRAME_V04.js`, `editor-main.js`, etc.) restent inchangés.
 
@@ -36,7 +36,7 @@ Content-Type: application/x-www-form-urlencoded;charset=UTF-8
 
 Paramètres : `username`, `token`, `edition`, `jobId`
 
-### Contrat V2 (segmentsConfidence)
+### Contrat V2.1 (segmentsConfidence)
 
 ```json
 {
@@ -67,15 +67,48 @@ Paramètres : `username`, `token`, `edition`, `jobId`
 
 Si `available !== true` : transcript normal, aucun message utilisateur.
 
-## Comportement V2
+### Extension V3 optionnelle (mot-à-mot)
 
-- Confidence **segment-level** (badges dans `.ag-seg__head`, pas de highlight mot-à-mot)
-- Scores **conservés après édition** + badge « Texte modifié »
-- Panneau global : score, compteurs, « Zone suivante », « Masquer »
+Le backend peut enrichir chaque segment sans casser V2.1 :
+
+```json
+{
+  "segmentId": "s12",
+  "score": 0.72,
+  "level": "verify",
+  "textModified": false,
+  "wordCount": 8,
+  "originalTextHash": "fnv1a:3f31a8c2",
+  "issues": [
+    {
+      "text": "climatisé",
+      "score": 0.6,
+      "level": "low",
+      "startChar": 11,
+      "endChar": 20,
+      "startTime": 20.1,
+      "endTime": 20.8,
+      "wordIndex": 2
+    }
+  ]
+}
+```
+
+Le frontend applique `issues[]` uniquement si les offsets correspondent encore au texte affiché. Si le texte a été modifié ou si les issues ne correspondent pas, il retire le surlignage mot-à-mot et garde le signal segment-level.
+
+## Comportement V2.1/V3
+
+- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond léger sur `.ag-seg__text`
+- Wording visible : « À vérifier » / « À vérifier en priorité » (jamais « Faible confiance »)
+- Score `%` conservé en tooltip, pas dans le badge principal
+- Scores **conservés après édition** + badge « Modifié depuis transcription »
+- États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
+- Panneau global : « Qualité transcription », zones à vérifier, prioritaires, modifiées, « Zone suivante », « Masquer »
+- Extension V3 : surlignage `mark.ag-confidence-word` si `issues[]` compatible
 - `summary.globalScore` utilisé tel quel (pondéré back par `wordCount`)
 - Sauvegarde : JSON principal seul — jamais de champs confidence
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
-- Textes UX neutres : « Confiance audio », « Confidence transcription »
+- Textes UX neutres : « Confiance audio », « À vérifier », « Qualité transcription »
 
 ## API publique client
 
@@ -84,6 +117,7 @@ window.AgiloConfidence = {
   reload,
   clear,
   markSegmentModified,
+  setReviewState,
   toggle
 };
 ```
@@ -94,8 +128,8 @@ window.AgiloConfidence = {
 |---------|------|
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
 | `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence |
-| `confidence-v1/agilo-confidence.js` | Module V2 segment-level |
-| `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau |
+| `confidence-v1/agilo-confidence.js` | Module V2.1/V3 confidence |
+| `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau + highlights |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 
 ## Tests
