@@ -1,37 +1,60 @@
-# Email — Handoff Nicolas empreinte vocale
+# Email — Handoff Nicolas empreinte vocale (v3 — juin 2026)
 
 **Destinataire :** nicolas.de.pomereu@agilotext.com  
-**Objet :** Empreinte vocale — 3 points backend (micro invité, liste invites, bug invite)
+**Objet :** Empreinte vocale invité — page Webflow + 4 correctifs backend
 
 ---
 
 Bonjour Nicolas,
 
-On avance sur l'empreinte vocale côté front (Mon compte Pro/Business). Trois sujets backend pour aligner l'expérience invité et l'historique des invitations :
+Florian déploie la page invité sur **Webflow** (`/auth/voice-invite`) avec le même design que Mon compte. L'API submit reste identique ; on change seulement l'URL email et un redirect pour les liens déjà envoyés.
 
-**1) MICRO SUR LA PAGE INVITÉ**
+Guide complet : [`GUIDE_NICOLAS_VOICE_INVITE_URL.md`](GUIDE_NICOLAS_VOICE_INVITE_URL.md)
 
-Page : https://api.agilotext.com/api/v1/speakerVoiceInvite?inviteToken=sv_...
+---
 
-Aujourd'hui upload fichier uniquement. On a le même pattern micro que Webflow (onboarding + Mon compte) : MediaRecorder → injecte le blob dans le champ `voiceFile` existant via DataTransfer, submit inchangé (POST `submitSpeakerVoiceInvite`).
+**P0 — BLOQUANT : `submitSpeakerVoiceInvite`**
 
-Guide + snippet prêt à coller :
-https://github.com/Agilotext/Agilotext-Scripts-Public/blob/1.09/docs/webflow-embeds/voice-enrollment/GUIDE_NICOLAS_MICRO_PAGE_INVITE.md
+Compte inviteur Business (`bauerwebpro@gmail.com`, edition `ent`) :
+- `createSpeakerVoiceInvite` OK
+- `getSpeakerVoices` OK
+- Submit avec token `sv_47c6d920983e4a3985088afa2d1e7850` + WAV 16s → « La création d'empreinte vocale n'est pas disponible pour ce compte. »
 
-Prérequis : accepter webm/mp4 sur `submitSpeakerVoiceInvite` (comme `enrollSpeakerVoice`).
+Peux-tu aligner le contrôle d'édition du submit sur create/getSpeakerVoices ? (edition BDD invite : `business` vs `ent` ?)
 
-**2) LISTE DES INVITATIONS (API)**
+---
 
-Le front appelle déjà `getSpeakerVoiceInvites` avec fallback localStorage si 404.
+**P1 — URL Brevo (5 min)**
 
-Spec :
-https://github.com/Agilotext/Agilotext-Scripts-Public/blob/1.09/docs/webflow-embeds/voice-enrollment/GUIDE_NICOLAS_GET_SPEAKER_VOICE_INVITES.md
+Remplacer :
+`https://api.agilotext.com/api/v1/speakerVoiceInvite?inviteToken={{token}}`
 
-Question : une invitation `pending` compte-t-elle dans `maxVoices` ? (On affiche voix + pending / max côté front.)
+Par :
+`https://www.agilotext.com/auth/voice-invite?inviteToken={{token}}&recipientName={{recipientNameEncoded}}&invitedBy={{inviterEmailEncoded}}`
 
-**3) BUG createSpeakerVoiceInvite**
+Staging : `https://agilotext-test.webflow.io/auth/voice-invite?...`
 
-Parfois `error_speaker_voice_invite_not_found` alors que l'email Brevo part. Peux-tu vérifier la persistance invite vs envoi mail ?
+---
 
-Merci,
+**P1 — Redirect legacy (15 min)**
+
+`GET api.agilotext.com/.../speakerVoiceInvite?inviteToken=X` → **302** vers Webflow avec les mêmes query params.
+
+---
+
+**P2 — CORS `getSpeakerVoiceInvites`**
+
+Mêmes headers que `getSpeakerVoices` (`Access-Control-Allow-Origin: *`) — fetch bloqué depuis `www.agilotext.com` aujourd'hui.
+
+---
+
+**Rappels précédents (toujours d'actualité)**
+
+1. Micro page API invité — [`GUIDE_NICOLAS_MICRO_PAGE_INVITE.md`](GUIDE_NICOLAS_MICRO_PAGE_INVITE.md) (optionnel si Webflow remplace la page API)
+2. Liste invites — [`GUIDE_NICOLAS_GET_SPEAKER_VOICE_INVITES.md`](GUIDE_NICOLAS_GET_SPEAKER_VOICE_INVITES.md)
+3. Bug `createSpeakerVoiceInvite` parfois `error_speaker_voice_invite_not_found` alors que l'email part
+
+**Inchangé :** champs submit `inviteToken`, `fullName`, `voiceFile`.
+
+Merci,  
 Florian
