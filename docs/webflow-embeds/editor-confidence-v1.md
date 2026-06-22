@@ -1,4 +1,4 @@
-# Webflow — Confidence transcript V2.3/V3 (test isolé)
+# Webflow — Confidence transcript V2.4/V3 (test isolé)
 
 > **Important :** la prod Webflow ne doit **pas** être modifiée. Les scripts prod (`Code-main-editor-IFRAME_V04.js`, `editor-main.js`, etc.) restent inchangés.
 
@@ -96,22 +96,24 @@ Le backend peut enrichir chaque segment sans casser V2.1 :
 
 Le frontend applique `issues[]` uniquement si les offsets correspondent encore au texte affiché. Si le texte a été modifié ou si les issues ne correspondent pas, il retire le surlignage mot-à-mot et garde le signal segment-level.
 
-## Comportement V2.3/V3
+## Comportement V2.4/V3
 
 - Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond arrondi léger sur `.ag-seg__text`
-- Wording visible : « À vérifier » / « À vérifier en priorité » (jamais « Faible confiance »)
-- Score `%` conservé en tooltip, pas dans le badge principal
+- Wording visible : « À relire » / « Prioritaire » (jamais « Faible confiance »)
+- Score `%` affiché en secondaire : « Qualité estimée », avec tooltip explicatif
 - Scores **conservés après édition** + badge « Modifié depuis transcription »
-- États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : « Qualité transcription », zones à vérifier, prioritaires, modifiées, « Zone suivante », toggle « Zones à vérifier »
-- Helper one-shot si des zones existent : explique brièvement pourquoi relire ces passages, bouton « Compris »
+- États de revue locaux : « Relu », « Ignoré », « Réouvrir »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, bouton « Passage suivant », toggle « Passages à relire »
+- Cas zéro : ligne sobre « Aucun passage signalé à relire · Qualité estimée »
+- Après revue complète : ligne sobre « Tous les passages signalés sont traités »
+- Helper one-shot si des passages existent : explique brièvement pourquoi relire ces passages, bouton « Compris »
 - Désactivation utilisateur locale : les repères sont masqués mais le panneau minimal reste affiché pour réactiver
-- Raccourcis hors édition : `Alt+ArrowRight` zone suivante, `Alt+ArrowLeft` zone précédente
+- Raccourcis hors édition : `Alt+ArrowRight` passage suivant, `Alt+ArrowLeft` passage précédent
 - Extension V3 : surlignage `mark.ag-confidence-word` si `issues[]` compatible
 - `summary.globalScore` utilisé tel quel (pondéré back par `wordCount`)
 - Sauvegarde : JSON principal seul — jamais de champs confidence
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
-- Textes UX neutres : « Confiance audio », « À vérifier », « Qualité transcription »
+- Textes UX neutres : « Passages à relire », « À relire », « Prioritaire », « Qualité estimée »
 
 ## Activation et préférences
 
@@ -143,7 +145,7 @@ window.AgiloConfidence = {
 |---------|------|
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
 | `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence |
-| `confidence-v1/agilo-confidence.js` | Module V2.3/V3 confidence |
+| `confidence-v1/agilo-confidence.js` | Module V2.4/V3 confidence |
 | `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau + highlights |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 

@@ -1,4 +1,4 @@
-# Sign-off Nicolas — Confidence transcript V2.3/V3-ready
+# Sign-off Nicolas — Confidence transcript V2.4/V3-ready
 
 ## Embed staging (jsDelivr @1.09)
 
@@ -13,27 +13,29 @@ Debug : `?agilo_cdn_branch=1.09&debug=1`
 
 Fournir un `jobId` avec `available:true` sur `POST /receiveConfidenceTextJson` pour valider end-to-end.
 
-## Checklist validation (15 scénarios)
+## Checklist validation (17 scénarios)
 
-- [ ] Badges « À vérifier » / « À vérifier en priorité » dans `.ag-seg__head`
+- [ ] Badges « À relire » / « Prioritaire » dans `.ag-seg__head`
 - [ ] Mise en évidence sobre du texte du segment à vérifier, sans trait orange abrupt
-- [ ] Panneau global « Qualité transcription » + `summary.globalScore`
+- [ ] Texte du segment toujours sous l’en-tête, jamais à droite des badges
+- [ ] Panneau global : passages à relire en premier + « Qualité estimée » secondaire
+- [ ] Cas zéro passage : affichage sobre, sans helper
 - [ ] Panneau global accessible après scroll et retour normal quand on remonte
-- [ ] Helper one-shot visible au premier transcript avec zones à vérifier
+- [ ] Helper one-shot visible au premier transcript avec passages à relire
 - [ ] Bouton « Compris » masque le helper après reload
-- [ ] Toggle « Zones à vérifier » OFF masque les repères et persiste au reload
-- [ ] Toggle « Zones à vérifier » ON réaffiche badges, highlights, navigation
+- [ ] Toggle « Passages à relire » OFF masque les repères et persiste au reload
+- [ ] Toggle « Passages à relire » ON réaffiche badges, highlights, navigation
 - [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition
 - [ ] Les raccourcis ne changent pas de zone quand le curseur est dans le transcript ou quand le toggle est OFF
 - [ ] Édition locale : score conservé + « Modifié depuis transcription »
-- [ ] Boutons locaux « Vérifié » / « Ignorer » + navigation mise à jour
+- [ ] Boutons locaux « Relu » / « Ignorer » + navigation mise à jour
 - [ ] Sauvegarde + reload : `textModified:true` du backend
 - [ ] Changement rapide de job : pas de mélange
 - [ ] Flag `false` : aucun appel confidence
 
 ## Point à confirmer
 
-Navigation « Zone suivante » : **priorité UI** `low → verify → textModified`, en excluant les zones vérifiées/ignorées. Raccourcis retenus : `Alt+ArrowRight` / `Alt+ArrowLeft`.
+Navigation « Passage suivant » : **priorité UI** `low → verify → textModified`, en excluant les passages relus/ignorés. Raccourcis retenus : `Alt+ArrowRight` / `Alt+ArrowLeft`.
 
 ## Contrat V3 à valider
 
@@ -42,11 +44,11 @@ Pour le vrai mot-à-mot, ajouter `segmentsConfidence[].issues[]` avec `text`, `s
 ## Brouillon email
 
 ```
-Objet : Confidence V2.3 client — prêt pour test staging
+Objet : Confidence V2.4 client — prêt pour test staging
 
 Bonjour Nicolas,
 
-Le stack client confidence V2.3 est sur la branche 1.09 (repo public, nommage neutre).
+Le stack client confidence V2.4 est sur la branche 1.09 (repo public, nommage neutre).
 
 Staging Webflow :
 - AGILOTEXT_ENABLE_CONFIDENCE = true

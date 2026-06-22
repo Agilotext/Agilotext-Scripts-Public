@@ -162,11 +162,11 @@ async function run() {
   assert(map.size === 3, '3 segments réconciliés');
   assert(map.get('s1')?.level === 'low', 's1 level low');
   assert(map.get('s1')?.textModified === true, 's1 textModified');
-  assert(AC.badgeLabel('low', false, 'pending') === 'À vérifier en priorité', 'low => À vérifier en priorité');
+  assert(AC.badgeLabel('low', false, 'pending') === 'Prioritaire', 'low => Prioritaire');
   assert(!AC.badgeLabel('low', false, 'pending').includes('Faible confiance'), 'label visible sans Faible confiance');
-  assert(AC.badgeLabel('verify', false, 'pending') === 'À vérifier', 'verify => À vérifier');
+  assert(AC.badgeLabel('verify', false, 'pending') === 'À relire', 'verify => À relire');
   assert(AC.badgeLabel('normal', true, 'pending') === 'Modifié depuis transcription', 'normal modifié => libellé modifié');
-  assert(AC.badgeLabel('low', false, 'verified') === 'Vérifié', 'état vérifié prioritaire sur risk label');
+  assert(AC.badgeLabel('low', false, 'verified') === 'Relu', 'état relu prioritaire sur risk label');
 
   const badId = AC.reconcileConfidenceSegments(mainSegments, {
     available: true,
@@ -199,6 +199,11 @@ async function run() {
   assert(fallback && Math.round(fallback.globalScore * 100) > 0, 'fallback globalScore calculé');
   const weighted = (0.95 * 3 + 0.52 * 6 + 0.72 * 1) / (3 + 6 + 1);
   assert(Math.abs(fallback.globalScore - weighted) < 0.001, 'fallback pondéré wordCount');
+  assert(AC.panelMainLabel({ verifySegments: 16, lowSegments: 2 }) === '18 passages à relire · 2 prioritaires', 'panneau: compteurs avant score');
+  assert(AC.panelMainLabel({ verifySegments: 1, lowSegments: 0 }) === '1 passage à relire', 'panneau: pas de zéro prioritaire inutile');
+  assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }) === 'Aucun passage signalé à relire', 'panneau: état zéro passage');
+  assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }, { verifySegments: 1, lowSegments: 0 }) === 'Tous les passages signalés sont traités', 'panneau: passages traités après revue');
+  assert(AC.qualityLabel({ globalScore: 0.96 }) === 'Qualité estimée : 96%', 'panneau: qualité estimée secondaire');
 
   const nav = AC.buildNavigationOrder(map);
   assert(nav[0] === 's1', 'navigation: low en premier (priorité UI)');
@@ -216,8 +221,8 @@ async function run() {
   assert(AC.isEditableShortcutTarget(textEl) === true, 'raccourci ignoré dans contenteditable');
   assert(AC.isEditableShortcutTarget(plainEl) === false, 'raccourci autorisé hors édition');
 
-  assert(AC.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === true, 'helper visible si zones à vérifier et jamais vu');
-  assert(AC.shouldShowHelper({ verifySegments: 0, lowSegments: 0 }) === false, 'helper absent sans zone à vérifier');
+  assert(AC.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === true, 'helper visible si passages à relire et jamais vu');
+  assert(AC.shouldShowHelper({ verifySegments: 0, lowSegments: 0 }) === false, 'helper absent sans passage à relire');
   AC.dismissHelper();
   assert(AC.__storage.get('agilo:confidence-helper-seen:v1') === 'true', 'Compris persiste helper vu');
   assert(AC.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent après Compris');

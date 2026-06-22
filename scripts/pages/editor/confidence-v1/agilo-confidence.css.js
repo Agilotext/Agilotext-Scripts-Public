@@ -1,4 +1,4 @@
-// Agilotext — Confidence transcript V2.3/V3 (styles segment-level + word issues)
+// Agilotext — Confidence transcript V2.4/V3 (guided review + word issues)
 (function () {
   if (document.getElementById('agilo-confidence-css')) return;
   const s = document.createElement('style');
@@ -62,6 +62,19 @@
   color: #174a96;
 }
 
+.ag-confidence-panel__main {
+  font-size: 13px;
+  font-weight: 700;
+  color: #262626;
+  white-space: nowrap;
+}
+
+.ag-confidence-panel__score {
+  font-size: 12px;
+  color: #626262;
+  white-space: nowrap;
+}
+
 .ag-confidence-panel__stat {
   font-size: 12px;
   white-space: nowrap;
@@ -80,6 +93,17 @@
 
 .ag-confidence-panel__btn:hover {
   background: rgba(23, 74, 150, 0.06);
+}
+
+.ag-confidence-panel__btn--primary {
+  background: #174a96;
+  border-color: #174a96;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.ag-confidence-panel__btn--primary:hover {
+  background: #123d7c;
 }
 
 .ag-confidence-panel__btn:focus-visible,
@@ -271,23 +295,27 @@
 }
 
 .ag-confidence-verify .ag-seg__text {
-  display: inline-block;
+  display: block;
+  clear: both;
   width: fit-content;
   max-width: 100%;
   box-sizing: border-box;
   background: linear-gradient(90deg, rgba(255, 247, 237, 0.98), rgba(255, 251, 235, 0.58));
   border-radius: 7px;
+  margin-top: 0.18rem;
   padding: 2px 7px;
   box-shadow: inset 0 0 0 1px rgba(253, 186, 116, 0.22);
 }
 
 .ag-confidence-low .ag-seg__text {
-  display: inline-block;
+  display: block;
+  clear: both;
   width: fit-content;
   max-width: 100%;
   box-sizing: border-box;
   background: linear-gradient(90deg, rgba(255, 237, 213, 0.98), rgba(255, 247, 237, 0.64));
   border-radius: 7px;
+  margin-top: 0.18rem;
   padding: 2px 7px;
   box-shadow: inset 0 0 0 1px rgba(251, 146, 60, 0.28);
 }

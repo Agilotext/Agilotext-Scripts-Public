@@ -1,4 +1,4 @@
-// Agilotext — Confidence transcript V2.3/V3 (segment-level + optional word issues)
+// Agilotext — Confidence transcript V2.4/V3 (guided review + optional word issues)
 (function () {
   'use strict';
 
@@ -76,12 +76,12 @@
   }
 
   function badgeLabel(level, modified, reviewState) {
-    if (reviewState === 'verified') return 'Vérifié';
+    if (reviewState === 'verified') return 'Relu';
     if (reviewState === 'ignored') return 'Ignoré';
-    if (level === 'low') return 'À vérifier en priorité';
-    if (level === 'verify') return 'À vérifier';
+    if (level === 'low') return 'Prioritaire';
+    if (level === 'verify') return 'À relire';
     if (modified) return 'Modifié depuis transcription';
-    return 'À vérifier';
+    return 'À relire';
   }
 
   function reviewStateFor(segId) {
@@ -89,9 +89,9 @@
   }
 
   function reviewLabel(state) {
-    if (state === 'verified') return 'Vérifié';
+    if (state === 'verified') return 'Relu';
     if (state === 'ignored') return 'Ignoré';
-    return 'À vérifier';
+    return 'À relire';
   }
 
   function isReviewed(segId) {
@@ -196,7 +196,7 @@
       mark.dataset.confidenceScore = String(issue.score);
       if (Number.isFinite(issue.startTime)) mark.dataset.startTime = String(issue.startTime);
       if (Number.isFinite(issue.endTime)) mark.dataset.endTime = String(issue.endTime);
-      mark.title = `À vérifier dans ce mot · confiance audio ${pct(issue.score)}%`;
+      mark.title = `À relire dans ce mot · confiance audio ${pct(issue.score)}%`;
       mark.textContent = text.slice(issue.startChar, issue.endChar);
       frag.appendChild(mark);
       cursor = issue.endChar;
@@ -222,6 +222,24 @@
     const verify = Number(summary?.verifySegments) || 0;
     const low = Number(summary?.lowSegments) || 0;
     return verify + low;
+  }
+
+  function plural(n, singular, pluralLabel) {
+    return `${n} ${n === 1 ? singular : pluralLabel}`;
+  }
+
+  function panelMainLabel(summary, originalSummary) {
+    const pendingRisk = riskCount(summary);
+    const originalRisk = riskCount(originalSummary);
+    const priority = Number(summary?.lowSegments) || 0;
+    if (pendingRisk <= 0 && originalRisk > 0) return 'Tous les passages signalés sont traités';
+    if (pendingRisk <= 0) return 'Aucun passage signalé à relire';
+    const main = plural(pendingRisk, 'passage à relire', 'passages à relire');
+    return priority > 0 ? `${main} · ${plural(priority, 'prioritaire', 'prioritaires')}` : main;
+  }
+
+  function qualityLabel(summary) {
+    return `Qualité estimée : ${pct(summary?.globalScore)}%`;
   }
 
   function shouldShowHelper(summary) {
@@ -285,7 +303,7 @@
       countEl.textContent = '';
       return;
     }
-    countEl.textContent = `Zone ${__navIndex + 1} / ${__navKeys.length}`;
+    countEl.textContent = `Passage ${__navIndex + 1} / ${__navKeys.length}`;
   }
 
   function isEditableShortcutTarget(target) {
@@ -590,7 +608,7 @@
       review.className = 'ag-confidence-review';
       if (reviewState === 'pending') {
         review.innerHTML =
-          `<button type="button" class="ag-confidence-review__btn" data-confidence-review="verified" data-confidence-seg-id="${escapeAttr(segId)}">Vérifié</button>` +
+          `<button type="button" class="ag-confidence-review__btn" data-confidence-review="verified" data-confidence-seg-id="${escapeAttr(segId)}">Relu</button>` +
           `<button type="button" class="ag-confidence-review__btn ag-confidence-review__btn--ghost" data-confidence-review="ignored" data-confidence-seg-id="${escapeAttr(segId)}">Ignorer</button>`;
       } else {
         review.innerHTML =
@@ -621,7 +639,7 @@
   }
 
   /**
-   * Navigation « Zone suivante » : priorité UI low → verify → textModified,
+   * Navigation « Passage suivant » : priorité UI low → verify → textModified,
    * puis ordre segmentIndex (aligné avec arbitrage plan client V2).
    */
   function buildNavigationOrder(reconciledMap) {
@@ -699,38 +717,41 @@
     }
 
     const display = effectivePanelSummary(summary);
-    const globalPct = pct(display.globalScore);
     const pendingRisk = riskCount(display);
+    const hasPendingRisk = pendingRisk > 0;
+    const modifiedCount = Number(display.modifiedSegments) || 0;
+    const modifiedStat = modifiedCount > 0
+      ? `<span class="ag-confidence-panel__stat">${plural(modifiedCount, 'modifié', 'modifiés')}</span>`
+      : '';
     const toggleHtml =
       `<button type="button" class="ag-confidence-toggle" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}">` +
       '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
-      '<span class="ag-confidence-toggle__label">Zones à vérifier</span>' +
+      '<span class="ag-confidence-toggle__label">Passages à relire</span>' +
       '</button>';
 
     if (__confidenceVisible) {
-      const helperHtml = shouldShowHelper(display)
+      const helperHtml = hasPendingRisk && shouldShowHelper(display)
         ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
             '<div class="ag-confidence-helper__copy">' +
-              '<strong>Nouveau : zones à vérifier.</strong> Agilotext signale les passages où la transcription semble moins sûre, souvent à cause de l’audio, d’un mot rare ou d’un chevauchement de voix.' +
-              '<span class="ag-confidence-helper__details" hidden> Ces repères n’indiquent pas forcément une erreur. Ils aident à relire les passages utiles avant d’utiliser ou partager le transcript.</span>' +
+              '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
+              '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
             '</div>' +
-            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">En savoir plus</button>' +
+            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
             '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
           '</div>'
         : '';
 
       panel.innerHTML =
-        `<span class="ag-confidence-panel__score">Qualité transcription : <strong>${globalPct}%</strong></span>` +
-        `<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">${pendingRisk} zone${pendingRisk !== 1 ? 's' : ''} à vérifier</span>` +
-        `<span class="ag-confidence-panel__stat">${display.lowSegments} prioritaire${display.lowSegments !== 1 ? 's' : ''}</span>` +
-        `<span class="ag-confidence-panel__stat">${display.modifiedSegments} modifiée${display.modifiedSegments !== 1 ? 's' : ''}</span>` +
-        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-next">Zone suivante</button>' +
+        `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
+        `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
+        modifiedStat +
+        (hasPendingRisk ? '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next">Passage suivant</button>' : '') +
         toggleHtml +
         '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
         helperHtml;
     } else {
       panel.innerHTML =
-        '<span class="ag-confidence-panel__score">Zones à vérifier masquées</span>' +
+        '<span class="ag-confidence-panel__main">Passages à relire masqués</span>' +
         '<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">Réactivez-les pour relire les passages moins sûrs.</span>' +
         toggleHtml;
     }
@@ -1006,6 +1027,8 @@
     computeSummaryFallback,
     buildNavigationOrder,
     badgeLabel,
+    panelMainLabel,
+    qualityLabel,
     textHash,
     normalizeWordIssues,
     areIssuesCompatible,

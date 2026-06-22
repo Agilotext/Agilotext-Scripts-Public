@@ -1,4 +1,4 @@
-# confidence-v1 — branche test Confidence transcript V2.3/V3
+# confidence-v1 — branche test Confidence transcript V2.4/V3
 
 Stack éditeur **isolé** pour tester la confidence segment-level et préparer le mot-à-mot V3 sans modifier les scripts prod Webflow.
 
@@ -35,21 +35,23 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 
 Les autres scripts éditeur sont chargés depuis `../` (prod) pour éviter la duplication.
 
-## Comportement V2.3/V3
+## Comportement V2.4/V3
 
 - Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond arrondi léger sur `.ag-seg__text`
-- Wording visible : « À vérifier » / « À vérifier en priorité » (pas « Faible confiance »)
-- Score `%` en tooltip, pas dans le badge principal
+- Wording visible : « À relire » / « Prioritaire » (pas « Faible confiance »)
+- Score `%` en secondaire : « Qualité estimée », pas comme action principale
 - Scores conservés après édition + badge « Modifié depuis transcription »
-- États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : qualité transcription, zones à vérifier, prioritaires, modifiées, « Zone suivante », toggle « Zones à vérifier »
-- Helper one-shot : affiché seulement avec des zones à vérifier, dismissible par « Compris »
+- États de revue locaux : « Relu », « Ignoré », « Réouvrir »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, « Passage suivant », toggle « Passages à relire »
+- Cas zéro passage : affichage sobre, sans helper
+- Après revue complète : affichage sobre « Tous les passages signalés sont traités »
+- Helper one-shot : affiché seulement avec des passages à relire, dismissible par « Compris »
 - Préférence utilisateur locale : le toggle masque/réaffiche les repères sans désactiver le flag Webflow
 - Extension V3 : `segmentsConfidence[].issues[]` surligne les mots si les offsets correspondent encore au texte
 - `summary.globalScore` utilisé tel quel
 - Mode `plain` (transcript non structuré) : confidence désactivée
 - Navigation : priorité UI `low → verify → textModified`, en excluant les zones vérifiées/ignorées
-- Raccourcis hors édition : `Alt+ArrowRight` zone suivante, `Alt+ArrowLeft` zone précédente
+- Raccourcis hors édition : `Alt+ArrowRight` passage suivant, `Alt+ArrowLeft` passage précédent
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
 - Clés locales : `agilo:confidence-visible:v1`, `agilo:confidence-helper-seen:v1`
 
@@ -76,14 +78,14 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 
 ## Checklist validation manuelle (sign-off Nicolas)
 
-1. [ ] Job récent `available:true` : badges « À vérifier » / « À vérifier en priorité » visibles
-2. [ ] Panneau global avec « Qualité transcription » + `summary.globalScore` correct
+1. [ ] Job récent `available:true` : badges « À relire » / « Prioritaire » visibles
+2. [ ] Panneau global avec passages à relire en premier + « Qualité estimée » secondaire
 3. [ ] Édition locale : score conservé + « Modifié depuis transcription » immédiat
 4. [ ] Sauvegarde + reload : `textModified:true` revient du backend
-5. [ ] Boutons « Vérifié » / « Ignorer » retirent la zone de la navigation courante
+5. [ ] Boutons « Relu » / « Ignorer » retirent le passage de la navigation courante
 6. [ ] Le panneau reste accessible en scroll puis revient à sa position normale
-7. [ ] Helper visible au premier transcript avec zones, puis absent après « Compris » + reload
-8. [ ] Toggle « Zones à vérifier » OFF masque les repères, persiste au reload, et garde le panneau de réactivation
+7. [ ] Helper visible au premier transcript avec passages à relire, absent si zéro passage, puis absent après « Compris » + reload
+8. [ ] Toggle « Passages à relire » OFF masque les repères, persiste au reload, et garde le panneau de réactivation
 9. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition, ne font rien dans le texte éditable, ni quand le toggle est OFF
 10. [ ] Changement rapide de job : aucun badge résiduel
 11. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
