@@ -77,6 +77,16 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 
 **Go/no-go prod :** les 6 scénarios OK + accord Nicolas sur navigation UI.
 
+## Promotion prod (après sign-off Nicolas)
+
+Ne **pas** modifier `editor-main.js` in-place.
+
+1. Extraire `agilo-confidence.js` → `scripts/pages/editor/Code-confidence.js`
+2. Remplacer le fork IFRAME 2952 lignes par un patch hooks ~40 lignes (`Code-main-editor-IFRAME_V04-confidence-hooks.js`)
+3. Activer via embed prod dédié ou feature flag page par page
+
+Voir [`docs/webflow-embeds/editor-confidence-SIGNOFF_NICOLAS.md`](../../../docs/webflow-embeds/editor-confidence-SIGNOFF_NICOLAS.md) pour le message de validation à envoyer à Nicolas.
+
 ## Edge cases documentés
 
 - Suppression/fusion de segment : badges peuvent être désalignés jusqu’au prochain reload job
