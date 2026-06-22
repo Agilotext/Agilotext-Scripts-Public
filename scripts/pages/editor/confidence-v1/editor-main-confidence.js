@@ -39,10 +39,6 @@
     'Code-chat_V06.js',
     'Code-ed-header.js',
     'Code-save_transcript.js',
-    'Code-questions-ia.js',
-    'Code-copy-paste-text.js',
-    'Code-gsap.js',
-    'Code-lottie.js',
     'relance-compte-rendu.js'
   ]);
 
@@ -67,11 +63,7 @@
     'Code-editor-auth-sync.js',
     'Code-chat_V06.js',
     'Code-ed-header.js',
-    'Code-questions-ia.js',
-    'Code-copy-paste-text.js',
     'Code-save_transcript.js',
-    'Code-gsap.js',
-    'Code-lottie.js',
     'relance-compte-rendu.js'
   ];
 
