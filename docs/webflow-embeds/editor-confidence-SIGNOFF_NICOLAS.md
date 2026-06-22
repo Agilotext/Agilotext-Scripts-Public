@@ -1,4 +1,4 @@
-# Sign-off Nicolas — Confidence transcript V2.1/V3-ready
+# Sign-off Nicolas — Confidence transcript V2.3/V3-ready
 
 ## Embed staging (jsDelivr @1.09)
 
@@ -13,11 +13,18 @@ Debug : `?agilo_cdn_branch=1.09&debug=1`
 
 Fournir un `jobId` avec `available:true` sur `POST /receiveConfidenceTextJson` pour valider end-to-end.
 
-## Checklist validation (8 scénarios)
+## Checklist validation (15 scénarios)
 
 - [ ] Badges « À vérifier » / « À vérifier en priorité » dans `.ag-seg__head`
-- [ ] Mise en évidence sobre du texte du segment à vérifier
+- [ ] Mise en évidence sobre du texte du segment à vérifier, sans trait orange abrupt
 - [ ] Panneau global « Qualité transcription » + `summary.globalScore`
+- [ ] Panneau global accessible après scroll et retour normal quand on remonte
+- [ ] Helper one-shot visible au premier transcript avec zones à vérifier
+- [ ] Bouton « Compris » masque le helper après reload
+- [ ] Toggle « Zones à vérifier » OFF masque les repères et persiste au reload
+- [ ] Toggle « Zones à vérifier » ON réaffiche badges, highlights, navigation
+- [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition
+- [ ] Les raccourcis ne changent pas de zone quand le curseur est dans le transcript ou quand le toggle est OFF
 - [ ] Édition locale : score conservé + « Modifié depuis transcription »
 - [ ] Boutons locaux « Vérifié » / « Ignorer » + navigation mise à jour
 - [ ] Sauvegarde + reload : `textModified:true` du backend
@@ -26,7 +33,7 @@ Fournir un `jobId` avec `available:true` sur `POST /receiveConfidenceTextJson` p
 
 ## Point à confirmer
 
-Navigation « Zone suivante » : **priorité UI** `low → verify → textModified`, en excluant les zones vérifiées/ignorées. OK pour toi ?
+Navigation « Zone suivante » : **priorité UI** `low → verify → textModified`, en excluant les zones vérifiées/ignorées. Raccourcis retenus : `Alt+ArrowRight` / `Alt+ArrowLeft`.
 
 ## Contrat V3 à valider
 
@@ -35,17 +42,17 @@ Pour le vrai mot-à-mot, ajouter `segmentsConfidence[].issues[]` avec `text`, `s
 ## Brouillon email
 
 ```
-Objet : Confidence V2.1 client — prêt pour test staging
+Objet : Confidence V2.3 client — prêt pour test staging
 
 Bonjour Nicolas,
 
-Le stack client confidence V2.1 est sur la branche 1.09 (repo public, nommage neutre).
+Le stack client confidence V2.3 est sur la branche 1.09 (repo public, nommage neutre).
 
 Staging Webflow :
 - AGILOTEXT_ENABLE_CONFIDENCE = true
 - editor-main-confidence.js @1.09
 
-Tests auto : 32/32 unitaires + endpoint POST reachable.
+Tests auto : 49/49 unitaires confidence + endpoint POST reachable.
 
 Peux-tu :
 1. Me donner un jobId avec available:true pour test live complet ?

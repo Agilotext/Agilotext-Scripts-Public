@@ -1,4 +1,4 @@
-# confidence-v1 — branche test Confidence transcript V2.1/V3
+# confidence-v1 — branche test Confidence transcript V2.3/V3
 
 Stack éditeur **isolé** pour tester la confidence segment-level et préparer le mot-à-mot V3 sans modifier les scripts prod Webflow.
 
@@ -35,24 +35,28 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 
 Les autres scripts éditeur sont chargés depuis `../` (prod) pour éviter la duplication.
 
-## Comportement V2.1/V3
+## Comportement V2.3/V3
 
-- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond léger sur `.ag-seg__text`
+- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond arrondi léger sur `.ag-seg__text`
 - Wording visible : « À vérifier » / « À vérifier en priorité » (pas « Faible confiance »)
 - Score `%` en tooltip, pas dans le badge principal
 - Scores conservés après édition + badge « Modifié depuis transcription »
 - États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
-- Panneau global : qualité transcription, zones à vérifier, prioritaires, modifiées, « Zone suivante », « Masquer »
+- Panneau global sticky/floating : qualité transcription, zones à vérifier, prioritaires, modifiées, « Zone suivante », toggle « Zones à vérifier »
+- Helper one-shot : affiché seulement avec des zones à vérifier, dismissible par « Compris »
+- Préférence utilisateur locale : le toggle masque/réaffiche les repères sans désactiver le flag Webflow
 - Extension V3 : `segmentsConfidence[].issues[]` surligne les mots si les offsets correspondent encore au texte
 - `summary.globalScore` utilisé tel quel
 - Mode `plain` (transcript non structuré) : confidence désactivée
 - Navigation : priorité UI `low → verify → textModified`, en excluant les zones vérifiées/ignorées
+- Raccourcis hors édition : `Alt+ArrowRight` zone suivante, `Alt+ArrowLeft` zone précédente
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
+- Clés locales : `agilo:confidence-visible:v1`, `agilo:confidence-helper-seen:v1`
 
 ## API publique
 
 ```js
-window.AgiloConfidence = { reload, clear, markSegmentModified, setReviewState, toggle };
+window.AgiloConfidence = { reload, clear, markSegmentModified, setReviewState, goToNextConfidenceZone, goToPreviousConfidenceZone, toggleUserConfidenceVisible, toggle };
 ```
 
 ## Tests
@@ -77,10 +81,14 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 3. [ ] Édition locale : score conservé + « Modifié depuis transcription » immédiat
 4. [ ] Sauvegarde + reload : `textModified:true` revient du backend
 5. [ ] Boutons « Vérifié » / « Ignorer » retirent la zone de la navigation courante
-6. [ ] Changement rapide de job : aucun badge résiduel
-7. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
+6. [ ] Le panneau reste accessible en scroll puis revient à sa position normale
+7. [ ] Helper visible au premier transcript avec zones, puis absent après « Compris » + reload
+8. [ ] Toggle « Zones à vérifier » OFF masque les repères, persiste au reload, et garde le panneau de réactivation
+9. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition, ne font rien dans le texte éditable, ni quand le toggle est OFF
+10. [ ] Changement rapide de job : aucun badge résiduel
+11. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
 
-**Go/no-go prod :** les 7 scénarios OK + accord Nicolas sur navigation UI.
+**Go/no-go prod :** les 11 scénarios OK + accord Nicolas sur navigation UI.
 
 ## Promotion prod (après sign-off Nicolas)
 

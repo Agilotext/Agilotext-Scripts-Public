@@ -23,15 +23,28 @@ function makeDom() {
       contains(c) { return this._s.has(c); },
       toggle(c, v) { v ? this._s.add(c) : this._s.delete(c); }
     },
-    style: {},
+    style: {
+      _m: new Map(),
+      setProperty(k, v) { this._m.set(k, v); },
+      removeProperty(k) { this._m.delete(k); }
+    },
     dataset: {},
     textContent: '',
     innerHTML: '',
     children: [],
+    nodeType: 1,
+    isConnected: true,
+    parentElement: null,
+    nextElementSibling: null,
     setAttribute() {},
     removeAttribute() {},
-    appendChild() {},
-    insertBefore() {},
+    appendChild(child) { if (child) { child.parentElement = this; this.children.push(child); } },
+    insertBefore(child, ref) {
+      if (!child) return;
+      child.parentElement = this;
+      child.nextElementSibling = ref || null;
+      this.children.push(child);
+    },
     prepend() {},
     querySelectorAll(sel) {
       if (sel === '.ag-seg') return [];
@@ -40,9 +53,15 @@ function makeDom() {
     },
     querySelector() { return null; },
     addEventListener() {},
-    remove() {},
-    parentElement: { insertBefore() {} },
-    scrollIntoView() {}
+    remove() { this.isConnected = false; },
+    getBoundingClientRect() { return { top: 0, bottom: 600, left: 24, width: 720 }; },
+    scrollIntoView() {},
+    closest(sel) {
+      if (sel.includes('input') && this.tagName === 'INPUT') return this;
+      if (sel.includes('button') && this.tagName === 'BUTTON') return this;
+      if (sel.includes('[contenteditable="true"]') && this.contentEditable === 'true') return this;
+      return null;
+    }
   });
 
   return {
@@ -53,6 +72,7 @@ function makeDom() {
     querySelector() { return null; },
     createElement(tag) {
       const el = mk(`el-${tag}-${Math.random()}`);
+      el.tagName = String(tag || '').toUpperCase();
       if (tag === 'span' || tag === 'button' || tag === 'div') {
         el.querySelector = () => null;
         el.querySelectorAll = () => [];
@@ -67,18 +87,33 @@ function makeDom() {
 }
 
 function boot(opts = {}) {
+  const storage = new Map(Object.entries(opts.storage || {}));
   const window = {
     __agiloConfidence: false,
     AGILOTEXT_ENABLE_CONFIDENCE: opts.enableConfidence !== false,
     _segments: [],
+    innerWidth: 1024,
     fetch: opts.fetch || (async () => ({ ok: false })),
-    addEventListener() {}
+    localStorage: {
+      getItem(key) {
+        return storage.has(key) ? storage.get(key) : null;
+      },
+      setItem(key, value) {
+        storage.set(key, String(value));
+      }
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    requestAnimationFrame(fn) { return setTimeout(fn, 0); },
+    cancelAnimationFrame(id) { clearTimeout(id); }
   };
   window.window = window;
 
   const sandbox = { window, document: makeDom() };
   vm.runInNewContext(src, sandbox);
-  return sandbox.window.AgiloConfidence;
+  const api = sandbox.window.AgiloConfidence;
+  api.__storage = storage;
+  return api;
 }
 
 let passed = 0;
@@ -168,6 +203,35 @@ async function run() {
   const nav = AC.buildNavigationOrder(map);
   assert(nav[0] === 's1', 'navigation: low en premier (priorité UI)');
   assert(nav.includes('s2'), 'navigation: verify inclus');
+  assert(typeof AC.goToPreviousConfidenceZone === 'function', 'navigation précédente exposée');
+  assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowRight' }) === true, 'Alt+ArrowRight reconnu');
+  assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowLeft' }) === true, 'Alt+ArrowLeft reconnu');
+  assert(AC.isConfidenceShortcutEvent({ altKey: false, key: 'ArrowRight' }) === false, 'ArrowRight seul ignoré');
+  assert(AC.isConfidenceShortcutEvent({ altKey: true, ctrlKey: true, key: 'ArrowRight' }) === false, 'Ctrl+Alt+Arrow ignoré');
+
+  const inputEl = { nodeType: 1, tagName: 'INPUT', closest: (sel) => sel.includes('input') ? inputEl : null };
+  const textEl = { nodeType: 1, contentEditable: 'true', closest: (sel) => sel.includes('[contenteditable="true"]') ? textEl : null };
+  const plainEl = { nodeType: 1, closest: () => null };
+  assert(AC.isEditableShortcutTarget(inputEl) === true, 'raccourci ignoré dans input');
+  assert(AC.isEditableShortcutTarget(textEl) === true, 'raccourci ignoré dans contenteditable');
+  assert(AC.isEditableShortcutTarget(plainEl) === false, 'raccourci autorisé hors édition');
+
+  assert(AC.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === true, 'helper visible si zones à vérifier et jamais vu');
+  assert(AC.shouldShowHelper({ verifySegments: 0, lowSegments: 0 }) === false, 'helper absent sans zone à vérifier');
+  AC.dismissHelper();
+  assert(AC.__storage.get('agilo:confidence-helper-seen:v1') === 'true', 'Compris persiste helper vu');
+  assert(AC.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent après Compris');
+
+  const ACHelperSeen = boot({ storage: { 'agilo:confidence-helper-seen:v1': 'true' } });
+  assert(ACHelperSeen.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent si localStorage helper vu');
+
+  const ACVisibleOff = boot({ storage: { 'agilo:confidence-visible:v1': 'false' } });
+  assert(ACVisibleOff.readConfidenceVisiblePreference() === false, 'préférence OFF lue depuis localStorage');
+  assert(ACVisibleOff.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent si zones désactivées');
+  ACVisibleOff.toggle(true, true);
+  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v1') === 'true', 'préférence ON persistée');
+  ACVisibleOff.toggle(false, true);
+  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v1') === 'false', 'préférence OFF persistée');
 
   const textWithIssue = 'S’est passé climatisé. ASH.';
   const lowWordStart = textWithIssue.indexOf('climatisé');

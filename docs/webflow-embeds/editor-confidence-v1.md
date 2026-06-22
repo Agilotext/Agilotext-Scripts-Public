@@ -1,4 +1,4 @@
-# Webflow — Confidence transcript V2.1/V3 (test isolé)
+# Webflow — Confidence transcript V2.3/V3 (test isolé)
 
 > **Important :** la prod Webflow ne doit **pas** être modifiée. Les scripts prod (`Code-main-editor-IFRAME_V04.js`, `editor-main.js`, etc.) restent inchangés.
 
@@ -96,19 +96,31 @@ Le backend peut enrichir chaque segment sans casser V2.1 :
 
 Le frontend applique `issues[]` uniquement si les offsets correspondent encore au texte affiché. Si le texte a été modifié ou si les issues ne correspondent pas, il retire le surlignage mot-à-mot et garde le signal segment-level.
 
-## Comportement V2.1/V3
+## Comportement V2.3/V3
 
-- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond léger sur `.ag-seg__text`
+- Confidence **segment-level** par défaut : badge dans `.ag-seg__head` + fond arrondi léger sur `.ag-seg__text`
 - Wording visible : « À vérifier » / « À vérifier en priorité » (jamais « Faible confiance »)
 - Score `%` conservé en tooltip, pas dans le badge principal
 - Scores **conservés après édition** + badge « Modifié depuis transcription »
 - États de revue locaux : « Vérifié », « Ignoré », « Réouvrir »
-- Panneau global : « Qualité transcription », zones à vérifier, prioritaires, modifiées, « Zone suivante », « Masquer »
+- Panneau global sticky/floating : « Qualité transcription », zones à vérifier, prioritaires, modifiées, « Zone suivante », toggle « Zones à vérifier »
+- Helper one-shot si des zones existent : explique brièvement pourquoi relire ces passages, bouton « Compris »
+- Désactivation utilisateur locale : les repères sont masqués mais le panneau minimal reste affiché pour réactiver
+- Raccourcis hors édition : `Alt+ArrowRight` zone suivante, `Alt+ArrowLeft` zone précédente
 - Extension V3 : surlignage `mark.ag-confidence-word` si `issues[]` compatible
 - `summary.globalScore` utilisé tel quel (pondéré back par `wordCount`)
 - Sauvegarde : JSON principal seul — jamais de champs confidence
 - Feature flag : `window.AGILOTEXT_ENABLE_CONFIDENCE = false` désactive tout
 - Textes UX neutres : « Confiance audio », « À vérifier », « Qualité transcription »
+
+## Activation et préférences
+
+- Activation globale Webflow : `window.AGILOTEXT_ENABLE_CONFIDENCE = true|false`
+- Disponibilité backend par job : `available:true|false`
+- Préférence utilisateur locale : `localStorage.getItem('agilo:confidence-visible:v1')`
+- Helper déjà vu : `localStorage.getItem('agilo:confidence-helper-seen:v1')`
+
+Le toggle éditeur ne remplace pas le flag Webflow : il masque uniquement les repères pour l'utilisateur courant sur ce navigateur.
 
 ## API publique client
 
@@ -118,6 +130,9 @@ window.AgiloConfidence = {
   clear,
   markSegmentModified,
   setReviewState,
+  goToNextConfidenceZone,
+  goToPreviousConfidenceZone,
+  toggleUserConfidenceVisible,
   toggle
 };
 ```
@@ -128,7 +143,7 @@ window.AgiloConfidence = {
 |---------|------|
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
 | `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence |
-| `confidence-v1/agilo-confidence.js` | Module V2.1/V3 confidence |
+| `confidence-v1/agilo-confidence.js` | Module V2.3/V3 confidence |
 | `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau + highlights |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 

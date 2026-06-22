@@ -1,4 +1,4 @@
-// Agilotext — Confidence transcript V2.1/V3 (segment-level + optional word issues)
+// Agilotext — Confidence transcript V2.3/V3 (segment-level + optional word issues)
 (function () {
   'use strict';
 
@@ -6,12 +6,14 @@
   window.__agiloConfidence = true;
 
   const DEFAULT_API_BASE = 'https://api.agilotext.com/api/v1';
+  const STORAGE_HELPER_SEEN = 'agilo:confidence-helper-seen:v1';
+  const STORAGE_VISIBLE = 'agilo:confidence-visible:v1';
   const LEVELS = new Set(['normal', 'verify', 'low']);
   const REVIEW_STATES = new Set(['pending', 'verified', 'ignored']);
 
   let __fetchController = null;
   let __currentJobId = '';
-  let __confidenceVisible = true;
+  let __confidenceVisible = readConfidenceVisiblePreference();
   let __confidenceJson = null;
   let __reconciledMap = new Map();
   let __localModified = new Set();
@@ -19,6 +21,9 @@
   let __navIndex = -1;
   let __navKeys = [];
   let __transcriptRoot = null;
+  let __panelSentinel = null;
+  let __panelFloatCleanup = null;
+  let __keyboardBound = false;
 
   function debugLog(reason, details) {
     if (window.AGILO_DEBUG) {
@@ -28,6 +33,40 @@
 
   function isConfidenceEnabled() {
     return window.AGILOTEXT_ENABLE_CONFIDENCE !== false;
+  }
+
+  function storageGet(key) {
+    try {
+      return window.localStorage?.getItem?.(key) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  function storageSet(key, value) {
+    try {
+      window.localStorage?.setItem?.(key, String(value));
+    } catch {
+      /* ignore private mode / blocked storage */
+    }
+  }
+
+  function readConfidenceVisiblePreference() {
+    return storageGet(STORAGE_VISIBLE) !== 'false';
+  }
+
+  function writeConfidenceVisiblePreference(visible) {
+    storageSet(STORAGE_VISIBLE, visible ? 'true' : 'false');
+  }
+
+  function isHelperSeen() {
+    return storageGet(STORAGE_HELPER_SEEN) === 'true';
+  }
+
+  function dismissHelper() {
+    storageSet(STORAGE_HELPER_SEEN, 'true');
+    const helper = document.getElementById('ag-confidence-helper');
+    if (helper) helper.remove();
   }
 
   function pct(score) {
@@ -185,6 +224,11 @@
     return verify + low;
   }
 
+  function shouldShowHelper(summary) {
+    if (!isConfidenceEnabled() || !__confidenceVisible || isHelperSeen()) return false;
+    return riskCount(summary) > 0;
+  }
+
   function effectivePanelSummary(summary) {
     const base = {
       globalScore: summary?.globalScore ?? 0,
@@ -234,6 +278,109 @@
       null;
   }
 
+  function updateNavCount() {
+    const countEl = document.getElementById('ag-confidence-nav-count');
+    if (!countEl) return;
+    if (!__navKeys.length || __navIndex < 0) {
+      countEl.textContent = '';
+      return;
+    }
+    countEl.textContent = `Zone ${__navIndex + 1} / ${__navKeys.length}`;
+  }
+
+  function isEditableShortcutTarget(target) {
+    if (!target) return false;
+    const el = target.nodeType === 1 ? target : target.parentElement;
+    if (!el) return false;
+    if (el.closest?.('[contenteditable="true"], input, textarea, select, button, a[href], [role="button"]')) return true;
+    return false;
+  }
+
+  function isConfidenceShortcutEvent(e) {
+    if (!e || !e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return false;
+    return e.key === 'ArrowRight' || e.key === 'ArrowLeft';
+  }
+
+  function bindKeyboardShortcuts() {
+    if (__keyboardBound || !document?.addEventListener) return;
+    __keyboardBound = true;
+    document.addEventListener('keydown', (e) => {
+      if (!isConfidenceShortcutEvent(e)) return;
+      if (isEditableShortcutTarget(e.target)) return;
+      if (!__confidenceVisible || !__reconciledMap.size) return;
+      e.preventDefault();
+      if (e.key === 'ArrowRight') goToNextConfidenceZone();
+      else goToPreviousConfidenceZone();
+    });
+  }
+
+  function teardownPanelFloating() {
+    try { __panelFloatCleanup?.(); } catch { /* ignore */ }
+    __panelFloatCleanup = null;
+    if (__panelSentinel?.remove) __panelSentinel.remove();
+    __panelSentinel = null;
+  }
+
+  function setupPanelFloating(panel, transcriptRoot) {
+    if (!panel || !transcriptRoot || !window?.addEventListener) return;
+    if (__panelFloatCleanup && __panelSentinel?.nextElementSibling === panel) return;
+
+    teardownPanelFloating();
+
+    const sentinel = document.createElement('span');
+    sentinel.className = 'ag-confidence-panel-sentinel';
+    panel.parentElement?.insertBefore(sentinel, panel);
+    __panelSentinel = sentinel;
+
+    const update = () => {
+      if (!__confidenceVisible || !panel.isConnected || !sentinel.isConnected) {
+        panel.classList.remove('is-floating');
+        return;
+      }
+
+      const sRect = sentinel.getBoundingClientRect();
+      const container = transcriptRoot.parentElement || transcriptRoot;
+      const cRect = container.getBoundingClientRect();
+      const shouldFloat = sRect.top < 8 && cRect.bottom > 72;
+
+      if (shouldFloat) {
+        const left = Math.max(12, cRect.left);
+        const width = Math.max(260, Math.min(cRect.width, window.innerWidth - 24));
+        panel.style.setProperty('--ag-confidence-floating-left', `${left}px`);
+        panel.style.setProperty('--ag-confidence-floating-width', `${width}px`);
+        panel.style.setProperty('--ag-confidence-floating-top', '10px');
+      }
+      panel.classList.toggle('is-floating', shouldFloat);
+    };
+
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = window.requestAnimationFrame?.(() => {
+        raf = 0;
+        update();
+      }) || setTimeout(() => {
+        raf = 0;
+        update();
+      }, 16);
+    };
+
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    schedule();
+
+    __panelFloatCleanup = () => {
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+      if (raf && window.cancelAnimationFrame) window.cancelAnimationFrame(raf);
+      else if (raf) clearTimeout(raf);
+      panel.classList.remove('is-floating');
+      panel.style.removeProperty('--ag-confidence-floating-left');
+      panel.style.removeProperty('--ag-confidence-floating-width');
+      panel.style.removeProperty('--ag-confidence-floating-top');
+    };
+  }
+
   function setReviewState(segId, state) {
     const key = String(segId || '');
     if (!key || !REVIEW_STATES.has(state)) return;
@@ -247,6 +394,7 @@
 
     __navIndex = -1;
     __navKeys = buildNavigationOrder(__reconciledMap);
+    updateNavCount();
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary && root) renderConfidencePanel(root, summary);
   }
@@ -266,7 +414,7 @@
     art.removeAttribute('data-confidence-local-modified');
     art.removeAttribute('data-confidence-review-state');
     art.removeAttribute('data-confidence-word-issues');
-    art.querySelectorAll('.ag-confidence-badge, .ag-confidence-modified, .ag-confidence-review').forEach(el => el.remove());
+    art.querySelectorAll('.ag-confidence-controls, .ag-confidence-badge, .ag-confidence-modified, .ag-confidence-review').forEach(el => el.remove());
   }
 
   function clearConfidenceUi() {
@@ -276,6 +424,7 @@
     }
     const panel = document.getElementById('ag-confidence-panel');
     if (panel) panel.remove();
+    teardownPanelFloating();
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
@@ -289,7 +438,7 @@
     clearConfidenceUi();
     __currentJobId = '';
     __transcriptRoot = null;
-    __confidenceVisible = true;
+    __confidenceVisible = readConfidenceVisiblePreference();
   }
 
   /**
@@ -420,17 +569,20 @@
     const head = art.querySelector('.ag-seg__head');
     if (!head) return;
 
+    const controls = document.createElement('span');
+    controls.className = 'ag-confidence-controls';
+
     const badge = document.createElement('span');
     badge.className = 'ag-confidence-badge';
     badge.title = tooltipFor(item, modified, reviewState);
     badge.textContent = badgeLabel(level, modified, reviewState);
-    head.appendChild(badge);
+    controls.appendChild(badge);
 
     if (modified) {
       const mod = document.createElement('span');
       mod.className = 'ag-confidence-modified';
       mod.textContent = 'Modifié depuis transcription';
-      head.appendChild(mod);
+      controls.appendChild(mod);
     }
 
     if (level === 'low' || level === 'verify') {
@@ -451,8 +603,10 @@
           setReviewState(btn.dataset.confidenceSegId, btn.dataset.confidenceReview);
         });
       });
-      head.appendChild(review);
+      controls.appendChild(review);
     }
+
+    head.appendChild(controls);
   }
 
   function applyConfidenceToDom(transcriptRoot, reconciledMap) {
@@ -517,11 +671,18 @@
 
     __navIndex = (__navIndex + 1) % __navKeys.length;
     activateNavTarget(__navKeys[__navIndex]);
+    updateNavCount();
+  }
 
-    const countEl = document.getElementById('ag-confidence-nav-count');
-    if (countEl) {
-      countEl.textContent = `Zone ${__navIndex + 1} / ${__navKeys.length}`;
+  function goToPreviousConfidenceZone() {
+    if (!__navKeys.length) {
+      __navKeys = buildNavigationOrder(__reconciledMap);
     }
+    if (!__navKeys.length) return;
+
+    __navIndex = (__navIndex - 1 + __navKeys.length) % __navKeys.length;
+    activateNavTarget(__navKeys[__navIndex]);
+    updateNavCount();
   }
 
   function renderConfidencePanel(transcriptRoot, summary) {
@@ -540,31 +701,65 @@
     const display = effectivePanelSummary(summary);
     const globalPct = pct(display.globalScore);
     const pendingRisk = riskCount(display);
-    panel.innerHTML =
-      `<span class="ag-confidence-panel__score">Qualité transcription : <strong>${globalPct}%</strong></span>` +
-      `<span class="ag-confidence-panel__stat">${pendingRisk} zone${pendingRisk !== 1 ? 's' : ''} à vérifier</span>` +
-      `<span class="ag-confidence-panel__stat">${display.lowSegments} prioritaire${display.lowSegments !== 1 ? 's' : ''}</span>` +
-      `<span class="ag-confidence-panel__stat">${display.modifiedSegments} modifiée${display.modifiedSegments !== 1 ? 's' : ''}</span>` +
-      '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-next">Zone suivante</button>' +
-      '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--ghost" id="ag-confidence-toggle">Masquer</button>' +
-      '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>';
+    const toggleHtml =
+      `<button type="button" class="ag-confidence-toggle" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}">` +
+      '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
+      '<span class="ag-confidence-toggle__label">Zones à vérifier</span>' +
+      '</button>';
+
+    if (__confidenceVisible) {
+      const helperHtml = shouldShowHelper(display)
+        ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
+            '<div class="ag-confidence-helper__copy">' +
+              '<strong>Nouveau : zones à vérifier.</strong> Agilotext signale les passages où la transcription semble moins sûre, souvent à cause de l’audio, d’un mot rare ou d’un chevauchement de voix.' +
+              '<span class="ag-confidence-helper__details" hidden> Ces repères n’indiquent pas forcément une erreur. Ils aident à relire les passages utiles avant d’utiliser ou partager le transcript.</span>' +
+            '</div>' +
+            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">En savoir plus</button>' +
+            '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
+          '</div>'
+        : '';
+
+      panel.innerHTML =
+        `<span class="ag-confidence-panel__score">Qualité transcription : <strong>${globalPct}%</strong></span>` +
+        `<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">${pendingRisk} zone${pendingRisk !== 1 ? 's' : ''} à vérifier</span>` +
+        `<span class="ag-confidence-panel__stat">${display.lowSegments} prioritaire${display.lowSegments !== 1 ? 's' : ''}</span>` +
+        `<span class="ag-confidence-panel__stat">${display.modifiedSegments} modifiée${display.modifiedSegments !== 1 ? 's' : ''}</span>` +
+        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-next">Zone suivante</button>' +
+        toggleHtml +
+        '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
+        helperHtml;
+    } else {
+      panel.innerHTML =
+        '<span class="ag-confidence-panel__score">Zones à vérifier masquées</span>' +
+        '<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">Réactivez-les pour relire les passages moins sûrs.</span>' +
+        toggleHtml;
+    }
 
     panel.querySelector('#ag-confidence-next')?.addEventListener('click', goToNextConfidenceZone);
     panel.querySelector('#ag-confidence-toggle')?.addEventListener('click', () => {
-      setConfidenceVisible(!__confidenceVisible);
+      toggleUserConfidenceVisible();
+    });
+    panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', dismissHelper);
+    panel.querySelector('#ag-confidence-helper-more')?.addEventListener('click', () => {
+      const details = panel.querySelector('.ag-confidence-helper__details');
+      const more = panel.querySelector('#ag-confidence-helper-more');
+      if (details) details.hidden = false;
+      if (more) more.remove();
     });
 
-    panel.classList.toggle('is-hidden', !__confidenceVisible);
+    panel.classList.toggle('is-disabled', !__confidenceVisible);
+    setupPanelFloating(panel, transcriptRoot);
+    bindKeyboardShortcuts();
+    updateNavCount();
     return panel;
   }
 
-  function setConfidenceVisible(visible) {
+  function setConfidenceVisible(visible, persist = false) {
     __confidenceVisible = visible !== false;
+    if (persist) writeConfidenceVisiblePreference(__confidenceVisible);
     const panel = document.getElementById('ag-confidence-panel');
     if (panel) {
-      panel.classList.toggle('is-hidden', !__confidenceVisible);
-      const toggleBtn = panel.querySelector('#ag-confidence-toggle');
-      if (toggleBtn) toggleBtn.textContent = __confidenceVisible ? 'Masquer' : 'Afficher';
+      if (!__confidenceVisible) panel.classList.remove('is-floating');
     }
 
     const root = getTranscriptRoot();
@@ -581,6 +776,13 @@
         removeSegmentConfidenceDecorations(art);
       }
     });
+
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    if (summary) renderConfidencePanel(root, summary);
+  }
+
+  function toggleUserConfidenceVisible() {
+    setConfidenceVisible(!__confidenceVisible, true);
   }
 
   async function fetchConfidenceJson(apiBaseUrl, credentials, jobId, signal) {
@@ -637,6 +839,7 @@
     decorateSegmentWithConfidence(art, item, idx);
     __navIndex = -1;
     __navKeys = buildNavigationOrder(__reconciledMap);
+    updateNavCount();
 
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary) renderConfidencePanel(root, summary);
@@ -674,6 +877,7 @@
     __navKeys = buildNavigationOrder(reconciled);
     __transcriptRoot = transcriptRoot;
     __currentJobId = String(jobId);
+    __confidenceVisible = readConfidenceVisiblePreference();
 
     const summary = getSummaryDisplay(confidenceJson, 0);
     renderConfidencePanel(transcriptRoot, summary);
@@ -793,6 +997,8 @@
     markSegmentModified,
     setReviewState,
     toggle: setConfidenceVisible,
+    toggleUserConfidenceVisible,
+    dismissHelper,
     // API interne / tests
     isConfidenceEnabled,
     fetchConfidenceJson,
@@ -803,11 +1009,17 @@
     textHash,
     normalizeWordIssues,
     areIssuesCompatible,
+    isConfidenceShortcutEvent,
+    isEditableShortcutTarget,
+    shouldShowHelper,
+    isHelperSeen,
+    readConfidenceVisiblePreference,
     applyConfidenceData,
     applyAfterTranscriptLoad,
     resetSessionState,
     abortCurrentConfidenceFetch,
     goToNextConfidenceZone,
+    goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex
   };
 })();
