@@ -9,10 +9,15 @@
 
   const __CDN_BRANCH = (() => {
     try {
-      const b = new URLSearchParams(location.search).get('agilo_cdn_branch') || 'main';
-      return String(b).replace(/[^a-zA-Z0-9._-]/g, '') || 'main';
+      const qp = new URLSearchParams(location.search).get('agilo_cdn_branch');
+      if (qp) return String(qp).replace(/[^a-zA-Z0-9._-]/g, '') || '1.09';
+      // Hérite de la branche du tag @ dans l'URL du loader (ex. @1.09)
+      const src = document.currentScript?.src || '';
+      const m = src.match(/Agilotext-Scripts-Public@([^/]+)/);
+      if (m && m[1]) return m[1];
+      return '1.09';
     } catch {
-      return 'main';
+      return '1.09';
     }
   })();
 
@@ -31,7 +36,7 @@
     'Code-lecteur-audio.js',
     'Code-changement-audio.js',
     'Code-editor-auth-sync.js',
-    'Code-chat.js',
+    'Code-chat_V06.js',
     'Code-ed-header.js',
     'Code-save_transcript.js',
     'Code-questions-ia.js',
@@ -60,7 +65,7 @@
     'Code-main-editor-IFRAME_V04-confidence.js',
     'Code-changement-audio.js',
     'Code-editor-auth-sync.js',
-    'Code-chat.js',
+    'Code-chat_V06.js',
     'Code-ed-header.js',
     'Code-questions-ia.js',
     'Code-copy-paste-text.js',
