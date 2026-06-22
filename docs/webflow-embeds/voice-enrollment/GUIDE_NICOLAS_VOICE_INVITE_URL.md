@@ -19,7 +19,7 @@
 
 ## P0 — Bug submit (BLOQUANT)
 
-**Symptôme :** POST `submitSpeakerVoiceInvite` → HTML « La création d'empreinte vocale n'est pas disponible pour ce compte. »
+**Statut juin 2026 :** confirmé en prod — la page Webflow affiche « réf. invitation vocale » ; le message backend brut est « pas disponible pour ce compte ». Voir aussi [`DEBUG_VOICE_INVITE_CONSOLE.md`](DEBUG_VOICE_INVITE_CONSOLE.md).
 
 **Reproduction :**
 

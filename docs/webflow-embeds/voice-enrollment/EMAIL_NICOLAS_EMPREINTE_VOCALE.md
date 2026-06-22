@@ -15,7 +15,7 @@ Guide complet : [`GUIDE_NICOLAS_VOICE_INVITE_URL.md`](GUIDE_NICOLAS_VOICE_INVITE
 
 **P0 — BLOQUANT : `submitSpeakerVoiceInvite`**
 
-Compte inviteur Business (`bauerwebpro@gmail.com`, edition `ent`) :
+Compte inviteur Business (`bauerwebpro@gmail.com`, edition `ent`) — **confirmé sur page Webflow `/auth/voice-invite` juin 2026** :
 - `createSpeakerVoiceInvite` OK
 - `getSpeakerVoices` OK
 - Submit avec token `sv_47c6d920983e4a3985088afa2d1e7850` + WAV 16s → « La création d'empreinte vocale n'est pas disponible pour ce compte. »

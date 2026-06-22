@@ -7,7 +7,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-invite"></div>
      2. Script (pin SHA) :
-        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8612019/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice23
+        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8612019/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice24
    API : POST submitSpeakerVoiceInvite (inviteToken, fullName, voiceFile)
    Styles : sync avec voice-enrollment-settings.js injectStyles (voice21)
    ================================================================ */
@@ -25,7 +25,51 @@
   var RESERVED_LABELS = new Set(['S1', 'S2', 'UU']);
   var AGILO_RADIUS = 'var(--0-5_radius,0.5rem)';
 
-  var READING_TEXT = 'Longtemps, je me suis couché de bonne heure. Parfois, à peine ma bougie éteinte, mes yeux se fermaient si vite que je n\'avais pas le temps de me dire : « Je m\'endors. » Parlez seul(e), clairement, dans un endroit calme.';
+  var READING_PASSAGES = [
+    {
+      id: 'proust',
+      labelShort: 'Proust',
+      text: 'Longtemps, je me suis couché de bonne heure. Parfois, à peine ma bougie éteinte, mes yeux se fermaient si vite que je n\'avais pas le temps de me dire : « Je m\'endors. » Et, une demi-heure après, la pensée qu\'il était temps de chercher le sommeil m\'éveillait ; je voulais poser le volume que je croyais avoir encore dans les mains et souffler ma lumière ; je n\'avais pas cessé en dormant de faire des réflexions sur ce que je venais de lire, mais ces réflexions avaient pris un tour un peu particulier.',
+      author: 'Marcel Proust',
+      work: 'Du côté de chez Swann (1913)'
+    },
+    {
+      id: 'prevert',
+      labelShort: 'Prévert',
+      text: 'Il cassait les œufs dans une assiette bleue. Il tournait en riant le dos au papier peint jaune où je devais faire l\'effet d\'une grande vague bleue. Il tournait en riant vers moi et les tremblements de son rire me faisaient trembler sur la chaise. Il tournait en riant le dos au papier peint jaune.',
+      author: 'Jacques Prévert',
+      work: 'Paroles — Déjeuner du matin (1945)'
+    },
+    {
+      id: 'hugo',
+      labelShort: 'Hugo',
+      text: 'Demain, dès l\'aube, à l\'heure où blanchit la campagne, je partirai. Vois-tu, je sais que tu m\'attends. J\'irai par la forêt, j\'irai par la montagne. Je ne puis demeurer loin de toi plus longtemps.',
+      author: 'Victor Hugo',
+      work: 'Les Contemplations — Demain, dès l\'aube (1856)'
+    }
+  ];
+
+  var READING_RULES_HTML = [
+    '<p class="agilo-voice-reading-rules-title"><strong>Consignes d\'enregistrement</strong></p>',
+    '<ul class="agilo-voice-reading-rules">',
+    '  <li>Parlez seul(e), à voix haute et naturelle</li>',
+    '  <li>Aucun bruit parasite : pas de feuilletage, clavier, pas de page tournée</li>',
+    '  <li>Endroit calme, micro à 20–30 cm de votre bouche</li>',
+    '  <li>Durée : entre 15 et 45 secondes</li>',
+    '</ul>'
+  ].join('');
+
+  function pickReadingPassage() {
+    return READING_PASSAGES[Math.floor(Math.random() * READING_PASSAGES.length)];
+  }
+
+  function buildReadingPanelHtml(passage) {
+    return [
+      '<blockquote class="agilo-voice-reading-quote">' + escapeHtml(passage.text) + '</blockquote>',
+      '<p class="agilo-voice-reading-attrib">— ' + escapeHtml(passage.author) + ', <em>' + escapeHtml(passage.work) + '</em></p>',
+      READING_RULES_HTML
+    ].join('');
+  }
 
   var MIC_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 11a7 7 0 0 1-14 0M12 18v3M8 21h8" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   var CHECK_SVG = '<svg class="agilo-voice-hero-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.75"/><path d="m8 12.5 2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -85,11 +129,19 @@
     return el.value;
   }
 
-  function matchVoiceErrorMessage(text) {
+  function warnEditionBackendError(inviteToken, rawText) {
+    console.warn('[agilo-voice-invite] backend edition check failed — known P0 submitSpeakerVoiceInvite', {
+      inviteTokenPrefix: String(inviteToken || '').slice(0, 12),
+      backendMessage: rawText
+    });
+  }
+
+  function matchVoiceErrorMessage(text, inviteToken) {
     var t = String(text || '').toLowerCase();
     if (!t) return '';
     if (t.indexOf('pas disponible pour ce compte') !== -1) {
-      return 'L\'organisation qui vous a invité n\'a pas accès à cette fonctionnalité pour le moment. Contactez la personne qui vous a envoyé le lien.';
+      warnEditionBackendError(inviteToken, text);
+      return 'L\'enregistrement n\'a pas pu être finalisé. La personne qui vous a invité doit contacter le support Agilotext — réf. invitation vocale.';
     }
     if (t.indexOf('invalide') !== -1 || t.indexOf('expir') !== -1 || t.indexOf('not found') !== -1) {
       return 'Ce lien n\'est plus valide ou a expiré. Demandez un nouveau lien à la personne qui vous a invité(e).';
@@ -117,7 +169,7 @@
     return '';
   }
 
-  function parseSubmitHtml(html) {
+  function parseSubmitHtml(html, inviteToken) {
     var doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
     var h1 = decodeHtmlEntities((doc.querySelector('h1') || {}).textContent || '').trim();
     var p = decodeHtmlEntities((doc.querySelector('p') || {}).textContent || '').trim();
@@ -126,10 +178,10 @@
       return { ok: true, title: h1, message: p || h1 };
     }
     if (/n'a pas pu|pas disponible|invalide|expir|introuvable/i.test(combined)) {
-      var mapped = matchVoiceErrorMessage(combined) || matchVoiceErrorMessage(p) || p || h1;
+      var mapped = matchVoiceErrorMessage(combined, inviteToken) || matchVoiceErrorMessage(p, inviteToken) || p || h1;
       return { ok: false, title: h1, message: mapped };
     }
-    if (h1) return { ok: false, title: h1, message: matchVoiceErrorMessage(p) || p || h1 };
+    if (h1) return { ok: false, title: h1, message: matchVoiceErrorMessage(p, inviteToken) || p || h1 };
     return { ok: false, title: 'Erreur', message: 'Impossible d\'envoyer l\'empreinte vocale. Réessayez.' };
   }
 
@@ -162,6 +214,12 @@
       '.agilo-voice-reading-toggle{display:inline-flex;margin:0 0 1rem;padding:0;border:0;background:none;color:var(--color--blue,#174a96);font:inherit;font-size:.88rem;font-weight:600;text-decoration:underline;cursor:pointer}',
       '.agilo-voice-reading-panel{display:none;margin:0 0 1rem;padding:12px 14px;border-radius:' + AGILO_RADIUS + ';background:rgba(23,74,150,.06);border:1px solid rgba(23,74,150,.15);font-size:.88rem;line-height:1.55;color:var(--color--gris,#525252)}',
       '.agilo-voice-reading-panel.is-open{display:block}',
+      '.agilo-voice-reading-quote{margin:0 0 10px;padding:0;border:none;font-style:italic;color:var(--color--gris_foncé,#020202);line-height:1.6}',
+      '.agilo-voice-reading-attrib{margin:0 0 14px;font-size:.82rem;color:var(--color--gris,#525252)}',
+      '.agilo-voice-reading-attrib em{font-style:normal}',
+      '.agilo-voice-reading-rules-title{margin:14px 0 8px;padding-top:12px;border-top:1px solid rgba(23,74,150,.12);font-size:.85rem}',
+      '.agilo-voice-reading-rules{margin:0;padding-left:1.15rem;font-size:.84rem;line-height:1.55}',
+      '.agilo-voice-reading-rules li{margin-bottom:4px}',
       '.agilo-voice-hero{position:relative;display:flex;align-items:center;justify-content:center;width:112px;height:112px;margin:0 auto;cursor:pointer;transition:transform .15s ease}',
       '.agilo-voice-hero:hover{transform:scale(1.03)}',
       '.agilo-voice-hero-wrap{text-align:center;margin:.75rem 0 .5rem}',
@@ -178,7 +236,8 @@
       '.agilo-voice-drop-zone strong{display:block;margin-bottom:6px;color:var(--color--gris_foncé,#020202);font-size:1rem}',
       '.agilo-voice-drop-zone.is-dragover{border-color:var(--color--blue,#174a96);background:#edf4ff}',
       '.agilo-voice-drop-zone.is-filled{border-style:solid;border-color:rgba(23,74,150,.35);background:rgba(23,74,150,.04)}',
-      '.agilo-voice-submit-row{margin-top:.5rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center}',
+      '.agilo-voice-submit-row{margin-top:.5rem;display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;width:100%}',
+      '.agilo-voice-submit-row .agilo-voice-btn-submit{margin:0 auto}',
       '.agilo-voice-record-area{display:flex;flex-direction:column;gap:.75rem}',
       '.agilo-voice-label{display:block;margin:0 0 .45rem;font-size:.9rem;font-weight:500}',
       '.agilo-voice-input{width:100%;box-sizing:border-box;border:1px solid rgba(82,82,82,.25);border-radius:' + AGILO_RADIUS + ';background:#fff;padding:10px 12px;font:inherit}',
@@ -288,9 +347,9 @@
       var json = await r.json();
       if (json.status === 'OK') return { ok: true, message: json.message || 'Empreinte vocale enregistrée.' };
       var raw = json.errorMessage || json.message || json.error || '';
-      return { ok: false, message: matchVoiceErrorMessage(String(raw)) || String(raw) || 'Erreur serveur.' };
+      return { ok: false, message: matchVoiceErrorMessage(String(raw), inviteToken) || String(raw) || 'Erreur serveur.' };
     }
-    return parseSubmitHtml(await r.text());
+    return parseSubmitHtml(await r.text(), inviteToken);
   }
 
   function submitInviteVoiceFormFallback(inviteToken, fullName, voiceFile) {
@@ -364,11 +423,13 @@
 
   function mountRecordForm(container, params, statusEl) {
     var displayName = params.recipientName || '';
+    var readingPassage = pickReadingPassage();
+    var readingToggleLabel = 'Un passage à lire — ' + readingPassage.labelShort;
 
     container.innerHTML = [
       '<p class="agilo-voice-lead">' + buildLeadText(params) + '</p>',
-      '<button type="button" class="agilo-voice-reading-toggle" id="agilo-voice-reading-toggle" aria-expanded="false" aria-controls="agilo-voice-reading-panel">Exemple de texte à lire</button>',
-      '<div class="agilo-voice-reading-panel" id="agilo-voice-reading-panel" hidden>' + escapeHtml(READING_TEXT) + '</div>',
+      '<button type="button" class="agilo-voice-reading-toggle" id="agilo-voice-reading-toggle" aria-expanded="false" aria-controls="agilo-voice-reading-panel">' + escapeHtml(readingToggleLabel) + '</button>',
+      '<div class="agilo-voice-reading-panel" id="agilo-voice-reading-panel" hidden>' + buildReadingPanelHtml(readingPassage) + '</div>',
       '<div class="agilo-voice-record-area" id="agilo-voice-record-area">',
       '  <div class="agilo-voice-name-single">',
       '    <label class="agilo-voice-label" for="agilo-voice-display-name">Prénom &amp; Nom</label>',

@@ -1,6 +1,8 @@
 # Webflow — Page invitation empreinte vocale (`/auth/voice-invite`)
 
-**voice23** — page publique pour les invités (sans compte Agilotext).
+**voice24** — page publique pour les invités (sans compte Agilotext).
+
+**v24 :** 3 passages littéraires aléatoires (Proust, Prévert, Hugo) + consignes bruit zéro · bouton submit centré · message erreur invité affiné.
 
 ---
 
@@ -33,12 +35,14 @@ https://www.agilotext.com/auth/voice-invite?inviteToken=sv_...&recipientName=Mar
 
 ```html
 <div id="agilo-voice-invite"></div>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8612019/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice23"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice24"></script>
 ```
 
 Voir [`voice-invite-page.html`](voice-invite-page.html) pour le SHA courant.
 
 **Où coller :** Embed HTML dans la zone contenu principale (pas dans un composant Memberstack).
+
+**Action Florian :** mettre à jour le query `?v=1.09-voice24` dans l'embed Webflow pour forcer le cache.
 
 ---
 
@@ -61,11 +65,15 @@ https://agilotext-test.webflow.io/auth/voice-invite?inviteToken=sv_47c6d920983e4
 ## Recette
 
 1. Token absent → « Lien incomplet »
-2. UI micro + import fichier
-3. Submit → erreur edition **tant que Nico n'a pas fixé P0** (comportement attendu juin 2026)
-4. Après fix Nico → succès inline (hero vert)
-5. Mobile Safari — micro
-6. Side-by-side avec profil Business « Ajouter une voix »
+2. Lien « Un passage à lire — Proust/Prévert/Hugo » → citation + auteur + consignes
+3. Recharger 3× → rotation aléatoire des 3 passages
+4. Bouton « Enregistrer cette voix » centré
+5. UI micro + import fichier
+6. Submit → erreur « réf. invitation vocale » **tant que Nico P0 non fixé**
+7. Après fix Nico → succès inline (hero vert)
+8. Mobile Safari — micro
+
+Debug console : [`DEBUG_VOICE_INVITE_CONSOLE.md`](DEBUG_VOICE_INVITE_CONSOLE.md)
 
 ---
 
