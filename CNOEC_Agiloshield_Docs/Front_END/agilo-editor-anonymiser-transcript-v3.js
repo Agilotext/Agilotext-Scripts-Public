@@ -1,4 +1,3 @@
-<script>
 // Agilotext – Anonymisation transcript v3
 (function () {
   'use strict';
@@ -874,4 +873,3 @@
 
   init();
 })();
-</script>
