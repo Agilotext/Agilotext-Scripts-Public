@@ -409,6 +409,7 @@
 
   function createUi() {
     if (state.ui) return state.ui;
+    if (!document.body || !document.head) return null;
 
     const style = document.createElement('style');
     style.textContent = `
@@ -554,6 +555,7 @@
 
   function syncConfigToUi() {
     const ui = createUi();
+    if (!ui) return;
     ui.goalInputs.forEach((input) => {
       input.checked = input.value === state.anonymizationConfig.goal;
     });
@@ -565,6 +567,9 @@
 
   function openModal() {
     const ui = createUi();
+    if (!ui) {
+      throw new Error('Interface d’anonymisation indisponible. Rechargez la page.');
+    }
     syncConfigToUi();
     ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
     ui.status.textContent = 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.';
@@ -578,11 +583,14 @@
   }
 
   function closeModal() {
-    createUi().overlay.classList.remove('is-open');
+    const ui = createUi();
+    if (!ui) return;
+    ui.overlay.classList.remove('is-open');
   }
 
   function setModalBusy(isBusy, text) {
     const ui = createUi();
+    if (!ui) return;
     [ui.previewBtn, ui.downloadBtn, ui.applyBtn, ui.closeBtn].forEach((button) => {
       button.disabled = !!isBusy || (button === ui.downloadBtn || button === ui.applyBtn ? !state.previewText : false);
     });
@@ -612,6 +620,7 @@
     state.previewJobId = getJobId();
 
     const ui = createUi();
+    if (!ui) return;
     ui.preview.textContent = outputText || 'Aucune donnée renvoyée.';
     ui.downloadBtn.disabled = false;
     ui.applyBtn.disabled = !mapped;
@@ -701,6 +710,7 @@
 
   function updateBanner() {
     const ui = createUi();
+    if (!ui) return;
     const visible = state.hasUnsavedAnonymizedDraft || state.hasSavedAnonymizedDraft;
     ui.banner.classList.toggle('is-visible', visible);
     ui.banner.classList.toggle('is-saved', state.hasSavedAnonymizedDraft && !state.hasUnsavedAnonymizedDraft);
@@ -832,8 +842,6 @@
     window.__agiloAnonymiserInitialized = true;
 
     restoreConfig();
-    createUi();
-    updateBanner();
     window.agiloAnonymiser = anonymiser;
 
     let attempts = 0;
@@ -844,6 +852,8 @@
       const btn = document.querySelector('[data-action="anonymiser"]');
       setupSaveBridge();
       if (btn) {
+        createUi();
+        updateBanner();
         if (!btn.__anonymiserListenerAttached) {
           btn.addEventListener('click', (event) => {
             event.preventDefault();
