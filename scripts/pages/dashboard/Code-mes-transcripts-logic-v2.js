@@ -1,6 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.0-fullclient
-   v2.2.0-fullclient — fetch all (progressive 100→2000), tri/pagination client,
+   AGILOTEXT — Mes transcripts logic v2.2.2-fullclient
+   v2.2.2-fullclient — fetch all (progressive 100→2000), tri/pagination client,
    cache invalidation, polling 60s (API ignore sortDir)
    Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
    =============================================================================
