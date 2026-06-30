@@ -18,7 +18,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.1-fullclient';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.2-fullclient';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -1262,20 +1262,46 @@
 
     async function fetchRemainingBatches(ed) {
       let offset = FETCH_LIMIT_INITIAL;
+      let reachedEnd = false;
       while (offset < FETCH_LIMIT_TOTAL && activeLoadToken === loadId) {
         const { data } = await fetchJobsBatch(ed, offset, FETCH_LIMIT_INITIAL, true);
         if (activeLoadToken !== loadId) return;
         const batch = data.jobsInfoDtos || [];
-        if (batch.length === 0) break;
-        allJobsCache = (allJobsCache || []).concat(batch);
+        if (batch.length === 0) {
+          reachedEnd = true;
+          break;
+        }
+        const jobsById = new Map(
+          (allJobsCache || []).map((job) => [String(job.jobid), job])
+        );
+        batch.forEach((job) => jobsById.set(String(job.jobid), job));
+        allJobsCache = Array.from(jobsById.values());
         await loadPageFromCache(paginationState.currentPage, { keepRender: true });
-        if (batch.length < FETCH_LIMIT_INITIAL) break;
+        if (batch.length < FETCH_LIMIT_INITIAL) {
+          reachedEnd = true;
+          break;
+        }
         offset += FETCH_LIMIT_INITIAL;
       }
       if (activeLoadToken === loadId) {
-        cacheTotalKnown = true;
-        console.info('[Agilo] fetch all complete', allJobsCache?.length || 0, 'jobs');
-        await loadPageFromCache(paginationState.currentPage, { keepRender: true });
+        cacheTotalKnown = reachedEnd;
+        if (!reachedEnd && (allJobsCache?.length || 0) >= FETCH_LIMIT_TOTAL) {
+          console.warn(
+            '[Agilo] fetch limit reached:',
+            FETCH_LIMIT_TOTAL,
+            'jobs; backend cursor pagination is required for a complete list.'
+          );
+        }
+        console.info(
+          '[Agilo] fetch all complete',
+          allJobsCache?.length || 0,
+          'jobs',
+          { totalKnown: cacheTotalKnown }
+        );
+        // Les lots suivants peuvent contenir les jobs les plus récents lorsque
+        // l'API renvoie les résultats par ordre ancien -> récent. Il faut donc
+        // rerendre la page courante une fois le chargement terminé.
+        await loadPageFromCache(paginationState.currentPage);
       }
     }
 
