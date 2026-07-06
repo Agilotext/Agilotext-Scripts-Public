@@ -7,7 +7,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-invite"></div>
      2. Script (pin SHA) :
-        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b5e40db/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice24
+        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25
    API : POST submitSpeakerVoiceInvite (inviteToken, fullName, voiceFile)
    Styles : sync avec voice-enrollment-settings.js injectStyles (voice21)
    ================================================================ */
@@ -81,7 +81,7 @@
     error_voice_file_duration_too_long: 'L\'extrait audio ne doit pas dépasser 45 secondes.',
     error_invalid_audio_file_content: 'Le fichier ne peut pas être lu comme un audio valide.',
     error_reserved_speaker_label: 'Ce nom est réservé. Utilisez votre prénom et nom (pas S1, S2 ou UU).',
-    error_multiple_speakers_in_voice_enrollment: 'Plusieurs voix détectées. Enregistrez-vous seul(e), dans un endroit calme.',
+    error_multiple_speakers_in_voice_enrollment: 'L\'audio contient plusieurs voix. Merci d\'envoyer un extrait avec une seule voix.',
     error_speaker_identifier_not_found: 'Voix non identifiable. Parlez plus distinctement et plus près du micro.'
   };
 
@@ -136,37 +136,80 @@
     });
   }
 
-  function matchVoiceErrorMessage(text, inviteToken) {
+  function matchVoiceError(text, inviteToken) {
     var t = String(text || '').toLowerCase();
-    if (!t) return '';
+    if (!t) return null;
     if (t.indexOf('pas disponible pour ce compte') !== -1) {
       warnEditionBackendError(inviteToken, text);
-      return 'L\'enregistrement n\'a pas pu être finalisé. La personne qui vous a invité doit contacter le support Agilotext — réf. invitation vocale.';
+      return {
+        message: 'L\'enregistrement n\'a pas pu être finalisé. La personne qui vous a invité doit contacter le support Agilotext — réf. invitation vocale.',
+        reason: 'edition_unavailable'
+      };
     }
-    if (t.indexOf('invalide') !== -1 || t.indexOf('expir') !== -1 || t.indexOf('not found') !== -1) {
-      return 'Ce lien n\'est plus valide ou a expiré. Demandez un nouveau lien à la personne qui vous a invité(e).';
+    if (
+      t.indexOf('plusieurs voix') !== -1 ||
+      t.indexOf('une seule voix') !== -1 ||
+      t.indexOf('audio contient plusieurs voix') !== -1 ||
+      t.indexOf('multiple speakers') !== -1
+    ) {
+      return {
+        message: ERROR_MESSAGES.error_multiple_speakers_in_voice_enrollment,
+        reason: 'multiple_speakers'
+      };
+    }
+    if (t.indexOf('no spoken audio') !== -1 || t.indexOf('silent') !== -1 || t.indexOf('silenc') !== -1 || t.indexOf('aucune voix') !== -1) {
+      return {
+        message: 'Aucune voix détectée. Vérifiez votre micro et parlez plus fort, plus près, pendant au moins 15 secondes.',
+        reason: 'silent_audio'
+      };
+    }
+    if (t.indexOf('speaker identifier not found') !== -1 || t.indexOf('voix non identifiable') !== -1) {
+      return {
+        message: ERROR_MESSAGES.error_speaker_identifier_not_found,
+        reason: 'speaker_not_found'
+      };
     }
     if (t.indexOf('invalid audio') !== -1 || t.indexOf('job rejected') !== -1) {
-      return 'Votre enregistrement n\'a pas pu être analysé. Essayez un fichier MP3 ou WAV de 15 secondes minimum.';
+      return {
+        message: 'Votre enregistrement n\'a pas pu être analysé. Essayez un fichier MP3 ou WAV de 15 secondes minimum.',
+        reason: 'invalid_audio'
+      };
     }
-    if (t.indexOf('no spoken audio') !== -1 || t.indexOf('silent') !== -1 || t.indexOf('silenc') !== -1) {
-      return 'Aucune voix détectée. Vérifiez votre micro et parlez plus fort, plus près, pendant au moins 15 secondes.';
+    if (t.indexOf('invalide') !== -1 || t.indexOf('expir') !== -1 || t.indexOf('introuvable') !== -1 || t.indexOf('not found') !== -1) {
+      return {
+        message: 'Ce lien n\'est plus valide ou a expiré. Demandez un nouveau lien à la personne qui vous a invité(e).',
+        reason: 'invite_expired'
+      };
     }
-    if (t.indexOf('too short') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('short') !== -1)) {
-      return ERROR_MESSAGES.error_voice_file_duration_too_short;
+    if (t.indexOf('too short') !== -1 || t.indexOf('trop court') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('short') !== -1)) {
+      return { message: ERROR_MESSAGES.error_voice_file_duration_too_short, reason: 'duration_too_short' };
     }
-    if (t.indexOf('too long') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('long') !== -1)) {
-      return ERROR_MESSAGES.error_voice_file_duration_too_long;
+    if (t.indexOf('too long') !== -1 || t.indexOf('trop long') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('long') !== -1)) {
+      return { message: ERROR_MESSAGES.error_voice_file_duration_too_long, reason: 'duration_too_long' };
     }
-    if (t.indexOf('multiple speakers') !== -1) return ERROR_MESSAGES.error_multiple_speakers_in_voice_enrollment;
-    if (t.indexOf('speaker identifier not found') !== -1) return ERROR_MESSAGES.error_speaker_identifier_not_found;
     if (t.indexOf('fichier audio') !== -1 && t.indexOf('reçu') !== -1) {
-      return 'Aucun fichier audio valide. Enregistrez votre voix ou importez un fichier.';
+      return {
+        message: 'Aucun fichier audio valide. Enregistrez votre voix ou importez un fichier.',
+        reason: 'missing_audio_file'
+      };
     }
-    if (t.indexOf('speechmatics') !== -1 || t.indexOf('enrollment job') !== -1) {
-      return 'L\'enregistrement vocal n\'a pas été accepté. Parlez clairement pendant 15 à 45 secondes dans un endroit calme.';
+    if (t.indexOf('speechmatics') !== -1 || t.indexOf('enrollment job') !== -1 || t.indexOf('n\'a pas pu') !== -1) {
+      return {
+        message: 'L\'enregistrement vocal n\'a pas été accepté. Parlez clairement pendant 15 à 45 secondes dans un endroit calme.',
+        reason: 'enrollment_rejected'
+      };
     }
-    return '';
+    return null;
+  }
+
+  function matchVoiceErrorMessage(text, inviteToken) {
+    var err = matchVoiceError(text, inviteToken);
+    return err ? err.message : '';
+  }
+
+  function isStrictVoiceEnrollmentSuccess(combined) {
+    var t = String(combined || '').toLowerCase();
+    return /empreinte vocale.*enregistr|a bien été enregistr|voice enrolled|enregistrée avec succès|enrollment (was )?successful|succ[eè]s.*enregistr/i.test(t);
   }
 
   function parseSubmitHtml(html, inviteToken) {
@@ -174,15 +217,40 @@
     var h1 = decodeHtmlEntities((doc.querySelector('h1') || {}).textContent || '').trim();
     var p = decodeHtmlEntities((doc.querySelector('p') || {}).textContent || '').trim();
     var combined = (h1 + ' ' + p).trim();
-    if (/merci|enregistr|succès|succes|a bien été|envoyée avec/i.test(combined)) {
-      return { ok: true, title: h1, message: p || h1 };
+
+    var voiceErr = matchVoiceError(combined, inviteToken) || matchVoiceError(p, inviteToken) || matchVoiceError(h1, inviteToken);
+    if (voiceErr) {
+      return { ok: false, title: h1, message: voiceErr.message, reason: voiceErr.reason };
     }
+
+    if (isStrictVoiceEnrollmentSuccess(combined)) {
+      return {
+        ok: true,
+        title: h1,
+        message: p || h1 || 'Votre empreinte vocale a bien été enregistrée.'
+      };
+    }
+
     if (/n'a pas pu|pas disponible|invalide|expir|introuvable/i.test(combined)) {
       var mapped = matchVoiceErrorMessage(combined, inviteToken) || matchVoiceErrorMessage(p, inviteToken) || p || h1;
-      return { ok: false, title: h1, message: mapped };
+      return { ok: false, title: h1, message: mapped, reason: 'backend_rejection' };
     }
-    if (h1) return { ok: false, title: h1, message: matchVoiceErrorMessage(p, inviteToken) || p || h1 };
-    return { ok: false, title: 'Erreur', message: 'Impossible d\'envoyer l\'empreinte vocale. Réessayez.' };
+
+    if (h1 || p) {
+      return {
+        ok: false,
+        title: h1,
+        message: matchVoiceErrorMessage(combined, inviteToken) || p || h1 || 'Impossible d\'envoyer l\'empreinte vocale. Réessayez.',
+        reason: 'ambiguous_response'
+      };
+    }
+
+    return {
+      ok: false,
+      title: 'Erreur',
+      message: 'Impossible d\'envoyer l\'empreinte vocale. Réessayez.',
+      reason: 'empty_response'
+    };
   }
 
   function getWebflowSaveIconHtml() {
@@ -347,7 +415,9 @@
       var json = await r.json();
       if (json.status === 'OK') return { ok: true, message: json.message || 'Empreinte vocale enregistrée.' };
       var raw = json.errorMessage || json.message || json.error || '';
-      return { ok: false, message: matchVoiceErrorMessage(String(raw), inviteToken) || String(raw) || 'Erreur serveur.' };
+      var errMatch = matchVoiceError(String(raw), inviteToken);
+      if (errMatch) return { ok: false, message: errMatch.message, reason: errMatch.reason };
+      return { ok: false, message: String(raw) || 'Erreur serveur.', reason: 'api_error' };
     }
     return parseSubmitHtml(await r.text(), inviteToken);
   }
@@ -518,7 +588,7 @@
     var _lastIconState = null;
 
     function updateUIState() {
-      els.hero.classList.remove('is-idle', 'is-recording', 'is-preview');
+      els.hero.classList.remove('is-idle', 'is-recording', 'is-preview', 'is-retry');
       els.timer.classList.remove('is-visible');
       els.rerecord.style.display = 'none';
       els.miniPlayer.classList.remove('is-visible');
@@ -555,6 +625,13 @@
         }
         els.hint.textContent = state.uiState === 'preview' ? 'Écoutez votre enregistrement, puis validez.' : 'Validez pour enregistrer cette voix.';
         els.submitBtn.classList.add('is-visible');
+      } else if (state.uiState === 'retry') {
+        els.hero.classList.add('is-idle', 'is-retry');
+        if (_lastIconState !== 'idle') { els.heroIcon.innerHTML = MIC_SVG; _lastIconState = 'idle'; }
+        els.waves.style.display = 'none';
+        els.heroLabel.textContent = 'Recommencez avec une seule voix';
+        els.hint.textContent = 'Enregistrez un nouvel extrait, seul(e), entre 15 et 45 secondes.';
+        els.submitBtn.classList.remove('is-visible');
       } else {
         els.hero.classList.add('is-idle');
         if (_lastIconState !== 'idle') { els.heroIcon.innerHTML = MIC_SVG; _lastIconState = 'idle'; }
@@ -575,6 +652,24 @@
       if (state.fileMode && els.fileInput.files && els.fileInput.files[0]) return els.fileInput.files[0];
       if (state.recordedBlob) return new File([state.recordedBlob], state.recordedFileName, { type: state.recordedBlob.type || 'audio/webm' });
       return null;
+    }
+
+    function resetAfterRejectedVoice(message) {
+      els.submitBtn.disabled = false;
+      els.hero.style.pointerEvents = '';
+      applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
+      state.fileMode = false;
+      els.fileInput.value = '';
+      updateDropZoneLabel('');
+      state.recordedBlob = null;
+      state.previewDurationMs = 0;
+      state.elapsedMs = 0;
+      els.preview.pause();
+      els.preview.removeAttribute('src');
+      els.playBtn.textContent = '▶';
+      state.uiState = 'retry';
+      updateUIState();
+      setStatus(statusEl, 'error', message || 'Impossible d\'enregistrer cette voix.');
     }
 
     function resetRecording() {
@@ -670,7 +765,7 @@
         heroBusy = true;
         stopRecording();
         setTimeout(function () { heroBusy = false; }, 300);
-      } else if (state.uiState === 'idle') {
+      } else if (state.uiState === 'idle' || state.uiState === 'retry') {
         startRecording();
       }
     }
@@ -748,11 +843,8 @@
           if (statusEl) statusEl.textContent = '';
           return;
         }
-        trackInviteEvent(false, { reason: result.message });
-        setStatus(statusEl, 'error', result.message || 'Impossible d\'enregistrer cette voix.');
-        els.submitBtn.disabled = false;
-        els.hero.style.pointerEvents = '';
-        applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
+        trackInviteEvent(false, { reason: result.reason || result.message });
+        resetAfterRejectedVoice(result.message || 'Impossible d\'enregistrer cette voix.');
       }).catch(function (err) {
         if (String(err && err.message || '').indexOf('Failed to fetch') !== -1) {
           setStatus(statusEl, 'info', 'Redirection vers l\'envoi sécurisé…');
@@ -760,10 +852,7 @@
           return;
         }
         trackInviteEvent(false, { reason: err && err.message });
-        setStatus(statusEl, 'error', (err && err.message) || 'Impossible d\'enregistrer cette voix.');
-        els.submitBtn.disabled = false;
-        els.hero.style.pointerEvents = '';
-        applyWebflowSaveButton(els.submitBtn, 'Enregistrer cette voix');
+        resetAfterRejectedVoice((err && err.message) || 'Impossible d\'enregistrer cette voix.');
       });
     });
 

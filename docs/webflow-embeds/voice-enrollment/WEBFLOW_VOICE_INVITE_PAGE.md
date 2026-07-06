@@ -1,8 +1,8 @@
 # Webflow — Page invitation empreinte vocale (`/auth/voice-invite`)
 
-**voice24** — page publique pour les invités (sans compte Agilotext).
+**voice25** — page publique pour les invités (sans compte Agilotext).
 
-**v24 :** 3 passages littéraires aléatoires (Proust, Prévert, Hugo) + consignes bruit zéro · bouton submit centré · message erreur invité affiné.
+**v25 :** rejets audio backend (plusieurs voix, silence, etc.) traités comme erreurs réessayables — plus de faux succès sur « Merci ! ».
 
 ---
 
@@ -35,14 +35,14 @@ https://www.agilotext.com/auth/voice-invite?inviteToken=sv_...&recipientName=Mar
 
 ```html
 <div id="agilo-voice-invite"></div>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b5e40db/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice24"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25"></script>
 ```
 
 Voir [`voice-invite-page.html`](voice-invite-page.html) pour le SHA courant.
 
 **Où coller :** Embed HTML dans la zone contenu principale (pas dans un composant Memberstack).
 
-**Action Florian :** mettre à jour le query `?v=1.09-voice24` dans l'embed Webflow pour forcer le cache.
+**Action Florian :** mettre à jour le query `?v=1.09-voice25` dans l'embed Webflow pour forcer le cache.
 
 ---
 
@@ -86,5 +86,5 @@ Voir [`GUIDE_NICOLAS_VOICE_INVITE_URL.md`](GUIDE_NICOLAS_VOICE_INVITE_URL.md) �
 ## Purge CDN (après deploy script)
 
 ```
-curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b5e40db/scripts/pages/auth/voice-enrollment-invite.js"
+curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js"
 ```
