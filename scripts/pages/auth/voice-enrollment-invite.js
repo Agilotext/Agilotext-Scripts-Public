@@ -209,7 +209,7 @@
 
   function isStrictVoiceEnrollmentSuccess(combined) {
     var t = String(combined || '').toLowerCase();
-    return /empreinte vocale.*enregistr|a bien été enregistr|voice enrolled|enregistrée avec succès|enrollment (was )?successful|succ[eè]s.*enregistr/i.test(t);
+    return /empreinte vocale.*enregistr|a bien été enregistr|voice enrolled|enregistrée avec succès|enrollment (was )?successful|succ[eè]s.*enregistr|trait[eé][^.]*avec succ[eè]s|rattach[eé][^.]*au compte|successfully (processed|enrolled|attached)/i.test(t);
   }
 
   function parseSubmitHtml(html, inviteToken) {
