@@ -1,8 +1,8 @@
 # Webflow — Page invitation empreinte vocale (`/auth/voice-invite`)
 
-**voice25** — page publique pour les invités (sans compte Agilotext).
+**voice26** — page publique pour les invités (sans compte Agilotext).
 
-**v25 :** rejets audio backend (plusieurs voix, silence, etc.) traités comme erreurs réessayables — plus de faux succès sur « Merci ! ».
+**v26 :** rejets audio backend (plusieurs voix, silence, etc.) traités comme erreurs réessayables — plus de faux succès sur « Merci ! ». Le vrai message de succès (« fichier audio traité et rattaché au compte ») affiche bien le panneau vert.
 
 ---
 
@@ -35,14 +35,14 @@ https://www.agilotext.com/auth/voice-invite?inviteToken=sv_...&recipientName=Mar
 
 ```html
 <div id="agilo-voice-invite"></div>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a4323ea/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a6119a9/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice26"></script>
 ```
 
 Voir [`voice-invite-page.html`](voice-invite-page.html) pour le SHA courant.
 
 **Où coller :** Embed HTML dans la zone contenu principale (pas dans un composant Memberstack).
 
-**Action Florian :** mettre à jour le query `?v=1.09-voice25` dans l'embed Webflow pour forcer le cache.
+**Action Florian :** mettre à jour le query `?v=1.09-voice26` dans l'embed Webflow pour forcer le cache.
 
 ---
 
@@ -86,5 +86,5 @@ Voir [`GUIDE_NICOLAS_VOICE_INVITE_URL.md`](GUIDE_NICOLAS_VOICE_INVITE_URL.md) �
 ## Purge CDN (après deploy script)
 
 ```
-curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a4323ea/scripts/pages/auth/voice-enrollment-invite.js"
+curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a6119a9/scripts/pages/auth/voice-enrollment-invite.js"
 ```
