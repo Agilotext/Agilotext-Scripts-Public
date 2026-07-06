@@ -7,7 +7,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-invite"></div>
      2. Script (pin SHA) :
-        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25
+        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a4323ea/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25
    API : POST submitSpeakerVoiceInvite (inviteToken, fullName, voiceFile)
    Styles : sync avec voice-enrollment-settings.js injectStyles (voice21)
    ================================================================ */

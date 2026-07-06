@@ -35,7 +35,7 @@ https://www.agilotext.com/auth/voice-invite?inviteToken=sv_...&recipientName=Mar
 
 ```html
 <div id="agilo-voice-invite"></div>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a4323ea/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice25"></script>
 ```
 
 Voir [`voice-invite-page.html`](voice-invite-page.html) pour le SHA courant.
@@ -86,5 +86,5 @@ Voir [`GUIDE_NICOLAS_VOICE_INVITE_URL.md`](GUIDE_NICOLAS_VOICE_INVITE_URL.md) ‚Ä
 ## Purge CDN (apr√®s deploy script)
 
 ```
-curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f75094e/scripts/pages/auth/voice-enrollment-invite.js"
+curl "https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a4323ea/scripts/pages/auth/voice-enrollment-invite.js"
 ```
