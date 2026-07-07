@@ -2,6 +2,8 @@
 (function () {
   'use strict';
 
+  window.__agiloAnonVersion = '3.1.0';
+
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
@@ -501,8 +503,8 @@
     `;
 
     const transcriptPane = document.getElementById('pane-transcript');
-    if (transcriptPane?.parentNode) {
-      transcriptPane.parentNode.insertBefore(banner, transcriptPane);
+    if (transcriptPane) {
+      transcriptPane.prepend(banner);
     }
 
     const ui = {
@@ -736,14 +738,17 @@
       notify('Sauvegarde indisponible pour le moment. Réessayez dans quelques secondes.');
       return;
     }
+    const hadDraft = state.hasUnsavedAnonymizedDraft;
     try {
       const result = await window.__agiloAnonWrappedSave();
       if (!result || result.ok !== true) return result;
-      state.hasUnsavedAnonymizedDraft = false;
-      state.hasSavedAnonymizedDraft = true;
-      state.originalTranscriptState = null;
-      updateBanner();
-      logEvent('save_success', { jobId: getJobId() });
+      if (hadDraft) {
+        state.hasUnsavedAnonymizedDraft = false;
+        state.hasSavedAnonymizedDraft = true;
+        state.originalTranscriptState = null;
+        updateBanner();
+        logEvent('save_success', { jobId: getJobId() });
+      }
       return result;
     } catch (err) {
       logEvent('save_error', { jobId: getJobId(), message: err?.message || String(err) });
@@ -774,6 +779,7 @@
     const saveBtn = document.querySelector('[data-action="save-transcript"]');
     if (saveBtn && !saveBtn.__agiloAnonSaveAttached) {
       saveBtn.addEventListener('click', async (event) => {
+        if (!state.hasUnsavedAnonymizedDraft) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         await triggerSave();
@@ -798,6 +804,18 @@
       btn.style.display = 'none';
       btn.setAttribute('aria-hidden', 'true');
     }
+  }
+
+  function setupTranscriptEditObserver() {
+    const root = getEditorRoot();
+    if (!root || root.__agiloAnonEditWatcher) return;
+    root.__agiloAnonEditWatcher = true;
+    root.addEventListener('input', () => {
+      if (!state.hasSavedAnonymizedDraft) return;
+      clearDraftState();
+      updateBanner();
+      logEvent('saved_state_cleared_on_edit', { jobId: getJobId() });
+    }, true);
   }
 
   function setupTabObserver() {
@@ -864,6 +882,7 @@
         }
         updateButtonVisibility();
         setupTabObserver();
+        setupTranscriptEditObserver();
         monitorJobChanges();
         return;
       }

@@ -1446,6 +1446,36 @@
     return btn;
   }
 
+  let _ensureSegButtonsTimer = null;
+
+  function ensureSegButtons() {
+    const root = editors.transcript;
+    if (!root || __mode !== 'structured') return;
+    const segs = getSegList(root);
+    segs.forEach((seg, idx) => {
+      if (!seg.dataset.id) {
+        seg.dataset.id = `s${idx}_${Date.now()}`;
+      }
+      const head = seg.querySelector('.ag-seg__head');
+      if (head && !head.querySelector('.delete-seg-btn')) {
+        head.appendChild(buildDeleteBtn());
+      }
+    });
+  }
+
+  function scheduleEnsureSegButtons() {
+    clearTimeout(_ensureSegButtonsTimer);
+    _ensureSegButtonsTimer = setTimeout(ensureSegButtons, 150);
+  }
+
+  function setupSegButtonsObserver(root) {
+    if (!root || root.__segButtonsObserver) return;
+    const observer = new MutationObserver(scheduleEnsureSegButtons);
+    observer.observe(root, { childList: true, subtree: true });
+    root.__segButtonsObserver = observer;
+    ensureSegButtons();
+  }
+
   function setSpeakerStyle(el, name) {
     if (!el) return;
     el.style.color = getSpeakerColor(name);
@@ -1525,6 +1555,7 @@
     root.setAttribute('contenteditable', 'false');
     _selectedSegs.clear();
     if (_bulkBar) _bulkBar.setAttribute('hidden', '');
+    setupSegButtonsObserver(root);
 
     if (!root.__bound) {
       root.addEventListener('click', (e) => {
@@ -1604,6 +1635,15 @@
           }
         }
       });
+
+      root.addEventListener('paste', (e) => {
+        const node = e.target.closest('.ag-seg__text');
+        if (!node || !e.clipboardData || e.defaultPrevented) return;
+        const text = e.clipboardData.getData('text/plain');
+        if (text == null) return;
+        e.preventDefault();
+        document.execCommand('insertText', false, text);
+      }, true);
 
       root.addEventListener('keydown', (e) => {
         const node = e.target.closest('.ag-seg__text'); if (!node) return;
@@ -2969,4 +3009,6 @@
       if (wantsChat) openChatTab();
     }, { passive: true });
   }
+
+  window.__agiloEditorConfidenceVersion = '1.09.1';
 });
