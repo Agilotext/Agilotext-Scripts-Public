@@ -42,8 +42,12 @@
   function $(id) { return document.getElementById(id); }
 
   function apiBase() {
-    if (typeof w.getApiBase === 'function') return w.getApiBase();
-    return 'https://agilotext.com';
+    // Même host que upload_ent_v2 (sendMultipleAudio / getToken)
+    if (typeof w.getApiBase === 'function') {
+      var b = w.getApiBase();
+      if (b) return String(b).replace(/\/$/, '');
+    }
+    return 'https://api.agilotext.com';
   }
 
   function ensureToken() {
