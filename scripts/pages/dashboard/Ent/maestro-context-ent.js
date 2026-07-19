@@ -14,6 +14,7 @@
  *   - token via ensureValidToken (exposé par upload_ent_v2)
  *   - max 15 Mo ; UI hors onglet Fichier masquée
  *   - force doSummary / toggle CR si contexte actif
+ *   - toggle OFF par défaut ; préférence ON/OFF en localStorage (pas dans UserSendDefaults)
  */
 (function (w) {
   'use strict';
@@ -30,14 +31,30 @@
   var MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 15728640;
   var EDITION = CFG.edition || 'ent';
   var ACCEPT_EXT = /\.(pdf|docx?|txt)$/i;
+  var PREF_KEY = 'agilo.maestro.contextBriefEnabled.' + EDITION;
 
   var state = {
     file: null,
     contextId: null,
     preAnalyzePromise: null,
     lastPreview: null,
-    enabled: true
+    enabled: false
   };
+
+  function readPref() {
+    try {
+      var v = w.localStorage && w.localStorage.getItem(PREF_KEY);
+      if (v === '1' || v === 'true') return true;
+      if (v === '0' || v === 'false') return false;
+    } catch (e) { /* private mode */ }
+    return false; // défaut : non coché
+  }
+
+  function writePref(on) {
+    try {
+      if (w.localStorage) w.localStorage.setItem(PREF_KEY, on ? '1' : '0');
+    } catch (e) { /* ignore */ }
+  }
 
   function $(id) { return document.getElementById(id); }
 
@@ -57,7 +74,7 @@
     return Promise.resolve(w.globalToken || null);
   }
 
-  function setToggleChecked(on) {
+  function setToggleChecked(on, persist) {
     var box = $('maestro-context-toggle');
     var input = $('maestro-context-toggle-input');
     state.enabled = !!on;
@@ -70,11 +87,19 @@
     if (switchEl) switchEl.setAttribute('aria-pressed', on ? 'true' : 'false');
     var drop = $('maestro-context-drop');
     if (drop) drop.hidden = !on;
+    var help = document.querySelector('.maestro-context-help');
+    if (help) help.hidden = !on;
     var rgpd = $('maestro-context-rgpd');
     if (rgpd) rgpd.hidden = !on;
+    var preview = $('maestro-context-preview');
+    if (preview && !on) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+    }
     if (!on) {
       clearFile(true);
     }
+    if (persist !== false) writePref(!!on);
   }
 
   function clearFile(silent) {
@@ -275,7 +300,7 @@
 
     var switchEl = $('maestro-context-switch');
     if (switchEl) {
-      function toggle() { setToggleChecked(!state.enabled); }
+      function toggle() { setToggleChecked(!state.enabled, true); }
       switchEl.addEventListener('click', function (e) {
         e.preventDefault();
         toggle();
@@ -328,7 +353,8 @@
       });
     });
 
-    setToggleChecked(true);
+    // Défaut OFF ; si l’utilisateur a déjà activé → restaurer (localStorage)
+    setToggleChecked(readPref(), false);
     syncVisibility();
 
     w.AgiloMaestroContext = {
@@ -339,7 +365,8 @@
         return {
           enabled: state.enabled,
           hasFile: !!state.file,
-          contextId: state.contextId
+          contextId: state.contextId,
+          prefKey: PREF_KEY
         };
       }
     };
