@@ -1,6 +1,9 @@
 /**
  * upload_ent_v2.js — Agilotext Business
  * ──────────────────────────────────────────────────────────────────
+ * Branche Scripts-Public **1.10** (copie live @24cac26 + hook Maestro).
+ * Ne pas pousser sur 1.09 / @24cac26.
+ *
  * Version adaptée du script upload Ent pour le nouveau dashboard
  * avec 3 onglets source (Fichier | YouTube | Dictée).
  *
@@ -13,11 +16,16 @@
  *     globalToken / edition / checkTranscriptStatus sur window
  *     pour mount-streaming.js
  *
+ * v1.10 : hook AgiloMaestroContext.enrichFormData avant sendWithRetry(FormData)
+ *   (chemin FilePond). Sans maestro-context-ent.js → comportement = live.
+ *   Force doSummary=true si contexte Maestro actif.
+ *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
  *   - v1.07 : compte-rendu iframe via XHR sync (même branche) — erreurs userErrorMessage prioritaire
  *
- * Après ce script, charger (optionnel, streaming) :
+ * Après ce script, charger (optionnel) :
+ *   - maestro-context-ent.js (V1 B+ Joindre brief)
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
  *
  * v1.01+ : jeton sur actions longues — refresh avant upload, retry receiveText/Summary
@@ -901,7 +909,23 @@ document.addEventListener('DOMContentLoaded', function () {
             fd.append('fileUpload1', file, file.name);
             fd.append('deviceId', window.DEVICE_ID || '');
             fd.append('mailTranscription', 'true');
-            return sendWithRetry(fd, 3, false);
+
+            // v1.10 — Maestro B+ : enrichissement optionnel (contextId / contextFile)
+            function maybeEnrichAndSend(formData) {
+              var send = function (finalFd) { return sendWithRetry(finalFd, 3, false); };
+              if (!window.AgiloMaestroContext || typeof window.AgiloMaestroContext.enrichFormData !== 'function') {
+                return send(formData);
+              }
+              if (typeof window.AgiloMaestroContext.hasActiveContext === 'function' &&
+                  window.AgiloMaestroContext.hasActiveContext()) {
+                try { formData.delete('doSummary'); } catch (e) { /* ignore */ }
+                formData.append('doSummary', 'true');
+              }
+              return Promise.resolve(window.AgiloMaestroContext.enrichFormData(formData)).then(function (fd2) {
+                return send(fd2 || formData);
+              });
+            }
+            return maybeEnrichAndSend(fd);
           });
         }
 
