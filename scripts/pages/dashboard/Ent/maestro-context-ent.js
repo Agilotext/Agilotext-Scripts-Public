@@ -225,13 +225,20 @@
       if (typeof t === 'string') labelText = t;
       else if (t && nameKey && t[nameKey]) labelText = t[nameKey];
       else labelText = (t && (t.canonicalName || t.name || t.nom || t.label)) || String(t);
-      return '<span class="maestro-chip">' + escapeHtml(String(labelText)) + '</span>';
+      var full = String(labelText);
+      return '<span class="maestro-chip" title="' + escapeHtml(full) + '">' + escapeHtml(full) + '</span>';
     }).join('');
     if (rest > 0) {
       chips += '<span class="maestro-chip maestro-chip-more">+' + rest + '</span>';
     }
     return '<div><strong>' + escapeHtml(label) + '</strong><div class="maestro-chips">' + chips + '</div></div>';
   }
+
+  var TRASH_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">' +
+      '<path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" ' +
+        'd="M3.5 4.5h9M6.5 4.5V3.25a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75V4.5m1.5 0v8.25a.75.75 0 0 1-.75.75h-5.5a.75.75 0 0 1-.75-.75V4.5"/>' +
+    '</svg>';
 
   function showPreviewHtml(html) {
     var preview = $('maestro-context-preview');
@@ -270,25 +277,20 @@
       return;
     }
     list.hidden = false;
-    list.innerHTML = docs.map(function (d, idx) {
+    list.innerHTML = docs.map(function (d) {
+      var shown = displayFileName(d.file.name);
       var actions =
-        (idx === 0
-          ? '<button type="button" class="maestro-doc-btn" data-maestro-action="replace" data-id="' + d.id + '">Remplacer</button>'
-          : '') +
-        '<button type="button" class="maestro-doc-btn" data-maestro-action="remove" data-id="' + d.id + '">Retirer</button>';
+        '<button type="button" class="maestro-doc-btn" data-maestro-action="replace" data-id="' + d.id + '">Remplacer</button>' +
+        '<button type="button" class="maestro-doc-btn maestro-doc-btn--icon" data-maestro-action="remove" data-id="' + d.id + '" aria-label="Retirer">' +
+          TRASH_SVG +
+        '</button>';
 
       return (
         '<li class="maestro-doc-item" data-id="' + d.id + '">' +
-          '<div class="maestro-doc-meta">' +
-            '<div class="maestro-doc-line1">' +
-              '<span class="maestro-doc-name" title="' + escapeHtml(displayFileName(d.file.name)) + '">' +
-                escapeHtml(displayFileName(d.file.name)) +
-              '</span>' +
-              '<span class="maestro-doc-size">' + escapeHtml(formatSize(d.file.size)) + '</span>' +
-            '</div>' +
-            badgeHtml(d) +
-          '</div>' +
+          '<span class="maestro-doc-name" title="' + escapeHtml(shown) + '">' + escapeHtml(shown) + '</span>' +
+          '<span class="maestro-doc-size">' + escapeHtml(formatSize(d.file.size)) + '</span>' +
           '<div class="maestro-doc-actions">' + actions + '</div>' +
+          badgeHtml(d) +
         '</li>'
       );
     }).join('');
@@ -323,17 +325,6 @@
   function buildPreviewFromAnalysis(data) {
     var analysis = (data && data.analysis) || data || {};
     var parts = [];
-
-    var docMeta = analysis.documents || [];
-    if (docMeta.length) {
-      var names = docMeta.map(function (d) {
-        return (d && d.filename) || '';
-      }).filter(Boolean);
-      if (names.length) {
-        parts.push('<div><strong>Documents</strong><p class="text-color-grey" style="margin:.25rem 0 0;font-size:.75rem">' +
-          escapeHtml(names.join(' · ')) + '</p></div>');
-      }
-    }
 
     var participants = analysis.participants || data.participants || [];
     parts.push(renderChips(participants, 'Participants', 8, 'canonicalName'));
@@ -524,9 +515,14 @@
     schedulePreAnalyze();
   }
 
-  function replaceFirst() {
+  function replaceDoc(id) {
     var input = $('maestro-context-file');
-    if (!input) return;
+    if (!input || !id) return;
+    var idx = -1;
+    for (var i = 0; i < docs.length; i++) {
+      if (docs[i].id === id) { idx = i; break; }
+    }
+    if (idx < 0) return;
     input.value = '';
     var prevMultiple = input.multiple;
     input.multiple = false;
@@ -540,13 +536,15 @@
         showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(err) + '</p>');
         return;
       }
-      var restSize = docs.slice(1).reduce(function (s, d) { return s + d.file.size; }, 0);
+      var restSize = 0;
+      for (var j = 0; j < docs.length; j++) {
+        if (j !== idx) restSize += docs[j].file.size || 0;
+      }
       if (restSize + file.size > MAX_TOTAL_BYTES) {
         showPreviewHtml('<p class="maestro-preview-fail">Total supérieur à 50 Mo.</p>');
         return;
       }
-      if (docs.length) docs[0] = { id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' };
-      else docs.push({ id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' });
+      docs[idx] = { id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' };
       renderDocList();
       schedulePreAnalyze();
     }
@@ -819,7 +817,7 @@
         var action = btn.getAttribute('data-maestro-action');
         var id = btn.getAttribute('data-id');
         if (action === 'remove' && id) removeDoc(id);
-        if (action === 'replace') replaceFirst();
+        if (action === 'replace' && id) replaceDoc(id);
       });
     }
 
