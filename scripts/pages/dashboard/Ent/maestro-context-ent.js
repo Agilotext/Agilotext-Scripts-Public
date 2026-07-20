@@ -1,5 +1,6 @@
 /**
  * maestro-context-ent.js — Maestro V1 B+ « Joindre des documents »
+ * Go-live polish : RGPD si contextId ; erreur unique ; copy user_not_allowed douce
  * Branche Scripts-Public 1.10 — partagé Free / Pro / Ent (ne pas pousser sur @24cac26 / 1.09)
  *
  * Tiers :
@@ -32,7 +33,7 @@
 
   var ERROR_MAP = {
     error_maestro_not_enabled: 'Maestro n’est pas activé sur ce serveur.',
-    error_maestro_user_not_allowed: 'Votre compte n’est pas autorisé à utiliser Maestro.',
+    error_maestro_user_not_allowed: 'Ouverture Maestro en cours côté serveur — réessayez dans quelques minutes.',
     error_maestro_context_file_missing: 'Aucun document fourni.',
     error_maestro_context_file_empty: 'Document sans texte extractible.',
     error_maestro_context_file_too_many: 'Maximum de documents atteint pour votre offre.',
@@ -379,6 +380,15 @@
     preview.hidden = false;
   }
 
+  /** Footer RGPD seulement après analyse OK (pas sous une erreur). */
+  function syncRgpdVisibility() {
+    var rgpd = document.querySelector('.maestro-context-rgpd');
+    if (!rgpd) return;
+    var show = !!(state.contextId);
+    rgpd.hidden = !show;
+    rgpd.style.display = show ? '' : 'none';
+  }
+
   function badgeHtml(d) {
     if (d.status === 'loading') {
       return '<div class="maestro-badge is-loading">' +
@@ -447,6 +457,7 @@
     if (input) input.value = '';
     renderDocList();
     showPreviewHtml('');
+    syncRgpdVisibility();
   }
 
   function buildPreviewFromAnalysis(data) {
@@ -570,9 +581,11 @@
 
         if (!res.ok || !data || data.status !== 'OK') {
           var msg = mapMaestroError(data);
-          setAllDocsStatus('warn', msg);
           state.contextId = null;
-          showPreviewHtml('<p class="maestro-preview-warn">' + escapeHtml(msg) + '</p>');
+          // Erreur une seule fois (ligne doc) — pas de doublon dans le preview
+          setAllDocsStatus('warn', msg);
+          showPreviewHtml('');
+          syncRgpdVisibility();
           return null;
         }
 
@@ -580,6 +593,7 @@
         state.lastPreview = data;
         setAllDocsStatus('ok', 'Analysé');
         buildPreviewFromAnalysis(data);
+        syncRgpdVisibility();
         return state.contextId;
       }
 
@@ -589,6 +603,8 @@
         if (gen !== state.analyzeGen) return null;
         setAllDocsStatus('warn', 'Réseau indisponible');
         state.contextId = null;
+        showPreviewHtml('');
+        syncRgpdVisibility();
         return null;
       });
     });
@@ -599,9 +615,11 @@
 
   function schedulePreAnalyze() {
     state.contextId = null;
+    syncRgpdVisibility();
     if (state.debounceTimer) clearTimeout(state.debounceTimer);
     if (!docs.length) {
       showPreviewHtml('');
+      syncRgpdVisibility();
       return;
     }
     setAllDocsStatus('loading', 'Analyse…');
@@ -948,6 +966,7 @@
       rgpd.textContent = 'Document traité pour enrichir votre compte rendu ; données nominatives possibles. Usage conforme à votre compte.';
       block.appendChild(rgpd);
     }
+    syncRgpdVisibility();
 
     var row = injectToggleRow();
     placeBlockInSlot();
