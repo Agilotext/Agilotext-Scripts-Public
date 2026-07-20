@@ -1,12 +1,12 @@
 /**
  * maestro-context-ent.js — Maestro V1 B+ « Joindre des documents »
- * Go-live polish : RGPD si contextId ; erreur unique ; copy user_not_allowed douce
+ * Découverte v2 : badge Nouveau + copy désir ; Ent ON si pref absente ; Free → upsell Pro
  * Branche Scripts-Public 1.10 — partagé Free / Pro / Ent (ne pas pousser sur @24cac26 / 1.09)
  *
  * Tiers :
- *   free/perso → toggle locked + upsell Business
+ *   free/perso → toggle locked + upsell Pro
  *   pro        → 1 doc max + aperçu bêta
- *   ent        → jusqu’à 5 docs + aperçu bêta
+ *   ent        → jusqu’à 5 docs + aperçu bêta ; défaut ON si pref absente
  *
  * API Section 7 : multi contextFile → 1 contextId ; upload audio = contextId seul.
  */
@@ -30,6 +30,8 @@
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
   var DEBOUNCE_MS = 400;
+  var CONTEXT_USED_KEY = 'agilo.maestro.contextUsed.v1';
+  var NEW_BADGE_UNTIL_MS = Date.parse('2026-09-01T00:00:00+02:00');
 
   var ERROR_MAP = {
     error_maestro_not_enabled: 'Maestro n’est pas activé sur ce serveur.',
@@ -110,9 +112,27 @@
     return 'agilo.maestro.contextBriefEnabled.' + state.edition;
   }
 
+  function hasUsedContext() {
+    try {
+      return !!(w.localStorage && w.localStorage.getItem(CONTEXT_USED_KEY));
+    } catch (e) { return false; }
+  }
+
+  function markContextUsed() {
+    try {
+      if (w.localStorage) w.localStorage.setItem(CONTEXT_USED_KEY, '1');
+    } catch (e) { /* ignore */ }
+    var badge = document.querySelector('#maestro-context-option-row .maestro-new-badge');
+    if (badge && badge.parentNode) badge.parentNode.removeChild(badge);
+  }
+
+  function showNewBadge() {
+    return Date.now() < NEW_BADGE_UNTIL_MS && !hasUsedContext();
+  }
+
   function tooltipText() {
     if (state.locked) {
-      return 'Joignez une convocation ou un brief pour ancrer le compte rendu — disponible avec l’offre Business.';
+      return 'Disponible dès Pro (1 document). Jusqu’à 5 en Business. L’aperçu est indicatif ; une convocation avec liste de présences garantit les participants.';
     }
     if (state.edition === 'pro') {
       return '1 document (PDF, DOCX, TXT, 10 Mo). L’aperçu est indicatif ; seule une convocation avec liste de présences garantit les participants. Jusqu’à 5 documents en Business.';
@@ -134,24 +154,27 @@
   }
 
   function toggleSubLabel() {
-    if (state.locked) return ''; // Free : plan dit dans la popup, pas sur la ligne
-    if (state.edition === 'pro') return '1 PDF/DOCX/TXT · aperçu indicatif';
-    return '';
+    if (state.locked) return 'Nouveau — dès l’offre Pro';
+    if (state.edition === 'pro') return 'ODJ / brief → CR plus fiable · 1 PDF';
+    return 'ODJ / brief → CR plus fiable · jusqu’à 5 docs';
   }
 
-  function showUpgradeBusiness(reason) {
-    var msg = reason || 'Joindre des documents';
+  /** Free → Pro ; Pro (limite 1 doc) → Business */
+  function showUpgrade(reason, minPlan) {
+    var plan = minPlan === 'ent' ? 'ent' : 'pro';
+    var msg = reason || (plan === 'ent'
+      ? 'Jusqu’à 5 documents de contexte en Business.'
+      : 'Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.');
     if (w.AgiloFreeUpgrade && typeof w.AgiloFreeUpgrade.show === 'function') {
-      w.AgiloFreeUpgrade.show({ minPlan: 'ent', reason: msg, source: 'maestro_docs' });
+      w.AgiloFreeUpgrade.show({ minPlan: plan, reason: msg, source: 'maestro_docs' });
       return;
     }
     if (w.AgiloGate && typeof w.AgiloGate.showUpgrade === 'function') {
-      w.AgiloGate.showUpgrade('ent', msg);
+      w.AgiloGate.showUpgrade(plan, msg);
       return;
     }
-    // Fallback modal légère (même pattern Memberstack) si free_v2 pas chargé
     if (typeof document === 'undefined') {
-      alert(msg || 'Passez à Business pour joindre des documents de contexte.');
+      alert(msg);
       return;
     }
     var prev = document.getElementById('agilo-free-upgrade-modal');
@@ -161,29 +184,46 @@
     overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
     var panel = document.createElement('div');
     panel.style.cssText = 'background:#fff;border-radius:16px;padding:2rem;width:min(460px,92vw);text-align:center;font-family:inherit';
-    panel.innerHTML = '<h3 style="margin:0 0 .6rem;font-size:1.1rem">Passez en Business…</h3>'
+    var title = plan === 'ent' ? 'Passez en Business…' : 'Passez en Pro…';
+    var priceId = plan === 'ent' ? 'prc_business-1-seat-aj1780sye' : 'prc_pro-qn9f07eb';
+    var btnLabel = plan === 'ent'
+      ? 'Passer en Business (100% français)'
+      : 'Passer en Pro — 7 jours gratuits';
+    var href = plan === 'ent' ? '/auth/sign-up-ent' : '/auth/sign-up-pro';
+    panel.innerHTML = '<h3 style="margin:0 0 .6rem;font-size:1.1rem">' + title + '</h3>'
       + '<p style="margin:0 0 1.2rem;color:#525252;font-size:.88rem">' + String(msg).replace(/</g, '&lt;') + '</p>';
-    var btnBiz = document.createElement('button');
-    btnBiz.type = 'button';
-    btnBiz.setAttribute('data-ms-price:update', 'prc_business-1-seat-aj1780sye');
-    btnBiz.style.cssText = 'width:100%;padding:.75rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer';
-    btnBiz.textContent = 'Passer en Business (100% français)';
-    btnBiz.onclick = function () {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.setAttribute('data-ms-price:update', priceId);
+    btn.style.cssText = 'width:100%;padding:.75rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer';
+    btn.textContent = btnLabel;
+    btn.onclick = function () {
       overlay.remove();
-      var existing = document.querySelector('.ms-upgrade-business, [data-ms-price\\:update^="prc_business-"]');
-      if (existing && existing !== btnBiz) { existing.click(); return; }
-      w.location.href = '/auth/sign-up-ent';
+      var sel = plan === 'ent'
+        ? '.ms-upgrade-business, [data-ms-price\\:update^="prc_business-"]'
+        : '.ms-upgrade-pro, [data-ms-price\\:update^="prc_pro-"]';
+      var existing = document.querySelector(sel);
+      if (existing && existing !== btn) { existing.click(); return; }
+      w.location.href = href;
     };
     var later = document.createElement('button');
     later.type = 'button';
     later.style.cssText = 'display:block;margin:.8rem auto 0;background:none;border:none;color:#888;text-decoration:underline;cursor:pointer';
     later.textContent = 'Plus tard';
     later.onclick = function () { overlay.remove(); };
-    panel.appendChild(btnBiz);
+    panel.appendChild(btn);
     panel.appendChild(later);
     overlay.appendChild(panel);
     overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
+  }
+
+  function showUpgradeBusiness(reason) {
+    showUpgrade(reason, 'ent');
+  }
+
+  function showUpgradePro(reason) {
+    showUpgrade(reason, 'pro');
   }
 
   function readPref() {
@@ -192,6 +232,8 @@
       if (v === '1' || v === 'true') return true;
       if (v === '0' || v === 'false') return false;
     } catch (e) { /* private mode */ }
+    // Business : défaut ON si aucune préférence (ne pas écraser OFF explicite)
+    if (state.edition === 'ent' && !state.locked) return true;
     return false;
   }
 
@@ -591,6 +633,7 @@
 
         state.contextId = data.contextId || null;
         state.lastPreview = data;
+        if (state.contextId) markContextUsed();
         setAllDocsStatus('ok', 'Analysé');
         buildPreviewFromAnalysis(data);
         syncRgpdVisibility();
@@ -633,7 +676,7 @@
     var arr = Array.prototype.slice.call(fileList || []);
     if (!arr.length) return;
     if (state.locked) {
-      showUpgradeBusiness('Joindre des documents');
+      showUpgradePro('Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.');
       return;
     }
 
@@ -751,9 +794,11 @@
 
       if (state.contextId) {
         fd.append('contextId', state.contextId);
+        markContextUsed();
       } else if (docs.length === 1) {
         // Dernier recours : 1 seul fichier sans contextId (preAnalyze a échoué)
         fd.append('contextFile', docs[0].file, docs[0].file.name);
+        markContextUsed();
       }
       return fd;
     });
@@ -831,6 +876,9 @@
 
     var tip = tooltipText();
     var sub = toggleSubLabel();
+    var newBadge = showNewBadge()
+      ? ' <span class="maestro-new-badge">Nouveau</span>'
+      : '';
     var row = document.createElement('div');
     row.className = 'checkbox-component' + (state.locked ? ' is-disabled' : '');
     row.id = 'maestro-context-option-row';
@@ -848,8 +896,9 @@
           'style="opacity:0;position:absolute;z-index:-1">' +
         '<span class="checkbox-label w-form-label" for="toggle-maestro-context">Off/ On</span>' +
       '</label>' +
-      '<div class="text-size-small text-color-grey">' +
+      '<div class="text-size-small text-color-grey maestro-toggle-copy">' +
         '<span class="maestro-toggle-label">' + escapeHtml(toggleLabel()) + '</span>' +
+        newBadge +
         (sub ? ' <span class="maestro-tier-badge">' + escapeHtml(sub) + '</span>' : '') +
         '<span class="maestro-tip-wrap">' +
           '<button type="button" class="maestro-tip" aria-label="' + escapeHtml(tip) + '" ' +
@@ -907,7 +956,7 @@
     if (!row) return;
     function toggle() {
       if (state.locked) {
-        showUpgradeBusiness('Joindre des documents');
+        showUpgradePro('Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.');
         return;
       }
       setToggleChecked(!state.enabled, true);
@@ -1021,7 +1070,13 @@
       var up = e.target && e.target.closest ? e.target.closest('[data-maestro-upgrade]') : null;
       if (!up) return;
       e.preventDefault();
-      showUpgradeBusiness('Joindre des documents');
+      var plan = up.getAttribute('data-maestro-upgrade') === 'ent' ? 'ent' : 'pro';
+      showUpgrade(
+        plan === 'ent'
+          ? 'Jusqu’à 5 documents de contexte en Business.'
+          : 'Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.',
+        plan
+      );
     });
 
     document.querySelectorAll('.source-tab[data-tab]').forEach(function (tab) {

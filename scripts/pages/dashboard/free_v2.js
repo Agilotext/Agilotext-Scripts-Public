@@ -1126,13 +1126,21 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = fallbackPath;
   }
 
-  function freeUpgradeBenefits(minPlan) {
+  function freeUpgradeBenefits(minPlan, source) {
     if (minPlan === 'ent') {
       return [
-        'Joignez PDF, DOCX, TXT de contexte',
+        'Joignez jusqu’à 5 PDF, DOCX, TXT de contexte',
         'Noms et termes mieux reconnus',
         'Compte rendu plus précis',
         'IA 100 % française (Business)'
+      ];
+    }
+    if (source === 'maestro_docs') {
+      return [
+        'Joignez 1 PDF, DOCX ou TXT de contexte',
+        'Noms et termes mieux reconnus',
+        'Compte rendu plus fiable',
+        'Et les atouts Pro (intervenants, modèles…)'
       ];
     }
     return [
@@ -1146,10 +1154,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function showFreeUpgradeModal(opts) {
     const options = opts || {};
     const minPlan = options.minPlan === 'ent' ? 'ent' : 'pro';
+    const source = options.source || 'modal';
     const reason = options.reason || (minPlan === 'ent'
       ? 'Joignez des documents pour un contexte plus précis.'
-      : 'Débloquez les outils qui font gagner du temps sur chaque fichier.');
-    const source = options.source || 'modal';
+      : source === 'maestro_docs'
+        ? 'Joignez un ODJ ou un brief pour un compte rendu plus fiable — dès Pro.'
+        : 'Débloquez les outils qui font gagner du temps sur chaque fichier.');
 
     trackFreeUpsell(source, minPlan);
 
@@ -1178,7 +1188,9 @@ document.addEventListener('DOMContentLoaded', () => {
       // Titres désir (meilleure conversion que « Passez en… »)
       h3.textContent = minPlan === 'ent'
         ? 'Des transcriptions plus précises'
-        : 'Gagnez du temps sur chaque fichier';
+        : source === 'maestro_docs'
+          ? 'Des comptes rendus plus fiables'
+          : 'Gagnez du temps sur chaque fichier';
 
       const p = document.createElement('p');
       p.className = 'agilo-free-modal-reason';
@@ -1186,7 +1198,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const ul = document.createElement('ul');
       ul.className = 'agilo-free-modal-benefits';
-      freeUpgradeBenefits(minPlan).forEach(text => {
+      freeUpgradeBenefits(minPlan, source).forEach(text => {
         const li = document.createElement('li');
         li.textContent = text;
         ul.appendChild(li);
