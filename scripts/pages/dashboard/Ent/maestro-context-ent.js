@@ -832,7 +832,7 @@
       '</label>' +
       '<div class="text-size-small text-color-grey">' +
         '<span class="maestro-toggle-label">' + escapeHtml(toggleLabel()) + '</span>' +
-        (sub ? '<span class="maestro-tier-badge">' + escapeHtml(sub) + '</span>' : '') +
+        (sub ? ' <span class="maestro-tier-badge">' + escapeHtml(sub) + '</span>' : '') +
         '<span class="maestro-tip-wrap">' +
           '<button type="button" class="maestro-tip" aria-label="' + escapeHtml(tip) + '" ' +
             'aria-describedby="maestro-tip-bubble">?</button>' +
