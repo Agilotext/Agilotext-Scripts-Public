@@ -66,6 +66,9 @@
     maxTotalBytes: CFG_MAX_TOTAL
   };
   var uidSeq = 0;
+  /** Si non null : le prochain change de #maestro-context-file remplace ce doc (pas addFiles). */
+  var replaceTargetId = null;
+  var replacePrevMultiple = true;
 
   function resolveEdition() {
     if (w.edition) return String(w.edition).toLowerCase();
@@ -727,6 +730,39 @@
     schedulePreAnalyze();
   }
 
+  function clearReplaceMode() {
+    replaceTargetId = null;
+    var input = $('maestro-context-file');
+    if (input) input.multiple = replacePrevMultiple;
+  }
+
+  function applyReplaceFile(file) {
+    var id = replaceTargetId;
+    clearReplaceMode();
+    if (!id || !file) return;
+    var idx = -1;
+    for (var i = 0; i < docs.length; i++) {
+      if (docs[i].id === id) { idx = i; break; }
+    }
+    if (idx < 0) return;
+    var err = validateFile(file);
+    if (err) {
+      showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(err) + '</p>');
+      return;
+    }
+    var restSize = 0;
+    for (var j = 0; j < docs.length; j++) {
+      if (j !== idx) restSize += docs[j].file.size || 0;
+    }
+    if (restSize + file.size > state.maxTotalBytes) {
+      showPreviewHtml('<p class="maestro-preview-fail">Total supérieur à 50 Mo.</p>');
+      return;
+    }
+    docs[idx] = { id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' };
+    renderDocList();
+    schedulePreAnalyze();
+  }
+
   function replaceDoc(id) {
     var input = $('maestro-context-file');
     if (!input || !id) return;
@@ -736,31 +772,9 @@
     }
     if (idx < 0) return;
     input.value = '';
-    var prevMultiple = input.multiple;
+    replacePrevMultiple = !!input.multiple;
+    replaceTargetId = id;
     input.multiple = false;
-    function onChange() {
-      input.removeEventListener('change', onChange);
-      input.multiple = prevMultiple;
-      if (!(input.files && input.files[0])) return;
-      var file = input.files[0];
-      var err = validateFile(file);
-      if (err) {
-        showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(err) + '</p>');
-        return;
-      }
-      var restSize = 0;
-      for (var j = 0; j < docs.length; j++) {
-        if (j !== idx) restSize += docs[j].file.size || 0;
-      }
-      if (restSize + file.size > state.maxTotalBytes) {
-        showPreviewHtml('<p class="maestro-preview-fail">Total supérieur à 50 Mo.</p>');
-        return;
-      }
-      docs[idx] = { id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' };
-      renderDocList();
-      schedulePreAnalyze();
-    }
-    input.addEventListener('change', onChange);
     input.click();
   }
 
@@ -1025,10 +1039,30 @@
     }
 
     input.addEventListener('change', function () {
+      if (replaceTargetId) {
+        var file = input.files && input.files[0] ? input.files[0] : null;
+        input.value = '';
+        if (file) applyReplaceFile(file);
+        else clearReplaceMode();
+        return;
+      }
       if (input.files && input.files.length) {
         addFiles(input.files);
         input.value = '';
       }
+    });
+    // Annulation du picker (Chrome) ou focus retour sans fichier
+    input.addEventListener('cancel', function () {
+      if (replaceTargetId) clearReplaceMode();
+    });
+    w.addEventListener('focus', function onWinFocus() {
+      if (!replaceTargetId) return;
+      setTimeout(function () {
+        if (!replaceTargetId) return;
+        var inp = $('maestro-context-file');
+        if (inp && inp.files && inp.files.length) return;
+        clearReplaceMode();
+      }, 300);
     });
 
     var drop = $('maestro-context-drop');
