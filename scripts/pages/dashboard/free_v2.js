@@ -1,6 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
- * v1.10 — upsell polish v2 (carte unique, locks sans badges, toggles OFF durables) ; hook Maestro
+ * v1.10 — upsell popup only (pas de carte, pas de CSS toggles Webflow) ; hook Maestro
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
@@ -1063,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setSummaryUI('hidden');
 
-  /* ─── Free upsell polish v2 : carte unique + locks sans badges Pro ─── */
+  /* ─── Free upsell : popup Memberstack uniquement (pas de carte, pas de CSS toggles) ─── */
   const MS_PRICE_PRO = 'prc_pro-qn9f07eb';
   const MS_PRICE_BUSINESS = 'prc_business-1-seat-aj1780sye';
 
@@ -1071,23 +1071,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('agilo-free-upsell-css')) return;
     const style = document.createElement('style');
     style.id = 'agilo-free-upsell-css';
+    // Ne jamais styler .checkbox_toggle / .w-checkbox-input — rendu Webflow uniquement
     style.textContent = [
       '@keyframes agiloFreeFadeIn{from{opacity:0}to{opacity:1}}',
       '@keyframes agiloFreeSlideUp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}',
       '.blocker,.blocker-overlay{display:none!important;pointer-events:none!important;opacity:0!important}',
-      '#agilo-free-desire-card{margin:0 0 12px;padding:14px 16px;border:1px solid #d6e0f0;border-radius:12px;background:linear-gradient(135deg,#f7faff 0%,#eef4ff 100%);font-family:inherit}',
-      '#agilo-free-desire-card .agilo-free-desire-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
-      '#agilo-free-desire-card h3{margin:0 0 4px;font-size:1rem;font-weight:700;color:#0f274f}',
-      '#agilo-free-desire-card p{margin:0;font-size:.85rem;line-height:1.4;color:#4a5d7a}',
-      '#agilo-free-desire-card button{flex-shrink:0;border:none;border-radius:10px;background:#174a96;color:#fff;font:inherit;font-weight:600;font-size:.88rem;padding:.65rem 1rem;cursor:pointer}',
-      '#agilo-free-desire-card button:hover{background:#12397a}',
-      '.agilo-free-lock.is-locked{cursor:pointer;opacity:.88}',
-      '.agilo-free-lock.is-locked .checkbox_toggle,.agilo-free-lock.is-locked .w-checkbox-input{background:#d0d0d0!important;cursor:pointer}',
-      '.agilo-free-lock.is-locked .checkbox_toggle.w--redirected-checked,.agilo-free-lock.is-locked .w-checkbox-input.w--redirected-checked{background:#d0d0d0!important}',
-      '.agilo-free-lock.is-locked .checkbox_toggle.w--redirected-checked::after,.agilo-free-lock.is-locked .w-checkbox-input.w--redirected-checked::after{transform:translateX(0)!important}',
-      '.agilo-free-lock.is-locked input[type="checkbox"]{pointer-events:none}',
-      '#default-template-select.agilo-free-locked-select,#speakers-select.agilo-free-locked-select{opacity:.55;cursor:pointer}',
-      '.agilo-free-select-hit{cursor:pointer}',
+      '#agilo-free-desire-card{display:none!important}',
       '.agilo-pro-badge{display:none!important}',
       '#agilo-free-upgrade-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFreeFadeIn .2s ease}',
       '#agilo-free-upgrade-modal .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloFreeSlideUp .25s ease}',
@@ -1233,34 +1222,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.AgiloFreeUpgrade = { show: showFreeUpgradeModal };
 
-  function mountFreeDesireCard() {
-    injectFreeUpsellCss();
-    if (document.getElementById('agilo-free-desire-card')) return;
-    const anchor = document.querySelector('.options-wrapper');
-    if (!anchor || !anchor.parentNode) return;
-
-    const card = document.createElement('div');
-    card.id = 'agilo-free-desire-card';
-    card.innerHTML = [
-      '<div class="agilo-free-desire-row">',
-      '  <div>',
-      '    <h3>Passez en Pro</h3>',
-      '    <p>Intervenants identifiés · compte rendu sur mesure · modèles prêts</p>',
-      '  </div>',
-      '  <button type="button" id="agilo-free-desire-cta">Découvrir Pro</button>',
-      '</div>'
-    ].join('');
-    anchor.parentNode.insertBefore(card, anchor);
-    const cta = card.querySelector('#agilo-free-desire-cta');
-    if (cta) {
-      cta.addEventListener('click', () => {
-        showFreeUpgradeModal({
-          minPlan: 'pro',
-          reason: 'Intervenants identifiés · compte rendu sur mesure · modèles prêts',
-          source: 'desire_card'
-        });
-      });
-    }
+  function removeFreeDesireCard() {
+    const card = document.getElementById('agilo-free-desire-card');
+    if (card) card.remove();
   }
 
   function hideWebflowUnlockHeading() {
@@ -1297,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const wrap = el.closest('.checkbox-component, .w-checkbox') || el.closest('label') || el.parentElement;
     if (!wrap) return;
 
-    wrap.classList.add('agilo-free-lock', 'is-locked');
+    // Pas de classe visuelle sur les toggles Webflow — uniquement comportement
     forceToggleVisualOff(el);
     removeInjectedProBadges(wrap);
     requestAnimationFrame(() => forceToggleVisualOff(el));
@@ -1321,14 +1285,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function lockFreeSelect(selectEl, reason, source) {
     if (!selectEl) return;
-    selectEl.classList.add('agilo-free-locked-select');
     selectEl.setAttribute('aria-disabled', 'true');
     selectEl.setAttribute('tabindex', '-1');
-    // Bloquer l’ouverture native sans disabled (sinon clic mort)
     selectEl.style.pointerEvents = 'none';
 
     const hit = selectEl.parentElement || selectEl;
-    hit.classList.add('agilo-free-select-hit', 'agilo-free-lock', 'is-locked');
     removeInjectedProBadges(hit);
 
     if (hit.getAttribute('data-agilo-free-locked') === '1') return;
@@ -1347,7 +1308,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return /\+?\s*Créer un modèle/i.test(t);
     });
     if (!createModelLink) return;
-    createModelLink.classList.add('agilo-free-lock', 'is-locked');
     removeInjectedProBadges(createModelLink);
     if (createModelLink.getAttribute('data-agilo-free-locked') === '1') return;
     createModelLink.setAttribute('data-agilo-free-locked', '1');
@@ -1364,6 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function initFreeOptionLocks() {
     injectFreeUpsellCss();
+    removeFreeDesireCard();
     lockFreeCheckbox(speakersCheckbox, 'Identifiez automatiquement les intervenants.', 'toggle_speakers');
     lockFreeCheckbox(summaryCheckbox, 'Générez un compte rendu sur mesure.', 'toggle_summary');
     lockFreeCheckbox(formatCheckbox, 'Formatez la transcription pour une lecture claire.', 'toggle_format');
@@ -1391,11 +1352,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  mountFreeDesireCard();
+  removeFreeDesireCard();
   hideWebflowUnlockHeading();
   initFreeOptionLocks();
   [300, 1000].forEach(ms => {
     setTimeout(() => {
+      removeFreeDesireCard();
       hideWebflowUnlockHeading();
       initFreeOptionLocks();
     }, ms);
