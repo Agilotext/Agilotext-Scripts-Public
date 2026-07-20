@@ -1,10 +1,12 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
+ * v1.10 — hook AgiloMaestroContext.enrichFormData (toggle Joindre docs locked Free)
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Free.
  * Ne pas modifier free.js (version precedente, encore live).
+ * Branche Scripts-Public 1.10 — ne pas pousser sur @24cac26 / 1.09 sans QA.
  */
 
 // erreurs API job — mirror scripts/shared/agilo-api-error-format.js
@@ -955,7 +957,23 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('mailTranscription', 'true');
       payload = fd;
 
-      sendWithRetry(payload, 3, false)
+      // v1.10 — Maestro B+ : enrichissement optionnel (contextId)
+      function maybeEnrichAndSend(formData) {
+        var send = function (finalFd) { return sendWithRetry(finalFd, 3, false); };
+        if (!window.AgiloMaestroContext || typeof window.AgiloMaestroContext.enrichFormData !== 'function') {
+          return send(formData);
+        }
+        if (typeof window.AgiloMaestroContext.hasActiveContext === 'function' &&
+            window.AgiloMaestroContext.hasActiveContext()) {
+          try { formData.delete('doSummary'); } catch (e) { /* ignore */ }
+          formData.append('doSummary', 'true');
+        }
+        return Promise.resolve(window.AgiloMaestroContext.enrichFormData(formData)).then(function (fd2) {
+          return send(fd2 || formData);
+        });
+      }
+
+      maybeEnrichAndSend(fd)
         .then(data => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
 

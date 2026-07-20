@@ -1,12 +1,13 @@
 /**
- * maestro-context-ent.js — Agilotext Business / Maestro V1 B+
- * Branche Scripts-Public 1.10 (ne pas pousser sur @24cac26 / 1.09)
+ * maestro-context-ent.js — Maestro V1 B+ « Joindre des documents »
+ * Branche Scripts-Public 1.10 — partagé Free / Pro / Ent (ne pas pousser sur @24cac26 / 1.09)
  *
- * API Section 7 — Joindre des documents :
- *   - 1–5 contextFile répétés → POST /preAnalyzeContextDocument → 1 contextId
- *   - Limites : 10 Mo/doc, 5 docs, 50 Mo total
- *   - Envoi audio : contextId seul (jamais contextId + contextFile)
- *   - Toggle options + slot anti-saut + tooltip immédiat
+ * Tiers :
+ *   free/perso → toggle locked + upsell Business
+ *   pro        → 1 doc max + aperçu bêta
+ *   ent        → jusqu’à 5 docs + aperçu bêta
+ *
+ * API Section 7 : multi contextFile → 1 contextId ; upload audio = contextId seul.
  */
 (function (w) {
   'use strict';
@@ -21,13 +22,9 @@
     return;
   }
 
-  var MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 10 * 1024 * 1024;
-  var MAX_TOTAL_BYTES = typeof CFG.maxTotalBytes === 'number' ? CFG.maxTotalBytes : 50 * 1024 * 1024;
-  var MAX_DOCS = typeof CFG.maxDocs === 'number' ? CFG.maxDocs : 5;
-  var EDITION = CFG.edition || 'ent';
+  var CFG_MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 10 * 1024 * 1024;
+  var CFG_MAX_TOTAL = typeof CFG.maxTotalBytes === 'number' ? CFG.maxTotalBytes : 50 * 1024 * 1024;
   var ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
-  var PREF_KEY = 'agilo.maestro.contextBriefEnabled.' + EDITION;
-  var TOOLTIP = 'Ajoutez jusqu’à 5 documents (PDF, DOCX, TXT, 10 Mo chacun) : noms et termes guident le compte rendu.';
   var LABEL_EMPTY = 'Glissez un PDF, DOCX ou TXT ou&nbsp;<span class="browse">Parcourir</span>';
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
@@ -38,7 +35,7 @@
     error_maestro_user_not_allowed: 'Votre compte n’est pas autorisé à utiliser Maestro.',
     error_maestro_context_file_missing: 'Aucun document fourni.',
     error_maestro_context_file_empty: 'Document sans texte extractible.',
-    error_maestro_context_file_too_many: 'Maximum 5 documents.',
+    error_maestro_context_file_too_many: 'Maximum de documents atteint pour votre offre.',
     error_maestro_context_file_too_large: 'Un document dépasse 10 Mo.',
     error_maestro_context_total_too_large: 'Total des documents supérieur à 50 Mo.',
     error_maestro_context_pdf_too_many_pages: 'Plus de 50 pages PDF au total.',
@@ -58,13 +55,100 @@
     preAnalyzePromise: null,
     lastPreview: null,
     debounceTimer: null,
-    analyzeGen: 0
+    analyzeGen: 0,
+    edition: 'ent',
+    locked: false,
+    maxDocs: 5,
+    maxBytes: CFG_MAX_BYTES,
+    maxTotalBytes: CFG_MAX_TOTAL
   };
   var uidSeq = 0;
 
+  function resolveEdition() {
+    if (w.edition) return String(w.edition).toLowerCase();
+    var inp = document.querySelector('input[name="edition"]');
+    if (inp && inp.value) return String(inp.value).toLowerCase();
+    if (CFG.edition) return String(CFG.edition).toLowerCase();
+    return 'ent';
+  }
+
+  function tierLimits(edition) {
+    var ed = String(edition || 'ent').toLowerCase();
+    if (ed === 'free' || ed === 'perso' || ed === 'personal') {
+      return { edition: 'free', allowed: false, locked: true, maxDocs: 0, maxBytes: 0, maxTotalBytes: 0 };
+    }
+    if (ed === 'pro') {
+      return {
+        edition: 'pro',
+        allowed: true,
+        locked: false,
+        maxDocs: 1,
+        maxBytes: CFG_MAX_BYTES,
+        maxTotalBytes: CFG_MAX_BYTES
+      };
+    }
+    return {
+      edition: 'ent',
+      allowed: true,
+      locked: false,
+      maxDocs: typeof CFG.maxDocs === 'number' ? CFG.maxDocs : 5,
+      maxBytes: CFG_MAX_BYTES,
+      maxTotalBytes: CFG_MAX_TOTAL
+    };
+  }
+
+  function applyTier(tier) {
+    state.edition = tier.edition;
+    state.locked = !!tier.locked;
+    state.maxDocs = tier.maxDocs;
+    state.maxBytes = tier.maxBytes;
+    state.maxTotalBytes = tier.maxTotalBytes;
+  }
+
+  function prefKey() {
+    return 'agilo.maestro.contextBriefEnabled.' + state.edition;
+  }
+
+  function tooltipText() {
+    if (state.locked) {
+      return 'Joignez une convocation ou un brief pour ancrer le compte rendu — disponible avec l’offre Business.';
+    }
+    if (state.edition === 'pro') {
+      return '1 document (PDF, DOCX, TXT, 10 Mo). L’aperçu est indicatif ; seule une convocation avec liste de présences garantit les participants. Jusqu’à 5 documents en Business.';
+    }
+    return 'Ajoutez jusqu’à 5 documents (PDF, DOCX, TXT, 10 Mo chacun). L’aperçu est indicatif ; une convocation avec liste de présences garantit les participants.';
+  }
+
+  function helpText() {
+    if (state.edition === 'pro') {
+      return 'PDF, DOCX, TXT — 1 document (10 Mo max). Aperçu indicatif.';
+    }
+    return 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
+  }
+
+  function toggleLabel() {
+    if (state.locked) return 'Joindre des documents';
+    if (state.edition === 'pro') return 'Joindre un document';
+    return 'Joindre des documents';
+  }
+
+  function toggleSubLabel() {
+    if (state.locked) return 'Offre Business';
+    if (state.edition === 'pro') return '1 PDF/DOCX/TXT · aperçu indicatif';
+    return '';
+  }
+
+  function showUpgradeBusiness(reason) {
+    if (w.AgiloGate && typeof w.AgiloGate.showUpgrade === 'function') {
+      w.AgiloGate.showUpgrade('ent', reason || 'Joindre des documents');
+      return;
+    }
+    alert(reason || 'Passez à Business pour joindre des documents de contexte.');
+  }
+
   function readPref() {
     try {
-      var v = w.localStorage && w.localStorage.getItem(PREF_KEY);
+      var v = w.localStorage && w.localStorage.getItem(prefKey());
       if (v === '1' || v === 'true') return true;
       if (v === '0' || v === 'false') return false;
     } catch (e) { /* private mode */ }
@@ -73,7 +157,7 @@
 
   function writePref(on) {
     try {
-      if (w.localStorage) w.localStorage.setItem(PREF_KEY, on ? '1' : '0');
+      if (w.localStorage) w.localStorage.setItem(prefKey(), on ? '1' : '0');
     } catch (e) { /* ignore */ }
   }
 
@@ -199,7 +283,8 @@
 
   function validateFile(file) {
     if (!file) return 'Aucun fichier.';
-    if (file.size > MAX_BYTES) return 'Fichier trop volumineux (max 10 Mo).';
+    if (state.locked || !state.maxDocs) return 'Documents de contexte — offre Business.';
+    if (file.size > state.maxBytes) return 'Fichier trop volumineux (max 10 Mo).';
     if (!ACCEPT_EXT.test(file.name || '')) return 'Formats acceptés : PDF, DOCX, TXT.';
     return null;
   }
@@ -207,6 +292,9 @@
   function mapMaestroError(data) {
     var code = (data && (data.errorMessage || data.error || data.code)) || '';
     code = String(code);
+    if (code.indexOf('ocr') !== -1 && state.edition === 'pro') {
+      return 'OCR PDF scanné — disponible avec l’offre Business. Essayez un DOCX/TXT ou un PDF texte.';
+    }
     if (ERROR_MAP[code]) return ERROR_MAP[code];
     for (var key in ERROR_MAP) {
       if (code.indexOf(key) !== -1) return ERROR_MAP[key];
@@ -325,9 +413,22 @@
   function buildPreviewFromAnalysis(data) {
     var analysis = (data && data.analysis) || data || {};
     var parts = [];
-
+    var rosterDetected = analysis.rosterDetected === true || data.rosterDetected === true;
     var participants = analysis.participants || data.participants || [];
-    parts.push(renderChips(participants, 'Participants', 8, 'canonicalName'));
+
+    if (rosterDetected && participants.length) {
+      parts.push(renderChips(participants, 'Participants', 8, 'canonicalName'));
+    } else if (participants.length && state.edition === 'ent') {
+      parts.push(renderChips(participants, 'Participants', 8, 'canonicalName'));
+    } else {
+      parts.push(
+        '<div class="maestro-preview-note">' +
+          '<strong>Contexte</strong>' +
+          '<p class="text-color-grey" style="margin:.25rem 0 0;font-size:.75rem">' +
+            'Contexte métier pris en compte (pas de liste de présences).' +
+          '</p></div>'
+      );
+    }
 
     var agenda = analysis.agendaItems || data.agendaItems || [];
     if (agenda.length) parts.push(renderChips(agenda, 'Ordre du jour', 8));
@@ -349,7 +450,7 @@
     }
     showPreviewHtml(
       '<details class="maestro-preview-details">' +
-        '<summary>Aperçu (non modifiable)</summary>' +
+        '<summary>Aperçu indicatif <span class="maestro-beta-badge">bêta</span></summary>' +
         '<div class="maestro-preview-body">' + parts.join('') + '</div>' +
       '</details>'
     );
@@ -368,14 +469,14 @@
     var fd = new FormData();
     fd.append('username', email);
     fd.append('token', token);
-    fd.append('edition', EDITION);
+    fd.append('edition', state.edition);
     docs.forEach(function (d) {
       fd.append('contextFile', d.file, d.file.name);
     });
     console.log('[MaestroContext] preAnalyze', {
       username: email,
       files: docs.length,
-      edition: EDITION
+      edition: state.edition
     });
     return fetch(API_PREANALYZE, { method: 'POST', body: fd }).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (data) {
@@ -474,19 +575,28 @@
   function addFiles(fileList) {
     var arr = Array.prototype.slice.call(fileList || []);
     if (!arr.length) return;
+    if (state.locked) {
+      showUpgradeBusiness('Joindre des documents');
+      return;
+    }
 
     var errors = [];
+    var upgradeHint = '';
     arr.forEach(function (file) {
       var err = validateFile(file);
       if (err) {
         errors.push(displayFileName(file.name) + ' : ' + err);
         return;
       }
-      if (docs.length >= MAX_DOCS) {
-        errors.push('Maximum ' + MAX_DOCS + ' documents.');
+      if (docs.length >= state.maxDocs) {
+        if (state.edition === 'pro') {
+          upgradeHint = '1 document max — offre Pro. <button type="button" class="maestro-upgrade-hint" data-maestro-upgrade="ent">Jusqu’à 5 documents — passez à Business</button>';
+        } else {
+          errors.push('Maximum ' + state.maxDocs + ' documents.');
+        }
         return;
       }
-      if (totalBytes() + file.size > MAX_TOTAL_BYTES) {
+      if (totalBytes() + file.size > state.maxTotalBytes) {
         errors.push('Total supérieur à 50 Mo.');
         return;
       }
@@ -499,7 +609,9 @@
     });
 
     renderDocList();
-    if (errors.length) {
+    if (upgradeHint) {
+      showPreviewHtml('<p class="maestro-preview-fail">' + upgradeHint + '</p>');
+    } else if (errors.length) {
       showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(errors.join(' · ')) + '</p>');
     }
     if (docs.length) schedulePreAnalyze();
@@ -540,7 +652,7 @@
       for (var j = 0; j < docs.length; j++) {
         if (j !== idx) restSize += docs[j].file.size || 0;
       }
-      if (restSize + file.size > MAX_TOTAL_BYTES) {
+      if (restSize + file.size > state.maxTotalBytes) {
         showPreviewHtml('<p class="maestro-preview-fail">Total supérieur à 50 Mo.</p>');
         return;
       }
@@ -566,7 +678,7 @@
   }
 
   function hasActiveContext() {
-    return !!(state.enabled && docs.length > 0);
+    return !!(state.enabled && !state.locked && docs.length > 0);
   }
 
   /** Envoi audio : contextId seul (jamais contextFile → error_maestro_context_ambiguous) */
@@ -601,6 +713,7 @@
   }
 
   function setToggleChecked(on, persist) {
+    if (state.locked) on = false;
     state.enabled = !!on;
     var input = $('toggle-maestro-context');
     var visual = document.querySelector('[data-visual-for="toggle-maestro-context"] .checkbox_toggle') ||
@@ -611,14 +724,18 @@
       else visual.classList.remove('w--redirected-checked');
     }
     var row = $('maestro-context-option-row');
-    if (row) row.setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (row) {
+      row.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (state.locked) row.classList.add('is-disabled');
+      else row.classList.remove('is-disabled');
+    }
 
     var block = $('maestro-context-block');
     var slot = $('maestro-context-slot');
     if (block) {
-      block.hidden = !(on && isFileTabActive());
+      block.hidden = !(on && isFileTabActive() && !state.locked);
       if (slot) slot.hidden = block.hidden;
-      if (on) {
+      if (on && !state.locked) {
         syncBlockWidth();
         if (w.requestAnimationFrame) {
           w.requestAnimationFrame(function () {
@@ -631,7 +748,7 @@
       }
     }
     if (!on) clearAllDocs();
-    if (persist !== false) writePref(!!on);
+    if (persist !== false && !state.locked) writePref(!!on);
   }
 
   function findOptionsInsertPoint() {
@@ -655,28 +772,33 @@
       return null;
     }
 
+    var tip = tooltipText();
+    var sub = toggleSubLabel();
     var row = document.createElement('div');
-    row.className = 'checkbox-component';
+    row.className = 'checkbox-component' + (state.locked ? ' is-disabled' : '');
     row.id = 'maestro-context-option-row';
     row.setAttribute('role', 'button');
     row.setAttribute('tabindex', '0');
     row.setAttribute('aria-pressed', 'false');
-    row.setAttribute('aria-label', 'Joindre des documents');
+    row.setAttribute('aria-label', toggleLabel());
+    if (state.locked) row.setAttribute('aria-disabled', 'true');
     row.innerHTML =
       '<label data-visual-for="toggle-maestro-context" class="w-checkbox checkbox-field">' +
         '<div class="w-checkbox-input w-checkbox-input--inputType-custom checkbox_toggle"></div>' +
         '<input type="checkbox" id="toggle-maestro-context" name="toggle-maestro-context" ' +
           'data-option-type="maestroContext" data-name="toggle-maestro-context" ' +
+          (state.locked ? 'disabled ' : '') +
           'style="opacity:0;position:absolute;z-index:-1">' +
         '<span class="checkbox-label w-form-label" for="toggle-maestro-context">Off/ On</span>' +
       '</label>' +
       '<div class="text-size-small text-color-grey">' +
-        'Joindre des documents' +
+        '<span class="maestro-toggle-label">' + escapeHtml(toggleLabel()) + '</span>' +
+        (sub ? '<span class="maestro-tier-badge">' + escapeHtml(sub) + '</span>' : '') +
         '<span class="maestro-tip-wrap">' +
-          '<button type="button" class="maestro-tip" aria-label="' + escapeHtml(TOOLTIP) + '" ' +
+          '<button type="button" class="maestro-tip" aria-label="' + escapeHtml(tip) + '" ' +
             'aria-describedby="maestro-tip-bubble">?</button>' +
           '<span id="maestro-tip-bubble" class="maestro-tip-bubble" role="tooltip">' +
-            escapeHtml(TOOLTIP) +
+            escapeHtml(tip) +
           '</span>' +
         '</span>' +
       '</div>';
@@ -726,9 +848,16 @@
 
   function bindToggleRow(row) {
     if (!row) return;
-    function toggle() { setToggleChecked(!state.enabled, true); }
+    function toggle() {
+      if (state.locked) {
+        showUpgradeBusiness('Joindre des documents');
+        return;
+      }
+      setToggleChecked(!state.enabled, true);
+    }
     row.addEventListener('click', function (e) {
       if (e.target && e.target.closest && e.target.closest('.maestro-tip-wrap')) return;
+      if (e.target && e.target.closest && e.target.closest('[data-maestro-upgrade]')) return;
       e.preventDefault();
       toggle();
     });
@@ -747,13 +876,15 @@
     var row = $('maestro-context-option-row');
     if (row) row.style.display = isFileTabActive() ? '' : 'none';
     if (!block) return;
-    var show = state.enabled && isFileTabActive();
+    var show = state.enabled && !state.locked && isFileTabActive();
     block.hidden = !show;
     if (slot) slot.hidden = !show;
     if (show) syncBlockWidth();
   }
 
   function bindUi() {
+    applyTier(tierLimits(resolveEdition()));
+
     var block = $('maestro-context-block');
     var input = $('maestro-context-file');
     if (!block || !input) {
@@ -766,10 +897,17 @@
     }
 
     if (input.hasAttribute('name')) input.removeAttribute('name');
+    input.multiple = state.maxDocs > 1;
 
     var help = block.querySelector('.maestro-context-help');
-    if (help) {
-      help.textContent = 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
+    if (help) help.textContent = helpText();
+
+    var rgpd = block.querySelector('.maestro-context-rgpd');
+    if (!rgpd) {
+      rgpd = document.createElement('p');
+      rgpd.className = 'maestro-context-rgpd text-size-small text-color-grey';
+      rgpd.textContent = 'Document traité pour enrichir votre compte rendu ; données nominatives possibles. Usage conforme à votre compte.';
+      block.appendChild(rgpd);
     }
 
     var row = injectToggleRow();
@@ -821,6 +959,13 @@
       });
     }
 
+    document.addEventListener('click', function (e) {
+      var up = e.target && e.target.closest ? e.target.closest('[data-maestro-upgrade]') : null;
+      if (!up) return;
+      e.preventDefault();
+      showUpgradeBusiness('Joindre des documents');
+    });
+
     document.querySelectorAll('.source-tab[data-tab]').forEach(function (tab) {
       tab.addEventListener('click', function () {
         setTimeout(syncVisibility, 0);
@@ -831,22 +976,24 @@
       if (state.enabled) syncBlockWidth();
     });
 
-    setToggleChecked(readPref(), false);
+    setToggleChecked(state.locked ? false : readPref(), false);
     syncVisibility();
 
     w.AgiloMaestroContext = {
       enrichFormData: enrichFormData,
       hasActiveContext: hasActiveContext,
-      // Legacy no-op : multi-doc via preAnalyze (Section 7), plus d’attachments post-job
       uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
       clear: function () { clearAllDocs(); },
       getState: function () {
         return {
           enabled: state.enabled,
+          locked: state.locked,
+          edition: state.edition,
+          maxDocs: state.maxDocs,
           docsCount: docs.length,
           hasFile: docs.length > 0,
           contextId: state.contextId,
-          prefKey: PREF_KEY
+          prefKey: prefKey()
         };
       }
     };
