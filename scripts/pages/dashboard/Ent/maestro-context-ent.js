@@ -2,17 +2,15 @@
  * maestro-context-ent.js — Agilotext Business / Maestro V1 B+
  * Branche Scripts-Public 1.10 (ne pas pousser sur @24cac26 / 1.09)
  *
- * Feature : « Joindre des documents »
- *   - Toggle injecté dans .options-wrapper (même markup que speakers / CR)
- *   - Doc #1 (primaire) → preAnalyze → contextId → enrichFormData
- *   - Docs #2..N → addJobContextAttachment après upload (job_id)
- *   - Fallback 1 doc si route attachments absente
+ * Feature : « Joindre des documents » (polish v2)
+ *   - Toggle injecté dans .options-wrapper
+ *   - Drop dans #maestro-context-slot (avant .wrapper-pro) — ne décale pas les toggles
+ *   - Doc #1 (primaire) → preAnalyze → contextId
+ *   - Docs #2..N → addJobContextAttachment après upload (jamais preAnalyze — contrat API V1)
+ *   - Tooltip ? immédiat (hover + tap)
  *
- * Auth = même pattern que sendMultipleAudio :
- *   resolveMemberEmail → ensureValidToken → FormData username+token+edition+…
- *   retry 1× sur error_invalid_token
- *
- * Limites : PDF/DOCX/TXT, 20 Mo max (MAESTRO_CONTEXT_MAX_BYTES)
+ * Auth = sendMultipleAudio : username + token + edition
+ * Limites : PDF/DOCX/TXT, 20 Mo max
  */
 (function (w) {
   'use strict';
@@ -33,6 +31,8 @@
   var ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
   var PREF_KEY = 'agilo.maestro.contextBriefEnabled.' + EDITION;
   var TOOLTIP = 'Ajoutez un document (PDF, DOCX, TXT, 20 Mo) : ses noms et termes guident le compte rendu.';
+  var LABEL_EMPTY = 'Glissez un PDF, DOCX ou TXT ou&nbsp;<span class="browse">Parcourir</span>';
+  var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
   var API_ATTACHMENT = 'https://api.agilotext.com/api/v1/addJobContextAttachment';
 
@@ -98,6 +98,17 @@
       .replace(/"/g, '&quot;');
   }
 
+  /** Best-effort fix mojibake (ex. prÃªt → prêt) */
+  function displayFileName(name) {
+    var n = String(name || '');
+    if (/Ã.|Â./.test(n)) {
+      try {
+        return decodeURIComponent(escape(n));
+      } catch (e) { /* keep original */ }
+    }
+    return n;
+  }
+
   function formatSize(bytes) {
     if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, '') + ' Mo';
     return Math.round(bytes / 1024) + ' Ko';
@@ -114,27 +125,37 @@
     return docs.filter(function (d) { return d.role === 'extra'; });
   }
 
-  function syncDropHasFile() {
+  function syncDropMode() {
     var drop = $('maestro-context-drop');
-    if (drop) {
-      if (docs.length) drop.classList.add('has-file');
-      else drop.classList.remove('has-file');
+    var label = $('maestro-context-drop-label');
+    if (!drop || !label) return;
+    if (docs.length) {
+      drop.classList.add('has-file', 'is-compact');
+      label.innerHTML = LABEL_COMPACT;
+    } else {
+      drop.classList.remove('has-file', 'is-compact');
+      label.innerHTML = LABEL_EMPTY;
     }
   }
 
   function syncBlockWidth() {
     var block = $('maestro-context-block');
+    var slot = $('maestro-context-slot');
     if (!block || block.hidden) return;
     var pond = document.querySelector('.uploader .filepond--root') ||
       document.querySelector('.uploader');
-    if (pond) {
-      var wPx = pond.getBoundingClientRect().width;
-      if (wPx > 40) {
-        block.style.maxWidth = Math.round(wPx) + 'px';
-        block.style.width = '100%';
+    var wPx = 0;
+    if (pond) wPx = pond.getBoundingClientRect().width;
+    if (wPx > 40) {
+      block.style.maxWidth = Math.round(wPx) + 'px';
+      block.style.width = '100%';
+      if (slot) {
+        slot.style.maxWidth = Math.round(wPx) + 'px';
+        slot.style.width = '100%';
+        slot.style.marginLeft = 'auto';
+        slot.style.marginRight = 'auto';
       }
     }
-    block.style.margin = '.5rem auto 0';
   }
 
   function forceSummaryOn() {
@@ -152,12 +173,18 @@
     return null;
   }
 
-  function renderChips(list, label) {
+  function renderChips(list, label, maxShow) {
     if (!list || !list.length) return '';
-    var chips = list.slice(0, 12).map(function (t) {
+    var max = typeof maxShow === 'number' ? maxShow : 8;
+    var shown = list.slice(0, max);
+    var rest = list.length - shown.length;
+    var chips = shown.map(function (t) {
       var labelText = typeof t === 'string' ? t : (t && (t.name || t.nom || t.label)) || String(t);
       return '<span class="maestro-chip">' + escapeHtml(String(labelText)) + '</span>';
     }).join('');
+    if (rest > 0) {
+      chips += '<span class="maestro-chip maestro-chip-more">+' + rest + '</span>';
+    }
     return '<div><strong>' + escapeHtml(label) + '</strong><div class="maestro-chips">' + chips + '</div></div>';
   }
 
@@ -173,24 +200,32 @@
     preview.hidden = false;
   }
 
+  function badgeHtml(d) {
+    if (d.status === 'loading') {
+      return '<div class="maestro-badge is-loading">' +
+        '<span class="maestro-spinner" aria-hidden="true"></span>' +
+        '<span>' + escapeHtml(d.statusText || 'Analyse…') + '</span></div>';
+    }
+    var cls = 'maestro-badge';
+    if (d.status === 'ok') cls += ' is-ok';
+    else if (d.status === 'warn') cls += ' is-warn';
+    else if (d.status === 'fail') cls += ' is-fail';
+    else cls += ' is-queued';
+    return '<div class="' + cls + '">' + escapeHtml(d.statusText || '') + '</div>';
+  }
+
   function renderDocList() {
     var list = $('maestro-doc-list');
     if (!list) return;
     if (!docs.length) {
       list.hidden = true;
       list.innerHTML = '';
+      syncDropMode();
+      syncBlockWidth();
       return;
     }
     list.hidden = false;
     list.innerHTML = docs.map(function (d) {
-      var badgeClass = 'maestro-status';
-      var dotClass = 'maestro-status-dot';
-      if (d.status === 'loading') { badgeClass += ' is-loading'; dotClass += ' is-loading'; }
-      else if (d.status === 'ok') { badgeClass += ' is-ok'; dotClass += ' is-ok'; }
-      else if (d.status === 'warn') { badgeClass += ' is-warn'; dotClass += ' is-warn'; }
-      else if (d.status === 'fail') { badgeClass += ' is-fail'; dotClass += ' is-fail'; }
-      else { dotClass += ' is-queued'; }
-
       var actions = '';
       if (d.role === 'primary') {
         actions =
@@ -204,14 +239,13 @@
       return (
         '<li class="maestro-doc-item" data-id="' + d.id + '">' +
           '<div class="maestro-doc-meta">' +
-            '<span class="maestro-doc-name">' + escapeHtml(d.file.name) + '</span>' +
-            '<span class="maestro-doc-size">' + escapeHtml(formatSize(d.file.size)) +
-              (d.role === 'primary' ? ' · document principal' : ' · pièce jointe') +
-            '</span>' +
-            '<div class="' + badgeClass + '">' +
-              '<span class="' + dotClass + '" aria-hidden="true"></span>' +
-              '<span>' + escapeHtml(d.statusText || '') + '</span>' +
+            '<div class="maestro-doc-line1">' +
+              '<span class="maestro-doc-name" title="' + escapeHtml(displayFileName(d.file.name)) + '">' +
+                escapeHtml(displayFileName(d.file.name)) +
+              '</span>' +
+              '<span class="maestro-doc-size">' + escapeHtml(formatSize(d.file.size)) + '</span>' +
             '</div>' +
+            badgeHtml(d) +
           '</div>' +
           '<div class="maestro-doc-actions">' + actions + '</div>' +
         '</li>'
@@ -223,6 +257,8 @@
         '<li class="maestro-doc-item"><p class="maestro-preview-warn">' +
         escapeHtml(state.attachmentsNote) + '</p></li>');
     }
+    syncDropMode();
+    syncBlockWidth();
   }
 
   function setDocStatus(id, status, text) {
@@ -243,7 +279,6 @@
     state.attachmentsNote = '';
     var input = $('maestro-context-file');
     if (input) input.value = '';
-    syncDropHasFile();
     renderDocList();
     showPreviewHtml('');
   }
@@ -260,7 +295,7 @@
     if (wasPrimary && docs.length) {
       docs[0].role = 'primary';
       docs[0].status = 'loading';
-      docs[0].statusText = 'Analyse du document…';
+      docs[0].statusText = 'Analyse…';
       docs[0].contextId = null;
       state.preAnalyzePromise = runPreAnalyze(docs[0]);
     } else if (!docs.length) {
@@ -270,7 +305,6 @@
     } else if (wasPrimary) {
       showPreviewHtml('');
     }
-    syncDropHasFile();
     renderDocList();
   }
 
@@ -278,20 +312,27 @@
     doc.contextId = data.contextId || data.contextDocumentId || null;
     state.lastPreview = data;
     doc.status = 'ok';
-    doc.statusText = 'Document analysé';
+    doc.statusText = 'Analysé';
     renderDocList();
 
-    var parts = [];
     var participants = data.participants || data.participantNames || [];
     var terms = data.terms || data.wordBoost || data.keywords || data.wordBoostCandidates || [];
-    var topics = data.topics || [];
-    if (participants.length) parts.push(renderChips(participants, 'Participants'));
-    if (topics.length) parts.push(renderChips(topics, 'Thèmes'));
-    if (terms.length) parts.push(renderChips(terms, 'Termes'));
+    var parts = [];
+    if (participants.length) parts.push(renderChips(participants, 'Participants', 8));
+    if (terms.length) parts.push(renderChips(terms, 'Termes', 6));
     if (!parts.length && data.summary) {
       parts.push('<p class="text-color-grey">' + escapeHtml(String(data.summary).slice(0, 220)) + '</p>');
     }
-    showPreviewHtml(parts.join(''));
+    if (!parts.length) {
+      showPreviewHtml('');
+      return doc.contextId;
+    }
+    showPreviewHtml(
+      '<details class="maestro-preview-details">' +
+        '<summary>Aperçu (non modifiable)</summary>' +
+        '<div class="maestro-preview-body">' + parts.join('') + '</div>' +
+      '</details>'
+    );
     return doc.contextId;
   }
 
@@ -321,16 +362,16 @@
   function runPreAnalyze(doc) {
     var email = resolveMemberEmail();
     if (!email) {
-      setDocStatus(doc.id, 'warn', 'Email introuvable — fichier joint à l’envoi');
+      setDocStatus(doc.id, 'warn', 'Email introuvable — joint à l’envoi');
       return Promise.resolve(null);
     }
 
-    setDocStatus(doc.id, 'loading', 'Analyse du document…');
+    setDocStatus(doc.id, 'loading', 'Analyse…');
 
     return ensureTokenForEmail(email, false).then(function (ok) {
       var token = w.globalToken;
       if (!ok || !token) {
-        setDocStatus(doc.id, 'warn', 'Connectez-vous pour analyser — fichier joint à l’envoi');
+        setDocStatus(doc.id, 'warn', 'Connectez-vous — joint à l’envoi');
         return null;
       }
 
@@ -342,7 +383,7 @@
           return ensureTokenForEmail(email, true).then(function (ok2) {
             var token2 = w.globalToken;
             if (!ok2 || !token2) {
-              setDocStatus(doc.id, 'warn', 'Session expirée — fichier joint à l’envoi');
+              setDocStatus(doc.id, 'warn', 'Session expirée — joint à l’envoi');
               return null;
             }
             return postPreAnalyze(doc.file, email, token2).then(function (r2) {
@@ -353,7 +394,7 @@
 
         if (!res.ok || !data || data.status !== 'OK') {
           var msg = (data && (data.userErrorMessage || data.errorMessage || data.message)) ||
-            'Analyse impossible — fichier joint à l’envoi';
+            'Analyse impossible — joint à l’envoi';
           setDocStatus(doc.id, 'warn', msg);
           showPreviewHtml('<p class="maestro-preview-warn">' + escapeHtml(msg) + '</p>');
           return null;
@@ -364,12 +405,13 @@
       return postPreAnalyze(doc.file, email, token).then(function (result) {
         return handleResult(result, true);
       }).catch(function () {
-        setDocStatus(doc.id, 'warn', 'Réseau indisponible — fichier joint à l’envoi');
+        setDocStatus(doc.id, 'warn', 'Réseau indisponible — joint à l’envoi');
         return null;
       });
     });
   }
 
+  // Docs #2..N : jamais preAnalyze (contrat API V1 — 1 contextId primaire)
   function addFiles(fileList) {
     var arr = Array.prototype.slice.call(fileList || []);
     if (!arr.length) return;
@@ -378,7 +420,7 @@
     arr.forEach(function (file) {
       var err = validateFile(file);
       if (err) {
-        errors.push(file.name + ' : ' + err);
+        errors.push(displayFileName(file.name) + ' : ' + err);
         return;
       }
       if (docs.length >= MAX_DOCS) {
@@ -391,7 +433,7 @@
         file: file,
         role: role,
         status: role === 'primary' ? 'loading' : 'queued',
-        statusText: role === 'primary' ? 'Analyse du document…' : 'Joint (non analysé)',
+        statusText: role === 'primary' ? 'Analyse…' : 'Joint à l’envoi',
         contextId: null,
         attachmentId: null
       };
@@ -402,7 +444,6 @@
       }
     });
 
-    syncDropHasFile();
     renderDocList();
     if (errors.length) {
       showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(errors.join(' · ')) + '</p>');
@@ -413,7 +454,6 @@
     var input = $('maestro-context-file');
     if (!input) return;
     input.value = '';
-    // temporary single-file pick for replace
     var prevMultiple = input.multiple;
     input.multiple = false;
     function onChange() {
@@ -435,15 +475,19 @@
           file: file,
           role: 'primary',
           status: 'loading',
-          statusText: 'Analyse du document…',
+          statusText: 'Analyse…',
           contextId: null,
           attachmentId: null
         };
         docs.unshift(entry);
-        // demote any previous accidental primary
-        for (var i = 1; i < docs.length; i++) docs[i].role = 'extra';
+        for (var i = 1; i < docs.length; i++) {
+          docs[i].role = 'extra';
+          if (docs[i].status === 'ok' && !docs[i].contextId) {
+            docs[i].status = 'queued';
+            docs[i].statusText = 'Joint à l’envoi';
+          }
+        }
         forceSummaryOn();
-        syncDropHasFile();
         renderDocList();
         state.preAnalyzePromise = runPreAnalyze(entry);
         console.log('[MaestroContext] doc principal remplacé');
@@ -500,10 +544,6 @@
     });
   }
 
-  /**
-   * Appelé par upload_ent_v2 après succès (job_id connu).
-   * Envoie les docs #2..N via addJobContextAttachment ; fallback propre si 404.
-   */
   function uploadAttachments(jobId) {
     var extras = extraDocs();
     if (!jobId || !extras.length) {
@@ -534,7 +574,7 @@
       extras.forEach(function (doc) {
         chain = chain.then(function (acc) {
           if (acc.fallback) return acc;
-          setDocStatus(doc.id, 'loading', 'Envoi de la pièce jointe…');
+          setDocStatus(doc.id, 'loading', 'Envoi…');
           return postAttachment(jobId, doc.file, email, token).then(function (result) {
             var res = result.res;
             var data = result.data;
@@ -549,14 +589,14 @@
               return { ok: false, fallback: true, count: acc.count };
             }
             if (!res.ok || !data || (data.status && data.status !== 'OK')) {
-              setDocStatus(doc.id, 'warn', 'Envoi pièce jointe échoué');
+              setDocStatus(doc.id, 'warn', 'Envoi échoué');
               return { ok: false, count: acc.count };
             }
             doc.attachmentId = (data.attachmentId != null) ? String(data.attachmentId) : 'ok';
-            setDocStatus(doc.id, 'ok', 'Joint (non analysé)');
+            setDocStatus(doc.id, 'ok', 'Joint à l’envoi');
             return { ok: true, count: acc.count + 1 };
           }).catch(function () {
-            setDocStatus(doc.id, 'warn', 'Envoi pièce jointe échoué');
+            setDocStatus(doc.id, 'warn', 'Envoi échoué');
             return { ok: false, count: acc.count };
           });
         });
@@ -589,8 +629,10 @@
     if (row) row.setAttribute('aria-pressed', on ? 'true' : 'false');
 
     var block = $('maestro-context-block');
+    var slot = $('maestro-context-slot');
     if (block) {
       block.hidden = !(on && isFileTabActive());
+      if (slot) slot.hidden = block.hidden;
       if (on) {
         setTimeout(syncBlockWidth, 0);
         setTimeout(syncBlockWidth, 200);
@@ -630,7 +672,6 @@
     row.setAttribute('tabindex', '0');
     row.setAttribute('aria-pressed', 'false');
     row.setAttribute('aria-label', 'Joindre des documents');
-    row.title = TOOLTIP;
     row.innerHTML =
       '<label data-visual-for="toggle-maestro-context" class="w-checkbox checkbox-field">' +
         '<div class="w-checkbox-input w-checkbox-input--inputType-custom checkbox_toggle"></div>' +
@@ -641,29 +682,76 @@
       '</label>' +
       '<div class="text-size-small text-color-grey">' +
         'Joindre des documents' +
-        '<span class="maestro-tip" title="' + escapeHtml(TOOLTIP) + '" aria-label="' + escapeHtml(TOOLTIP) + '">?</span>' +
+        '<span class="maestro-tip-wrap">' +
+          '<button type="button" class="maestro-tip" aria-label="' + escapeHtml(TOOLTIP) + '" ' +
+            'aria-describedby="maestro-tip-bubble">?</button>' +
+          '<span id="maestro-tip-bubble" class="maestro-tip-bubble" role="tooltip">' +
+            escapeHtml(TOOLTIP) +
+          '</span>' +
+        '</span>' +
       '</div>';
 
     insertBefore.parentNode.insertBefore(row, insertBefore);
     return row;
   }
 
-  function placeBlockUnderToggle(row) {
+  /** Slot avant .wrapper-pro — ne pas afterend sur la row (évite d’étirer les options) */
+  function placeBlockInSlot() {
     var block = $('maestro-context-block');
-    if (!block || !row) return;
-    row.insertAdjacentElement('afterend', block);
+    var insertBefore = findOptionsInsertPoint();
+    if (!block) return null;
+
+    var slot = $('maestro-context-slot');
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = 'maestro-context-slot';
+      if (insertBefore && insertBefore.parentNode) {
+        insertBefore.parentNode.insertBefore(slot, insertBefore);
+      } else if (block.parentNode) {
+        block.parentNode.insertBefore(slot, block);
+      }
+    } else if (insertBefore && slot.nextSibling !== insertBefore && slot.parentNode !== insertBefore.parentNode) {
+      insertBefore.parentNode.insertBefore(slot, insertBefore);
+    } else if (insertBefore && slot.parentNode === insertBefore.parentNode && slot !== insertBefore.previousSibling) {
+      insertBefore.parentNode.insertBefore(slot, insertBefore);
+    }
+
+    if (block.parentNode !== slot) {
+      slot.appendChild(block);
+    }
+    return slot;
+  }
+
+  function bindTip(row) {
+    if (!row) return;
+    var wrap = row.querySelector('.maestro-tip-wrap');
+    var tip = row.querySelector('.maestro-tip');
+    if (!wrap || !tip) return;
+
+    tip.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      wrap.classList.toggle('is-open');
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!wrap.classList.contains('is-open')) return;
+      if (wrap.contains(e.target)) return;
+      wrap.classList.remove('is-open');
+    });
   }
 
   function bindToggleRow(row) {
     if (!row) return;
     function toggle() { setToggleChecked(!state.enabled, true); }
     row.addEventListener('click', function (e) {
-      if (e.target && e.target.closest && e.target.closest('.maestro-tip')) return;
+      if (e.target && e.target.closest && e.target.closest('.maestro-tip-wrap')) return;
       e.preventDefault();
       toggle();
     });
     row.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') {
+        if (e.target && e.target.closest && e.target.closest('.maestro-tip')) return;
         e.preventDefault();
         toggle();
       }
@@ -672,11 +760,14 @@
 
   function syncVisibility() {
     var block = $('maestro-context-block');
+    var slot = $('maestro-context-slot');
     var row = $('maestro-context-option-row');
     if (row) row.style.display = isFileTabActive() ? '' : 'none';
     if (!block) return;
-    block.hidden = !(state.enabled && isFileTabActive());
-    if (state.enabled && isFileTabActive()) syncBlockWidth();
+    var show = state.enabled && isFileTabActive();
+    block.hidden = !show;
+    if (slot) slot.hidden = !show;
+    if (show) syncBlockWidth();
   }
 
   function bindUi() {
@@ -694,9 +785,10 @@
     if (input.hasAttribute('name')) input.removeAttribute('name');
 
     var row = injectToggleRow();
+    placeBlockInSlot();
     if (row) {
-      placeBlockUnderToggle(row);
       bindToggleRow(row);
+      bindTip(row);
     }
 
     input.addEventListener('change', function () {
