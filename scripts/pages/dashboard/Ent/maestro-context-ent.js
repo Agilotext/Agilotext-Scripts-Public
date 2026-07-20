@@ -101,11 +101,16 @@
   /** Best-effort fix mojibake (ex. prÃªt → prêt) */
   function displayFileName(name) {
     var n = String(name || '');
-    if (/Ã.|Â./.test(n)) {
-      try {
-        return decodeURIComponent(escape(n));
-      } catch (e) { /* keep original */ }
-    }
+    if (!/Ã.|Â./.test(n)) return n;
+    try {
+      var bytes = new Uint8Array(n.length);
+      for (var i = 0; i < n.length; i++) bytes[i] = n.charCodeAt(i) & 0xff;
+      var fixed = new TextDecoder('utf-8').decode(bytes);
+      if (fixed && fixed.indexOf('\ufffd') === -1) return fixed;
+    } catch (e1) { /* ignore */ }
+    try {
+      return decodeURIComponent(escape(n));
+    } catch (e2) { /* keep original */ }
     return n;
   }
 
@@ -141,21 +146,42 @@
   function syncBlockWidth() {
     var block = $('maestro-context-block');
     var slot = $('maestro-context-slot');
-    if (!block || block.hidden) return;
+    var row = $('maestro-context-option-row');
+    if (!block || block.hidden || !slot) return;
+
+    // Slot ne contribue PAS à la largeur du parent (évite le saut des toggles)
+    slot.style.width = '0';
+    slot.style.maxWidth = '0';
+    slot.style.minWidth = '0';
+    slot.style.overflow = 'visible';
+    slot.style.marginLeft = '0';
+    slot.style.marginRight = '0';
+
     var pond = document.querySelector('.uploader .filepond--root') ||
       document.querySelector('.uploader');
-    var wPx = 0;
-    if (pond) wPx = pond.getBoundingClientRect().width;
-    if (wPx > 40) {
-      block.style.maxWidth = Math.round(wPx) + 'px';
-      block.style.width = '100%';
-      if (slot) {
-        slot.style.maxWidth = Math.round(wPx) + 'px';
-        slot.style.width = '100%';
-        slot.style.marginLeft = 'auto';
-        slot.style.marginRight = 'auto';
-      }
+    var wPx = pond ? pond.getBoundingClientRect().width : 0;
+    if (wPx < 40) wPx = Math.min(640, (w.innerWidth || 800) - 32);
+    wPx = Math.round(wPx);
+
+    block.style.width = wPx + 'px';
+    block.style.maxWidth = 'calc(100vw - 2rem)';
+    block.style.position = 'relative';
+    block.style.left = '0';
+    block.style.right = 'auto';
+    block.style.transform = 'none';
+    block.style.marginRight = '0';
+
+    // Centre le drop sur l’axe de la colonne options (pas sur le bord gauche)
+    var anchor = (row && row.parentElement) || slot.parentElement;
+    if (!anchor) {
+      block.style.marginLeft = '0';
+      return;
     }
+    var anchorRect = anchor.getBoundingClientRect();
+    var slotRect = slot.getBoundingClientRect();
+    var centerX = anchorRect.left + anchorRect.width / 2;
+    var targetLeft = centerX - wPx / 2;
+    block.style.marginLeft = Math.round(targetLeft - slotRect.left) + 'px';
   }
 
   function forceSummaryOn() {
@@ -634,8 +660,15 @@
       block.hidden = !(on && isFileTabActive());
       if (slot) slot.hidden = block.hidden;
       if (on) {
-        setTimeout(syncBlockWidth, 0);
-        setTimeout(syncBlockWidth, 200);
+        syncBlockWidth();
+        if (w.requestAnimationFrame) {
+          w.requestAnimationFrame(function () {
+            syncBlockWidth();
+            w.requestAnimationFrame(syncBlockWidth);
+          });
+        }
+        setTimeout(syncBlockWidth, 50);
+        setTimeout(syncBlockWidth, 250);
       }
     }
     if (!on) clearAllDocs();
