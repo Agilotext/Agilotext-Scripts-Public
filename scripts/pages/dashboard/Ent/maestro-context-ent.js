@@ -139,11 +139,50 @@
   }
 
   function showUpgradeBusiness(reason) {
-    if (w.AgiloGate && typeof w.AgiloGate.showUpgrade === 'function') {
-      w.AgiloGate.showUpgrade('ent', reason || 'Joindre des documents');
+    var msg = reason || 'Joindre des documents';
+    if (w.AgiloFreeUpgrade && typeof w.AgiloFreeUpgrade.show === 'function') {
+      w.AgiloFreeUpgrade.show({ minPlan: 'ent', reason: msg, source: 'maestro_docs' });
       return;
     }
-    alert(reason || 'Passez à Business pour joindre des documents de contexte.');
+    if (w.AgiloGate && typeof w.AgiloGate.showUpgrade === 'function') {
+      w.AgiloGate.showUpgrade('ent', msg);
+      return;
+    }
+    // Fallback modal légère (même pattern Memberstack) si free_v2 pas chargé
+    if (typeof document === 'undefined') {
+      alert(msg || 'Passez à Business pour joindre des documents de contexte.');
+      return;
+    }
+    var prev = document.getElementById('agilo-free-upgrade-modal');
+    if (prev) prev.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'agilo-free-upgrade-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    var panel = document.createElement('div');
+    panel.style.cssText = 'background:#fff;border-radius:16px;padding:2rem;width:min(460px,92vw);text-align:center;font-family:inherit';
+    panel.innerHTML = '<h3 style="margin:0 0 .6rem;font-size:1.1rem">Passez en Business…</h3>'
+      + '<p style="margin:0 0 1.2rem;color:#525252;font-size:.88rem">' + String(msg).replace(/</g, '&lt;') + '</p>';
+    var btnBiz = document.createElement('button');
+    btnBiz.type = 'button';
+    btnBiz.setAttribute('data-ms-price:update', 'prc_business-1-seat-aj1780sye');
+    btnBiz.style.cssText = 'width:100%;padding:.75rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-weight:600;cursor:pointer';
+    btnBiz.textContent = 'Passer en Business (100% français)';
+    btnBiz.onclick = function () {
+      overlay.remove();
+      var existing = document.querySelector('.ms-upgrade-business, [data-ms-price\\:update^="prc_business-"]');
+      if (existing && existing !== btnBiz) { existing.click(); return; }
+      w.location.href = '/auth/sign-up-ent';
+    };
+    var later = document.createElement('button');
+    later.type = 'button';
+    later.style.cssText = 'display:block;margin:.8rem auto 0;background:none;border:none;color:#888;text-decoration:underline;cursor:pointer';
+    later.textContent = 'Plus tard';
+    later.onclick = function () { overlay.remove(); };
+    panel.appendChild(btnBiz);
+    panel.appendChild(later);
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
   }
 
   function readPref() {

@@ -1,12 +1,14 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
- * v1.10 — hook AgiloMaestroContext.enrichFormData (toggle Joindre docs locked Free)
+ * v1.10 — upsell code (carte + locks + modal Memberstack Pro/Business) ; hook Maestro enrichFormData
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Free.
  * Ne pas modifier free.js (version precedente, encore live).
  * Branche Scripts-Public 1.10 — ne pas pousser sur @24cac26 / 1.09 sans QA.
+ *
+ * Prérequis Webflow : supprimer le div `blocker` hover (voir WEBFLOW_FREE_DELETE_BLOCKER.md).
  */
 
 // erreurs API job — mirror scripts/shared/agilo-api-error-format.js
@@ -121,6 +123,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showFreeUpgradeMessage() {
+      if (window.AgiloFreeUpgrade && typeof window.AgiloFreeUpgrade.show === 'function') {
+        window.AgiloFreeUpgrade.show({ minPlan: 'pro', reason: 'Envoi multiple', source: 'multi_upload' });
+        return;
+      }
       if (window.AgiloGate && typeof window.AgiloGate.showUpgrade === 'function') {
         window.AgiloGate.showUpgrade('pro', 'Envoi multiple');
         return;
@@ -1057,41 +1063,286 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setSummaryUI('hidden');
 
-  // ⭐ BLOCAGE YOUTUBE POUR FREE : Fonctionnalité réservée aux abonnements Pro & Business
-  const TIMEOUT_TOAST = 6000;
+  /* ─── Free upsell v3 : modal Memberstack + carte désir + locks ─── */
+  const MS_PRICE_PRO = 'prc_pro-qn9f07eb';
+  const MS_PRICE_BUSINESS = 'prc_business-1-seat-aj1780sye';
 
-  const toast = (msg, extra = null, ms = TIMEOUT_TOAST) => {
-    const el = Object.assign(document.createElement("div"), { innerHTML: msg });
-    el.style.cssText = "position:fixed;left:20px;bottom:20px;background:#111;color:#fff;padding:8px 14px;border-radius:6px;font-size:14px;z-index:999999;opacity:0;transition:opacity .25s;max-width:92vw;box-shadow:0 8px 24px rgba(0,0,0,.25)";
-    if (extra) el.appendChild(extra);
-    document.body.appendChild(el);
-    requestAnimationFrame(() => el.style.opacity = 1);
-    if (ms !== Infinity) setTimeout(() => { el.style.opacity = 0; setTimeout(() => el.remove(), 350) }, ms);
-    return el;
-  };
+  function injectFreeUpsellCss() {
+    if (document.getElementById('agilo-free-upsell-css')) return;
+    const style = document.createElement('style');
+    style.id = 'agilo-free-upsell-css';
+    style.textContent = [
+      '@keyframes agiloFreeFadeIn{from{opacity:0}to{opacity:1}}',
+      '@keyframes agiloFreeSlideUp{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}',
+      /* Défense : ancien overlay Webflow tant que Flo ne l’a pas supprimé */
+      '.blocker,.blocker-overlay{display:none!important;pointer-events:none!important;opacity:0!important}',
+      '#agilo-free-desire-card{margin:0 0 12px;padding:14px 16px;border:1px solid #d6e0f0;border-radius:12px;background:linear-gradient(135deg,#f7faff 0%,#eef4ff 100%);font-family:inherit}',
+      '#agilo-free-desire-card .agilo-free-desire-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}',
+      '#agilo-free-desire-card h3{margin:0 0 4px;font-size:1rem;font-weight:700;color:#0f274f}',
+      '#agilo-free-desire-card p{margin:0;font-size:.85rem;line-height:1.4;color:#4a5d7a}',
+      '#agilo-free-desire-card button{flex-shrink:0;border:none;border-radius:10px;background:#174a96;color:#fff;font:inherit;font-weight:600;font-size:.88rem;padding:.65rem 1rem;cursor:pointer}',
+      '#agilo-free-desire-card button:hover{background:#12397a}',
+      '.agilo-free-lock.is-locked{position:relative;opacity:.92}',
+      '.agilo-free-lock.is-locked .agilo-pro-badge{display:inline-flex;align-items:center;margin-left:8px;padding:2px 8px;border-radius:999px;background:#174a96;color:#fff;font-size:.68rem;font-weight:700;letter-spacing:.02em;vertical-align:middle}',
+      '.agilo-free-lock.is-locked input[type="checkbox"],.agilo-free-lock.is-locked select,.agilo-free-lock.is-locked .w-checkbox-input{pointer-events:none}',
+      '#agilo-free-upgrade-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFreeFadeIn .2s ease}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloFreeSlideUp .25s ease}',
+      '#agilo-free-upgrade-modal h3{margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-reason{margin:0 0 1.4rem;font-size:.88rem;line-height:1.55;color:#525252}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-primary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.75rem 1rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.92rem;font-weight:600;cursor:pointer;font-family:inherit}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-secondary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.65rem 1rem;margin-top:.55rem;background:transparent;color:#174a96;border:1.5px solid #174a96;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit}',
+      '#agilo-free-upgrade-modal .agilo-free-btn-ghost{display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline}',
+      '#agilo-free-upgrade-modal .agilo-free-compare{display:block;margin:.55rem auto 0;font-size:.8rem;color:#174a96;text-decoration:underline}',
+      '#agilo-free-upgrade-modal .agilo-free-close{position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem}'
+    ].join('');
+    document.head.appendChild(style);
+  }
 
-  const triggerUpgrade = () => {
-    const existing = document.querySelector('[data-ms-price\\:update^="prc_pro-"]') ||
-                     document.querySelector('[data-ms-price\\:update*="pro"]') ||
-                     document.querySelector('a[href*="pro"]') ||
-                     document.querySelector('a[href*="upgrade"]');
-    if (existing) { existing.click(); return; }
-    toast("Veuillez passer à un abonnement Pro ou Business pour accéder à cette fonctionnalité.");
-  };
+  function trackFreeUpsell(source, minPlan) {
+    try {
+      if (window.posthog && typeof window.posthog.capture === 'function') {
+        window.posthog.capture('free_upsell_click', { source: source || 'unknown', minPlan: minPlan || 'pro' });
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  function clickMsPriceOrFallback(priceId, fallbackPath, excludeEl) {
+    const sel = '[data-ms-price\\:update="' + priceId + '"]';
+    const hidden = document.querySelector(
+      priceId.indexOf('pro') === 0 || priceId.indexOf('prc_pro') === 0
+        ? '.ms-upgrade-pro'
+        : '.ms-upgrade-business'
+    );
+    if (hidden && hidden !== excludeEl) {
+      hidden.click();
+      return;
+    }
+    const existing = Array.from(document.querySelectorAll(sel)).find(el => el !== excludeEl);
+    if (existing) {
+      existing.click();
+      return;
+    }
+    const link = document.querySelector(
+      fallbackPath.indexOf('pro') !== -1
+        ? 'a[href*="sign-up-pro"]'
+        : 'a[href*="sign-up-ent"], a[href*="sign-up-business"]'
+    );
+    if (link) {
+      link.click();
+      return;
+    }
+    window.location.href = fallbackPath;
+  }
+
+  function showFreeUpgradeModal(opts) {
+    const options = opts || {};
+    const minPlan = options.minPlan === 'ent' ? 'ent' : 'pro';
+    const reason = options.reason || (minPlan === 'ent'
+      ? 'Joignez des documents pour un contexte plus précis.'
+      : 'Intervenants, compte rendu et modèles prêts.');
+    const source = options.source || 'modal';
+
+    trackFreeUpsell(source, minPlan);
+
+    if (window.AgiloGate && typeof window.AgiloGate.showUpgrade === 'function') {
+      window.AgiloGate.showUpgrade(minPlan, reason);
+      return;
+    }
+
+    injectFreeUpsellCss();
+    const prev = document.getElementById('agilo-free-upgrade-modal');
+    if (prev) prev.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'agilo-free-upgrade-modal';
+    overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
+
+    const panel = document.createElement('div');
+    panel.className = 'agilo-free-modal-panel';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'agilo-free-close';
+    closeBtn.setAttribute('aria-label', 'Fermer');
+    closeBtn.textContent = '\u00D7';
+    closeBtn.onclick = () => overlay.remove();
+
+    const h3 = document.createElement('h3');
+    h3.textContent = minPlan === 'ent' ? 'Passez en Business…' : 'Passez en Pro…';
+
+    const p = document.createElement('p');
+    p.className = 'agilo-free-modal-reason';
+    p.textContent = reason;
+
+    const btnPro = document.createElement('button');
+    btnPro.type = 'button';
+    btnPro.className = minPlan === 'ent' ? 'agilo-free-btn-secondary' : 'agilo-free-btn-primary';
+    btnPro.setAttribute('data-ms-price:update', MS_PRICE_PRO);
+    btnPro.textContent = 'Passer en Pro — 7 jours gratuits';
+    btnPro.onclick = () => {
+      overlay.remove();
+      clickMsPriceOrFallback(MS_PRICE_PRO, '/auth/sign-up-pro', btnPro);
+    };
+
+    const btnBiz = document.createElement('button');
+    btnBiz.type = 'button';
+    btnBiz.className = minPlan === 'ent' ? 'agilo-free-btn-primary' : 'agilo-free-btn-secondary';
+    btnBiz.setAttribute('data-ms-price:update', MS_PRICE_BUSINESS);
+    btnBiz.textContent = minPlan === 'ent'
+      ? 'Passer en Business (100% français)'
+      : 'Ou Business (100% français)';
+    btnBiz.onclick = () => {
+      overlay.remove();
+      clickMsPriceOrFallback(MS_PRICE_BUSINESS, '/auth/sign-up-ent', btnBiz);
+    };
+
+    const compare = document.createElement('a');
+    compare.className = 'agilo-free-compare';
+    compare.href = 'https://www.agilotext.com/tarifs';
+    compare.target = '_blank';
+    compare.rel = 'noopener noreferrer';
+    compare.textContent = 'Comparer les plans';
+
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.className = 'agilo-free-btn-ghost';
+    later.textContent = 'Plus tard';
+    later.onclick = () => overlay.remove();
+
+    panel.appendChild(closeBtn);
+    panel.appendChild(h3);
+    panel.appendChild(p);
+    if (minPlan === 'ent') {
+      panel.appendChild(btnBiz);
+      panel.appendChild(btnPro);
+    } else {
+      panel.appendChild(btnPro);
+      panel.appendChild(btnBiz);
+    }
+    panel.appendChild(compare);
+    panel.appendChild(later);
+    overlay.appendChild(panel);
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
+
+  window.AgiloFreeUpgrade = { show: showFreeUpgradeModal };
+
+  function mountFreeDesireCard() {
+    injectFreeUpsellCss();
+    if (document.getElementById('agilo-free-desire-card')) return;
+    const anchor = document.querySelector('.options-wrapper');
+    if (!anchor || !anchor.parentNode) return;
+
+    const card = document.createElement('div');
+    card.id = 'agilo-free-desire-card';
+    card.innerHTML = [
+      '<div class="agilo-free-desire-row">',
+      '  <div>',
+      '    <h3>Passez en Pro</h3>',
+      '    <p>Intervenants identifiés · compte rendu sur mesure · modèles prêts</p>',
+      '  </div>',
+      '  <button type="button" id="agilo-free-desire-cta">Découvrir Pro</button>',
+      '</div>'
+    ].join('');
+    anchor.parentNode.insertBefore(card, anchor);
+    const cta = card.querySelector('#agilo-free-desire-cta');
+    if (cta) {
+      cta.addEventListener('click', () => {
+        showFreeUpgradeModal({
+          minPlan: 'pro',
+          reason: 'Intervenants identifiés · compte rendu sur mesure · modèles prêts',
+          source: 'desire_card'
+        });
+      });
+    }
+  }
+
+  function lockFreeControl(el, reason, source) {
+    if (!el) return;
+    const wrap = el.closest('.w-checkbox, .checkbox-field, .form-field, .div-block, label, .w-form-formradioinput--inputType-custom')
+      || el.parentElement
+      || el;
+    wrap.classList.add('agilo-free-lock', 'is-locked');
+
+    if (el.type === 'checkbox') {
+      el.checked = false;
+      el.setAttribute('aria-disabled', 'true');
+    }
+    if (el.tagName === 'SELECT') {
+      el.setAttribute('aria-disabled', 'true');
+    }
+
+    if (!wrap.querySelector('.agilo-pro-badge')) {
+      const badge = document.createElement('span');
+      badge.className = 'agilo-pro-badge';
+      badge.textContent = 'Pro';
+      const label = wrap.querySelector('.checkbox-label, .w-form-label, label') || wrap;
+      label.appendChild(badge);
+    }
+
+    const open = e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (el.type === 'checkbox') el.checked = false;
+      showFreeUpgradeModal({ minPlan: 'pro', reason: reason, source: source });
+    };
+
+    wrap.addEventListener('click', open, true);
+    el.addEventListener('change', open, true);
+    if (el.tagName === 'SELECT') {
+      el.addEventListener('mousedown', open, true);
+      el.addEventListener('focus', open, true);
+    }
+  }
+
+  function initFreeOptionLocks() {
+    injectFreeUpsellCss();
+    lockFreeControl(speakersCheckbox, 'Identifiez automatiquement les intervenants.', 'toggle_speakers');
+    lockFreeControl(summaryCheckbox, 'Générez un compte rendu sur mesure.', 'toggle_summary');
+    lockFreeControl(formatCheckbox, 'Formatez la transcription pour une lecture claire.', 'toggle_format');
+    lockFreeControl(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
+
+    const templateSelect = document.getElementById('default-template-select');
+    lockFreeControl(templateSelect, 'Utilisez des modèles de compte rendu prêts à l’emploi.', 'template_select');
+
+    const createModelLink = Array.from(document.querySelectorAll('a, button')).find(el => {
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      return /\+?\s*Créer un modèle/i.test(t);
+    });
+    if (createModelLink) {
+      createModelLink.classList.add('agilo-free-lock', 'is-locked');
+      if (!createModelLink.querySelector('.agilo-pro-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'agilo-pro-badge';
+        badge.textContent = 'Pro';
+        createModelLink.appendChild(badge);
+      }
+      createModelLink.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        showFreeUpgradeModal({
+          minPlan: 'pro',
+          reason: 'Créez vos modèles de compte rendu.',
+          source: 'create_template'
+        });
+      }, true);
+    }
+  }
 
   const showUpsell = () => {
-    const wrap = document.createElement("div");
-    wrap.style.cssText = "display:flex;gap:8px;align-items:center;margin-top:8px";
-
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = "Passer en Pro";
-    btn.style.cssText = "background:#28a745;color:#fff;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-weight:600";
-    btn.onclick = triggerUpgrade;
-    wrap.appendChild(btn);
-
-    toast("🚫 Fonction réservée aux offres Pro & Business. Passez en Pro pour débloquer la transcription YouTube.", wrap, TIMEOUT_TOAST);
+    showFreeUpgradeModal({
+      minPlan: 'pro',
+      reason: 'Transcrivez des vidéos YouTube directement depuis le tableau de bord.',
+      source: 'youtube'
+    });
   };
+
+  mountFreeDesireCard();
+  initFreeOptionLocks();
 
   // Expose globals for mount-streaming.js (dictee en direct)
   window.ensureValidToken = ensureValidToken;
