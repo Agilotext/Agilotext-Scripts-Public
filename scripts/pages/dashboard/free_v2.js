@@ -1,6 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
- * v1.10 — upsell popup only (pas de carte, pas de CSS toggles Webflow) ; hook Maestro
+ * v1.10 — upsell popup only ; CR Free libre + coché par défaut ; hook Maestro
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
@@ -1137,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     return [
       'Intervenants identifiés automatiquement',
-      'Compte rendu sur mesure + modèles',
+      'Modèles de compte rendu personnalisés',
       'Formatage et traduction',
       'Transcription YouTube'
     ];
@@ -1279,6 +1279,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  /** Free : CR autorisé — défaut ON une seule fois (pas de lock / popup). */
+  function ensureFreeSummaryDefaultOn() {
+    if (!summaryCheckbox) return;
+    if (summaryCheckbox.getAttribute('data-agilo-summary-defaulted') === '1') return;
+    summaryCheckbox.setAttribute('data-agilo-summary-defaulted', '1');
+    summaryCheckbox.checked = true;
+    summaryCheckbox.removeAttribute('aria-disabled');
+    const root = summaryCheckbox.closest('.checkbox-component, .w-checkbox, label') || summaryCheckbox.parentElement;
+    if (!root) return;
+    root.querySelectorAll('.checkbox_toggle, .w-checkbox-input').forEach(v => {
+      v.classList.add('w--redirected-checked');
+    });
+  }
+
   function removeInjectedProBadges(scope) {
     const root = scope || document;
     root.querySelectorAll('.agilo-pro-badge').forEach(b => b.remove());
@@ -1353,8 +1367,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function initFreeOptionLocks() {
     injectFreeUpsellCss();
     removeFreeDesireCard();
+    ensureFreeSummaryDefaultOn();
     lockFreeCheckbox(speakersCheckbox, 'Identifiez automatiquement les intervenants.', 'toggle_speakers');
-    lockFreeCheckbox(summaryCheckbox, 'Générez un compte rendu sur mesure.', 'toggle_summary');
+    // #toggle-summary : libre sur Free (doSummary) — ne pas lock / force OFF
     lockFreeCheckbox(formatCheckbox, 'Formatez la transcription pour une lecture claire.', 'toggle_format');
     lockFreeCheckbox(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
 
