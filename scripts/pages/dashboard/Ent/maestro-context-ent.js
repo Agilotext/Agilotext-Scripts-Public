@@ -133,7 +133,7 @@
   }
 
   function toggleSubLabel() {
-    if (state.locked) return 'Offre Business';
+    if (state.locked) return ''; // Free : plan dit dans la popup, pas sur la ligne
     if (state.edition === 'pro') return '1 PDF/DOCX/TXT · aperçu indicatif';
     return '';
   }

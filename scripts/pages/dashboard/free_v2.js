@@ -1081,7 +1081,9 @@ document.addEventListener('DOMContentLoaded', () => {
       '#agilo-free-upgrade-modal{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);animation:agiloFreeFadeIn .2s ease}',
       '#agilo-free-upgrade-modal .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;animation:agiloFreeSlideUp .25s ease}',
       '#agilo-free-upgrade-modal h3{margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202}',
-      '#agilo-free-upgrade-modal .agilo-free-modal-reason{margin:0 0 1.4rem;font-size:.88rem;line-height:1.55;color:#525252}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-reason{margin:0 0 .75rem;font-size:.88rem;line-height:1.55;color:#525252}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-benefits{margin:0 0 1.35rem;padding:0 0 0 1.15rem;text-align:left;font-size:.86rem;line-height:1.5;color:#333;list-style:disc}',
+      '#agilo-free-upgrade-modal .agilo-free-modal-benefits li{margin:0 0 .35rem}',
       '#agilo-free-upgrade-modal .agilo-free-btn-primary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.75rem 1rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.92rem;font-weight:600;cursor:pointer;font-family:inherit}',
       '#agilo-free-upgrade-modal .agilo-free-btn-secondary{display:flex;align-items:center;justify-content:center;gap:.4rem;width:100%;padding:.65rem 1rem;margin-top:.55rem;background:transparent;color:#174a96;border:1.5px solid #174a96;border-radius:10px;font-size:.85rem;font-weight:600;cursor:pointer;font-family:inherit}',
       '#agilo-free-upgrade-modal .agilo-free-btn-ghost{display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline}',
@@ -1124,12 +1126,29 @@ document.addEventListener('DOMContentLoaded', () => {
     window.location.href = fallbackPath;
   }
 
+  function freeUpgradeBenefits(minPlan) {
+    if (minPlan === 'ent') {
+      return [
+        'Joignez PDF, DOCX, TXT de contexte',
+        'Noms et termes mieux reconnus',
+        'Compte rendu plus précis',
+        'IA 100 % française (Business)'
+      ];
+    }
+    return [
+      'Intervenants identifiés automatiquement',
+      'Compte rendu sur mesure + modèles',
+      'Formatage et traduction',
+      'Transcription YouTube'
+    ];
+  }
+
   function showFreeUpgradeModal(opts) {
     const options = opts || {};
     const minPlan = options.minPlan === 'ent' ? 'ent' : 'pro';
     const reason = options.reason || (minPlan === 'ent'
       ? 'Joignez des documents pour un contexte plus précis.'
-      : 'Intervenants, compte rendu et modèles prêts.');
+      : 'Débloquez les outils qui font gagner du temps sur chaque fichier.');
     const source = options.source || 'modal';
 
     trackFreeUpsell(source, minPlan);
@@ -1161,6 +1180,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const p = document.createElement('p');
       p.className = 'agilo-free-modal-reason';
       p.textContent = reason;
+
+      const ul = document.createElement('ul');
+      ul.className = 'agilo-free-modal-benefits';
+      freeUpgradeBenefits(minPlan).forEach(text => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        ul.appendChild(li);
+      });
 
       const btnPro = document.createElement('button');
       btnPro.type = 'button';
@@ -1200,6 +1227,7 @@ document.addEventListener('DOMContentLoaded', () => {
       panel.appendChild(closeBtn);
       panel.appendChild(h3);
       panel.appendChild(p);
+      panel.appendChild(ul);
       if (minPlan === 'ent') {
         panel.appendChild(btnBiz);
         panel.appendChild(btnPro);
