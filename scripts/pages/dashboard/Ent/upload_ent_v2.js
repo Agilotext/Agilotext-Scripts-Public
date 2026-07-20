@@ -19,7 +19,7 @@
  * v1.10 : hook AgiloMaestroContext.enrichFormData avant sendWithRetry(FormData)
  *   (chemin FilePond). Sans maestro-context-ent.js → comportement = live.
  *   Force doSummary=true si contexte Maestro actif.
- *   Après succès (jobId) : AgiloMaestroContext.uploadAttachments(jobId) pour docs #2..N.
+ *   Section 7 : enrichFormData envoie contextId seul (multi-doc déjà pré-analysés).
  *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
@@ -943,12 +943,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 var sessionInput = form.querySelector('input[name="agilo_record_session_id"]');
                 var recordSessionId = sessionInput ? sessionInput.value : undefined;
                 document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
-                // v1.10 — Maestro : pièces jointes context (#2..N) après job_id
-                if (window.AgiloMaestroContext && typeof window.AgiloMaestroContext.uploadAttachments === 'function') {
-                  Promise.resolve(window.AgiloMaestroContext.uploadAttachments(jobId)).catch(function (err) {
-                    console.warn('[MaestroContext] uploadAttachments failed', err);
-                  });
-                }
               }
               if (successDiv) successDiv.style.display = 'flex';
               if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';

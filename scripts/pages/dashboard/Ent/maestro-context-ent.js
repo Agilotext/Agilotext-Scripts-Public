@@ -2,15 +2,11 @@
  * maestro-context-ent.js — Agilotext Business / Maestro V1 B+
  * Branche Scripts-Public 1.10 (ne pas pousser sur @24cac26 / 1.09)
  *
- * Feature : « Joindre des documents » (polish v2)
- *   - Toggle injecté dans .options-wrapper
- *   - Drop dans #maestro-context-slot (avant .wrapper-pro) — ne décale pas les toggles
- *   - Doc #1 (primaire) → preAnalyze → contextId
- *   - Docs #2..N → addJobContextAttachment après upload (jamais preAnalyze — contrat API V1)
- *   - Tooltip ? immédiat (hover + tap)
- *
- * Auth = sendMultipleAudio : username + token + edition
- * Limites : PDF/DOCX/TXT, 20 Mo max
+ * API Section 7 — Joindre des documents :
+ *   - 1–5 contextFile répétés → POST /preAnalyzeContextDocument → 1 contextId
+ *   - Limites : 10 Mo/doc, 5 docs, 50 Mo total
+ *   - Envoi audio : contextId seul (jamais contextId + contextFile)
+ *   - Toggle options + slot anti-saut + tooltip immédiat
  */
 (function (w) {
   'use strict';
@@ -25,25 +21,44 @@
     return;
   }
 
-  var MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 20 * 1024 * 1024;
-  var MAX_DOCS = typeof CFG.maxDocs === 'number' ? CFG.maxDocs : 8;
+  var MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 10 * 1024 * 1024;
+  var MAX_TOTAL_BYTES = typeof CFG.maxTotalBytes === 'number' ? CFG.maxTotalBytes : 50 * 1024 * 1024;
+  var MAX_DOCS = typeof CFG.maxDocs === 'number' ? CFG.maxDocs : 5;
   var EDITION = CFG.edition || 'ent';
   var ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
   var PREF_KEY = 'agilo.maestro.contextBriefEnabled.' + EDITION;
-  var TOOLTIP = 'Ajoutez un document (PDF, DOCX, TXT, 20 Mo) : ses noms et termes guident le compte rendu.';
+  var TOOLTIP = 'Ajoutez jusqu’à 5 documents (PDF, DOCX, TXT, 10 Mo chacun) : noms et termes guident le compte rendu.';
   var LABEL_EMPTY = 'Glissez un PDF, DOCX ou TXT ou&nbsp;<span class="browse">Parcourir</span>';
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
-  var API_ATTACHMENT = 'https://api.agilotext.com/api/v1/addJobContextAttachment';
+  var DEBOUNCE_MS = 400;
 
-  /** @type {{ id: string, file: File, role: 'primary'|'extra', status: string, statusText: string, contextId: string|null, attachmentId: string|null }[]} */
+  var ERROR_MAP = {
+    error_maestro_not_enabled: 'Maestro n’est pas activé sur ce serveur.',
+    error_maestro_user_not_allowed: 'Votre compte n’est pas autorisé à utiliser Maestro.',
+    error_maestro_context_file_missing: 'Aucun document fourni.',
+    error_maestro_context_file_empty: 'Document sans texte extractible.',
+    error_maestro_context_file_too_many: 'Maximum 5 documents.',
+    error_maestro_context_file_too_large: 'Un document dépasse 10 Mo.',
+    error_maestro_context_total_too_large: 'Total des documents supérieur à 50 Mo.',
+    error_maestro_context_pdf_too_many_pages: 'Plus de 50 pages PDF au total.',
+    error_maestro_context_file_unsupported: 'Formats acceptés : PDF, DOCX, TXT.',
+    error_maestro_context_ocr_failed: 'Échec OCR du PDF scanné.',
+    error_maestro_context_segment_limit: 'Documents trop longs pour l’analyse.',
+    error_maestro_context_json_invalid: 'Analyse structurée invalide.',
+    error_maestro_context_not_found: 'Contexte introuvable.',
+    error_invalid_token: 'Session expirée — reconnectez-vous.'
+  };
+
+  /** @type {{ id: string, file: File, status: string, statusText: string }[]} */
   var docs = [];
   var state = {
     enabled: false,
+    contextId: null,
     preAnalyzePromise: null,
     lastPreview: null,
-    attachmentsUnavailable: false,
-    attachmentsNote: ''
+    debounceTimer: null,
+    analyzeGen: 0
   };
   var uidSeq = 0;
 
@@ -98,7 +113,6 @@
       .replace(/"/g, '&quot;');
   }
 
-  /** Best-effort fix mojibake (ex. prÃªt → prêt) */
   function displayFileName(name) {
     var n = String(name || '');
     if (!/Ã.|Â./.test(n)) return n;
@@ -110,7 +124,7 @@
     } catch (e1) { /* ignore */ }
     try {
       return decodeURIComponent(escape(n));
-    } catch (e2) { /* keep original */ }
+    } catch (e2) { /* keep */ }
     return n;
   }
 
@@ -119,15 +133,8 @@
     return Math.round(bytes / 1024) + ' Ko';
   }
 
-  function primaryDoc() {
-    for (var i = 0; i < docs.length; i++) {
-      if (docs[i].role === 'primary') return docs[i];
-    }
-    return docs[0] || null;
-  }
-
-  function extraDocs() {
-    return docs.filter(function (d) { return d.role === 'extra'; });
+  function totalBytes() {
+    return docs.reduce(function (s, d) { return s + (d.file.size || 0); }, 0);
   }
 
   function syncDropMode() {
@@ -149,7 +156,6 @@
     var row = $('maestro-context-option-row');
     if (!block || block.hidden || !slot) return;
 
-    // Slot ne contribue PAS à la largeur du parent (évite le saut des toggles)
     slot.style.width = '0';
     slot.style.maxWidth = '0';
     slot.style.minWidth = '0';
@@ -171,7 +177,6 @@
     block.style.transform = 'none';
     block.style.marginRight = '0';
 
-    // Centre le drop sur l’axe de la colonne options (pas sur le bord gauche)
     var anchor = (row && row.parentElement) || slot.parentElement;
     if (!anchor) {
       block.style.marginLeft = '0';
@@ -194,18 +199,32 @@
 
   function validateFile(file) {
     if (!file) return 'Aucun fichier.';
-    if (file.size > MAX_BYTES) return 'Fichier trop volumineux (max 20 Mo).';
+    if (file.size > MAX_BYTES) return 'Fichier trop volumineux (max 10 Mo).';
     if (!ACCEPT_EXT.test(file.name || '')) return 'Formats acceptés : PDF, DOCX, TXT.';
     return null;
   }
 
-  function renderChips(list, label, maxShow) {
+  function mapMaestroError(data) {
+    var code = (data && (data.errorMessage || data.error || data.code)) || '';
+    code = String(code);
+    if (ERROR_MAP[code]) return ERROR_MAP[code];
+    for (var key in ERROR_MAP) {
+      if (code.indexOf(key) !== -1) return ERROR_MAP[key];
+    }
+    return (data && (data.userErrorMessage || data.message)) ||
+      'Analyse impossible — réessayez ou retirez un document.';
+  }
+
+  function renderChips(list, label, maxShow, nameKey) {
     if (!list || !list.length) return '';
     var max = typeof maxShow === 'number' ? maxShow : 8;
     var shown = list.slice(0, max);
     var rest = list.length - shown.length;
     var chips = shown.map(function (t) {
-      var labelText = typeof t === 'string' ? t : (t && (t.name || t.nom || t.label)) || String(t);
+      var labelText;
+      if (typeof t === 'string') labelText = t;
+      else if (t && nameKey && t[nameKey]) labelText = t[nameKey];
+      else labelText = (t && (t.canonicalName || t.name || t.nom || t.label)) || String(t);
       return '<span class="maestro-chip">' + escapeHtml(String(labelText)) + '</span>';
     }).join('');
     if (rest > 0) {
@@ -251,16 +270,12 @@
       return;
     }
     list.hidden = false;
-    list.innerHTML = docs.map(function (d) {
-      var actions = '';
-      if (d.role === 'primary') {
-        actions =
-          '<button type="button" class="maestro-doc-btn" data-maestro-action="replace" data-id="' + d.id + '">Remplacer</button>' +
-          '<button type="button" class="maestro-doc-btn" data-maestro-action="remove" data-id="' + d.id + '">Retirer</button>';
-      } else {
-        actions =
-          '<button type="button" class="maestro-doc-btn" data-maestro-action="remove" data-id="' + d.id + '">Retirer</button>';
-      }
+    list.innerHTML = docs.map(function (d, idx) {
+      var actions =
+        (idx === 0
+          ? '<button type="button" class="maestro-doc-btn" data-maestro-action="replace" data-id="' + d.id + '">Remplacer</button>'
+          : '') +
+        '<button type="button" class="maestro-doc-btn" data-maestro-action="remove" data-id="' + d.id + '">Retirer</button>';
 
       return (
         '<li class="maestro-doc-item" data-id="' + d.id + '">' +
@@ -277,81 +292,69 @@
         '</li>'
       );
     }).join('');
-
-    if (state.attachmentsNote) {
-      list.insertAdjacentHTML('beforeend',
-        '<li class="maestro-doc-item"><p class="maestro-preview-warn">' +
-        escapeHtml(state.attachmentsNote) + '</p></li>');
-    }
     syncDropMode();
     syncBlockWidth();
   }
 
-  function setDocStatus(id, status, text) {
-    for (var i = 0; i < docs.length; i++) {
-      if (docs[i].id === id) {
-        docs[i].status = status;
-        docs[i].statusText = text || '';
-        break;
-      }
-    }
+  function setAllDocsStatus(status, text) {
+    docs.forEach(function (d) {
+      d.status = status;
+      d.statusText = text || '';
+    });
     renderDocList();
   }
 
   function clearAllDocs() {
     docs = [];
+    state.contextId = null;
     state.preAnalyzePromise = null;
     state.lastPreview = null;
-    state.attachmentsNote = '';
+    state.analyzeGen += 1;
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
+    }
     var input = $('maestro-context-file');
     if (input) input.value = '';
     renderDocList();
     showPreviewHtml('');
   }
 
-  function removeDoc(id) {
-    var wasPrimary = false;
-    docs = docs.filter(function (d) {
-      if (d.id === id) {
-        wasPrimary = d.role === 'primary';
-        return false;
-      }
-      return true;
-    });
-    if (wasPrimary && docs.length) {
-      docs[0].role = 'primary';
-      docs[0].status = 'loading';
-      docs[0].statusText = 'Analyse…';
-      docs[0].contextId = null;
-      state.preAnalyzePromise = runPreAnalyze(docs[0]);
-    } else if (!docs.length) {
-      state.preAnalyzePromise = null;
-      state.lastPreview = null;
-      showPreviewHtml('');
-    } else if (wasPrimary) {
-      showPreviewHtml('');
-    }
-    renderDocList();
-  }
-
-  function applyPreviewSuccess(doc, data) {
-    doc.contextId = data.contextId || data.contextDocumentId || null;
-    state.lastPreview = data;
-    doc.status = 'ok';
-    doc.statusText = 'Analysé';
-    renderDocList();
-
-    var participants = data.participants || data.participantNames || [];
-    var terms = data.terms || data.wordBoost || data.keywords || data.wordBoostCandidates || [];
+  function buildPreviewFromAnalysis(data) {
+    var analysis = (data && data.analysis) || data || {};
     var parts = [];
-    if (participants.length) parts.push(renderChips(participants, 'Participants', 8));
-    if (terms.length) parts.push(renderChips(terms, 'Termes', 6));
-    if (!parts.length && data.summary) {
-      parts.push('<p class="text-color-grey">' + escapeHtml(String(data.summary).slice(0, 220)) + '</p>');
+
+    var docMeta = analysis.documents || [];
+    if (docMeta.length) {
+      var names = docMeta.map(function (d) {
+        return (d && d.filename) || '';
+      }).filter(Boolean);
+      if (names.length) {
+        parts.push('<div><strong>Documents</strong><p class="text-color-grey" style="margin:.25rem 0 0;font-size:.75rem">' +
+          escapeHtml(names.join(' · ')) + '</p></div>');
+      }
     }
+
+    var participants = analysis.participants || data.participants || [];
+    parts.push(renderChips(participants, 'Participants', 8, 'canonicalName'));
+
+    var agenda = analysis.agendaItems || data.agendaItems || [];
+    if (agenda.length) parts.push(renderChips(agenda, 'Ordre du jour', 8));
+
+    var terms = analysis.wordBoostCandidates || data.wordBoostCandidates ||
+      data.terms || data.wordBoost || data.keywords || [];
+    parts.push(renderChips(terms, 'Termes', 6));
+
+    var hints = analysis.summaryHints || data.summaryHints || [];
+    if (hints.length) {
+      parts.push('<div><strong>Pistes CR</strong><p class="text-color-grey" style="margin:.25rem 0 0;font-size:.75rem">' +
+        escapeHtml(hints.slice(0, 4).join(' · ')) + '</p></div>');
+    }
+
+    parts = parts.filter(Boolean);
     if (!parts.length) {
       showPreviewHtml('');
-      return doc.contextId;
+      return;
     }
     showPreviewHtml(
       '<details class="maestro-preview-details">' +
@@ -359,7 +362,6 @@
         '<div class="maestro-preview-body">' + parts.join('') + '</div>' +
       '</details>'
     );
-    return doc.contextId;
   }
 
   function isInvalidTokenError(data, res) {
@@ -371,13 +373,19 @@
       msg.indexOf('error_invalid_token') !== -1;
   }
 
-  function postPreAnalyze(file, email, token) {
+  function postPreAnalyzeAll(email, token) {
     var fd = new FormData();
     fd.append('username', email);
     fd.append('token', token);
     fd.append('edition', EDITION);
-    fd.append('contextFile', file, file.name);
-    console.log('[MaestroContext] preAnalyze', { username: email, hasToken: !!token, edition: EDITION });
+    docs.forEach(function (d) {
+      fd.append('contextFile', d.file, d.file.name);
+    });
+    console.log('[MaestroContext] preAnalyze', {
+      username: email,
+      files: docs.length,
+      edition: EDITION
+    });
     return fetch(API_PREANALYZE, { method: 'POST', body: fd }).then(function (res) {
       return res.json().catch(function () { return null; }).then(function (data) {
         return { res: res, data: data };
@@ -385,23 +393,34 @@
     });
   }
 
-  function runPreAnalyze(doc) {
-    var email = resolveMemberEmail();
-    if (!email) {
-      setDocStatus(doc.id, 'warn', 'Email introuvable — joint à l’envoi');
+  function runPreAnalyzeAll() {
+    if (!docs.length) {
+      state.contextId = null;
+      state.preAnalyzePromise = null;
+      showPreviewHtml('');
       return Promise.resolve(null);
     }
 
-    setDocStatus(doc.id, 'loading', 'Analyse…');
+    var gen = ++state.analyzeGen;
+    var email = resolveMemberEmail();
+    if (!email) {
+      setAllDocsStatus('warn', 'Email introuvable');
+      return Promise.resolve(null);
+    }
 
-    return ensureTokenForEmail(email, false).then(function (ok) {
+    setAllDocsStatus('loading', 'Analyse…');
+    forceSummaryOn();
+
+    var promise = ensureTokenForEmail(email, false).then(function (ok) {
+      if (gen !== state.analyzeGen) return null;
       var token = w.globalToken;
       if (!ok || !token) {
-        setDocStatus(doc.id, 'warn', 'Connectez-vous — joint à l’envoi');
+        setAllDocsStatus('warn', 'Connectez-vous pour analyser');
         return null;
       }
 
       function handleResult(result, canRetry) {
+        if (gen !== state.analyzeGen) return null;
         var res = result.res;
         var data = result.data;
 
@@ -409,35 +428,58 @@
           return ensureTokenForEmail(email, true).then(function (ok2) {
             var token2 = w.globalToken;
             if (!ok2 || !token2) {
-              setDocStatus(doc.id, 'warn', 'Session expirée — joint à l’envoi');
+              setAllDocsStatus('warn', 'Session expirée');
               return null;
             }
-            return postPreAnalyze(doc.file, email, token2).then(function (r2) {
+            return postPreAnalyzeAll(email, token2).then(function (r2) {
               return handleResult(r2, false);
             });
           });
         }
 
         if (!res.ok || !data || data.status !== 'OK') {
-          var msg = (data && (data.userErrorMessage || data.errorMessage || data.message)) ||
-            'Analyse impossible — joint à l’envoi';
-          setDocStatus(doc.id, 'warn', msg);
+          var msg = mapMaestroError(data);
+          setAllDocsStatus('warn', msg);
+          state.contextId = null;
           showPreviewHtml('<p class="maestro-preview-warn">' + escapeHtml(msg) + '</p>');
           return null;
         }
-        return applyPreviewSuccess(doc, data);
+
+        state.contextId = data.contextId || null;
+        state.lastPreview = data;
+        setAllDocsStatus('ok', 'Analysé');
+        buildPreviewFromAnalysis(data);
+        return state.contextId;
       }
 
-      return postPreAnalyze(doc.file, email, token).then(function (result) {
+      return postPreAnalyzeAll(email, token).then(function (result) {
         return handleResult(result, true);
       }).catch(function () {
-        setDocStatus(doc.id, 'warn', 'Réseau indisponible — joint à l’envoi');
+        if (gen !== state.analyzeGen) return null;
+        setAllDocsStatus('warn', 'Réseau indisponible');
+        state.contextId = null;
         return null;
       });
     });
+
+    state.preAnalyzePromise = promise;
+    return promise;
   }
 
-  // Docs #2..N : jamais preAnalyze (contrat API V1 — 1 contextId primaire)
+  function schedulePreAnalyze() {
+    state.contextId = null;
+    if (state.debounceTimer) clearTimeout(state.debounceTimer);
+    if (!docs.length) {
+      showPreviewHtml('');
+      return;
+    }
+    setAllDocsStatus('loading', 'Analyse…');
+    state.debounceTimer = setTimeout(function () {
+      state.debounceTimer = null;
+      runPreAnalyzeAll();
+    }, DEBOUNCE_MS);
+  }
+
   function addFiles(fileList) {
     var arr = Array.prototype.slice.call(fileList || []);
     if (!arr.length) return;
@@ -453,30 +495,36 @@
         errors.push('Maximum ' + MAX_DOCS + ' documents.');
         return;
       }
-      var role = docs.length === 0 ? 'primary' : 'extra';
-      var entry = {
+      if (totalBytes() + file.size > MAX_TOTAL_BYTES) {
+        errors.push('Total supérieur à 50 Mo.');
+        return;
+      }
+      docs.push({
         id: 'd' + (++uidSeq),
         file: file,
-        role: role,
-        status: role === 'primary' ? 'loading' : 'queued',
-        statusText: role === 'primary' ? 'Analyse…' : 'Joint à l’envoi',
-        contextId: null,
-        attachmentId: null
-      };
-      docs.push(entry);
-      if (role === 'primary') {
-        forceSummaryOn();
-        state.preAnalyzePromise = runPreAnalyze(entry);
-      }
+        status: 'loading',
+        statusText: 'Analyse…'
+      });
     });
 
     renderDocList();
     if (errors.length) {
       showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(errors.join(' · ')) + '</p>');
     }
+    if (docs.length) schedulePreAnalyze();
   }
 
-  function replacePrimary() {
+  function removeDoc(id) {
+    docs = docs.filter(function (d) { return d.id !== id; });
+    renderDocList();
+    if (!docs.length) {
+      clearAllDocs();
+      return;
+    }
+    schedulePreAnalyze();
+  }
+
+  function replaceFirst() {
     var input = $('maestro-context-file');
     if (!input) return;
     input.value = '';
@@ -485,46 +533,37 @@
     function onChange() {
       input.removeEventListener('change', onChange);
       input.multiple = prevMultiple;
-      if (input.files && input.files[0]) {
-        var file = input.files[0];
-        var err = validateFile(file);
-        if (err) {
-          showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(err) + '</p>');
-          return;
-        }
-        var old = primaryDoc();
-        if (old) {
-          docs = docs.filter(function (d) { return d.id !== old.id; });
-        }
-        var entry = {
-          id: 'd' + (++uidSeq),
-          file: file,
-          role: 'primary',
-          status: 'loading',
-          statusText: 'Analyse…',
-          contextId: null,
-          attachmentId: null
-        };
-        docs.unshift(entry);
-        for (var i = 1; i < docs.length; i++) {
-          docs[i].role = 'extra';
-          if (docs[i].status === 'ok' && !docs[i].contextId) {
-            docs[i].status = 'queued';
-            docs[i].statusText = 'Joint à l’envoi';
-          }
-        }
-        forceSummaryOn();
-        renderDocList();
-        state.preAnalyzePromise = runPreAnalyze(entry);
-        console.log('[MaestroContext] doc principal remplacé');
+      if (!(input.files && input.files[0])) return;
+      var file = input.files[0];
+      var err = validateFile(file);
+      if (err) {
+        showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(err) + '</p>');
+        return;
       }
+      var restSize = docs.slice(1).reduce(function (s, d) { return s + d.file.size; }, 0);
+      if (restSize + file.size > MAX_TOTAL_BYTES) {
+        showPreviewHtml('<p class="maestro-preview-fail">Total supérieur à 50 Mo.</p>');
+        return;
+      }
+      if (docs.length) docs[0] = { id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' };
+      else docs.push({ id: 'd' + (++uidSeq), file: file, status: 'loading', statusText: 'Analyse…' });
+      renderDocList();
+      schedulePreAnalyze();
     }
     input.addEventListener('change', onChange);
     input.click();
   }
 
   function waitPreAnalyze() {
-    if (!state.preAnalyzePromise) return Promise.resolve(null);
+    if (state.debounceTimer) {
+      clearTimeout(state.debounceTimer);
+      state.debounceTimer = null;
+      return runPreAnalyzeAll();
+    }
+    if (!state.preAnalyzePromise) {
+      if (docs.length && !state.contextId) return runPreAnalyzeAll();
+      return Promise.resolve(state.contextId);
+    }
     return state.preAnalyzePromise.then(function (id) { return id; }, function () { return null; });
   }
 
@@ -532,6 +571,7 @@
     return !!(state.enabled && docs.length > 0);
   }
 
+  /** Envoi audio : contextId seul (jamais contextFile → error_maestro_context_ambiguous) */
   function enrichFormData(fd) {
     if (!hasActiveContext()) return Promise.resolve(fd);
 
@@ -539,95 +579,16 @@
       forceSummaryOn();
       try { fd.delete('doSummary'); } catch (e) { /* ignore */ }
       fd.append('doSummary', 'true');
+      try { fd.delete('contextFile'); } catch (e1) { /* ignore */ }
+      try { fd.delete('contextId'); } catch (e2) { /* ignore */ }
 
-      var prim = primaryDoc();
-      if (!prim) return fd;
-
-      if (prim.contextId) {
-        try { fd.delete('contextId'); } catch (e1) { /* ignore */ }
-        try { fd.delete('contextFile'); } catch (e2) { /* ignore */ }
-        fd.append('contextId', prim.contextId);
-      } else if (prim.file) {
-        try { fd.delete('contextFile'); } catch (e3) { /* ignore */ }
-        fd.append('contextFile', prim.file, prim.file.name);
+      if (state.contextId) {
+        fd.append('contextId', state.contextId);
+      } else if (docs.length === 1) {
+        // Dernier recours : 1 seul fichier sans contextId (preAnalyze a échoué)
+        fd.append('contextFile', docs[0].file, docs[0].file.name);
       }
       return fd;
-    });
-  }
-
-  function postAttachment(jobId, file, email, token) {
-    var fd = new FormData();
-    fd.append('username', email);
-    fd.append('token', token);
-    fd.append('edition', EDITION);
-    fd.append('jobId', String(jobId));
-    fd.append('attachmentType', 'context_document');
-    fd.append('attachmentFile', file, file.name);
-    return fetch(API_ATTACHMENT, { method: 'POST', body: fd }).then(function (res) {
-      return res.json().catch(function () { return null; }).then(function (data) {
-        return { res: res, data: data };
-      });
-    });
-  }
-
-  function uploadAttachments(jobId) {
-    var extras = extraDocs();
-    if (!jobId || !extras.length) {
-      return Promise.resolve({ ok: true, skipped: true });
-    }
-    if (state.attachmentsUnavailable) {
-      state.attachmentsNote = 'Un seul document pris en compte pour l’instant (pièces jointes indisponibles).';
-      renderDocList();
-      return Promise.resolve({ ok: false, fallback: true });
-    }
-
-    var email = resolveMemberEmail();
-    if (!email) {
-      state.attachmentsNote = 'Pièces jointes non envoyées (email introuvable).';
-      renderDocList();
-      return Promise.resolve({ ok: false });
-    }
-
-    return ensureTokenForEmail(email, false).then(function (ok) {
-      var token = w.globalToken;
-      if (!ok || !token) {
-        state.attachmentsNote = 'Pièces jointes non envoyées (session).';
-        renderDocList();
-        return { ok: false };
-      }
-
-      var chain = Promise.resolve({ ok: true, count: 0 });
-      extras.forEach(function (doc) {
-        chain = chain.then(function (acc) {
-          if (acc.fallback) return acc;
-          setDocStatus(doc.id, 'loading', 'Envoi…');
-          return postAttachment(jobId, doc.file, email, token).then(function (result) {
-            var res = result.res;
-            var data = result.data;
-            if (res && (res.status === 404 || res.status === 501)) {
-              state.attachmentsUnavailable = true;
-              state.attachmentsNote = 'Un seul document pris en compte pour l’instant.';
-              setDocStatus(doc.id, 'warn', 'Non envoyé (route indisponible)');
-              extras.forEach(function (d2) {
-                if (d2.id !== doc.id) setDocStatus(d2.id, 'warn', 'Non envoyé');
-              });
-              renderDocList();
-              return { ok: false, fallback: true, count: acc.count };
-            }
-            if (!res.ok || !data || (data.status && data.status !== 'OK')) {
-              setDocStatus(doc.id, 'warn', 'Envoi échoué');
-              return { ok: false, count: acc.count };
-            }
-            doc.attachmentId = (data.attachmentId != null) ? String(data.attachmentId) : 'ok';
-            setDocStatus(doc.id, 'ok', 'Joint à l’envoi');
-            return { ok: true, count: acc.count + 1 };
-          }).catch(function () {
-            setDocStatus(doc.id, 'warn', 'Envoi échoué');
-            return { ok: false, count: acc.count };
-          });
-        });
-      });
-      return chain;
     });
   }
 
@@ -681,20 +642,18 @@
       var wrap = select.closest('.wrapper-pro') || select.closest('.options-wrapper') || select.parentElement;
       if (wrap) return wrap;
     }
-    var opts = document.querySelector('.options-wrapper .text-align-left._0-25-rem_gap') ||
+    return document.querySelector('.options-wrapper .text-align-left._0-25-rem_gap') ||
       document.querySelector('.options-wrapper .text-align-left') ||
       document.querySelector('.options-wrapper');
-    return opts || null;
   }
 
   function injectToggleRow() {
     if ($('toggle-maestro-context') || $('maestro-context-option-row')) {
       return $('maestro-context-option-row') || $('toggle-maestro-context').closest('.checkbox-component');
     }
-
     var insertBefore = findOptionsInsertPoint();
     if (!insertBefore) {
-      console.warn('[MaestroContext] .options-wrapper introuvable — toggle reste dans le panel');
+      console.warn('[MaestroContext] .options-wrapper introuvable');
       return null;
     }
 
@@ -728,7 +687,6 @@
     return row;
   }
 
-  /** Slot avant .wrapper-pro — ne pas afterend sur la row (évite d’étirer les options) */
   function placeBlockInSlot() {
     var block = $('maestro-context-block');
     var insertBefore = findOptionsInsertPoint();
@@ -743,15 +701,11 @@
       } else if (block.parentNode) {
         block.parentNode.insertBefore(slot, block);
       }
-    } else if (insertBefore && slot.nextSibling !== insertBefore && slot.parentNode !== insertBefore.parentNode) {
-      insertBefore.parentNode.insertBefore(slot, insertBefore);
-    } else if (insertBefore && slot.parentNode === insertBefore.parentNode && slot !== insertBefore.previousSibling) {
+    } else if (insertBefore && insertBefore.parentNode) {
       insertBefore.parentNode.insertBefore(slot, insertBefore);
     }
 
-    if (block.parentNode !== slot) {
-      slot.appendChild(block);
-    }
+    if (block.parentNode !== slot) slot.appendChild(block);
     return slot;
   }
 
@@ -760,13 +714,11 @@
     var wrap = row.querySelector('.maestro-tip-wrap');
     var tip = row.querySelector('.maestro-tip');
     if (!wrap || !tip) return;
-
     tip.addEventListener('click', function (e) {
       e.preventDefault();
       e.stopPropagation();
       wrap.classList.toggle('is-open');
     });
-
     document.addEventListener('click', function (e) {
       if (!wrap.classList.contains('is-open')) return;
       if (wrap.contains(e.target)) return;
@@ -817,6 +769,11 @@
 
     if (input.hasAttribute('name')) input.removeAttribute('name');
 
+    var help = block.querySelector('.maestro-context-help');
+    if (help) {
+      help.textContent = 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
+    }
+
     var row = injectToggleRow();
     placeBlockInSlot();
     if (row) {
@@ -862,7 +819,7 @@
         var action = btn.getAttribute('data-maestro-action');
         var id = btn.getAttribute('data-id');
         if (action === 'remove' && id) removeDoc(id);
-        if (action === 'replace') replacePrimary();
+        if (action === 'replace') replaceFirst();
       });
     }
 
@@ -882,17 +839,16 @@
     w.AgiloMaestroContext = {
       enrichFormData: enrichFormData,
       hasActiveContext: hasActiveContext,
-      uploadAttachments: uploadAttachments,
+      // Legacy no-op : multi-doc via preAnalyze (Section 7), plus d’attachments post-job
+      uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
       clear: function () { clearAllDocs(); },
       getState: function () {
-        var prim = primaryDoc();
         return {
           enabled: state.enabled,
           docsCount: docs.length,
           hasFile: docs.length > 0,
-          contextId: prim ? prim.contextId : null,
-          prefKey: PREF_KEY,
-          attachmentsUnavailable: state.attachmentsUnavailable
+          contextId: state.contextId,
+          prefKey: PREF_KEY
         };
       }
     };
