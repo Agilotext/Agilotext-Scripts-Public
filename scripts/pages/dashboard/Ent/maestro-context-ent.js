@@ -150,6 +150,14 @@
     return 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
   }
 
+  function agiloA11yAnnounce(msg) {
+    try {
+      if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+        window.AgilotextA11y.announce(msg);
+      }
+    } catch (_) {}
+  }
+
   function toggleLabel() {
     if (state.locked) return 'Joindre des documents';
     if (state.edition === 'pro') return 'Joindre un document';
@@ -717,6 +725,16 @@
     } else if (errors.length) {
       showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(errors.join(' · ')) + '</p>');
     }
+    var addedOk = arr.length - errors.length;
+    if (addedOk > 0) {
+      agiloA11yAnnounce(
+        addedOk === 1
+          ? 'Document de contexte ajouté.'
+          : addedOk + ' documents de contexte ajoutés.'
+      );
+    } else if (errors.length) {
+      agiloA11yAnnounce(errors[0]);
+    }
     if (docs.length) schedulePreAnalyze();
   }
 
@@ -864,7 +882,14 @@
       }
     }
     if (!on) clearAllDocs();
-    if (persist !== false && !state.locked) writePref(!!on);
+    if (persist !== false && !state.locked) {
+      writePref(!!on);
+      if (on) {
+        agiloA11yAnnounce('Joindre des documents activé. Ajoutez un ordre du jour ou la liste des participants.');
+      } else {
+        agiloA11yAnnounce('Joindre des documents désactivé.');
+      }
+    }
   }
 
   function findOptionsInsertPoint() {

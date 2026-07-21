@@ -75,6 +75,11 @@
     },
     show(msg, type = 'info', duration = 5000, title = '', actions = []) {
       this.init();
+      try {
+        if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+          window.AgilotextA11y.announce((title ? String(title) + '. ' : '') + String(msg || ''));
+        }
+      } catch (_) {}
       const toast = document.createElement('div');
       toast.className = 'agilo-toast ' + type;
 
@@ -340,6 +345,77 @@
   const startAudioButton = document.getElementById('recording_audio');
   const errorMessage = document.getElementById('error-message_recording');
   const levelFill = document.getElementById('audioLevelFill');
+  const recordCtaButton = document.querySelector('.button.record');
+  const recordPopup = document.querySelector('.popup-container---recording.recording');
+
+  function ensureRecordA11yLabels() {
+    if (recordCtaButton && !recordCtaButton.getAttribute('aria-label')) {
+      recordCtaButton.setAttribute('aria-label', 'Enregistrer une réunion');
+    }
+    if (startButton && !startButton.getAttribute('aria-label')) {
+      startButton.setAttribute('aria-label', "Confirmer et démarrer l'enregistrement");
+    }
+    if (stopButton && !stopButton.getAttribute('aria-label')) {
+      stopButton.setAttribute('aria-label', "Arrêter l'enregistrement");
+    }
+    if (pauseButton && !pauseButton.getAttribute('aria-label')) {
+      pauseButton.setAttribute('aria-label', "Mettre en pause ou reprendre l'enregistrement");
+    }
+    if (startAudioButton && !startAudioButton.getAttribute('aria-label')) {
+      startAudioButton.setAttribute('aria-label', 'Enregistrer avec le microphone');
+    }
+    if (startSharingButton && !startSharingButton.getAttribute('aria-label')) {
+      startSharingButton.setAttribute('aria-label', "Enregistrer l'audio d'un onglet ou d'un écran");
+    }
+  }
+  ensureRecordA11yLabels();
+
+  // Focus clavier : entrée dans le popup d'instructions, sortie vers le CTA Enregistrer
+  (function bindRecordPopupFocus() {
+    if (!recordPopup || typeof MutationObserver === 'undefined') return;
+    var lastFocusedBeforeOpen = null;
+    function isOpen() {
+      try {
+        return window.getComputedStyle(recordPopup).display !== 'none';
+      } catch (_) {
+        return recordPopup.style.display !== 'none';
+      }
+    }
+    function onOpen() {
+      lastFocusedBeforeOpen = document.activeElement;
+      var title = recordPopup.querySelector('h5, h4, h3, [tabindex]');
+      var focusTarget =
+        startAudioButton ||
+        startSharingButton ||
+        title ||
+        recordPopup.querySelector('button, a, [href], input, select, textarea');
+      if (focusTarget && typeof focusTarget.focus === 'function') {
+        setTimeout(function () {
+          try { focusTarget.focus(); } catch (_) {}
+        }, 50);
+      }
+      try {
+        if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+          window.AgilotextA11y.announce("Fenêtre d'instructions d'enregistrement ouverte.");
+        }
+      } catch (_) {}
+    }
+    function onClose() {
+      var back = recordCtaButton || lastFocusedBeforeOpen;
+      if (back && typeof back.focus === 'function') {
+        setTimeout(function () {
+          try { back.focus(); } catch (_) {}
+        }, 50);
+      }
+    }
+    var wasOpen = isOpen();
+    new MutationObserver(function () {
+      var open = isOpen();
+      if (open && !wasOpen) onOpen();
+      if (!open && wasOpen) onClose();
+      wasOpen = open;
+    }).observe(recordPopup, { attributes: true, attributeFilter: ['style', 'class'] });
+  })();
 
   /* --------- État --------- */
   let mediaRecorder;
@@ -1376,6 +1452,12 @@
     WakeLockManager.request();
     Reliability.start(mediaRecorder);
 
+    try {
+      if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+        window.AgilotextA11y.announce('Enregistrement démarré.');
+      }
+    } catch (_) {}
+
     toggleAnimation(true);
     if (startButton) startButton.disabled = true;
     if (stopButton) { stopButton.disabled = false; stopButton.style.display = 'flex'; }
@@ -1420,6 +1502,12 @@
   function stopRecordingAndSubmitForm() {
     if (stopInProgress) return;
     stopInProgress = true;
+
+    try {
+      if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+        window.AgilotextA11y.announce('Enregistrement arrêté. Envoi en cours.');
+      }
+    } catch (_) {}
 
     // [INJECTED V2]
     Reliability.stop();

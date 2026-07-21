@@ -2,8 +2,9 @@
  * Agilotext — accessibilité légère (Webflow / Memberstack)
  * Ne s'exécute que si l'URL contient /app/
  *
+ * Pin CDN recommandé : hash de commit (pas @1.10 tip).
  * @see scripts/pages/dashboard/a11y/README.md
- * @see scripts/pages/dashboard/a11y/ANCHORS.md
+ * @see scripts/pages/dashboard/a11y/PLAN_DEPLOIEMENT_VILLETTE_1.10.txt
  */
 (function () {
   'use strict';
@@ -22,7 +23,32 @@
   live.setAttribute('aria-live', 'polite');
   live.setAttribute('aria-relevant', 'additions text');
   live.className = 'agilo-a11y-sr-only';
-  document.body.insertBefore(live, document.body.firstChild);
+
+  var skip = document.createElement('a');
+  skip.className = 'agilo-a11y-skip';
+  skip.href = '#agilo-main-focus';
+  skip.textContent = 'Aller au contenu principal';
+
+  /**
+   * Keep the skip link as the first focusable in <body> when possible.
+   * Finsweet Cookie Consent (fs-cc) often injects a banner that steals the first Tab —
+   * after dismiss / close, we re-promote the skip link to document.body.firstChild.
+   */
+  function ensureSkipFirst() {
+    try {
+      if (!document.body) return;
+      if (skip.parentNode !== document.body || document.body.firstChild !== skip) {
+        document.body.insertBefore(skip, document.body.firstChild);
+      }
+      if (live.parentNode !== document.body) {
+        document.body.insertBefore(live, skip.nextSibling);
+      } else if (skip.nextSibling !== live) {
+        document.body.insertBefore(live, skip.nextSibling);
+      }
+    } catch (_) {}
+  }
+
+  ensureSkipFirst();
 
   window.AgilotextA11y = window.AgilotextA11y || {};
   window.AgilotextA11y.announce = function (msg) {
@@ -32,12 +58,6 @@
       live.textContent = String(msg);
     }, 50);
   };
-
-  var skip = document.createElement('a');
-  skip.className = 'agilo-a11y-skip';
-  skip.href = '#agilo-main-focus';
-  skip.textContent = 'Aller au contenu principal';
-  document.body.insertBefore(skip, document.body.firstChild);
 
   function setSkipTarget(id) {
     if (id) skip.setAttribute('href', '#' + id);
@@ -69,6 +89,7 @@
     var mainEl = null;
     for (var i = 0; i < kids.length; i++) {
       if (kids[i].id === 'agiloSidebar') continue;
+      if (kids[i].getAttribute && kids[i].getAttribute('role') === 'navigation') continue;
       mainEl = kids[i];
       break;
     }
@@ -98,9 +119,41 @@
     });
   }
 
+  function bindCookieConsentSkipRepair() {
+    // Finsweet Cookie Consent: reopen / close often mutates body children.
+    document.addEventListener(
+      'click',
+      function (ev) {
+        var t = ev.target;
+        if (!t || !t.closest) return;
+        if (t.closest('[fs-cc], .fs-cc-banner_component, .fs-cc-prefs_component, [fs-cc-element]')) {
+          setTimeout(ensureSkipFirst, 0);
+          setTimeout(ensureSkipFirst, 300);
+        }
+      },
+      true
+    );
+    // MutationObserver: if a banner is removed or added at body start, re-assert skip.
+    if (typeof MutationObserver !== 'undefined' && document.body) {
+      var mo = new MutationObserver(function () {
+        // Avoid fighting while cookie UI is open as first focusable — after close, promote skip.
+        var bannerOpen = document.querySelector(
+          '.fs-cc-banner_component:not([style*="display: none"]), [fs-cc="banner"]:not([style*="display: none"])'
+        );
+        if (!bannerOpen) ensureSkipFirst();
+      });
+      mo.observe(document.body, { childList: true, subtree: false });
+    }
+    // Short delayed passes for late Finsweet inject
+    setTimeout(ensureSkipFirst, 500);
+    setTimeout(ensureSkipFirst, 1500);
+  }
+
   function init() {
+    ensureSkipFirst();
     setupLandmarks();
     fixWebflowFormMessages();
+    bindCookieConsentSkipRepair();
   }
 
   if (document.readyState === 'loading') {

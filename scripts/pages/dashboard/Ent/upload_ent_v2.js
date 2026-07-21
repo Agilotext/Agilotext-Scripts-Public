@@ -306,6 +306,31 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   var defaultErrorHtml = defaultErrorTextNode ? defaultErrorTextNode.innerHTML : '';
 
+  var A11Y_ERROR_LABELS = {
+    default: 'Une erreur s’est produite. Consultez le message à l’écran.',
+    tooMuchTraffic: 'Trop de demandes en ce moment. Réessayez plus tard.',
+    audioTooLong: 'La durée du fichier dépasse la limite autorisée.',
+    audioFormat: 'Format audio non pris en charge.',
+    audioNotFound: 'Aucun fichier audio à envoyer.',
+    invalidToken:
+      'Accès Agilotext expiré ou renouvelé côté serveur. Rechargez la page pour continuer — vous restez connecté à votre compte (Memberstack).',
+    invalidAudioContent: 'Le contenu audio n’a pas pu être traité.',
+    summaryLimit: 'Durée trop longue pour générer le compte-rendu avec cette option.',
+    offline: 'Pas de connexion internet.',
+    timeout: 'Délai dépassé. Réessayez plus tard.',
+    tooManyHours: 'Quota d’heures audio dépassé sur la période.',
+    unreachable: 'Le serveur est injoignable. Réessayez plus tard.',
+    youtubeInvalid: 'URL YouTube invalide.',
+    youtubePrivate: 'Vidéo YouTube inaccessible ou privée.',
+    youtubeNotFound: 'Vidéo YouTube introuvable.'
+  };
+
+  function agiloA11yAnnounce(msg) {
+    if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+      window.AgilotextA11y.announce(msg);
+    }
+  }
+
   /* ─── Helpers UI ───────────────────────────────────────────── */
   function hideAllErrors() {
     Object.keys(errorMessageDivs).forEach(function (k) {
@@ -319,9 +344,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (successDiv) successDiv.style.display = 'none';
     var el = errorMessageDivs[key] || errorMessageDivs['default'];
     if (el) el.style.display = 'block';
+    agiloA11yAnnounce(A11Y_ERROR_LABELS[key] || A11Y_ERROR_LABELS.default);
   }
 
-  function showSuccess() { hideAllErrors(); if (successDiv) successDiv.style.display = 'flex'; }
+  function showSuccess() {
+    hideAllErrors();
+    if (successDiv) successDiv.style.display = 'flex';
+    agiloA11yAnnounce('Demande acceptée. Transcription en cours.');
+  }
 
   function resetDefaultErrorMessage() {
     if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = defaultErrorHtml;
@@ -857,6 +887,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (formLoadingDiv) formLoadingDiv.style.display = 'block';
         if (submitBtn) submitBtn.disabled = true;
+        agiloA11yAnnounce('Envoi en cours.');
 
         var speakersChecked = !!(speakersCheckbox && speakersCheckbox.checked);
         var summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
