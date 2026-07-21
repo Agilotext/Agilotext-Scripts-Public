@@ -2,17 +2,18 @@ Plan déploiement — a11y Villette (branche 1.10)
 ================================================
 
 IMPORTANT : pin par HASH de commit, pas @1.10 (tip qui bouge).
+HASH livré ce lot : 49215d8
 
 1) GitHub
    - Worktree isolé sur origin/1.10 ; add ciblé uniquement (jamais git add .)
    - Push : git push origin 1.10
-   - Noter le HASH du commit a11y (ex. git rev-parse --short HEAD)
+   - HASH a11y Villette : 49215d8
 
 2) Webflow — footer site (Custom Code avant </body>)
-   Remplacer les URLs @1.02 a11y par (HASH = commit poussé) :
+   Remplacer les URLs @1.02 a11y par :
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@HASH/scripts/pages/dashboard/a11y/agilotext-a11y-lite.css?v=HASH" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@HASH/scripts/pages/dashboard/a11y/agilotext-a11y-lite.js?v=HASH" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.js?v=49215d8" crossorigin="anonymous"></script>
 
    Ordre : a11y CSS → a11y JS → scripts métier (upload_ent_v2, Record, maestro, sidebar…).
 
@@ -31,6 +32,6 @@ IMPORTANT : pin par HASH de commit, pas @1.10 (tip qui bouge).
 5) Ne pas modifier Hotjar / Posthog / Memberstack dans ce lot.
 
 6) Sidebar CDN (P1 hygiène)
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@HASH/scripts/pages/dashboard/Code-sidebar-toggle.css?v=HASH" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@HASH/scripts/pages/dashboard/Code-sidebar-toggle.js?v=HASH" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.js?v=49215d8" crossorigin="anonymous"></script>
    → remplace le gros bloc inline sidebar du footer Webflow.
