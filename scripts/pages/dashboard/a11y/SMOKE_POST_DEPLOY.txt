@@ -1,0 +1,20 @@
+Smoke post-deploy — Villette a11y
+=================================
+
+Date : 2026-07-21
+Hashes : feature a11y 49215d8 ; boot/invite a75b413
+
+Avant smoke live :
+  [ ] Publish Webflow OK (site scripts registered)
+  [ ] Page Business dashboard : AGILO_SCRIPTS_BASE + upload/maestro/Record @ 49215d8
+
+Checklist (TESTING.md) :
+  1. Après cookies : Tab → skip « Aller au contenu principal »
+  2. Landmarks navigation + main
+  3. Upload fichier : annonce « Envoi en cours » puis succès/erreur
+  4. Record 1 min : labels, annonces start/stop, focus popup, Copie locale inchangée
+  5. Maestro : activer Joindre docs + ajouter un doc → annonces
+  6. Sidebar collapse / aria-expanded OK
+
+Baseline pré-patch : BASELINE_VILLETTE.md
+Pilote : PILOT.md + DRAFT_MAIL_LEMAIRE_VILLETTE.md (envoi sur accord)
