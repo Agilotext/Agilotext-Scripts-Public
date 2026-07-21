@@ -1,12 +1,11 @@
 /**
- * Agilotext — Toggle « Copie locale de sécurité » (téléchargement auto audio).
+ * Agilotext — Toggle minimal « Copie locale » (téléchargement auto audio).
  *
- * Business dashboard only (Ent). Visible by default.
- * Pref key: localStorage `agilo:record:auto-download` ('1' ON | '0' OFF). Default ON.
- * IT override: window.AGILO_RECORD_AUTO_DOWNLOAD = true|false (locks UI when false).
- * Optional early reveal (legacy): ?ft=recorder-adv (sticky localStorage, no longer required).
+ * Business dashboard (Ent). Ligne discrète sous le texte RGPD.
+ * Pref : localStorage `agilo:record:auto-download` ('1' ON | '0' OFF). Défaut ON.
+ * Override IT : window.AGILO_RECORD_AUTO_DOWNLOAD = true|false.
  *
- * Embed (Webflow Business dashboard), after Record script:
+ * Embed (après Record) :
  *   <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.10/scripts/pages/dashboard/Code-record-audio-toggle.js?v=<HASH>"></script>
  */
 (function () {
@@ -15,6 +14,10 @@
   var PREF_KEY = 'agilo:record:auto-download';
   var ROOT_ID = 'agilo-auto-download-pref';
   var INPUT_ID = 'agilo-auto-download-checkbox';
+  var HELP_ID = 'agilo-ad-help';
+  var HELP_TEXT =
+    "Télécharge l'audio dans Téléchargements à la fin. Décochez si votre organisation l'interdit. " +
+    "Upload Agilotext inchangé ; récupération d'urgence possible si échec.";
 
   if (window.__AGILO_RECORD_AUDIO_TOGGLE_BOOTED__) return;
   window.__AGILO_RECORD_AUDIO_TOGGLE_BOOTED__ = true;
@@ -40,42 +43,40 @@
     return window.AGILO_RECORD_AUTO_DOWNLOAD === false;
   }
 
+  function findRgpdNode() {
+    var nodes = document.querySelectorAll(
+      '.text-color-grey.text-size-small, .text-size-small.text-color-grey, .text-size-small'
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      var t = (nodes[i].textContent || '').replace(/\s+/g, ' ').trim();
+      if (t.indexOf('Conforme au RGPD') !== -1) return nodes[i];
+    }
+    return null;
+  }
+
   /**
-   * Ancres visibles (ordre de préférence).
-   * NE PAS utiliser `.startrecording` : c’est le bouton OK du popup,
-   * souvent dans `#wrapper_button-ok { display:none }` → case invisible.
+   * Insertion juste après le texte RGPD.
+   * Fallback : après .wrapper-button_recording.
    */
   function findMountTarget() {
+    var rgpd = findRgpdNode();
+    if (rgpd && rgpd.parentNode) {
+      return {
+        parent: rgpd.parentNode,
+        before: rgpd.nextSibling,
+        after: rgpd,
+        kind: 'rgpd'
+      };
+    }
+
     var main = document.querySelector('.wrapper-button_recording');
     if (main && main.parentNode) {
-      return { parent: main.parentNode, before: main, kind: 'main-record' };
-    }
-
-    var opts = document.querySelector('.wrapper_options-recording');
-    if (opts && opts.parentNode) {
-      return { parent: opts.parentNode, before: opts, kind: 'popup-options' };
-    }
-
-    var grid = document.querySelector('.grid_options-recording');
-    if (grid && grid.parentNode) {
-      return { parent: grid.parentNode, before: grid, kind: 'popup-grid' };
-    }
-
-    var popupContent = document.querySelector(
-      '.popup-container---recording.recording .popup-content'
-    );
-    if (popupContent) {
-      return { parent: popupContent, before: null, kind: 'popup-content' };
-    }
-
-    var form = document.querySelector('form[ms-code-file-upload="form"]');
-    if (form && form.parentNode) {
-      return { parent: form.parentNode, before: form, kind: 'form' };
-    }
-
-    var anim = document.querySelector('#Recording_animation');
-    if (anim && anim.parentNode) {
-      return { parent: anim.parentNode, before: anim, kind: 'animation' };
+      return {
+        parent: main.parentNode,
+        before: main.nextSibling,
+        after: main,
+        kind: 'main-record'
+      };
     }
 
     return null;
@@ -87,28 +88,35 @@
     style.id = 'agilo-auto-download-pref-style';
     style.textContent =
       '#' + ROOT_ID + '{' +
-        'display:block;width:100%;max-width:36rem;margin:12px 0 8px;' +
-        'padding:12px 14px;box-sizing:border-box;border:1px solid rgba(0,0,0,.12);' +
-        'border-radius:10px;background:rgba(245,245,245,.85);font-family:inherit;' +
-        'color:#0e0e0e;text-align:left;' +
+        'display:block;position:relative;width:auto;max-width:none;' +
+        'margin:4px 0 0;padding:0;border:none;background:transparent;' +
+        'box-sizing:border-box;font-family:inherit;text-align:inherit;' +
       '}' +
       '#' + ROOT_ID + ' .agilo-ad-row{' +
-        'display:flex;align-items:flex-start;gap:10px;margin:0;cursor:pointer;' +
+        'display:inline-flex;align-items:center;gap:6px;margin:0;' +
+        'cursor:pointer;font-size:12px;font-weight:400;line-height:1.35;' +
+        'color:#6b6b6b;' +
       '}' +
       '#' + ROOT_ID + ' #' + INPUT_ID + '{' +
-        'width:18px;height:18px;margin:2px 0 0;flex-shrink:0;cursor:pointer;' +
+        'width:14px;height:14px;margin:0;flex-shrink:0;cursor:pointer;' +
         'accent-color:#fd7d13;' +
       '}' +
       '#' + ROOT_ID + ' .agilo-ad-label{' +
-        'font-size:14px;font-weight:600;line-height:1.35;margin:0;' +
+        'font-size:12px;font-weight:400;line-height:1.35;margin:0;' +
+        'color:inherit;' +
       '}' +
       '#' + ROOT_ID + ' .agilo-ad-help{' +
-        'font-size:12px;line-height:1.45;color:#525252;margin:6px 0 0 28px;' +
+        'position:absolute;left:0;bottom:calc(100% + 6px);z-index:40;' +
+        'display:none;width:max-content;max-width:min(280px,80vw);' +
+        'padding:8px 10px;border-radius:6px;background:#1f1f1f;color:#fff;' +
+        'font-size:11px;font-weight:400;line-height:1.4;text-align:left;' +
+        'box-shadow:0 4px 14px rgba(0,0,0,.18);pointer-events:none;' +
       '}' +
-      '#' + ROOT_ID + ' .agilo-ad-org{' +
-        'font-size:12px;line-height:1.4;color:#a82633;margin:8px 0 0 28px;' +
+      '#' + ROOT_ID + ':hover .agilo-ad-help,' +
+      '#' + ROOT_ID + ':focus-within .agilo-ad-help{' +
+        'display:block;' +
       '}' +
-      '#' + ROOT_ID + '.is-locked{opacity:.92;}' +
+      '#' + ROOT_ID + '.is-locked .agilo-ad-row{cursor:default;opacity:.85;}' +
       '#' + ROOT_ID + '.is-locked #' + INPUT_ID + '{cursor:not-allowed;}';
     document.head.appendChild(style);
   }
@@ -121,8 +129,8 @@
 
     var root = document.createElement('div');
     root.id = ROOT_ID;
+    root.className = 'text-color-grey text-size-small';
     root.setAttribute('role', 'group');
-    root.setAttribute('aria-labelledby', 'agilo-ad-label-text');
     if (locked) root.classList.add('is-locked');
 
     var row = document.createElement('label');
@@ -135,32 +143,24 @@
     input.name = INPUT_ID;
     input.checked = on;
     if (locked) input.disabled = true;
+    input.setAttribute('aria-label', 'Copie locale dans le dossier Téléchargements');
+    input.setAttribute('aria-describedby', HELP_ID);
+    input.title = HELP_TEXT;
 
     var labelText = document.createElement('span');
     labelText.className = 'agilo-ad-label';
-    labelText.id = 'agilo-ad-label-text';
-    labelText.textContent = 'Copie locale de sécurité (dossier Téléchargements)';
+    labelText.textContent = locked ? 'Copie locale (imposée désactivée)' : 'Copie locale';
+
+    var help = document.createElement('span');
+    help.className = 'agilo-ad-help';
+    help.id = HELP_ID;
+    help.setAttribute('role', 'tooltip');
+    help.textContent = HELP_TEXT;
 
     row.appendChild(input);
     row.appendChild(labelText);
     root.appendChild(row);
-
-    var help = document.createElement('p');
-    help.className = 'agilo-ad-help';
-    help.id = 'agilo-ad-help';
-    help.textContent =
-      "Désactivez si votre organisation interdit les fichiers audio sur le poste. " +
-      "L'envoi vers Agilotext continue ; une récupération d'urgence reste possible si l'envoi échoue.";
     root.appendChild(help);
-
-    if (locked) {
-      var org = document.createElement('p');
-      org.className = 'agilo-ad-org';
-      org.textContent = 'Imposé par votre organisation (téléchargement automatique désactivé).';
-      root.appendChild(org);
-    }
-
-    input.setAttribute('aria-describedby', 'agilo-ad-help');
 
     input.addEventListener('change', function () {
       if (isOrgLockedOff()) {
@@ -182,14 +182,28 @@
     return root;
   }
 
-  function isHiddenAncestor(el) {
+  function placeNode(ui, target) {
+    if (target.after && target.after.parentNode === target.parent) {
+      if (target.after.nextSibling) {
+        target.parent.insertBefore(ui, target.after.nextSibling);
+      } else {
+        target.parent.appendChild(ui);
+      }
+      return;
+    }
+    if (target.before) target.parent.insertBefore(ui, target.before);
+    else target.parent.appendChild(ui);
+  }
+
+  function isBadPlacement(el) {
     var n = el;
     while (n && n !== document.body) {
       if (n.id === 'wrapper_button-ok') return true;
-      if (n.classList && n.classList.contains('startrecording')) return true;
       try {
-        var st = window.getComputedStyle(n);
-        if (st && st.display === 'none') return true;
+        if (n.classList && n.classList.contains('popup-container---recording')) {
+          var st = window.getComputedStyle(n);
+          if (st && st.display === 'none') return true;
+        }
       } catch (_) {}
       n = n.parentNode;
     }
@@ -197,7 +211,6 @@
   }
 
   function mount() {
-    // Optional sticky reveal flag (no longer required for visibility).
     try {
       var q = new URLSearchParams(window.location.search || '').get('ft');
       if (q === 'recorder-adv') localStorage.setItem('agilo:ft:recorder-adv', '1');
@@ -210,19 +223,15 @@
 
     var existing = document.getElementById(ROOT_ID);
     if (existing) {
-      // Reposition si l’ancienne injection était dans le popup OK (caché).
-      if (isHiddenAncestor(existing) || existing.parentNode !== target.parent) {
-        if (target.before) target.parent.insertBefore(existing, target.before);
-        else target.parent.appendChild(existing);
+      if (isBadPlacement(existing) || existing.parentNode !== target.parent) {
+        placeNode(existing, target);
       }
       return true;
     }
 
     var ui = buildUi();
     if (!ui) return true;
-
-    if (target.before) target.parent.insertBefore(ui, target.before);
-    else target.parent.appendChild(ui);
+    placeNode(ui, target);
     return true;
   }
 
