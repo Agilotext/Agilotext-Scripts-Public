@@ -40,13 +40,45 @@
     return window.AGILO_RECORD_AUTO_DOWNLOAD === false;
   }
 
-  function findAnchor() {
-    return (
-      document.querySelector('.startrecording') ||
-      document.querySelector('form[ms-code-file-upload="form"]') ||
-      document.querySelector('#Recording_animation') ||
-      null
+  /**
+   * Ancres visibles (ordre de préférence).
+   * NE PAS utiliser `.startrecording` : c’est le bouton OK du popup,
+   * souvent dans `#wrapper_button-ok { display:none }` → case invisible.
+   */
+  function findMountTarget() {
+    var main = document.querySelector('.wrapper-button_recording');
+    if (main && main.parentNode) {
+      return { parent: main.parentNode, before: main, kind: 'main-record' };
+    }
+
+    var opts = document.querySelector('.wrapper_options-recording');
+    if (opts && opts.parentNode) {
+      return { parent: opts.parentNode, before: opts, kind: 'popup-options' };
+    }
+
+    var grid = document.querySelector('.grid_options-recording');
+    if (grid && grid.parentNode) {
+      return { parent: grid.parentNode, before: grid, kind: 'popup-grid' };
+    }
+
+    var popupContent = document.querySelector(
+      '.popup-container---recording.recording .popup-content'
     );
+    if (popupContent) {
+      return { parent: popupContent, before: null, kind: 'popup-content' };
+    }
+
+    var form = document.querySelector('form[ms-code-file-upload="form"]');
+    if (form && form.parentNode) {
+      return { parent: form.parentNode, before: form, kind: 'form' };
+    }
+
+    var anim = document.querySelector('#Recording_animation');
+    if (anim && anim.parentNode) {
+      return { parent: anim.parentNode, before: anim, kind: 'animation' };
+    }
+
+    return null;
   }
 
   function injectStyles() {
@@ -150,6 +182,20 @@
     return root;
   }
 
+  function isHiddenAncestor(el) {
+    var n = el;
+    while (n && n !== document.body) {
+      if (n.id === 'wrapper_button-ok') return true;
+      if (n.classList && n.classList.contains('startrecording')) return true;
+      try {
+        var st = window.getComputedStyle(n);
+        if (st && st.display === 'none') return true;
+      } catch (_) {}
+      n = n.parentNode;
+    }
+    return false;
+  }
+
   function mount() {
     // Optional sticky reveal flag (no longer required for visibility).
     try {
@@ -157,18 +203,26 @@
       if (q === 'recorder-adv') localStorage.setItem('agilo:ft:recorder-adv', '1');
     } catch (_) {}
 
-    var anchor = findAnchor();
-    if (!anchor || !anchor.parentNode) return false;
+    var target = findMountTarget();
+    if (!target) return false;
 
     injectStyles();
+
+    var existing = document.getElementById(ROOT_ID);
+    if (existing) {
+      // Reposition si l’ancienne injection était dans le popup OK (caché).
+      if (isHiddenAncestor(existing) || existing.parentNode !== target.parent) {
+        if (target.before) target.parent.insertBefore(existing, target.before);
+        else target.parent.appendChild(existing);
+      }
+      return true;
+    }
+
     var ui = buildUi();
     if (!ui) return true;
 
-    if (anchor.classList && anchor.classList.contains('startrecording')) {
-      anchor.parentNode.insertBefore(ui, anchor);
-    } else {
-      anchor.parentNode.insertBefore(ui, anchor);
-    }
+    if (target.before) target.parent.insertBefore(ui, target.before);
+    else target.parent.appendChild(ui);
     return true;
   }
 
