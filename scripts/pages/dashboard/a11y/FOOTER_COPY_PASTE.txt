@@ -1,0 +1,32 @@
+À COLLER TOI-MÊME — Site Settings → Custom Code → Footer (avant </body>)
+======================================================================
+Hash a11y / sidebar : 49215d8
+Ne pas utiliser Registered Scripts / Apps MCP pour ça.
+
+1) Remplace le footer site actuel (qui peut encore contenir « <!-- a11y pin test --> »)
+   par le bloc ci-dessous (ou réintègre ton ancien footer + ces 4 lignes a11y/sidebar).
+
+2) Sur la page Dashboard Business : remplace @415d56b → @49215d8
+   (AGILO_SCRIPTS_BASE, upload_ent_v2, maestro, streaming, Record).
+
+----- DÉBUT BLOC FOOTER (minimal a11y + sidebar CDN) -----
+
+<script>
+document.querySelector(".current_year").textContent = new Date().getFullYear();
+</script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.js?v=49215d8" crossorigin="anonymous"></script>
+
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/agilo-mobile-app-banner.js"></script>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.js?v=49215d8" crossorigin="anonymous"></script>
+
+<!-- Remets ensuite ton GLOBAL INVITE HANDLER si tu l’avais dans le footer -->
+
+----- FIN BLOC -----
+
+Code added by Apps → « Webflow MCP Bridge App » :
+  - Garde 1 seule entrée (idéalement celle d’avril si tu utilises encore le MCP Designer)
+  - Supprime les doublons du 21 juillet (poubelle) — ça vient des appels MCP d’aujourd’hui
