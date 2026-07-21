@@ -19,6 +19,20 @@
 
     const DBG = !!window.AGILO_DEBUG;
 
+    // Pref V1 : localStorage agilo:record:auto-download ('1'|'0'). Défaut ON.
+    // Override IT : window.AGILO_RECORD_AUTO_DOWNLOAD = true|false (prioritaire).
+    // V2 : hydrater depuis userSendDefaults.autoDownloadAudio.
+    function shouldAutoDownloadAudio() {
+      if (window.AGILO_RECORD_AUTO_DOWNLOAD === false) return false;
+      if (window.AGILO_RECORD_AUTO_DOWNLOAD === true) return true;
+      try {
+        const v = localStorage.getItem('agilo:record:auto-download');
+        if (v === '0' || v === 'false') return false;
+        if (v === '1' || v === 'true') return true;
+      } catch (_) {}
+      return true;
+    }
+
   // --- MODULES FIABILITÉ (INJECTÉS V2 & V3) ---
 
   // [V3] Notification Manager (Non-bloquant)
@@ -1298,7 +1312,15 @@
         }, 50);
 
         audioChunks = [];
-        setTimeout(() => downloadRecording(audioBlob, audioFileName), 1000);
+        if (shouldAutoDownloadAudio()) {
+          setTimeout(() => downloadRecording(audioBlob, audioFileName), 1000);
+        } else {
+          NotificationManager.show(
+            "Envoi vers Agilotext sans copie dans Téléchargements. En cas d'échec, une récupération d'urgence reste disponible.",
+            'info',
+            6000
+          );
+        }
 
         if (screenVideoTrack && onScreenEnded) {
           try {
