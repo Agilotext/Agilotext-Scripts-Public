@@ -121,6 +121,62 @@
     } catch (e) { return false; }
   }
 
+  /** Events adoption (GA4 / GTM) — pas de PII. */
+  function trackMaestroEvent(name, params) {
+    var payload = params || {};
+    try {
+      payload.edition = state.edition || resolveEdition();
+    } catch (e0) { /* ignore */ }
+    try {
+      if (typeof w.gtag === 'function') {
+        w.gtag('event', name, payload);
+      }
+    } catch (e1) { /* ignore */ }
+    try {
+      w.dataLayer = w.dataLayer || [];
+      w.dataLayer.push(Object.assign({ event: name }, payload));
+    } catch (e2) { /* ignore */ }
+    try {
+      if (w.console && typeof w.console.debug === 'function') {
+        w.console.debug('[MaestroContext]', name, payload);
+      }
+    } catch (e3) { /* ignore */ }
+  }
+
+  function participantCountFromData(data) {
+    if (!data) return 0;
+    var analysis = data.analysis || data;
+    var participants = analysis.participants || data.participants || [];
+    return Array.isArray(participants) ? participants.length : 0;
+  }
+
+  function contextLoadedLabel(n) {
+    if (n > 0) return 'Document chargé (' + n + ' participant' + (n > 1 ? 's' : '') + ')';
+    return 'Document chargé';
+  }
+
+  function syncContextLoadedBanner(nParticipants) {
+    var row = document.querySelector('#maestro-context-option-row') ||
+      document.querySelector('.maestro-context-block');
+    if (!row) return;
+    var el = document.getElementById('maestro-context-loaded-banner');
+    if (!state.contextId) {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      return;
+    }
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'maestro-context-loaded-banner';
+      el.className = 'maestro-context-loaded-banner';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'margin-top:8px;padding:8px 10px;border-radius:6px;background:#e8f5e9;color:#1b5e20;font-size:13px;font-weight:600;';
+      row.appendChild(el);
+    }
+    var n = typeof nParticipants === 'number' ? nParticipants : participantCountFromData(state.lastPreview);
+    el.textContent = contextLoadedLabel(n);
+    el.hidden = false;
+  }
+
   function markContextUsed() {
     try {
       if (w.localStorage) w.localStorage.setItem(CONTEXT_USED_KEY, '1');
@@ -148,14 +204,6 @@
       return 'PDF, DOCX, TXT — 1 document (10 Mo max). Aperçu indicatif.';
     }
     return 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
-  }
-
-  function agiloA11yAnnounce(msg) {
-    try {
-      if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
-        window.AgilotextA11y.announce(msg);
-      }
-    } catch (_) {}
   }
 
   function toggleLabel() {
@@ -511,6 +559,7 @@
     renderDocList();
     showPreviewHtml('');
     syncRgpdVisibility();
+    syncContextLoadedBanner(0);
   }
 
   function buildPreviewFromAnalysis(data) {
@@ -639,15 +688,26 @@
           setAllDocsStatus('warn', msg);
           showPreviewHtml('');
           syncRgpdVisibility();
+          syncContextLoadedBanner(0);
+          trackMaestroEvent('maestro_preanalyze_fail', {
+            error_code: (data && (data.error || data.status)) || ('http_' + (res && res.status))
+          });
           return null;
         }
 
         state.contextId = data.contextId || null;
         state.lastPreview = data;
+        var nPart = participantCountFromData(data);
         if (state.contextId) markContextUsed();
-        setAllDocsStatus('ok', 'Analysé');
+        setAllDocsStatus('ok', contextLoadedLabel(nPart));
         buildPreviewFromAnalysis(data);
         syncRgpdVisibility();
+        syncContextLoadedBanner(nPart);
+        if (state.contextId) {
+          trackMaestroEvent('maestro_preanalyze_ok', { participantCount: nPart, docs: docs.length });
+        } else {
+          trackMaestroEvent('maestro_preanalyze_fail', { error_code: 'missing_contextId' });
+        }
         return state.contextId;
       }
 
@@ -659,6 +719,8 @@
         state.contextId = null;
         showPreviewHtml('');
         syncRgpdVisibility();
+        syncContextLoadedBanner(0);
+        trackMaestroEvent('maestro_preanalyze_fail', { error_code: 'network' });
         return null;
       });
     });
@@ -724,16 +786,6 @@
       showPreviewHtml('<p class="maestro-preview-fail">' + upgradeHint + '</p>');
     } else if (errors.length) {
       showPreviewHtml('<p class="maestro-preview-fail">' + escapeHtml(errors.join(' · ')) + '</p>');
-    }
-    var addedOk = arr.length - errors.length;
-    if (addedOk > 0) {
-      agiloA11yAnnounce(
-        addedOk === 1
-          ? 'Document de contexte ajouté.'
-          : addedOk + ' documents de contexte ajoutés.'
-      );
-    } else if (errors.length) {
-      agiloA11yAnnounce(errors[0]);
     }
     if (docs.length) schedulePreAnalyze();
   }
@@ -827,10 +879,17 @@
       if (state.contextId) {
         fd.append('contextId', state.contextId);
         markContextUsed();
+        trackMaestroEvent('maestro_upload_with_context', {
+          participantCount: participantCountFromData(state.lastPreview),
+          docs: docs.length
+        });
       } else if (docs.length === 1) {
         // Dernier recours : 1 seul fichier sans contextId (preAnalyze a échoué)
         fd.append('contextFile', docs[0].file, docs[0].file.name);
         markContextUsed();
+        trackMaestroEvent('maestro_upload_without_context', { reason: 'preanalyze_fallback_file' });
+      } else if (docs.length > 0) {
+        trackMaestroEvent('maestro_upload_without_context', { reason: 'preanalyze_failed' });
       }
       return fd;
     });
@@ -882,14 +941,7 @@
       }
     }
     if (!on) clearAllDocs();
-    if (persist !== false && !state.locked) {
-      writePref(!!on);
-      if (on) {
-        agiloA11yAnnounce('Joindre des documents activé. Ajoutez un ordre du jour ou la liste des participants.');
-      } else {
-        agiloA11yAnnounce('Joindre des documents désactivé.');
-      }
-    }
+    if (persist !== false && !state.locked) writePref(!!on);
   }
 
   function findOptionsInsertPoint() {
