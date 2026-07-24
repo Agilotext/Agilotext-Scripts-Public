@@ -42,7 +42,8 @@ Les autres scripts éditeur sont chargés depuis `../` (prod) pour éviter la du
 - Score `%` en secondaire : « Qualité estimée », pas comme action principale
 - Scores conservés après édition + badge « Modifié depuis transcription »
 - États de revue locaux : « Relu », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : passages à relire en premier, score en secondaire, « Passage suivant », toggle « Passages à relire »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, « Passage précédent » / « Passage suivant » (compteur entre les deux), toggle « Passages à relire »
+- Raccourcis : `Alt+←` / `Alt+→` (titles persistants sur les boutons + hint dans le helper one-shot)
 - Cas zéro passage : affichage sobre, sans helper
 - Après revue complète : affichage sobre « Tous les passages signalés sont traités »
 - Helper one-shot : affiché seulement avec des passages à relire, dismissible par « Compris »

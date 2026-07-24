@@ -6,7 +6,7 @@ Correctifs livrés juillet 2026 : corbeille manquante, bannière anonymisation, 
 
 | Fichier | Bugs | Version |
 |---------|------|---------|
-| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2 | `window.__agiloEditorConfidenceVersion = '1.09.1'` |
+| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2 + nav prev | `window.__agiloEditorConfidenceVersion = '1.09.2'` |
 | `CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js` | 3, 4 | `window.__agiloAnonVersion = '3.1.0'` |
 
 ## URLs CDN (@1.09)
@@ -14,7 +14,7 @@ Correctifs livrés juillet 2026 : corbeille manquante, bannière anonymisation, 
 ```html
 <!-- Fork confidence (staging / test) -->
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js?v=1.09.1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js?v=1.09.2"></script>
 
 <!-- Anonymiser v3 (embed Webflow séparé — confirmer le src dans Designer) -->
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js?v=3.1.0"></script>
@@ -23,7 +23,7 @@ Correctifs livrés juillet 2026 : corbeille manquante, bannière anonymisation, 
 ## Vérification console
 
 ```js
-window.__agiloEditorConfidenceVersion  // '1.09.1'
+window.__agiloEditorConfidenceVersion  // '1.09.2'
 window.__agiloAnonVersion              // '3.1.0'
 ```
 

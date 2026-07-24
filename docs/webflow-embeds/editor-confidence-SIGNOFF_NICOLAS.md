@@ -25,6 +25,9 @@ Fournir un `jobId` avec `available:true` sur `POST /receiveConfidenceTextJson` p
 - [ ] Bouton « Compris » masque le helper après reload
 - [ ] Toggle « Passages à relire » OFF masque les repères et persiste au reload
 - [ ] Toggle « Passages à relire » ON réaffiche badges, highlights, navigation
+- [ ] Boutons panneau « Passage précédent » et « Passage suivant » (précédent avant suivant, compteur au milieu)
+- [ ] Clic précédent / suivant met à jour le compteur `Passage X / N` (nav circulaire)
+- [ ] Hover boutons : titles affichent Alt+← / Alt+→
 - [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition
 - [ ] Les raccourcis ne changent pas de zone quand le curseur est dans le transcript ou quand le toggle est OFF
 - [ ] Édition locale : score conservé + « Modifié depuis transcription »
@@ -35,7 +38,7 @@ Fournir un `jobId` avec `available:true` sur `POST /receiveConfidenceTextJson` p
 
 ## Point à confirmer
 
-Navigation « Passage suivant » : **priorité UI** `low → verify → textModified`, en excluant les passages relus/ignorés. Raccourcis retenus : `Alt+ArrowRight` / `Alt+ArrowLeft`.
+Navigation « Passage précédent / suivant » : **priorité UI** `low → verify → textModified`, en excluant les passages relus/ignorés. Nav circulaire. Raccourcis : `Alt+ArrowRight` / `Alt+ArrowLeft` (aussi en `title` / `aria-keyshortcuts` sur les boutons).
 
 ## Contrat V3 à valider
 

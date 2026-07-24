@@ -3010,5 +3010,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.1';
+  window.__agiloEditorConfidenceVersion = '1.09.2';
 });

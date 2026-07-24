@@ -103,12 +103,12 @@ Le frontend applique `issues[]` uniquement si les offsets correspondent encore a
 - Score `%` affiché en secondaire : « Qualité estimée », avec tooltip explicatif
 - Scores **conservés après édition** + badge « Modifié depuis transcription »
 - États de revue locaux : « Relu », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : passages à relire en premier, score en secondaire, bouton « Passage suivant », toggle « Passages à relire »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, boutons « Passage précédent » / « Passage suivant » (titles Alt+←/→), compteur `Passage X / N`, toggle « Passages à relire »
 - Cas zéro : ligne sobre « Aucun passage signalé à relire · Qualité estimée »
 - Après revue complète : ligne sobre « Tous les passages signalés sont traités »
 - Helper one-shot si des passages existent : explique brièvement pourquoi relire ces passages, bouton « Compris »
 - Désactivation utilisateur locale : les repères sont masqués mais le panneau minimal reste affiché pour réactiver
-- Raccourcis hors édition : `Alt+ArrowRight` passage suivant, `Alt+ArrowLeft` passage précédent
+- Raccourcis hors édition : `Alt+ArrowRight` passage suivant, `Alt+ArrowLeft` passage précédent (mêmes actions que les boutons ; navigation circulaire)
 - Extension V3 : surlignage `mark.ag-confidence-word` si `issues[]` compatible
 - `summary.globalScore` utilisé tel quel (pondéré back par `wordCount`)
 - Sauvegarde : JSON principal seul — jamais de champs confidence
@@ -134,6 +134,7 @@ window.AgiloConfidence = {
   setReviewState,
   goToNextConfidenceZone,
   goToPreviousConfidenceZone,
+  buildNavControlsHtml,
   toggleUserConfidenceVisible,
   toggle
 };
