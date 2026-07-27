@@ -18,8 +18,8 @@
 */
 (() => {
   const API = "https://api.agilotext.com/api/v1",
-        EDITION = "ent",
-        LIMIT = 100;
+        EDITION = String(window.AGILO_WORDBOOST_EDITION || "ent").toLowerCase(),
+        LIMIT = Math.max(1, Number(window.AGILO_WORDBOOST_LIMIT) || (EDITION === "pro" ? 40 : 100));
 
   // Timers
   const POLL_DOM = 200,
