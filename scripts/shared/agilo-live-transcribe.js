@@ -38,13 +38,100 @@
     return "";
   }
 
+  /* sync: Code-main-editor-IFRAME_V04.js — palette locuteurs éditeur Business */
+  var SPK_COLORS = [
+    "#174a96", "#fd7e14", "#1c661a", "#a82633",
+    "#6f42c1", "#0891b2", "#b45309", "#be185d",
+    "#0ea5e9", "#15803d", "#d946ef", "#854d0e",
+    "#4b5563", "#4338ca", "#0f766e", "#9f1239",
+    "#a16207", "#7c2d12", "#374151", "#1d4ed8"
+  ];
+
+  function getSpeakerColor(name) {
+    if (!name) return "#666";
+    var hash = 0;
+    for (var i = 0; i < name.length; i += 1) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return SPK_COLORS[Math.abs(hash) % SPK_COLORS.length];
+  }
+
+  /** Speechmatics S1 / 1 / A → Speaker_A (parité éditeur). */
+  function mapSpeakerId(raw) {
+    if (raw == null || raw === "") return "";
+    var s = String(raw).trim();
+    var m = s.match(/^Speaker[_\s-]?([A-Za-z]|\d+)$/i);
+    if (m) {
+      var tok = m[1];
+      if (/^\d+$/.test(tok)) {
+        var n = parseInt(tok, 10);
+        if (n >= 1 && n <= 26) return "Speaker_" + String.fromCharCode(64 + n);
+        return "Speaker_" + tok;
+      }
+      return "Speaker_" + tok.toUpperCase();
+    }
+    m = s.match(/^S(\d+)$/i);
+    if (m) {
+      var n2 = parseInt(m[1], 10);
+      if (n2 >= 1 && n2 <= 26) return "Speaker_" + String.fromCharCode(64 + n2);
+      return "Speaker_" + n2;
+    }
+    if (/^\d+$/.test(s)) {
+      var n3 = parseInt(s, 10);
+      if (n3 >= 1 && n3 <= 26) return "Speaker_" + String.fromCharCode(64 + n3);
+    }
+    if (/^[A-Za-z]$/.test(s)) return "Speaker_" + s.toUpperCase();
+    return s;
+  }
+
+  function appendWord(base, word) {
+    if (!word) return base || "";
+    if (!base) return word;
+    if (/[\s:]$/.test(base) || /^[,.;:!?…]/.test(word)) return base + word;
+    return base + " " + word;
+  }
+
+  function serializeTurns(turns) {
+    if (!Array.isArray(turns) || !turns.length) return "";
+    return turns
+      .map(function (t) {
+        var text = ((t && t.text) || "").trim();
+        if (!text) return "";
+        if (t.speaker) return t.speaker + ": " + text;
+        return text;
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  function parsePlainToTurns(plain) {
+    var turns = [];
+    var lines = String(plain || "").split(/\n/);
+    var re = /^(Speaker[_\s-]?[A-Za-z0-9]+|S\d+)\s*:\s*(.*)$/i;
+    for (var i = 0; i < lines.length; i += 1) {
+      var line = lines[i];
+      var m = line.match(re);
+      if (m) {
+        turns.push({ speaker: mapSpeakerId(m[1]), text: m[2] || "" });
+      } else if (turns.length) {
+        var trimmed = line.trim();
+        if (!trimmed) continue;
+        var last = turns[turns.length - 1];
+        last.text = appendWord(last.text, trimmed);
+      } else if (line.trim()) {
+        turns.push({ speaker: "", text: line.trim() });
+      }
+    }
+    return turns;
+  }
+
   /**
-   * Finals only: prefix "Speaker X:" on speaker change. Mutates state.lastLiveSpeaker.
+   * Finals only: labels Speaker_A: + state.turns. Mutates state.
    * Preview live (le job batch à l’arrêt reste la vérité métier).
    */
   function appendDiarizedFinals(committed, results, state) {
     if (!Array.isArray(results) || !results.length) return committed || "";
-    var out = committed || "";
+    if (!Array.isArray(state.turns)) state.turns = [];
     var lastSpeaker = state.lastLiveSpeaker || "";
 
     for (var i = 0; i < results.length; i += 1) {
@@ -53,19 +140,21 @@
         (item && item.alternatives && item.alternatives[0] && item.alternatives[0].content) || "";
       if (!content) continue;
 
-      var speaker = pickSpeaker(item);
+      var speaker = mapSpeakerId(pickSpeaker(item));
       if (speaker && speaker !== lastSpeaker) {
-        if (out) out += "\n";
-        out += "Speaker " + speaker + ": ";
+        state.turns.push({ speaker: speaker, text: "" });
         lastSpeaker = speaker;
-      } else if (out && !/[\s:]$/.test(out) && !/^[,.;:!?…]/.test(content)) {
-        out += " ";
+      } else if (!state.turns.length) {
+        state.turns.push({ speaker: speaker || "", text: "" });
+        lastSpeaker = speaker || "";
       }
-      out += content;
+
+      var turn = state.turns[state.turns.length - 1];
+      turn.text = appendWord(turn.text, content);
     }
 
     state.lastLiveSpeaker = lastSpeaker;
-    return out;
+    return serializeTurns(state.turns);
   }
 
   /** Joint committed + partial sans écraser les sauts de ligne (labels Speaker). */
@@ -74,6 +163,37 @@
     if (!committed) return partial;
     if (/[\s]$/.test(committed)) return committed + partial;
     return committed + " " + partial;
+  }
+
+  var LIVE_TURNS_CSS = [
+    "#agilo-live-turns.agilo-live-turns{",
+    "  order:5;width:100%;max-width:100%;box-sizing:border-box;",
+    "  border:1px solid var(--agilo-border,#d7e0ef);border-radius:10px;",
+    "  background:#fff;padding:.85rem 1rem;max-height:min(50vh,420px);",
+    "  overflow:auto;text-align:left;",
+    "}",
+    "#agilo-live-turns[hidden]{display:none!important;}",
+    "[data-agilo-streaming-text].is-live-hidden{",
+    "  position:absolute!important;width:1px!important;height:1px!important;",
+    "  padding:0!important;margin:-1px!important;overflow:hidden!important;",
+    "  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;",
+    "  opacity:0!important;pointer-events:none!important;",
+    "}",
+    ".agilo-live-seg{margin:0 0 .85rem;}",
+    ".agilo-live-seg:last-of-type{margin-bottom:.35rem;}",
+    ".agilo-live-seg__head{display:inline-flex;align-items:baseline;gap:.35rem;margin-bottom:.2rem;}",
+    ".agilo-live-seg__head .speaker{font-weight:600;opacity:.95;margin-right:.15rem;}",
+    ".agilo-live-seg__text{white-space:pre-wrap;color:inherit;line-height:1.45;font-size:.95rem;}",
+    ".agilo-live-partial{margin-top:.35rem;color:#6b7280;font-size:.9rem;line-height:1.4;white-space:pre-wrap;}",
+    ".agilo-live-partial:empty{display:none;}"
+  ].join("");
+
+  function ensureLiveTurnsCss() {
+    if (document.getElementById("agilo-live-turns-css")) return;
+    var style = document.createElement("style");
+    style.id = "agilo-live-turns-css";
+    style.textContent = LIVE_TURNS_CSS;
+    document.head.appendChild(style);
   }
 
   /** Webflow peut déplacer le minuteur hors du nœud root : repli par id unique. */
@@ -151,13 +271,15 @@
       email: "",
       liveDiarization: false,
       maxSpeakers: 0,
-      lastLiveSpeaker: ""
+      lastLiveSpeaker: "",
+      turns: []
     };
 
     this.els = {};
     this._timerInterval = null;
     this._timerStart = 0;
     this._pausedElapsed = 0;
+    this._richTurnCount = 0;
 
     this.refreshDomRefs();
     this.bind();
@@ -188,6 +310,104 @@
     this.els.levelFill = r.querySelector("#agilo-level-fill");
     this.els.copyBtn = r.querySelector("#agilo-copy-btn");
     this.els.copyText = r.querySelector("#agilo-copy-btn-text");
+    this.els.turns = r.querySelector("#agilo-live-turns");
+  };
+
+  AgiloLiveVoiceController.prototype.ensureRichPanel = function () {
+    this.refreshDomRefs();
+    if (!this.root) return null;
+    ensureLiveTurnsCss();
+    var panel = this.root.querySelector("#agilo-live-turns");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.id = "agilo-live-turns";
+      panel.className = "agilo-live-turns";
+      panel.setAttribute("aria-live", "polite");
+      panel.hidden = true;
+      var ta = this.root.querySelector("[data-agilo-streaming-text]");
+      if (ta && ta.parentNode) {
+        ta.parentNode.insertBefore(panel, ta);
+      } else {
+        this.root.appendChild(panel);
+      }
+    }
+    this.els.turns = panel;
+    return panel;
+  };
+
+  AgiloLiveVoiceController.prototype._shouldShowRichPreview = function () {
+    if (!this.state.liveDiarization) return false;
+    var st = this.state.status;
+    return (
+      st === "recording" ||
+      st === "connecting" ||
+      st === "initializing" ||
+      st === "pausing"
+    );
+  };
+
+  AgiloLiveVoiceController.prototype.renderTurns = function (forceRebuild) {
+    var panel = this.ensureRichPanel();
+    if (!panel) return;
+
+    var turns = Array.isArray(this.state.turns) ? this.state.turns : [];
+    if (forceRebuild || this._richTurnCount > turns.length) {
+      panel.innerHTML = "";
+      this._richTurnCount = 0;
+    }
+
+    while (this._richTurnCount < turns.length) {
+      var t = turns[this._richTurnCount];
+      var art = document.createElement("article");
+      art.className = "agilo-live-seg";
+      art.dataset.speaker = t.speaker || "";
+      var head = document.createElement("header");
+      head.className = "agilo-live-seg__head";
+      if (t.speaker) {
+        var sp = document.createElement("span");
+        sp.className = "speaker";
+        sp.textContent = t.speaker;
+        sp.style.color = getSpeakerColor(t.speaker);
+        sp.style.fontWeight = "600";
+        head.appendChild(sp);
+      }
+      art.appendChild(head);
+      var body = document.createElement("div");
+      body.className = "agilo-live-seg__text";
+      body.textContent = t.text || "";
+      art.appendChild(body);
+      panel.appendChild(art);
+      this._richTurnCount += 1;
+    }
+
+    if (turns.length && this._richTurnCount === turns.length) {
+      var lastArt = panel.querySelector(".agilo-live-seg:last-of-type");
+      var lastBody = lastArt && lastArt.querySelector(".agilo-live-seg__text");
+      if (lastBody) lastBody.textContent = turns[turns.length - 1].text || "";
+      if (lastArt) lastArt.dataset.speaker = turns[turns.length - 1].speaker || "";
+    }
+
+    var partialEl = panel.querySelector(".agilo-live-partial");
+    if (!partialEl) {
+      partialEl = document.createElement("div");
+      partialEl.className = "agilo-live-partial";
+      partialEl.setAttribute("aria-hidden", "true");
+      panel.appendChild(partialEl);
+    }
+    partialEl.textContent = this.state.partialText || "";
+  };
+
+  AgiloLiveVoiceController.prototype.syncLivePreviewUi = function () {
+    this.refreshDomRefs();
+    var showRich = this._shouldShowRichPreview();
+    if (showRich) {
+      this.renderTurns(false);
+      if (this.els.turns) this.els.turns.hidden = false;
+      if (this.els.text) this.els.text.classList.add("is-live-hidden");
+    } else {
+      if (this.els.turns) this.els.turns.hidden = true;
+      if (this.els.text) this.els.text.classList.remove("is-live-hidden");
+    }
   };
 
   /** Un seul listener document : les boutons remplacés par des clones restent utilisables. */
@@ -247,6 +467,7 @@
     this.refreshDomRefs();
     if (this.els.status) this.els.status.textContent = label || status;
     this.render();
+    this.syncLivePreviewUi();
   };
 
   /** Webflow / thèmes mettent souvent display sur button en !important : le forcer côté script. */
@@ -346,16 +567,23 @@
 
   AgiloLiveVoiceController.prototype.renderText = function () {
     this.refreshDomRefs();
-    if (!this.els.text) return;
-    this.els.text.value = joinCommittedPartial(
-      this.state.committedText,
-      this.state.partialText
-    );
-    var ta = this.els.text;
-    if (ta.scrollHeight > ta.clientHeight) {
-      ta.style.height = "auto";
-      ta.style.height = Math.min(ta.scrollHeight + 4, window.innerHeight * 0.5) + "px";
+    if (this.els.text) {
+      if (this.state.liveDiarization && this._shouldShowRichPreview()) {
+        // Textarea = plaintext committed only (copie / pause) ; partial dans le panneau riche.
+        this.els.text.value = this.state.committedText || "";
+      } else {
+        this.els.text.value = joinCommittedPartial(
+          this.state.committedText,
+          this.state.partialText
+        );
+      }
+      var ta = this.els.text;
+      if (ta.scrollHeight > ta.clientHeight) {
+        ta.style.height = "auto";
+        ta.style.height = Math.min(ta.scrollHeight + 4, window.innerHeight * 0.5) + "px";
+      }
     }
+    this.syncLivePreviewUi();
   };
 
   /** Gèle l’option speakers pour la session WS (start / resume). Toggle mid-écoute sans effet. */
@@ -640,7 +868,10 @@
     this.state.partialText = "";
     this.state.pcmChunks = [];
     this.state.lastLiveSpeaker = "";
+    this.state.turns = [];
+    this._richTurnCount = 0;
     this.freezeLiveDiarizationOptions();
+    if (this.els.turns) this.els.turns.innerHTML = "";
     this.renderText();
 
     this.setStatus("initializing", "Initialisation micro...");
@@ -705,6 +936,17 @@
     this.state.committedText = ((this.els.text && this.els.text.value) || "").trim();
     this.state.partialText = "";
     this.freezeLiveDiarizationOptions();
+    if (this.state.liveDiarization) {
+      this.state.turns = parsePlainToTurns(this.state.committedText);
+      this.state.lastLiveSpeaker = this.state.turns.length
+        ? this.state.turns[this.state.turns.length - 1].speaker || ""
+        : "";
+      this._richTurnCount = 0;
+      this.renderTurns(true);
+    } else {
+      this.state.turns = [];
+      this.state.lastLiveSpeaker = "";
+    }
     this.renderText();
 
     this.setStatus("connecting", "Reconnexion au service vocal...");
