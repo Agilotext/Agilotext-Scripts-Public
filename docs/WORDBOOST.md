@@ -38,7 +38,7 @@ Voir [`docs/WEBFLOW_WORDBOOST_UX.md`](WEBFLOW_WORDBOOST_UX.md).
 **CDN pin (remplacer SHA après push r14.1) :**
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_R14_1/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@dbe36dcdee374343677afa27464435402cfb78e6/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
 ```
 
 ## Backend Java (Nicolas uniquement)

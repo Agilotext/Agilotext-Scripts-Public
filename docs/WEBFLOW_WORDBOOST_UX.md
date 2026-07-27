@@ -11,10 +11,10 @@ Page : **Mon compte → Mots à surveiller** (`/app/business/profile?tab=mots-cl
 3. Coller **uniquement** :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<SHA_R14_1>/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@<dbe36dcdee374343677afa27464435402cfb78e6>/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
 ```
 
-Remplacer `<SHA_R14_1>` par le SHA du commit r14.1 (voir fin de [`docs/WORDBOOST.md`](WORDBOOST.md) après push).
+Remplacer `<dbe36dcdee374343677afa27464435402cfb78e6>` par le SHA du commit r14.1 (voir fin de [`docs/WORDBOOST.md`](WORDBOOST.md) après push).
 
 Alternative : coller le fichier [`Script a changer`](../Script%20a%20changer) **à la place** de l’inline (pas en plus).
 

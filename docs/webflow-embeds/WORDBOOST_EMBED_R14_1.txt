@@ -3,4 +3,4 @@
      2) Coller UNIQUEMENT les lignes ci-dessous (remplacer SHA après push)
 -->
 
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_R14_1/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@dbe36dcdee374343677afa27464435402cfb78e6/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
