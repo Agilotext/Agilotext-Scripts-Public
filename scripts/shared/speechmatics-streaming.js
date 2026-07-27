@@ -30,6 +30,52 @@
     );
   }
 
+  function pickSpeaker(item) {
+    if (!item) return "";
+    if (item.speaker != null && item.speaker !== "") return String(item.speaker);
+    var alt = item.alternatives && item.alternatives[0];
+    if (alt && alt.speaker != null && alt.speaker !== "") return String(alt.speaker);
+    return "";
+  }
+
+  /**
+   * Finals only: prefix "Speaker X:" on speaker change. Mutates state.lastLiveSpeaker.
+   * Preview live (le job batch à l’arrêt reste la vérité métier).
+   */
+  function appendDiarizedFinals(committed, results, state) {
+    if (!Array.isArray(results) || !results.length) return committed || "";
+    var out = committed || "";
+    var lastSpeaker = state.lastLiveSpeaker || "";
+
+    for (var i = 0; i < results.length; i += 1) {
+      var item = results[i];
+      var content =
+        (item && item.alternatives && item.alternatives[0] && item.alternatives[0].content) || "";
+      if (!content) continue;
+
+      var speaker = pickSpeaker(item);
+      if (speaker && speaker !== lastSpeaker) {
+        if (out) out += "\n";
+        out += "Speaker " + speaker + ": ";
+        lastSpeaker = speaker;
+      } else if (out && !/[\s:]$/.test(out) && !/^[,.;:!?…]/.test(content)) {
+        out += " ";
+      }
+      out += content;
+    }
+
+    state.lastLiveSpeaker = lastSpeaker;
+    return out;
+  }
+
+  /** Joint committed + partial sans écraser les sauts de ligne (labels Speaker). */
+  function joinCommittedPartial(committed, partial) {
+    if (!partial) return committed || "";
+    if (!committed) return partial;
+    if (/[\s]$/.test(committed)) return committed + partial;
+    return committed + " " + partial;
+  }
+
   /** Webflow peut déplacer le minuteur hors du nœud root : repli par id unique. */
   function queryTimerEl(root) {
     var el = root.querySelector("#agilo-streaming-timer");
@@ -102,7 +148,10 @@
       committedText: "",
       partialText: "",
       pcmChunks: [],
-      email: ""
+      email: "",
+      liveDiarization: false,
+      maxSpeakers: 0,
+      lastLiveSpeaker: ""
     };
 
     this.els = {};
@@ -298,15 +347,22 @@
   AgiloLiveVoiceController.prototype.renderText = function () {
     this.refreshDomRefs();
     if (!this.els.text) return;
-    this.els.text.value = joinText([
+    this.els.text.value = joinCommittedPartial(
       this.state.committedText,
       this.state.partialText
-    ]);
+    );
     var ta = this.els.text;
     if (ta.scrollHeight > ta.clientHeight) {
       ta.style.height = "auto";
       ta.style.height = Math.min(ta.scrollHeight + 4, window.innerHeight * 0.5) + "px";
     }
+  };
+
+  /** Gèle l’option speakers pour la session WS (start / resume). Toggle mid-écoute sans effet. */
+  AgiloLiveVoiceController.prototype.freezeLiveDiarizationOptions = function () {
+    var opts = this.getOptions();
+    this.state.liveDiarization = !!opts.speakers;
+    this.state.maxSpeakers = Number(opts.speakersExpected) || 0;
   };
 
   AgiloLiveVoiceController.prototype._updateLevel = function (chunk) {
@@ -445,6 +501,30 @@
         self.state.seqNo = 0;
 
         ws.addEventListener("open", function () {
+          var transcriptionConfig = {
+            language: self.getLanguage(),
+            operating_point: "enhanced",
+            enable_partials: true,
+            max_delay: 1.0,
+            max_delay_mode: "flexible"
+          };
+
+          if (self.state.liveDiarization) {
+            transcriptionConfig.diarization = "speaker";
+            var n = Number(self.state.maxSpeakers) || 0;
+            if (n >= 2 && n <= 10) {
+              transcriptionConfig.speaker_diarization_config = { max_speakers: n };
+            }
+            console.info(
+              "[AgiloLive] StartRecognition diarization=",
+              transcriptionConfig.diarization,
+              "max_speakers=",
+              (transcriptionConfig.speaker_diarization_config &&
+                transcriptionConfig.speaker_diarization_config.max_speakers) ||
+                "auto"
+            );
+          }
+
           ws.send(JSON.stringify({
             message: "StartRecognition",
             audio_format: {
@@ -452,13 +532,7 @@
               encoding: "pcm_s16le",
               sample_rate: self.state.sampleRate
             },
-            transcription_config: {
-              language: self.getLanguage(),
-              operating_point: "enhanced",
-              enable_partials: true,
-              max_delay: 1.0,
-              max_delay_mode: "flexible"
-            }
+            transcription_config: transcriptionConfig
           }));
         });
 
@@ -472,17 +546,26 @@
           }
 
           if (msg.message === "AddPartialTranscript") {
+            // Partials: texte plat (évite flicker labels).
             self.state.partialText = resultsToText(msg.results || []);
             self.renderText();
             return;
           }
 
           if (msg.message === "AddTranscript") {
-            var finalText = resultsToText(msg.results || []);
-            self.state.committedText = joinText([
-              self.state.committedText,
-              finalText
-            ]);
+            if (self.state.liveDiarization) {
+              self.state.committedText = appendDiarizedFinals(
+                self.state.committedText,
+                msg.results || [],
+                self.state
+              );
+            } else {
+              var finalText = resultsToText(msg.results || []);
+              self.state.committedText = joinText([
+                self.state.committedText,
+                finalText
+              ]);
+            }
             self.state.partialText = "";
             self.renderText();
             return;
@@ -494,6 +577,7 @@
           }
 
           if (msg.message === "Error") {
+            console.error("[AgiloLive] Speechmatics Error:", msg.reason || msg);
             reject(new Error(msg.reason || "rt_stream_error"));
           }
         });
@@ -555,6 +639,8 @@
     this.state.committedText = "";
     this.state.partialText = "";
     this.state.pcmChunks = [];
+    this.state.lastLiveSpeaker = "";
+    this.freezeLiveDiarizationOptions();
     this.renderText();
 
     this.setStatus("initializing", "Initialisation micro...");
@@ -618,6 +704,7 @@
     // Prendre le texte édité comme nouvelle base
     this.state.committedText = ((this.els.text && this.els.text.value) || "").trim();
     this.state.partialText = "";
+    this.freezeLiveDiarizationOptions();
     this.renderText();
 
     this.setStatus("connecting", "Reconnexion au service vocal...");
