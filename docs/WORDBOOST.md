@@ -9,17 +9,20 @@ Les termes sont validés en deux étapes :
 
 **Ligatures** (`œ`, `æ`, `ß`, ligatures typographiques Word `ﬁ`/`ﬂ`) doivent être converties en `oe`, `ae`, `ss`, `fi`, `fl` **avant** envoi, sinon status `ON_ERROR`.
 
+**Artefact connu (2026-07-27)** : l’API peut échouer avec  
+`Invalid to-word: … got "[oiuytr]"`  
+alors que le front envoie `{"wordBoost":["oiuytr"]}`. Hypothèse : `List.toString()` passé à `ToWordNoSpecialCharsConverter.sanitize` (boost 146, démo Florian). Voir ticket Nicolas + [`webflow-embeds/WORDBOOST_AUDIT_ON_ERROR_2026-07-27.md`](webflow-embeds/WORDBOOST_AUDIT_ON_ERROR_2026-07-27.md).
+
 ## Fichiers
 
 | Fichier | Rôle |
 |---------|------|
-| `scripts/shared/wordboost-sanitize.mjs` | Module Node : `normalizeLigatures`, `validateWord`, `sanitizeWordList` |
-| `scripts/pages/profile/wordboost2.js` | Front Webflow Mon compte (r14) |
+| `scripts/shared/wordboost-sanitize.mjs` | Module Node : unwrap crochets, ligatures, `sanitizeWordList` |
+| `scripts/shared/wordboost-sanitize.test.mjs` | Tests unitaires sanitize |
+| `scripts/pages/profile/wordboost2.js` | Front Webflow Mon compte (**r14.1**) |
 | `Script a changer` | Copie inline Webflow (coller dans la page) |
 
 ## Scripts admin (Node)
-
-Tout script `apply_*_wordboost.mjs` doit importer le module partagé :
 
 ```js
 import { sanitizeWordList } from "../../../Agilotext-Scripts-Public/scripts/shared/wordboost-sanitize.mjs";
@@ -30,18 +33,16 @@ const { words, corrected, rejected } = sanitizeWordList(rawWords);
 
 ## Déploiement Webflow
 
-Page **Mon compte → Mots à surveiller** :
+Voir [`docs/WEBFLOW_WORDBOOST_UX.md`](WEBFLOW_WORDBOOST_UX.md).
+
+**CDN pin (remplacer SHA après push r14.1) :**
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/profile/wordboost2.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_R14_1/scripts/pages/profile/wordboost2.js?v=r14.1"></script>
 ```
-
-Ou coller le contenu de `Script a changer` (inline).
-
-Voir aussi `docs/WEBFLOW_WORDBOOST_UX.md` pour les textes à ajouter dans Webflow.
 
 ## Backend Java (Nicolas uniquement)
 
-Le backend **n'est pas modifié** dans ce repo. Les scripts front/admin normalisent les termes avant envoi pour rester compatibles avec `ToWordNoSpecialCharsConverter` actuel.
+Le backend **n’est pas modifié** dans ce repo. Contournements front : normalisation ligatures + unwrap défensif `[mot]` + toasts ON_ERROR.
 
-Proposition optionnelle pour Nicolas : `CNOEC_Agiloshield_Docs/PATCH_WORDBOOST_LIGATURES_NICOLAS.md`
+Proposition : `CNOEC_Agiloshield_Docs/PATCH_WORDBOOST_LIGATURES_NICOLAS.md`

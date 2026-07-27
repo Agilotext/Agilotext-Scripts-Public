@@ -1,0 +1,6 @@
+<!-- Webflow Mon compte → embed Mots à surveiller (code-mots-cl-s)
+     1) SUPPRIMER tout le <script id="wordboost2-module"> inline r13
+     2) Coller UNIQUEMENT les lignes ci-dessous (remplacer SHA après push)
+-->
+
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_R14_1/scripts/pages/profile/wordboost2.js?v=r14.1"></script>

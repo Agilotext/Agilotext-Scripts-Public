@@ -39,13 +39,51 @@ export function looksLikeMojibake(text) {
 }
 
 /**
- * Valide UN mot/terme après normalisation.
+ * Détecte un artefact Java List.toString() du type `[oiuytr]` ou `["oiuytr"]`.
+ * @returns {{ unwrapped: boolean, value: string|null, reason?: string }}
+ */
+export function unwrapBracketArtifact(raw) {
+  const trimmed = trimWord(raw);
+  const m = /^\[(.*)\]$/.exec(trimmed);
+  if (!m) return { unwrapped: false, value: trimmed };
+
+  const innerRaw = m[1].trim();
+  // Liste multi-éléments Java : "[a, b]" → invalide comme terme unique
+  if (/,/.test(innerRaw)) {
+    return { unwrapped: true, value: null, reason: "list_tostring" };
+  }
+
+  let inner = innerRaw;
+  if (
+    (inner.startsWith('"') && inner.endsWith('"')) ||
+    (inner.startsWith("'") && inner.endsWith("'"))
+  ) {
+    inner = inner.slice(1, -1);
+  }
+  inner = trimWord(inner);
+  if (!inner) return { unwrapped: true, value: null, reason: "invalide" };
+  return { unwrapped: true, value: inner };
+}
+
+/**
+ * Valide UN mot/terme après normalisation (+ unwrap crochets défensif).
  * @returns {{ ok: boolean, reason?: string, normalized: string, corrected?: boolean }}
  */
 export function validateWord(raw) {
-  const trimmed = trimWord(raw);
+  const bracket = unwrapBracketArtifact(raw);
+  if (bracket.unwrapped && bracket.value == null) {
+    return {
+      ok: false,
+      reason: bracket.reason || "invalide",
+      normalized: trimWord(raw),
+      corrected: false,
+    };
+  }
+
+  const source = bracket.value;
+  const trimmed = trimWord(source);
   const normalized = normalizeLigatures(trimmed);
-  const corrected = normalized !== trimmed;
+  const corrected = normalized !== trimWord(raw) || bracket.unwrapped;
 
   if (normalized.length < MIN_WORD_LEN) {
     return { ok: false, reason: "trop_court", normalized, corrected };
@@ -60,7 +98,7 @@ export function validateWord(raw) {
 }
 
 /**
- * Nettoie une liste de tokens pour l'API (Node/admin).
+ * Nettoie une liste de tokens pour l'API (Node/admin) ou re-load getWordBoost2.
  * @returns {{ words: string[], corrected: Array<{from:string,to:string}>, rejected: Array<{word:string,reason:string}> }}
  */
 export function sanitizeWordList(words) {
@@ -83,4 +121,9 @@ export function sanitizeWordList(words) {
   }
 
   return { words: out, corrected, rejected };
+}
+
+/** Message ON_ERROR : crochets dans got "..." = artefact serveur probable */
+export function isBracketServerErrorMessage(userErrorMessage) {
+  return /got "\[[^\"]*\]"/.test(String(userErrorMessage || ""));
 }
