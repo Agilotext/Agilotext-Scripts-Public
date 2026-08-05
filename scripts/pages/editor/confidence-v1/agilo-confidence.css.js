@@ -25,18 +25,27 @@
   transition: box-shadow .16s ease, padding .16s ease, border-color .16s ease, transform .16s ease;
 }
 
+/* Flotte sous la chrome éditeur (onglets/toolbar). Ne jamais monter au-dessus
+   des onglets Transcription / Compte rendu / Assistant (bug top:10px / z:9999). */
 .ag-confidence-panel.is-floating {
   position: fixed;
-  top: var(--ag-confidence-floating-top, 10px);
+  top: var(--ag-confidence-floating-top, 72px);
   left: var(--ag-confidence-floating-left, 16px);
   width: var(--ag-confidence-floating-width, min(760px, calc(100vw - 32px)));
   max-width: calc(100vw - 32px);
   margin: 0;
   padding: 0.38rem 0.52rem;
-  z-index: 9999;
+  z-index: 25;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
   border-color: rgba(23, 74, 150, 0.20);
   transform: translateZ(0);
+}
+
+main.ed-main > .ed-tabs,
+main.ed-main > nav.ed-tabs,
+main.ed-main > .ed-toolbar {
+  position: relative;
+  z-index: 40;
 }
 
 .ag-confidence-panel.is-floating .ag-confidence-panel__stat:not(.ag-confidence-panel__stat--primary),

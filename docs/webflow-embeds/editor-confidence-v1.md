@@ -144,16 +144,31 @@ window.AgiloConfidence = {
 | Fichier | Rôle |
 |---------|------|
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
-| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence (`__agiloEditorConfidenceVersion`) |
 | `confidence-v1/agilo-confidence.js` | Module V2.4/V3 confidence |
 | `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau + highlights |
+| `confidence-v1/DIAGNOSTIC_PASSAGES_A_RELIRE.js` | Diagnostic console recouvrement onglets |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
+
+## Correctif 1.09.2 — onglets masqués au clic « Passages à relire »
+
+**Symptôme :** après clic sur le toggle, impression que Transcription / Compte rendu / Assistant disparaissent.
+
+**Cause :** panneau confidence en `position:fixed; top:10px; z-index:9999` recouvrant `nav.ed-tabs`. Pas l’iframe CR, pas `__agiloTabsV`.
+
+**Fix :** top flottant calculé sous la chrome éditeur, z-index abaissé, `stopPropagation` sur le toggle, filet `ensureActiveEditorPane()`, fallback iframe sans injection HTML riche.
+
+Voir aussi [`inline-embed-scripts.md`](./inline-embed-scripts.md) section « Passages à relire ».
+
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.2'`
 
 ## Tests
 
 ```bash
 node scripts/pages/editor/confidence-v1/agilo-confidence.test.mjs
 ```
+
+Couvre notamment : top flottant sous chrome, restauration d’un volet si aucun `.is-active`, persistence toggle ON/OFF sans rechargement.
 
 ## Checklist validation (Nicolas)
 

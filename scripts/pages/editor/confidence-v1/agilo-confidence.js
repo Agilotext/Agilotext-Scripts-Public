@@ -23,6 +23,7 @@
   let __transcriptRoot = null;
   let __panelSentinel = null;
   let __panelFloatCleanup = null;
+  let __panelFloatRefresh = null;
   let __keyboardBound = false;
 
   function debugLog(reason, details) {
@@ -335,13 +336,101 @@
   function teardownPanelFloating() {
     try { __panelFloatCleanup?.(); } catch { /* ignore */ }
     __panelFloatCleanup = null;
+    __panelFloatRefresh = null;
     if (__panelSentinel?.remove) __panelSentinel.remove();
     __panelSentinel = null;
   }
 
+  /**
+   * Bas de la chrome éditeur (onglets + toolbar) pour éviter qu'un panneau
+   * `position:fixed` recouvre Transcription / Compte rendu / Assistant.
+   */
+  function getEditorChromeBottom(doc = document) {
+    if (!doc?.querySelector) return 0;
+    const selectors = [
+      'main.ed-main nav.ed-tabs',
+      'main.ed-main [data-tour="ed-tabs"]',
+      'nav.ed-tabs',
+      'main.ed-main .ed-toolbar',
+      '.ed-toolbar'
+    ];
+    let bottom = 0;
+    selectors.forEach((sel) => {
+      const el = doc.querySelector(sel);
+      if (!el || typeof el.getBoundingClientRect !== 'function') return;
+      const rect = el.getBoundingClientRect();
+      if (rect && Number.isFinite(rect.bottom) && rect.height > 0) {
+        bottom = Math.max(bottom, rect.bottom);
+      }
+    });
+    return bottom;
+  }
+
+  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth) {
+    const safeChrome = Math.max(0, Number(chromeBottom) || 0);
+    const floatThreshold = Math.max(8, safeChrome + 4);
+    const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
+    const cLeft = Number(containerRect?.left) || 0;
+    const cWidth = Number(containerRect?.width) || 0;
+    const cBottom = Number(containerRect?.bottom) || 0;
+    const sTop = Number(sentinelRect?.top) || 0;
+    const shouldFloat = sTop < floatThreshold && cBottom > safeChrome + 72;
+    if (!shouldFloat) {
+      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
+    }
+    return {
+      shouldFloat: true,
+      left: Math.max(12, cLeft),
+      width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
+      top: Math.max(10, safeChrome + 8),
+      chromeBottom: safeChrome
+    };
+  }
+
+  /** Restaure un volet actif si le filet CSS a tout masqué (aucun `.is-active`). */
+  function ensureActiveEditorPane(doc = document) {
+    try {
+      const root = doc.querySelector?.('main.ed-main[data-ed-tabs], main.ed-main, [data-ed-tabs]');
+      if (!root) return false;
+      const panes = Array.from(root.querySelectorAll?.('.edtr-pane') || []);
+      if (!panes.length) return false;
+      const active = panes.filter((p) => p.classList?.contains?.('is-active') && !p.hasAttribute?.('hidden'));
+      if (active.length === 1) return false;
+
+      const transcript = root.querySelector?.('#pane-transcript') || panes[0];
+      const id = String(transcript?.id || 'pane-transcript').replace(/^pane-/, '') || 'transcript';
+      const tab = root.querySelector?.(`#tab-${id}`)
+        || root.querySelector?.(`.ed-tab[data-tab="${id}"]`)
+        || null;
+
+      panes.forEach((p) => {
+        const on = p === transcript;
+        p.classList?.toggle?.('is-active', on);
+        if (on) p.removeAttribute?.('hidden');
+        else p.setAttribute?.('hidden', '');
+      });
+
+      Array.from(root.querySelectorAll?.('.ed-tab') || []).forEach((b) => {
+        const on = b === tab
+          || b.dataset?.tab === id
+          || b.id === `tab-${id}`
+          || b.getAttribute?.('aria-controls') === `pane-${id}`;
+        b.classList?.toggle?.('is-active', on);
+        b.setAttribute?.('aria-selected', String(on));
+        b.setAttribute?.('tabindex', on ? '0' : '-1');
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function setupPanelFloating(panel, transcriptRoot) {
     if (!panel || !transcriptRoot || !window?.addEventListener) return;
-    if (__panelFloatCleanup && __panelSentinel?.nextElementSibling === panel) return;
+    if (__panelFloatCleanup && __panelSentinel?.nextElementSibling === panel) {
+      try { __panelFloatRefresh?.(); } catch { /* ignore */ }
+      return;
+    }
 
     teardownPanelFloating();
 
@@ -359,16 +448,19 @@
       const sRect = sentinel.getBoundingClientRect();
       const container = transcriptRoot.parentElement || transcriptRoot;
       const cRect = container.getBoundingClientRect();
-      const shouldFloat = sRect.top < 8 && cRect.bottom > 72;
+      const box = computeConfidenceFloatingBox(
+        sRect,
+        cRect,
+        getEditorChromeBottom(document),
+        window.innerWidth
+      );
 
-      if (shouldFloat) {
-        const left = Math.max(12, cRect.left);
-        const width = Math.max(260, Math.min(cRect.width, window.innerWidth - 24));
-        panel.style.setProperty('--ag-confidence-floating-left', `${left}px`);
-        panel.style.setProperty('--ag-confidence-floating-width', `${width}px`);
-        panel.style.setProperty('--ag-confidence-floating-top', '10px');
+      if (box.shouldFloat) {
+        panel.style.setProperty('--ag-confidence-floating-left', `${box.left}px`);
+        panel.style.setProperty('--ag-confidence-floating-width', `${box.width}px`);
+        panel.style.setProperty('--ag-confidence-floating-top', `${box.top}px`);
       }
-      panel.classList.toggle('is-floating', shouldFloat);
+      panel.classList.toggle('is-floating', box.shouldFloat);
     };
 
     let raf = 0;
@@ -387,6 +479,7 @@
     window.addEventListener('resize', schedule);
     schedule();
 
+    __panelFloatRefresh = schedule;
     __panelFloatCleanup = () => {
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
@@ -396,6 +489,7 @@
       panel.style.removeProperty('--ag-confidence-floating-left');
       panel.style.removeProperty('--ag-confidence-floating-width');
       panel.style.removeProperty('--ag-confidence-floating-top');
+      __panelFloatRefresh = null;
     };
   }
 
@@ -756,12 +850,24 @@
         toggleHtml;
     }
 
-    panel.querySelector('#ag-confidence-next')?.addEventListener('click', goToNextConfidenceZone);
-    panel.querySelector('#ag-confidence-toggle')?.addEventListener('click', () => {
+    panel.querySelector('#ag-confidence-next')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      goToNextConfidenceZone();
+    });
+    panel.querySelector('#ag-confidence-toggle')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
       toggleUserConfidenceVisible();
     });
-    panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', dismissHelper);
-    panel.querySelector('#ag-confidence-helper-more')?.addEventListener('click', () => {
+    panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      dismissHelper();
+    });
+    panel.querySelector('#ag-confidence-helper-more')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
       const details = panel.querySelector('.ag-confidence-helper__details');
       const more = panel.querySelector('#ag-confidence-helper-more');
       if (details) details.hidden = false;
@@ -784,7 +890,10 @@
     }
 
     const root = getTranscriptRoot();
-    if (!root) return;
+    if (!root) {
+      ensureActiveEditorPane(document);
+      return;
+    }
 
     root.querySelectorAll('.ag-seg').forEach((art) => {
       const segId = art.dataset.id || '';
@@ -800,6 +909,7 @@
 
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary) renderConfidencePanel(root, summary);
+    ensureActiveEditorPane(document);
   }
 
   function toggleUserConfidenceVisible() {
@@ -1043,6 +1153,9 @@
     abortCurrentConfidenceFetch,
     goToNextConfidenceZone,
     goToPreviousConfidenceZone,
-    getCurrentNavIndex: () => __navIndex
+    getCurrentNavIndex: () => __navIndex,
+    getEditorChromeBottom,
+    computeConfidenceFloatingBox,
+    ensureActiveEditorPane
   };
 })();

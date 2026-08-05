@@ -170,12 +170,60 @@ Lancer dans la console **avant** de reproduire le bug. Le script observe les ong
 
 ---
 
+## Diagnostic — « Passages à relire » masque Transcription / Compte rendu / Assistant
+
+### Cause confirmée (août 2026, fix `1.09.2`)
+
+Ce n’est **pas** l’iframe du compte rendu qui est en cause au clic du toggle.
+
+Le panneau `#ag-confidence-panel` passait en `position: fixed` avec `top: 10px` et `z-index: 9999` dès que le sentinel scrollait près du haut du viewport (scroll capturé sur le volet transcript). La barre `nav.ed-tabs` (Transcription / Compte rendu / Assistant) restait dans le flux normal, donc **recouverte** : impression que les trois panneaux avaient disparu.
+
+Preuves statiques sur la capture `Éditeur de transcripts _ Business.html` :
+
+- `#pane-transcript` reste `is-active`, les deux autres restent `hidden`
+- aucune `<iframe class="ag-summary-iframe">` dans le job capturé
+- le toggle confidence ne touche ni `#tab-*` ni `#pane-*`
+- variables flottantes déjà calculées : `--ag-confidence-floating-top: 10px`, largeur ~961px
+
+### Correctif versionné
+
+| Fichier | Changement |
+|---------|------------|
+| `confidence-v1/agilo-confidence.js` | `top` flottant = bas des onglets/toolbar + 8px ; `stopPropagation` sur le toggle ; `ensureActiveEditorPane()` |
+| `confidence-v1/agilo-confidence.css.js` | `z-index: 25` (plus 9999) ; chrome `.ed-tabs` / `.ed-toolbar` en `z-index: 40` |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | fallback iframe : alerte locale, plus d’injection HTML riche dans le parent |
+
+Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.2'`
+
+### Script console dédié
+
+Coller le contenu de :
+
+`scripts/pages/editor/confidence-v1/DIAGNOSTIC_PASSAGES_A_RELIRE.js`
+
+Puis cliquer le toggle. Interprétation :
+
+- `overlapTabs=true` + `floating=true` → recouvrement flottant (régression si `top` trop bas / z-index trop haut)
+- `activePanes=0` → perte de `.is-active` (filet CSS `chat-embed-styles.css`)
+- `beforeLoadCount` augmente → rechargement job involontaire
+- `iframeFailed=true` → échec d’isolation CR (hors toggle)
+
+### Piste iframe (historique, hors toggle)
+
+L’iframe summary a bien corrigé l’ancienne fuite CSS des templates CR riches (bug Chromium de barre d’onglets). Elle n’est pas appelée par « Passages à relire ». Le fallback `el.innerHTML = html` a été retiré en `1.09.2` pour éviter toute régression CR.
+
+---
+
 ## Purge jsDelivr après déploiement
 
 ```
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js
 
+https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js
+
+https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js
+
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js
 ```
 
-Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` et `window.__agiloAnonVersion`.
+Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.2`) et `window.__agiloAnonVersion`.

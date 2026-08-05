@@ -298,6 +298,167 @@ async function run() {
   assert(typeof AC.reload === 'function', 'reload exposé');
   assert(typeof AC.clear === 'function', 'clear exposé');
 
+  // --- Non-régression : panneau flottant sous les onglets (bug 1.09.2) ---
+  assert(typeof AC.computeConfidenceFloatingBox === 'function', 'computeConfidenceFloatingBox exposé');
+  assert(typeof AC.getEditorChromeBottom === 'function', 'getEditorChromeBottom exposé');
+  assert(typeof AC.ensureActiveEditorPane === 'function', 'ensureActiveEditorPane exposé');
+
+  const chromeBottom = 120;
+  const floatCoveringTabs = AC.computeConfidenceFloatingBox(
+    { top: 4 },
+    { left: 320, width: 960, bottom: 800 },
+    chromeBottom,
+    1440
+  );
+  assert(floatCoveringTabs.shouldFloat === true, 'float actif quand sentinel sous chrome');
+  assert(floatCoveringTabs.top >= chromeBottom + 8, 'top flottant sous la barre d onglets');
+  assert(floatCoveringTabs.top > 10, 'top flottant ne reste pas a 10px viewport');
+
+  const noFloat = AC.computeConfidenceFloatingBox(
+    { top: 200 },
+    { left: 320, width: 960, bottom: 800 },
+    chromeBottom,
+    1440
+  );
+  assert(noFloat.shouldFloat === false, 'pas de float si sentinel encore visible sous chrome');
+
+  const mobileFloat = AC.computeConfidenceFloatingBox(
+    { top: 0 },
+    { left: 8, width: 360, bottom: 640 },
+    96,
+    390
+  );
+  assert(mobileFloat.shouldFloat === true, 'float mobile possible');
+  assert(mobileFloat.width <= 390 - 24, 'largeur flottante bornee au viewport');
+  assert(mobileFloat.top >= 96 + 8, 'top mobile sous chrome');
+
+  // --- Invariant multi-panneaux : toggle ne doit pas tout masquer ---
+  function makeEditorDom() {
+    const mk = (tag, props = {}) => {
+      const el = {
+        tagName: String(tag).toUpperCase(),
+        id: props.id || '',
+        className: props.className || '',
+        classList: {
+          _s: new Set(String(props.className || '').split(/\s+/).filter(Boolean)),
+          add(c) { this._s.add(c); el.className = [...this._s].join(' '); },
+          remove(c) { this._s.delete(c); el.className = [...this._s].join(' '); },
+          contains(c) { return this._s.has(c); },
+          toggle(c, v) {
+            if (v) this.add(c);
+            else this.remove(c);
+          }
+        },
+        dataset: { ...(props.dataset || {}) },
+        attrs: { ...(props.attrs || {}) },
+        children: [],
+        parentElement: null,
+        style: { _m: new Map(), setProperty(k, v) { this._m.set(k, v); }, removeProperty(k) { this._m.delete(k); } },
+        getAttribute(name) {
+          if (name === 'aria-selected') return this.attrs['aria-selected'];
+          if (name === 'aria-controls') return this.attrs['aria-controls'];
+          if (name === 'hidden') return Object.prototype.hasOwnProperty.call(this.attrs, 'hidden') ? '' : null;
+          return this.attrs[name] ?? null;
+        },
+        setAttribute(name, value) { this.attrs[name] = String(value); },
+        removeAttribute(name) { delete this.attrs[name]; },
+        hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); },
+        querySelector(sel) {
+          return this.querySelectorAll(sel)[0] || null;
+        },
+        querySelectorAll(sel) {
+          const all = [];
+          const walk = (node) => {
+            if (!node) return;
+            all.push(node);
+            (node.children || []).forEach(walk);
+          };
+          walk(this);
+          if (sel === '.edtr-pane') return all.filter((n) => n.classList.contains('edtr-pane'));
+          if (sel === '.ed-tab') return all.filter((n) => n.classList.contains('ed-tab'));
+          if (sel.startsWith('#')) return all.filter((n) => n.id === sel.slice(1));
+          if (sel.startsWith('.ed-tab[data-tab=')) {
+            const tab = sel.match(/data-tab="([^"]+)"/)?.[1];
+            return all.filter((n) => n.classList.contains('ed-tab') && n.dataset.tab === tab);
+          }
+          return [];
+        }
+      };
+      return el;
+    };
+
+    const root = mk('main', { className: 'ed-main', attrs: { 'data-ed-tabs': '' } });
+    root.id = '';
+    const tabs = [
+      mk('button', { id: 'tab-transcript', className: 'ed-tab is-active', dataset: { tab: 'transcript' }, attrs: { 'aria-selected': 'true', 'aria-controls': 'pane-transcript' } }),
+      mk('button', { id: 'tab-summary', className: 'ed-tab', dataset: { tab: 'summary' }, attrs: { 'aria-selected': 'false', 'aria-controls': 'pane-summary' } }),
+      mk('button', { id: 'tab-chat', className: 'ed-tab', dataset: { tab: 'chat' }, attrs: { 'aria-selected': 'false', 'aria-controls': 'pane-chat' } })
+    ];
+    const panes = [
+      mk('section', { id: 'pane-transcript', className: 'edtr-pane is-active' }),
+      mk('section', { id: 'pane-summary', className: 'edtr-pane', attrs: { hidden: '' } }),
+      mk('section', { id: 'pane-chat', className: 'edtr-pane', attrs: { hidden: '' } })
+    ];
+    root.children = [...tabs, ...panes];
+    tabs.forEach((t) => { t.parentElement = root; });
+    panes.forEach((p) => { p.parentElement = root; });
+
+    root.querySelector = (sel) => {
+      if (sel === '#pane-transcript') return panes[0];
+      if (sel.startsWith('#tab-')) return tabs.find((t) => t.id === sel.slice(1)) || null;
+      if (sel.startsWith('.ed-tab[data-tab=')) {
+        const tab = sel.match(/data-tab="([^"]+)"/)?.[1];
+        return tabs.find((t) => t.dataset.tab === tab) || null;
+      }
+      return null;
+    };
+    root.querySelectorAll = (sel) => {
+      if (sel === '.edtr-pane') return panes;
+      if (sel === '.ed-tab') return tabs;
+      return [];
+    };
+
+    const fakeDoc = {
+      querySelector(sel) {
+        if (sel.includes('main.ed-main') || sel.includes('[data-ed-tabs]')) return root;
+        if (sel.startsWith('#')) return [...tabs, ...panes].find((n) => n.id === sel.slice(1)) || null;
+        return root.querySelector(sel);
+      },
+      querySelectorAll() { return []; }
+    };
+
+    return { fakeDoc, root, tabs, panes };
+  }
+
+  const editorA = makeEditorDom();
+  // Simule perte totale de .is-active
+  editorA.panes.forEach((p) => {
+    p.classList.remove('is-active');
+    p.setAttribute('hidden', '');
+  });
+  editorA.tabs.forEach((t) => {
+    t.classList.remove('is-active');
+    t.setAttribute('aria-selected', 'false');
+  });
+  const restored = AC.ensureActiveEditorPane(editorA.fakeDoc);
+  assert(restored === true, 'ensureActiveEditorPane restaure un volet');
+  assert(editorA.panes[0].classList.contains('is-active') === true, 'pane-transcript redevient actif');
+  assert(editorA.panes[0].hasAttribute('hidden') === false, 'pane-transcript n a plus hidden');
+  assert(editorA.panes.filter((p) => p.classList.contains('is-active')).length === 1, 'exactement un volet actif');
+  assert(editorA.tabs[0].classList.contains('is-active') === true, 'onglet transcript actif');
+
+  const editorB = makeEditorDom();
+  const noop = AC.ensureActiveEditorPane(editorB.fakeDoc);
+  assert(noop === false, 'ensureActiveEditorPane no-op si deja valide');
+  assert(editorB.panes[0].classList.contains('is-active') === true, 'volet transcript conserve');
+
+  // Toggle ON/OFF ne doit pas casser la preference ni exposer un chemin beforeload
+  const ACTogglePanes = boot({ storage: { 'agilo:confidence-visible:v1': 'true' } });
+  ACTogglePanes.toggle(false, true);
+  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v1') === 'false', 'toggle OFF persiste sans rechargement');
+  ACTogglePanes.toggle(true, true);
+  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v1') === 'true', 'toggle ON persiste sans rechargement');
+
   console.log(`\nRésultat : ${passed} ok, ${failed} échec(s)`);
   if (failed > 0) process.exit(1);
 }

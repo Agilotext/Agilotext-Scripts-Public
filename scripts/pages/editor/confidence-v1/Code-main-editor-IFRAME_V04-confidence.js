@@ -687,8 +687,15 @@
             this.srcdoc = html;
           } catch (e2) {
             console.error('[Editor] Erreur srcdoc fallback:', e2);
-            // Dernier recours : injection directe
-            el.innerHTML = html;
+            // Ne jamais injecter le HTML riche dans le parent : fuite CSS globale
+            // (historique : barre d'onglets qui disparaît sur Chromium).
+            el.removeAttribute('data-raw-html');
+            el.setAttribute('data-is-iframe', 'false');
+            el.setAttribute('data-iframe-failed', 'true');
+            el.innerHTML =
+              '<div class="ag-alert ag-alert--warn" role="alert">' +
+              'Impossible d’afficher ce compte rendu de façon isolée. Rechargez la page ou régénérez le compte rendu.' +
+              '</div>';
           }
         }
       };
@@ -3010,5 +3017,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.1';
+  window.__agiloEditorConfidenceVersion = '1.09.2';
 });
