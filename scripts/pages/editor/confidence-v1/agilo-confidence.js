@@ -25,6 +25,9 @@
   let __panelFloatCleanup = null;
   let __panelFloatRefresh = null;
   let __keyboardBound = false;
+  let __shellScrollGuardBound = false;
+  let __shellScrollGuardHandler = null;
+  let __shellScrollGuardDoc = null;
 
   function debugLog(reason, details) {
     if (window.AGILO_DEBUG) {
@@ -465,6 +468,60 @@
       if (el.scrollTop) el.scrollTop = 0;
       if (el.scrollLeft) el.scrollLeft = 0;
     });
+  }
+
+  function isEditorShellScrollTarget(el) {
+    if (!el?.classList) return false;
+    return el.classList.contains('ed-body') || el.classList.contains('ed-main');
+  }
+
+  function isHiddenOverflowShell(el) {
+    if (!el || typeof getComputedStyle !== 'function') return false;
+    const cs = getComputedStyle(el);
+    const oy = cs.overflowY || cs.overflow;
+    const ox = cs.overflowX || cs.overflow;
+    return oy === 'hidden' || ox === 'hidden';
+  }
+
+  function resetHiddenShellScroll(el) {
+    if (!el || !isEditorShellScrollTarget(el) || !isHiddenOverflowShell(el)) return false;
+    let changed = false;
+    if (el.scrollTop) {
+      el.scrollTop = 0;
+      changed = true;
+    }
+    if (el.scrollLeft) {
+      el.scrollLeft = 0;
+      changed = true;
+    }
+    return changed;
+  }
+
+  /** Filet : empêche .ed-body / .ed-main (overflow:hidden) de scroller et masquer les onglets. */
+  function startEditorShellScrollGuard(doc = document) {
+    if (__shellScrollGuardBound) return false;
+    if (!doc?.addEventListener) return false;
+
+    __shellScrollGuardHandler = (e) => {
+      resetHiddenShellScroll(e?.target);
+    };
+
+    doc.addEventListener('scroll', __shellScrollGuardHandler, { capture: true, passive: true });
+    __shellScrollGuardBound = true;
+    __shellScrollGuardDoc = doc;
+    return true;
+  }
+
+  function stopEditorShellScrollGuard(doc = document) {
+    const targetDoc = doc || __shellScrollGuardDoc;
+    if (!__shellScrollGuardBound || !__shellScrollGuardHandler || !targetDoc?.removeEventListener) {
+      return false;
+    }
+    targetDoc.removeEventListener('scroll', __shellScrollGuardHandler, true);
+    __shellScrollGuardBound = false;
+    __shellScrollGuardHandler = null;
+    __shellScrollGuardDoc = null;
+    return true;
   }
 
   function ensureTranscriptPaneActive(doc = document) {
@@ -1280,6 +1337,7 @@
   });
 
   repairEditorShellScroll(document);
+  startEditorShellScrollGuard(document);
 
   window.AgiloConfidence = {
     reload: reloadConfidenceForCurrentJob,
@@ -1321,6 +1379,11 @@
     captureAncestorScroll,
     restoreNonTargetScroll,
     repairEditorShellScroll,
+    startEditorShellScrollGuard,
+    stopEditorShellScrollGuard,
+    isEditorShellScrollTarget,
+    isHiddenOverflowShell,
+    resetHiddenShellScroll,
     ensureTranscriptPaneActive,
     scrollConfidenceBehavior
   };

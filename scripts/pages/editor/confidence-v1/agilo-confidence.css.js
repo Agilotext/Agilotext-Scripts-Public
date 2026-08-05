@@ -41,15 +41,11 @@
   transform: translateZ(0);
 }
 
-@media (min-width: 641px) {
-  main.ed-main > .ed-tabs,
-  main.ed-main > nav.ed-tabs,
-  main.ed-main > .ed-toolbar {
-    position: sticky;
-    top: 0;
-    z-index: 40;
-    background: #fff;
-  }
+main.ed-main > .ed-tabs,
+main.ed-main > nav.ed-tabs,
+main.ed-main > .ed-toolbar {
+  position: relative;
+  z-index: 40;
 }
 
 #pane-transcript .ag-seg,

@@ -646,6 +646,83 @@ async function run() {
   vm.runInNewContext(src, reducedSandbox);
   assert(reducedSandbox.window.AgiloConfidence.scrollConfidenceBehavior() === 'auto', 'prefers-reduced-motion => auto');
 
+  // --- Non-régression : garde scroll shell (retrait sticky 1.09.4) ---
+  assert(typeof AC.startEditorShellScrollGuard === 'function', 'startEditorShellScrollGuard exposé');
+  assert(typeof AC.stopEditorShellScrollGuard === 'function', 'stopEditorShellScrollGuard exposé');
+  assert(typeof AC.resetHiddenShellScroll === 'function', 'resetHiddenShellScroll exposé');
+
+  const guardStyleMap = new Map();
+  const guardBody = {
+    className: 'ed-body',
+    classList: { contains(c) { return c === 'ed-body'; } },
+    scrollTop: 200,
+    scrollLeft: 5
+  };
+  const guardPane = {
+    className: 'edtr-pane is-active',
+    classList: { contains(c) { return c === 'edtr-pane'; } },
+    scrollTop: 100,
+    scrollLeft: 0
+  };
+  guardStyleMap.set(guardBody, { overflowY: 'hidden', overflow: 'hidden', overflowX: 'hidden' });
+  guardStyleMap.set(guardPane, { overflowY: 'auto', overflow: 'auto', overflowX: 'visible' });
+
+  const guardSandbox = {
+    window: {
+      __agiloConfidence: false,
+      AGILOTEXT_ENABLE_CONFIDENCE: true,
+      addEventListener() {},
+      removeEventListener() {}
+    },
+    document: { querySelector: () => null, readyState: 'complete', addEventListener() {} },
+    getComputedStyle: (el) => guardStyleMap.get(el) || { overflowY: 'visible', overflow: 'visible', overflowX: 'visible' }
+  };
+  guardSandbox.window.window = guardSandbox.window;
+  vm.runInNewContext(src, guardSandbox);
+  const ACGuard = guardSandbox.window.AgiloConfidence;
+
+  assert(ACGuard.resetHiddenShellScroll(guardBody) === true, 'garde remet ed-body hidden a 0');
+  assert(guardBody.scrollTop === 0 && guardBody.scrollLeft === 0, 'ed-body scroll remis a zero');
+  assert(ACGuard.resetHiddenShellScroll(guardPane) === false, 'garde ignore overflow auto');
+  assert(guardPane.scrollTop === 100, 'pane transcript scroll preserve');
+
+  const guardDoc2 = {
+    listeners: [],
+    querySelector: () => null,
+    readyState: 'complete',
+    addEventListener(type, fn, opts) { this.listeners.push({ type, fn, opts }); },
+    removeEventListener(type, fn, capture) {
+      this.listeners = this.listeners.filter((l) => l.fn !== fn);
+    }
+  };
+  const guardBody2 = {
+    className: 'ed-body',
+    classList: { contains(c) { return c === 'ed-body'; } },
+    scrollTop: 0,
+    scrollLeft: 0
+  };
+  const guardSandbox2 = {
+    window: {
+      __agiloConfidence: false,
+      AGILOTEXT_ENABLE_CONFIDENCE: true,
+      addEventListener() {},
+      removeEventListener() {}
+    },
+    document: guardDoc2,
+    getComputedStyle: () => ({ overflowY: 'hidden', overflow: 'hidden', overflowX: 'hidden' })
+  };
+  guardSandbox2.window.window = guardSandbox2.window;
+  vm.runInNewContext(src, guardSandbox2);
+  const ACGuard2 = guardSandbox2.window.AgiloConfidence;
+  const scrollListeners = guardDoc2.listeners.filter((l) => l.type === 'scroll');
+  assert(scrollListeners.length === 1, 'un seul listener scroll a l init');
+  assert(ACGuard2.startEditorShellScrollGuard(guardDoc2) === false, 'startEditorShellScrollGuard idempotent');
+  assert(guardDoc2.listeners.filter((l) => l.type === 'scroll').length === 1, 'toujours un seul listener apres second start');
+
+  guardBody2.scrollTop = 150;
+  scrollListeners[0].fn({ target: guardBody2 });
+  assert(guardBody2.scrollTop === 0, 'listener scroll remet ed-body a 0');
+
   console.log(`\nRésultat : ${passed} ok, ${failed} échec(s)`);
   if (failed > 0) process.exit(1);
 }

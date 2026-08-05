@@ -156,13 +156,24 @@ window.AgiloConfidence = {
 
 **Cause :** `activateNavTarget()` appelait `art.scrollIntoView({ block: 'center' })`, ce qui scrollait aussi `.ed-body` (`overflow:hidden`). Le conteneur n'a pas de barre de défilement utilisable : les onglets sortent du cadre découpé sans retour possible.
 
-**Fix :** `scrollSegmentIntoView()` borne le scroll au seul conteneur `overflow:auto` (`#pane-transcript`), restaure les positions des autres ancêtres, active l'onglet Transcription si besoin, filet sticky sur `nav.ed-tabs` / `.ed-toolbar`.
+**Fix :** `scrollSegmentIntoView()` borne le scroll au seul conteneur `overflow:auto` (`#pane-transcript`), restaure les positions des autres ancêtres, active l'onglet Transcription si besoin, garde JS shell (sticky retiré en 1.09.4).
 
 Le correctif 1.09.2 (recouvrement panneau flottant) reste utile mais ne couvrait pas ce scénario.
 
 Voir aussi [`inline-embed-scripts.md`](./inline-embed-scripts.md) section « Passages à relire ».
 
-Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.3'`
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.4'` (voir aussi 1.09.3 pour le scroll Passage suivant)
+
+
+## Correctif 1.09.4 — menus de téléchargement masqués
+
+**Symptôme :** les panneaux « Télécharger transcription » / « Télécharger compte rendu » passent sous la barre d'onglets (milieu du menu invisible).
+
+**Cause :** le filet sticky 1.09.3 (`position: sticky; background: #fff; z-index: 40`) peignait par-dessus les dropdowns Webflow (`.wrapper-message-pro.download`, sans z-index, ouverts depuis `.ed-actions` placé avant `.ed-body`).
+
+**Fix :** retour à `position: relative; z-index: 40` sans fond opaque ; filet remplacé par `startEditorShellScrollGuard()` qui remet `.ed-body` / `.ed-main` à `scrollTop: 0` uniquement si `overflow: hidden`.
+
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.4'`
 
 ## Tests
 

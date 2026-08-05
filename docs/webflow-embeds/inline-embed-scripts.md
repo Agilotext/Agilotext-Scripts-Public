@@ -186,11 +186,11 @@ Le correctif 1.09.2 (recouvrement panneau flottant `top:10px`) était une piste 
 
 | Fichier | Changement |
 |---------|------------|
-| `confidence-v1/agilo-confidence.js` | `scrollSegmentIntoView()` borné ; `captureAncestorScroll` + restauration ; `ensureTranscriptPaneActive()` ; `repairEditorShellScroll()` à l'init |
-| `confidence-v1/agilo-confidence.css.js` | `nav.ed-tabs` / `.ed-toolbar` sticky (≥641px) ; `scroll-margin-block` sur `.ag-seg` |
+| `confidence-v1/agilo-confidence.js` | `scrollSegmentIntoView()` borné ; `startEditorShellScrollGuard()` ; restauration ancêtres ; `ensureTranscriptPaneActive()` |
+| `confidence-v1/agilo-confidence.css.js` | z-index chrome 40 sans sticky (1.09.4) ; `scroll-margin-block` sur `.ag-seg` |
 | `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | `scrollIntoView` exposé sur `window.AgiloEditors` ; version `1.09.3` |
 
-Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.3'`
+Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.4'`
 
 ### Script console dédié
 
@@ -200,7 +200,7 @@ Coller le contenu de :
 
 Puis cliquer « Passage suivant ». Interprétation :
 
-- `edBodyScrollTop > 0` → scrollIntoView non borné (régression si version < 1.09.3)
+- `edBodyScrollTop > 0` → scrollIntoView non borné (régression si version < 1.09.3 (scroll) ou menus téléchargement masqués si sticky 1.09.3)
 - `overlapTabs=true` + `floating=true` → recouvrement flottant (piste secondaire)
 - `activePanes=0` → perte de `.is-active` (filet CSS `chat-embed-styles.css`)
 - `beforeLoadCount` augmente → rechargement job involontaire
@@ -220,6 +220,13 @@ window.__agiloProbe = () => [
 ```
 
 
+
+### Correctif 1.09.4 — menus téléchargement
+
+Le sticky + fond blanc sur `nav.ed-tabs` masquait les dropdowns `.wrapper-message-pro.download`. Retiré. Filet : garde JS `startEditorShellScrollGuard()` sur scroll capture, remet à 0 uniquement `.ed-body` / `.ed-main` en `overflow:hidden`.
+
+Checklist : ouvrir « Télécharger transcription » et « Télécharger compte rendu », menus entiers visibles.
+
 ### Piste iframe (historique, hors toggle)
 
 L’iframe summary a bien corrigé l’ancienne fuite CSS des templates CR riches (bug Chromium de barre d’onglets). Elle n’est pas appelée par « Passages à relire ». Le fallback `el.innerHTML = html` a été retiré en `1.09.2` pour éviter toute régression CR.
@@ -238,4 +245,4 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js
 ```
 
-Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.3`) et `window.__agiloAnonVersion`.
+Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.4`) et `window.__agiloAnonVersion`.
