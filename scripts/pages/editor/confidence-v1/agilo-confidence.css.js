@@ -41,11 +41,20 @@
   transform: translateZ(0);
 }
 
-main.ed-main > .ed-tabs,
-main.ed-main > nav.ed-tabs,
-main.ed-main > .ed-toolbar {
-  position: relative;
-  z-index: 40;
+@media (min-width: 641px) {
+  main.ed-main > .ed-tabs,
+  main.ed-main > nav.ed-tabs,
+  main.ed-main > .ed-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: #fff;
+  }
+}
+
+#pane-transcript .ag-seg,
+.edtr-pane .ag-seg {
+  scroll-margin-block: 96px;
 }
 
 .ag-confidence-panel.is-floating .ag-confidence-panel__stat:not(.ag-confidence-panel__stat--primary),

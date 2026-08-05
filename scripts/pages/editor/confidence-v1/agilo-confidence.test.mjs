@@ -459,6 +459,193 @@ async function run() {
   ACTogglePanes.toggle(true, true);
   assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v1') === 'true', 'toggle ON persiste sans rechargement');
 
+  // --- Non-régression : scroll « Passage suivant » borné (bug 1.09.3) ---
+  assert(typeof AC.findConfidenceScrollContainer === 'function', 'findConfidenceScrollContainer exposé');
+  assert(typeof AC.scrollSegmentIntoView === 'function', 'scrollSegmentIntoView exposé');
+  assert(typeof AC.captureAncestorScroll === 'function', 'captureAncestorScroll exposé');
+  assert(typeof AC.restoreNonTargetScroll === 'function', 'restoreNonTargetScroll exposé');
+  assert(typeof AC.repairEditorShellScroll === 'function', 'repairEditorShellScroll exposé');
+  assert(typeof AC.ensureTranscriptPaneActive === 'function', 'ensureTranscriptPaneActive exposé');
+
+  function makeScrollDom() {
+    const styleMap = new Map();
+    const setStyle = (el, styles) => styleMap.set(el, { ...styles });
+
+    const mkScrollEl = (props = {}) => {
+      const el = {
+        id: props.id || '',
+        className: props.className || '',
+        tagName: props.tagName || 'DIV',
+        parentElement: null,
+        children: [],
+        scrollTop: props.scrollTop || 0,
+        scrollLeft: 0,
+        scrollHeight: props.scrollHeight ?? 2000,
+        clientHeight: props.clientHeight ?? 400,
+        scrollWidth: 100,
+        clientWidth: 100,
+        offsetHeight: props.offsetHeight ?? 24,
+        scrollIntoViewCalls: 0,
+        scrollToCalls: [],
+        classList: {
+          _s: new Set(String(props.className || '').split(/\s+/).filter(Boolean)),
+          add(c) { this._s.add(c); el.className = [...this._s].join(' '); },
+          remove(c) { this._s.delete(c); el.className = [...this._s].join(' '); },
+          contains(c) { return this._s.has(c); },
+          toggle(c, v) { v ? this.add(c) : this.remove(c); }
+        },
+        attrs: { ...(props.attrs || {}) },
+        getAttribute(name) {
+          if (name === 'hidden') return Object.prototype.hasOwnProperty.call(this.attrs, 'hidden') ? '' : null;
+          return this.attrs[name] ?? null;
+        },
+        setAttribute(name, value) { this.attrs[name] = String(value); },
+        removeAttribute(name) { delete this.attrs[name]; },
+        hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); },
+        getBoundingClientRect() {
+          return props.rect || { top: 500, bottom: 524, left: 40, width: 720, height: 24 };
+        },
+        closest(sel) {
+          if (sel.includes('edtr-pane') && el.className.includes('edtr-pane')) return el;
+          return el.parentElement?.closest?.(sel) || null;
+        },
+        scrollIntoView() { this.scrollIntoViewCalls += 1; },
+        scrollTo(opts) { this.scrollToCalls.push(opts); if (opts?.top != null) this.scrollTop = opts.top; }
+      };
+      setStyle(el, props.styles || { overflowY: 'visible' });
+      return el;
+    };
+
+    const hiddenBody = mkScrollEl({ className: 'ed-body', scrollTop: 120, styles: { overflowY: 'hidden', overflow: 'hidden' } });
+    const edMain = mkScrollEl({ className: 'ed-main', styles: { overflowY: 'visible' } });
+    const pane = mkScrollEl({
+      id: 'pane-transcript',
+      className: 'edtr-pane is-active',
+      tagName: 'SECTION',
+      styles: { overflowY: 'auto', overflow: 'auto' },
+      rect: { top: 120, bottom: 520, left: 24, width: 760, height: 400 }
+    });
+    const seg = mkScrollEl({
+      className: 'ag-seg',
+      tagName: 'ARTICLE',
+      rect: { top: 500, bottom: 524, left: 40, width: 720, height: 24 }
+    });
+
+    pane.children = [seg];
+    seg.parentElement = pane;
+    edMain.children = [pane];
+    pane.parentElement = edMain;
+    hiddenBody.children = [edMain];
+    edMain.parentElement = hiddenBody;
+
+    const getComputedStyle = (node) => styleMap.get(node) || { overflowY: 'visible', overflow: 'visible', overflowX: 'visible' };
+
+    return { hiddenBody, edMain, pane, seg, getComputedStyle };
+  }
+
+  const scrollDom = makeScrollDom();
+  const scrollBoot = boot({});
+  const scrollSandbox = {
+    window: {
+      __agiloConfidence: false,
+      AGILOTEXT_ENABLE_CONFIDENCE: true,
+      innerWidth: 1280,
+      matchMedia: () => ({ matches: false }),
+      requestAnimationFrame: (fn) => { fn(); return 1; },
+      addEventListener() {},
+      removeEventListener() {}
+    },
+    document: {
+      body: scrollDom.hiddenBody,
+      documentElement: scrollDom.hiddenBody,
+      scrollingElement: { scrollTop: 0, scrollLeft: 0 },
+      getElementById(id) {
+        if (id === 'pane-transcript') return scrollDom.pane;
+        return null;
+      },
+      querySelector(sel) {
+        if (sel === '.ed-body') return scrollDom.hiddenBody;
+        if (sel === '.ed-main') return scrollDom.edMain;
+        if (sel.includes('main.ed-main')) return scrollDom.edMain;
+        return null;
+      },
+      querySelectorAll(sel) {
+        if (sel === '.edtr-pane') return [scrollDom.pane];
+        if (sel === '.ed-tab') return [];
+        return [];
+      },
+      readyState: 'complete',
+      addEventListener() {}
+    },
+    getComputedStyle: scrollDom.getComputedStyle
+  };
+  scrollSandbox.window.window = scrollSandbox.window;
+  vm.runInNewContext(src, scrollSandbox);
+  const ACScroll = scrollSandbox.window.AgiloConfidence;
+  scrollDom.hiddenBody.scrollTop = 120;
+
+  const container = ACScroll.findConfidenceScrollContainer(scrollDom.seg);
+  assert(container === scrollDom.pane, 'findConfidenceScrollContainer retourne le pane overflow:auto');
+
+  const capturedBefore = ACScroll.captureAncestorScroll(scrollDom.seg);
+  assert(capturedBefore.some((c) => c.node === scrollDom.hiddenBody && c.top === 120), 'capture enregistre ed-body scrollTop');
+
+  const target = ACScroll.scrollSegmentIntoView(scrollDom.seg);
+  assert(target === scrollDom.pane, 'scrollSegmentIntoView cible le pane');
+  assert(scrollDom.seg.scrollIntoViewCalls === 0, 'scrollSegmentIntoView n appelle jamais scrollIntoView natif');
+  assert(scrollDom.pane.scrollToCalls.length === 1, 'scrollSegmentIntoView appelle scrollTo sur le pane');
+
+  ACScroll.restoreNonTargetScroll(capturedBefore, target);
+  assert(scrollDom.hiddenBody.scrollTop === 120, 'restoreNonTargetScroll preserve ed-body scrollTop initial');
+
+  const capturedZero = ACScroll.captureAncestorScroll(scrollDom.seg);
+  scrollDom.hiddenBody.scrollTop = 50;
+  ACScroll.restoreNonTargetScroll(capturedZero, target);
+  assert(scrollDom.hiddenBody.scrollTop === 120, 'restoreNonTargetScroll remet ed-body a sa valeur capturee');
+
+  const noScrollDom = makeScrollDom();
+  noScrollDom.pane.scrollHeight = 100;
+  noScrollDom.pane.clientHeight = 100;
+  noScrollDom.getComputedStyle(noScrollDom.pane).overflowY = 'visible';
+  const noTarget = ACScroll.scrollSegmentIntoView(noScrollDom.seg);
+  assert(noTarget === null, 'aucun conteneur scrollable: pas de scroll');
+
+  const repairDoc = {
+    querySelector(sel) {
+      if (sel === '.ed-body') return scrollDom.hiddenBody;
+      if (sel === '.ed-main') return scrollDom.edMain;
+      return null;
+    }
+  };
+  scrollDom.hiddenBody.scrollTop = 88;
+  ACScroll.repairEditorShellScroll(repairDoc);
+  assert(scrollDom.hiddenBody.scrollTop === 0, 'repairEditorShellScroll remet ed-body a 0');
+
+  const inactiveEditor = makeEditorDom();
+  inactiveEditor.panes[0].classList.remove('is-active');
+  inactiveEditor.panes[0].setAttribute('hidden', '');
+  inactiveEditor.panes[1].classList.add('is-active');
+  inactiveEditor.panes[1].removeAttribute('hidden');
+  const activated = AC.ensureTranscriptPaneActive(inactiveEditor.fakeDoc);
+  assert(activated === true, 'ensureTranscriptPaneActive reactive transcript');
+  assert(inactiveEditor.panes[0].classList.contains('is-active') === true, 'pane transcript actif apres ensureTranscriptPaneActive');
+
+  const reducedBoot = boot({});
+  const reducedSandbox = {
+    window: {
+      __agiloConfidence: false,
+      AGILOTEXT_ENABLE_CONFIDENCE: true,
+      matchMedia: () => ({ matches: true }),
+      addEventListener() {},
+      removeEventListener() {}
+    },
+    document: makeDom(),
+    getComputedStyle: () => ({ overflowY: 'auto', overflow: 'auto', overflowX: 'visible' })
+  };
+  reducedSandbox.window.window = reducedSandbox.window;
+  vm.runInNewContext(src, reducedSandbox);
+  assert(reducedSandbox.window.AgiloConfidence.scrollConfidenceBehavior() === 'auto', 'prefers-reduced-motion => auto');
+
   console.log(`\nRésultat : ${passed} ok, ${failed} échec(s)`);
   if (failed > 0) process.exit(1);
 }

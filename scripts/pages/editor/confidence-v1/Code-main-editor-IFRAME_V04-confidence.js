@@ -2972,7 +2972,7 @@
     if (jid) loadJob(jid);
   });
   function serializeSmart() { return ''; }
-  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart };
+  window.AgiloEditors = { ...(window.AgiloEditors || {}), loadJob, serializeSmart, scrollIntoView: agiloScrollIntoView };
 
   function openChatTab() {
     if (window.AgiloChat?.openConversation) { try { window.AgiloChat.openConversation(); } catch { } }
@@ -3017,5 +3017,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.2';
+  window.__agiloEditorConfidenceVersion = '1.09.3';
 });

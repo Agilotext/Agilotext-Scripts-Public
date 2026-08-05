@@ -387,6 +387,134 @@
     };
   }
 
+  function isScrollableOverflow(value) {
+    return value === 'auto' || value === 'scroll' || value === 'overlay';
+  }
+
+  /** Conteneur réellement scrollable le plus proche (jamais overflow:hidden). */
+  function findConfidenceScrollContainer(el) {
+    for (let p = el?.parentElement; p; p = p.parentElement) {
+      if (p === document.body || p === document.documentElement) break;
+      const cs = getComputedStyle(p);
+      const oy = cs.overflowY || cs.overflow;
+      const ox = cs.overflowX || cs.overflow;
+      const scrollableY = isScrollableOverflow(oy) && p.scrollHeight > p.clientHeight + 2;
+      const scrollableX = isScrollableOverflow(ox) && p.scrollWidth > p.clientWidth + 2;
+      if (scrollableY || scrollableX) return p;
+    }
+    return null;
+  }
+
+  function captureAncestorScroll(el) {
+    const captured = [];
+    for (let p = el?.parentElement; p; p = p.parentElement) {
+      captured.push({ node: p, top: p.scrollTop, left: p.scrollLeft });
+    }
+    const se = document.scrollingElement;
+    if (se) captured.push({ node: se, top: se.scrollTop, left: se.scrollLeft });
+    return captured;
+  }
+
+  function restoreNonTargetScroll(captured, targetContainer) {
+    if (!captured?.length) return;
+    captured.forEach(({ node, top, left }) => {
+      if (!node || node === targetContainer) return;
+      if (node.scrollTop !== top) node.scrollTop = top;
+      if (node.scrollLeft !== left) node.scrollLeft = left;
+    });
+  }
+
+  function scrollConfidenceBehavior() {
+    try {
+      return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ? 'auto' : 'smooth';
+    } catch {
+      return 'smooth';
+    }
+  }
+
+  /** Scroll borné au seul conteneur scrollable (jamais scrollIntoView natif). */
+  function scrollSegmentIntoView(el) {
+    if (!el) return null;
+    const pane = el.closest?.('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
+    let container = findConfidenceScrollContainer(el);
+    if (!container && pane) container = findConfidenceScrollContainer(pane);
+    if (!container && pane) {
+      const cs = getComputedStyle(pane);
+      const oy = cs.overflowY || cs.overflow;
+      if (isScrollableOverflow(oy) && pane.scrollHeight > pane.clientHeight + 2) {
+        container = pane;
+      }
+    }
+    if (!container) return null;
+
+    const behavior = scrollConfidenceBehavior();
+    const r = el.getBoundingClientRect();
+    const c = container.getBoundingClientRect();
+    const currentScroll = container.scrollTop;
+    const relTop = r.top - c.top;
+    const desiredRelTop = (container.clientHeight / 2) - (el.offsetHeight / 2);
+    container.scrollTo({ top: currentScroll + relTop - desiredRelTop, behavior });
+    return container;
+  }
+
+  /** Dépanne un shell éditeur déjà bloqué (.ed-body / .ed-main scrollTop > 0). */
+  function repairEditorShellScroll(doc = document) {
+    ['.ed-body', '.ed-main'].forEach((sel) => {
+      const el = doc.querySelector?.(sel);
+      if (!el) return;
+      if (el.scrollTop) el.scrollTop = 0;
+      if (el.scrollLeft) el.scrollLeft = 0;
+    });
+  }
+
+  function ensureTranscriptPaneActive(doc = document) {
+    try {
+      const root = doc.querySelector?.('main.ed-main[data-ed-tabs], main.ed-main, [data-ed-tabs]');
+      const transcript = doc.getElementById?.('pane-transcript')
+        || root?.querySelector?.('#pane-transcript')
+        || doc.querySelector?.('#pane-transcript');
+      if (!transcript) return false;
+      if (transcript.classList?.contains?.('is-active') && !transcript.hasAttribute?.('hidden')) {
+        return false;
+      }
+
+      const id = String(transcript.id || 'pane-transcript').replace(/^pane-/, '') || 'transcript';
+      const tab = root?.querySelector?.(`#tab-${id}`)
+        || root?.querySelector?.(`.ed-tab[data-tab="${id}"]`)
+        || doc.querySelector?.(`#tab-${id}`)
+        || null;
+
+      const panes = root
+        ? Array.from(root.querySelectorAll?.('.edtr-pane') || [])
+        : [transcript];
+
+      panes.forEach((p) => {
+        const on = p === transcript;
+        p.classList?.toggle?.('is-active', on);
+        if (on) p.removeAttribute?.('hidden');
+        else p.setAttribute?.('hidden', '');
+      });
+
+      const tabs = root
+        ? Array.from(root.querySelectorAll?.('.ed-tab') || [])
+        : (tab ? [tab] : []);
+
+      tabs.forEach((b) => {
+        const on = b === tab
+          || b.dataset?.tab === id
+          || b.id === `tab-${id}`
+          || b.getAttribute?.('aria-controls') === `pane-${id}`;
+        b.classList?.toggle?.('is-active', on);
+        b.setAttribute?.('aria-selected', String(on));
+        b.setAttribute?.('tabindex', on ? '0' : '-1');
+      });
+
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Restaure un volet actif si le filet CSS a tout masqué (aucun `.is-active`). */
   function ensureActiveEditorPane(doc = document) {
     try {
@@ -439,9 +567,16 @@
     panel.parentElement?.insertBefore(sentinel, panel);
     __panelSentinel = sentinel;
 
+    const clearFloatingVars = () => {
+      panel.style.removeProperty('--ag-confidence-floating-left');
+      panel.style.removeProperty('--ag-confidence-floating-width');
+      panel.style.removeProperty('--ag-confidence-floating-top');
+    };
+
     const update = () => {
       if (!__confidenceVisible || !panel.isConnected || !sentinel.isConnected) {
         panel.classList.remove('is-floating');
+        clearFloatingVars();
         return;
       }
 
@@ -459,6 +594,8 @@
         panel.style.setProperty('--ag-confidence-floating-left', `${box.left}px`);
         panel.style.setProperty('--ag-confidence-floating-width', `${box.width}px`);
         panel.style.setProperty('--ag-confidence-floating-top', `${box.top}px`);
+      } else {
+        clearFloatingVars();
       }
       panel.classList.toggle('is-floating', box.shouldFloat);
     };
@@ -772,7 +909,22 @@
     const art = root.querySelector(`.ag-seg[data-id="${CSS.escape(segId)}"]`);
     if (!art) return;
     art.classList.add('is-confidence-nav-active');
-    art.scrollIntoView({ block: 'center', behavior: 'smooth' });
+
+    const paneActivated = ensureTranscriptPaneActive(document);
+    const performScroll = () => {
+      const captured = captureAncestorScroll(art);
+      const targetContainer = scrollSegmentIntoView(art);
+      restoreNonTargetScroll(captured, targetContainer);
+      const raf = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+      raf(() => restoreNonTargetScroll(captured, targetContainer));
+    };
+
+    if (paneActivated) {
+      const raf = window.requestAnimationFrame || ((fn) => setTimeout(fn, 16));
+      raf(performScroll);
+    } else {
+      performScroll();
+    }
   }
 
   function goToNextConfidenceZone() {
@@ -886,7 +1038,12 @@
     if (persist) writeConfidenceVisiblePreference(__confidenceVisible);
     const panel = document.getElementById('ag-confidence-panel');
     if (panel) {
-      if (!__confidenceVisible) panel.classList.remove('is-floating');
+      if (!__confidenceVisible) {
+        panel.classList.remove('is-floating');
+        panel.style.removeProperty('--ag-confidence-floating-left');
+        panel.style.removeProperty('--ag-confidence-floating-width');
+        panel.style.removeProperty('--ag-confidence-floating-top');
+      }
     }
 
     const root = getTranscriptRoot();
@@ -1122,6 +1279,8 @@
     __currentJobId = '';
   });
 
+  repairEditorShellScroll(document);
+
   window.AgiloConfidence = {
     reload: reloadConfidenceForCurrentJob,
     clear: clearConfidenceUi,
@@ -1156,6 +1315,13 @@
     getCurrentNavIndex: () => __navIndex,
     getEditorChromeBottom,
     computeConfidenceFloatingBox,
-    ensureActiveEditorPane
+    ensureActiveEditorPane,
+    findConfidenceScrollContainer,
+    scrollSegmentIntoView,
+    captureAncestorScroll,
+    restoreNonTargetScroll,
+    repairEditorShellScroll,
+    ensureTranscriptPaneActive,
+    scrollConfidenceBehavior
   };
 })();

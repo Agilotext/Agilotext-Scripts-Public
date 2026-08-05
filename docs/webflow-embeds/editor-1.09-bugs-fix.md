@@ -2,15 +2,17 @@
 
 Correctifs livrés juillet 2026 : corbeille manquante, bannière anonymisation, durcissement collage.
 
-Correctif août 2026 (`1.09.2`) : panneau « Passages à relire » qui recouvrait les onglets Transcription / Compte rendu / Assistant.
+Correctif août 2026 (`1.09.2`) : panneau flottant (piste secondaire, recouvrement).
+
+Correctif août 2026 (`1.09.3`) : « Passage suivant » scrolle `.ed-body` (`overflow:hidden`) et découpait la barre d'onglets sans possibilité de remonter.
 
 ## Fichiers modifiés
 
 | Fichier | Bugs | Version |
 |---------|------|---------|
-| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.2'` |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5 | panneau flottant sous chrome + filet onglets |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5 | z-index flottant 25, chrome onglets 40 |
+| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.3'` |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5 | scroll borné « Passage suivant » + filet onglets sticky |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5 | sticky `.ed-tabs` / `.ed-toolbar`, scroll-margin segments |
 | `CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js` | 3, 4 | `window.__agiloAnonVersion = '3.1.0'` |
 
 ## URLs CDN (@1.09)
@@ -18,7 +20,7 @@ Correctif août 2026 (`1.09.2`) : panneau « Passages à relire » qui recouvrai
 ```html
 <!-- Fork confidence (staging / test) -->
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js?v=1.09.2"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js?v=1.09.3"></script>
 
 <!-- Anonymiser v3 (embed Webflow séparé — confirmer le src dans Designer) -->
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js?v=3.1.0"></script>
@@ -27,7 +29,7 @@ Correctif août 2026 (`1.09.2`) : panneau « Passages à relire » qui recouvrai
 ## Vérification console
 
 ```js
-window.__agiloEditorConfidenceVersion  // '1.09.2'
+window.__agiloEditorConfidenceVersion  // '1.09.3'
 window.__agiloAnonVersion              // '3.1.0'
 ```
 
@@ -41,6 +43,10 @@ window.__agiloAnonVersion              // '3.1.0'
 - [ ] Basculer onglets : pas de bannière fantôme sur Compte rendu / Assistant
 - [ ] Coller HTML riche → texte brut ; coller transcript timé → smart-paste UX++ intact
 - [ ] Toggle « Passages à relire » ON puis scroll : onglets Transcription / Compte rendu / Assistant toujours visibles et cliquables
+- [ ] « Passage suivant » x5 : barre d'onglets reste visible, pas de reload nécessaire
+- [ ] `Alt+Flèche droite` / `Alt+Flèche gauche` : même comportement que « Passage suivant »
+- [ ] Depuis l'onglet Compte rendu, « Passage suivant » bascule sur Transcription et centre le segment
+- [ ] `window.__agiloProbe()` : `.ed-body` et `document` restent à `scrollTop: 0`
 - [ ] Compte rendu iframe riche : pas de fuite CSS, onglets stables
 
 ## Tests auto
@@ -49,7 +55,7 @@ window.__agiloAnonVersion              // '3.1.0'
 node scripts/pages/editor/confidence-v1/agilo-confidence.test.mjs
 ```
 
-Attendu : 73/73.
+Attendu : 91/91.
 
 ## Rollback
 

@@ -172,28 +172,25 @@ Lancer dans la console **avant** de reproduire le bug. Le script observe les ong
 
 ## Diagnostic — « Passages à relire » masque Transcription / Compte rendu / Assistant
 
-### Cause confirmée (août 2026, fix `1.09.2`)
+### Cause confirmée (août 2026, fix `1.09.3`)
 
-Ce n’est **pas** l’iframe du compte rendu qui est en cause au clic du toggle.
+Ce n'est **pas** l'iframe du compte rendu qui est en cause. Le toggle « Passages à relire » n'est pas le déclencheur principal.
 
-Le panneau `#ag-confidence-panel` passait en `position: fixed` avec `top: 10px` et `z-index: 9999` dès que le sentinel scrollait près du haut du viewport (scroll capturé sur le volet transcript). La barre `nav.ed-tabs` (Transcription / Compte rendu / Assistant) restait dans le flux normal, donc **recouverte** : impression que les trois panneaux avaient disparu.
+Le bouton **« Passage suivant »** (et `Alt+Flèche droite`) appelait `art.scrollIntoView({ block: 'center' })`. Le navigateur scrollait tous les ancêtres, y compris `.ed-body` en `overflow:hidden`. Les onglets `nav.ed-tabs` sortaient du cadre découpé sans barre de défilement pour revenir en arrière : reload obligatoire.
 
-Preuves statiques sur la capture `Éditeur de transcripts _ Business.html` :
+Preuve par contraste : la recherche dans l'éditeur utilise `agiloScrollIntoView(el, { allowWindow: false })`, qui ne scrolle que le conteneur réellement scrollable.
 
-- `#pane-transcript` reste `is-active`, les deux autres restent `hidden`
-- aucune `<iframe class="ag-summary-iframe">` dans le job capturé
-- le toggle confidence ne touche ni `#tab-*` ni `#pane-*`
-- variables flottantes déjà calculées : `--ag-confidence-floating-top: 10px`, largeur ~961px
+Le correctif 1.09.2 (recouvrement panneau flottant `top:10px`) était une piste secondaire valide mais ne couvrait pas ce scénario.
 
 ### Correctif versionné
 
 | Fichier | Changement |
 |---------|------------|
-| `confidence-v1/agilo-confidence.js` | `top` flottant = bas des onglets/toolbar + 8px ; `stopPropagation` sur le toggle ; `ensureActiveEditorPane()` |
-| `confidence-v1/agilo-confidence.css.js` | `z-index: 25` (plus 9999) ; chrome `.ed-tabs` / `.ed-toolbar` en `z-index: 40` |
-| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | fallback iframe : alerte locale, plus d’injection HTML riche dans le parent |
+| `confidence-v1/agilo-confidence.js` | `scrollSegmentIntoView()` borné ; `captureAncestorScroll` + restauration ; `ensureTranscriptPaneActive()` ; `repairEditorShellScroll()` à l'init |
+| `confidence-v1/agilo-confidence.css.js` | `nav.ed-tabs` / `.ed-toolbar` sticky (≥641px) ; `scroll-margin-block` sur `.ag-seg` |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | `scrollIntoView` exposé sur `window.AgiloEditors` ; version `1.09.3` |
 
-Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.2'`
+Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.3'`
 
 ### Script console dédié
 
@@ -201,12 +198,27 @@ Coller le contenu de :
 
 `scripts/pages/editor/confidence-v1/DIAGNOSTIC_PASSAGES_A_RELIRE.js`
 
-Puis cliquer le toggle. Interprétation :
+Puis cliquer « Passage suivant ». Interprétation :
 
-- `overlapTabs=true` + `floating=true` → recouvrement flottant (régression si `top` trop bas / z-index trop haut)
+- `edBodyScrollTop > 0` → scrollIntoView non borné (régression si version < 1.09.3)
+- `overlapTabs=true` + `floating=true` → recouvrement flottant (piste secondaire)
 - `activePanes=0` → perte de `.is-active` (filet CSS `chat-embed-styles.css`)
 - `beforeLoadCount` augmente → rechargement job involontaire
-- `iframeFailed=true` → échec d’isolation CR (hors toggle)
+- `iframeFailed=true` → échec d'isolation CR (hors toggle)
+
+Snippet rapide :
+
+```js
+window.__agiloProbe = () => [
+  ...document.querySelectorAll('.ed-body, .ed-main, .edtr-pane'),
+  document.scrollingElement
+].map(e => ({
+  el: e === document.scrollingElement ? 'document' : (e.id || e.className),
+  scrollTop: e.scrollTop,
+  overflowY: getComputedStyle(e).overflowY
+}));
+```
+
 
 ### Piste iframe (historique, hors toggle)
 
@@ -226,4 +238,4 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js
 ```
 
-Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.2`) et `window.__agiloAnonVersion`.
+Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.3`) et `window.__agiloAnonVersion`.

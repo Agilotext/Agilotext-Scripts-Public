@@ -150,17 +150,19 @@ window.AgiloConfidence = {
 | `confidence-v1/DIAGNOSTIC_PASSAGES_A_RELIRE.js` | Diagnostic console recouvrement onglets |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 
-## Correctif 1.09.2 — onglets masqués au clic « Passages à relire »
+## Correctif 1.09.3 — onglets masqués après « Passage suivant »
 
-**Symptôme :** après clic sur le toggle, impression que Transcription / Compte rendu / Assistant disparaissent.
+**Symptôme :** après plusieurs clics sur « Passage suivant », la barre Transcription / Compte rendu / Assistant disparaît. Remonter en haut de page ne suffit pas, il faut recharger.
 
-**Cause :** panneau confidence en `position:fixed; top:10px; z-index:9999` recouvrant `nav.ed-tabs`. Pas l’iframe CR, pas `__agiloTabsV`.
+**Cause :** `activateNavTarget()` appelait `art.scrollIntoView({ block: 'center' })`, ce qui scrollait aussi `.ed-body` (`overflow:hidden`). Le conteneur n'a pas de barre de défilement utilisable : les onglets sortent du cadre découpé sans retour possible.
 
-**Fix :** top flottant calculé sous la chrome éditeur, z-index abaissé, `stopPropagation` sur le toggle, filet `ensureActiveEditorPane()`, fallback iframe sans injection HTML riche.
+**Fix :** `scrollSegmentIntoView()` borne le scroll au seul conteneur `overflow:auto` (`#pane-transcript`), restaure les positions des autres ancêtres, active l'onglet Transcription si besoin, filet sticky sur `nav.ed-tabs` / `.ed-toolbar`.
+
+Le correctif 1.09.2 (recouvrement panneau flottant) reste utile mais ne couvrait pas ce scénario.
 
 Voir aussi [`inline-embed-scripts.md`](./inline-embed-scripts.md) section « Passages à relire ».
 
-Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.2'`
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.3'`
 
 ## Tests
 
@@ -168,7 +170,7 @@ Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.2
 node scripts/pages/editor/confidence-v1/agilo-confidence.test.mjs
 ```
 
-Couvre notamment : top flottant sous chrome, restauration d’un volet si aucun `.is-active`, persistence toggle ON/OFF sans rechargement.
+Couvre notamment : scroll « Passage suivant » borné, restauration scroll ancêtres, activation onglet Transcription, top flottant sous chrome, restauration d'un volet si aucun `.is-active`, persistence toggle ON/OFF sans rechargement.
 
 ## Checklist validation (Nicolas)
 

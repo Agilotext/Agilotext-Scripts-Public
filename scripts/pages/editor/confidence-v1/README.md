@@ -28,7 +28,7 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 |---------|------|
 | `agilo-confidence.js` | Fetch POST, réconciliation segment, badges, états de revue, panneau, navigation, issues V3 |
 | `agilo-confidence.css.js` | Styles badges + panneau + highlights |
-| `Code-main-editor-IFRAME_V04-confidence.js` | Fork V04 + hooks confidence (`__agiloEditorConfidenceVersion` = `1.09.2`) |
+| `Code-main-editor-IFRAME_V04-confidence.js` | Fork V04 + hooks confidence (`__agiloEditorConfidenceVersion` = `1.09.3`) |
 | `editor-main-confidence.js` | Loader staging (scripts prod via PARENT_ONLY) |
 | `DIAGNOSTIC_PASSAGES_A_RELIRE.js` | Diagnostic console si les onglets semblent disparaître |
 | `agilo-confidence.test.mjs` | Tests unitaires |
@@ -87,12 +87,14 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 6. [ ] Le panneau reste accessible en scroll puis revient à sa position normale
 7. [ ] Helper visible au premier transcript avec passages à relire, absent si zéro passage, puis absent après « Compris » + reload
 8. [ ] Toggle « Passages à relire » OFF masque les repères, persiste au reload, et garde le panneau de réactivation
-9. [ ] Toggle ON + scroll : onglets Transcription / Compte rendu / Assistant restent visibles et cliquables (pas de recouvrement)
-10. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` naviguent hors édition, ne font rien dans le texte éditable, ni quand le toggle est OFF
-11. [ ] Changement rapide de job : aucun badge résiduel
-12. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
+9. [ ] « Passage suivant » x5 : barre d'onglets reste visible sans reload
+10. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` : même comportement, onglets stables
+11. [ ] Depuis Compte rendu, « Passage suivant » bascule sur Transcription
+12. [ ] Toggle ON + scroll : onglets Transcription / Compte rendu / Assistant restent visibles (filet sticky)
+13. [ ] Changement rapide de job : aucun badge résiduel
+14. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
 
-**Go/no-go prod :** les 12 scénarios OK + accord Nicolas sur navigation UI.
+**Go/no-go prod :** les 14 scénarios OK + accord Nicolas sur navigation UI.
 
 ## Promotion prod (après sign-off Nicolas)
 
