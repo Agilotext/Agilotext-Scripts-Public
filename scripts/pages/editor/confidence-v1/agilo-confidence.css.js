@@ -41,13 +41,6 @@
   transform: translateZ(0);
 }
 
-main.ed-main > .ed-tabs,
-main.ed-main > nav.ed-tabs,
-main.ed-main > .ed-toolbar {
-  position: relative;
-  z-index: 40;
-}
-
 #pane-transcript .ag-seg,
 .edtr-pane .ag-seg {
   scroll-margin-block: 96px;

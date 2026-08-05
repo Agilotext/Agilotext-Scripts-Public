@@ -162,18 +162,29 @@ Le correctif 1.09.2 (recouvrement panneau flottant) reste utile mais ne couvrait
 
 Voir aussi [`inline-embed-scripts.md`](./inline-embed-scripts.md) section « Passages à relire ».
 
-Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.4'` (voir aussi 1.09.3 pour le scroll Passage suivant)
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.5'` (voir aussi 1.09.3 pour le scroll Passage suivant)
 
 
-## Correctif 1.09.4 — menus de téléchargement masqués
+## Correctif 1.09.4 — menus de téléchargement masqués (partiel)
 
 **Symptôme :** les panneaux « Télécharger transcription » / « Télécharger compte rendu » passent sous la barre d'onglets (milieu du menu invisible).
 
-**Cause :** le filet sticky 1.09.3 (`position: sticky; background: #fff; z-index: 40`) peignait par-dessus les dropdowns Webflow (`.wrapper-message-pro.download`, sans z-index, ouverts depuis `.ed-actions` placé avant `.ed-body`).
+**Cause partielle :** le filet sticky 1.09.3 (`position: sticky; background: #fff; z-index: 40`) peignait par-dessus les dropdowns Webflow.
 
-**Fix :** retour à `position: relative; z-index: 40` sans fond opaque ; filet remplacé par `startEditorShellScrollGuard()` qui remet `.ed-body` / `.ed-main` à `scrollTop: 0` uniquement si `overflow: hidden`.
+**Fix 1.09.4 :** retour à `position: relative; z-index: 40` sans fond opaque ; filet remplacé par `startEditorShellScrollGuard()`.
 
-Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.4'`
+**Limite :** le `z-index: 40` sur `nav.ed-tabs` (1.09.2) continuait de faire passer les menus sous la barre d'onglets. Corrigé en 1.09.5.
+
+
+## Correctif 1.09.5 — menus de téléchargement (cause racine)
+
+**Symptôme :** les libellés « Compte rendu » / « Assistant IA » se peignent par-dessus le menu « Télécharger transcription ».
+
+**Cause :** la règle `main.ed-main > nav.ed-tabs { position: relative; z-index: 40 }` ajoutée en 1.09.2 pour compenser le fallback `top: 10px` du panneau flottant. Les menus Webflow (`.download_link-options`, couche `auto`) passent dessous.
+
+**Fix :** suppression de la règle z-index sur la chrome ; `computeConfidenceFloatingBox()` ne flotte plus si `chromeBottom <= 0` (panneau reste sticky dans le flux).
+
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.5'`
 
 ## Tests
 

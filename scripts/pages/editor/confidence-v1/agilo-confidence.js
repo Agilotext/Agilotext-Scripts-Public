@@ -377,7 +377,7 @@
     const cWidth = Number(containerRect?.width) || 0;
     const cBottom = Number(containerRect?.bottom) || 0;
     const sTop = Number(sentinelRect?.top) || 0;
-    const shouldFloat = sTop < floatThreshold && cBottom > safeChrome + 72;
+    const shouldFloat = safeChrome > 0 && sTop < floatThreshold && cBottom > safeChrome + 72;
     if (!shouldFloat) {
       return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
     }
@@ -385,7 +385,7 @@
       shouldFloat: true,
       left: Math.max(12, cLeft),
       width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
-      top: Math.max(10, safeChrome + 8),
+      top: safeChrome + 8,
       chromeBottom: safeChrome
     };
   }

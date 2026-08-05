@@ -187,10 +187,10 @@ Le correctif 1.09.2 (recouvrement panneau flottant `top:10px`) était une piste 
 | Fichier | Changement |
 |---------|------------|
 | `confidence-v1/agilo-confidence.js` | `scrollSegmentIntoView()` borné ; `startEditorShellScrollGuard()` ; restauration ancêtres ; `ensureTranscriptPaneActive()` |
-| `confidence-v1/agilo-confidence.css.js` | z-index chrome 40 sans sticky (1.09.4) ; `scroll-margin-block` sur `.ag-seg` |
-| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | `scrollIntoView` exposé sur `window.AgiloEditors` ; version `1.09.3` |
+| `confidence-v1/agilo-confidence.css.js` | retrait z-index chrome 40 (1.09.5) ; `scroll-margin-block` sur `.ag-seg` |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | version `1.09.5` |
 
-Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.4'`
+Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.5'`
 
 ### Script console dédié
 
@@ -221,11 +221,26 @@ window.__agiloProbe = () => [
 
 
 
-### Correctif 1.09.4 — menus téléchargement
+### Correctif 1.09.4 — menus téléchargement (partiel)
 
-Le sticky + fond blanc sur `nav.ed-tabs` masquait les dropdowns `.wrapper-message-pro.download`. Retiré. Filet : garde JS `startEditorShellScrollGuard()` sur scroll capture, remet à 0 uniquement `.ed-body` / `.ed-main` en `overflow:hidden`.
+Le sticky + fond blanc sur `nav.ed-tabs` masquait les dropdowns. Retiré. Filet : garde JS `startEditorShellScrollGuard()`.
 
-Checklist : ouvrir « Télécharger transcription » et « Télécharger compte rendu », menus entiers visibles.
+Le `z-index: 40` sur la chrome (1.09.2) continuait de masquer les menus. Voir 1.09.5.
+
+
+### Correctif 1.09.5 — menus téléchargement (cause racine)
+
+Suppression du `z-index: 40` sur `nav.ed-tabs` / `.ed-toolbar`. Protection panneau flottant : pas de float si chrome non mesurable (`chromeBottom <= 0`).
+
+Checklist : ouvrir « Télécharger transcription », « Télécharger compte rendu », « Analyses IA », popups upsell `.wrapper-message-pro.download`, menu renommage intervenant, bannière anonymisation. Aucun libellé d'onglet ne doit traverser un menu ouvert.
+
+Embed Webflow (référence branche `@1.09`) :
+
+```html
+<script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.5"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.5"></script>
+```
 
 ### Piste iframe (historique, hors toggle)
 
@@ -245,4 +260,4 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js
 ```
 
-Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.4`) et `window.__agiloAnonVersion`.
+Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.5`) et `window.__agiloAnonVersion`.

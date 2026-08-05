@@ -6,15 +6,17 @@ Correctif août 2026 (`1.09.2`) : panneau flottant (piste secondaire, recouvreme
 
 Correctif août 2026 (`1.09.3`) : « Passage suivant » scrolle `.ed-body` (`overflow:hidden`) et découpait la barre d'onglets sans possibilité de remonter.
 
-Correctif août 2026 (`1.09.4`) : retrait du filet sticky qui masquait les menus « Télécharger transcription / compte rendu », remplacé par un garde JS sur `.ed-body`.
+Correctif août 2026 (`1.09.4`) : retrait du filet sticky qui masquait partiellement les menus, remplacé par un garde JS sur `.ed-body`.
+
+Correctif août 2026 (`1.09.5`) : suppression du `z-index: 40` sur la chrome éditeur (1.09.2) qui faisait passer les menus de téléchargement sous la barre d'onglets ; protection panneau flottant désormais géométrique (pas de float si chrome non mesurable).
 
 ## Fichiers modifiés
 
 | Fichier | Bugs | Version |
 |---------|------|---------|
-| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.4'` |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5 | scroll borné « Passage suivant » + garde JS shell `.ed-body` |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5 | z-index chrome 40 (sans sticky), scroll-margin segments |
+| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.5'` |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5 | scroll borné « Passage suivant » + garde JS shell + float sans chrome mesurable |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5 | retrait z-index chrome 40 ; scroll-margin segments |
 | `CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js` | 3, 4 | `window.__agiloAnonVersion = '3.1.0'` |
 
 ## URLs CDN (@1.09)
@@ -22,7 +24,8 @@ Correctif août 2026 (`1.09.4`) : retrait du filet sticky qui masquait les menus
 ```html
 <!-- Fork confidence (staging / test) -->
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/editor-main-confidence.js?v=1.09.4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.5"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.5"></script>
 
 <!-- Anonymiser v3 (embed Webflow séparé — confirmer le src dans Designer) -->
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js?v=3.1.0"></script>
@@ -31,7 +34,7 @@ Correctif août 2026 (`1.09.4`) : retrait du filet sticky qui masquait les menus
 ## Vérification console
 
 ```js
-window.__agiloEditorConfidenceVersion  // '1.09.4'
+window.__agiloEditorConfidenceVersion  // '1.09.5'
 window.__agiloAnonVersion              // '3.1.0'
 ```
 
@@ -45,7 +48,8 @@ window.__agiloAnonVersion              // '3.1.0'
 - [ ] Basculer onglets : pas de bannière fantôme sur Compte rendu / Assistant
 - [ ] Coller HTML riche → texte brut ; coller transcript timé → smart-paste UX++ intact
 - [ ] Toggle « Passages à relire » ON puis scroll : onglets Transcription / Compte rendu / Assistant toujours visibles et cliquables
-- [ ] Ouvrir « Télécharger transcription » et « Télécharger compte rendu » : menus entièrement visibles (pas de recouvrement)
+- [ ] Ouvrir « Télécharger transcription », « Télécharger compte rendu » et « Analyses IA » : menus entièrement visibles (aucun libellé d'onglet ne traverse le menu)
+- [ ] `getComputedStyle(document.querySelector('main.ed-main nav.ed-tabs')).zIndex` retourne `'auto'`
 - [ ] « Passage suivant » x5 : barre d'onglets reste visible, pas de reload nécessaire
 - [ ] `Alt+Flèche droite` / `Alt+Flèche gauche` : même comportement que « Passage suivant »
 - [ ] Depuis l'onglet Compte rendu, « Passage suivant » bascule sur Transcription et centre le segment
@@ -58,9 +62,13 @@ window.__agiloAnonVersion              // '3.1.0'
 node scripts/pages/editor/confidence-v1/agilo-confidence.test.mjs
 ```
 
-Attendu : 102/102.
+Attendu : 108/108.
 
 ## Rollback
+
+Retirer les deux lignes `<script>` confidence de la page Webflow (retour immédiat à l'éditeur sans confidence). Revenir à 1.09.4 ne répare pas les menus de téléchargement (le `z-index: 40` y est déjà présent).
+
+Pour rollback git :
 
 ```bash
 git revert <commit-sha>

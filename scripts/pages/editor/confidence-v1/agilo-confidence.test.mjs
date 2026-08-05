@@ -332,6 +332,29 @@ async function run() {
   assert(mobileFloat.width <= 390 - 24, 'largeur flottante bornee au viewport');
   assert(mobileFloat.top >= 96 + 8, 'top mobile sous chrome');
 
+  const noFloatZeroChrome = AC.computeConfidenceFloatingBox(
+    { top: 0 },
+    { left: 320, width: 960, bottom: 800 },
+    0,
+    1440
+  );
+  assert(noFloatZeroChrome.shouldFloat === false, 'pas de float si chromeBottom vaut 0');
+
+  const noFloatNegativeChrome = AC.computeConfidenceFloatingBox(
+    { top: 0 },
+    { left: 320, width: 960, bottom: 800 },
+    -12,
+    1440
+  );
+  assert(noFloatNegativeChrome.shouldFloat === false, 'pas de float si chromeBottom negatif');
+
+  assert(floatCoveringTabs.top === chromeBottom + 8, 'top flottant = chromeBottom + 8 sans plancher 10px');
+
+  const cssSrc = readFileSync(path.join(__dirname, 'agilo-confidence.css.js'), 'utf8');
+  assert(!cssSrc.includes('main.ed-main > .ed-tabs'), 'CSS sans regle z-index sur ed-tabs');
+  assert(!cssSrc.includes('main.ed-main > nav.ed-tabs'), 'CSS sans regle z-index sur nav.ed-tabs');
+  assert(!cssSrc.includes('main.ed-main > .ed-toolbar'), 'CSS sans regle z-index sur ed-toolbar');
+
   // --- Invariant multi-panneaux : toggle ne doit pas tout masquer ---
   function makeEditorDom() {
     const mk = (tag, props = {}) => {
