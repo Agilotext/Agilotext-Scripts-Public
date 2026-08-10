@@ -13,8 +13,10 @@ Le collage texte n’utilise plus `/anonText`. Il passe par le même moteur que 
 
 Remplacer le `src` par le **SHA du commit** tip de la branche (pas `@1.09`) :
 
+Tip branche poussée : `1b9ffc0d2be2dc4271d7cd457afef60845c2b18b`
+
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_DU_COMMIT/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.16" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1b9ffc0d2be2dc4271d7cd457afef60845c2b18b/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.16" defer></script>
 ```
 
 ## Checklist post-pin
