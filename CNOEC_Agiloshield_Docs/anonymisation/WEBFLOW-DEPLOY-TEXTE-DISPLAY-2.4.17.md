@@ -13,10 +13,10 @@
 
 ## Script à pin (après push)
 
-Remplacer par le **SHA tip** de la branche :
+Tip code (pastilles / compteur) : `1769f3501c4d3b62b4d2cf9298318119d73f7c95`
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_DU_COMMIT/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.17" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1769f3501c4d3b62b4d2cf9298318119d73f7c95/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.17" defer></script>
 ```
 
 Si le CSS est chargé depuis le même repo / CDN, republier aussi `agiloshield-embed-anonymisation.css` (sinon l’alias `PII`→`PR` côté JS suffit pour le cas screenshot).
