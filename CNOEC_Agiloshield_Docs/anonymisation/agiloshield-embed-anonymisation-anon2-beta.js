@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.14-prod3';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.15';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -45,9 +45,11 @@
     restore: runtimeFeatureFlags.restore !== false && query.get('featureRestore') !== '0',
     inclusion: runtimeFeatureFlags.inclusion !== false && query.get('featureInclusion') !== '0'
   });
-  /** false en prod : le HTML/modal restent en place, seul l'affichage sidebar est coupé. */
-  const UI_SHOW_INCLUSION = false;
-  const SHOW_INCLUSION_UI = UI_SHOW_INCLUSION || query.get('featureInclusionUi') === '1';
+  /** Inclusion/Exclusion Anon2 : API depuis 4.0.79 (params anon2InclusionListJson / anon2ExclusionListJson). */
+  const ANON2_LISTS_MIN_API = Object.freeze({ major: 4, minor: 0, patch: 79 });
+  const ANON2_TERM_MIN_LEN = 3;
+  const ANON2_TERM_MAX_LEN = 120;
+  const ANON2_TERM_MAX_COUNT = 100;
   const ANON2_OPTION_ENDPOINTS = Object.freeze({
     defaults: Object.freeze({ get: ANON_OPTIONS_GET_DEFAULTS, set: ANON_OPTIONS_SET_DEFAULTS }),
     options: Object.freeze({ get: ANON_OPTIONS_GET, set: ANON_OPTIONS_SET })
@@ -144,6 +146,9 @@
     abortController: null,
     includeTerms: [],
     excludeTerms: [],
+    /** null = inconnu, true/false après getVersion */
+    apiSupportsInclusionLists: null,
+    apiVersionRaw: '',
     pseudoConfig: { ...DEFAULT_PSEUDO_CONFIG },
     optionsApiMode: null,
     optionsLoading: false,
@@ -244,12 +249,53 @@
 
   normalizeAnon2ProductionMarkup();
 
+  function parseApiVersionParts(versionText) {
+    const match = String(versionText || '').match(/(\d+)\.(\d+)\.(\d+)/);
+    if (!match) return null;
+    return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
+  }
+
+  function isApiVersionAtLeast(parts, min) {
+    if (!parts || !min) return false;
+    if (parts.major !== min.major) return parts.major > min.major;
+    if (parts.minor !== min.minor) return parts.minor > min.minor;
+    return parts.patch >= min.patch;
+  }
+
+  function isInclusionUiCanaryPath() {
+    const path = window.location.pathname || '';
+    return path.indexOf('/app/business/dashboard/anonymiser') !== -1
+      || path.indexOf('/business/') !== -1;
+  }
+
+  /** UI visible seulement si API >= 4.0.79 et canary Business (ou override QA). */
+  function computeShowInclusionUi() {
+    if (state.apiSupportsInclusionLists !== true) return false;
+    return isInclusionUiCanaryPath()
+      || query.get('featureInclusionUi') === '1'
+      || runtimeFeatureFlags.inclusionUi === true;
+  }
+
   function syncInclusionUiVisibility() {
+    const show = computeShowInclusionUi();
     ['agfOpenInclusion', 'agfInclusionAvailabilityHint'].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
-      el.classList.toggle('agf-ui-hidden', !SHOW_INCLUSION_UI);
+      el.classList.toggle('agf-ui-hidden', !show);
     });
+  }
+
+  function ensureInclusionHelpCopy() {
+    const modal = ui.modals && ui.modals.inclusion;
+    if (!modal) return;
+    const body = modal.querySelector('.agf-modal-body') || modal.querySelector('.agf-modal');
+    if (!body || body.querySelector('#agfInclusionHelpCopy')) return;
+    const help = document.createElement('p');
+    help.id = 'agfInclusionHelpCopy';
+    help.className = 'agf-inclusion-help';
+    help.setAttribute('role', 'note');
+    help.textContent = 'Inclusion : forcer l’anonymisation. Exclusion : ne jamais anonymiser (prioritaire). Correspondance exacte, sans distinction majuscules. Sur PDF scannés, le texte OCR doit coller. Listes mémorisées sur ce navigateur uniquement.';
+    body.insertBefore(help, body.firstChild);
   }
 
   function ensureBetaDisclaimer() {
@@ -2193,6 +2239,43 @@
       .toLowerCase();
   }
 
+  function normalizeAnon2Terms(list) {
+    const source = Array.isArray(list) ? list : [];
+    const out = [];
+    const seen = new Set();
+    for (let i = 0; i < source.length; i += 1) {
+      const value = normalizeTerm(source[i]);
+      if (!value) continue;
+      if (value.length < ANON2_TERM_MIN_LEN) continue;
+      if (value.length > ANON2_TERM_MAX_LEN) continue;
+      const key = normalizeTermKey(value);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(value);
+      if (out.length >= ANON2_TERM_MAX_COUNT) break;
+    }
+    return out;
+  }
+
+  /** Exclusion gagne sur inclusion en cas de conflit. */
+  function getNormalizedInclusionExclusionForApi() {
+    const exclusion = normalizeAnon2Terms(state.excludeTerms);
+    const excKeys = new Set(exclusion.map((term) => normalizeTermKey(term)));
+    const inclusion = normalizeAnon2Terms(state.includeTerms).filter((term) => !excKeys.has(normalizeTermKey(term)));
+    return { inclusion: inclusion, exclusion: exclusion };
+  }
+
+  function canAppendAnon2ListParams() {
+    return state.apiSupportsInclusionLists === true && isFeatureEnabled('inclusion');
+  }
+
+  function appendAnon2ListParams(formData) {
+    if (!formData || !canAppendAnon2ListParams()) return;
+    const lists = getNormalizedInclusionExclusionForApi();
+    formData.append('anon2InclusionListJson', JSON.stringify(lists.inclusion));
+    formData.append('anon2ExclusionListJson', JSON.stringify(lists.exclusion));
+  }
+
   function parseStoredTerms(raw) {
     if (!raw) return [];
     const t = String(raw).trim();
@@ -2205,13 +2288,7 @@
       } catch (e) { }
     }
     if (!terms.length) terms = t.split(/\r?\n/).map((x) => normalizeTerm(x)).filter(Boolean);
-    const seen = new Set();
-    return terms.filter((item) => {
-      const key = normalizeTermKey(item);
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+    return normalizeAnon2Terms(terms);
   }
 
   function syncHiddenTermFields() {
@@ -2273,10 +2350,36 @@
   function addTerm(kind, rawValue) {
     const value = normalizeTerm(rawValue);
     if (!value) return false;
+    if (value.length < ANON2_TERM_MIN_LEN) {
+      setStatus('info', 'Terme trop court (minimum ' + ANON2_TERM_MIN_LEN + ' caractères).');
+      return false;
+    }
+    if (value.length > ANON2_TERM_MAX_LEN) {
+      setStatus('info', 'Terme trop long (maximum ' + ANON2_TERM_MAX_LEN + ' caractères).');
+      return false;
+    }
     const list = kind === 'include' ? state.includeTerms : state.excludeTerms;
+    if (list.length >= ANON2_TERM_MAX_COUNT) {
+      setStatus('info', 'Maximum ' + ANON2_TERM_MAX_COUNT + ' termes par liste.');
+      return false;
+    }
     const key = normalizeTermKey(value);
     if (!key) return false;
     if (list.some((x) => normalizeTermKey(x) === key)) return false;
+    if (kind === 'include') {
+      const inExclude = state.excludeTerms.some((x) => normalizeTermKey(x) === key);
+      if (inExclude) {
+        setStatus('info', 'Ce terme est déjà en exclusion (prioritaire). Retirez-le de l’exclusion d’abord.');
+        return false;
+      }
+    } else {
+      const incIdx = state.includeTerms.findIndex((x) => normalizeTermKey(x) === key);
+      if (incIdx !== -1) {
+        state.includeTerms.splice(incIdx, 1);
+        renderTermList('include');
+        setStatus('info', 'Terme retiré de l’inclusion : l’exclusion est prioritaire.');
+      }
+    }
     list.push(value);
     syncHiddenTermFields();
     renderTermList(kind);
@@ -2856,10 +2959,29 @@
   async function loadApiVersion() {
     try {
       const response = await fetchWithTimeout(VERSION_ENDPOINT, { method: 'GET' }, 10000);
-      if (!response.ok) return;
+      if (!response.ok) {
+        state.apiSupportsInclusionLists = false;
+        console.warn('[Agiloshield] inclusion disabled: getVersion HTTP ' + response.status);
+        syncInclusionUiVisibility();
+        return;
+      }
       const data = await response.json();
-      if (data && data.status === 'OK' && data.version && ui.apiMeta) ui.apiMeta.textContent = 'API: ' + data.version;
-    } catch (e) { }
+      const versionText = data && data.version ? String(data.version) : '';
+      state.apiVersionRaw = versionText;
+      if (data && data.status === 'OK' && versionText && ui.apiMeta) {
+        ui.apiMeta.textContent = 'API: ' + versionText;
+      }
+      const parts = parseApiVersionParts(versionText);
+      state.apiSupportsInclusionLists = isApiVersionAtLeast(parts, ANON2_LISTS_MIN_API);
+      if (!state.apiSupportsInclusionLists) {
+        console.warn('[Agiloshield] inclusion disabled: api < 4.0.79', versionText || '(empty)');
+      }
+    } catch (e) {
+      state.apiSupportsInclusionLists = false;
+      console.warn('[Agiloshield] inclusion disabled: getVersion failed', e);
+    }
+    syncInclusionUiVisibility();
+    applyFeatureAvailability();
   }
 
   /** Ne jamais afficher un message d'erreur API qui pourrait contenir un token/mot de passe. */
@@ -2872,6 +2994,7 @@
     if (m.indexOf('error_anon_file_not_exists') !== -1) return 'Fichier introuvable côté serveur.';
     if (m.indexOf('error_anon_invalid_file_type') !== -1) return 'Type de fichier non accepté pour le téléchargement.';
     if (m.indexOf('error_invalid_anon2_options_json') !== -1) return 'Configuration de traitement invalide. Vérifiez les types sélectionnés.';
+    if (m.indexOf('error_invalid_anon2_list_json') !== -1) return 'Listes Inclusion/Exclusion invalides. Vérifiez les termes saisis.';
     if (m.indexOf('error_anon2_reconcile_supports_docx_xlsx_pptx_pdf_only') !== -1) return 'La restauration supporte seulement DOCX, XLSX, PPTX et PDF.';
     if (m.indexOf('error_anon2_reconcile_missing_matching_properties') !== -1) return 'Un ou plusieurs fichiers de correspondance sont manquants.';
     if (m.indexOf('error_anon2_reconcile_unused_properties') !== -1) return 'Certains fichiers de correspondance ne correspondent à aucun document pseudonymisé.';
@@ -2903,6 +3026,7 @@
     formData.append('token', state.token);
     formData.append('edition', getEditionForApi());
     formData.append('removeImages', state.removeImages ? 'true' : 'false');
+    appendAnon2ListParams(formData);
     formData.append('fileUpload[]', file, fileName);
     return formData;
   }
@@ -2913,6 +3037,7 @@
     formData.append('token', state.token);
     formData.append('edition', getEditionForApi());
     formData.append('removeImages', state.removeImages ? 'true' : 'false');
+    appendAnon2ListParams(formData);
     items.forEach((item) => { formData.append('fileUpload[]', item.file, item.fileName); });
     return formData;
   }
@@ -2932,6 +3057,7 @@
         if (code === 'error_invalid_office_extension') msg = 'Format non accepté.';
         else if (code === 'error_content_size_too_big') msg = 'Fichier trop volumineux.';
         else if (code === 'error_too_many_files') msg = 'Trop de fichiers.';
+        else if (code === 'error_invalid_anon2_list_json') msg = 'Listes Inclusion/Exclusion invalides. Vérifiez les termes saisis.';
         else if (isQuotaExceededError(json)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Quota de crédits atteint pour aujourd’hui. Réessayez demain ou passez à Agiloshield.');
         else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
       } else {
@@ -3535,11 +3661,9 @@
     payload.append('forceTextFormat', 'true');
     const entities = selectedEntities();
     if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
-    if (isFeatureEnabled('inclusion')) {
-      const inc = (state.includeTerms || []).join('\n').trim();
-      if (inc) payload.append('includeTerms', inc);
-      const exc = (state.excludeTerms || []).join('\n').trim();
-      if (exc) payload.append('excludeTerms', exc);
+    // /anonText n'accepte pas les listes Anon2 (anon2InclusionListJson). Fichiers uniquement.
+    if ((state.includeTerms && state.includeTerms.length) || (state.excludeTerms && state.excludeTerms.length)) {
+      setStatus('info', 'Inclusion/Exclusion s’applique aux fichiers anonymisés, pas au collage texte.');
     }
     payload.append('fileUpload1', new Blob([value], { type: 'text/plain;charset=utf-8' }), 'input.txt');
 
@@ -3778,10 +3902,13 @@
     if (ui.excludeAdd) ui.excludeAdd.disabled = !inclusionEnabled;
     if (ui.inclusionDefaults) ui.inclusionDefaults.disabled = !inclusionEnabled;
     if (ui.saveInclusion) {
-      ui.saveInclusion.disabled = !inclusionEnabled;
-      ui.saveInclusion.textContent = inclusionEnabled ? 'Enregistrer les listes' : 'Activation backend en attente';
+      ui.saveInclusion.disabled = !inclusionEnabled || state.apiSupportsInclusionLists !== true;
+      ui.saveInclusion.textContent = (inclusionEnabled && state.apiSupportsInclusionLists === true)
+        ? 'Enregistrer les listes'
+        : 'Activation backend en attente';
     }
 
+    ensureInclusionHelpCopy();
     syncInclusionUiVisibility();
   }
 
@@ -4038,7 +4165,7 @@
       storage.set(STORAGE_EXC, (ui.excludeTerms && ui.excludeTerms.value) || '');
       state.anon2OptionsSaved = false;
       resetTextCache();
-      setStatus('success', 'Listes enregistrées.');
+      setStatus('success', 'Listes enregistrées sur ce navigateur uniquement. Elles seront envoyées au prochain traitement de fichiers.');
       closeModal(ui.modals.inclusion);
       refreshTextIfNeeded();
     });
@@ -4202,6 +4329,8 @@
     renderRestorePanel();
     renderFileList();
     updateActions();
+    // Gate Inclusion/Exclusion : toujours résoudre getVersion (pas seulement le footer API).
+    await loadApiVersion();
     if (state.email && state.token) {
       loadAnon2Options(true).catch(function (err) {
         state.anon2OptionsLoaded = false;
@@ -4217,7 +4346,6 @@
     await resumeInFlightJobsIfAny();
     if (shouldCallApiMeta()) {
       runSessionMaintenance();
-      loadApiVersion();
     }
     loadAnonJobsList().catch(function () { });
   }

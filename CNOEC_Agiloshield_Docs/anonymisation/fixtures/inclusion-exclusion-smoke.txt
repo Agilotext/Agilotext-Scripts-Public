@@ -1,0 +1,4 @@
+Document de test Agiloshield.
+Société ACME_FORCE_ANON_TEST à anonymiser de force.
+Contact KEEP_VISIBLE_TEST doit rester visible.
+Personne Jean Dupont pour test NER classique.

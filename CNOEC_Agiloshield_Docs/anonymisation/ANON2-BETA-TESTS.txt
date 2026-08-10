@@ -4,6 +4,8 @@ Fichiers ajoutés
 - anonymisation/agiloshield-embed-anonymisation-anon2-beta.js
 - anonymisation/index-anon2-beta.html
 - Front_END/FINAL-2026-05-10-anon2-beta.html
+- anonymisation/fixtures/inclusion-exclusion-smoke.txt
+- anonymisation/WEBFLOW-DEPLOY-INCLUSION-2.4.15.md
 
 Endpoints Anon2 branchés
 - /anon2AsyncOfficeText
@@ -18,68 +20,51 @@ Endpoints Anon2 branchés
 - /setAnon2UserOptions (fallback temporaire uniquement si endpoint Defaults absent: 404/405/501/no route)
 - /reconcileAnon2Text
 - /getAnon2Usage (attendu backend — compteur crédits, v2.4+ front)
+- /getVersion (gate Inclusion/Exclusion >= 4.0.79)
 
 Monétisation (mai 2026)
 - edition API: agiloshield (plus de mapping anonymisation -> free)
 - Quotas documentés: free 10/j, payant 250/j (fallback UI si usage API absent)
-- Brief Nicolas: NEW_VERSION_AVRIL_2026/BRIEF_NICOLAS_EDITION_CREDITS_ANON2.md
 
 URLs de test
 - Page locale: anonymisation/index-anon2-beta.html
-- Snippet Webflow 1.09: Front_END/FINAL-2026-05-10-anon2-beta.html
-- Script CDN prod 2.4:
-  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@d5f42b82b994fd236787af414b2dab6791bc8cc1/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.0-prod1
+- Snippet Webflow: Front_END/FINAL-2026-05-10-anon2-beta.html
+- Page canary prod: /app/business/dashboard/anonymiser
+- Script CDN 2.4.15 (pin SHA commit, pas @1.09) :
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@COMMIT_SHA/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15
 
 Vérifications déjà faites
 - Syntaxe JS validée avec node --check
 - Endpoints Anon2 bien substitués dans le bundle
 - Chargement/sauvegarde des options Anon2 avec fallback Defaults -> UserOptions strictement limité à l’absence d’endpoint
-- Upload async strict en username + token + edition + removeImages=true + fileUpload[]
-- Champs pseudo legacy supprimés du payload upload Anon2
-- Champs includeTerms/excludeTerms supprimés du payload upload Anon2
-- Liste officielle Anon2 exposée côté UI: ADR, DAT, EML, IBA, IDN, JOB, LOC, ORG, PER, PII, PRO, TEL
+- Upload async : username + token + edition + removeImages + fileUpload[]
+- Depuis 2.4.15 : upload envoie aussi anon2InclusionListJson + anon2ExclusionListJson (JSON arrays) si getVersion >= 4.0.79 et feature inclusion active
+- Anciens champs legacy includeTerms/excludeTerms retirés du flux fichier et du collage texte (/anonText)
+- Liste officielle Anon2 exposée côté UI: ADR, DAT, EML, IBA, IDN, JOB, LOC, ORG, PER, PII, PRO, TEL, URL
 - Restauration Anon2 branchée côté frontend avec validation ZIP multi-fichiers par signature PK
 - receiveAnon2Zip validé par signature PK avant téléchargement
-- Résumé latéral attendu: Mode + Codes actifs
-- Bouton historique attendu pour le sidecar: Correspondance (.properties)
-- Parsing tolérant renforcé sur:
-  - jobIdList, jobIds, jobs[]
-  - anonStatus, status, state, jobStatus
-  - jobs, jobList, jobsInfoDtos, jobsAnon2InfoDtos, results
+- UI Inclusion/Exclusion : canary Business + gate API ; listes en localStorage navigateur
 
-Résultat des appels live depuis le poste local
-- POST /getAnon2JobsInfo répond bien, mais le token chargé depuis .env est refusé avec error_invalid_token
-- GET /getToken appelé depuis le poste local retourne error_forbidden_source
-
-Conséquence
-- Les tests end-to-end normaux doivent être faits:
-  - soit sur une page Webflow autorisée par l’API
-  - soit en mode identifiants manuels avec un token valide déjà obtenu côté source autorisée
+Smoke API prod (10/08/2026, lecture seule, sans toucher kawansoft)
+- getVersion = Agilotext API - 4.0.98 - 07-Aug-2026
+- Fixture inclusion-exclusion-smoke.txt → job 1000037769
+- ACME_FORCE_ANON_TEST → <PII_AA> (inclusion OK)
+- KEEP_VISIBLE_TEST reste visible (exclusion OK)
 
 Checklist de validation manuelle
-- Charger le snippet 1.09 sur une page Webflow dédiée
-- Vérifier que la page ne contient plus de wording de pré-lancement
-- Vérifier que les options serveur se chargent avant le premier upload
-- Vérifier au reload que les checkboxes reflètent exactement getAnon2UserDefaults
-- Vérifier que les checkboxes sont verrouillées pendant le chargement des options serveur
-- Modifier les types, lancer un upload, vérifier que le save options précède l’upload
-- Vérifier le refus frontend si moins de deux codes sont sélectionnés
+- Charger le snippet / pin CDN 2.4.15 sur Business anonymiser
+- Console : __AGILO_EMBED_ANON_VERSION__ === '2.4.15'
+- Bouton Inclusion/Exclusion visible sans ?featureInclusionUi=1 sur /business/
+- Ajouter termes, Save, reload → listes encore là (localStorage)
+- Network upload : FormData contient anon2InclusionListJson et anon2ExclusionListJson (même [])
+- Inclusion seule : terme source anonymisé / tagué
+- Exclusion seule : terme préservé
+- Conflit inclusion+exclusion : exclusion gagne
+- Terme < 3 caractères refusé côté UI
+- ?featureInclusion=0 : pas d’envoi listes
+- Upload sans listes : pas de régression
+- Collage texte : toast « s’applique aux fichiers », pas de includeTerms/excludeTerms
 - Vérifier que le payload upload ne contient pas processingMode/pseudoStrategy/pseudoScope/pseudoKeyMode/pseudoRestoreWindow/pseudoDeterministic/pseudoPreserveFormat/includeTerms/excludeTerms
-- Tester upload PDF
-- Tester upload DOCX
-- Tester upload XLSX si support backend confirmé
-- Tester lot multi-fichiers
-- Vérifier polling PENDING -> READY
-- Vérifier téléchargement fichier simple
-- Vérifier téléchargement ORIGIN
-- Vérifier téléchargement .properties
-- Vérifier téléchargement ZIP
-- Vérifier que tout ZIP reçu commence par PK et s’ouvre localement
-- Vérifier historique des jobs
-- Vérifier suppression d’un job
-- Vérifier restauration: 1 fichier + 1 .properties
-- Vérifier restauration: plusieurs fichiers + plusieurs .properties
-- Vérifier que le ZIP restauration multi-fichiers est ouvrable
-- Vérifier erreur .properties manquant
-- Vérifier erreur .properties ambigu
-- Vérifier absence d’erreur console bloquante Agilo
+- Tester upload PDF / DOCX / lot multi-fichiers
+- Vérifier polling PENDING -> READY + téléchargements ANON / ZIP / .properties
+- Vérifier restauration + historique + suppression job
