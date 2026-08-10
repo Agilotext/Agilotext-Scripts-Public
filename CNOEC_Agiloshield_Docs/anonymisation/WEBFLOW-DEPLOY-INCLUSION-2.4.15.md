@@ -15,6 +15,8 @@
 
 Remplacer le `src` de `agiloshield-embed-anonymisation-anon2-beta.js` par le **SHA du commit** (pas `@1.09`) :
 
+Tip branche poussée (10/08/2026) : `b8ff79179911b7b5b614f49350283236ae663a9f` (ou SHA du merge dans `1.09`).
+
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ed62816e0ffd0dc355e630e96a988cf6a16b8144/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15" defer></script>
 ```
