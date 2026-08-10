@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.15';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.16';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -18,7 +18,11 @@
   const ANON_OPTIONS_GET = API_BASE + '/getAnon2UserOptions';
   const ANON_OPTIONS_SET = API_BASE + '/setAnon2UserOptions';
   const ANON_RECONCILE = API_BASE + '/reconcileAnon2Text';
+  /** @deprecated depuis 2.4.16 — le collage texte passe par ANON_ASYNC_UPLOAD (paste.txt). Conservé pour rollback d’urgence uniquement. */
   const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
+  const AGILO_PASTE_FILE_NAME = 'agilo-paste.txt';
+  const TEXT_POLL_INTERVAL_MS = 1500;
+  const TEXT_POLL_MAX_MS = 120000;
   /** Plafonds statiques du front. 1 crédit = 20k car. ou 1 page PDF. */
   const CREDIT_LIMITS_FALLBACK = Object.freeze({
     free: Object.freeze({ day: 10, month: 100, pseudo: false, restore: false, maxFiles: 3 }),
@@ -167,7 +171,7 @@
     transcriptionEdition: 'free'
   };
   window.__AGILO_EMBED_STATE__ = state; // Export pour debug console
-  const DEBOUNCE_TEXT_MS = 1000;
+  const DEBOUNCE_TEXT_MS = 1500;
   const MIN_TEXT_LENGTH_FOR_API = 10;
   let debounceTextTimer = null;
   let textProcessQueued = false;
@@ -1663,10 +1667,22 @@
         const res = await fetchJobStatus(item.jobId);
         item.anonStatus = res.status === 'done' ? 'READY' : res.status === 'error' ? 'ON_ERROR' : 'PENDING';
       }
-      return list.sort((a, b) => (b.jobId - a.jobId));
+      return filterOutPasteJobs(list.sort((a, b) => (b.jobId - a.jobId)));
     } catch (e) {
       return [];
     }
+  }
+
+  function isAgiloPasteJobName(name) {
+    return String(name || '').toLowerCase().indexOf('agilo-paste') !== -1;
+  }
+
+  function filterOutPasteJobs(list) {
+    return (list || []).filter((job) => {
+      if (!job) return true;
+      const candidates = [job.fileName, job.originalFileName, job.sourceFileName, job.name];
+      return !candidates.some((n) => isAgiloPasteJobName(n));
+    });
   }
 
   // Parse French date format "DD-MM-YYYY HH:MM:SS" or "DD/MM/YYYY HH:MM:SS" or ISO
@@ -1685,7 +1701,7 @@
   function renderAnonJobsList() {
     const containers = document.querySelectorAll('#agfAnonJobsList');
     if (!containers.length) return;
-    const rawList = state.anonJobsList || [];
+    const rawList = filterOutPasteJobs(state.anonJobsList || []);
 
     // Sort by dtCreation (fallback: jobId)
     const list = rawList.slice().sort(function (a, b) {
@@ -2094,7 +2110,7 @@
       });
     });
     merged.sort((a, b) => (b.jobId - a.jobId));
-    state.anonJobsList = merged;
+    state.anonJobsList = filterOutPasteJobs(merged);
     renderAnonJobsList();
   }
 
@@ -3595,6 +3611,87 @@
     }).catch(() => { setStatus('error', 'Impossible de créer le fichier zip. Réessayez.'); done(); });
   }
 
+  function extractJobIdsFromAnon2Upload(data, expectedCount) {
+    let jobIds = [];
+    if (!data || typeof data !== 'object') return jobIds;
+    if (Array.isArray(data.jobIdList)) jobIds = data.jobIdList;
+    else if (Array.isArray(data.jobIds)) jobIds = data.jobIds;
+    else if (Array.isArray(data.jobs)) jobIds = data.jobs.map((j) => j && (j.id != null ? j.id : (j.jobId != null ? j.jobId : j.jobID)));
+    else if (typeof data.jobId === 'number') jobIds = [data.jobId];
+    else if (typeof data.jobId === 'string' && /^\d+$/.test(data.jobId)) jobIds = [parseInt(data.jobId, 10)];
+    jobIds = jobIds
+      .map((id) => {
+        if (typeof id === 'number' && Number.isFinite(id)) return id;
+        if (typeof id === 'string') {
+          const t = id.trim();
+          if (/^\d+$/.test(t)) return parseInt(t, 10);
+        }
+        return null;
+      })
+      .filter((id) => id != null);
+    if (expectedCount && jobIds.length > expectedCount) return jobIds.slice(0, expectedCount);
+    return jobIds;
+  }
+
+  async function uploadPasteTextAndGetJobId(textValue) {
+    const formData = new FormData();
+    formData.append('username', state.email);
+    formData.append('token', state.token);
+    formData.append('edition', getEditionForApi());
+    formData.append('removeImages', state.removeImages ? 'true' : 'false');
+    appendAnon2ListParams(formData);
+    formData.append(
+      'fileUpload[]',
+      new Blob([textValue], { type: 'text/plain;charset=utf-8' }),
+      AGILO_PASTE_FILE_NAME
+    );
+    const response = await fetchWithTimeout(ANON_ASYNC_UPLOAD, { method: 'POST', body: formData }, REQUEST_TIMEOUT);
+    const raw = await response.text();
+    const parsed = tryParseJson(raw);
+    if (!response.ok) {
+      let msg = 'Erreur de traitement du texte.';
+      if (parsed.ok) {
+        const json = parsed.data;
+        const code = json && (json.errorCode || json.error_code || json.statusCode);
+        if (code === 'error_invalid_anon2_list_json') msg = 'Listes Inclusion/Exclusion invalides. Vérifiez les termes saisis.';
+        else if (isQuotaExceededError(json)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Quota de crédits atteint pour aujourd’hui.');
+        else if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage);
+      } else if (raw && raw.length < 220) {
+        msg = sanitizeApiErrorMessage(raw);
+      }
+      throw new Error(msg);
+    }
+    let data = parsed.ok ? parsed.data : null;
+    if (!data) {
+      try { data = JSON.parse(normalizeResponseText(raw)); } catch (e) { data = null; }
+    }
+    if (!data || typeof data !== 'object') throw new Error(buildInvalidJsonMessage(raw, true));
+    if (data.status === 'KO' || data.status === 'ko') {
+      throw new Error(sanitizeApiErrorMessage(data.userErrorMessage || data.errorMessage || 'Erreur de traitement.'));
+    }
+    const jobIds = extractJobIdsFromAnon2Upload(data, 1);
+    if (!jobIds.length) throw new Error('Réponse serveur incomplète (jobId texte).');
+    return jobIds[0];
+  }
+
+  async function pollTextJobUntilReady(jobId, requestSerial) {
+    const started = Date.now();
+    let delay = TEXT_POLL_INTERVAL_MS;
+    while (Date.now() - started < TEXT_POLL_MAX_MS) {
+      if (requestSerial !== textRequestSerial) {
+        const abortErr = new Error('AbortError');
+        abortErr.name = 'AbortError';
+        throw abortErr;
+      }
+      const res = await fetchJobStatus(jobId);
+      if (res.status === 'done') return;
+      if (res.status === 'error') throw new Error(res.errorMessage || 'Échec du traitement.');
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(Math.round(delay * 1.15), 4000);
+    }
+    throw new Error('Délai dépassé pour l\'anonymisation du texte. Réessayez.');
+  }
+
   async function processText() {
     let value = '';
     document.querySelectorAll('#agfInputText').forEach(el => {
@@ -3636,7 +3733,7 @@
     state.textProcessing = true;
     const requestSerial = ++textRequestSerial;
     document.querySelectorAll('#agfOutputText').forEach(el => {
-      el.textContent = 'Traitement en cours… Les gros fichiers peuvent prendre un moment.';
+      el.textContent = 'Anonymisation du texte en cours…';
       el.style.whiteSpace = 'normal';
       el.classList.add('agf-text-output--loading');
       el.setAttribute('aria-busy', 'true');
@@ -3652,38 +3749,29 @@
       return;
     }
 
-    state.abortController = new AbortController();
-
-    const payload = new FormData();
-    payload.append('username', state.email);
-    payload.append('token', state.token);
-    payload.append('edition', getEditionForApi());
-    payload.append('forceTextFormat', 'true');
-    const entities = selectedEntities();
-    if (entities.length) payload.append('entityTypes', JSON.stringify(entities));
-    // /anonText n'accepte pas les listes Anon2 (anon2InclusionListJson). Fichiers uniquement.
-    if ((state.includeTerms && state.includeTerms.length) || (state.excludeTerms && state.excludeTerms.length)) {
-      setStatus('info', 'Inclusion/Exclusion s’applique aux fichiers anonymisés, pas au collage texte.');
+    try {
+      await saveAnon2Options();
+    } catch (optErr) {
+      setTextOutput(sanitizeApiErrorMessage((optErr && optErr.message) || 'Impossible d\'enregistrer les types de données.'), false, null, null, 0);
+      state.textProcessing = false;
+      document.querySelectorAll('#agfOutputText').forEach(el => {
+        el.classList.remove('agf-text-output--loading');
+        el.setAttribute('aria-busy', 'false');
+      });
+      return;
     }
-    payload.append('fileUpload1', new Blob([value], { type: 'text/plain;charset=utf-8' }), 'input.txt');
 
     try {
-      const response = await fetchWithTimeout(ANON_TEXT_ENDPOINT, { method: 'POST', body: payload }, REQUEST_TIMEOUT);
-      if (!response.ok) {
-        const raw = await response.text();
-        let msg = 'Erreur de traitement du texte.';
-        try { const json = JSON.parse(raw); if (json && (json.userErrorMessage || json.errorMessage)) msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage); }
-        catch (err) { if (raw && raw.length < 220) msg = sanitizeApiErrorMessage(raw); }
-        throw new Error(msg);
-      }
-      const blob = await response.blob();
-      const raw = await blob.text();
-      // Backend peut renvoyer 200 avec status KO (ex: timeout)
+      const jobId = await uploadPasteTextAndGetJobId(value);
+      if (requestSerial !== textRequestSerial) return;
+      await pollTextJobUntilReady(jobId, requestSerial);
+      if (requestSerial !== textRequestSerial) return;
+      const received = await receiveAnonFile(jobId, 0, 'ANON');
+      const raw = await received.blob.text();
       let json;
       try { json = JSON.parse(raw); } catch (_) { json = null; }
       if (json && json.status === 'KO') {
-        const msg = sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
-        throw new Error(msg);
+        throw new Error(sanitizeApiErrorMessage(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.'));
       }
       const out = applyStructuredResponse(raw);
       if (requestSerial !== textRequestSerial) return;
@@ -3698,7 +3786,10 @@
       if (requestSerial !== textRequestSerial) return;
       const isAbort = err.name === 'AbortError' || err.message === 'AbortError';
       if (isAbort) {
-        setTextOutput('Traitement annulé.', false, null, null, 0);
+        // Debounce already scheduled a follow-up run: keep the loader, skip cancel flicker.
+        if (!debounceTextTimer && !textProcessQueued) {
+          setTextOutput('Traitement annulé.', false, null, null, 0);
+        }
       } else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
         setTextOutput('Erreur réseau. Vérifiez votre connexion et réessayez.', false, null, null, 0);
       } else {
@@ -3707,9 +3798,16 @@
     } finally {
       state.abortController = null;
       state.textProcessing = false;
+      const keepLoadingForRerun = !!(debounceTextTimer || textProcessQueued);
       document.querySelectorAll('#agfOutputText').forEach(el => {
-        el.classList.remove('agf-text-output--loading');
-        el.setAttribute('aria-busy', 'false');
+        if (keepLoadingForRerun) {
+          el.textContent = 'Anonymisation du texte en cours…';
+          el.classList.add('agf-text-output--loading');
+          el.setAttribute('aria-busy', 'true');
+        } else {
+          el.classList.remove('agf-text-output--loading');
+          el.setAttribute('aria-busy', 'false');
+        }
       });
       if (textProcessQueued) {
         textProcessQueued = false;
@@ -3734,6 +3832,11 @@
   }
 
   function scheduleDebouncedText() {
+    // Invalidate any in-flight paste job so a stale result cannot paint over newer text.
+    if (state.textProcessing) {
+      textRequestSerial += 1;
+      textProcessQueued = false;
+    }
     if (debounceTextTimer) clearTimeout(debounceTextTimer);
     debounceTextTimer = setTimeout(() => {
       debounceTextTimer = null;

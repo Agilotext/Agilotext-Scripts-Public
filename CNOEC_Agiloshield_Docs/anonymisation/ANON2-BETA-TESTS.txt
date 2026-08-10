@@ -6,6 +6,16 @@ Fichiers ajoutés
 - Front_END/FINAL-2026-05-10-anon2-beta.html
 - anonymisation/fixtures/inclusion-exclusion-smoke.txt
 - anonymisation/WEBFLOW-DEPLOY-INCLUSION-2.4.15.md
+- anonymisation/MESSAGE_NICOLAS_TEXTE_ASYNC_2.4.16.txt
+- anonymisation/WEBFLOW-DEPLOY-TEXTE-ASYNC-2.4.16.md
+
+## 2.4.16 — collage texte via Anon2 async
+- processText() n'appelle plus /anonText
+- Collage → agilo-paste.txt → /anon2AsyncOfficeText (+ listes) → poll → receiveAnon2Text
+- saveAnon2Options() avant chaque run texte
+- Debounce 1500 ms + textRequestSerial (anti-spam / résultat périmé)
+- Historique UI : jobs agilo-paste filtrés
+- Smoke API 10/08/2026 job 1000037802 : Florian BAUER + ACME_FORCE forcés, KEEP_VISIBLE préservé
 
 Endpoints Anon2 branchés
 - /anon2AsyncOfficeText

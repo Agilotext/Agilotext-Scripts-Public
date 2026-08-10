@@ -35,7 +35,7 @@ Kill-switch : `?featureInclusion=0`
    - inclusion `ACME_FORCE_ANON_TEST` → anonymisé
    - exclusion `KEEP_VISIBLE_TEST` → visible
 5. Upload sans listes : comportement inchangé
-6. Collage texte : pas d’envoi des listes (toast informatif)
+6. Collage texte : corrigé en 2.4.16 (même moteur async + listes) — voir WEBFLOW-DEPLOY-TEXTE-ASYNC-2.4.16.md
 
 ## Hors scope
 

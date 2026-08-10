@@ -1,0 +1,19 @@
+Objet : collage texte Agiloshield — on garde l’UI, le front abandonne /anonText
+
+Salut Nicolas,
+
+On garde le collage texte côté produit (tout le monde n’a pas un PDF sous la main).
+
+Ce qui cassait n’était pas « une autre API oubliée » au sens d’un vieux moteur isolé : /anonText est déjà un alias vers ApiAnon2Text, mais ce chemin ignore entityTypes du front et force des listes inclusion/exclusion vides. Du coup le collage ne suivait pas les types UI ni Inclusion/Exclusion, alors que les fichiers via /anon2AsyncOfficeText marchaient.
+
+Fix front 2.4.16 (repo Agilotext-Scripts-Public uniquement, on ne touche pas ton GitHub) :
+- le collage est envoyé en agilo-paste.txt via /anon2AsyncOfficeText
+- puis poll + receiveAnon2Text
+- avec saveAnon2UserDefaults avant + anon2InclusionListJson / anon2ExclusionListJson
+- les jobs agilo-paste sont filtrés de l’historique UI
+
+Pas de patch Java demandé de ton côté.
+
+Merci seulement de ne pas supprimer l’alias /anonText tant que le CDN Business n’est pas pin en 2.4.16. Ensuite tu pourras le retirer tranquillement.
+
+Florian
