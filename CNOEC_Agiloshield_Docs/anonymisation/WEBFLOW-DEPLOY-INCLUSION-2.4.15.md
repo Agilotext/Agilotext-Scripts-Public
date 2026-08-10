@@ -16,7 +16,7 @@
 Remplacer le `src` de `agiloshield-embed-anonymisation-anon2-beta.js` par le **SHA du commit** (pas `@1.09`) :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@79cc7a3a2a7f1fbdac620e8062b75538db60a993/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15" defer></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5e9fb55cdbd212240a6440b1c05f8d9916774d5a/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15" defer></script>
 ```
 
 Canary Business : l’UI Inclusion s’affiche automatiquement sur les paths `/business/` et `/app/business/dashboard/anonymiser` si `getVersion >= 4.0.79`.

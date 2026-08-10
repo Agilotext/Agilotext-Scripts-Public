@@ -31,7 +31,7 @@ URLs de test
 - Snippet Webflow: Front_END/FINAL-2026-05-10-anon2-beta.html
 - Page canary prod: /app/business/dashboard/anonymiser
 - Script CDN 2.4.15 (pin SHA commit, pas @1.09) :
-  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@79cc7a3a2a7f1fbdac620e8062b75538db60a993/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15
+  - https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5e9fb55cdbd212240a6440b1c05f8d9916774d5a/CNOEC_Agiloshield_Docs/anonymisation/agiloshield-embed-anonymisation-anon2-beta.js?v=2.4.15
 
 Vérifications déjà faites
 - Syntaxe JS validée avec node --check
