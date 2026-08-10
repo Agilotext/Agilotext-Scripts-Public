@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.16';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.17';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -183,17 +183,34 @@
   let lastProcessedStats = null;
   let lastProcessedCounts = null;
   const ENTITY_TYPES_TAG = ['PR', 'MAIL', 'PHON', 'AGE', 'TR', 'DT', 'CIE', 'CID', 'ACT', 'PROD', 'ORG', 'FILE', 'ADR', 'POST', 'LOC', 'GEO', 'BANK', 'CARD', 'REF', 'MT', 'IBAN', 'URL', 'IP', 'CLAUSE', 'FRNIR', 'FRPASS', 'FRCNI', 'SIREN', 'SIRET', 'TVA', 'BIC', 'OTHER'];
-  const PLACEHOLDER_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  /** Legacy Anon1 / spacy: [CODE] */
+  const PLACEHOLDER_BRACKET_RE = /\[([A-Za-z0-9_]{2,32})\]/g;
+  /** Anon2 plain: <PREFIX_SUFFIX> */
+  const PLACEHOLDER_ANGLE_PLAIN_RE = /<([A-Za-z][A-Za-z0-9]{1,15})_([A-Za-z0-9]{1,6})>/g;
+  /** Same after escapeHtml: &lt;PREFIX_SUFFIX&gt; */
+  const PLACEHOLDER_ANGLE_ESCAPED_RE = /&lt;([A-Za-z][A-Za-z0-9]{1,15})_([A-Za-z0-9]{1,6})&gt;/g;
+  /** Préfixes autorisés pour pastilles Anon2 (hors whitelist = texte échappé brut, pas de span). */
+  const ANON2_ANGLE_PREFIX_WHITELIST = Object.freeze({
+    PII: 1, PER: 1, PR: 1, PERSON: 1, NAME: 1,
+    ADR: 1, ADDRESS: 1, LOC: 1, LOCATION: 1, POST: 1, POSTAL: 1,
+    ORG: 1, COMPANY: 1, ORGANIZATION: 1, ORGANISATION: 1,
+    TEL: 1, PHON: 1, PHONE: 1, EML: 1, MAIL: 1, EMAIL: 1,
+    IBA: 1, IBAN: 1, IDN: 1, DAT: 1, DATE: 1, DT: 1,
+    JOB: 1, PRO: 1, PROD: 1, URL: 1,
+    SIRET: 1, SIREN: 1, BIC: 1, TVA: 1, NIR: 1, FRNIR: 1, FRCNI: 1, FRPASS: 1
+  });
   /** Backend (Nicolas/spacy-anon) placeholders → code affiché dans l’UI. Tous les tags backend doivent avoir une entrée pour éviter OTHER. */
   const TAG_ALIAS = {
     PR: 'PR',
     PERSON: 'PR',
     PERSON_NAME: 'PR',
     PER: 'PR',
+    PII: 'PR',
     NAME: 'PR',
     MAIL: 'MAIL',
     EMAIL: 'MAIL',
     E_MAIL: 'MAIL',
+    EML: 'MAIL',
     PHON: 'PHON',
     PHONE: 'PHON',
     TEL: 'PHON',
@@ -225,6 +242,7 @@
     TVA: 'TVA',
     VAT: 'TVA',
     IBAN: 'IBAN',
+    IBA: 'IBAN',
     RIB: 'IBAN',
     RIB_KEY: 'IBAN',
     BIC: 'BIC',
@@ -232,13 +250,17 @@
     FRNIR: 'FRNIR',
     NIR: 'FRNIR',
     NSS: 'FRNIR',
+    IDN: 'FRCNI',
     DT: 'DT',
+    DAT: 'DT',
     DATE: 'DT',
     DATETIME: 'DT',
     TIME: 'DT',
     BIRTH_DATE: 'DT',
     BIRTH_PLACE: 'LOC',
     URL: 'URL',
+    JOB: 'ACT',
+    PRO: 'PROD',
     URSSAF_ID: 'SIREN',
     FISCAL_ID: 'SIREN',
     APE: 'SIREN',
@@ -3861,16 +3883,57 @@
     return 'OTHER';
   }
 
-  /** Render backend placeholders [XXX] as colored spans. No client-side anonymization: we only map tag names (e.g. PERSON→PR, LOCATION→LOC) for display. */
+  function isSafeTagCssType(type) {
+    return typeof type === 'string' && /^[A-Z][A-Z0-9]{0,31}$/.test(type);
+  }
+
+  function isAnon2AnglePrefixAllowed(prefix) {
+    const key = String(prefix || '').toUpperCase();
+    return !!ANON2_ANGLE_PREFIX_WHITELIST[key];
+  }
+
+  function bumpStatCount(counts, code) {
+    if (!code || !isSafeTagCssType(code)) return;
+    counts[code] = (counts[code] || 0) + 1;
+  }
+
+  function sumStatCounts(stats) {
+    if (!stats || typeof stats !== 'object') return 0;
+    return Object.values(stats).reduce((sum, n) => sum + Math.max(0, Math.floor(Number(n || 0))), 0);
+  }
+
+  function buildColoredTagSpan(cssType, label, titleText) {
+    if (!isSafeTagCssType(cssType)) return escapeHtml(label);
+    const safeLabel = escapeHtml(label);
+    const safeTitle = escapeHtml(titleText || label);
+    return '<span class="agf-tag agf-tag-' + cssType + '" title="' + safeTitle + '" aria-label="' + safeTitle + '">' + safeLabel + '</span>';
+  }
+
+  /**
+   * Render placeholders as colored spans (display only).
+   * Supports legacy [CODE] and Anon2 &lt;PREFIX_SUFFIX&gt; (matched after escapeHtml).
+   * Clipboard / lastProcessedResult keep the plain text with raw tags.
+   */
   function buildOutputWithTags(processedText) {
     if (!processedText) return { plain: processedText || '', useTags: false };
     const escaped = escapeHtml(processedText);
     let replaced = false;
-    const html = escaped.replace(/\[([A-Za-z0-9_]{2,32})\]/g, (_, rawType) => {
+    let html = escaped.replace(PLACEHOLDER_ANGLE_ESCAPED_RE, (full, rawPrefix, rawSuffix) => {
+      const prefix = String(rawPrefix || '').toUpperCase();
+      const suffix = String(rawSuffix || '').toUpperCase();
+      if (!isAnon2AnglePrefixAllowed(prefix)) return full;
+      const cssType = normalizeEntityCode(prefix);
+      if (!cssType || !isSafeTagCssType(cssType)) return full;
       replaced = true;
+      const label = prefix + '_' + suffix;
+      const title = '<' + label + '>';
+      return buildColoredTagSpan(cssType, label, title);
+    });
+    html = html.replace(PLACEHOLDER_BRACKET_RE, (full, rawType) => {
       const type = normalizeEntityCode(rawType);
-      if (!type) return '[' + rawType + ']';
-      return '<span class="agf-tag agf-tag-' + type + '">' + type + '</span>';
+      if (!type || !isSafeTagCssType(type)) return full;
+      replaced = true;
+      return buildColoredTagSpan(type, type, '[' + type + ']');
     });
     if (!replaced || html === escaped) return { plain: processedText, useTags: false };
     return { plain: processedText, useTags: true, html };
@@ -3880,31 +3943,41 @@
     const counts = {};
     if (!processedText) return counts;
     let match;
-    while ((match = PLACEHOLDER_RE.exec(processedText)) !== null) {
-      const code = normalizeEntityCode(match[1]);
-      if (!code) continue;
-      counts[code] = (counts[code] || 0) + 1;
+    PLACEHOLDER_ANGLE_PLAIN_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_ANGLE_PLAIN_RE.exec(processedText)) !== null) {
+      const prefix = String(match[1] || '').toUpperCase();
+      if (!isAnon2AnglePrefixAllowed(prefix)) continue;
+      bumpStatCount(counts, normalizeEntityCode(prefix));
     }
-    PLACEHOLDER_RE.lastIndex = 0;
+    PLACEHOLDER_BRACKET_RE.lastIndex = 0;
+    while ((match = PLACEHOLDER_BRACKET_RE.exec(processedText)) !== null) {
+      bumpStatCount(counts, normalizeEntityCode(match[1]));
+    }
     return counts;
   }
 
   function renderOutputStats(processedText, explicitStats, explicitTotal) {
     if (!ui.outputSummary || !ui.outputEntities) return;
 
-    const stats = explicitStats && typeof explicitStats === 'object'
-      ? explicitStats
-      : extractEntityStats(processedText);
+    let stats = explicitStats && typeof explicitStats === 'object' ? explicitStats : null;
+    let total = typeof explicitTotal === 'number' ? explicitTotal : null;
+    const textStats = extractEntityStats(processedText);
+    const textTotal = sumStatCounts(textStats);
+    if ((!stats || total === 0) && textTotal > 0) {
+      stats = textStats;
+      total = textTotal;
+    }
+    if (!stats) stats = textStats;
+    if (total == null) total = sumStatCounts(stats);
+
     const entries = Object.entries(stats)
       .map((entry) => [entry[0], Math.max(0, Math.floor(Number(entry[1] || 0)))])
-      .filter((entry) => entry[1] > 0)
+      .filter((entry) => entry[1] > 0 && isSafeTagCssType(entry[0]))
       .sort((a, b) => {
         if (b[1] !== a[1]) return b[1] - a[1];
         return a[0].localeCompare(b[0]);
       });
-    const total = typeof explicitTotal === 'number'
-      ? explicitTotal
-      : entries.reduce((sum, item) => sum + item[1], 0);
+    if (total === 0) total = entries.reduce((sum, item) => sum + item[1], 0);
 
     document.querySelectorAll('#agfOutputEntities').forEach(el => { el.textContent = ''; });
     if (total === 0) {
@@ -3949,10 +4022,14 @@
           stats[code] = (stats[code] || 0) + 1;
         });
       }
-      if (stats) {
-        total = Object.values(stats).reduce((sum, n) => sum + Number(n || 0), 0);
-      }
-    } catch (e) { }
+      if (stats) total = sumStatCounts(stats);
+    } catch (e) { /* plain text Anon2 */ }
+    const textStats = extractEntityStats(plain);
+    const textTotal = sumStatCounts(textStats);
+    if ((!stats || total === 0) && textTotal > 0) {
+      stats = textStats;
+      total = textTotal;
+    }
     const built = buildOutputWithTags(plain);
     return { plain, useTags: built.useTags, html: built.html, stats, total };
   }
@@ -4068,6 +4145,7 @@
         debounceTextTimer = null;
       }
     });
+    // Prefer lastProcessedResult (plain with <PII_AA> tags), never the colored HTML spans.
     if (ui.textCopy) ui.textCopy.addEventListener('click', () => { const t = lastProcessedResult != null ? lastProcessedResult : (ui.textOutput.innerText || '').trim(); if (t && t !== 'Le résultat s\'affichera ici après anonymisation.') { navigator.clipboard.writeText(t).then(() => { ui.textCopy.innerHTML = 'Copié\u00a0!'; setTimeout(() => { ui.textCopy.innerHTML = '<span class="agf-icon-copy" aria-hidden="true"></span>Copier'; }, 1200); }).catch(() => { setStatus('error', 'Copie impossible. Vous pouvez sélectionner le texte et copier à la main.'); }); } });
 
     applyRemoveImagesLocked();

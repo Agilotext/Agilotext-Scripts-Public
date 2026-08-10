@@ -1,0 +1,22 @@
+Objet : Anon2 collage — villes / pays en clair (question produit)
+
+Salut Nicolas,
+
+Sur collage Anon2, avec par ex. :
+
+« Je m'appelle Florian BAUER, et je vis à Saint-mandé, France, 94160, 16 avenue Benoit-Levy. »
+
+PER/PII + rue/CP OK ; « Saint-mandé » et « France » restent en clair.
+
+Lecture code (sans patch de notre côté) :
+- LOC part surtout sur le motif CP + ville adjacents ;
+- l’ordre ville / pays / CP casse cette règle ;
+- « france » est en NER_STOPLIST (anti faux positifs, textes compta etc.).
+
+Question produit : comportement volontaire, ou élargissement possible (ville même avec virgules ; pays optionnels / liste courte) ?
+
+Workaround client court terme : liste Inclusion.
+
+De notre côté on corrige seulement l’UI pastilles / compteur sur le format `<PII_AA>` (embed 2.4.17). Pas de patch Java demandé.
+
+Florian

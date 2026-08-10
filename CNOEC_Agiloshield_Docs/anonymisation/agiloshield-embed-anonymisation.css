@@ -233,12 +233,12 @@
     font-weight: 600;
     border: 1px solid color-mix(in srgb, var(--agilo-primary) 26%, transparent);
   }
-  .agf-tag-PR { background: #fef9c3; color: #422006; }
+  .agf-tag-PR, .agf-tag-PII { background: #fef9c3; color: #422006; }
   .agf-tag-ADR { background: #dbeafe; color: #1e3a8a; }
   .agf-tag-POST { background: #d1fae5; color: #065f46; }
   .agf-tag-LOC { background: #e9d5ff; color: #5b21b6; }
-  .agf-tag-MAIL { background: #ffedd5; color: #9a3412; }
-  .agf-tag-PHON { background: #ccfbf1; color: #0f766e; }
+  .agf-tag-MAIL, .agf-tag-EML { background: #ffedd5; color: #9a3412; }
+  .agf-tag-PHON, .agf-tag-TEL { background: #ccfbf1; color: #0f766e; }
   .agf-tag-ORG { background: #dbeafe; color: #1e3a8a; }
   .agf-tag-SIREN, .agf-tag-SIRET, .agf-tag-IBAN, .agf-tag-FRNIR, .agf-tag-BIC, .agf-tag-TVA { background: #fce7f3; color: #831843; }
   .agf-tag-OTHER { background: #f3f4f6; color: #374151; }

@@ -17,6 +17,13 @@ Fichiers ajoutés
 - Historique UI : jobs agilo-paste filtrés
 - Smoke API 10/08/2026 job 1000037802 : Florian BAUER + ACME_FORCE forcés, KEEP_VISIBLE préservé
 
+## 2.4.17 — pastilles / compteur format Anon2 <TYPE_XX>
+- buildOutputWithTags : [CODE] + &lt;PREFIX_SUFFIX&gt; post-escapeHtml
+- extractEntityStats + fallback si audit.entityCounts vide / total 0
+- Pastille affiche PII_AA (classe PR) ; Copier = plain
+- CSS : .agf-tag-PII (= PR), TEL/EML
+- Docs : WEBFLOW-DEPLOY-TEXTE-DISPLAY-2.4.17.md, MESSAGE_NICOLAS_LOC_VILLES_PAYS.txt
+
 Endpoints Anon2 branchés
 - /anon2AsyncOfficeText
 - /getAnon2JobsInfo
