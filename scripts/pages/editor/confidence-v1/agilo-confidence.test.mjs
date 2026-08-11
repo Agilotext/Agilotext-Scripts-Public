@@ -209,6 +209,16 @@ async function run() {
   assert(nav[0] === 's1', 'navigation: low en premier (priorité UI)');
   assert(nav.includes('s2'), 'navigation: verify inclus');
   assert(typeof AC.goToPreviousConfidenceZone === 'function', 'navigation précédente exposée');
+  assert(typeof AC.buildNavControlsHtml === 'function', 'buildNavControlsHtml exposée');
+  const navHtml = AC.buildNavControlsHtml(true);
+  assert(navHtml.includes('id="ag-confidence-prev"'), 'nav HTML: bouton précédent');
+  assert(navHtml.includes('id="ag-confidence-next"'), 'nav HTML: bouton suivant');
+  assert(navHtml.includes('id="ag-confidence-nav-count"'), 'nav HTML: compteur Passage X / N');
+  assert(navHtml.includes('Passage précédent'), 'nav HTML: libellé Passage précédent');
+  assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowLeft"'), 'nav HTML: raccourci précédent');
+  assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowRight"'), 'nav HTML: raccourci suivant');
+  assert(navHtml.indexOf('ag-confidence-prev') < navHtml.indexOf('ag-confidence-next'), 'nav HTML: précédent avant suivant');
+  assert(AC.buildNavControlsHtml(false) === '', 'nav HTML: vide sans passages à relire');
   assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowRight' }) === true, 'Alt+ArrowRight reconnu');
   assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowLeft' }) === true, 'Alt+ArrowLeft reconnu');
   assert(AC.isConfidenceShortcutEvent({ altKey: false, key: 'ArrowRight' }) === false, 'ArrowRight seul ignoré');

@@ -125,10 +125,23 @@
   background: transparent;
 }
 
+.ag-confidence-panel__nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .ag-confidence-panel__nav-count {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: #525252;
+  min-width: 6.5em;
+  text-align: center;
+}
+
+.ag-confidence-panel__btn-icon {
+  display: none;
 }
 
 .ag-confidence-toggle {
@@ -204,6 +217,13 @@
 .ag-confidence-helper__copy strong {
   color: #174a96;
   font-weight: 700;
+}
+
+.ag-confidence-helper__hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 12px;
+  color: #626262;
 }
 
 .ag-confidence-helper__link {
@@ -391,6 +411,18 @@
 
   .ag-confidence-panel__stat {
     font-size: 11px;
+  }
+
+  .ag-confidence-panel__nav .ag-confidence-panel__btn-text {
+    display: none;
+  }
+
+  .ag-confidence-panel__nav .ag-confidence-panel__btn-icon {
+    display: inline;
+  }
+
+  .ag-confidence-panel__nav-count {
+    min-width: 4.5em;
   }
 
   .ag-confidence-controls {

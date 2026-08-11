@@ -103,7 +103,7 @@ Le frontend applique `issues[]` uniquement si les offsets correspondent encore a
 - Score `%` affiché en secondaire : « Qualité estimée », avec tooltip explicatif
 - Scores **conservés après édition** + badge « Modifié depuis transcription »
 - États de revue locaux : « Relu », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : passages à relire en premier, score en secondaire, bouton « Passage suivant », toggle « Passages à relire »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, boutons « Passage précédent » / « Passage suivant », toggle « Passages à relire »
 - Cas zéro : ligne sobre « Aucun passage signalé à relire · Qualité estimée »
 - Après revue complète : ligne sobre « Tous les passages signalés sont traités »
 - Helper one-shot si des passages existent : explique brièvement pourquoi relire ces passages, bouton « Compris »
@@ -162,7 +162,7 @@ Le correctif 1.09.2 (recouvrement panneau flottant) reste utile mais ne couvrait
 
 Voir aussi [`inline-embed-scripts.md`](./inline-embed-scripts.md) section « Passages à relire ».
 
-Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.5'` (voir aussi 1.09.3 pour le scroll Passage suivant)
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.6'` (voir aussi 1.09.3 pour le scroll Passage suivant)
 
 
 ## Correctif 1.09.4 — menus de téléchargement masqués (partiel)
@@ -185,6 +185,17 @@ Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.5
 **Fix :** suppression de la règle z-index sur la chrome ; `computeConfidenceFloatingBox()` ne flotte plus si `chromeBottom <= 0` (panneau reste sticky dans le flux).
 
 Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.5'`
+
+
+## Correctif 1.09.6 — restauration « Passage précédent »
+
+**Symptôme :** le panneau n'affiche que « Passage suivant », plus de bouton « Passage précédent ».
+
+**Cause :** le bouton UI vivait uniquement sur `f3bbc9e` (`feature/confidence-nav-prev-2026-07-24`), jamais mergé dans `1.09`. Pendant 1.09.2→1.09.5 l'embed a quitté ce hash pour `@1.09`. Ce n'est pas un effet du retrait z-index 1.09.5. Alt+← restait fonctionnel.
+
+**Fix :** port chirurgical de `buildNavControlsHtml` + CSS `__nav` / icônes mobile, sans reprendre le floating `top:10px` / `z-index:9999` de f3. Voir [`editor-confidence-nav-prev-2026-07-24.md`](editor-confidence-nav-prev-2026-07-24.md).
+
+Version attendue en console : `window.__agiloEditorConfidenceVersion === '1.09.6'`
 
 ## Tests
 

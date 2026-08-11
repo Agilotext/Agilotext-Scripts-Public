@@ -1006,6 +1006,31 @@
     updateNavCount();
   }
 
+  /**
+   * Groupe nav panneau : Passage précédent · compteur · Passage suivant.
+   * Navigation circulaire (alignée Alt+← / Alt+→). Prev secondaire, Next primary.
+   */
+  function buildNavControlsHtml(hasPendingRisk) {
+    if (!hasPendingRisk) return '';
+    return (
+      '<span class="ag-confidence-panel__nav" role="group" aria-label="Navigation passages à relire">' +
+        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-prev"' +
+          ' aria-label="Passage précédent" aria-keyshortcuts="Alt+ArrowLeft"' +
+          ' title="Passage précédent (Alt+←) · boucle en début de liste">' +
+          '<span class="ag-confidence-panel__btn-text">Passage précédent</span>' +
+          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">←</span>' +
+        '</button>' +
+        '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
+        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next"' +
+          ' aria-label="Passage suivant" aria-keyshortcuts="Alt+ArrowRight"' +
+          ' title="Passage suivant (Alt+→)">' +
+          '<span class="ag-confidence-panel__btn-text">Passage suivant</span>' +
+          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">→</span>' +
+        '</button>' +
+      '</span>'
+    );
+  }
+
   function renderConfidencePanel(transcriptRoot, summary) {
     if (!transcriptRoot || !summary) return null;
 
@@ -1038,6 +1063,7 @@
             '<div class="ag-confidence-helper__copy">' +
               '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
               '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
+              '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages.</span>' +
             '</div>' +
             '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
             '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
@@ -1048,9 +1074,8 @@
         `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
         `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
         modifiedStat +
-        (hasPendingRisk ? '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next">Passage suivant</button>' : '') +
+        buildNavControlsHtml(hasPendingRisk) +
         toggleHtml +
-        '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
         helperHtml;
     } else {
       panel.innerHTML =
@@ -1059,6 +1084,11 @@
         toggleHtml;
     }
 
+    panel.querySelector('#ag-confidence-prev')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      goToPreviousConfidenceZone();
+    });
     panel.querySelector('#ag-confidence-next')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
@@ -1353,6 +1383,7 @@
     reconcileConfidenceSegments,
     computeSummaryFallback,
     buildNavigationOrder,
+    buildNavControlsHtml,
     badgeLabel,
     panelMainLabel,
     qualityLabel,

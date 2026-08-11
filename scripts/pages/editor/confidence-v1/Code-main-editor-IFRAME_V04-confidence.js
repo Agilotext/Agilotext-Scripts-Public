@@ -3017,5 +3017,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.5';
+  window.__agiloEditorConfidenceVersion = '1.09.6';
 });

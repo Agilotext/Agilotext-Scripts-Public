@@ -187,10 +187,10 @@ Le correctif 1.09.2 (recouvrement panneau flottant `top:10px`) était une piste 
 | Fichier | Changement |
 |---------|------------|
 | `confidence-v1/agilo-confidence.js` | `scrollSegmentIntoView()` borné ; `startEditorShellScrollGuard()` ; restauration ancêtres ; `ensureTranscriptPaneActive()` |
-| `confidence-v1/agilo-confidence.css.js` | retrait z-index chrome 40 (1.09.5) ; `scroll-margin-block` sur `.ag-seg` |
-| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | version `1.09.5` |
+| `confidence-v1/agilo-confidence.css.js` | retrait z-index chrome 40 (1.09.5) ; styles nav prev/next (1.09.6) ; `scroll-margin-block` sur `.ag-seg` |
+| `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | version `1.09.6` |
 
-Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.5'`
+Version attendue : `window.__agiloEditorConfidenceVersion === '1.09.6'`
 
 ### Script console dédié
 
@@ -238,9 +238,15 @@ Embed Webflow (référence branche `@1.09`) :
 
 ```html
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.5"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.5"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.6"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.6"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js?v=1.09.6"></script>
 ```
+
+
+### Correctif 1.09.6 — restauration « Passage précédent »
+
+Le bouton UI n'était jamais sur `1.09` (seulement sur `f3bbc9e`). Port de `buildNavControlsHtml` + CSS nav. Checklist : panneau affiche précédent + suivant ; prev ×5 sans perdre les onglets.
 
 ### Piste iframe (historique, hors toggle)
 
@@ -260,4 +266,4 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js
 ```
 
-Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.5`) et `window.__agiloAnonVersion`.
+Vérifier ensuite en console : `window.__agiloEditorConfidenceVersion` (`1.09.6`) et `window.__agiloAnonVersion`.

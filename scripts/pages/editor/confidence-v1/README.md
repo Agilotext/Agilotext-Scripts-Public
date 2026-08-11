@@ -28,7 +28,7 @@ Retirer les 2 lignes `<script>` ci-dessus de la page Webflow staging → retour 
 |---------|------|
 | `agilo-confidence.js` | Fetch POST, réconciliation segment, badges, états de revue, panneau, navigation, issues V3 |
 | `agilo-confidence.css.js` | Styles badges + panneau + highlights |
-| `Code-main-editor-IFRAME_V04-confidence.js` | Fork V04 + hooks confidence (`__agiloEditorConfidenceVersion` = `1.09.5`) |
+| `Code-main-editor-IFRAME_V04-confidence.js` | Fork V04 + hooks confidence (`__agiloEditorConfidenceVersion` = `1.09.6`) |
 | `editor-main-confidence.js` | Loader staging (scripts prod via PARENT_ONLY) |
 | `DIAGNOSTIC_PASSAGES_A_RELIRE.js` | Diagnostic console si les onglets semblent disparaître |
 | `agilo-confidence.test.mjs` | Tests unitaires |
@@ -43,7 +43,7 @@ Les autres scripts éditeur sont chargés depuis `../` (prod) pour éviter la du
 - Score `%` en secondaire : « Qualité estimée », pas comme action principale
 - Scores conservés après édition + badge « Modifié depuis transcription »
 - États de revue locaux : « Relu », « Ignoré », « Réouvrir »
-- Panneau global sticky/floating : passages à relire en premier, score en secondaire, « Passage suivant », toggle « Passages à relire »
+- Panneau global sticky/floating : passages à relire en premier, score en secondaire, « Passage précédent » / « Passage suivant », toggle « Passages à relire »
 - Cas zéro passage : affichage sobre, sans helper
 - Après revue complète : affichage sobre « Tous les passages signalés sont traités »
 - Helper one-shot : affiché seulement avec des passages à relire, dismissible par « Compris »
@@ -87,17 +87,18 @@ Token éditeur : `localStorage.getItem('agilo:token:ent')`
 6. [ ] Le panneau reste accessible en scroll puis revient à sa position normale
 7. [ ] Helper visible au premier transcript avec passages à relire, absent si zéro passage, puis absent après « Compris » + reload
 8. [ ] Toggle « Passages à relire » OFF masque les repères, persiste au reload, et garde le panneau de réactivation
-9. [ ] « Passage suivant » x5 : barre d'onglets reste visible sans reload
-10. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` : même comportement, onglets stables
-11. [ ] Depuis Compte rendu, « Passage suivant » bascule sur Transcription
-12. [ ] Ouvrir « Télécharger transcription », « Télécharger compte rendu » et « Analyses IA » : menus entiers visibles, aucun libellé d'onglet ne traverse le menu
-13. [ ] Popups upsell `.wrapper-message-pro.download`, menu renommage intervenant, bannière anonymisation : pas de recouvrement par la barre d'onglets
-14. [ ] Toggle ON + scroll : onglets restent visibles (garde JS shell, pas de sticky)
-15. [ ] `getComputedStyle(document.querySelector('main.ed-main nav.ed-tabs')).zIndex` retourne `'auto'`
-16. [ ] Changement rapide de job : aucun badge résiduel
-17. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
+9. [ ] Panneau : « Passage précédent » et « Passage suivant » visibles quand il y a des passages
+10. [ ] « Passage précédent » x5 et « Passage suivant » x5 : barre d'onglets reste visible sans reload
+11. [ ] `Alt+ArrowRight` / `Alt+ArrowLeft` : même comportement, onglets stables
+12. [ ] Depuis Compte rendu, « Passage suivant » bascule sur Transcription
+13. [ ] Ouvrir « Télécharger transcription », « Télécharger compte rendu » et « Analyses IA » : menus entiers visibles, aucun libellé d'onglet ne traverse le menu
+14. [ ] Popups upsell `.wrapper-message-pro.download`, menu renommage intervenant, bannière anonymisation : pas de recouvrement par la barre d'onglets
+15. [ ] Toggle ON + scroll : onglets restent visibles (garde JS shell, pas de sticky)
+16. [ ] `getComputedStyle(document.querySelector('main.ed-main nav.ed-tabs')).zIndex` retourne `'auto'`
+17. [ ] Changement rapide de job : aucun badge résiduel
+18. [ ] `AGILOTEXT_ENABLE_CONFIDENCE = false` : aucun appel réseau confidence (onglet Network)
 
-**Go/no-go prod :** les 17 scénarios OK + accord Nicolas sur navigation UI.
+**Go/no-go prod :** les 18 scénarios OK + accord Nicolas sur navigation UI.
 
 ## Promotion prod (après sign-off Nicolas)
 
