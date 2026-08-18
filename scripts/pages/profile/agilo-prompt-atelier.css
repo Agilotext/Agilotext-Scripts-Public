@@ -1,0 +1,964 @@
+/*
+ * agilo-prompt-atelier v1.10 — fork studio 1.09 + tokens maquette (rayon 4px).
+ * Unités : rem (hérite de la racine HTML du site, souvent 16px) ; svh / dvh pour le viewport.
+ */
+/* Couleurs / tokens Webflow (--color--*) + surcharges --agt-* / themeAccent */
+.agilo-ps-panel {
+  --agilo-ps-text: var(--agt-text, var(--color--gris_foncé, #0e0e0e));
+  --agilo-ps-muted: var(--agt-muted, var(--color--gris, #525252));
+  --agilo-ps-border: var(--agt-border, var(--color--noir_25, #e5e7eb));
+  --agilo-ps-surface: var(--agt-bg, var(--color--white, #ffffff));
+  --agilo-ps-surface-2: var(--agt-surface-2, var(--color--blanc_gris, #f9fafb));
+  --agilo-ps-accent: var(--agt-accent, var(--color--vert, #1c661a));
+  --agilo-ps-accent-hover: var(--agt-accent-hover, #145a12);
+  --agilo-ps-danger-bg: #fef2f2;
+  --agilo-ps-danger-text: #991b1b;
+  --agilo-ps-warn-bg: #fffbeb;
+  --agilo-ps-warn-border: #f59e0b;
+}
+
+/* z-index au-dessus des sidebars Webflow typiques */
+/* Espacements & rayons : hérités par tout le sous-arbre du modal */
+.agilo-ps-overlay {
+  --agilo-ps-pad-outer: 0.75rem;
+  --agilo-ps-radius-sm: 999px;
+  --agilo-ps-radius: 4px;
+  --agilo-ps-radius-lg: 4px;
+  --agilo-ps-space-xs: 0.25rem;
+  --agilo-ps-space-sm: 0.5rem;
+  --agilo-ps-space-md: 0.625rem;
+  --agilo-ps-space: 0.75rem;
+  --agilo-ps-space-lg: 1rem;
+  --agilo-ps-space-xl: 1.25rem;
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: rgba(14, 14, 14, 0.55);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: var(--agilo-ps-pad-outer);
+  box-sizing: border-box;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-panel {
+  background: var(--agilo-ps-surface);
+  border-radius: var(--agilo-ps-radius-lg);
+  max-width: min(75rem, 100%);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1.25rem 3.125rem rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  /* Remplit la hauteur de l’overlay (align-items: stretch) pour éviter le vide en bas */
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 2 * var(--agilo-ps-pad-outer));
+}
+
+@supports (height: 1svh) {
+  .agilo-ps-panel {
+    max-height: calc(100svh - 2 * var(--agilo-ps-pad-outer));
+  }
+}
+
+/* dvh = barre d’adresse dynamique ; min avec svh évite de dépasser quand l’UI mobile est ouverte */
+@supports (height: 1dvh) {
+  .agilo-ps-panel {
+    max-height: min(
+      calc(100svh - 2 * var(--agilo-ps-pad-outer)),
+      calc(100dvh - 2 * var(--agilo-ps-pad-outer))
+    );
+  }
+}
+
+@media (min-width: 80rem) {
+  .agilo-ps-panel {
+    max-width: min(82.5rem, 96vw);
+  }
+}
+
+@media (min-width: 96rem) {
+  .agilo-ps-panel {
+    max-width: min(92.5rem, 94vw);
+  }
+}
+
+.agilo-ps-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--agilo-ps-space) var(--agilo-ps-space-lg);
+  padding: 0.875rem var(--agilo-ps-space-lg) 0.875rem var(--agilo-ps-space-xl);
+  border-bottom: 1px solid var(--agilo-ps-border);
+  flex-shrink: 0;
+}
+
+.agilo-ps-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--agilo-ps-space-xs);
+}
+
+.agilo-ps-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.agilo-ps-hint {
+  margin: 0;
+  color: var(--agilo-ps-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.agilo-ps-close-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: calc(-1 * var(--agilo-ps-space-xs)) calc(-1 * var(--agilo-ps-space-xs)) 0 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--agilo-ps-radius);
+  background: transparent;
+  color: var(--agilo-ps-muted);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.agilo-ps-close-btn:hover {
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-close-btn:focus-visible {
+  outline: 0.125rem solid var(--agilo-ps-accent);
+  outline-offset: 0.125rem;
+}
+
+.agilo-ps-close-btn-icon {
+  font-size: 1.75rem;
+  font-weight: 300;
+  line-height: 1;
+  transform: translateY(-0.0625rem);
+}
+
+.agilo-ps-body {
+  display: grid;
+  grid-template-columns: minmax(12.5rem, 16.25rem) 1fr;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: stretch;
+}
+
+@media (min-width: 80rem) {
+  .agilo-ps-body {
+    grid-template-columns: minmax(16.25rem, 22%) 1fr;
+  }
+}
+
+@media (max-width: 45rem) {
+  .agilo-ps-body {
+    grid-template-columns: 1fr;
+    min-height: min(45vh, 26.25rem);
+  }
+
+  .agilo-ps-listcol {
+    max-height: min(38vh, 20rem);
+    flex: 0 0 auto;
+  }
+}
+
+@supports (height: 1svh) {
+  @media (max-width: 45rem) {
+    .agilo-ps-body {
+      min-height: min(45svh, 26.25rem);
+    }
+
+    .agilo-ps-listcol {
+      max-height: min(38svh, 20rem);
+    }
+  }
+}
+
+.agilo-ps-listcol {
+  border-right: 1px solid var(--agilo-ps-border);
+  padding: var(--agilo-ps-space);
+  background: var(--agilo-ps-surface-2);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agilo-ps-listcol > .agilo-ps-subtitle,
+.agilo-ps-listcol > .agilo-ps-error {
+  flex-shrink: 0;
+}
+
+.agilo-ps-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.agilo-ps-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: var(--agilo-ps-space-lg);
+}
+
+/* Zone centrale défilante : titre, exports, onglets, éditeur — tout ce qui peut dépasser en hauteur. */
+.agilo-ps-main-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Pied fixe : actions Enregistrer toujours accessibles sans scroller toute la colonne. */
+.agilo-ps-main-footer {
+  flex: 0 0 auto;
+  margin-top: var(--agilo-ps-space-sm);
+  padding-top: var(--agilo-ps-space-md);
+  border-top: 1px solid var(--agilo-ps-border);
+  background: var(--agilo-ps-surface);
+  box-shadow: 0 -0.375rem 0.75rem rgba(0, 0, 0, 0.04);
+  padding-bottom: max(var(--agilo-ps-space-xs), env(safe-area-inset-bottom, 0px));
+}
+
+/* Chrome du haut : ne jamais grandir (sinon la bannière brouillon mange tout l’espace éditeur). */
+.agilo-ps-main-scroll > .agilo-ps-status,
+.agilo-ps-main-scroll > .agilo-ps-banner,
+.agilo-ps-main > .agilo-ps-placeholder,
+.agilo-ps-main-scroll > .agilo-ps-toolbar,
+.agilo-ps-main-scroll > .agilo-ps-dirty-banner,
+.agilo-ps-main-scroll > .agilo-ps-tabs {
+  flex: 0 0 auto;
+}
+
+.agilo-ps-main-scroll > .agilo-ps-tabpanels {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.agilo-ps-subtitle {
+  margin: 0 0 var(--agilo-ps-space-sm);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.agilo-ps-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--agilo-ps-space-xs);
+  width: 100%;
+  text-align: left;
+  padding: var(--agilo-ps-space-md) var(--agilo-ps-space);
+  margin-bottom: var(--agilo-ps-space-sm);
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: var(--agilo-ps-radius);
+  background: var(--agilo-ps-surface);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.agilo-ps-list-item:hover {
+  border-color: var(--agilo-ps-accent);
+  background: #f5f3ff;
+  background: color-mix(in srgb, var(--agilo-ps-accent) 8%, var(--agilo-ps-surface));
+}
+
+.agilo-ps-list-item--active {
+  border-color: var(--agilo-ps-accent);
+  background: color-mix(in srgb, var(--agilo-ps-accent) 14%, var(--agilo-ps-surface));
+  box-shadow: 0 0 0 0.125rem color-mix(in srgb, var(--agilo-ps-accent) 38%, transparent);
+}
+
+.agilo-ps-list-item-name {
+  font-weight: 600;
+}
+
+.agilo-ps-list-item-id {
+  font-size: 0.75rem;
+  color: var(--agilo-ps-muted);
+}
+
+.agilo-ps-error {
+  padding: var(--agilo-ps-space-md);
+  background: var(--agilo-ps-danger-bg);
+  color: var(--agilo-ps-danger-text);
+  border-radius: var(--agilo-ps-radius);
+  margin-bottom: var(--agilo-ps-space-sm);
+  font-size: 0.85rem;
+}
+
+.agilo-ps-warning {
+  padding: var(--agilo-ps-space-md);
+  background: var(--agilo-ps-warn-bg);
+  color: inherit;
+  border: 1px solid var(--agilo-ps-warn-border);
+  border-radius: var(--agilo-ps-radius);
+  margin-bottom: var(--agilo-ps-space-sm);
+  font-size: 0.85rem;
+}
+
+.agilo-ps-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--agilo-ps-space);
+  padding: var(--agilo-ps-space) 0.875rem;
+  border-radius: var(--agilo-ps-radius);
+  margin-bottom: var(--agilo-ps-space);
+  border: 1px solid var(--agilo-ps-border);
+}
+
+.agilo-ps-banner--warn {
+  background: var(--agilo-ps-warn-bg);
+  border-color: var(--agilo-ps-warn-border);
+}
+
+.agilo-ps-banner-text {
+  margin: 0;
+  flex: 1 1 12.5rem;
+  font-size: 0.9rem;
+}
+
+.agilo-ps-status {
+  padding: var(--agilo-ps-space-md) var(--agilo-ps-space);
+  margin-bottom: var(--agilo-ps-space-md);
+  border-radius: var(--agilo-ps-radius);
+  background: color-mix(in srgb, var(--agilo-ps-accent) 12%, var(--agilo-ps-surface));
+  border: 1px solid var(--agilo-ps-border);
+  font-size: 0.88rem;
+}
+
+.agilo-ps-status--busy {
+  border-color: var(--agilo-ps-accent);
+}
+
+.agilo-ps-prompt-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: var(--agilo-ps-radius);
+  overflow: hidden;
+}
+
+.agilo-ps-prompt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--agilo-ps-space-sm) var(--agilo-ps-space-lg);
+  padding: var(--agilo-ps-space-md) var(--agilo-ps-space);
+  background: var(--agilo-ps-surface-2);
+  border-bottom: 1px solid var(--agilo-ps-border);
+  font-size: 0.8rem;
+  color: var(--agilo-ps-muted);
+  flex-shrink: 0;
+}
+
+.agilo-ps-prompt-meta-item {
+  font-weight: 600;
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-prompt-body {
+  padding: 0.875rem var(--agilo-ps-space-lg);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  max-width: 75ch;
+  margin-inline: auto;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.agilo-ps-raw-details {
+  margin: 0;
+  border-top: 1px solid var(--agilo-ps-border);
+}
+
+.agilo-ps-raw-summary {
+  padding: var(--agilo-ps-space-md) 0.875rem;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--agilo-ps-accent);
+}
+
+.agilo-ps-pre--raw {
+  max-height: 15rem;
+  margin: 0;
+  border-top: 1px solid var(--agilo-ps-border);
+}
+
+.agilo-ps-preview-hint {
+  margin: 0 0 var(--agilo-ps-space-sm);
+  font-size: 0.8rem;
+  color: var(--agilo-ps-muted);
+}
+
+.agilo-ps-preview-empty {
+  margin: 0 0 var(--agilo-ps-space-md);
+  padding: var(--agilo-ps-space-sm) var(--agilo-ps-space-md);
+  border-radius: var(--agilo-ps-radius);
+  background: var(--agilo-ps-surface-2);
+  border: 1px solid var(--agilo-ps-border);
+}
+
+.agilo-ps-preview-empty .agilo-ps-muted {
+  margin: var(--agilo-ps-space-xs) 0;
+  font-size: 0.85rem;
+}
+
+.agilo-ps-preview-wrap {
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: var(--agilo-ps-radius);
+  overflow: hidden;
+  background: #fff;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agilo-ps-preview-frame {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 12.5rem;
+  border: none;
+  display: block;
+  background: #fff;
+}
+
+.agilo-ps-simple-help {
+  width: 100%;
+  flex: 0 1 100%;
+  padding: var(--agilo-ps-space-sm) 0 0;
+  border-top: 1px dashed var(--agilo-ps-border);
+  margin-top: 0.125rem;
+}
+
+.agilo-ps-simple-help-title {
+  margin: 0 0 0.375rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.agilo-ps-simple-help-list {
+  margin: 0 0 var(--agilo-ps-space-sm);
+  padding-left: 1.15rem;
+  color: var(--agilo-ps-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.agilo-ps-simple-help-li {
+  margin: 0.125rem 0;
+}
+
+.agilo-ps-cta-design {
+  display: inline-flex;
+  text-decoration: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.agilo-ps-cta-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.agilo-ps-html-toolbar {
+  margin-bottom: var(--agilo-ps-space-sm);
+}
+
+.agilo-ps-html-toolbar label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  margin: 0;
+}
+
+.agilo-ps-file-input {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.agilo-ps-placeholder,
+.agilo-ps-muted {
+  color: #6b7280;
+  margin: 0;
+}
+
+.agilo-ps-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--agilo-ps-space-sm) var(--agilo-ps-space-md);
+  align-items: center;
+  margin-bottom: var(--agilo-ps-space-md);
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.agilo-ps-toolbar .agilo-ps-subtitle {
+  flex: 0 1 100%;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.agilo-ps-btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--agilo-ps-space-sm);
+}
+
+.agilo-ps-btn {
+  border-radius: var(--agilo-ps-radius);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Sans la classe Webflow `.button`, on garde le style compact du bundle */
+.agilo-ps-btn:not(.button) {
+  border: none;
+  padding: var(--agilo-ps-space-sm) 0.875rem;
+}
+
+.agilo-ps-btn--primary {
+  background: var(--agilo-ps-accent);
+  color: var(--agt-on-accent, var(--color--white, #ffffff));
+}
+
+.agilo-ps-btn--primary:hover {
+  background: var(--agilo-ps-accent-hover);
+}
+
+@supports (background: color-mix(in srgb, red, blue)) {
+  .agilo-ps-btn--primary:hover {
+    background: color-mix(in srgb, var(--agilo-ps-accent) 88%, #000);
+  }
+}
+
+.agilo-ps-btn--with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--agilo-ps-space-sm);
+}
+
+.agilo-ps-btn-save-icon {
+  display: flex;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.agilo-ps-btn-save-icon svg {
+  display: block;
+}
+
+.agilo-ps-dirty-banner {
+  width: 100%;
+  flex: 0 0 auto;
+  align-self: stretch;
+  margin: 0 0 var(--agilo-ps-space-md);
+  padding: var(--agilo-ps-space-md) var(--agilo-ps-space);
+  border-radius: var(--agilo-ps-radius);
+  border: 1px solid var(--agilo-ps-warn-border);
+  background: var(--agilo-ps-warn-bg);
+  box-sizing: border-box;
+}
+
+.agilo-ps-dirty-banner-text {
+  margin: 0 0 var(--agilo-ps-space-sm);
+  font-size: 0.86rem;
+  color: var(--agilo-ps-text);
+  line-height: 1.4;
+}
+
+.agilo-ps-dirty-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--agilo-ps-space-sm);
+}
+
+.agilo-ps-btn--primary:disabled,
+.agilo-ps-save-group .button.save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.agilo-ps-btn--secondary {
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-btn--secondary:hover {
+  background: var(--agt-surface-2-hover, #e5e7eb);
+}
+
+@supports (background: color-mix(in srgb, red, blue)) {
+  .agilo-ps-btn--secondary:hover {
+    background: var(
+      --agt-surface-2-hover,
+      color-mix(in srgb, var(--agilo-ps-border) 35%, var(--agilo-ps-surface-2))
+    );
+  }
+}
+
+/*
+ * Enregistrer : mêmes classes que le dashboard Webflow (`.button.save` = fond `--color--vert`).
+ * `.button` seul utilise `--color--orange` sur le site — ne pas l’utiliser sans `.save` / `.is-secondary`.
+ */
+.agilo-ps-save-group .agilo-ps-btn.button.save {
+  background-color: var(--color--vert);
+  color: var(--color--white);
+}
+
+.agilo-ps-save-group .agilo-ps-btn.button.save .agilo-ps-btn-save-icon {
+  color: inherit;
+}
+
+/* « Enregistrer tout » : `.button.is-secondary` + contour vert (même swatch que Sauvegarder) */
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary {
+  background-color: var(--color--white, #ffffff);
+  color: var(--color--vert);
+  border: 0.125rem solid var(--color--vert);
+  box-shadow: 0 0.0625rem 0.125rem rgba(0, 0, 0, 0.06);
+}
+
+@supports (box-shadow: 0 0 color-mix(in srgb, red, blue)) {
+  .agilo-ps-save-group .agilo-ps-btn.button.is-secondary {
+    box-shadow: 0 0.0625rem 0.125rem color-mix(in srgb, var(--color--vert) 18%, transparent);
+  }
+}
+
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary:hover {
+  opacity: 0.95;
+  background-color: var(--agt-accent-soft, #d3f8e1);
+  color: var(--color--vert);
+}
+
+@supports (background: color-mix(in srgb, red, blue)) {
+  .agilo-ps-save-group .agilo-ps-btn.button.is-secondary:hover {
+    background-color: color-mix(in srgb, var(--color--vert) 16%, var(--color--white, #ffffff));
+  }
+}
+
+.agilo-ps-save-group .agilo-ps-btn.button.is-secondary:disabled {
+  opacity: 0.45;
+  border-color: var(--agilo-ps-border);
+  color: var(--agilo-ps-muted);
+  background: var(--agilo-ps-surface-2);
+}
+
+.agilo-ps-btn--ghost {
+  background: transparent;
+  color: var(--agilo-ps-accent);
+}
+
+.agilo-ps-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--agilo-ps-space-xs);
+  border-bottom: 1px solid var(--agilo-ps-border);
+  margin-bottom: var(--agilo-ps-space);
+  flex-shrink: 0;
+}
+
+.agilo-ps-tab {
+  padding: var(--agilo-ps-space-sm) 0.875rem;
+  border: none;
+  border-radius: var(--agilo-ps-radius) var(--agilo-ps-radius) 0 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--agilo-ps-muted);
+}
+
+.agilo-ps-tab--active {
+  background: var(--agilo-ps-surface-2);
+  color: var(--agilo-ps-text);
+}
+
+.agilo-ps-tabpanels {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.agilo-ps-tabpanel[hidden] {
+  display: none !important;
+}
+
+/* Onglet visible : occupe toute la hauteur sous les tabs */
+.agilo-ps-tabpanels > .agilo-ps-tabpanel:not([hidden]) {
+  display: flex !important;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agilo-ps-preview-hint,
+.agilo-ps-preview-empty {
+  flex-shrink: 0;
+}
+
+.agilo-ps-tabpanel:not([hidden]) > .agilo-ps-html-toolbar {
+  flex-shrink: 0;
+}
+
+.agilo-ps-fields-dynamic,
+.agilo-ps-consistency-dynamic {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.agilo-ps-editor-mount {
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: var(--agilo-ps-radius);
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.agilo-ps-tabpanel:not([hidden]) > .agilo-ps-editor-mount {
+  flex: 1 1 auto;
+}
+
+.agilo-ps-editor-mount--tall {
+  min-height: min(17.5rem, 32vh);
+}
+
+@supports (height: 1svh) {
+  .agilo-ps-editor-mount--tall {
+    min-height: min(17.5rem, 32svh);
+  }
+}
+
+.agilo-ps-pre {
+  margin: 0;
+  padding: var(--agilo-ps-space);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 50vh;
+  overflow: auto;
+}
+
+@supports (height: 1svh) {
+  .agilo-ps-pre {
+    max-height: 50svh;
+  }
+}
+
+.agilo-ps-pre--tall {
+  max-height: min(55vh, 32.5rem);
+}
+
+@supports (height: 1svh) {
+  .agilo-ps-pre--tall {
+    max-height: min(55svh, 32.5rem);
+  }
+}
+
+/* Pré HTML en lecture seule : remplit la zone sous l’onglet */
+.agilo-ps-editor-mount > .agilo-ps-pre {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: auto;
+}
+
+.agilo-ps-native-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--agilo-ps-space);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: none;
+  resize: vertical;
+  background: #0e0e0e;
+  color: #f3f4f6;
+  flex: 1 1 auto;
+  min-height: 12.5rem;
+  max-height: 100%;
+}
+
+@media (min-width: 75rem) {
+  .agilo-ps-editor-mount .agilo-ps-native-editor {
+    min-height: 22.5rem !important;
+  }
+
+  .agilo-ps-editor-mount--tall .agilo-ps-native-editor {
+    min-height: 32.5rem !important;
+  }
+}
+
+.agilo-ps-dirty-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--agilo-ps-space-xs) var(--agilo-ps-space-md);
+  margin-left: var(--agilo-ps-space-xs);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--agilo-ps-warn-bg);
+  color: #92400e;
+  border: 1px solid var(--agilo-ps-warn-border);
+}
+
+.agilo-ps-tabs[role="tablist"] {
+  flex-wrap: wrap;
+}
+
+.agilo-ps-field-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--agilo-ps-space-xs);
+}
+
+.agilo-ps-field-row {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 1fr) 2fr auto;
+  gap: var(--agilo-ps-space-sm);
+  padding: var(--agilo-ps-space-sm) var(--agilo-ps-space-md);
+  background: var(--agilo-ps-surface-2);
+  border: 1px solid var(--agilo-ps-border);
+  border-radius: var(--agilo-ps-radius-sm);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 37.5rem) {
+  .agilo-ps-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.agilo-ps-field-id {
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+}
+
+.agilo-ps-field-kind {
+  color: #6b7280;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.agilo-ps-h4 {
+  margin: 1rem 0 var(--agilo-ps-space-sm);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.agilo-ps-bullets {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.agilo-ps-li {
+  margin: var(--agilo-ps-space-xs) 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+body.agilo-ps-scroll-lock {
+  overflow: hidden;
+}
+
+.agilo-ps-launch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--agilo-ps-space-md, 0.625rem) var(--agilo-ps-space-lg, 1rem);
+  border-radius: var(--agilo-ps-radius, 0.5rem);
+  border: 1px solid var(--agilo-ps-accent);
+  background: var(--agilo-ps-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.agilo-ps-launch-btn:hover {
+  background: var(--agilo-ps-accent-hover);
+}
+
+@media print {
+  .agilo-ps-overlay {
+    position: static;
+    background: none;
+    padding: 0;
+  }
+  .agilo-ps-panel {
+    box-shadow: none;
+    max-width: none;
+  }
+  .agilo-ps-listcol,
+  .agilo-ps-tabs,
+  .agilo-ps-toolbar .agilo-ps-btn-group,
+  .agilo-ps-dirty-banner,
+  .agilo-ps-main-footer,
+  .agilo-ps-save-group {
+    display: none !important;
+  }
+  .agilo-ps-body {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+}
+
+.agilo-ps-save-group .agilo-ps-btn--secondary:last-child {
+  border-color: var(--agilo-ps-border-strong, var(--agilo-ps-border));
+}
