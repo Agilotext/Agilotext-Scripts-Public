@@ -519,11 +519,17 @@
     .agilo-ps-meta-box .is-ko { color: var(--agilo-ps-danger-text); }
     .agilo-ps-file-input { position: absolute; width: 0.1px; height: 0.1px; opacity: 0; overflow: hidden; z-index: -1; }
 
-    .agilo-ps-result-head { display: flex; flex-wrap: nowrap; gap: 0.35rem; align-items: center; margin-bottom: 0.35rem; flex-shrink: 0; }
+    .agilo-ps-result-head { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-bottom: 0.35rem; flex-shrink: 0; }
     .agilo-ps-result-head label { font-weight: 550; font-size: 0.75rem; color: var(--agilo-ps-muted); }
+    .agilo-ps-job-search {
+      font: inherit; height: 32px; padding: 0 0.5rem; border: 1px solid var(--agilo-ps-border);
+      border-radius: var(--agilo-ps-radius); min-width: 7rem; max-width: 11rem; flex: 1 1 8rem;
+      background: var(--agilo-ps-field); color: var(--agilo-ps-text); box-shadow: none;
+    }
+    .agilo-ps-job-search::placeholder { color: var(--agilo-ps-hint); }
     .agilo-ps-result-head select {
       font: inherit; height: 32px; padding: 0 0.5rem; border: 1px solid var(--agilo-ps-border);
-      border-radius: var(--agilo-ps-radius); max-width: 14rem;
+      border-radius: var(--agilo-ps-radius); min-width: 10rem; max-width: 22rem; flex: 1 1 14rem;
       background: var(--agilo-ps-surface); box-shadow: none;
     }
     .agilo-ps-credits { font-size: 0.72rem; color: var(--agilo-ps-muted); }

@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var OVERLAY_HTML = "<div class=\"agilo-ps-overlay\" id=\"studio-overlay\">\n  <div class=\"agilo-ps-panel agilo-ps-panel--mobile-list agilo-ps-panel--tab-prompt agilo-ps-left-prompt agilo-ps-panel--result-collapsed\" id=\"studio-panel\" role=\"dialog\" aria-labelledby=\"ps-title\" aria-modal=\"true\">\n    <div class=\"agilo-ps-header\">\n      <div class=\"agilo-ps-header-text\">\n        <h1 class=\"agilo-ps-title\" id=\"ps-title\">Modèles de comptes rendus</h1>\n      </div>\n      <div class=\"agilo-ps-header-actions\">\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-help\" aria-label=\"Aide\" title=\"Aide\" aria-expanded=\"false\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M6.925,6.619c.388-1.057,1.294-1.492,2.18-1.492,.895,0,1.818,.638,1.818,1.808,0,1.784-1.816,1.468-2.096,3.065\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8.791,13.567c-.552,0-1-.449-1-1s.448-1,1-1,1,.449,1,1-.448,1-1,1Z\" fill=\"currentColor\"/></svg></span></button>\n        <div class=\"agilo-ps-help-pop\" id=\"help-pop\">\n          <p><strong>Enregistrer sous</strong> crée une copie (texte + HTML). L’original reste intact.</p>\n          <p><strong>⌘S</strong> ou <strong>Ctrl+S</strong> fait la même chose que le bouton en bas. Pas de sauvegarde toute seule.</p>\n          <p><strong>Historique</strong> : 3 sauvegardes de ce modèle. Ce n’est pas Cmd+Z, et les copies V2 sont dans la liste.</p>\n          <p><strong>Essayer</strong> remplace le compte rendu officiel du dossier choisi.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-close-studio\" aria-label=\"Fermer\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n    </div>\n     <div class=\"agilo-ps-body\">\n      <aside class=\"agilo-ps-listcol\">\n        <h2 class=\"agilo-ps-subtitle\">Vos modèles</h2>\n        <div class=\"agilo-ps-search-wrap\">\n          <span class=\"agilo-ps-ico\" aria-hidden=\"true\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M15.75 15.75L11.6386 11.6386\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span>\n          <input class=\"agilo-ps-search\" id=\"search\" type=\"search\" placeholder=\"Rechercher…\" />\n        </div>\n        <div class=\"agilo-ps-list\" id=\"list\"></div>\n      </aside>\n      <section class=\"agilo-ps-main\" id=\"main\">\n        <div class=\"agilo-ps-skeleton\" aria-hidden=\"true\">\n          <div class=\"agilo-ps-skel-line\" style=\"width:40%\"></div>\n          <div class=\"agilo-ps-skel-line\" style=\"width:70%\"></div>\n          <div class=\"agilo-ps-skel-line agilo-ps-skel-line--lg\"></div>\n        </div>\n        <div class=\"agilo-ps-main-live\">\n          <div class=\"agilo-ps-main-scroll\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-back-list\" id=\"btn-back-list\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"2.75\" y1=\"9\" x2=\"15.25\" y2=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"7 13.25 2.75 9 7 4.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Modèles</button>\n            <div class=\"agilo-ps-toolbar\">\n              <h3 class=\"agilo-ps-detail-title\" id=\"detail-title\"></h3>\n              <span id=\"detail-badge\" class=\"agilo-ps-badge agilo-ps-badge--orig\">Original</span>\n              <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-pin-btn\" id=\"btn-pin\">Épingler</button>\n              <p class=\"agilo-ps-meta\" id=\"detail-meta\"></p>\n              <p class=\"agilo-ps-orig-hint\" id=\"orig-hint\" hidden>Pour ne pas écraser l’original, Enregistrer sous crée une copie.</p>\n            </div>\n            <div class=\"agilo-ps-dirty-banner\" id=\"dirty-banner\" hidden></div>\n            <span id=\"char-count\" hidden></span>\n            <div class=\"agilo-ps-tabs agilo-ps-work-tabs\" role=\"tablist\">\n              <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-work=\"prompt\">Prompt</button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-m\" hidden></span></button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"result\">Résultat</button>\n            </div>\n            <div class=\"agilo-ps-main-split\">\n              <div class=\"agilo-ps-prompt-col\">\n                <div class=\"agilo-ps-tabs agilo-ps-left-tabs\">\n                  <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-left=\"prompt\">Prompt</button>\n                  <button type=\"button\" class=\"agilo-ps-tab\" data-left=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-d\" hidden></span></button>\n                </div>\n                <div class=\"agilo-ps-prompt-panel\">\n                  <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor\"></textarea></div>\n                </div>\n                <div class=\"agilo-ps-layout-panel\">\n                  <div class=\"agilo-ps-layout-toolbar\">\n                    <div class=\"agilo-ps-tabs\" style=\"margin:0\">\n                      <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" id=\"btn-view-preview\">Aperçu</button>\n                      <button type=\"button\" class=\"agilo-ps-tab\" id=\"btn-view-source\">Source</button>\n                    </div>\n                    <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-layout\" aria-label=\"Agrandir la mise en page\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    <label class=\"agilo-ps-btn agilo-ps-btn--secondary\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6.75 10.5L9 8.25L11.25 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M9 8.25V14.25\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M12 14.25H12.5C14.571 14.25 16.25 12.571 16.25 10.5C16.25 8.7639 15.065 7.31791 13.464 6.89111C13.278 4.57711 11.362 2.75 9 2.75C6.515 2.75 4.5 4.7651 4.5 7.25C4.5 7.6001 4.54899 7.93598 4.62399 8.26288C3.02699 8.32998 1.75 9.6369 1.75 11.25C1.75 12.907 3.093 14.25 4.75 14.25H6\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span> Importer .html\n                      <input class=\"agilo-ps-file-input\" id=\"html-import\" type=\"file\" accept=\".html,.htm,text/html\" />\n                    </label>\n                  </div>\n                  <div class=\"agilo-ps-layout-preview\" id=\"layout-preview\">\n                    <p class=\"agilo-ps-layout-label\">Mise en page vide (placeholders)</p>\n                    <iframe class=\"agilo-ps-preview-frame\" id=\"iframe-layout\" title=\"Aperçu du template HTML\" sandbox=\"allow-same-origin\"></iframe>\n                  </div>\n                  <div class=\"agilo-ps-layout-source\" id=\"layout-source\" hidden>\n                    <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor-html\"></textarea></div>\n                  </div>\n                  <details class=\"agilo-ps-meta-box\" id=\"layout-meta-wrap\">\n                    <summary>Champs et cohérence</summary>\n                    <div class=\"agilo-ps-meta-inner\" id=\"layout-meta\"></div>\n                  </details>\n                </div>\n              </div>\n              <div class=\"agilo-ps-result-col\">\n                <div class=\"agilo-ps-result-head\">\n                  <label for=\"job\">Dossier</label>\n                  <select id=\"job\"></select>\n                  <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-try\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M5.245,2.878l9.492,5.256c.685,.379,.685,1.353,0,1.732L5.245,15.122c-.669,.371-1.495-.108-1.495-.866V3.744c0-.758,.825-1.237,1.495-.866Z\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Essayer</button>\n                  <a class=\"agilo-ps-editor-link\" id=\"link-editor\" href=\"#\">Ouvrir dans l’éditeur</a>\n                  <span class=\"agilo-ps-credits\" id=\"credits-label\">Essais restants : 4</span>\n                  <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-collapse-try\" aria-label=\"Masquer le test\" title=\"Masquer le test\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"7.25 4.75 11.5 9 7.25 13.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                </div>\n                <div class=\"agilo-ps-trial-cols\">\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>CR actuel du dossier</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-before\" aria-label=\"Agrandir le CR actuel\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-before\"></div>\n                  </div>\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>Après relance (CR officiel)</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-after\" aria-label=\"Agrandir le CR après\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-after\"><p class=\"agilo-ps-cr-empty\">Pas encore d’essai. Relancer remplace le CR officiel de ce dossier.</p></div>\n                  </div>\n                </div>\n              </div>\n            </div>\n          </div>\n          <div class=\"agilo-ps-main-footer\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary agilo-ps-toggle-try\" id=\"btn-toggle-try\" aria-expanded=\"false\">Tester sur un dossier</button>\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-save-primary\"><span class=\"agilo-ps-save-label\">Enregistrer sous</span><kbd class=\"agilo-ps-kbd\" id=\"save-kbd\"></kbd></button>\n            <button type=\"button\" class=\"agilo-ps-btn\" id=\"btn-history\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"9 4.75 9 9 12.25 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></span> Historique</button>\n          </div>\n        </div>\n      </section>\n    </div>\n     <div class=\"agilo-ps-menu agilo-ps-row-menu\" id=\"row-menu\" role=\"menu\"></div>\n    <div class=\"agilo-ps-drawer-back\" id=\"drawer-back\"></div>\n    <aside class=\"agilo-ps-drawer\" id=\"versions-drawer\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"drawer-title\">\n      <div class=\"agilo-ps-drawer-head\">\n        <div style=\"flex:1;min-width:0\">\n          <h3 id=\"drawer-title\" tabindex=\"-1\">Historique</h3>\n          <p id=\"drawer-sub\">3 dernières sauvegardes de <strong>ce</strong> modèle. Les copies V2 sont dans la liste à gauche.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"drawer-close\" aria-label=\"Fermer l’historique\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n      <div class=\"agilo-ps-drawer-body\" id=\"versions-list\"></div>\n    </aside>\n  </div>\n</div>\n <div class=\"agilo-ps-dialog-back\" id=\"dialog-saveas\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"saveas-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"saveas-title\">Enregistrer sous</h4>\n    <p>Une copie complète est créée (texte + HTML). L’original n’est pas modifié.</p>\n    <label for=\"saveas-name\">Nom de la copie</label>\n    <input id=\"saveas-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"saveas-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"saveas-ok\">Créer la copie</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-rename\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"rename-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"rename-title\">Renommer</h4>\n    <p>Le nom apparaît dans la liste à gauche.</p>\n    <label for=\"rename-name\">Nouveau nom</label>\n    <input id=\"rename-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"rename-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"rename-ok\">Renommer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-leave\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"leave-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"leave-title\">Enregistrer les modifications ?</h4>\n    <p id=\"leave-body\">Des changements ne sont pas enregistrés.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-discard\">Ignorer</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"leave-save\">Enregistrer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-redo\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"redo-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"redo-title\">Remplacer le compte rendu de ce dossier ?</h4>\n    <p id=\"redo-body\">Le CR officiel sera régénéré avec le modèle sauvé. La transcription ne change pas. 1 crédit.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-dl\">Télécharger le CR actuel</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"redo-ok\">Remplacer le CR</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-expand-back\" id=\"expand-back\">\n  <div class=\"agilo-ps-expand-bar\">\n    <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary\" id=\"expand-close\">Fermer</button>\n  </div>\n  <iframe class=\"agilo-ps-expand-frame\" id=\"expand-frame\" title=\"Compte rendu agrandi\" sandbox=\"allow-same-origin\"></iframe>\n</div>\n<div class=\"agilo-ps-toast\" id=\"toast\"><span id=\"toast-msg\"></span></div>\n\n";
+  var OVERLAY_HTML = "<div class=\"agilo-ps-overlay\" id=\"studio-overlay\">\n  <div class=\"agilo-ps-panel agilo-ps-panel--mobile-list agilo-ps-panel--tab-prompt agilo-ps-left-prompt agilo-ps-panel--result-collapsed\" id=\"studio-panel\" role=\"dialog\" aria-labelledby=\"ps-title\" aria-modal=\"true\">\n    <div class=\"agilo-ps-header\">\n      <div class=\"agilo-ps-header-text\">\n        <h1 class=\"agilo-ps-title\" id=\"ps-title\">Modèles de comptes rendus</h1>\n      </div>\n      <div class=\"agilo-ps-header-actions\">\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-help\" aria-label=\"Aide\" title=\"Aide\" aria-expanded=\"false\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M6.925,6.619c.388-1.057,1.294-1.492,2.18-1.492,.895,0,1.818,.638,1.818,1.808,0,1.784-1.816,1.468-2.096,3.065\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8.791,13.567c-.552,0-1-.449-1-1s.448-1,1-1,1,.449,1,1-.448,1-1,1Z\" fill=\"currentColor\"/></svg></span></button>\n        <div class=\"agilo-ps-help-pop\" id=\"help-pop\">\n          <p><strong>Enregistrer sous</strong> crée une copie (texte + HTML). L’original reste intact.</p>\n          <p><strong>⌘S</strong> ou <strong>Ctrl+S</strong> fait la même chose que le bouton en bas. Pas de sauvegarde toute seule.</p>\n          <p><strong>Historique</strong> : 3 sauvegardes de ce modèle. Ce n’est pas Cmd+Z, et les copies V2 sont dans la liste.</p>\n          <p><strong>Essayer</strong> remplace le compte rendu officiel du dossier choisi.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-close-studio\" aria-label=\"Fermer\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n    </div>\n     <div class=\"agilo-ps-body\">\n      <aside class=\"agilo-ps-listcol\">\n        <h2 class=\"agilo-ps-subtitle\">Vos modèles</h2>\n        <div class=\"agilo-ps-search-wrap\">\n          <span class=\"agilo-ps-ico\" aria-hidden=\"true\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M15.75 15.75L11.6386 11.6386\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span>\n          <input class=\"agilo-ps-search\" id=\"search\" type=\"search\" placeholder=\"Rechercher…\" />\n        </div>\n        <div class=\"agilo-ps-list\" id=\"list\"></div>\n      </aside>\n      <section class=\"agilo-ps-main\" id=\"main\">\n        <div class=\"agilo-ps-skeleton\" aria-hidden=\"true\">\n          <div class=\"agilo-ps-skel-line\" style=\"width:40%\"></div>\n          <div class=\"agilo-ps-skel-line\" style=\"width:70%\"></div>\n          <div class=\"agilo-ps-skel-line agilo-ps-skel-line--lg\"></div>\n        </div>\n        <div class=\"agilo-ps-main-live\">\n          <div class=\"agilo-ps-main-scroll\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-back-list\" id=\"btn-back-list\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"2.75\" y1=\"9\" x2=\"15.25\" y2=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"7 13.25 2.75 9 7 4.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Modèles</button>\n            <div class=\"agilo-ps-toolbar\">\n              <h3 class=\"agilo-ps-detail-title\" id=\"detail-title\"></h3>\n              <span id=\"detail-badge\" class=\"agilo-ps-badge agilo-ps-badge--orig\">Original</span>\n              <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-pin-btn\" id=\"btn-pin\">Épingler</button>\n              <p class=\"agilo-ps-meta\" id=\"detail-meta\"></p>\n              <p class=\"agilo-ps-orig-hint\" id=\"orig-hint\" hidden>Pour ne pas écraser l’original, Enregistrer sous crée une copie.</p>\n            </div>\n            <div class=\"agilo-ps-dirty-banner\" id=\"dirty-banner\" hidden></div>\n            <span id=\"char-count\" hidden></span>\n            <div class=\"agilo-ps-tabs agilo-ps-work-tabs\" role=\"tablist\">\n              <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-work=\"prompt\">Prompt</button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-m\" hidden></span></button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"result\">Résultat</button>\n            </div>\n            <div class=\"agilo-ps-main-split\">\n              <div class=\"agilo-ps-prompt-col\">\n                <div class=\"agilo-ps-tabs agilo-ps-left-tabs\">\n                  <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-left=\"prompt\">Prompt</button>\n                  <button type=\"button\" class=\"agilo-ps-tab\" data-left=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-d\" hidden></span></button>\n                </div>\n                <div class=\"agilo-ps-prompt-panel\">\n                  <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor\"></textarea></div>\n                </div>\n                <div class=\"agilo-ps-layout-panel\">\n                  <div class=\"agilo-ps-layout-toolbar\">\n                    <div class=\"agilo-ps-tabs\" style=\"margin:0\">\n                      <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" id=\"btn-view-preview\">Aperçu</button>\n                      <button type=\"button\" class=\"agilo-ps-tab\" id=\"btn-view-source\">Source</button>\n                    </div>\n                    <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-layout\" aria-label=\"Agrandir la mise en page\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    <label class=\"agilo-ps-btn agilo-ps-btn--secondary\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6.75 10.5L9 8.25L11.25 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M9 8.25V14.25\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M12 14.25H12.5C14.571 14.25 16.25 12.571 16.25 10.5C16.25 8.7639 15.065 7.31791 13.464 6.89111C13.278 4.57711 11.362 2.75 9 2.75C6.515 2.75 4.5 4.7651 4.5 7.25C4.5 7.6001 4.54899 7.93598 4.62399 8.26288C3.02699 8.32998 1.75 9.6369 1.75 11.25C1.75 12.907 3.093 14.25 4.75 14.25H6\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span> Importer .html\n                      <input class=\"agilo-ps-file-input\" id=\"html-import\" type=\"file\" accept=\".html,.htm,text/html\" />\n                    </label>\n                  </div>\n                  <div class=\"agilo-ps-layout-preview\" id=\"layout-preview\">\n                    <p class=\"agilo-ps-layout-label\">Mise en page vide (placeholders)</p>\n                    <iframe class=\"agilo-ps-preview-frame\" id=\"iframe-layout\" title=\"Aperçu du template HTML\" sandbox=\"allow-same-origin\"></iframe>\n                  </div>\n                  <div class=\"agilo-ps-layout-source\" id=\"layout-source\" hidden>\n                    <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor-html\"></textarea></div>\n                  </div>\n                  <details class=\"agilo-ps-meta-box\" id=\"layout-meta-wrap\">\n                    <summary>Champs et cohérence</summary>\n                    <div class=\"agilo-ps-meta-inner\" id=\"layout-meta\"></div>\n                  </details>\n                </div>\n              </div>\n              <div class=\"agilo-ps-result-col\">\n                <div class=\"agilo-ps-result-head\">\n                  <label for=\"job-search\">Dossier</label>\n                  <input class=\"agilo-ps-job-search\" id=\"job-search\" type=\"search\" placeholder=\"Rechercher un dossier…\" autocomplete=\"off\" />\n                  <select id=\"job\"></select>\n                  <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-try\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M5.245,2.878l9.492,5.256c.685,.379,.685,1.353,0,1.732L5.245,15.122c-.669,.371-1.495-.108-1.495-.866V3.744c0-.758,.825-1.237,1.495-.866Z\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Essayer</button>\n                  <a class=\"agilo-ps-editor-link\" id=\"link-editor\" href=\"#\">Ouvrir dans l’éditeur</a>\n                  <span class=\"agilo-ps-credits\" id=\"credits-label\">Essais restants : 4</span>\n                  <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-collapse-try\" aria-label=\"Masquer le test\" title=\"Masquer le test\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"7.25 4.75 11.5 9 7.25 13.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                </div>\n                <div class=\"agilo-ps-trial-cols\">\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>CR actuel du dossier</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-before\" aria-label=\"Agrandir le CR actuel\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-before\"></div>\n                  </div>\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>Après relance (CR officiel)</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-after\" aria-label=\"Agrandir le CR après\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-after\"><p class=\"agilo-ps-cr-empty\">Pas encore d’essai. Relancer remplace le CR officiel de ce dossier.</p></div>\n                  </div>\n                </div>\n              </div>\n            </div>\n          </div>\n          <div class=\"agilo-ps-main-footer\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary agilo-ps-toggle-try\" id=\"btn-toggle-try\" aria-expanded=\"false\">Tester sur un dossier</button>\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-save-primary\"><span class=\"agilo-ps-save-label\">Enregistrer sous</span><kbd class=\"agilo-ps-kbd\" id=\"save-kbd\"></kbd></button>\n            <button type=\"button\" class=\"agilo-ps-btn\" id=\"btn-history\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"9 4.75 9 9 12.25 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></span> Historique</button>\n          </div>\n        </div>\n      </section>\n    </div>\n     <div class=\"agilo-ps-menu agilo-ps-row-menu\" id=\"row-menu\" role=\"menu\"></div>\n    <div class=\"agilo-ps-drawer-back\" id=\"drawer-back\"></div>\n    <aside class=\"agilo-ps-drawer\" id=\"versions-drawer\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"drawer-title\">\n      <div class=\"agilo-ps-drawer-head\">\n        <div style=\"flex:1;min-width:0\">\n          <h3 id=\"drawer-title\" tabindex=\"-1\">Historique</h3>\n          <p id=\"drawer-sub\">3 dernières sauvegardes de <strong>ce</strong> modèle. Les copies V2 sont dans la liste à gauche.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"drawer-close\" aria-label=\"Fermer l’historique\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n      <div class=\"agilo-ps-drawer-body\" id=\"versions-list\"></div>\n    </aside>\n  </div>\n</div>\n <div class=\"agilo-ps-dialog-back\" id=\"dialog-saveas\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"saveas-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"saveas-title\">Enregistrer sous</h4>\n    <p>Une copie complète est créée (texte + HTML). L’original n’est pas modifié.</p>\n    <label for=\"saveas-name\">Nom de la copie</label>\n    <input id=\"saveas-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"saveas-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"saveas-ok\">Créer la copie</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-rename\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"rename-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"rename-title\">Renommer</h4>\n    <p>Le nom apparaît dans la liste à gauche.</p>\n    <label for=\"rename-name\">Nouveau nom</label>\n    <input id=\"rename-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"rename-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"rename-ok\">Renommer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-leave\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"leave-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"leave-title\">Enregistrer les modifications ?</h4>\n    <p id=\"leave-body\">Des changements ne sont pas enregistrés.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-discard\">Ignorer</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"leave-save\">Enregistrer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-redo\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"redo-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"redo-title\">Remplacer le compte rendu de ce dossier ?</h4>\n    <p id=\"redo-body\">Le CR officiel sera régénéré avec le modèle sauvé. La transcription ne change pas. 1 crédit.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-dl\">Télécharger le CR actuel</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"redo-ok\">Remplacer le CR</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-expand-back\" id=\"expand-back\">\n  <div class=\"agilo-ps-expand-bar\">\n    <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary\" id=\"expand-close\">Fermer</button>\n  </div>\n  <iframe class=\"agilo-ps-expand-frame\" id=\"expand-frame\" title=\"Compte rendu agrandi\" sandbox=\"allow-same-origin\"></iframe>\n</div>\n<div class=\"agilo-ps-toast\" id=\"toast\"><span id=\"toast-msg\"></span></div>\n\n";
   var PIN_MAX = 5;
   var LS_LAST = "agilo:ps:lastPromptId";
   var LS_RECENT = "agilo:ps:recentPromptIds";
@@ -238,17 +238,126 @@
   function isDraftModel(m) {
     return !isCatalogueModel(m);
   }
+  var SUMMARY_INITIAL_DELAY_MS = 4000;
+  var SUMMARY_POLL_MS = 10000;
+  var SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
+  var RECEIVE_SUMMARY_MIN_READY_LEN = 80;
+
   function jobStatusOf(j) {
     if (!j || typeof j !== "object") return "";
     return String(j.transcriptStatus || j.status || j.jobStatus || "").toUpperCase();
   }
-  function isJobReadyStatus(status) {
+  function isJobListableStatus(status) {
     var s = String(status || "").toUpperCase();
-    return s === "READY" || s === "READY_SUMMARY_READY" || s.indexOf("READY") === 0;
+    if (!s || s.indexOf("ERROR") !== -1 || s.indexOf("KO") !== -1) return false;
+    if (s.indexOf("PENDING") !== -1) return false;
+    return s === "READY_SUMMARY_READY" || s === "READY" || s === "READY_TRANSCRIPT" || s === "READY_TEXT";
   }
-  function isJobSummaryReady(status) {
-    var s = String(status || "").toUpperCase();
-    return s === "READY_SUMMARY_READY" || s === "READY";
+  function isSummaryMissingText(text) {
+    var lower = String(text || "").toLowerCase();
+    return lower.indexOf("error_summary_transcript_file_not_exists") !== -1;
+  }
+  function parseJobDate(ds) {
+    if (!ds) return new Date(0);
+    var m = String(ds).match(/^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m) {
+      return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]), Number(m[4] || 0), Number(m[5] || 0), Number(m[6] || 0));
+    }
+    var d = new Date(ds);
+    return isNaN(d.getTime()) ? new Date(0) : d;
+  }
+  function formatJobWhen(ds) {
+    var d = parseJobDate(ds);
+    if (!d.getTime()) return "";
+    var dd = String(d.getDate()).padStart(2, "0");
+    var mm = String(d.getMonth() + 1).padStart(2, "0");
+    var hh = String(d.getHours()).padStart(2, "0");
+    var mi = String(d.getMinutes()).padStart(2, "0");
+    return dd + "/" + mm + " " + hh + ":" + mi;
+  }
+  function formatDurationParts(h, min, s) {
+    h = Number(h) || 0;
+    min = Number(min) || 0;
+    s = Number(s) || 0;
+    if (h > 0) return h + " h " + String(min).padStart(2, "0") + " min";
+    if (min > 0) return min + " min";
+    if (s > 0) return s + " s";
+    return "";
+  }
+  function durationFromFilename(file) {
+    var m = String(file || "").match(/(\d{2})h(\d{2})m(\d{2})s/);
+    if (!m) return "";
+    return formatDurationParts(m[1], m[2], m[3]);
+  }
+  function durationFromFileLength(n) {
+    var v = Number(n);
+    if (!Number.isFinite(v) || v <= 0 || v > 86400) return "";
+    var total = Math.round(v);
+    return formatDurationParts(Math.floor(total / 3600), Math.floor((total % 3600) / 60), total % 60);
+  }
+  function stripFileExt(name) {
+    return String(name || "").replace(/\.[a-z0-9]{2,5}$/i, "").trim();
+  }
+  function jobDisplayTitle(j) {
+    var t = stripFileExt(j.jobTitle || "");
+    if (t) return t;
+    return stripFileExt(j.filename || j.fileName || j.file || "") || ("Dossier " + (j.jobid || j.jobId || ""));
+  }
+  function jobShortId(id) {
+    var s = String(id || "");
+    return s.length > 5 ? s.slice(-5) : s;
+  }
+  function jobOptionLabel(j) {
+    var left = j.whenLabel || "";
+    if (j.durationLabel) left = left ? left + " · " + j.durationLabel : j.durationLabel;
+    var title = j.title || j.file || ("Dossier " + j.jobId);
+    if (title.length > 42) title = title.slice(0, 41) + "…";
+    return (left ? left + "  " : "") + title + "  · " + jobShortId(j.jobId);
+  }
+  function jobMatchesQuery(j, q) {
+    if (!q) return true;
+    var blob = [j.title, j.file, j.jobId, j.whenLabel, j.durationLabel, j.dtCreation].join(" ").toLowerCase();
+    return blob.indexOf(q) !== -1;
+  }
+  function getSummaryContentHash(text) {
+    var s = String(text || "");
+    if (s.length < 60) return "len:" + s.length;
+    var head = s.slice(0, 180).replace(/\s+/g, "");
+    var tail = s.slice(-180).replace(/\s+/g, "");
+    return s.length + ":" + head.slice(0, 40) + ":" + tail.slice(-40);
+  }
+  function htmlFromSummaryPayload(text) {
+    var data = parseJsonSafe(text);
+    if (data && typeof data === "object") {
+      var html = data.summary || data.html || data.content || data.body;
+      if (typeof html === "string") return html;
+    }
+    return String(text || "");
+  }
+  function formatElapsed(ms) {
+    var sec = Math.max(0, Math.floor(ms / 1000));
+    var mm = Math.floor(sec / 60);
+    var ss = sec % 60;
+    if (mm > 0) return mm + " min " + ss + " s";
+    return ss + " s";
+  }
+  function mapJobDto(j) {
+    var id = j.jobid != null ? j.jobid : j.jobId;
+    if (id == null) return null;
+    var status = jobStatusOf(j);
+    if (!isJobListableStatus(status)) return null;
+    var file = String(j.filename || j.fileName || j.file || "Dossier " + id);
+    var dtCreation = j.dtCreation || j.creationDate || "";
+    return {
+      jobId: String(id),
+      file: file,
+      title: jobDisplayTitle(j),
+      status: status,
+      dtCreation: dtCreation,
+      whenLabel: formatJobWhen(dtCreation),
+      durationLabel: durationFromFilename(file) || durationFromFileLength(j.fileLength),
+      sortMs: parseJobDate(dtCreation).getTime()
+    };
   }
 
   function PromptsClient(apiBase, getAuth) {
@@ -446,33 +555,64 @@
       var data = await this.getJson("/getJobsInfo", { limit: 100, offset: offset });
       var batch = (data && data.jobsInfoDtos) || [];
       batch.forEach(function (j) {
-        var id = j.jobid != null ? j.jobid : j.jobId;
-        if (id == null) return;
-        var status = jobStatusOf(j);
-        if (!isJobReadyStatus(status)) return;
-        out.push({
-          jobId: String(id),
-          file: String(j.filename || j.fileName || j.file || "Dossier " + id),
-          status: status
-        });
+        var mapped = mapJobDto(j);
+        if (mapped) out.push(mapped);
       });
       if (batch.length < 100) break;
       offset += 100;
     }
-    return out;
+    out.sort(function (a, b) { return (b.sortMs || 0) - (a.sortMs || 0); });
+    return out.slice(0, 100);
   };
-  PromptsClient.prototype.receiveSummaryHtml = async function (jobId) {
+  PromptsClient.prototype.fetchSummaryRawText = async function (jobId) {
     var q = this.authQuery({ jobId: jobId, format: "html" });
     var res = await fetch(this.apiBase + "/receiveSummary?" + q.toString(), { method: "GET", cache: "no-store" });
     var text = await res.text();
-    if (!res.ok) throw new Error("receiveSummary: HTTP " + res.status);
-    var data = parseJsonSafe(text);
-    if (data && data.status === "KO") throw new Error(data.errorMessage || "receiveSummary KO");
-    if (data && typeof data === "object") {
-      var html = data.summary || data.html || data.content || data.body;
-      if (typeof html === "string") return html;
+    return { okHttp: res.ok, status: res.status, text: text };
+  };
+  PromptsClient.prototype.receiveSummaryResult = async function (jobId) {
+    var raw = await this.fetchSummaryRawText(jobId);
+    if (isSummaryMissingText(raw.text)) return { ok: false, missing: true, html: "", message: "file_not_exists" };
+    var data = parseJsonSafe(raw.text);
+    if (!raw.okHttp) return { ok: false, missing: false, html: "", message: "receiveSummary: HTTP " + raw.status };
+    if (data && data.status === "KO") {
+      var msg = data.errorMessage || "receiveSummary KO";
+      return { ok: false, missing: isSummaryMissingText(msg), html: "", message: msg };
     }
-    return text;
+    var html = htmlFromSummaryPayload(raw.text);
+    if (!html || html.length < 20) return { ok: false, missing: true, html: "", message: "empty" };
+    return { ok: true, missing: false, html: html };
+  };
+  PromptsClient.prototype.receiveSummaryHtml = async function (jobId) {
+    var result = await this.receiveSummaryResult(jobId);
+    if (result.ok) return result.html;
+    throw new Error(result.missing ? "error_summary_transcript_file_not_exists" : (result.message || "receiveSummary KO"));
+  };
+  PromptsClient.prototype.fetchPriorSummaryContentHash = async function (jobId) {
+    try {
+      var result = await this.receiveSummaryResult(jobId);
+      if (!result.ok || !result.html || result.html.length < 40) return "";
+      return getSummaryContentHash(result.html);
+    } catch (_e) {
+      return "";
+    }
+  };
+  PromptsClient.prototype.receiveSummaryIndicatesCrReady = async function (jobId, priorContentHash) {
+    try {
+      var result = await this.receiveSummaryResult(jobId);
+      if (!result.ok || result.html.length < RECEIVE_SUMMARY_MIN_READY_LEN) return { ready: false, html: "" };
+      if (priorContentHash && getSummaryContentHash(result.html) === priorContentHash) {
+        return { ready: false, html: "" };
+      }
+      return { ready: true, html: result.html };
+    } catch (_e) {
+      return { ready: false, html: "" };
+    }
+  };
+  PromptsClient.prototype.getTranscriptStatusFull = async function (jobId) {
+    var data = await this.getJson("/getTranscriptStatus", { jobId: jobId });
+    var ts = data && data.transcriptStatus ? String(data.transcriptStatus).trim().toUpperCase() : "";
+    return { transcriptStatus: ts, raw: data || null };
   };
   PromptsClient.prototype.redoSummary = async function (jobId, promptId) {
     var q = this.authQuery({ jobId: jobId, promptId: promptId });
@@ -484,20 +624,25 @@
     return data || text;
   };
   PromptsClient.prototype.waitJobSummaryReady = async function (jobId, opts) {
-    var maxMs = (opts && opts.maxMs) || 240000;
-    var pollMs = (opts && opts.pollMs) || 3000;
+    var maxMs = (opts && opts.maxMs) || SUMMARY_MAX_WAIT_MS;
+    var pollMs = (opts && opts.pollMs) || SUMMARY_POLL_MS;
+    var priorHash = (opts && opts.priorContentHash) || "";
     var start = Date.now();
+    await sleep(SUMMARY_INITIAL_DELAY_MS);
     while (Date.now() - start < maxMs) {
-      var data = await this.getJson("/getJobsInfo", { jobId: jobId, limit: 1, offset: 0 });
-      var jobs = (data && data.jobsInfoDtos) || [];
-      var job = jobs[0] || {};
-      var status = jobStatusOf(job);
+      var status = "";
+      try {
+        var full = await this.getTranscriptStatusFull(jobId);
+        status = full.transcriptStatus;
+      } catch (_e) {
+        status = "";
+      }
       if (opts && opts.onTick) opts.onTick({ elapsedMs: Date.now() - start, status: status });
-      if (isJobSummaryReady(status)) return true;
-      if (status.indexOf("ERROR") !== -1 || status.indexOf("KO") !== -1) return false;
+      var check = await this.receiveSummaryIndicatesCrReady(jobId, priorHash);
+      if (check.ready) return { ok: true, html: check.html };
       await sleep(pollMs);
     }
-    return false;
+    return { ok: false, timeout: true, html: "" };
   };
 
   function inferEditionFromLocation() {
@@ -588,6 +733,7 @@
     this.bound = false;
     this.models = [];
     this.jobs = [];
+    this.jobsFilter = "";
     this.selectedId = null;
     this.dirty = false;
     this.saving = false;
@@ -780,23 +926,35 @@
   MaquetteApp.prototype.selectedJob = function () {
     var val = this.$("#job") && this.$("#job").value;
     if (!val) return null;
-    return this.jobs.filter(function (j) { return j.jobId === val; })[0] || { jobId: val, file: val };
+    return this.jobs.filter(function (j) { return j.jobId === val; })[0] || { jobId: val, file: val, title: val };
   };
-  MaquetteApp.prototype.populateJobs = function () {
+  MaquetteApp.prototype.populateJobs = function (filter, opts) {
     var sel = this.$("#job");
     if (!sel) return;
+    opts = opts || {};
+    var keepValue = opts.keepValue ? sel.value : "";
+    if (filter !== undefined && filter !== null) this.jobsFilter = String(filter);
+    var q = String(this.jobsFilter || "").trim().toLowerCase();
+    var visible = this.jobs.filter(function (j) { return jobMatchesQuery(j, q); });
+    if (keepValue && visible.every(function (j) { return j.jobId !== keepValue; })) {
+      var kept = this.jobs.filter(function (j) { return j.jobId === keepValue; })[0];
+      if (kept) visible = [kept].concat(visible);
+    }
     sel.innerHTML = "";
     var first = document.createElement("option");
     first.value = "";
-    first.textContent = this.jobs.length ? "Choisir un dossier…" : "Aucun dossier READY";
+    if (!this.jobs.length) first.textContent = "Aucun dossier disponible";
+    else if (!visible.length) first.textContent = "Aucun résultat";
+    else first.textContent = "Choisir un dossier…";
     sel.appendChild(first);
-    this.jobs.forEach(function (t) {
+    visible.forEach(function (t) {
       var opt = document.createElement("option");
       opt.value = t.jobId;
-      opt.textContent = t.file + " · " + t.jobId;
+      opt.textContent = jobOptionLabel(t);
+      opt.title = t.title + " · " + t.jobId;
       sel.appendChild(opt);
     });
-    sel.value = "";
+    sel.value = keepValue && visible.some(function (j) { return j.jobId === keepValue; }) ? keepValue : "";
     this.syncTryCta();
     this.syncEditorLink();
   };
@@ -1427,7 +1585,8 @@
   MaquetteApp.prototype.openRedoConfirm = function () {
     var j = this.selectedJob();
     if (!j) return;
-    this.$("#redo-body").textContent = "Le CR officiel de « " + j.file + " » (job " + j.jobId + ") sera régénéré avec le modèle sauvé. La transcription ne change pas. 1 crédit.";
+    var label = j.title || j.file || j.jobId;
+    this.$("#redo-body").textContent = "Le CR officiel de « " + label + " » (" + j.jobId + ") sera régénéré avec le modèle sauvé. La transcription ne change pas. 1 crédit.";
     this.$("#dialog-redo").classList.add("is-open");
   };
   MaquetteApp.prototype.closeRedoConfirm = function () {
@@ -1456,18 +1615,24 @@
     this.closeRedoConfirm();
     this.trying = true;
     this.syncTryCta();
-    this.$("#cr-after").innerHTML = "<p class='agilo-ps-cr-empty'>Génération en cours…</p><div class='agilo-ps-skel-line'></div><div class='agilo-ps-skel-line' style='width:80%'></div>";
+    var after = this.$("#cr-after");
+    after.innerHTML = "<p class='agilo-ps-cr-empty'>Génération du compte-rendu en cours…</p><div class='agilo-ps-skel-line'></div><div class='agilo-ps-skel-line' style='width:80%'></div>";
     try {
       var ready = await this.client.waitPromptReady(m.id, { maxMs: 120000, pollMs: 2000 });
       if (!ready) throw new Error("Le modèle n’est pas READY. Enregistrez, puis réessayez.");
+      var priorHash = await this.client.fetchPriorSummaryContentHash(j.jobId);
       await this.client.redoSummary(j.jobId, m.id);
       this.toast("Régénération lancée…");
       var done = await this.client.waitJobSummaryReady(j.jobId, {
-        onTick: function () { /* poll */ }
+        priorContentHash: priorHash,
+        onTick: function (t) {
+          after.innerHTML = "<p class='agilo-ps-cr-empty'>Génération du compte-rendu en cours… " + formatElapsed(t.elapsedMs) + "</p><div class='agilo-ps-skel-line'></div><div class='agilo-ps-skel-line' style='width:80%'></div>";
+        }
       });
-      if (!done) throw new Error("Le CR n’est pas revenu à READY. Vérifiez le dossier dans l’éditeur.");
-      var html = await this.client.receiveSummaryHtml(j.jobId);
-      this.renderTrialHtml(this.$("#cr-after"), html, "CR vide.");
+      if (!done || !done.ok) {
+        throw new Error("Toujours en cours, ouvrez le dossier dans l’éditeur.");
+      }
+      this.renderTrialHtml(after, done.html, "CR vide.");
       this.toast("CR officiel remplacé pour le dossier " + j.jobId + ".");
     } catch (e) {
       this.$("#cr-after").innerHTML = "<p class='agilo-ps-cr-empty'>Échec : " + escapeHtml(e.message || String(e)) + "</p>";
@@ -1481,19 +1646,32 @@
     var j = this.selectedJob();
     this.frozenBeforeHtml = "";
     this.clearAfter();
+    this.syncTryCta();
+    this.syncEditorLink();
     if (!j) {
-      this.renderTrialHtml(this.$("#cr-before"), "", "Choisissez un dossier READY (pas le premier de la liste par défaut).");
-      this.syncTryCta();
-      this.syncEditorLink();
+      this.renderTrialHtml(this.$("#cr-before"), "", "Choisissez un dossier pour afficher le CR actuel.");
       return;
     }
     this.renderTrialHtml(this.$("#cr-before"), "", "Chargement du CR actuel…");
     try {
-      var html = await this.client.receiveSummaryHtml(j.jobId);
-      this.frozenBeforeHtml = html;
-      this.renderTrialHtml(this.$("#cr-before"), html, "Pas de CR sur ce dossier.");
+      var result = await this.client.receiveSummaryResult(j.jobId);
+      if (result.missing) {
+        this.renderTrialHtml(this.$("#cr-before"), "", "Pas de CR actuel. Essayer va en créer un (1 crédit).");
+        return;
+      }
+      if (!result.ok) {
+        this.renderTrialHtml(this.$("#cr-before"), "", "CR actuel indisponible : " + (result.message || ""));
+        return;
+      }
+      this.frozenBeforeHtml = result.html;
+      this.renderTrialHtml(this.$("#cr-before"), result.html, "Pas de CR sur ce dossier.");
     } catch (e) {
-      this.renderTrialHtml(this.$("#cr-before"), "", "CR actuel indisponible : " + (e.message || e));
+      var msg = e && e.message ? String(e.message) : String(e);
+      if (isSummaryMissingText(msg)) {
+        this.renderTrialHtml(this.$("#cr-before"), "", "Pas de CR actuel. Essayer va en créer un (1 crédit).");
+      } else {
+        this.renderTrialHtml(this.$("#cr-before"), "", "CR actuel indisponible : " + msg);
+      }
     }
     this.syncTryCta();
     this.syncEditorLink();
@@ -1585,7 +1763,9 @@
     } catch (_e) {
       this.jobs = [];
     }
-    this.populateJobs();
+    this.jobsFilter = "";
+    if (this.$("#job-search")) this.$("#job-search").value = "";
+    this.populateJobs("");
     if (promptId) {
       await this.select(String(promptId), { force: true });
     } else {
@@ -1653,7 +1833,15 @@
         self.toast("HTML importé.");
       });
     });
-    this.$("#job").addEventListener("change", function () { self.loadJobBefore(); });
+    this.$("#job").addEventListener("change", function () {
+      self.syncTryCta();
+      self.loadJobBefore();
+    });
+    if (this.$("#job-search")) {
+      this.$("#job-search").addEventListener("input", function (e) {
+        self.populateJobs(e.target.value, { keepValue: true });
+      });
+    }
     this.$("#btn-try").addEventListener("click", function () { self.runTry(); });
     this.$("#redo-cancel").addEventListener("click", function () { self.closeRedoConfirm(); });
     this.$("#redo-ok").addEventListener("click", function () { self.executeRedo(); });
