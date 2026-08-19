@@ -22,7 +22,7 @@
   --agilo-ps-danger-text: #991b1b;
   --agilo-ps-warn-bg: #fffbeb;
   --agilo-ps-warn-border: #f59e0b;
-  --agilo-ps-radius-sm: 999px; /* badges Original / Brouillon seulement */
+  --agilo-ps-radius-sm: 999px; /* badges Original / Copie seulement */
   --agilo-ps-radius: 4px; /* contrôles */
   --agilo-ps-radius-lg: 0; /* surfaces / panel */
   --agilo-ps-shadow-btn: none;
@@ -265,6 +265,22 @@
   font-size: 0.72rem;
   color: var(--agilo-ps-muted);
 }
+.agilo-ps-list-item-when {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  color: var(--agilo-ps-muted);
+  white-space: nowrap;
+}
+.agilo-ps-list-when-ico {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: currentColor;
+}
+.agilo-ps-list-when-ico svg { display: block; }
 .agilo-ps-list-item--active .agilo-ps-list-item-id {
   color: var(--agilo-ps-text);
 }
@@ -443,6 +459,10 @@
     .agilo-ps-left-layout .agilo-ps-prompt-panel { display: none !important; }
 
     .agilo-ps-main-split { display: grid; grid-template-columns: 1fr 1fr; flex: 1 1 auto; min-height: 0; gap: 0.5rem; }
+    @media (min-width: 45.01rem) {
+      .agilo-ps-panel--result-collapsed .agilo-ps-main-split { grid-template-columns: 1fr; }
+      .agilo-ps-panel--result-collapsed .agilo-ps-result-col { display: none; }
+    }
     .agilo-ps-prompt-col, .agilo-ps-result-col { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
     .agilo-ps-result-col { border-left: 1px solid var(--agilo-ps-border); padding-left: 0.5rem; }
     .agilo-ps-prompt-panel, .agilo-ps-layout-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
@@ -581,6 +601,8 @@
       .agilo-ps-footer-right { margin-left: 0; }
       .agilo-ps-kbd { display: none; }
       .agilo-ps-pin-btn { display: none; }
+      .agilo-ps-toggle-try,
+      #btn-collapse-try { display: none; }
     }
 
 /* Live : pas de compteur crédits localStorage. Launch bouton inutile (clic tableau). */
