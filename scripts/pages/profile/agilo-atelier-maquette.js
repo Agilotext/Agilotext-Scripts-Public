@@ -11,6 +11,8 @@
   var LS_LAST = "agilo:ps:lastPromptId";
   var LS_RECENT = "agilo:ps:recentPromptIds";
   var LS_RESULT_COL = "agilo:ps:resultCol";
+  var LS_LIST_GROUP_USER = "agilo:ps:listGroup:user";
+  var LS_LIST_GROUP_CATALOGUE = "agilo:ps:listGroup:catalogue";
   var CLOCK_SVG = "<span class='agilo-ps-list-when-ico' aria-hidden='true'><svg viewBox='0 0 18 18' width='12' height='12'><circle cx='9' cy='9' r='7.25' fill='none' stroke='currentColor' stroke-width='1.5'/><polyline points='9 4.75 9 9 12.25 11.25' fill='none' stroke='currentColor' stroke-width='1.5' stroke-linecap='round'/></svg></span>";
 
   var ICO = {
@@ -111,6 +113,47 @@
     try {
       localStorage.setItem(LS_RESULT_COL, open ? "open" : "closed");
     } catch (_e) { /* storage bloqué */ }
+  }
+  function readListGroupOpen(key, defaultOpen) {
+    try {
+      var v = localStorage.getItem(key);
+      if (v === "open") return true;
+      if (v === "closed") return false;
+    } catch (_e) { /* storage bloqué */ }
+    return defaultOpen;
+  }
+  function writeListGroupOpen(key, open) {
+    try {
+      localStorage.setItem(key, open ? "open" : "closed");
+    } catch (_e) { /* storage bloqué */ }
+  }
+  function bindLineBreakFilet(ta, onInput) {
+    if (!ta) return;
+    var enterBreakHandledThisTick = false;
+    function insertLineBreakAtCaret() {
+      var start = ta.selectionStart || 0;
+      var end = ta.selectionEnd || 0;
+      ta.value = ta.value.slice(0, start) + "\n" + ta.value.slice(end);
+      ta.selectionStart = ta.selectionEnd = start + 1;
+      if (onInput) onInput();
+    }
+    ta.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter") return;
+      if (e.isComposing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      enterBreakHandledThisTick = true;
+      insertLineBreakAtCaret();
+      queueMicrotask(function () { enterBreakHandledThisTick = false; });
+    }, true);
+    ta.addEventListener("beforeinput", function (e) {
+      if (e.inputType !== "insertLineBreak" && e.inputType !== "insertParagraph") return;
+      if (e.isComposing) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (enterBreakHandledThisTick) return;
+      insertLineBreakAtCaret();
+    }, true);
   }
   function suggestName(base) {
     var root = (base || "Copie").trim();
@@ -775,8 +818,8 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "agilo-ps-list-item" + (m.id === self.selectedId ? " agilo-ps-list-item--active" : "") + (m.id === last ? " agilo-ps-list-item--last" : "");
-      var draft = isDraftModel(m);
-      btn.innerHTML = "<span class='agilo-ps-list-item-name'></span><span class='agilo-ps-list-item-meta'><span class='agilo-ps-list-item-id'></span><span class='agilo-ps-badge " + (draft ? "agilo-ps-badge--draft" : "agilo-ps-badge--orig") + "'>" + (draft ? "Copie" : "Original") + "</span></span>";
+      var catalogue = isCatalogueModel(m);
+      btn.innerHTML = "<span class='agilo-ps-list-item-name'></span><span class='agilo-ps-list-item-meta'><span class='agilo-ps-list-item-id'></span>" + (catalogue ? "<span class='agilo-ps-badge agilo-ps-badge--orig'>Original</span>" : "") + "</span>";
       var nameEl = btn.querySelector(".agilo-ps-list-item-name");
       if (self.isPinned(m.id)) nameEl.innerHTML = pinSvg;
       nameEl.appendChild(document.createTextNode(m.name));
@@ -800,17 +843,40 @@
       row.appendChild(more);
       listEl.appendChild(row);
     }
-    function group(label, items) {
+    function group(label, key, defaultOpen, items, variant) {
       var shown = self.sortPinnedFirst(items.filter(matches));
       if (!shown.length) return;
-      var lab = document.createElement("div");
-      lab.className = "agilo-ps-list-group-label";
-      lab.textContent = label;
-      listEl.appendChild(lab);
+      var persisted = readListGroupOpen(key, defaultOpen);
+      var force = shown.some(function (m) { return m.id === self.selectedId; }) || (!!q && shown.length > 0);
+      var open = force || persisted;
+      var wrap = document.createElement("div");
+      wrap.className = "agilo-ps-list-group agilo-ps-list-group--" + variant;
+      var lab = document.createElement("button");
+      lab.type = "button";
+      lab.className = "agilo-ps-list-group-btn agilo-ps-list-group-btn--" + variant;
+      lab.setAttribute("aria-expanded", open ? "true" : "false");
+      lab.innerHTML = "<span class='agilo-ps-list-group-chevron' aria-hidden='true'><svg viewBox='0 0 18 18' width='12' height='12'><polyline points='6 7 9 10.25 12 7' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/></svg></span><span class='agilo-ps-list-group-title'></span><span class='agilo-ps-list-group-count'></span>";
+      lab.querySelector(".agilo-ps-list-group-title").textContent = label;
+      lab.querySelector(".agilo-ps-list-group-count").textContent = "(" + shown.length + ")";
+      var body = document.createElement("div");
+      body.className = "agilo-ps-list-group-body";
+      body.hidden = !open;
+      lab.addEventListener("click", function () {
+        var next = body.hidden;
+        body.hidden = !next;
+        lab.setAttribute("aria-expanded", next ? "true" : "false");
+        writeListGroupOpen(key, next);
+      });
+      wrap.appendChild(lab);
+      wrap.appendChild(body);
+      listEl.appendChild(wrap);
+      var prevList = listEl;
+      listEl = body;
       shown.forEach(appendItem);
+      listEl = prevList;
     }
-    group("Catalogue Agilotext", this.models.filter(function (m) { return isCatalogueModel(m); }));
-    group("Vos copies", this.models.filter(function (m) { return !isCatalogueModel(m); }));
+    group("Vos copies", LS_LIST_GROUP_USER, true, this.models.filter(function (m) { return !isCatalogueModel(m); }), "user");
+    group("Catalogue Agilotext", LS_LIST_GROUP_CATALOGUE, false, this.models.filter(function (m) { return isCatalogueModel(m); }), "catalogue");
   };
   MaquetteApp.prototype.syncPinBtn = function () {
     var btn = this.$("#btn-pin");
@@ -858,6 +924,7 @@
     if (!m) {
       this.$("#detail-title").textContent = "Aucun modèle";
       this.$("#detail-meta").textContent = "";
+      this.$("#detail-badge").hidden = true;
       this.$("#editor").value = "";
       this.$("#editor-html").value = "";
       this.syncFooterCtas(null);
@@ -867,9 +934,14 @@
       return;
     }
     this.$("#detail-title").textContent = m.name;
-    var draft = isDraftModel(m);
-    this.$("#detail-badge").textContent = draft ? "Copie" : "Original";
-    this.$("#detail-badge").className = "agilo-ps-badge " + (draft ? "agilo-ps-badge--draft" : "agilo-ps-badge--orig");
+    var badge = this.$("#detail-badge");
+    if (isCatalogueModel(m)) {
+      badge.hidden = false;
+      badge.textContent = "Original";
+      badge.className = "agilo-ps-badge agilo-ps-badge--orig";
+    } else {
+      badge.hidden = true;
+    }
     this.$("#detail-meta").textContent = "ID " + m.id + " · Modifié " + (m.modifiedLabel || "récemment");
     this.$("#editor").value = m.prompt || "";
     this.$("#editor-html").value = m.html || "";
@@ -1546,15 +1618,23 @@
     document.addEventListener("click", function () { self.closeRowMenu(); });
     this.$("#drawer-close").addEventListener("click", function () { self.closeDrawer(); });
     this.$("#drawer-back").addEventListener("click", function () { self.closeDrawer(); });
-    this.$("#editor").addEventListener("input", function () {
+    var editor = this.$("#editor");
+    var editorHtml = this.$("#editor-html");
+    if (editor) editor.spellcheck = false;
+    if (editorHtml) editorHtml.spellcheck = false;
+    function onPromptInput() {
       self.markDirty();
       self.$("#char-count").textContent = (self.$("#editor").value || "").length + " car.";
-    });
-    this.$("#editor-html").addEventListener("input", function () {
+    }
+    function onHtmlInput() {
       self.markDirty();
       if (self.layoutView === "preview") self.refreshLayoutPreview();
       else self.renderLayoutMeta();
-    });
+    }
+    editor.addEventListener("input", onPromptInput);
+    editorHtml.addEventListener("input", onHtmlInput);
+    bindLineBreakFilet(editor, onPromptInput);
+    bindLineBreakFilet(editorHtml, onHtmlInput);
     this.$("#html-import").addEventListener("change", function () {
       var f = self.$("#html-import").files && self.$("#html-import").files[0];
       self.$("#html-import").value = "";

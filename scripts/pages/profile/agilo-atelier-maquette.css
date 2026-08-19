@@ -318,6 +318,19 @@
   border: 1px solid var(--agilo-ps-border);
   box-shadow: none;
 }
+.agilo-ps-prompt-panel .agilo-ps-editor-mount {
+  background: #0e0e0e;
+  border-color: #1f1f1f;
+}
+#editor.agilo-ps-native-editor {
+  background: #0e0e0e;
+  color: #f3f4f6;
+  caret-color: #f3f4f6;
+  white-space: pre-wrap;
+}
+#editor.agilo-ps-native-editor::selection {
+  background: #374151;
+}
 
 .agilo-ps-skel-line {
   height: 0.75rem;
@@ -444,6 +457,22 @@
     .agilo-ps-subtitle { margin: 0 0 0.45rem; padding: 0 0.75rem; font-size: 0.7rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--agilo-ps-muted); }
     .agilo-ps-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
     .agilo-ps-list-group-label { font-size: 0.68rem; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--agilo-ps-muted); padding: 0.5rem 0.75rem 0.2rem; }
+    .agilo-ps-list-group-btn {
+      display: flex; align-items: center; gap: 0.3rem; width: 100%;
+      margin: 0; padding: 0.45rem 0.75rem; border: none; border-radius: 0;
+      font: inherit; font-size: 0.68rem; font-weight: 650; letter-spacing: 0.04em;
+      text-transform: uppercase; text-align: left; cursor: pointer;
+      color: var(--agilo-ps-muted);
+    }
+    .agilo-ps-list-group-btn--user { background: var(--agilo-ps-accent-tint); color: var(--agilo-ps-accent); }
+    .agilo-ps-list-group-btn--catalogue {
+      background: var(--agilo-ps-surface-2);
+      border-top: 1px solid var(--agilo-ps-border);
+    }
+    .agilo-ps-list-group-chevron { display: inline-flex; flex-shrink: 0; transition: transform 0.12s var(--agilo-ps-ease); }
+    .agilo-ps-list-group-btn[aria-expanded="false"] .agilo-ps-list-group-chevron { transform: rotate(-90deg); }
+    .agilo-ps-list-group-title { flex: 1; min-width: 0; }
+    .agilo-ps-list-group-count { font-weight: 550; letter-spacing: 0; text-transform: none; }
     .agilo-ps-empty { padding: 0.85rem 0.75rem; color: var(--agilo-ps-muted); font-size: 0.82rem; }
 
     .agilo-ps-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
