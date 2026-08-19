@@ -238,6 +238,10 @@
   function isDraftModel(m) {
     return !isCatalogueModel(m);
   }
+  function jobStatusOf(j) {
+    if (!j || typeof j !== "object") return "";
+    return String(j.transcriptStatus || j.status || j.jobStatus || "").toUpperCase();
+  }
   function isJobReadyStatus(status) {
     var s = String(status || "").toUpperCase();
     return s === "READY" || s === "READY_SUMMARY_READY" || s.indexOf("READY") === 0;
@@ -444,7 +448,7 @@
       batch.forEach(function (j) {
         var id = j.jobid != null ? j.jobid : j.jobId;
         if (id == null) return;
-        var status = String(j.status || j.jobStatus || "").toUpperCase();
+        var status = jobStatusOf(j);
         if (!isJobReadyStatus(status)) return;
         out.push({
           jobId: String(id),
@@ -487,7 +491,7 @@
       var data = await this.getJson("/getJobsInfo", { jobId: jobId, limit: 1, offset: 0 });
       var jobs = (data && data.jobsInfoDtos) || [];
       var job = jobs[0] || {};
-      var status = String(job.status || job.jobStatus || "").toUpperCase();
+      var status = jobStatusOf(job);
       if (opts && opts.onTick) opts.onTick({ elapsedMs: Date.now() - start, status: status });
       if (isJobSummaryReady(status)) return true;
       if (status.indexOf("ERROR") !== -1 || status.indexOf("KO") !== -1) return false;
