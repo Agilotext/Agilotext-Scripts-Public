@@ -378,19 +378,6 @@
 
 
 /* Overlay / layout (extrait 05-MAQUETTE) */
-      margin: 0;
-      font-family: inherit;
-      font-size: 0.875rem;
-      line-height: 1.45;
-      color: var(--agilo-ps-text);
-      background: var(--agilo-ps-page);
-      min-height: 100vh;
-    }
-      width: 100%; border-collapse: collapse; background: var(--agilo-ps-surface);
-      border-radius: 0; overflow: hidden;
-      border: 1px solid var(--agilo-ps-border); box-shadow: none;
-    }
-
     .agilo-ps-overlay {
       position: fixed; inset: 0; z-index: 2147483000;
       background: var(--agilo-ps-surface);
@@ -599,3 +586,15 @@
 /* Live : pas de compteur crédits localStorage. Launch bouton inutile (clic tableau). */
 .agilo-ps-credits { display: none !important; }
 .agilo-ps-launch-btn { display: none !important; }
+
+/* Filet viewport : après le parse error d’extract, cette règle n’a plus rien à avaler avant. */
+#agilo-atelier-maquette-root .agilo-ps-overlay.is-open {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-height: 100vh !important;
+  z-index: 2147483000 !important;
+  overflow: hidden;
+}
+body.agilo-ps-lock { overflow: hidden !important; }

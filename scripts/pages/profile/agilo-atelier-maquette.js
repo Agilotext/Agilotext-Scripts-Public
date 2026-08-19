@@ -1397,16 +1397,46 @@
   MaquetteApp.prototype.closeExpand = function () {
     this.$("#expand-back").classList.remove("is-open");
   };
+  MaquetteApp.prototype.setBodyLock = function (on) {
+    if (on) {
+      if (this._lockScrollY == null) this._lockScrollY = window.scrollY || 0;
+      document.body.classList.add("agilo-ps-lock");
+      return;
+    }
+    document.body.classList.remove("agilo-ps-lock");
+    var y = this._lockScrollY;
+    this._lockScrollY = null;
+    if (y != null) window.scrollTo(0, y);
+  };
+  MaquetteApp.prototype.ensureOverlayFixed = function () {
+    var overlay = this.$("#studio-overlay");
+    if (!overlay) return;
+    if (getComputedStyle(overlay).position === "fixed") return;
+    var css = "position:fixed;inset:0;z-index:2147483000;width:100%;height:100%;max-height:100dvh;overflow:hidden";
+    overlay.style.cssText = (overlay.style.cssText ? overlay.style.cssText + ";" : "") + css;
+    ["#dialog-saveas", "#dialog-rename", "#dialog-leave", "#dialog-redo", "#expand-back", "#toast"].forEach(function (sel) {
+      var el = document.querySelector(sel);
+      if (!el) return;
+      if (getComputedStyle(el).position === "fixed") return;
+      el.style.position = "fixed";
+      el.style.zIndex = "2147483100";
+    });
+  };
+  MaquetteApp.prototype.hideOverlay = function () {
+    var o = this.$("#studio-overlay");
+    if (o) o.classList.remove("is-open");
+    this.setBodyLock(false);
+  };
   MaquetteApp.prototype.closeStudio = function () {
     var self = this;
     if (this.dirty) {
       this.confirmLeaveDirty(function () {
         self.dirty = false;
-        self.$("#studio-overlay").classList.remove("is-open");
+        self.hideOverlay();
       });
       return;
     }
-    this.$("#studio-overlay").classList.remove("is-open");
+    this.hideOverlay();
   };
   MaquetteApp.prototype.open = async function (promptId) {
     this.ensureMounted();
@@ -1416,6 +1446,8 @@
       return;
     }
     this.$("#studio-overlay").classList.add("is-open");
+    this.setBodyLock(true);
+    this.ensureOverlayFixed();
     this.$("#studio-panel").classList.add("agilo-ps-panel--enter");
     this.$("#btn-history").hidden = true;
     await this.loadList();
