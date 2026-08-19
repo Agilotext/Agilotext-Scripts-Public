@@ -1,0 +1,38 @@
+<!-- Agilotext Prompt Studio — maquette coach+diff @22fc3b6  STAGING ONLY -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@22fc3b6/scripts/pages/profile/agilo-atelier-maquette-coach.css">
+
+<div id="agilo-prompt-studio-anchor"></div>
+
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@820f11f/scripts/pages/editor/token-resolver.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@22fc3b6/scripts/pages/profile/agilo-atelier-maquette-coach.js"></script>
+
+<script>
+  window.__AGILO_PROMPT_STUDIO__ = {
+    enabled: true,
+    readOnly: false,
+    editHtml: true,
+    studioMode: "expert",
+    showPreviewTab: true,
+    showFieldList: true,
+    showConsistencyTab: true,
+    coach: true,
+    apiBase: "https://api.agilotext.com/api/v1",
+    mountSelector: "#agilo-prompt-studio-anchor"
+  };
+
+  document.addEventListener("DOMContentLoaded", function () {
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest(".view-edit-btn");
+      if (!btn) return;
+      var row = btn.closest("[data-prompt-id]");
+      if (!row) return;
+      var id = row.getAttribute("data-prompt-id");
+      if (!id || !window.AgiloPromptStudio || !window.AgiloPromptStudio.openModalAndSelect) return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.AgiloPromptStudio.openModalAndSelect(String(id));
+    }, true);
+
+    if (window.AgiloPromptStudio) window.AgiloPromptStudio.init();
+  });
+</script>
