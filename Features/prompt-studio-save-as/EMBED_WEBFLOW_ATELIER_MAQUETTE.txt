@@ -1,10 +1,10 @@
-<!-- Agilotext Prompt Studio — maquette live @bd3d650  STAGING ONLY -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd3d650/scripts/pages/profile/agilo-atelier-maquette.css">
+<!-- Agilotext Prompt Studio — maquette live @7fcaf8a  STAGING ONLY -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7fcaf8a/scripts/pages/profile/agilo-atelier-maquette.css">
 
 <div id="agilo-prompt-studio-anchor"></div>
 
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@820f11f/scripts/pages/editor/token-resolver.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd3d650/scripts/pages/profile/agilo-atelier-maquette.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7fcaf8a/scripts/pages/profile/agilo-atelier-maquette.js"></script>
 
 <script>
   window.__AGILO_PROMPT_STUDIO__ = {
