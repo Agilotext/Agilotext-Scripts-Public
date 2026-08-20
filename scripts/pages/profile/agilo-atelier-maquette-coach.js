@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  var OVERLAY_HTML = "<div class=\"agilo-ps-overlay\" id=\"studio-overlay\">\n  <div class=\"agilo-ps-panel agilo-ps-panel--mobile-list agilo-ps-panel--tab-prompt agilo-ps-left-prompt agilo-ps-panel--result-collapsed\" id=\"studio-panel\" role=\"dialog\" aria-labelledby=\"ps-title\" aria-modal=\"true\">\n    <div class=\"agilo-ps-header\">\n      <div class=\"agilo-ps-header-text\">\n        <h1 class=\"agilo-ps-title\" id=\"ps-title\">Modèles de comptes rendus</h1>\n      </div>\n      <div class=\"agilo-ps-header-actions\">\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-help\" aria-label=\"Aide\" title=\"Aide\" aria-expanded=\"false\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M6.925,6.619c.388-1.057,1.294-1.492,2.18-1.492,.895,0,1.818,.638,1.818,1.808,0,1.784-1.816,1.468-2.096,3.065\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8.791,13.567c-.552,0-1-.449-1-1s.448-1,1-1,1,.449,1,1-.448,1-1,1Z\" fill=\"currentColor\"/></svg></span></button>\n        <div class=\"agilo-ps-help-pop\" id=\"help-pop\">\n          <p><strong>Enregistrer sous</strong> crée une copie (texte + HTML). L’original reste intact.</p>\n          <p><strong>⌘S</strong> ou <strong>Ctrl+S</strong> fait la même chose que le bouton en bas. Pas de sauvegarde toute seule.</p>\n          <p><strong>Historique</strong> : 3 sauvegardes de ce modèle. Ce n’est pas Cmd+Z, et les copies V2 sont dans la liste.</p>\n          <p><strong>Essayer</strong> remplace le compte rendu officiel du dossier choisi. 1 crédit par essai.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-close-studio\" aria-label=\"Fermer\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n    </div>\n     <div class=\"agilo-ps-body\">\n      <aside class=\"agilo-ps-listcol\">\n        <h2 class=\"agilo-ps-subtitle\">Vos modèles</h2>\n        <div class=\"agilo-ps-search-wrap\">\n          <span class=\"agilo-ps-ico\" aria-hidden=\"true\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M15.75 15.75L11.6386 11.6386\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span>\n          <input class=\"agilo-ps-search\" id=\"search\" type=\"search\" placeholder=\"Rechercher…\" />\n        </div>\n        <div class=\"agilo-ps-list\" id=\"list\"></div>\n      </aside>\n      <section class=\"agilo-ps-main\" id=\"main\">\n        <div class=\"agilo-ps-skeleton\" aria-hidden=\"true\">\n          <div class=\"agilo-ps-skel-line\" style=\"width:40%\"></div>\n          <div class=\"agilo-ps-skel-line\" style=\"width:70%\"></div>\n          <div class=\"agilo-ps-skel-line agilo-ps-skel-line--lg\"></div>\n        </div>\n        <div class=\"agilo-ps-main-live\">\n          <div class=\"agilo-ps-main-scroll\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-back-list\" id=\"btn-back-list\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"2.75\" y1=\"9\" x2=\"15.25\" y2=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"7 13.25 2.75 9 7 4.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Modèles</button>\n            <div class=\"agilo-ps-toolbar\">\n              <h3 class=\"agilo-ps-detail-title\" id=\"detail-title\"></h3>\n              <span id=\"detail-badge\" class=\"agilo-ps-badge agilo-ps-badge--orig\">Original</span>\n              <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-pin-btn\" id=\"btn-pin\">Épingler</button>\n              <p class=\"agilo-ps-meta\" id=\"detail-meta\"></p>\n              <p class=\"agilo-ps-orig-hint\" id=\"orig-hint\" hidden>Pour ne pas écraser l’original, Enregistrer sous crée une copie.</p>\n            </div>\n            <div class=\"agilo-ps-dirty-banner\" id=\"dirty-banner\" hidden></div>\n            <span id=\"char-count\" hidden></span>\n            <div class=\"agilo-ps-tabs agilo-ps-work-tabs\" role=\"tablist\">\n              <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-work=\"prompt\">Prompt</button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-m\" hidden></span></button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"result\">Résultat</button>\n            </div>\n            <div class=\"agilo-ps-main-split\">\n              <div class=\"agilo-ps-prompt-col\">\n                <div class=\"agilo-ps-tabs agilo-ps-left-tabs\">\n                  <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-left=\"prompt\">Prompt</button>\n                  <button type=\"button\" class=\"agilo-ps-tab\" data-left=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-d\" hidden></span></button>\n                </div>\n                <div class=\"agilo-ps-prompt-panel\">\n                  <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor\"></textarea></div>\n                <div class=\"agilo-ps-coach\" id=\"coach-panel\" role=\"region\" aria-labelledby=\"coach-title\">\n                    <p class=\"agilo-ps-coach-title\" id=\"coach-title\">Ajouter une consigne</p>\n                    <p class=\"agilo-ps-coach-hint\" id=\"coach-hint\">Ça s’ajoute au texte. Ensuite enregistrez, puis testez. 1 crédit.</p>\n                    <div class=\"agilo-ps-coach-list\" id=\"coach-list\" role=\"list\"></div>\n                    <div id=\"coach-extra\" hidden></div>\n                    <div class=\"agilo-ps-prompt-diff\" id=\"prompt-diff\" hidden role=\"region\" aria-label=\"Diff du prompt\"></div>\n                  </div>\n                </div>\n                <div class=\"agilo-ps-layout-panel\">\n                  <div class=\"agilo-ps-layout-toolbar\">\n                    <div class=\"agilo-ps-tabs\" style=\"margin:0\">\n                      <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" id=\"btn-view-preview\">Aperçu</button>\n                      <button type=\"button\" class=\"agilo-ps-tab\" id=\"btn-view-source\">Source</button>\n                    </div>\n                    <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-layout\" aria-label=\"Agrandir la mise en page\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    <label class=\"agilo-ps-btn agilo-ps-btn--secondary\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6.75 10.5L9 8.25L11.25 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M9 8.25V14.25\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M12 14.25H12.5C14.571 14.25 16.25 12.571 16.25 10.5C16.25 8.7639 15.065 7.31791 13.464 6.89111C13.278 4.57711 11.362 2.75 9 2.75C6.515 2.75 4.5 4.7651 4.5 7.25C4.5 7.6001 4.54899 7.93598 4.62399 8.26288C3.02699 8.32998 1.75 9.6369 1.75 11.25C1.75 12.907 3.093 14.25 4.75 14.25H6\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span> Importer .html\n                      <input class=\"agilo-ps-file-input\" id=\"html-import\" type=\"file\" accept=\".html,.htm,text/html\" />\n                    </label>\n                  </div>\n                  <div class=\"agilo-ps-layout-preview\" id=\"layout-preview\">\n                    <p class=\"agilo-ps-layout-label\">Mise en page vide (placeholders)</p>\n                    <iframe class=\"agilo-ps-preview-frame\" id=\"iframe-layout\" title=\"Aperçu du template HTML\" sandbox=\"allow-same-origin\"></iframe>\n                  </div>\n                  <div class=\"agilo-ps-layout-source\" id=\"layout-source\" hidden>\n                    <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor-html\"></textarea></div>\n                  </div>\n                  <details class=\"agilo-ps-meta-box\" id=\"layout-meta-wrap\">\n                    <summary>Champs et cohérence</summary>\n                    <div class=\"agilo-ps-meta-inner\" id=\"layout-meta\"></div>\n                  </details>\n                </div>\n              </div>\n              <div class=\"agilo-ps-result-col\">\n                <div class=\"agilo-ps-result-head\">\n                  <label for=\"job-search\">Dossier</label>\n                  <input class=\"agilo-ps-job-search\" id=\"job-search\" type=\"search\" placeholder=\"Rechercher un dossier…\" autocomplete=\"off\" />\n                  <select id=\"job\" aria-label=\"Dossier à tester\"></select>\n                  <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-try\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M5.245,2.878l9.492,5.256c.685,.379,.685,1.353,0,1.732L5.245,15.122c-.669,.371-1.495-.108-1.495-.866V3.744c0-.758,.825-1.237,1.495-.866Z\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Essayer</button>\n                  <a class=\"agilo-ps-editor-link\" id=\"link-editor\" href=\"#\">Ouvrir dans l’éditeur</a>\n                  <span class=\"agilo-ps-credits\" id=\"credits-label\" aria-live=\"polite\">1 crédit</span>\n                  <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-collapse-try\" aria-label=\"Masquer le test\" title=\"Masquer le test\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"7.25 4.75 11.5 9 7.25 13.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                </div>\n                <div class=\"agilo-ps-cr-diff\" id=\"cr-diff\" hidden role=\"region\" aria-labelledby=\"cr-diff-summary\">\n                  <p class=\"agilo-ps-cr-diff-summary\" id=\"cr-diff-summary\"></p>\n                  <p class=\"agilo-ps-cr-diff-counts\" id=\"cr-diff-counts\"></p>\n                  <ul class=\"agilo-ps-cr-diff-sections\" id=\"cr-diff-sections\"></ul>\n                  <div class=\"agilo-ps-cr-diff-detail\" id=\"cr-diff-detail\" hidden></div>\n                </div>\n                <div class=\"agilo-ps-trial-cols\">\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>CR actuel du dossier</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-before\" aria-label=\"Agrandir le CR actuel\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-before\"></div>\n                  </div>\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>Après relance (CR officiel)</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-after\" aria-label=\"Agrandir le CR après\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-after\"><p class=\"agilo-ps-cr-empty\">Pas encore d’essai. Relancer remplace le CR officiel de ce dossier.</p></div>\n                  </div>\n                </div>\n              </div>\n            </div>\n          </div>\n          <div class=\"agilo-ps-main-footer\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary agilo-ps-toggle-try\" id=\"btn-toggle-try\" aria-expanded=\"false\">Tester sur un dossier</button>\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-save-primary\"><span class=\"agilo-ps-save-label\">Enregistrer sous</span><kbd class=\"agilo-ps-kbd\" id=\"save-kbd\"></kbd></button>\n            <button type=\"button\" class=\"agilo-ps-btn\" id=\"btn-history\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"9 4.75 9 9 12.25 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></span> Historique</button>\n          </div>\n        </div>\n      </section>\n    </div>\n     <div class=\"agilo-ps-menu agilo-ps-row-menu\" id=\"row-menu\" role=\"menu\"></div>\n    <div class=\"agilo-ps-drawer-back\" id=\"drawer-back\"></div>\n    <aside class=\"agilo-ps-drawer\" id=\"versions-drawer\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"drawer-title\">\n      <div class=\"agilo-ps-drawer-head\">\n        <div style=\"flex:1;min-width:0\">\n          <h3 id=\"drawer-title\" tabindex=\"-1\">Historique</h3>\n          <p id=\"drawer-sub\">3 dernières sauvegardes de <strong>ce</strong> modèle. Les copies V2 sont dans la liste à gauche.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"drawer-close\" aria-label=\"Fermer l’historique\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n      <div class=\"agilo-ps-drawer-body\" id=\"versions-list\"></div>\n    </aside>\n  </div>\n</div>\n <div class=\"agilo-ps-dialog-back\" id=\"dialog-saveas\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"saveas-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"saveas-title\">Enregistrer sous</h4>\n    <p>Une copie complète est créée (texte + HTML). L’original n’est pas modifié.</p>\n    <label for=\"saveas-name\">Nom de la copie</label>\n    <input id=\"saveas-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"saveas-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"saveas-ok\">Créer la copie</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-rename\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"rename-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"rename-title\">Renommer</h4>\n    <p>Le nom apparaît dans la liste à gauche.</p>\n    <label for=\"rename-name\">Nouveau nom</label>\n    <input id=\"rename-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"rename-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"rename-ok\">Renommer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-leave\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"leave-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"leave-title\">Enregistrer les modifications ?</h4>\n    <p id=\"leave-body\">Des changements ne sont pas enregistrés.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-discard\">Ignorer</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"leave-save\">Enregistrer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-redo\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"redo-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"redo-title\">Remplacer le compte rendu de ce dossier ?</h4>\n    <p id=\"redo-body\">Le compte rendu officiel de ce dossier sera remplacé. 1 crédit. La transcription ne change pas.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-dl\">Télécharger le CR actuel</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"redo-ok\">Remplacer le CR</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-expand-back\" id=\"expand-back\">\n  <div class=\"agilo-ps-expand-bar\">\n    <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary\" id=\"expand-close\">Fermer</button>\n  </div>\n  <iframe class=\"agilo-ps-expand-frame\" id=\"expand-frame\" title=\"Compte rendu agrandi\" sandbox=\"allow-same-origin\"></iframe>\n</div>\n<div class=\"agilo-ps-toast\" id=\"toast\"><span id=\"toast-msg\"></span></div>\n\n";
+  var OVERLAY_HTML = "<div class=\"agilo-ps-overlay\" id=\"studio-overlay\">\n  <div class=\"agilo-ps-panel agilo-ps-panel--mobile-list agilo-ps-panel--tab-prompt agilo-ps-left-prompt agilo-ps-panel--result-collapsed\" id=\"studio-panel\" role=\"dialog\" aria-labelledby=\"ps-title\" aria-modal=\"true\">\n    <div class=\"agilo-ps-header\">\n      <div class=\"agilo-ps-header-text\">\n        <h1 class=\"agilo-ps-title\" id=\"ps-title\">Modèles de comptes rendus</h1>\n      </div>\n      <div class=\"agilo-ps-header-actions\">\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-help\" aria-label=\"Aide\" title=\"Aide\" aria-expanded=\"false\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M6.925,6.619c.388-1.057,1.294-1.492,2.18-1.492,.895,0,1.818,.638,1.818,1.808,0,1.784-1.816,1.468-2.096,3.065\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><path d=\"M8.791,13.567c-.552,0-1-.449-1-1s.448-1,1-1,1,.449,1,1-.448,1-1,1Z\" fill=\"currentColor\"/></svg></span></button>\n        <div class=\"agilo-ps-help-pop\" id=\"help-pop\">\n          <p><strong>1.</strong> Ouvrez un modèle, ajoutez une consigne si besoin.</p>\n          <p><strong>2.</strong> <strong>Enregistrer sous</strong> crée une copie. L’original reste intact.</p>\n          <p><strong>3.</strong> <strong>Essayer</strong> remplace le CR du dossier (1 crédit). Si ce n’est pas bon, supprimez la copie et rouvrez l’original.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-close-studio\" aria-label=\"Fermer\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n    </div>\n     <div class=\"agilo-ps-body\">\n      <aside class=\"agilo-ps-listcol\">\n        <h2 class=\"agilo-ps-subtitle\">Vos modèles</h2>\n        <div class=\"agilo-ps-search-wrap\">\n          <span class=\"agilo-ps-ico\" aria-hidden=\"true\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M15.75 15.75L11.6386 11.6386\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/><path d=\"M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span>\n          <input class=\"agilo-ps-search\" id=\"search\" type=\"search\" placeholder=\"Rechercher…\" />\n        </div>\n        <div class=\"agilo-ps-list\" id=\"list\"></div>\n      </aside>\n      <section class=\"agilo-ps-main\" id=\"main\">\n        <div class=\"agilo-ps-skeleton\" aria-hidden=\"true\">\n          <div class=\"agilo-ps-skel-line\" style=\"width:40%\"></div>\n          <div class=\"agilo-ps-skel-line\" style=\"width:70%\"></div>\n          <div class=\"agilo-ps-skel-line agilo-ps-skel-line--lg\"></div>\n        </div>\n        <div class=\"agilo-ps-main-live\">\n          <div class=\"agilo-ps-main-scroll\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-back-list\" id=\"btn-back-list\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"2.75\" y1=\"9\" x2=\"15.25\" y2=\"9\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"7 13.25 2.75 9 7 4.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Modèles</button>\n            <div class=\"agilo-ps-toolbar\">\n              <h3 class=\"agilo-ps-detail-title\" id=\"detail-title\"></h3>\n              <span id=\"detail-badge\" class=\"agilo-ps-badge agilo-ps-badge--orig\">Original</span>\n              <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--ghost agilo-ps-pin-btn\" id=\"btn-pin\">Épingler</button>\n              <p class=\"agilo-ps-meta\" id=\"detail-meta\"></p>\n              <p class=\"agilo-ps-orig-hint\" id=\"orig-hint\" hidden>Pour ne pas écraser l’original, Enregistrer sous crée une copie.</p>\n            </div>\n            <div class=\"agilo-ps-dirty-banner\" id=\"dirty-banner\" hidden></div>\n            <span id=\"char-count\" hidden></span>\n            <div class=\"agilo-ps-tabs agilo-ps-work-tabs\" role=\"tablist\">\n              <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-work=\"prompt\">Prompt</button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-m\" hidden></span></button>\n              <button type=\"button\" class=\"agilo-ps-tab\" data-work=\"result\">Résultat</button>\n            </div>\n            <div class=\"agilo-ps-main-split\">\n              <div class=\"agilo-ps-prompt-col\">\n                <div class=\"agilo-ps-tabs agilo-ps-left-tabs\">\n                  <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" data-left=\"prompt\">Prompt</button>\n                  <button type=\"button\" class=\"agilo-ps-tab\" data-left=\"layout\">Mise en page <span class=\"agilo-ps-pill\" id=\"pill-d\" hidden></span></button>\n                </div>\n                <div class=\"agilo-ps-prompt-panel\">\n                  <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor\"></textarea></div>\n                <div class=\"agilo-ps-coach\" id=\"coach-panel\" role=\"region\" aria-labelledby=\"coach-title\">\n                    <p class=\"agilo-ps-coach-title\" id=\"coach-title\">Ajouter une consigne</p>\n                    <p class=\"agilo-ps-coach-hint\" id=\"coach-hint\" aria-live=\"polite\"><span data-step=\"1\">1 Ajoutez</span><span class=\"agilo-ps-coach-step-sep\" aria-hidden=\"true\"> · </span><span data-step=\"2\">2 Enregistrez</span><span class=\"agilo-ps-coach-step-sep\" aria-hidden=\"true\"> · </span><span data-step=\"3\">3 Testez</span></p>\n                    <div class=\"agilo-ps-coach-list\" id=\"coach-list\" role=\"list\"></div>\n                    <div id=\"coach-extra\" hidden></div>\n                    <div class=\"agilo-ps-prompt-diff\" id=\"prompt-diff\" hidden role=\"region\" aria-label=\"Diff du prompt\"></div>\n                  </div>\n                </div>\n                <div class=\"agilo-ps-layout-panel\">\n                  <div class=\"agilo-ps-layout-toolbar\">\n                    <div class=\"agilo-ps-tabs\" style=\"margin:0\">\n                      <button type=\"button\" class=\"agilo-ps-tab agilo-ps-tab--active\" id=\"btn-view-preview\">Aperçu</button>\n                      <button type=\"button\" class=\"agilo-ps-tab\" id=\"btn-view-source\">Source</button>\n                    </div>\n                    <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-layout\" aria-label=\"Agrandir la mise en page\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    <label class=\"agilo-ps-btn agilo-ps-btn--secondary\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M6.75 10.5L9 8.25L11.25 10.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\" stroke-linecap=\"round\"/><path d=\"M9 8.25V14.25\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M12 14.25H12.5C14.571 14.25 16.25 12.571 16.25 10.5C16.25 8.7639 15.065 7.31791 13.464 6.89111C13.278 4.57711 11.362 2.75 9 2.75C6.515 2.75 4.5 4.7651 4.5 7.25C4.5 7.6001 4.54899 7.93598 4.62399 8.26288C3.02699 8.32998 1.75 9.6369 1.75 11.25C1.75 12.907 3.093 14.25 4.75 14.25H6\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/></svg></span> Importer .html\n                      <input class=\"agilo-ps-file-input\" id=\"html-import\" type=\"file\" accept=\".html,.htm,text/html\" />\n                    </label>\n                  </div>\n                  <div class=\"agilo-ps-layout-preview\" id=\"layout-preview\">\n                    <p class=\"agilo-ps-layout-label\">Mise en page vide (placeholders)</p>\n                    <iframe class=\"agilo-ps-preview-frame\" id=\"iframe-layout\" title=\"Aperçu du template HTML\" sandbox=\"allow-same-origin\"></iframe>\n                  </div>\n                  <div class=\"agilo-ps-layout-source\" id=\"layout-source\" hidden>\n                    <div class=\"agilo-ps-editor-mount\"><textarea class=\"agilo-ps-native-editor\" id=\"editor-html\"></textarea></div>\n                  </div>\n                  <details class=\"agilo-ps-meta-box\" id=\"layout-meta-wrap\">\n                    <summary>Champs et cohérence</summary>\n                    <div class=\"agilo-ps-meta-inner\" id=\"layout-meta\"></div>\n                  </details>\n                </div>\n              </div>\n              <div class=\"agilo-ps-result-col\">\n                <div class=\"agilo-ps-result-head\">\n                  <label for=\"job-search\">Dossier</label>\n                  <input class=\"agilo-ps-job-search\" id=\"job-search\" type=\"search\" placeholder=\"Rechercher un dossier…\" autocomplete=\"off\" />\n                  <select id=\"job\" aria-label=\"Dossier à tester\"></select>\n                  <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-try\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><path d=\"M5.245,2.878l9.492,5.256c.685,.379,.685,1.353,0,1.732L5.245,15.122c-.669,.371-1.495-.108-1.495-.866V3.744c0-.758,.825-1.237,1.495-.866Z\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span> Essayer</button>\n                  <a class=\"agilo-ps-editor-link\" id=\"link-editor\" href=\"#\">Ouvrir dans l’éditeur</a>\n                  <span class=\"agilo-ps-credits\" id=\"credits-label\" aria-live=\"polite\">1 crédit</span>\n                  <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-collapse-try\" aria-label=\"Masquer le test\" title=\"Masquer le test\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"7.25 4.75 11.5 9 7.25 13.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                </div>\n                <div class=\"agilo-ps-cr-diff\" id=\"cr-diff\" hidden role=\"region\" aria-labelledby=\"cr-diff-summary\">\n                  <p class=\"agilo-ps-cr-diff-summary\" id=\"cr-diff-summary\"></p>\n                  <p class=\"agilo-ps-cr-diff-counts\" id=\"cr-diff-counts\"></p>\n                  <ul class=\"agilo-ps-cr-diff-sections\" id=\"cr-diff-sections\"></ul>\n                  <div class=\"agilo-ps-cr-diff-detail\" id=\"cr-diff-detail\" hidden></div>\n                  <div class=\"agilo-ps-cr-diff-ko\" id=\"cr-diff-ko\" hidden>\n                    <p class=\"agilo-ps-cr-diff-ko-text\" id=\"cr-diff-ko-text\"></p>\n                    <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary\" id=\"btn-delete-copy\" hidden>Supprimer cette copie</button>\n                  </div>\n                </div>\n                <div class=\"agilo-ps-trial-cols\">\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>CR actuel du dossier</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-before\" aria-label=\"Agrandir le CR actuel\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-before\"></div>\n                  </div>\n                  <div class=\"agilo-ps-trial-col\">\n                    <div class=\"agilo-ps-trial-col-head\">\n                      <h4>Après relance (CR officiel)</h4>\n                      <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"btn-expand-after\" aria-label=\"Agrandir le CR après\" title=\"Agrandir\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><polyline points=\"11.25 2.75 15.25 2.75 15.25 6.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><polyline points=\"6.75 15.25 2.75 15.25 2.75 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"15\" y1=\"3\" x2=\"10.75\" y2=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/><line x1=\"3\" y1=\"15\" x2=\"7.25\" y2=\"10.75\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n                    </div>\n                    <div class=\"agilo-ps-trial-body\" id=\"cr-after\"><p class=\"agilo-ps-cr-empty\">Pas encore d’essai. Relancer remplace le CR officiel de ce dossier.</p></div>\n                  </div>\n                </div>\n              </div>\n            </div>\n          </div>\n          <div class=\"agilo-ps-main-footer\">\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary agilo-ps-toggle-try\" id=\"btn-toggle-try\" aria-expanded=\"false\">Tester sur un dossier</button>\n            <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"btn-save-primary\"><span class=\"agilo-ps-save-label\">Enregistrer sous</span><kbd class=\"agilo-ps-kbd\" id=\"save-kbd\"></kbd></button>\n            <button type=\"button\" class=\"agilo-ps-btn\" id=\"btn-history\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><circle cx=\"9\" cy=\"9\" r=\"7.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\"/><polyline points=\"9 4.75 9 9 12.25 11.25\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg></span> Historique</button>\n          </div>\n        </div>\n      </section>\n    </div>\n     <div class=\"agilo-ps-menu agilo-ps-row-menu\" id=\"row-menu\" role=\"menu\"></div>\n    <div class=\"agilo-ps-drawer-back\" id=\"drawer-back\"></div>\n    <aside class=\"agilo-ps-drawer\" id=\"versions-drawer\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"drawer-title\">\n      <div class=\"agilo-ps-drawer-head\">\n        <div style=\"flex:1;min-width:0\">\n          <h3 id=\"drawer-title\" tabindex=\"-1\">Historique</h3>\n          <p id=\"drawer-sub\">3 dernières sauvegardes de <strong>ce</strong> modèle. Les copies V2 sont dans la liste à gauche.</p>\n        </div>\n        <button type=\"button\" class=\"agilo-ps-icon-btn\" id=\"drawer-close\" aria-label=\"Fermer l’historique\" title=\"Fermer\"><span class=\"agilo-ps-ico\"><svg viewBox=\"0 0 18 18\" width=\"16\" height=\"16\" aria-hidden=\"true\"><line x1=\"14\" y1=\"4\" x2=\"4\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/><line x1=\"4\" y1=\"4\" x2=\"14\" y2=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"1.5\"/></svg></span></button>\n      </div>\n      <div class=\"agilo-ps-drawer-body\" id=\"versions-list\"></div>\n    </aside>\n  </div>\n</div>\n <div class=\"agilo-ps-dialog-back\" id=\"dialog-saveas\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"saveas-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"saveas-title\">Enregistrer sous</h4>\n    <p>Une copie complète est créée (texte + HTML). L’original n’est pas modifié.</p>\n    <label for=\"saveas-name\">Nom de la copie</label>\n    <input id=\"saveas-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"saveas-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"saveas-ok\">Créer la copie</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-rename\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"rename-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"rename-title\">Renommer</h4>\n    <p>Le nom apparaît dans la liste à gauche.</p>\n    <label for=\"rename-name\">Nouveau nom</label>\n    <input id=\"rename-name\" type=\"text\" maxlength=\"120\" />\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"rename-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"rename-ok\">Renommer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-leave\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"leave-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"leave-title\">Enregistrer les modifications ?</h4>\n    <p id=\"leave-body\">Des changements ne sont pas enregistrés.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"leave-discard\">Ignorer</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"leave-save\">Enregistrer</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-dialog-back\" id=\"dialog-redo\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"redo-title\">\n  <div class=\"agilo-ps-dialog\">\n    <h4 id=\"redo-title\">Remplacer le compte rendu de ce dossier ?</h4>\n    <p id=\"redo-body\">Le compte rendu officiel de ce dossier sera remplacé. 1 crédit. La transcription ne change pas.</p>\n    <div class=\"agilo-ps-dialog-actions\">\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-dl\">Télécharger le CR actuel</button>\n      <button type=\"button\" class=\"agilo-ps-btn\" id=\"redo-cancel\">Annuler</button>\n      <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--primary\" id=\"redo-ok\">Remplacer le CR</button>\n    </div>\n  </div>\n</div>\n<div class=\"agilo-ps-expand-back\" id=\"expand-back\">\n  <div class=\"agilo-ps-expand-bar\">\n    <button type=\"button\" class=\"agilo-ps-btn agilo-ps-btn--secondary\" id=\"expand-close\">Fermer</button>\n  </div>\n  <iframe class=\"agilo-ps-expand-frame\" id=\"expand-frame\" title=\"Compte rendu agrandi\" sandbox=\"allow-same-origin\"></iframe>\n</div>\n<div class=\"agilo-ps-toast\" id=\"toast\"><span id=\"toast-msg\"></span></div>\n\n";
   var PIN_MAX = 5;
   var LS_LAST = "agilo:ps:lastPromptId";
   var LS_RECENT = "agilo:ps:recentPromptIds";
@@ -726,6 +726,44 @@
     if (status === "new") return "ajouté";
     return status || "";
   }
+  function isNoiseDiffLine(text) {
+    var t = String(text || "").replace(/\s+/g, " ").trim();
+    if (!t) return true;
+    if (t.length < 28) return true;
+    if (/^\[\d{1,2}:\d{2}(:\d{2})?\]/.test(t)) return true;
+    if (/^\[\d{1,2}:\d{2}(:\d{2})?\]\s+\S+(\s+\S+){0,3}\.?$/.test(t)) return true;
+    return false;
+  }
+  function pickDiffExtracts(beforeText, afterText, maxEach) {
+    maxEach = maxEach || 2;
+    var a = sentenceSplit(beforeText);
+    var b = sentenceSplit(afterText);
+    var ops = alignSequences(a, b, 0.62);
+    var added = [];
+    var removed = [];
+    ops.forEach(function (op) {
+      if (op.type === "add" && !isNoiseDiffLine(op.b)) added.push(op.b);
+      if (op.type === "del" && !isNoiseDiffLine(op.a)) removed.push(op.a);
+      if (op.type === "mod") {
+        if (!isNoiseDiffLine(op.b)) added.push(op.b);
+        if (!isNoiseDiffLine(op.a)) removed.push(op.a);
+      }
+    });
+    return { added: added.slice(0, maxEach), removed: removed.slice(0, maxEach) };
+  }
+  function sectionDisplayTitle(row, totalRows) {
+    var t = String(row && row.title || "").trim();
+    if (totalRows === 1 && (!t || /^début$/i.test(t) || /^debut$/i.test(t))) {
+      return "Tout le compte rendu";
+    }
+    if (/^début$/i.test(t) || /^debut$/i.test(t)) return "Tout le compte rendu";
+    return t || "Partie";
+  }
+  function truncateExtract(text, maxLen) {
+    var t = String(text || "").replace(/\s+/g, " ").trim();
+    if (t.length <= maxLen) return t;
+    return t.slice(0, maxLen - 1).replace(/\s+\S*$/, "") + "…";
+  }
   function readWitnessPhrase() {
     try { return localStorage.getItem(LS_WITNESS) || ""; } catch (_e) { return ""; }
   }
@@ -1146,6 +1184,9 @@
     this.diffRows = [];
     this.diffSelectedKey = "";
     this.selectGen = 0;
+    this.coachHasConsigne = false;
+    this.coachSaved = false;
+    this.coachTried = false;
   }
   MaquetteApp.prototype.$ = function (sel) {
     return document.querySelector(sel);
@@ -1317,7 +1358,70 @@
       el.textContent = "1 crédit";
       return;
     }
-    el.textContent = gate.remaining + " restant" + (gate.remaining > 1 ? "s" : "") + " · 1 crédit";
+    if (gate.remaining <= 0) {
+      el.textContent = "Plus d’essai";
+      return;
+    }
+    if (gate.remaining === 1) {
+      el.textContent = "Dernier essai · 1 crédit";
+      return;
+    }
+    el.textContent = "1 crédit";
+  };
+  MaquetteApp.prototype.isFreePlan = function () {
+    var auth = this.getAuth() || {};
+    var ed = String(auth.edition || "").toLowerCase().trim();
+    return ed === "free" || ed.indexOf("free") === 0;
+  };
+  MaquetteApp.prototype.resetCoachFlow = function () {
+    this.coachHasConsigne = false;
+    this.coachSaved = false;
+    this.coachTried = false;
+  };
+  MaquetteApp.prototype.pulseSaveBtn = function () {
+    var btn = this.$("#btn-save-primary");
+    if (!btn) return;
+    btn.classList.remove("agilo-ps-btn--pulse");
+    void btn.offsetWidth;
+    btn.classList.add("agilo-ps-btn--pulse");
+    var self = this;
+    clearTimeout(this._pulseSaveTimer);
+    this._pulseSaveTimer = setTimeout(function () {
+      var b = self.$("#btn-save-primary");
+      if (b) b.classList.remove("agilo-ps-btn--pulse");
+    }, 2000);
+  };
+  MaquetteApp.prototype.syncCoachSteps = function () {
+    var hint = this.$("#coach-hint");
+    if (!hint) return;
+    var free = this.isFreePlan();
+    var step = 1;
+    if (this.coachTried) step = 4;
+    else if (this.coachSaved) step = 3;
+    else if (this.coachHasConsigne || this.dirty) step = 2;
+    Array.prototype.forEach.call(hint.querySelectorAll("[data-step]"), function (el) {
+      var n = Number(el.getAttribute("data-step"));
+      el.classList.remove("is-done", "is-current", "is-muted");
+      if (free && n === 3) {
+        el.classList.add("is-muted");
+        return;
+      }
+      if (step > n) el.classList.add("is-done");
+      else if (step === n) el.classList.add("is-current");
+    });
+  };
+  MaquetteApp.prototype.syncCoachChipsOn = function () {
+    var ta = this.$("#editor");
+    var text = ta ? ta.value : "";
+    var root = this.$("#coach-panel");
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll("[data-patch]"), function (btn) {
+      var id = btn.getAttribute("data-patch");
+      var patch = allPatches().filter(function (p) { return p.id === id; })[0];
+      var on = !!(patch && text.indexOf(patch.text.trim()) !== -1);
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
   };
   MaquetteApp.prototype.syncTryCta = function () {
     var btn = this.$("#btn-try");
@@ -1365,11 +1469,13 @@
     var counts = this.$("#cr-diff-counts");
     var list = this.$("#cr-diff-sections");
     var detail = this.$("#cr-diff-detail");
+    var ko = this.$("#cr-diff-ko");
     var status = this.$("#witness-status");
     if (sum) sum.textContent = "";
     if (counts) counts.textContent = "";
     if (list) list.innerHTML = "";
     if (detail) { detail.hidden = true; detail.innerHTML = ""; }
+    if (ko) ko.hidden = true;
     if (status) status.textContent = "";
   };
   MaquetteApp.prototype.renderCoach = function () {
@@ -1379,8 +1485,6 @@
     panel.hidden = false;
     var title = this.$("#coach-title");
     if (title) title.textContent = "Ajouter une consigne";
-    var hint = this.$("#coach-hint");
-    if (hint) hint.textContent = "Ça s’ajoute au texte. Ensuite enregistrez, puis testez. 1 crédit.";
     list.innerHTML = "";
     var ui = patchesForUi();
     function addChip(patch, parent) {
@@ -1389,6 +1493,7 @@
       btn.className = "agilo-ps-coach-chip";
       btn.setAttribute("data-patch", patch.id);
       btn.setAttribute("aria-label", "Ajouter la consigne : " + patch.label);
+      btn.setAttribute("aria-pressed", "false");
       btn.textContent = patch.label;
       parent.appendChild(btn);
     }
@@ -1413,6 +1518,8 @@
         extraWrap.hidden = true;
       }
     }
+    this.syncCoachChipsOn();
+    this.syncCoachSteps();
   };
   MaquetteApp.prototype.applyRustine = function (patchId) {
     var patch = allPatches().filter(function (p) { return p.id === patchId; })[0];
@@ -1424,15 +1531,25 @@
     var block = patch.text.trim();
     if (ta.value.indexOf(block) !== -1) {
       this.toast("Cette consigne est déjà dans le texte.");
+      this.syncCoachChipsOn();
       this.renderPromptDiff();
       return;
     }
+    var beforeLen = ta.value.replace(/\s*$/, "").length;
     ta.value = ta.value.replace(/\s*$/, "") + "\n\n" + block + "\n";
+    try {
+      ta.focus();
+      ta.setSelectionRange(beforeLen, ta.value.length);
+    } catch (_e) { /* ignore */ }
+    this.coachHasConsigne = true;
+    this.coachSaved = false;
+    this.coachTried = false;
     this.markDirty();
     this.renderPromptDiff();
+    this.syncCoachChipsOn();
+    this.syncCoachSteps();
+    this.pulseSaveBtn();
     this.toast("1 consigne ajoutée. Enregistrez, puis testez.");
-    var m = this.current();
-    if (m && isCatalogueModel(m)) this.openSaveAs();
   };
   MaquetteApp.prototype.renderPromptDiff = function () {
     var box = this.$("#prompt-diff");
@@ -1499,15 +1616,72 @@
     }
     if (!detail || !row) return;
     detail.hidden = false;
+    detail.innerHTML = "";
     var title = document.createElement("p");
     title.className = "agilo-ps-cr-diff-detail-title";
-    title.textContent = row.title + " · " + sectionStatusLabel(row.status);
-    detail.innerHTML = "";
+    title.textContent = sectionDisplayTitle(row, this.diffRows.length) + " · " + sectionStatusLabel(row.status);
     detail.appendChild(title);
+    var extracts = pickDiffExtracts(row.beforeText, row.afterText, 2);
+    var short = document.createElement("div");
+    short.className = "agilo-ps-cr-diff-extracts";
+    if (!extracts.added.length && !extracts.removed.length) {
+      short.innerHTML = "<p class='agilo-ps-diff-note'>Peu de texte utile à isoler. Comparez les deux colonnes ci-dessous.</p>";
+    } else {
+      extracts.added.forEach(function (t) {
+        short.innerHTML += "<p class='agilo-ps-diff-p agilo-ps-diff-p--add'><span class='agilo-ps-diff-tag agilo-ps-diff-tag--add'>ajouté</span> " + escapeHtml(truncateExtract(t, 180)) + "</p>";
+      });
+      extracts.removed.forEach(function (t) {
+        short.innerHTML += "<p class='agilo-ps-diff-p agilo-ps-diff-p--del'><span class='agilo-ps-diff-tag agilo-ps-diff-tag--del'>retiré</span> " + escapeHtml(truncateExtract(t, 180)) + "</p>";
+      });
+    }
+    detail.appendChild(short);
+    var linkBoth = document.createElement("button");
+    linkBoth.type = "button";
+    linkBoth.className = "agilo-ps-cr-diff-link";
+    linkBoth.textContent = "Voir les deux textes";
+    linkBoth.addEventListener("click", function () {
+      var after = document.getElementById("cr-after");
+      if (after && after.scrollIntoView) after.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    detail.appendChild(linkBoth);
+    var more = document.createElement("details");
+    more.className = "agilo-ps-cr-diff-wordy";
+    var sum = document.createElement("summary");
+    sum.textContent = "Voir le détail mot à mot";
+    more.appendChild(sum);
     var body = document.createElement("div");
     body.className = "agilo-ps-cr-diff-detail-body";
-    body.innerHTML = renderPhraseDiffHtml(row.beforeText, row.afterText);
-    detail.appendChild(body);
+    var full = renderPhraseDiffHtml(row.beforeText, row.afterText);
+    var a = sentenceSplit(row.beforeText);
+    var b = sentenceSplit(row.afterText);
+    if (a.length + b.length > 12) {
+      body.innerHTML = "<p class='agilo-ps-diff-note'>Trop long pour tout afficher. " +
+        countWords(row.beforeText) + " → " + countWords(row.afterText) + " mots. Utilisez les deux colonnes.</p>";
+    } else {
+      body.innerHTML = full;
+    }
+    more.appendChild(body);
+    detail.appendChild(more);
+  };
+  MaquetteApp.prototype.renderCrDiffKo = function () {
+    var ko = this.$("#cr-diff-ko");
+    var text = this.$("#cr-diff-ko-text");
+    var btn = this.$("#btn-delete-copy");
+    if (!ko || !text || !btn) return;
+    if (!this.coachTried || !this.frozenAfterHtml) {
+      ko.hidden = true;
+      btn.hidden = true;
+      return;
+    }
+    var m = this.current();
+    ko.hidden = false;
+    if (m && isDraftModel(m)) {
+      text.textContent = "Pas convaincu ? Le modèle d’origine reste dans Catalogue Agilotext.";
+      btn.hidden = false;
+    } else {
+      text.textContent = "Pour itérer sans risque, Enregistrer sous avant de tester.";
+      btn.hidden = true;
+    }
   };
   MaquetteApp.prototype.renderCrDiff = function () {
     var box = this.$("#cr-diff");
@@ -1526,47 +1700,45 @@
       if (counts) counts.textContent = "Premier compte rendu. Relancez pour comparer.";
       if (list) list.innerHTML = "";
       if (detail) { detail.hidden = true; detail.innerHTML = ""; }
+      this.renderCrDiffKo();
       return;
     }
     var rows = alignSections(htmlToSections(this.frozenBeforeHtml), htmlToSections(this.frozenAfterHtml));
     this.diffRows = rows;
-    var nId = 0;
-    var nMod = 0;
-    var nMiss = 0;
-    var nNew = 0;
+    var nTouched = 0;
     rows.forEach(function (r) {
-      if (r.status === "identical") nId += 1;
-      else if (r.status === "modified") nMod += 1;
-      else if (r.status === "missing") nMiss += 1;
-      else if (r.status === "new") nNew += 1;
+      if (r.status !== "identical") nTouched += 1;
     });
-    if (sum) {
-      sum.textContent = "Ce qui a changé";
-    }
+    if (sum) sum.textContent = "Ce qui a changé";
     var wordsBefore = countWords(stripHtmlToText(this.frozenBeforeHtml));
+    var wordsLine = wordsBefore + " → " + wordsAfter + " mots";
     if (counts) {
-      counts.textContent = nId + " gardé" + (nId > 1 ? "s" : "") +
-        " · " + nMod + " changée" + (nMod > 1 ? "s" : "") +
-        " · " + nMiss + " retiré" + (nMiss > 1 ? "s" : "") +
-        " · " + nNew + " ajouté" + (nNew > 1 ? "s" : "") +
-        " · " + wordsBefore + " → " + wordsAfter + " mots";
+      if (nTouched === 0) {
+        counts.textContent = "Le texte a bougé, les titres sont les mêmes. " + wordsLine;
+      } else if (nTouched === 1) {
+        counts.textContent = "Une partie a changé. " + wordsLine;
+      } else {
+        counts.textContent = nTouched + " parties ont changé. " + wordsLine;
+      }
     }
     if (list) {
       list.innerHTML = "";
       rows.forEach(function (r) {
+        if (r.status === "identical" && rows.length > 1) return;
         var li = document.createElement("li");
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "agilo-ps-cr-diff-sec agilo-ps-cr-diff-sec--" + r.status;
         btn.setAttribute("data-section", r.key);
         btn.setAttribute("aria-pressed", "false");
-        btn.setAttribute("aria-label", r.title + ", " + sectionStatusLabel(r.status));
+        var label = sectionDisplayTitle(r, rows.length);
+        btn.setAttribute("aria-label", label + ", " + sectionStatusLabel(r.status));
         var dot = document.createElement("span");
         dot.className = "agilo-ps-cr-diff-dot";
         dot.setAttribute("aria-hidden", "true");
         var lab = document.createElement("span");
         lab.className = "agilo-ps-cr-diff-sec-title";
-        lab.textContent = r.title;
+        lab.textContent = label;
         var st = document.createElement("span");
         st.className = "agilo-ps-cr-diff-sec-state";
         st.textContent = sectionStatusLabel(r.status);
@@ -1578,6 +1750,7 @@
       });
     }
     if (detail) { detail.hidden = true; detail.innerHTML = ""; }
+    this.renderCrDiffKo();
   };
   MaquetteApp.prototype.populateJobs = function (filter, opts) {
     var sel = this.$("#job");
@@ -1632,7 +1805,7 @@
       btn.type = "button";
       btn.className = "agilo-ps-list-item" + (m.id === self.selectedId ? " agilo-ps-list-item--active" : "") + (m.id === last ? " agilo-ps-list-item--last" : "");
       var catalogue = isCatalogueModel(m);
-      btn.innerHTML = "<span class='agilo-ps-list-item-name'></span><span class='agilo-ps-list-item-meta'><span class='agilo-ps-list-item-id'></span>" + (catalogue ? "<span class='agilo-ps-badge agilo-ps-badge--orig'>Original</span>" : "") + "</span>";
+      btn.innerHTML = "<span class='agilo-ps-list-item-name'></span><span class='agilo-ps-list-item-meta'><span class='agilo-ps-list-item-id'></span>" + (catalogue ? "<span class='agilo-ps-badge agilo-ps-badge--orig'>Modèle Agilotext</span>" : "") + "</span>";
       var nameEl = btn.querySelector(".agilo-ps-list-item-name");
       if (self.isPinned(m.id)) nameEl.innerHTML = pinSvg;
       nameEl.appendChild(document.createTextNode(m.name));
@@ -1750,12 +1923,13 @@
     }
     this.$("#detail-title").textContent = m.name;
     var badge = this.$("#detail-badge");
+    badge.hidden = false;
     if (isCatalogueModel(m)) {
-      badge.hidden = false;
-      badge.textContent = "Original";
+      badge.textContent = "Modèle Agilotext";
       badge.className = "agilo-ps-badge agilo-ps-badge--orig";
     } else {
-      badge.hidden = true;
+      badge.textContent = "Votre copie";
+      badge.className = "agilo-ps-badge agilo-ps-badge--draft";
     }
     this.$("#detail-meta").textContent = "ID " + m.id + " · Modifié " + (m.modifiedLabel || "récemment");
     this.$("#editor").value = m.prompt || "";
@@ -1763,10 +1937,12 @@
     this.$("#dirty-banner").hidden = true;
     this.$("#char-count").textContent = (m.prompt || "").length + " car.";
     this.promptBaseline = m.prompt || "";
+    this.resetCoachFlow();
     this.syncFooterCtas(m);
     this.refreshLayoutPreview();
     this.clearAfter();
     this.renderPromptDiff();
+    this.renderCoach();
   };
   MaquetteApp.prototype.setMobileView = function (detail) {
     this.$("#studio-panel").classList.toggle("agilo-ps-panel--mobile-detail", detail);
@@ -1961,6 +2137,9 @@
       } catch (_e) { /* ignore */ }
       this.dirty = false;
       this.toast("Copie prête (texte + HTML). Rafraîchissez la page pour voir la table.");
+      this.coachSaved = true;
+      this.coachTried = false;
+      this.syncCoachSteps();
       await this.loadList();
       var leave = this.pendingLeaveAfterSaveAs;
       this.pendingLeaveAfterSaveAs = null;
@@ -1970,6 +2149,11 @@
         return;
       }
       await this.select(copyId, { force: true });
+      this.coachHasConsigne = true;
+      this.coachSaved = true;
+      this.coachTried = false;
+      this.syncCoachSteps();
+      this.syncCoachChipsOn();
       if (this.pendingTryAfterSave) {
         this.pendingTryAfterSave = false;
         this.openRedoConfirm();
@@ -2004,8 +2188,11 @@
       this.dirty = false;
       this.$("#dirty-banner").hidden = true;
       this.promptBaseline = text;
+      this.coachSaved = true;
+      this.coachTried = false;
       this.syncFooterCtas(m);
       this.renderPromptDiff();
+      this.syncCoachSteps();
       this.toast("Copie enregistrée (texte + HTML).");
       try {
         window.dispatchEvent(new CustomEvent("agilo-ps-models-changed", { detail: { promptId: m.id } }));
@@ -2198,6 +2385,8 @@
     this.syncOrigHint();
     this.renderLayoutMeta();
     this.renderPromptDiff();
+    this.syncCoachSteps();
+    this.syncCoachChipsOn();
   };
   MaquetteApp.prototype.confirmLeaveDirty = function (onDiscard) {
     this._leaveFn = onDiscard;
@@ -2311,6 +2500,9 @@
       var auth = this.getAuth() || {};
       incrementRegenerationCount(j.jobId, auth.edition || "ent");
       this.syncCreditsLabel();
+      this.coachTried = true;
+      this.coachSaved = true;
+      this.syncCoachSteps();
       this.renderCrDiff();
       this.beforeCrMissing = false;
       this.frozenBeforeHtml = done.html || this.frozenBeforeHtml;
@@ -2543,6 +2735,10 @@
     }
     if (coachList) coachList.addEventListener("click", onPatchClick);
     if (coachExtra) coachExtra.addEventListener("click", onPatchClick);
+    var btnDelCopy = this.$("#btn-delete-copy");
+    if (btnDelCopy) {
+      btnDelCopy.addEventListener("click", function () { self.doDelete(); });
+    }
     var secList = this.$("#cr-diff-sections");
     if (secList) {
       secList.addEventListener("click", function (e) {
