@@ -552,13 +552,25 @@
       color: var(--agilo-ps-muted);
     }
     .agilo-ps-coach-hint { margin: 0 0 0.4rem; font-size: 0.72rem; color: var(--agilo-ps-muted); }
-    .agilo-ps-coach-list { display: flex; flex-direction: column; gap: 0.25rem; }
-    .agilo-ps-coach-row {
-      display: flex; align-items: center; gap: 0.4rem;
-      padding: 0.2rem 0;
+    .agilo-ps-coach-list { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .agilo-ps-coach-chip {
+      font: inherit; font-size: 0.75rem; line-height: 1.2;
+      padding: 0.35rem 0.6rem; cursor: pointer;
+      border: 1px solid var(--agilo-ps-border);
+      border-radius: 999px;
+      background: var(--agilo-ps-surface);
+      color: var(--agilo-ps-text);
     }
-    .agilo-ps-coach-label { flex: 1; min-width: 0; font-size: 0.78rem; color: var(--agilo-ps-text); }
-    .agilo-ps-coach-apply { flex-shrink: 0; height: 28px; padding: 0 0.55rem; font-size: 0.72rem; }
+    .agilo-ps-coach-chip:hover,
+    .agilo-ps-coach-chip:focus-visible {
+      border-color: var(--agilo-ps-text);
+      outline: none;
+    }
+    .agilo-ps-coach-more { margin: 0.35rem 0 0; }
+    .agilo-ps-coach-more summary {
+      cursor: pointer; font-size: 0.72rem; color: var(--agilo-ps-muted);
+    }
+    .agilo-ps-coach-more .agilo-ps-coach-list { margin-top: 0.35rem; }
 
     .agilo-ps-prompt-diff {
       margin-top: 0.4rem;
@@ -569,7 +581,9 @@
     }
     .agilo-ps-prompt-diff[hidden] { display: none !important; }
     .agilo-ps-prompt-diff-title { margin: 0 0 0.3rem; font-size: 0.72rem; font-weight: 650; color: var(--agilo-ps-text); }
-    .agilo-ps-prompt-diff-line { margin: 0 0 0.2rem; font-size: 0.72rem; line-height: 1.35; }
+    .agilo-ps-prompt-diff-more { margin: 0; }
+    .agilo-ps-prompt-diff-more summary { cursor: pointer; font-size: 0.72rem; color: var(--agilo-ps-muted); }
+    .agilo-ps-prompt-diff-line { margin: 0.25rem 0 0; font-size: 0.72rem; line-height: 1.35; }
     .agilo-ps-prompt-diff-line--kept { color: var(--agilo-ps-muted); }
     .agilo-ps-prompt-diff-line--add {
       background: #e8eef7;
