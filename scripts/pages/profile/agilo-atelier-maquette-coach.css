@@ -754,6 +754,12 @@
     .agilo-ps-list-item-name { display: flex; align-items: center; gap: 0.3rem; }
     .agilo-ps-list-pin { flex-shrink: 0; color: var(--agilo-ps-accent); }
     .agilo-ps-orig-hint { width: 100%; margin: 0.15rem 0 0; font-size: 0.75rem; color: var(--agilo-ps-muted); }
+    .agilo-ps-field--readonly {
+      background: var(--agilo-ps-surface-2, #f3f4f6);
+      cursor: default;
+    }
+    .agilo-ps-panel--catalogue-locked .agilo-ps-orig-hint { display: block; }
+    .agilo-ps-panel--catalogue-locked #coach-panel { display: none; }
     .agilo-ps-pin-btn { flex-shrink: 0; }
     .agilo-ps-kbd {
       font: inherit; font-size: 0.68rem; font-weight: 500;

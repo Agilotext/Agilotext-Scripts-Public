@@ -238,6 +238,8 @@
   function isDraftModel(m) {
     return !isCatalogueModel(m);
   }
+  var CATALOGUE_LOCK_HINT = "Modèle Agilotext en lecture seule. Enregistrer sous pour créer votre copie.";
+  var ORIG_HINT_DEFAULT = "Pour ne pas écraser l’original, Enregistrer sous crée une copie.";
   var SUMMARY_INITIAL_DELAY_MS = 4000;
   var SUMMARY_POLL_MS = 10000;
   var SUMMARY_MAX_WAIT_MS = 25 * 60 * 1000;
@@ -1435,10 +1437,65 @@
     btn.disabled = this.trying || this.saving || !jobVal || (jobVal && !gate.allowed);
     this.syncCreditsLabel();
   };
+  MaquetteApp.prototype.assertWritableModel = function (m, silent) {
+    m = m || this.current();
+    if (!isCatalogueModel(m)) return true;
+    if (!silent) this.toast(CATALOGUE_LOCK_HINT);
+    return false;
+  };
+  MaquetteApp.prototype.syncCatalogueLock = function (m) {
+    if (m === undefined) m = this.current();
+    var locked = !!(m && isCatalogueModel(m));
+    var panel = this.$("#studio-panel");
+    if (panel) panel.classList.toggle("agilo-ps-panel--catalogue-locked", locked);
+    var editor = this.$("#editor");
+    var editorHtml = this.$("#editor-html");
+    if (editor) {
+      editor.readOnly = locked;
+      editor.setAttribute("aria-readonly", locked ? "true" : "false");
+      editor.classList.toggle("agilo-ps-field--readonly", locked);
+    }
+    if (editorHtml) {
+      editorHtml.readOnly = locked;
+      editorHtml.setAttribute("aria-readonly", locked ? "true" : "false");
+      editorHtml.classList.toggle("agilo-ps-field--readonly", locked);
+    }
+    var htmlImport = this.$("#html-import");
+    if (htmlImport) htmlImport.disabled = locked;
+    var coachPanel = this.$("#coach-panel");
+    if (coachPanel) coachPanel.hidden = locked;
+    var hint = this.$("#orig-hint");
+    if (hint) {
+      if (locked) {
+        hint.hidden = false;
+        hint.textContent = CATALOGUE_LOCK_HINT;
+      } else {
+        hint.textContent = ORIG_HINT_DEFAULT;
+      }
+    }
+    var btnHistory = this.$("#btn-history");
+    if (btnHistory) btnHistory.hidden = locked || !this.versionsOk;
+    var promptDiff = this.$("#prompt-diff");
+    if (promptDiff && locked) {
+      promptDiff.hidden = true;
+      promptDiff.innerHTML = "";
+    }
+    if (locked) {
+      this.dirty = false;
+      var dirtyBanner = this.$("#dirty-banner");
+      if (dirtyBanner) dirtyBanner.hidden = true;
+    }
+    this.syncOrigHint();
+  };
   MaquetteApp.prototype.syncOrigHint = function () {
     var el = this.$("#orig-hint");
     if (!el) return;
     var m = this.current();
+    if (m && isCatalogueModel(m)) {
+      el.hidden = false;
+      el.textContent = CATALOGUE_LOCK_HINT;
+      return;
+    }
     el.hidden = !(m && !isDraftModel(m) && this.dirty);
   };
   MaquetteApp.prototype.syncEditorLink = function () {
@@ -1479,7 +1536,12 @@
     if (status) status.textContent = "";
   };
   MaquetteApp.prototype.renderCoach = function () {
+    var m = this.current();
     var panel = this.$("#coach-panel");
+    if (m && isCatalogueModel(m)) {
+      if (panel) panel.hidden = true;
+      return;
+    }
     var list = this.$("#coach-list");
     if (!panel || !list) return;
     panel.hidden = false;
@@ -1522,6 +1584,7 @@
     this.syncCoachSteps();
   };
   MaquetteApp.prototype.applyRustine = function (patchId) {
+    if (!this.assertWritableModel()) return;
     var patch = allPatches().filter(function (p) { return p.id === patchId; })[0];
     var ta = this.$("#editor");
     if (!patch || !ta) return;
@@ -1883,6 +1946,7 @@
     if (kbd) kbd.textContent = shortcutLabel();
     this.syncOrigHint();
     this.syncPinBtn();
+    this.syncCatalogueLock(m);
   };
   MaquetteApp.prototype.setLeftMode = function (mode) {
     this.leftMode = mode;
@@ -1914,6 +1978,7 @@
       this.$("#editor").value = "";
       this.$("#editor-html").value = "";
       this.syncFooterCtas(null);
+      this.syncCatalogueLock(null);
       this.promptBaseline = "";
       this.refreshLayoutPreview();
       this.clearAfter();
@@ -1943,6 +2008,7 @@
     this.clearAfter();
     this.renderPromptDiff();
     this.renderCoach();
+    this.syncCatalogueLock(m);
   };
   MaquetteApp.prototype.setMobileView = function (detail) {
     this.$("#studio-panel").classList.toggle("agilo-ps-panel--mobile-detail", detail);
@@ -2033,6 +2099,7 @@
       this.versions = list;
       this.versionsOk = true;
       if (btn) btn.hidden = false;
+      this.syncCatalogueLock(this.current());
     } catch (_e) {
       this.versionsOk = false;
       if (btn) btn.hidden = true;
@@ -2046,7 +2113,10 @@
       box.innerHTML = "";
       return;
     }
-    this.$("#drawer-sub").innerHTML = "Sauvegardes de <strong>ce</strong> modèle (« " + escapeHtml(m.name) + " »). Les copies V2 sont dans la liste à gauche.";
+    var catalogue = isCatalogueModel(m);
+    this.$("#drawer-sub").innerHTML = catalogue
+      ? ("Historique en consultation pour « " + escapeHtml(m.name) + " ».")
+      : ("Sauvegardes de <strong>ce</strong> modèle (« " + escapeHtml(m.name) + " »). Les copies V2 sont dans la liste à gauche.");
     box.innerHTML = "";
     var self = this;
     this.versions.forEach(function (v) {
@@ -2054,7 +2124,7 @@
       var isCurrent = v.isCurrent === true;
       el.className = "agilo-ps-ver-item" + (isCurrent ? " is-current" : "");
       el.innerHTML = "<div class='agilo-ps-ver-label'></div><div class='agilo-ps-ver-meta'></div>" +
-        (isCurrent ? "" : "<div class='agilo-ps-ver-actions'><button type='button' class='agilo-ps-btn agilo-ps-btn--primary btn-restore'>Restaurer</button></div>");
+        (isCurrent || catalogue ? "" : "<div class='agilo-ps-ver-actions'><button type='button' class='agilo-ps-btn agilo-ps-btn--primary btn-restore'>Restaurer</button></div>");
       var num = v.versionNumber != null ? v.versionNumber : "";
       el.querySelector(".agilo-ps-ver-label").textContent = isCurrent ? "Actuelle" : ("v" + num + " · " + (v.label || ""));
       el.querySelector(".agilo-ps-ver-meta").textContent = formatWhen(v.createdAt) + (v.source ? " · " + v.source : "");
@@ -2077,6 +2147,7 @@
   MaquetteApp.prototype.restoreVersion = async function (versionId) {
     var m = this.current();
     if (!m || !versionId) return;
+    if (!this.assertWritableModel(m)) return;
     if (!confirm("Restaurer cette version ? L’état actuel sera conservé dans l’historique.")) return;
     try {
       await this.client.restoreVersion(m.id, versionId);
@@ -2306,6 +2377,7 @@
   MaquetteApp.prototype.doRename = async function () {
     var m = this.renameTarget;
     if (!m) return;
+    if (!this.assertWritableModel(m)) return;
     var trimmed = this.$("#rename-name").value.trim();
     if (!trimmed) { this.toast("Nom vide."); return; }
     if (this.models.some(function (x) { return x.name === trimmed && x.id !== m.id; })) {
@@ -2378,6 +2450,7 @@
     downloadTextFile(fileSlug(c.name) + "-export.txt", buildCombinedExport(c.name, c.prompt, c.html));
   };
   MaquetteApp.prototype.markDirty = function () {
+    if (isCatalogueModel(this.current())) return;
     this.dirty = true;
     this.$("#dirty-banner").hidden = true;
     this.syncFooterCtas(this.current());
@@ -2702,6 +2775,7 @@
       var f = self.$("#html-import").files && self.$("#html-import").files[0];
       self.$("#html-import").value = "";
       if (!f) return;
+      if (!self.assertWritableModel()) return;
       var ok = /\.html?$/i.test(f.name) || f.type === "text/html";
       if (!ok) { self.toast("Fichier .html uniquement."); return; }
       f.text().then(function (t) {
