@@ -17,7 +17,7 @@ Remplacer **seulement** le `src` de `Code-mes-transcripts-logic-v2.js` (un seul 
 | Free | `/app/free/mes-transcripts` |
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_PLACEHOLDER/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-SHA_PLACEHOLDER"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@efc52bf/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-efc52bf"></script>
 ```
 
 Ordre : staging `agilotext-test`, puis Production www.
