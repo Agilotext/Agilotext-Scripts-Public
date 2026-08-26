@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.6-empty-demo
+   AGILOTEXT — Mes transcripts logic v2.2.7-demo-row
+   v2.2.7-demo-row — ligne exemple : plus de badge, une hauteur, clics bloqués.
    v2.2.6-empty-demo — liste vide Free n’est plus une erreur ; 1 ligne exemple hors cache.
    v2.2.5-summary-probe — GET receiveSummary html sur la page visible avant le menu formats.
    v2.2.4-summary-guard — filet CR en capture document (stoppe target=_blank / IX Webflow).
@@ -23,7 +24,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.6-empty-demo';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.7-demo-row';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -552,8 +553,24 @@
     document.addEventListener('click', handleSummaryToggleClick, true);
   }
 
+  function installDemoClickGuard() {
+    if (window.__agiloDemoClickGuard) return;
+    window.__agiloDemoClickGuard = true;
+    const block = (event) => {
+      const row =
+        event.target && event.target.closest ? event.target.closest('[data-agilo-demo="1"]') : null;
+      if (!row) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    };
+    document.addEventListener('click', block, true);
+    document.addEventListener('auxclick', block, true);
+  }
+
   installSummaryDownloadGuard();
   installSummaryMenuGate();
+  installDemoClickGuard();
 
   let allJobsCache = null;
   let cacheKey = '';
@@ -789,16 +806,6 @@
   function startTranscriptionPath() {
     const tier = (location.pathname.match(/^\/app\/([^/]+)/) || [])[1] || 'free';
     return `/app/${tier}/dashboard`;
-  }
-
-  function bindDemoNoop(el) {
-    if (!el || el.__agiloDemoBound) return;
-    el.__agiloDemoBound = true;
-    el.setAttribute('title', DEMO_HINT);
-    el.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-    });
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1416,22 +1423,23 @@
       row.setAttribute('data-agilo-demo', '1');
       row.setAttribute('data-job-id', 'demo-onboarding');
       row.setAttribute('data-creation-date', job.dtCreation || '');
+      row.setAttribute('title', DEMO_HINT);
       updateIconVisibility(clone, job.transcriptStatus, job);
 
       const creation = clone.querySelector('.creation-date');
-      if (creation) creation.textContent = 'Exemple';
+      if (creation) {
+        creation.textContent = convertDateStringToDate(job.dtCreation).toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
 
       const fileNameAnchor = clone.querySelector('.file-name');
       if (fileNameAnchor) {
-        fileNameAnchor.removeAttribute('href');
         fileNameAnchor.textContent = displayJobTitle(job);
-        fileNameAnchor.title = DEMO_HINT;
-        bindDemoNoop(fileNameAnchor);
-        const badge = document.createElement('span');
-        badge.textContent = 'Exemple';
-        badge.style.cssText =
-          'display:inline-flex;margin-left:8px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;vertical-align:middle;';
-        fileNameAnchor.insertAdjacentElement('afterend', badge);
       }
 
       const renameButton = clone.querySelector('.rename-btn');
@@ -1440,14 +1448,25 @@
         renameButton.style.visibility = 'hidden';
       }
 
-      const openLink = clone.querySelector('.button-open, .open-link');
-      if (openLink) {
-        if (openLink.tagName === 'A') openLink.removeAttribute('href');
-        openLink.removeAttribute('data-editor-url');
-        bindDemoNoop(openLink);
-      }
+      row.querySelectorAll('.custom-element.options').forEach((el) => {
+        el.setAttribute('data-agilo-download-locked', '1');
+      });
 
-      const cb = row.querySelector('.job-select');
+      row.querySelectorAll('a').forEach((a) => {
+        a.removeAttribute('href');
+        a.removeAttribute('target');
+        a.removeAttribute('download');
+        a.removeAttribute('data-w-id');
+        a.removeAttribute('data-editor-url');
+        a.setAttribute('title', DEMO_HINT);
+      });
+
+      row.querySelectorAll('.button-open, .open-link, .download-link').forEach((el) => {
+        el.setAttribute('tabindex', '-1');
+        el.setAttribute('title', DEMO_HINT);
+      });
+
+      const cb = row.querySelector('.job-select, .job-checkbox');
       if (cb) {
         cb.disabled = true;
         cb.checked = false;
@@ -1456,33 +1475,19 @@
         cb.tabIndex = -1;
       }
 
-      const isFree = String(edition || '').toLowerCase() === 'free';
       const formats = ['txt', 'rtf', 'docx', 'doc', 'pdf'];
       formats.forEach((fmt) => {
         const aT = clone.querySelector(`.download_wrapper-link_transcript_${fmt}`);
         const aS = clone.querySelector(`.download_wrapper-link_summary_${fmt}`);
         [aT, aS].forEach((a) => {
           if (!a) return;
-          if (isFree && isRestrictedFreeFormat(fmt)) {
-            lockFormatForFree(a, 'Réservé aux offres Pro et Business');
-            a.style.removeProperty('display');
-            return;
-          }
-          a.removeAttribute('href');
-          a.removeAttribute('target');
-          a.removeAttribute('download');
           a.style.removeProperty('display');
-          bindDemoNoop(a);
         });
       });
 
-      row.querySelectorAll('.download-link').forEach((btn) => {
-        btn.setAttribute('title', DEMO_HINT);
-        bindDemoNoop(btn);
-      });
       row.querySelectorAll('.delete-job-button, .delete-job-button_to-confirm').forEach((btn) => {
         btn.setAttribute('disabled', 'true');
-        bindDemoNoop(btn);
+        btn.setAttribute('tabindex', '-1');
       });
 
       container.appendChild(row);

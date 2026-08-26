@@ -1,10 +1,10 @@
-# Mes transcripts — logic-v2 2.2.6-empty-demo
+# Mes transcripts — logic-v2 2.2.7-demo-row
 
 **Branche :** `1.09` (pas `1.10`).  
 **Fichier :** `scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js`  
-**Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.6-empty-demo'`
+**Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.7-demo-row'`
 
-Inclut le probe CR (`2.2.5`) et l’état vide Free (plus d’erreur + 1 ligne exemple hors cache).
+Inclut le probe CR (`2.2.5`), l’état vide Free, et la ligne exemple sans badge (clics bloqués).
 
 ## Embed à changer uniquement
 
@@ -17,7 +17,7 @@ Remplacer **seulement** le `src` de `Code-mes-transcripts-logic-v2.js` (un seul 
 | Free | `/app/free/mes-transcripts` |
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@efc52bf/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-efc52bf"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_PLACEHOLDER/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-SHA_PLACEHOLDER"></script>
 ```
 
 Ordre : staging `agilotext-test`, puis Production www.
@@ -26,7 +26,7 @@ Ordre : staging `agilotext-test`, puis Production www.
 
 ```js
 window.__agiloMesTranscriptsLogicVersion
-// attendu : '2.2.6-empty-demo'
+// attendu : '2.2.7-demo-row'
 ```
 
-Compte Free à 0 fichier : pas « Erreur de chargement », légende + 1 ligne Exemple, badge Mes fichiers reste 0. Compte avec des jobs : inchangé.
+Compte Free à 0 fichier : une ligne, pas de tag bleu, Éditer / Télécharger ne font rien. Badge Mes fichiers reste 0.
