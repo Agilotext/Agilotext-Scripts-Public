@@ -19,7 +19,7 @@ Designer → pages **Mes transcripts** (classe live souvent `script-mes_transcri
 Remplacer **seulement** le `src` de `Code-mes-transcripts-logic-v2.js`. Un seul tag (sinon l’ancien gagne). Ne pas toucher `script-toglledown-link`, folders, bulk.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_PLACEHOLDER/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-SHA_PLACEHOLDER"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f80f408/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-f80f408"></script>
 ```
 
 Ordre : staging `agilotext-test`, puis Production www.
