@@ -2,7 +2,7 @@
   'use strict';
   // UTF-8; textes FR avec accents
   // Flux fichier Anon2 : upload async → polling statut → récupération fichier/zip.
-  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.17';
+  window.__AGILO_EMBED_ANON_VERSION__ = '2.4.19';
   window.__AGILO_EMBED_ANON_BACKEND__ = 'anon2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
@@ -611,12 +611,83 @@
     return 'free';
   }
 
+  const ACTIVE_PLAN_STATUSES = ['ACTIVE', 'TRIALING', 'GRACE'];
+
+  function isActivePlanStatus(status) {
+    return ACTIVE_PLAN_STATUSES.indexOf(String(status || '').toUpperCase()) !== -1;
+  }
+
+  function collectMemberPlans(member) {
+    const conns = Array.isArray(member && member.planConnections) ? member.planConnections : [];
+    if (conns.length) return conns;
+    return Array.isArray(member && member.plans) ? member.plans : [];
+  }
+
+  function makeHasPlan(plans) {
+    const list = Array.isArray(plans) ? plans : [];
+    return function hasPlan(prefix) {
+      return list.some((plan) => {
+        const id = String((plan && (plan.planId || plan.plan_id)) || '');
+        return isActivePlanStatus(plan && plan.status) && id.indexOf(prefix) === 0;
+      });
+    };
+  }
+
+  function hasClassicStorageHint() {
+    const canonical = normalizeEdition(storage.get('agilo:canonicalEdition'));
+    const shield = String(storage.get('agilo:agiloshieldEdition') || '').toLowerCase();
+    const stored = normalizeEdition(storage.get('agilo:edition'));
+    return canonical === 'agiloshield' || shield === 'classic' || stored === 'agiloshield';
+  }
+
+  function applyInflightProductEdition(currentProduct, payload) {
+    const current = normalizeEdition(currentProduct);
+    const data = payload || {};
+    if (normalizeEdition(data.productEdition || data.product_edition) === 'agiloshield') return 'agiloshield';
+    if (normalizeEdition(data.edition) === 'agiloshield') return 'agiloshield';
+    return current;
+  }
+
+  function shouldApplyTokenEdition(incomingEdition) {
+    return normalizeEdition(incomingEdition) === 'agiloshield';
+  }
+
+  function applyUrlEdition(currentProduct, queryEdition) {
+    const current = normalizeEdition(currentProduct);
+    if (current === 'agiloshield') return current;
+    const q = String(queryEdition || '').toLowerCase();
+    if (!q) return current;
+    if (q === 'agiloshield' || q === 'anonymisation') return 'agiloshield';
+    if (q === 'business' || q === 'ent') return 'ent';
+    if (q === 'pro' || q === 'free') return q;
+    return current;
+  }
+
+  function logEditionDebug(payload) {
+    if (!window.AGILO_DEBUG) return;
+    const safePlans = Array.isArray(payload && payload.plans)
+      ? payload.plans.map((p) => ({ planId: p && (p.planId || p.plan_id) || null, status: p && p.status || null }))
+      : undefined;
+    console.log('[agiloshield-edition]', {
+      version: window.__AGILO_EMBED_ANON_VERSION__,
+      product: payload && payload.product,
+      api: payload && payload.api,
+      memberstackResolved: payload && payload.memberstackResolved,
+      hasClassic: payload && payload.hasClassic,
+      keptFromHint: payload && payload.keptFromHint,
+      stored: storage.get('agilo:edition'),
+      canonical: storage.get('agilo:canonicalEdition'),
+      shieldHint: storage.get('agilo:agiloshieldEdition'),
+      plans: safePlans
+    });
+  }
+
   function hasMemberstackAnonProPlan(plans, hasPlan) {
-    if (hasPlan('pln_agiloshield') || hasPlan('pln_agiloshield-classic')) return true;
-    const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
+    const check = typeof hasPlan === 'function' ? hasPlan : makeHasPlan(plans);
+    if (check('pln_agiloshield') || check('pln_agiloshield-classic')) return true;
     return (Array.isArray(plans) ? plans : []).some((plan) => {
       const status = String(plan && plan.status || '').toUpperCase();
-      if (status && ACTIVE.indexOf(status) === -1) return false;
+      if (status && ACTIVE_PLAN_STATUSES.indexOf(status) === -1) return false;
       const payment = plan && plan.payment || {};
       const priceId = String(payment.priceId || plan.priceId || '');
       if (priceId === AGILOSHIELD_CLASSIC_PRICE_ID) return true;
@@ -1359,7 +1430,8 @@
       storage.set(STORAGE_INFLIGHT, JSON.stringify({
         savedAt: Date.now(),
         email: state.email || '',
-        edition: getEditionForApi(),
+        productEdition: normalizeEdition(state.edition),
+        apiEdition: getEditionForApi(),
         items
       }));
     } catch (e) { }
@@ -1384,7 +1456,7 @@
       clearInFlightJobs();
       return false;
     }
-    if (payload.edition) state.edition = normalizeEdition(payload.edition);
+    state.edition = applyInflightProductEdition(state.edition, payload);
 
     const restoredItems = payload.items
       .filter((item) => item && item.jobId != null)
@@ -2827,17 +2899,27 @@
     return false;
   }
 
-  async function memberHasAnonProPlan() {
+  async function getCurrentMemberFresh() {
     const ms = window.$memberstackDom;
-    if (!ms || typeof ms.getCurrentMember !== 'function') return false;
+    if (!ms || typeof ms.getCurrentMember !== 'function') return null;
+    let result = null;
     try {
-      const result = await ms.getCurrentMember({ cache: 'reload' });
-      const member = result && result.data;
+      result = await ms.getCurrentMember({ cache: 'reload' });
+    } catch (errReload) {
+      try { result = await ms.getCurrentMember({ useCache: false }); } catch (errNoCache) { /* fallback below */ }
+    }
+    if (!result) {
+      try { result = await ms.getCurrentMember(); } catch (errCached) { /* ignore */ }
+    }
+    return result && result.data;
+  }
+
+  async function memberHasAnonProPlan() {
+    try {
+      const member = await getCurrentMemberFresh();
       if (!member) return false;
-      const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
-      const plans = member.planConnections || [];
-      const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
-      return hasMemberstackAnonProPlan(plans, hasPlan);
+      const plans = collectMemberPlans(member);
+      return hasMemberstackAnonProPlan(plans, makeHasPlan(plans));
     } catch (e) {
       return false;
     }
@@ -2854,47 +2936,63 @@
   }
 
   async function detectEdition() {
-    const ms = window.$memberstackDom;
-    if (ms && typeof ms.getCurrentMember === 'function') {
-      try {
-        const result = await ms.getCurrentMember({ cache: 'reload' });
-        const member = result && result.data;
-        if (member) {
-          const ACTIVE = ['ACTIVE', 'TRIALING', 'GRACE'];
-          const plans = member.planConnections || [];
-          const hasPlan = (prefix) => plans.some((p) => ACTIVE.includes(p.status) && p.planId && p.planId.indexOf(prefix) === 0);
-          const teams = member.teams || { belongsToTeam: false, ownedTeams: [] };
-          if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) {
-            state.transcriptionEdition = 'ent';
-            if (hasMemberstackAnonProPlan(plans, hasPlan)) return { edition: 'agiloshield', memberstackResolved: true };
-            return { edition: 'ent', memberstackResolved: true };
-          }
-          if (hasPlan('pln_business')) state.transcriptionEdition = 'ent';
-          else if (hasPlan('pln_pro')) state.transcriptionEdition = 'pro';
-          else if (hasPlan('pln_free')) state.transcriptionEdition = 'free';
-          else state.transcriptionEdition = 'free';
-          if (hasMemberstackAnonProPlan(plans, hasPlan)) return { edition: 'agiloshield', memberstackResolved: true };
-          if (hasPlan('pln_business')) return { edition: 'ent', memberstackResolved: true };
-          if (hasPlan('pln_pro')) return { edition: 'pro', memberstackResolved: true };
-          if (hasPlan('pln_free')) return { edition: 'free', memberstackResolved: true };
-        }
-      } catch (e) { console.warn('detectEdition error', e); }
+    let member = null;
+    try {
+      member = await getCurrentMemberFresh();
+    } catch (e) { console.warn('detectEdition error', e); }
+
+    const plans = collectMemberPlans(member);
+    const teams = (member && member.teams) || { belongsToTeam: false, ownedTeams: [] };
+    const hasPlan = makeHasPlan(plans);
+    const hasClassic = !!(member && hasMemberstackAnonProPlan(plans, hasPlan));
+    if (member) {
+      if (teams.belongsToTeam && (teams.ownedTeams || []).length === 0) state.transcriptionEdition = 'ent';
+      else if (hasPlan('pln_business')) state.transcriptionEdition = 'ent';
+      else if (hasPlan('pln_pro')) state.transcriptionEdition = 'pro';
+      else if (hasPlan('pln_free')) state.transcriptionEdition = 'free';
+      else state.transcriptionEdition = 'free';
+    }
+
+    if (hasClassic) {
+      return { edition: 'agiloshield', memberstackResolved: true, hasClassic: true, keptFromHint: false, plans };
+    }
+    if (hasClassicStorageHint()) {
+      return {
+        edition: 'agiloshield',
+        memberstackResolved: !!member,
+        hasClassic: false,
+        keptFromHint: true,
+        plans
+      };
+    }
+    if (member) {
+      if (hasPlan('pln_business') || (teams.belongsToTeam && (teams.ownedTeams || []).length === 0)) {
+        return { edition: 'ent', memberstackResolved: true, hasClassic: false, keptFromHint: false, plans };
+      }
+      if (hasPlan('pln_pro')) return { edition: 'pro', memberstackResolved: true, hasClassic: false, keptFromHint: false, plans };
+      if (hasPlan('pln_free')) return { edition: 'free', memberstackResolved: true, hasClassic: false, keptFromHint: false, plans };
+      return { edition: 'free', memberstackResolved: true, hasClassic: false, keptFromHint: false, plans };
     }
 
     const fromQuery = new URLSearchParams(window.location.search).get('edition');
     if (fromQuery) {
       const n = fromQuery.toLowerCase();
+      if (n === 'agiloshield' || n === 'anonymisation') {
+        return { edition: 'agiloshield', memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
+      }
       if (['free', 'pro', 'ent', 'business'].includes(n)) {
-        return { edition: n === 'business' ? 'ent' : normalizeEdition(n), memberstackResolved: false };
+        return { edition: n === 'business' ? 'ent' : normalizeEdition(n), memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
       }
     }
     const stored = storage.get('agilo:edition');
-    if (stored) return { edition: normalizeEdition(stored), memberstackResolved: false };
+    if (stored) return { edition: normalizeEdition(stored), memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
     if (window.location.pathname.includes('/business/') || window.location.pathname.includes('/ent/')) {
-      return { edition: 'ent', memberstackResolved: false };
+      return { edition: 'ent', memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
     }
-    if (window.location.pathname.includes('/pro/')) return { edition: 'pro', memberstackResolved: false };
-    return { edition: 'free', memberstackResolved: false };
+    if (window.location.pathname.includes('/pro/')) {
+      return { edition: 'pro', memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
+    }
+    return { edition: 'free', memberstackResolved: false, hasClassic: false, keptFromHint: false, plans };
   }
 
   async function refreshAgiloshieldEditionBeforeQuotaGate() {
@@ -2911,11 +3009,8 @@
   }
 
   async function getMemberstackEmail() {
-    const ms = window.$memberstackDom;
-    if (!ms || typeof ms.getCurrentMember !== 'function') return null;
     try {
-      const result = await ms.getCurrentMember({ cache: 'reload' });
-      const member = result && result.data;
+      const member = await getCurrentMemberFresh();
       const memberEmail = member && (member.email || (member.auth && member.auth.email));
       return memberEmail ? String(memberEmail).trim() : null;
     } catch (e) {
@@ -4409,10 +4504,12 @@
 
   function applyTokenFromEvent(detail) {
     if (!detail || !detail.token) return;
-    if (state.edition === 'agiloshield') return;
     if (detail.email) state.email = detail.email;
-    if (detail.edition) state.edition = normalizeEdition(detail.edition);
     state.token = detail.token;
+    if (detail.edition && shouldApplyTokenEdition(detail.edition)) {
+      state.edition = 'agiloshield';
+      clearAnon2FreeUsageCounter();
+    }
   }
 
   async function resumeInFlightJobsIfAny() {
@@ -4456,20 +4553,12 @@
     if (!state.transcriptionEdition) state.transcriptionEdition = 'free';
     const editionFromUrl = new URLSearchParams(window.location.search).get('edition');
     if (editionFromUrl) {
-      const n = editionFromUrl.toLowerCase();
-      if (['free', 'pro', 'ent', 'business'].includes(n)) {
-        state.edition = n === 'business' ? 'ent' : normalizeEdition(n);
-      }
+      state.edition = applyUrlEdition(state.edition, editionFromUrl);
     }
 
-    const cachedEdition = storage.get('agilo:edition');
-    if (cachedEdition === 'agiloshield' && state.edition !== 'agiloshield') {
-      if (editionDetected.memberstackResolved) {
-        storage.set('agilo:edition', state.edition);
-      } else {
-        state.edition = 'agiloshield';
-        clearAnon2FreeUsageCounter();
-      }
+    if (hasClassicStorageHint() && state.edition !== 'agiloshield') {
+      state.edition = 'agiloshield';
+      clearAnon2FreeUsageCounter();
     }
 
     if (state.edition === 'agiloshield') {
@@ -4479,6 +4568,14 @@
     }
     storage.set('agilo:edition', state.edition);
     if (ui.manualEdition) ui.manualEdition.value = state.edition;
+    logEditionDebug({
+      product: state.edition,
+      api: getEditionForApi(),
+      memberstackResolved: editionDetected.memberstackResolved,
+      hasClassic: editionDetected.hasClassic,
+      keptFromHint: editionDetected.keptFromHint,
+      plans: editionDetected.plans
+    });
 
     if (!state.email) {
       state.email = await getMemberstackEmail() || await getUserEmail();
@@ -4525,6 +4622,9 @@
       });
     }
     await resumeInFlightJobsIfAny();
+    applyEditionLocks();
+    applyFeatureAvailability();
+    renderRestorePanel();
     if (shouldCallApiMeta()) {
       runSessionMaintenance();
     }
