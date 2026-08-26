@@ -1,0 +1,47 @@
+Plan déploiement — a11y Villette (branche 1.10)
+================================================
+
+IMPORTANT : pin par HASH de commit, pas @1.10 (tip qui bouge).
+HASH livré ce lot : 49215d8
+
+1) GitHub
+   - Worktree isolé sur origin/1.10 ; add ciblé uniquement (jamais git add .)
+   - Push : git push origin 1.10
+   - HASH a11y Villette : 49215d8
+
+2) Webflow — footer site
+   Statut 2026-07-21 : scripts enregistrés (Registered Scripts) + appliqués site footer :
+     - AgilotextFooterBoot (injecte CSS a11y + sidebar, année) @ a75b413
+     - AgilotextA11yLite @ 49215d8
+     - AgilotextSidebarToggle @ 49215d8
+     - AgilotextMobileBanner @ main
+     - AgilotextInviteHandler @ a75b413
+   Le freeform footer a été réduit (API 406 sur gros blocs <script>/<link>) ;
+   ne pas coller à nouveau le vieux sidebar inline.
+
+   URLs de référence (si besoin freeform) :
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/a11y/agilotext-a11y-lite.js?v=49215d8" crossorigin="anonymous"></script>
+
+3) Webflow — embeds page dashboard Business (MANUEL Designer — API page freeform 406)
+   Remplacer @415d56b / tip par @49215d8 sur :
+   - window.AGILO_SCRIPTS_BASE
+   - upload_ent_v2.js
+   - maestro-context-ent.js
+   - streaming-ent-loader.js
+   - Record.production.final.fixed.recovery-form.js
+   - Code-record-audio-toggle.js (rester sur 9abfc4a OK si déjà pin, sinon 49215d8+)
+
+4) Smoke post-deploy (TESTING.md)
+   - Skip / landmarks
+   - Envoi fichier : SR entend « Envoi en cours » puis succès/erreur
+   - Record 1 min : labels, annonces, focus popup, auto-download inchangé
+   - Maestro : activer « Joindre des documents » + ajouter un doc
+
+5) Ne pas modifier Hotjar / Posthog / Memberstack dans ce lot.
+
+6) Sidebar CDN (P1 hygiène)
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.css?v=49215d8" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@49215d8/scripts/pages/dashboard/Code-sidebar-toggle.js?v=49215d8" crossorigin="anonymous"></script>
+   → remplace le gros bloc inline sidebar du footer Webflow.

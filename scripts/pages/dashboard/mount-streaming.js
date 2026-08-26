@@ -385,7 +385,16 @@ function mountAgiloLiveVoice() {
     },
 
     onLocalAudioReady: function ({ blob, filename }) {
+      // Même préférence que Record Business : agilo:record:auto-download (défaut ON).
+      // Override IT : window.AGILO_RECORD_AUTO_DOWNLOAD.
       try {
+        if (window.AGILO_RECORD_AUTO_DOWNLOAD === false) return;
+        if (window.AGILO_RECORD_AUTO_DOWNLOAD !== true) {
+          try {
+            var pref = localStorage.getItem("agilo:record:auto-download");
+            if (pref === "0" || pref === "false") return;
+          } catch (_) {}
+        }
         var url = URL.createObjectURL(blob);
         var a = document.createElement("a");
         a.href = url;

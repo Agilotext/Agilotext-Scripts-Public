@@ -1,7 +1,7 @@
 /**
  * Agilotext — toggle barre latérale dashboard (.dashboard-left)
- * Webflow : coller le CSS (Code-sidebar-toggle.css) + ce script
- *           dans Project Settings → Custom Code → Before </body>
+ * Webflow : CDN jsDelivr pin HASH (voir a11y/PLAN_DEPLOIEMENT_VILLETTE_1.10.txt)
+ *           ou coller CSS + ce script dans Custom Code → Before </body>
  *
  * Le bouton Webflow porte data-sidebar-toggle + class button-sidebar.
  * v1.9 — flyouts collapsed, hover/actif, libellés propres.

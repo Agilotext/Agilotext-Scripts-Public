@@ -1,10 +1,12 @@
 /**
  * pro_v2.js — Agilotext PRO dashboard (fichier externe)
+ * v1.10 — hook AgiloMaestroContext.enrichFormData (1 doc teaser → contextId)
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
  * v1.01+ : retry receiveText/Summary après invalidToken, refresh proactif pendant poll (~10 min).
  * Remplace le code inline du footer Webflow Pro.
  * Ne pas modifier pro.js (version precedente, encore live).
+ * Branche Scripts-Public 1.10 — ne pas pousser sur @24cac26 / 1.09 sans QA.
  */
 
 // erreurs API job — mirror scripts/shared/agilo-api-error-format.js
@@ -928,7 +930,24 @@ document.addEventListener('DOMContentLoaded', () => {
         payload = fd;
       }
 
-      sendWithRetry(payload, 3, uploadSource === 'youtube')
+      // v1.10 — Maestro B+ : enrichissement optionnel (contextId) — fichier seulement
+      function maybeEnrichAndSend(data, isYouTube) {
+        var send = function (finalData) { return sendWithRetry(finalData, 3, isYouTube); };
+        if (isYouTube || !(data instanceof FormData) ||
+            !window.AgiloMaestroContext || typeof window.AgiloMaestroContext.enrichFormData !== 'function') {
+          return send(data);
+        }
+        if (typeof window.AgiloMaestroContext.hasActiveContext === 'function' &&
+            window.AgiloMaestroContext.hasActiveContext()) {
+          try { data.delete('doSummary'); } catch (e) { /* ignore */ }
+          data.append('doSummary', 'true');
+        }
+        return Promise.resolve(window.AgiloMaestroContext.enrichFormData(data)).then(function (fd2) {
+          return send(fd2 || data);
+        });
+      }
+
+      maybeEnrichAndSend(payload, uploadSource === 'youtube')
         .then(data => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
 

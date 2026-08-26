@@ -1,0 +1,23 @@
+ACTION MANUELLE RESTANTE — Dashboard Business (Designer)
+========================================================
+
+Site footer : FAIT (Registered Scripts publishés) — a11y-lite, sidebar, boot CSS, invite.
+
+Page custom code footer + embed Record : encore @415d56b (API freeform page → HTTP 406).
+
+Dans Webflow Designer → page « Dashboard - Business » (/app/business/dashboard) :
+
+1) Page Settings → Custom Code → Footer
+   Remplacer toutes les occurrences de @415d56b par @49215d8
+   (AGILO_SCRIPTS_BASE, upload_ent_v2.js, maestro-context-ent.js, streaming-ent-loader.js)
+
+2) Embed Record (classe script_record-ent)
+   URL actuelle :
+   ...@415d56b/scripts/pages/dashboard/Ent/Record.production.final.fixed.recovery-form.js?v=415d56b
+   → @49215d8/.../Record.production.final.fixed.recovery-form.js?v=49215d8
+
+3) Embed Code-record-audio-toggle (si présent) : garder 9abfc4a ou passer à 49215d8+
+
+4) Publish page / site
+
+Puis smoke : SMOKE_POST_DEPLOY.txt

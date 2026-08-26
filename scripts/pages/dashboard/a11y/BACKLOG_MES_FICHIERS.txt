@@ -1,0 +1,12 @@
+Backlog P1 — Mes fichiers / éditeur (Villette)
+==============================================
+
+Statut : NON traité dans le lot P0 (upload / Record / Maestro / a11y-lite).
+
+Déclencheur : si le pilote classe « Mes fichiers » ou l’éditeur comme P0 terrain
+(3 gestes bloquants), prioriser ensuite :
+  - liste des fichiers : liens / boutons nommés, annonces chargement
+  - actions ouvrir / télécharger / renommer
+  - éditeur iframe : hors a11y-lite ; audit dédié si P0
+
+Sinon : rester en backlog P1/P2 après feedback pilote.

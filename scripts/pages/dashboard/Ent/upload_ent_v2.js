@@ -1,6 +1,9 @@
 /**
  * upload_ent_v2.js — Agilotext Business
  * ──────────────────────────────────────────────────────────────────
+ * Branche Scripts-Public **1.10** (copie live @24cac26 + hook Maestro).
+ * Ne pas pousser sur 1.09 / @24cac26.
+ *
  * Version adaptée du script upload Ent pour le nouveau dashboard
  * avec 3 onglets source (Fichier | YouTube | Dictée).
  *
@@ -13,11 +16,17 @@
  *     globalToken / edition / checkTranscriptStatus sur window
  *     pour mount-streaming.js
  *
+ * v1.10 : hook AgiloMaestroContext.enrichFormData avant sendWithRetry(FormData)
+ *   (chemin FilePond). Sans maestro-context-ent.js → comportement = live.
+ *   Force doSummary=true si contexte Maestro actif.
+ *   Section 7 : enrichFormData envoie contextId seul (multi-doc déjà pré-analysés).
+ *
  * Dépendances CDN (à charger AVANT ce script) :
  *   - filepond.js + filepond-plugin-file-validate-type + size
  *   - v1.07 : compte-rendu iframe via XHR sync (même branche) — erreurs userErrorMessage prioritaire
  *
- * Après ce script, charger (optionnel, streaming) :
+ * Après ce script, charger (optionnel) :
+ *   - maestro-context-ent.js (V1 B+ Joindre brief)
  *   - streaming-ent-loader.js (qui charge agilo-live-transcribe + mount-streaming)
  *
  * v1.01+ : jeton sur actions longues — refresh avant upload, retry receiveText/Summary
@@ -297,6 +306,31 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   var defaultErrorHtml = defaultErrorTextNode ? defaultErrorTextNode.innerHTML : '';
 
+  var A11Y_ERROR_LABELS = {
+    default: 'Une erreur s’est produite. Consultez le message à l’écran.',
+    tooMuchTraffic: 'Trop de demandes en ce moment. Réessayez plus tard.',
+    audioTooLong: 'La durée du fichier dépasse la limite autorisée.',
+    audioFormat: 'Format audio non pris en charge.',
+    audioNotFound: 'Aucun fichier audio à envoyer.',
+    invalidToken:
+      'Accès Agilotext expiré ou renouvelé côté serveur. Rechargez la page pour continuer — vous restez connecté à votre compte (Memberstack).',
+    invalidAudioContent: 'Le contenu audio n’a pas pu être traité.',
+    summaryLimit: 'Durée trop longue pour générer le compte-rendu avec cette option.',
+    offline: 'Pas de connexion internet.',
+    timeout: 'Délai dépassé. Réessayez plus tard.',
+    tooManyHours: 'Quota d’heures audio dépassé sur la période.',
+    unreachable: 'Le serveur est injoignable. Réessayez plus tard.',
+    youtubeInvalid: 'URL YouTube invalide.',
+    youtubePrivate: 'Vidéo YouTube inaccessible ou privée.',
+    youtubeNotFound: 'Vidéo YouTube introuvable.'
+  };
+
+  function agiloA11yAnnounce(msg) {
+    if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+      window.AgilotextA11y.announce(msg);
+    }
+  }
+
   /* ─── Helpers UI ───────────────────────────────────────────── */
   function hideAllErrors() {
     Object.keys(errorMessageDivs).forEach(function (k) {
@@ -310,9 +344,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (successDiv) successDiv.style.display = 'none';
     var el = errorMessageDivs[key] || errorMessageDivs['default'];
     if (el) el.style.display = 'block';
+    agiloA11yAnnounce(A11Y_ERROR_LABELS[key] || A11Y_ERROR_LABELS.default);
   }
 
-  function showSuccess() { hideAllErrors(); if (successDiv) successDiv.style.display = 'flex'; }
+  function showSuccess() {
+    hideAllErrors();
+    if (successDiv) successDiv.style.display = 'flex';
+    agiloA11yAnnounce('Demande acceptée. Transcription en cours.');
+  }
 
   function resetDefaultErrorMessage() {
     if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = defaultErrorHtml;
@@ -848,6 +887,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (formLoadingDiv) formLoadingDiv.style.display = 'block';
         if (submitBtn) submitBtn.disabled = true;
+        agiloA11yAnnounce('Envoi en cours.');
 
         var speakersChecked = !!(speakersCheckbox && speakersCheckbox.checked);
         var summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
@@ -901,7 +941,23 @@ document.addEventListener('DOMContentLoaded', function () {
             fd.append('fileUpload1', file, file.name);
             fd.append('deviceId', window.DEVICE_ID || '');
             fd.append('mailTranscription', 'true');
-            return sendWithRetry(fd, 3, false);
+
+            // v1.10 — Maestro B+ : enrichissement optionnel (contextId / contextFile)
+            function maybeEnrichAndSend(formData) {
+              var send = function (finalFd) { return sendWithRetry(finalFd, 3, false); };
+              if (!window.AgiloMaestroContext || typeof window.AgiloMaestroContext.enrichFormData !== 'function') {
+                return send(formData);
+              }
+              if (typeof window.AgiloMaestroContext.hasActiveContext === 'function' &&
+                  window.AgiloMaestroContext.hasActiveContext()) {
+                try { formData.delete('doSummary'); } catch (e) { /* ignore */ }
+                formData.append('doSummary', 'true');
+              }
+              return Promise.resolve(window.AgiloMaestroContext.enrichFormData(formData)).then(function (fd2) {
+                return send(fd2 || formData);
+              });
+            }
+            return maybeEnrichAndSend(fd);
           });
         }
 

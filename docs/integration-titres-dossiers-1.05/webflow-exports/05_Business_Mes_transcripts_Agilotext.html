@@ -1981,7 +1981,7 @@ add('/dashboard','record','Enregistrer une réunion',
   `Cliquez sur <b>« Enregistrer »</b> pour capturer l’audio.<br><br>
    • <b>Réunion physique</b> : micro de votre ordinateur (démarrage immédiat).<br>
    • <b>Réunion en ligne</b> : capturez Teams, Zoom, Meet… (fenêtre/onglet/écran).<br><br>
-   <em>À savoir :</em> par sécurité, l’audio est aussi <b>enregistré localement</b> dans votre dossier <b>Téléchargements</b> à la fin.
+   <em>À savoir :</em> par défaut, une <b>copie locale de sécurité</b> est enregistrée dans votre dossier <b>Téléchargements</b> à la fin (désactivable dans la zone Enregistrer).
    Le fichier s’appelle généralement <code>agilotext_audio_[date].webm</code>.`, 'bottom','center');
 
 add('/dashboard','send-mode','Choisir le mode d’envoi',
@@ -2014,7 +2014,7 @@ add('/mes-transcripts','transcripts-table','Liste de vos documents',
 
 add('/mes-transcripts','upload-audio','Récupérer l’audio original',
   `Cliquez sur le <b>titre de l’audio</b> pour télécharger le fichier. Pratique pour réécouter un passage.<br>
-   <em>Rappel :</em> l’enregistrement est également sauvegardé automatiquement dans votre dossier <b>Téléchargements</b> à la fin.`, 'left','center');
+   <em>Rappel :</em> par défaut, une copie locale de sécurité peut aussi être enregistrée dans votre dossier <b>Téléchargements</b> (désactivable sur le tableau de bord).`, 'left','center');
 
 // NAV → /editor (depuis « Mes transcriptions »)
 add('/mes-transcripts', 'editor-open', 'Découvrez la page Éditeur',
