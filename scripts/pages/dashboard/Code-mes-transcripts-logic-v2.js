@@ -1,5 +1,7 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.2-fullclient
+   AGILOTEXT — Mes transcripts logic v2.2.3-summary-guard
+   v2.2.3-summary-guard — filet receiveSummary KO (READY menteur / STALE) :
+   clic CR → fetch, si fichier absent lock « Indisponible » au lieu du JSON.
    v2.2.2-fullclient — fetch all (progressive 100→2000), tri/pagination client,
    cache invalidation, polling 60s (API ignore sortDir)
    Remplacer l'embed v1 sur agilotext-test — ne jamais charger v1 et v2 ensemble.
@@ -18,7 +20,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.2-fullclient';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.3-summary-guard';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -33,6 +35,8 @@
   const AUDIO_GENERIC_MESSAGE = 'Impossible de récupérer cet audio pour le moment.';
   const AUDIO_AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
   const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+  const SUMMARY_MISSING_MESSAGE = 'Le compte-rendu n’est plus disponible.';
+  const SUMMARY_MISSING_HINT_RE = /(error_summary_transcript_file_not_exists|summary_transcript_file_not_exists|file_not_exists)/i;
 
   function tryParseJson(text) {
     try {
@@ -207,6 +211,106 @@
       document.body.appendChild(tempLink);
       tempLink.click();
       tempLink.remove();
+    });
+  }
+
+  function markSummaryUnavailable(job, title) {
+    if (!job) return;
+    job.__agiloSummaryUnavailable = true;
+    job.__agiloSummaryUnavailableTitle = title || SUMMARY_MISSING_MESSAGE;
+    if (Array.isArray(allJobsCache)) {
+      const cached = allJobsCache.find((j) => String(j?.jobid) === String(job.jobid));
+      if (cached) {
+        cached.__agiloSummaryUnavailable = true;
+        cached.__agiloSummaryUnavailableTitle = job.__agiloSummaryUnavailableTitle;
+      }
+    }
+  }
+
+  function isSummaryMissingPayload(payload, statusCode, byteLength) {
+    if (statusCode === 404) return true;
+    if (payload && typeof payload === 'object') {
+      const status = String(payload.status || '').toUpperCase();
+      const err = String(payload.errorMessage || payload.javaException || payload.exceptionName || '');
+      if (status === 'KO' && (SUMMARY_MISSING_HINT_RE.test(err) || !err)) return true;
+      if (SUMMARY_MISSING_HINT_RE.test(err)) return true;
+    }
+    if (typeof payload === 'string' && SUMMARY_MISSING_HINT_RE.test(payload)) return true;
+    if (Number.isFinite(byteLength) && byteLength > 0 && byteLength < 80 && payload && typeof payload === 'object') {
+      return true;
+    }
+    return false;
+  }
+
+  async function verifySummaryDownloadUrl(url) {
+    try {
+      const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+      const ct = String(res.headers.get('content-type') || '').toLowerCase();
+      const buf = await res.arrayBuffer();
+      const text = new TextDecoder('utf-8').decode(buf);
+      const json = tryParseJson(text.trim()) || (text.trim().startsWith('{') ? tryParseJson(text) : null);
+
+      if (json && isSummaryMissingPayload(json, res.status, buf.byteLength)) {
+        return { ok: false, missing: true };
+      }
+      if (ct.includes('json') || (text.trim().startsWith('{') && json && String(json.status || '').toUpperCase() === 'KO')) {
+        return { ok: false, missing: true };
+      }
+      if (!res.ok && isSummaryMissingPayload(json || text, res.status, buf.byteLength)) {
+        return { ok: false, missing: true };
+      }
+      if (!res.ok && buf.byteLength < 400 && SUMMARY_MISSING_HINT_RE.test(text)) {
+        return { ok: false, missing: true };
+      }
+      if (!res.ok) {
+        return { ok: false, missing: false };
+      }
+
+      return {
+        ok: true,
+        blob: new Blob([buf], { type: ct || 'application/octet-stream' })
+      };
+    } catch (err) {
+      console.warn('[Agilo][MesTranscripts][v2] verifySummaryDownloadUrl failed', err);
+      return { ok: false, missing: false };
+    }
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    const href = URL.createObjectURL(blob);
+    const tempLink = document.createElement('a');
+    tempLink.href = href;
+    tempLink.download = filename || 'summary';
+    tempLink.rel = 'noopener noreferrer';
+    tempLink.style.display = 'none';
+    document.body.appendChild(tempLink);
+    tempLink.click();
+    tempLink.remove();
+    setTimeout(() => URL.revokeObjectURL(href), 2000);
+  }
+
+  function bindSummaryDownloadGuard(anchorEl, { job, row }) {
+    if (!anchorEl || anchorEl.__agiloSummaryGuardBound) return;
+    anchorEl.__agiloSummaryGuardBound = true;
+    anchorEl.addEventListener('click', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (job?.__agiloSummaryUnavailable) {
+        setSummaryCellState(row, job);
+        return;
+      }
+      const url = String(anchorEl.getAttribute('href') || '').trim();
+      if (!url || url === '#' || !url.includes('receiveSummary')) return;
+
+      const check = await verifySummaryDownloadUrl(url);
+      if (!check.ok) {
+        if (check.missing) {
+          markSummaryUnavailable(job, SUMMARY_MISSING_MESSAGE);
+          setSummaryCellState(row, job);
+        }
+        return;
+      }
+      triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
     });
   }
 
@@ -596,6 +700,13 @@
   }
 
   function getSummaryAvailability(job) {
+    if (job?.__agiloSummaryUnavailable) {
+      return {
+        downloadable: false,
+        label: 'Indisponible',
+        title: job.__agiloSummaryUnavailableTitle || SUMMARY_MISSING_MESSAGE
+      };
+    }
     const status = String(job?.transcriptStatus || '').toUpperCase();
     const detail = getStatusTooltipFrench(job?.transcriptStatus, job);
     if (status === 'READY_SUMMARY_READY') {
@@ -1118,6 +1229,7 @@
         )}`;
         aS.target = '_blank';
         aS.style.removeProperty('display');
+        bindSummaryDownloadGuard(aS, { job, row });
         hasAnySummaryLink = true;
       } else if (aS) {
         aS.style.display = 'none';

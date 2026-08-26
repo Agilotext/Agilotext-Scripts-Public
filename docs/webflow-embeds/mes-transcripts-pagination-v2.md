@@ -5,6 +5,8 @@
 **Branche GitHub :** `1.09`  
 **Hash commit :** `2b4de42` (fetch all + pagination client, branche `1.09`, 18/06/2026)
 
+**Prod live (26/08) :** logic-v2 était `@6477b6f` (`2.2.2-fullclient`). Filet CR : [`mes-transcripts-summary-guard-2.2.3.md`](mes-transcripts-summary-guard-2.2.3.md) (remplacer seulement ce script).
+
 **Diagnostic confirmé :** l'API `getJobsInfo` ignore `sortDir` (3 réponses identiques en probe). Pagination serveur impossible → fetch progressif limit=100→2000 + tri/pagination client.
 
 ---
