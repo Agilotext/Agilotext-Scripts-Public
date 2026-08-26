@@ -2,7 +2,7 @@
 
 **Branche :** `1.09` (pas `1.10`).  
 **Fichier :** `scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js`  
-**Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.3-summary-guard'`
+**Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.4-summary-guard'`
 
 Live avant ce fix : `@6477b6f` / `2.2.2-fullclient`.
 
@@ -19,10 +19,10 @@ Designer → pages **Mes transcripts** :
 Remplacer **seulement** le `src` de `Code-mes-transcripts-logic-v2.js`. Ne pas toucher `script-toglledown-link`, folders, bulk.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@30e5e96/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-30e5e96"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA_PLACEHOLDER/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-SHA_PLACEHOLDER"></script>
 ```
 
-Le JS filet est dans `30e5e96`. Après `git push -u origin fix/mes-transcripts-summary-guard-1.09`, jsDelivr sert ce SHA.
+2.2.4 intercepte le clic en capture (avant `target=_blank` / interactions Webflow). Remplacer le SHA après push.
 
 ## Comportement
 

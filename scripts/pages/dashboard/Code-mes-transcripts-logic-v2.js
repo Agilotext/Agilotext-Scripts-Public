@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.3-summary-guard
+   AGILOTEXT — Mes transcripts logic v2.2.4-summary-guard
+   v2.2.4-summary-guard — filet CR en capture document (stoppe target=_blank / IX Webflow).
    v2.2.3-summary-guard — filet receiveSummary KO (READY menteur / STALE) :
    clic CR → fetch, si fichier absent lock « Indisponible » au lieu du JSON.
    v2.2.2-fullclient — fetch all (progressive 100→2000), tri/pagination client,
@@ -20,7 +21,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.3-summary-guard';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.4-summary-guard';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -289,30 +290,77 @@
     setTimeout(() => URL.revokeObjectURL(href), 2000);
   }
 
-  function bindSummaryDownloadGuard(anchorEl, { job, row }) {
-    if (!anchorEl || anchorEl.__agiloSummaryGuardBound) return;
-    anchorEl.__agiloSummaryGuardBound = true;
-    anchorEl.addEventListener('click', async (event) => {
+  function findJobForSummaryAnchor(anchorEl) {
+    const row = anchorEl && anchorEl.closest ? anchorEl.closest('.wrapper-content_item-row') : null;
+    const jobId = row && row.getAttribute('data-job-id');
+    const cached = Array.isArray(allJobsCache)
+      ? allJobsCache.find((j) => String(j?.jobid) === String(jobId))
+      : null;
+    return { row, job: cached || (jobId ? { jobid: jobId } : null) };
+  }
+
+  async function handleSummaryDownloadClick(anchorEl) {
+    const url = String(anchorEl.getAttribute('href') || '').trim();
+    if (!url || url === '#' || !url.includes('receiveSummary')) return;
+    const { row, job } = findJobForSummaryAnchor(anchorEl);
+    if (job?.__agiloSummaryUnavailable) {
+      if (row && job) setSummaryCellState(row, job);
+      return;
+    }
+    const check = await verifySummaryDownloadUrl(url);
+    if (!check.ok) {
+      if (check.missing && job) {
+        markSummaryUnavailable(job, SUMMARY_MISSING_MESSAGE);
+        if (row) setSummaryCellState(row, job);
+      }
+      return;
+    }
+    triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
+  }
+
+  function isSummaryDownloadAnchor(node) {
+    if (!node || node.tagName !== 'A') return false;
+    const href = String(node.getAttribute('href') || '');
+    return href.includes('receiveSummary');
+  }
+
+  function neutralizeSummaryNavigation(anchorEl) {
+    if (!anchorEl) return;
+    anchorEl.removeAttribute('target');
+    anchorEl.removeAttribute('data-w-id');
+    anchorEl.setAttribute('rel', 'nofollow');
+  }
+
+  function bindSummaryDownloadGuard(anchorEl) {
+    if (!anchorEl) return;
+    neutralizeSummaryNavigation(anchorEl);
+  }
+
+  function installSummaryDownloadGuard() {
+    if (window.__agiloSummaryDownloadGuard) return;
+    window.__agiloSummaryDownloadGuard = true;
+    const intercept = (event) => {
+      const anchorEl =
+        event.target && event.target.closest ? event.target.closest('a[href*="receiveSummary"]') : null;
+      if (!anchorEl || !isSummaryDownloadAnchor(anchorEl)) return;
+      if (event.type === 'click' && event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
-      if (job?.__agiloSummaryUnavailable) {
-        setSummaryCellState(row, job);
-        return;
-      }
-      const url = String(anchorEl.getAttribute('href') || '').trim();
-      if (!url || url === '#' || !url.includes('receiveSummary')) return;
-
-      const check = await verifySummaryDownloadUrl(url);
-      if (!check.ok) {
-        if (check.missing) {
-          markSummaryUnavailable(job, SUMMARY_MISSING_MESSAGE);
-          setSummaryCellState(row, job);
-        }
-        return;
-      }
-      triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
-    });
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      handleSummaryDownloadClick(anchorEl);
+    };
+    document.addEventListener('click', intercept, true);
+    document.addEventListener('auxclick', (event) => {
+      const anchorEl =
+        event.target && event.target.closest ? event.target.closest('a[href*="receiveSummary"]') : null;
+      if (!anchorEl || !isSummaryDownloadAnchor(anchorEl)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    }, true);
   }
+
+  installSummaryDownloadGuard();
 
   let allJobsCache = null;
   let cacheKey = '';
@@ -1229,7 +1277,7 @@
         )}`;
         aS.target = '_blank';
         aS.style.removeProperty('display');
-        bindSummaryDownloadGuard(aS, { job, row });
+        bindSummaryDownloadGuard(aS);
         hasAnySummaryLink = true;
       } else if (aS) {
         aS.style.display = 'none';
