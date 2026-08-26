@@ -1,6 +1,9 @@
 # Mes transcripts — logic-v2 2.2.7-demo-row
 
-**Branche :** `1.09` (pas `1.10`).  
+**Parent Git :** `1.11` (nouvelle branche = `git checkout -b fix/foo origin/1.11`).  
+**Gelées :** `1.09` et `1.10` (fourches parallèles, pas une suite). Ne pas forker le plus grand numéro.  
+**Live Mes transcripts :** pin SHA `@5094a73`, pas `@1.11` flottant. Créer `1.11` ne change pas Webflow.  
+**Tickets :** `fix/…` ou `feat/…`. `1.12` seulement pour une nouvelle intégration figée.  
 **Fichier :** `scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js`  
 **Version JS :** `__agiloMesTranscriptsLogicVersion === '2.2.7-demo-row'`
 
