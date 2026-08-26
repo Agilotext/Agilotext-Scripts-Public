@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.4-summary-guard
+   AGILOTEXT — Mes transcripts logic v2.2.5-summary-probe
+   v2.2.5-summary-probe — GET receiveSummary html sur la page visible avant le menu formats.
    v2.2.4-summary-guard — filet CR en capture document (stoppe target=_blank / IX Webflow).
    v2.2.3-summary-guard — filet receiveSummary KO (READY menteur / STALE) :
    clic CR → fetch, si fichier absent lock « Indisponible » au lieu du JSON.
@@ -21,7 +22,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.4-summary-guard';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.5-summary-probe';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -38,6 +39,11 @@
   const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
   const SUMMARY_MISSING_MESSAGE = 'Le compte-rendu n’est plus disponible.';
   const SUMMARY_MISSING_HINT_RE = /(error_summary_transcript_file_not_exists|summary_transcript_file_not_exists|file_not_exists)/i;
+  const SUMMARY_PROBE_POOL = 4;
+  const summaryProbeByJobId = new Map();
+  const summaryProbeInflight = new Map();
+  let summaryProbeAbort = null;
+  let lastSummaryCreds = { userEmail: '', token: '', edition: 'ent' };
 
   function tryParseJson(text) {
     try {
@@ -215,8 +221,30 @@
     });
   }
 
+  function summaryJobKey(jobOrId) {
+    if (jobOrId && typeof jobOrId === 'object') return String(jobOrId.jobid || '');
+    return String(jobOrId || '');
+  }
+
+  function rememberSummaryProbe(jobOrId, state) {
+    const id = summaryJobKey(jobOrId);
+    if (!id || (state !== 'ok' && state !== 'missing')) return;
+    summaryProbeByJobId.set(id, state);
+  }
+
+  function applySummaryProbeToJob(job) {
+    if (!job) return job;
+    const id = summaryJobKey(job);
+    if (id && summaryProbeByJobId.get(id) === 'missing') {
+      job.__agiloSummaryUnavailable = true;
+      job.__agiloSummaryUnavailableTitle = job.__agiloSummaryUnavailableTitle || SUMMARY_MISSING_MESSAGE;
+    }
+    return job;
+  }
+
   function markSummaryUnavailable(job, title) {
     if (!job) return;
+    rememberSummaryProbe(job, 'missing');
     job.__agiloSummaryUnavailable = true;
     job.__agiloSummaryUnavailableTitle = title || SUMMARY_MISSING_MESSAGE;
     if (Array.isArray(allJobsCache)) {
@@ -243,9 +271,9 @@
     return false;
   }
 
-  async function verifySummaryDownloadUrl(url) {
+  async function verifySummaryDownloadUrl(url, signal) {
     try {
-      const res = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+      const res = await fetch(url, { credentials: 'omit', cache: 'no-store', signal });
       const ct = String(res.headers.get('content-type') || '').toLowerCase();
       const buf = await res.arrayBuffer();
       const text = new TextDecoder('utf-8').decode(buf);
@@ -272,9 +300,95 @@
         blob: new Blob([buf], { type: ct || 'application/octet-stream' })
       };
     } catch (err) {
+      if (err && err.name === 'AbortError') return { ok: false, missing: false, aborted: true };
       console.warn('[Agilo][MesTranscripts][v2] verifySummaryDownloadUrl failed', err);
       return { ok: false, missing: false };
     }
+  }
+
+  function buildSummaryHtmlUrl(job, userEmail, token, edition) {
+    return `${API_BASE}/receiveSummary?jobId=${encodeURIComponent(
+      job.jobid
+    )}&username=${encodeURIComponent(userEmail)}&token=${encodeURIComponent(
+      token
+    )}&format=html&edition=${encodeURIComponent(edition)}`;
+  }
+
+  function beginSummaryProbeWave() {
+    if (summaryProbeAbort) {
+      try {
+        summaryProbeAbort.abort();
+      } catch (_) {}
+    }
+    summaryProbeAbort = new AbortController();
+    return summaryProbeAbort;
+  }
+
+  function findRowByJobId(jobId) {
+    const id = String(jobId || '');
+    if (!id) return null;
+    const root = document.getElementById('jobs-container');
+    if (!root) return null;
+    const safe = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(id) : id.replace(/"/g, '');
+    return root.querySelector(`.wrapper-content_item-row[data-job-id="${safe}"]`);
+  }
+
+  async function runSummaryProbePool(items, worker) {
+    let index = 0;
+    async function next() {
+      while (index < items.length) {
+        const current = items[index];
+        index += 1;
+        await worker(current);
+      }
+    }
+    const n = Math.min(SUMMARY_PROBE_POOL, items.length);
+    await Promise.all(Array.from({ length: n }, () => next()));
+  }
+
+  async function probeSummaryJob(job, { userEmail, token, edition, signal, url }) {
+    const id = summaryJobKey(job);
+    if (!id) return null;
+    const known = summaryProbeByJobId.get(id);
+    if (known) return known;
+    if (summaryProbeInflight.has(id)) return summaryProbeInflight.get(id);
+
+    const run = (async () => {
+      const probeUrl = url || buildSummaryHtmlUrl(job, userEmail, token, edition);
+      const check = await verifySummaryDownloadUrl(probeUrl, signal);
+      if (check.aborted || signal?.aborted) return null;
+      if (check.missing) {
+        markSummaryUnavailable(job, SUMMARY_MISSING_MESSAGE);
+        const row = findRowByJobId(id);
+        if (row) setSummaryCellState(row, job);
+        return 'missing';
+      }
+      if (check.ok) {
+        rememberSummaryProbe(job, 'ok');
+        return 'ok';
+      }
+      return null;
+    })();
+
+    summaryProbeInflight.set(id, run);
+    try {
+      return await run;
+    } finally {
+      summaryProbeInflight.delete(id);
+    }
+  }
+
+  async function probeVisibleSummaries(jobs, creds) {
+    const need = (jobs || []).filter((job) => {
+      const id = summaryJobKey(job);
+      if (!id || summaryProbeByJobId.has(id)) return false;
+      return getSummaryAvailability(job).downloadable;
+    });
+    if (!need.length) return;
+    await runSummaryProbePool(need, async (job) => {
+      if (creds.signal?.aborted) return;
+      await probeSummaryJob(job, creds);
+    });
   }
 
   function triggerBlobDownload(blob, filename) {
@@ -303,7 +417,7 @@
     const url = String(anchorEl.getAttribute('href') || '').trim();
     if (!url || url === '#' || !url.includes('receiveSummary')) return;
     const { row, job } = findJobForSummaryAnchor(anchorEl);
-    if (job?.__agiloSummaryUnavailable) {
+    if (job?.__agiloSummaryUnavailable || summaryProbeByJobId.get(summaryJobKey(job)) === 'missing') {
       if (row && job) setSummaryCellState(row, job);
       return;
     }
@@ -315,7 +429,72 @@
       }
       return;
     }
+    if (job) rememberSummaryProbe(job, 'ok');
     triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
+  }
+
+  function isSummaryOptionsCell(el) {
+    return !!(el && el.querySelector && el.querySelector('[class*="download_wrapper-link_summary_"]'));
+  }
+
+  function closeOtherDownloadPanels(keepPanel) {
+    const root = document.getElementById('jobs-container');
+    if (!root) return;
+    root.querySelectorAll('.download_link-options').forEach((panel) => {
+      if (panel !== keepPanel) panel.style.display = 'none';
+    });
+    root.querySelectorAll('.custom-element.options.is-open').forEach((box) => {
+      if (keepPanel && box.contains(keepPanel)) return;
+      box.classList.remove('is-open');
+    });
+  }
+
+  function openSummaryFormatPanel(optionsEl) {
+    if (!optionsEl) return;
+    const panel = optionsEl.querySelector('.download_link-options');
+    closeOtherDownloadPanels(panel);
+    if (!panel) return;
+    panel.style.display = 'block';
+    optionsEl.classList.add('is-open');
+    const toggle = optionsEl.querySelector('.download-link');
+    if (toggle) toggle.setAttribute('aria-expanded', 'true');
+  }
+
+  async function handleSummaryToggleClick(event) {
+    const optionsEl =
+      event.target && event.target.closest ? event.target.closest('.custom-element.options') : null;
+    if (!optionsEl || !isSummaryOptionsCell(optionsEl)) return;
+    if (event.target.closest && event.target.closest('a[href*="receiveSummary"]')) return;
+
+    const row = optionsEl.closest('.wrapper-content_item-row');
+    const jobId = row && row.getAttribute('data-job-id');
+    const job = (allJobsCache || []).find((j) => String(j?.jobid) === String(jobId));
+    const state = jobId ? summaryProbeByJobId.get(String(jobId)) : null;
+
+    if (state === 'ok') return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+
+    if (state === 'missing' || job?.__agiloSummaryUnavailable) {
+      if (row && job) setSummaryCellState(row, job);
+      return;
+    }
+
+    if (!job) return;
+
+    const htmlLink = optionsEl.querySelector('a[href*="receiveSummary"][href*="format=html"]');
+    const anyLink = htmlLink || optionsEl.querySelector('a[href*="receiveSummary"]');
+    const url = anyLink && String(anyLink.getAttribute('href') || '');
+    const probed = await probeSummaryJob(job, {
+      ...lastSummaryCreds,
+      url: url && url.includes('receiveSummary') ? url : undefined
+    });
+    if (probed === 'missing') return;
+    if (probed === 'ok' || summaryProbeByJobId.get(String(jobId)) === 'ok') {
+      openSummaryFormatPanel(optionsEl);
+    }
   }
 
   function isSummaryDownloadAnchor(node) {
@@ -360,7 +539,14 @@
     }, true);
   }
 
+  function installSummaryMenuGate() {
+    if (window.__agiloSummaryMenuGate) return;
+    window.__agiloSummaryMenuGate = true;
+    document.addEventListener('click', handleSummaryToggleClick, true);
+  }
+
   installSummaryDownloadGuard();
+  installSummaryMenuGate();
 
   let allJobsCache = null;
   let cacheKey = '';
@@ -464,6 +650,11 @@
 
   function invalidateCache(reason) {
     console.info('[Agilo] cache invalidated:', reason);
+    if (summaryProbeAbort) {
+      try {
+        summaryProbeAbort.abort();
+      } catch (_) {}
+    }
     allJobsCache = null;
     cacheKey = '';
     cacheTotalKnown = false;
@@ -748,11 +939,12 @@
   }
 
   function getSummaryAvailability(job) {
-    if (job?.__agiloSummaryUnavailable) {
+    const probeState = summaryProbeByJobId.get(summaryJobKey(job));
+    if (probeState === 'missing' || job?.__agiloSummaryUnavailable) {
       return {
         downloadable: false,
         label: 'Indisponible',
-        title: job.__agiloSummaryUnavailableTitle || SUMMARY_MISSING_MESSAGE
+        title: job?.__agiloSummaryUnavailableTitle || SUMMARY_MISSING_MESSAGE
       };
     }
     const status = String(job?.transcriptStatus || '').toUpperCase();
@@ -1384,6 +1576,7 @@
     }
 
     lastKnownToken = token;
+    lastSummaryCreds = { userEmail, token, edition };
     currentSortDir = readSortDirFromUrl();
     const loadId = Symbol('load');
     activeLoadToken = loadId;
@@ -1434,7 +1627,7 @@
         const jobsById = new Map(
           (allJobsCache || []).map((job) => [String(job.jobid), job])
         );
-        batch.forEach((job) => jobsById.set(String(job.jobid), job));
+        batch.forEach((job) => jobsById.set(String(job.jobid), applySummaryProbeToJob(job)));
         allJobsCache = Array.from(jobsById.values());
         await loadPageFromCache(paginationState.currentPage, { keepRender: true });
         if (batch.length < FETCH_LIMIT_INITIAL) {
@@ -1505,11 +1698,22 @@
       paginationState.pageItemCount = pageJobs.length;
 
       if (!opts.keepRender) {
+        const wave = beginSummaryProbeWave();
         renderRows(pageJobs);
         bindSortToggle();
         try {
           window.__agiloMesTranscriptsFolderBridge?.apply?.();
         } catch (_) {}
+        probeVisibleSummaries(pageJobs, {
+          userEmail,
+          token,
+          edition,
+          signal: wave.signal
+        }).catch((err) => {
+          if (err && err.name !== 'AbortError') {
+            console.warn('[Agilo][MesTranscripts][v2] summary probe failed', err);
+          }
+        });
       }
 
       renderPaginationWidget(paginationState, (nextPage) => {
@@ -1547,6 +1751,7 @@
       if (editionUsed === 'ent' && edition === 'free') {
         edition = 'ent';
         cacheKey = `${edition}|${folderId}`;
+        lastSummaryCreds = { userEmail, token, edition };
       }
 
       if (data.status !== 'OK') {
@@ -1555,7 +1760,7 @@
         return null;
       }
 
-      allJobsCache = data.jobsInfoDtos || [];
+      allJobsCache = (data.jobsInfoDtos || []).map(applySummaryProbeToJob);
       console.info(
         '[Agilo] fetch all start',
         allJobsCache.length,
