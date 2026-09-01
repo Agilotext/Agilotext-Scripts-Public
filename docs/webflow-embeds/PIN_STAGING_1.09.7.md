@@ -11,7 +11,7 @@ Chat live = `chat-loader.js` → V05 (`?v=v05.2`, bust `v05.2.1`). Anon = Anon2 
 | Composant | SHA actuel staging |
 |-----------|-------------------|
 | `code-chat_CSS&JS` | `@e54ba324168459b90c1f92eeb571ef73cd1b68e4` |
-| `Code-Anon_transcript&CR` | pin `3.3.0` (commit Anon2, voir git) |
+| `Code-Anon_transcript&CR` | `@fc69d844ab0ae9fe91a1d1bdbba941fb902e43b0` `?v=3.3.0` |
 | `Code-Redo_summary` / modeles | `@637a1ae4` (history) |
 
 Embed page Business `code-cr-history-maquette` : vidé le 01/09/2026. Free / Premium n’avaient pas cet embed.
