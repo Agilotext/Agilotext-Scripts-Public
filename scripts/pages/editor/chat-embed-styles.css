@@ -749,8 +749,8 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 .mistral-thinking__visual {
   position: relative;
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -759,9 +759,9 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 .mistral-thinking__avatar {
   position: relative;
   z-index: 1;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
   background: #ff8a00;
   color: #fff;
   display: flex;
@@ -772,13 +772,15 @@ main.ed-main [role="tabpanel"].edtr-pane:not(.is-active),
 
 .mistral-thinking__avatar svg {
   display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .mistral-thinking__ring {
   position: absolute;
   inset: 0;
   border-radius: 50%;
-  border: 3px solid color-mix(in srgb, var(--agilo-border, #343a4040) 40%, transparent);
+  border: 2px solid color-mix(in srgb, var(--agilo-border, #343a4040) 40%, transparent);
   border-top-color: #ff8a00;
   animation: mistral-thinking-spin 0.9s linear infinite;
   box-sizing: border-box;

@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  window.__agiloAnonVersion = '3.2.1';
+  window.__agiloAnonVersion = '3.2.2';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -15,6 +15,7 @@
   const GENERIC_SPEAKER_RE = /^(speaker[_\s-]?[a-z0-9]+|intervenant\s*\d+|locuteur\s*\d+)$/i;
 
   let abortController = null;
+  let anonInFlight = false;
 
   const state = {
     ui: null,
@@ -473,13 +474,74 @@
     const ignored = [];
     const src = String(input || '');
     const out = String(output || '');
-    if (types.includes('EML') && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(src) && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(out)) {
+    const typeSet = new Set((Array.isArray(types) ? types : []).map((code) => String(code || '').toUpperCase()));
+    if (typeSet.has('EML') && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(src) && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(out)) {
       ignored.push('Email');
     }
-    if (types.includes('TEL') && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(src) && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(out)) {
+    if (typeSet.has('TEL') && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(src) && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(out)) {
       ignored.push('Téléphone');
     }
-    return ignored;
+    if (typeSet.has('PER') && detectSpeakerLabelsStillVisible(src, out)) {
+      ignored.push('Personne (noms de locuteur)');
+    } else if (typeSet.has('PER') && detectUnchangedOutput(src, out)) {
+      ignored.push('Personne');
+    }
+    if (typeSet.has('ORG') && detectUnchangedOutput(src, out)) {
+      ignored.push('Organisation');
+    }
+    return Array.from(new Set(ignored));
+  }
+
+  // --- agilo-anon-detect helpers ---
+  function normalizeAnonCompare(text) {
+    return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function detectUnchangedOutput(input, output) {
+    const normalizedInput = normalizeAnonCompare(input);
+    const normalizedOutput = normalizeAnonCompare(output);
+    if (!normalizedInput) return false;
+    if (normalizedInput === normalizedOutput) return true;
+    if (normalizedInput.length < 20) return false;
+    const hasPlaceholders = /<[A-Z]{2,3}_[A-Z0-9]+>/.test(String(output || ''));
+    if (hasPlaceholders) return false;
+    return normalizedOutput.length / normalizedInput.length > 0.95;
+  }
+
+  function escapeRegexFragment(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function detectSpeakerLabelsStillVisible(input, output) {
+    const src = String(input || '');
+    const out = String(output || '');
+    const speakerLineRe = /^([^\n:]{1,80}):\s*/gm;
+    let match;
+    while ((match = speakerLineRe.exec(src)) !== null) {
+      const label = String(match[1] || '').trim();
+      if (!label || GENERIC_SPEAKER_RE.test(label)) continue;
+      const outLineRe = new RegExp('^' + escapeRegexFragment(label) + ':\\s', 'm');
+      if (outLineRe.test(out) || out.includes(label + ':')) return true;
+    }
+    return false;
+  }
+  // --- end helpers ---
+
+  function invalidatePreview() {
+    state.previewText = '';
+    state.previewHtml = '';
+    state.previewSegments = null;
+    state.previewJobId = '';
+    const ui = state.ui || createUi();
+    if (!ui) return;
+    if (ui.preview) ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
+    const exportOnly = state.previewSource === 'summary';
+    if (ui.downloadBtn) ui.downloadBtn.disabled = !exportOnly;
+    if (ui.downloadHtmlBtn) ui.downloadHtmlBtn.disabled = !exportOnly;
+    if (ui.applyBtn) ui.applyBtn.disabled = true;
+    setModalStatus(exportOnly
+      ? 'Prévisualisez d’abord ou exportez directement en TXT ou HTML.'
+      : 'Prévisualisez à nouveau après le changement de types.');
   }
 
   function createUi() {
@@ -514,6 +576,12 @@
       .agilo-anon-btn--ghost{background:transparent;color:#111827;border:1px solid rgba(0,0,0,.12)}
       .agilo-anon-btn[disabled]{opacity:.45;cursor:not-allowed}
       .agilo-anon-status{margin-top:12px;font-size:.92rem;color:#4b5563}
+      .agilo-anon-modal.is-busy .agilo-anon-actions{opacity:.7}
+      .agilo-anon-busy{display:none;align-items:center;gap:10px;margin-top:12px;font-size:.92rem;color:#4b5563}
+      .agilo-anon-modal.is-busy .agilo-anon-busy{display:flex}
+      .agilo-anon-busy__spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(0,0,0,.12);border-top-color:#111827;animation:agilo-anon-spin .8s linear infinite;flex-shrink:0}
+      @keyframes agilo-anon-spin{to{transform:rotate(360deg)}}
+      .agilo-anon-warning{margin-top:12px;padding:10px 12px;border-radius:12px;background:#fff8dc;border:1px solid #f4d67a;color:#575757;font-size:.9rem;line-height:1.4}
       .agilo-anon-banner{display:none;align-items:center;justify-content:space-between;gap:12px;margin:0 0 16px;padding:14px 16px;border-radius:16px;background:#fff8dc;border:1px solid #f4d67a}
       .agilo-anon-banner.is-visible{display:flex}
       .agilo-anon-banner.is-saved{background:#e9f9ef;border-color:#93d7a6}
@@ -554,6 +622,10 @@
             <section class="agilo-anon-card agilo-anon-preview-section" id="agiloAnonPreviewSection">
               <h4>Prévisualisation</h4>
               <div class="agilo-anon-preview" id="agiloAnonPreview" tabindex="0">Aucune prévisualisation pour le moment.</div>
+              <div class="agilo-anon-busy" id="agiloAnonBusy" aria-hidden="true">
+                <span class="agilo-anon-busy__spinner"></span>
+                <span id="agiloAnonBusyText">Anonymisation en cours…</span>
+              </div>
               <div class="agilo-anon-status" id="agiloAnonStatus">Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.</div>
             </section>
           </div>
@@ -597,6 +669,8 @@
       grid: overlay.querySelector('#agiloAnonGrid'),
       previewSection: overlay.querySelector('#agiloAnonPreviewSection'),
       preview: overlay.querySelector('#agiloAnonPreview'),
+      busy: overlay.querySelector('#agiloAnonBusy'),
+      busyText: overlay.querySelector('#agiloAnonBusyText'),
       status: overlay.querySelector('#agiloAnonStatus'),
       exportStatus: overlay.querySelector('#agiloAnonExportStatus'),
       entityInputs: Array.from(overlay.querySelectorAll('.agilo-anon-check input')),
@@ -618,12 +692,14 @@
         const selected = ui.entityInputs.filter((item) => item.checked).map((item) => item.value);
         state.anonymizationConfig.entityTypes = sanitizeEntityTypes(selected);
         persistConfig();
+        invalidatePreview();
       });
     });
     ui.maskAllBtn.addEventListener('click', () => {
       state.anonymizationConfig.entityTypes = ALL_MASK_ENTITY_TYPES.slice();
       persistConfig();
       syncConfigToUi();
+      invalidatePreview();
     });
 
     overlay.addEventListener('click', (event) => {
@@ -669,8 +745,8 @@
       : 'Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.';
     ui.applyBtn.hidden = isSummary;
     ui.downloadHtmlBtn.hidden = !isSummary;
-    ui.previewBtn.hidden = isSummary;
-    if (ui.previewSection) ui.previewSection.hidden = isSummary;
+    ui.previewBtn.hidden = false;
+    if (ui.previewSection) ui.previewSection.hidden = false;
     if (ui.grid) ui.grid.classList.toggle('is-export-only', isSummary);
     if (ui.exportStatus) ui.exportStatus.hidden = !isSummary;
   }
@@ -694,7 +770,7 @@
     ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
     const exportOnly = state.previewSource === 'summary';
     setModalStatus(exportOnly
-      ? 'Le compte-rendu de l’éditeur n’est pas modifié. Choisissez TXT ou HTML.'
+      ? 'Prévisualisez d’abord ou exportez directement en TXT ou HTML.'
       : 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.');
     ui.downloadBtn.disabled = !exportOnly;
     ui.downloadHtmlBtn.disabled = !exportOnly;
@@ -721,9 +797,16 @@
     const ui = createUi();
     if (!ui) return;
     const exportOnly = state.previewSource === 'summary';
+    const modal = ui.overlay?.querySelector('.agilo-anon-modal');
+    if (modal) modal.classList.toggle('is-busy', !!isBusy);
+    if (ui.busyText && text) ui.busyText.textContent = text;
     [ui.previewBtn, ui.downloadBtn, ui.downloadHtmlBtn, ui.applyBtn, ui.closeBtn].forEach((button) => {
       if (!button) return;
-      if (exportOnly && (button === ui.downloadBtn || button === ui.downloadHtmlBtn || button === ui.closeBtn)) {
+      if (exportOnly && button === ui.closeBtn) {
+        button.disabled = !!isBusy;
+        return;
+      }
+      if (exportOnly && (button === ui.downloadBtn || button === ui.downloadHtmlBtn || button === ui.previewBtn)) {
         button.disabled = !!isBusy;
         return;
       }
@@ -732,6 +815,12 @@
     });
     if (exportOnly) ui.applyBtn.disabled = true;
     if (text) setModalStatus(text);
+  }
+
+  function formatPreviewDisplay(text, maxChars) {
+    const raw = String(text || '');
+    if (!maxChars || raw.length <= maxChars) return raw || 'Aucune donnée renvoyée.';
+    return raw.slice(0, maxChars) + '\n…';
   }
 
   async function anonymiseContent() {
@@ -798,7 +887,9 @@
     state.previewJobId = getJobId();
     const ui = createUi();
     if (!ui) return;
-    if (result.source === 'transcript') {
+    if (result.source === 'summary') {
+      ui.preview.textContent = formatPreviewDisplay(state.previewText, 2000);
+    } else {
       ui.preview.textContent = state.previewText || 'Aucune donnée renvoyée.';
     }
     ui.downloadBtn.disabled = !state.previewText;
@@ -806,12 +897,15 @@
     ui.applyBtn.disabled = result.source === 'summary' || !state.previewSegments;
 
     let status = result.source === 'summary'
-      ? 'Export prêt. Le compte-rendu de l’éditeur n’est pas modifié.'
+      ? 'Aperçu prêt (extrait). Export TXT ou HTML sans modifier le compte-rendu de l’éditeur.'
       : (state.previewSegments
         ? 'Prévisualisation prête. Vous pouvez télécharger ou appliquer le brouillon au transcript.'
         : 'Prévisualisation prête, mais la structure du transcript ne peut pas être reconstruite proprement. Téléchargement uniquement.');
     if (result.ignored.length) {
       status += ' L’API n’a pas masqué : ' + result.ignored.join(', ') + '.';
+      if (result.ignored.some((item) => item.includes('locuteur'))) {
+        status += ' Limite connue du format dialogue. Téléchargement possible, vérifiez le fichier.';
+      }
     }
     setModalStatus(status);
 
@@ -823,12 +917,34 @@
   async function runModalAction(action) {
     const ui = createUi();
     const exportOnly = state.previewSource === 'summary';
+    if (anonInFlight) {
+      logEvent('ignored_busy', { step: action, jobId: getJobId(), source: state.previewSource });
+      return;
+    }
+    anonInFlight = true;
+    const busyCrMessage = 'Anonymisation en cours… (10-30 s pour un CR)';
     try {
-      if (exportOnly && action === 'preview') return;
+      if (exportOnly && action === 'preview') {
+        setModalBusy(true, busyCrMessage);
+        await buildPreview();
+        return;
+      }
 
       if (exportOnly && (action === 'download' || action === 'download-html')) {
-        setModalBusy(true, 'Anonymisation en cours…');
-        const result = await anonymiseContent();
+        setModalBusy(true, busyCrMessage);
+        let result;
+        if (state.previewText && state.previewJobId === getJobId() && state.previewSource === 'summary') {
+          result = {
+            previewText: state.previewText,
+            previewHtml: state.previewHtml,
+            source: 'summary'
+          };
+        } else {
+          result = await anonymiseContent();
+          state.previewText = result.previewText;
+          state.previewHtml = result.previewHtml;
+          state.previewJobId = getJobId();
+        }
         if (!result.previewText) throw new Error('Aucun compte-rendu à anonymiser.');
         if (action === 'download-html' && !result.previewHtml) {
           throw new Error('Export HTML disponible uniquement pour le compte-rendu.');
@@ -877,26 +993,24 @@
       }
     } catch (err) {
       if (err && (err.name === 'AbortError' || err.message === 'AbortError')) {
-        notify('Anonymisation annulée.');
+        notify('Anonymisation annulée ou délai dépassé (60 s). Réessayez.');
       } else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
         notify('Erreur réseau. Vérifiez votre connexion et réessayez.');
       } else {
         notify('Erreur : ' + ((err && err.message) || 'Une erreur est survenue.'));
       }
-      logEvent('error', { step: action, message: err?.message || String(err) });
+      logEvent('error', {
+        step: action,
+        message: err?.message || String(err),
+        jobId: getJobId(),
+        source: state.previewSource,
+        entityTypes: state.anonymizationConfig.entityTypes,
+        timeoutMs: REQUEST_TIMEOUT_MS
+      });
     } finally {
       abortController = null;
-      ui.previewBtn.disabled = exportOnly ? true : false;
-      ui.closeBtn.disabled = false;
-      if (exportOnly) {
-        ui.downloadBtn.disabled = false;
-        ui.downloadHtmlBtn.disabled = false;
-        ui.applyBtn.disabled = true;
-      } else {
-        ui.downloadBtn.disabled = !state.previewText;
-        ui.downloadHtmlBtn.disabled = true;
-        ui.applyBtn.disabled = !state.previewSegments;
-      }
+      anonInFlight = false;
+      setModalBusy(false);
     }
   }
 

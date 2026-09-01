@@ -58,7 +58,7 @@ function agiloChatInitFromDom() {
   const RECEIVE_RETRY_DELAY = 900;
   const AGILO_EMAIL_COMMENT_SPLIT = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(?:\(non envoyé\))?\s*:/i;
   const LINKEDIN_THINKING_MSG = 'Je travaille sur la rédaction du post LinkedIn. Je vous le dépose dans un instant dans l\'onglet Conversation.';
-  const MISTRAL_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.3715 16.358H16.1144V13.6486H13.3712L13.3715 16.358H10.6283V13.6486H7.88568V16.358H10.6283V19.0676H2.3999V16.358H5.14279V5.52002H7.88568V8.22963H10.6286V10.939H13.3715V8.22963H16.1144V5.52002H18.8572V16.358H21.5999V19.0676H13.3715V16.358Z"></path></svg>';
+  const MISTRAL_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.3715 16.358H16.1144V13.6486H13.3712L13.3715 16.358H10.6283V13.6486H7.88568V16.358H10.6283V19.0676H2.3999V16.358H5.14279V5.52002H7.88568V8.22963H10.6286V10.939H13.3715V8.22963H16.1144V5.52002H18.8572V16.358H21.5999V19.0676H13.3715V16.358Z"></path></svg>';
 
   function buildThinkingIndicatorHtml(label) {
     const raw = String(label || 'Assistant réfléchit').trim();
