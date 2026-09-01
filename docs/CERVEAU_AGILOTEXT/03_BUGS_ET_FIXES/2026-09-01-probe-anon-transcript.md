@@ -1,45 +1,26 @@
-# Probe anonymisation transcript (2026-09-01)
+# Probe anonymisation transcript (2026-09-01, MAJ Anon2)
 
-Job témoin : `1000039417` (bauerwebpro, staging).
+Job témoin éditeur : `1000039417` (bauerwebpro, staging).
 
-## Résultats MCP Agiloshield `anonymize_text`
+## Phase 0 Anon2 (bauerwebpro, edition `ent`)
 
-Texte :
+`getToken` depuis curl = `error_forbidden_source` (filtre source). Token via `getAuthToken` (même compte, édition `ent`) :
 
-```
-Florian de Bauerwebpro: Bonjour Stéphane. Contact: 06 12 34 56 78
-```
+| Étape | Résultat |
+|-------|----------|
+| `getAnon2UserDefaults` | OK (types compte sauvés, dont `doPseudoAnon`) |
+| `setAnon2UserDefaults` `["PER","ORG"]` | OK |
+| `POST /anon2AsyncOfficeText` `fileUpload[]` | OK, job `1000039453` |
+| Poll `getAnon2Status` | READY en ~3 s |
+| `receiveAnon2Text` ANON | TXT UTF-8 |
+| Restore defaults | OK |
 
-| `types` demandés | Résultat |
-|------------------|----------|
-| `["TEL"]` seul | TEL masqué (`<TEL_AB>`) **et** inline `Stéphane` → `<PER_AA>` |
-| `["PER"]` seul | Même sortie (TEL + PER inline masqués) |
+Types respectés : avec PER+ORG seulement, TEL et EML **restent en clair**. Inline `Stéphane` → `<PER_AA>`. Labels `Speaker:` encore visibles.
 
-Les libellés locuteur (`Florian de Bauerwebpro:`, `Stéphane:`) restent en clair dans les deux cas.
+## Chemin abandonné : `/anonText`
 
-## Dialogue type transcript (anonText live, session précédente)
+Masquage partiel, `entityTypes` ignorés. Plus utilisé par l’éditeur dès `3.3.0`.
 
-```
-Florian de Bauerwebpro: Bonjour Stéphane…
-Stéphane: Oui Florian…
-```
+## Front v3.3.0
 
-Avec `PER` seul : un remplacement inline, labels locuteur inchangés.
-
-Phrase simple `Florian a appelé Stéphane chez Bauerwebpro` avec `PER+ORG` : souvent texte identique (0 masquage).
-
-## Cause probable
-
-1. **NER / format dialogue** : les noms avant `:` ne sont pas traités comme entités.
-2. **`entityTypes` sur `ApiAnonText` legacy** : le servlet Java ne parse pas le champ `entityTypes` (seulement username, token, edition, forceTextFormat). Le front envoie le paramètre mais le worker Python ne le reçoit pas via ce chemin.
-
-## Actions front v3.2.2
-
-- Warnings honnêtes (locuteur, texte inchangé).
-- Mutex `anonInFlight`, `setModalBusy(false)` dans `finally`.
-- `invalidatePreview()` au changement de types.
-- Aperçu CR optionnel (2000 car.).
-
-## Brief backend
-
-Voir [`../02_BACKEND/ANON_ENTITYTYPES_ET_DIALOGUE.md`](../02_BACKEND/ANON_ENTITYTYPES_ET_DIALOGUE.md).
+Pipeline Classic/MCP : lock defaults, upload TXT, poll, receive blob, restore retry, apply remap.

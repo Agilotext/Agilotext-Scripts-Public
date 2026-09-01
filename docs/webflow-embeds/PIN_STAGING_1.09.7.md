@@ -1,4 +1,4 @@
-# Pin staging 1.09.7 / anon 3.2.2 / chat V05.2.1
+# Pin staging 1.09.7 / anon 3.3.0 / chat V05.2.1
 
 Après merge de `fix/demo-grand-est-1.09.7` dans `origin/1.09`. **Pas de publish www sans OK Florian.**
 
@@ -6,12 +6,12 @@ Après merge de `fix/demo-grand-est-1.09.7` dans `origin/1.09`. **Pas de publish
 
 Les pins confidence + chat + anon sont dans les embeds canvas (`code-main-editor`, `code-chat_CSS&JS`, `Code-Anon_transcript&CR`), pas dans le custom code page (head/footer).
 
-Chat live = `chat-loader.js` → V05 (`?v=v05.2`, bust `v05.2.1`). Anon CR = export + preview (`?v=3.2.2`). History CR = `@637a1ae4`. Confidence inchangé (`?v=1.09.7`).
+Chat live = `chat-loader.js` → V05 (`?v=v05.2`, bust `v05.2.1`). Anon = Anon2 document (`?v=3.3.0`). History CR = `@637a1ae4`. Confidence inchangé (`?v=1.09.7`).
 
 | Composant | SHA actuel staging |
 |-----------|-------------------|
 | `code-chat_CSS&JS` | `@e54ba324168459b90c1f92eeb571ef73cd1b68e4` |
-| `Code-Anon_transcript&CR` | `@e54ba324168459b90c1f92eeb571ef73cd1b68e4` `?v=3.2.2` |
+| `Code-Anon_transcript&CR` | pin `3.3.0` (commit Anon2, voir git) |
 | `Code-Redo_summary` / modeles | `@637a1ae4` (history) |
 
 Embed page Business `code-cr-history-maquette` : vidé le 01/09/2026. Free / Premium n’avaient pas cet embed.
@@ -45,6 +45,6 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 
 ## Rollback
 
-Lot B (anon + chat) : repin `@3d5b567d` chat-loader `?v=v05.2`, anon `?v=3.2.1`. History inchangé `@637a1ae4`.
+Lot Anon2 `3.3.0` : repin anon `@e54ba324` `?v=3.2.2`. Chat / History inchangés.
 
 Staging précédent global : `@56c20f30` (`?v=1.09.7` / `v05.1` / `3.2.0`). www : ne pas republier.

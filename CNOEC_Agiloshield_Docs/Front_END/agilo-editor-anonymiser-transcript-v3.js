@@ -2,14 +2,24 @@
 (function () {
   'use strict';
 
-  window.__agiloAnonVersion = '3.2.2';
+  window.__agiloAnonVersion = '3.3.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
-  const ANON_TEXT_ENDPOINT = API_BASE + '/anonText';
-  const REQUEST_TIMEOUT_MS = 60000;
+  const ANON2_UPLOAD = API_BASE + '/anon2AsyncOfficeText';
+  const ANON2_STATUS = API_BASE + '/getAnon2Status';
+  const ANON2_RECEIVE = API_BASE + '/receiveAnon2Text';
+  const ANON2_GET_DEFAULTS = API_BASE + '/getAnon2UserDefaults';
+  const ANON2_SET_DEFAULTS = API_BASE + '/setAnon2UserDefaults';
+  const ANON2_GET_OPTIONS = API_BASE + '/getAnon2UserOptions';
+  const ANON2_SET_OPTIONS = API_BASE + '/setAnon2UserOptions';
+  const REQUEST_TIMEOUT_MS = 180000;
+  const REQUEST_TIMEOUT_CR_MS = 300000;
+  const STATUS_TIMEOUT_MS = 20000;
+  const POLL_INTERVAL_MS = 2500;
   const TOKEN_RETRY_MAX = 3;
   const TOKEN_RETRY_DELAY_MS = 800;
+  const MIN_ENTITY_TYPES = 2;
   const DEFAULT_ENTITY_TYPES = ['PER', 'ORG', 'LOC'];
   const ALL_MASK_ENTITY_TYPES = ['PER', 'ORG', 'LOC', 'EML', 'TEL', 'ADR'];
   const GENERIC_SPEAKER_RE = /^(speaker[_\s-]?[a-z0-9]+|intervenant\s*\d+|locuteur\s*\d+)$/i;
@@ -28,6 +38,7 @@
     previewHtml: '',
     previewSegments: null,
     previewJobId: '',
+    previewTypesKey: '',
     previewSource: 'transcript',
     currentJobId: '',
     lastFocus: null,
@@ -384,7 +395,15 @@
     const next = (Array.isArray(list) ? list : [])
       .map((code) => String(code || '').toUpperCase())
       .filter((code) => allowed.has(code));
-    return next.length ? Array.from(new Set(next)) : DEFAULT_ENTITY_TYPES.slice();
+    return Array.from(new Set(next));
+  }
+
+  function assertMinEntityTypes(list) {
+    const types = sanitizeEntityTypes(list);
+    if (types.length < MIN_ENTITY_TYPES) {
+      throw new Error('Sélectionnez au moins ' + MIN_ENTITY_TYPES + ' types de données.');
+    }
+    return types;
   }
 
   function resolveEntityTypes() {
@@ -392,7 +411,7 @@
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length) return sanitizeEntityTypes(parsed);
+        if (Array.isArray(parsed) && parsed.length >= MIN_ENTITY_TYPES) return assertMinEntityTypes(parsed);
       } catch (_) {}
     }
     return DEFAULT_ENTITY_TYPES.slice();
@@ -413,39 +432,191 @@
     }
   }
 
-  async function requestAnonymisedText(content, entityTypes, options = {}) {
-    const creds = await ensureAuth();
-    const forceText = options.forceTextFormat !== false;
-    const isHtml = options.asHtml === true;
-    const payload = new FormData();
-    payload.append('username', creds.email);
-    payload.append('token', creds.token);
-    payload.append('edition', creds.edition);
-    if (forceText) payload.append('forceTextFormat', 'true');
-    const mime = isHtml ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
-    const fileName = isHtml ? 'input.html' : 'input.txt';
-    payload.append('fileUpload1', new Blob([content], { type: mime }), fileName);
-    payload.append('entityTypes', JSON.stringify(entityTypes && entityTypes.length ? entityTypes : DEFAULT_ENTITY_TYPES));
+  function typesKey(types) {
+    return sanitizeEntityTypes(types).slice().sort().join(',');
+  }
 
-    const response = await fetchWithTimeout(ANON_TEXT_ENDPOINT, { method: 'POST', body: payload }, REQUEST_TIMEOUT_MS);
-    const rawText = await response.text();
+  function hasFreshPreview() {
+    return !!(
+      state.previewText
+      && state.previewJobId === getJobId()
+      && state.previewTypesKey === typesKey(state.anonymizationConfig.entityTypes)
+    );
+  }
 
+  function parseAnon2Json(raw) {
+    const text = String(raw || '').trim();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (_) { return null; }
+  }
+
+  function throwIfAnon2Error(json, fallback) {
+    if (!json) return;
+    if (String(json.status || '').toUpperCase() === 'KO') {
+      throw new Error(json.userErrorMessage || json.errorMessage || fallback);
+    }
+  }
+
+  async function postAnon2Form(url, fields, timeoutMs) {
+    const body = new URLSearchParams();
+    Object.keys(fields || {}).forEach((key) => {
+      if (fields[key] == null) return;
+      body.set(key, String(fields[key]));
+    });
+    const response = await fetchWithTimeout(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    }, timeoutMs || STATUS_TIMEOUT_MS);
+    const raw = await response.text();
+    const json = parseAnon2Json(raw);
     if (!response.ok) {
+      throw new Error((json && (json.userErrorMessage || json.errorMessage)) || fallbackHttpError(raw));
+    }
+    throwIfAnon2Error(json, 'Erreur Anon2.');
+    return json || {};
+  }
+
+  function fallbackHttpError(raw) {
+    const text = String(raw || '').trim();
+    return text && text.length < 300 ? text : 'Erreur de traitement.';
+  }
+
+  async function callAnon2Options(action, extraFields, creds) {
+    const endpoints = action === 'get'
+      ? [ANON2_GET_DEFAULTS, ANON2_GET_OPTIONS]
+      : [ANON2_SET_DEFAULTS, ANON2_SET_OPTIONS];
+    let lastError = null;
+    for (const url of endpoints) {
       try {
-        const json = JSON.parse(rawText);
-        throw new Error(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
-      } catch (_) {
-        throw new Error(rawText && rawText.length < 300 ? rawText : 'Erreur de traitement.');
+        return await postAnon2Form(url, {
+          username: creds.email,
+          token: creds.token,
+          edition: creds.edition,
+          ...(extraFields || {})
+        }, STATUS_TIMEOUT_MS);
+      } catch (err) {
+        lastError = err;
+        const msg = String(err && err.message || '').toLowerCase();
+        const canFallback = /not found|no handler|no route|unknown endpoint|not implemented|404/.test(msg);
+        if (!canFallback) break;
       }
     }
+    throw lastError || new Error('Options de traitement Anon2 indisponibles.');
+  }
 
-    let json = null;
-    try { json = JSON.parse(rawText); } catch (_) {}
-    if (json && json.status === 'KO') {
-      throw new Error(json.userErrorMessage || json.errorMessage || 'Erreur de traitement.');
+  async function restoreAnon2Defaults(creds, saved, attempt) {
+    const current = typeof attempt === 'number' ? attempt : 0;
+    try {
+      let types = saved && saved.anon2OptionsJson;
+      if (Array.isArray(types)) types = JSON.stringify(types);
+      if (!types) return;
+      const pseudo = saved.doPseudoAnon === true || saved.doPseudoAnon === 'true' || saved.doPseudoAnon === 1 || saved.doPseudoAnon === '1';
+      await callAnon2Options('set', {
+        anon2OptionsJson: types,
+        doPseudoAnon: pseudo ? 'true' : 'false'
+      }, creds);
+    } catch (err) {
+      if (current < 1) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        return restoreAnon2Defaults(creds, saved, current + 1);
+      }
+      logEvent('defaults_restore_failed', { message: err && err.message ? String(err.message).slice(0, 180) : 'restore_failed' });
     }
+  }
 
-    return (json && typeof json.anonymisedText === 'string') ? json.anonymisedText : rawText;
+  async function receiveAnon2Text(creds, jobId, attempt) {
+    const current = typeof attempt === 'number' ? attempt : 0;
+    const body = new URLSearchParams();
+    body.set('username', creds.email);
+    body.set('token', creds.token);
+    body.set('edition', creds.edition);
+    body.set('jobId', String(jobId));
+    body.set('fileType', 'ANON');
+    try {
+      const response = await fetchWithTimeout(ANON2_RECEIVE, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      }, REQUEST_TIMEOUT_MS);
+      const blob = await response.blob();
+      const contentType = String(response.headers.get('Content-Type') || '').toLowerCase();
+      const text = await blob.text();
+      if (!response.ok || contentType.indexOf('json') !== -1 || text.trim().startsWith('{')) {
+        const json = parseAnon2Json(text);
+        throw new Error((json && (json.userErrorMessage || json.errorMessage)) || fallbackHttpError(text));
+      }
+      return text;
+    } catch (err) {
+      const transient = err && (err.name === 'AbortError' || err.message === 'Failed to fetch' || /réseau/i.test(String(err.message || '')));
+      if (transient && current < 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return receiveAnon2Text(creds, jobId, current + 1);
+      }
+      throw err;
+    }
+  }
+
+  async function pollAnon2Ready(creds, jobId, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (abortController && abortController.signal.aborted) {
+        const err = new Error('AbortError');
+        err.name = 'AbortError';
+        throw err;
+      }
+      const json = await postAnon2Form(ANON2_STATUS, {
+        username: creds.email,
+        token: creds.token,
+        edition: creds.edition,
+        jobId: String(jobId)
+      }, STATUS_TIMEOUT_MS);
+      const mapped = mapAnonStatus(json && json.anonStatus, json);
+      if (mapped.status === 'done') return json;
+      if (mapped.status === 'error' || mapped.status === 'canceled') {
+        throw new Error(mapped.errorMessage || 'Échec du traitement Anon2.');
+      }
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+    const timeoutErr = new Error('Délai Anon2 dépassé. Réessayez.');
+    timeoutErr.name = 'AbortError';
+    throw timeoutErr;
+  }
+
+  async function requestAnon2Text(plain, entityTypes, fileName, timeoutMs) {
+    const types = sanitizeEntityTypes(entityTypes);
+    assertMinEntityTypes(types);
+    const creds = await ensureAuth();
+    let saved = null;
+    try {
+      saved = await callAnon2Options('get', null, creds);
+      await callAnon2Options('set', {
+        anon2OptionsJson: JSON.stringify(types),
+        doPseudoAnon: 'false'
+      }, creds);
+
+      const payload = new FormData();
+      payload.append('username', creds.email);
+      payload.append('token', creds.token);
+      payload.append('edition', creds.edition);
+      payload.append('removeImages', 'true');
+      payload.append('fileUpload[]', new Blob([plain], { type: 'text/plain;charset=utf-8' }), fileName || 'transcript.txt');
+
+      const response = await fetchWithTimeout(ANON2_UPLOAD, { method: 'POST', body: payload }, timeoutMs || REQUEST_TIMEOUT_MS);
+      const rawText = await response.text();
+      const json = parseAnon2Json(rawText);
+      if (!response.ok) {
+        throw new Error((json && (json.userErrorMessage || json.errorMessage)) || fallbackHttpError(rawText));
+      }
+      throwIfAnon2Error(json, 'Erreur de traitement.');
+      const jobIds = extractJobIds(json || {});
+      if (!jobIds.length) throw new Error('Aucun job Anon2 retourné.');
+      await pollAnon2Ready(creds, jobIds[0], timeoutMs || REQUEST_TIMEOUT_MS);
+      const output = await receiveAnon2Text(creds, jobIds[0]);
+      return normalizeAnon2Output(output);
+    } finally {
+      if (saved) await restoreAnon2Defaults(creds, saved);
+    }
   }
 
   function downloadBlob(content, fileName, mime) {
@@ -492,6 +663,58 @@
     return Array.from(new Set(ignored));
   }
 
+  // --- agilo-anon2 helpers ---
+  function extractJobIds(data) {
+    if (!data || typeof data !== 'object') return [];
+    if (Array.isArray(data.jobIdList)) {
+      return data.jobIdList.map(Number).filter((n) => !Number.isNaN(n));
+    }
+    if (Array.isArray(data.jobIds)) {
+      return data.jobIds.map(Number).filter((n) => !Number.isNaN(n));
+    }
+    if (Array.isArray(data.jobs)) {
+      return data.jobs.map((job) => Number(job && (job.jobId || job.id))).filter((n) => !Number.isNaN(n));
+    }
+    if (data.jobId != null) {
+      const one = Number(data.jobId);
+      return Number.isNaN(one) ? [] : [one];
+    }
+    return [];
+  }
+
+  function normalizeAnon2Output(text) {
+    return String(text || '')
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\n+$/g, '')
+      .trim();
+  }
+
+  function mapAnonStatus(anonStatus, data) {
+    const status = String(anonStatus || '').toUpperCase();
+    if (status === 'READY') return { status: 'done', anonStatus: status };
+    if (status === 'ON_ERROR') {
+      return {
+        status: 'error',
+        anonStatus: status,
+        errorMessage: (data && (data.userErrorMessage || data.errorMessage || data.errorCode)) || 'Échec du traitement.'
+      };
+    }
+    if (status === 'CANCELED' || status === 'CANCELLED') {
+      return { status: 'canceled', anonStatus: status, errorMessage: 'Traitement annulé côté serveur.' };
+    }
+    if (status === 'PENDING' || status === 'UNKNOWN' || status === '') {
+      return { status: 'pending', anonStatus: status || 'PENDING' };
+    }
+    const st = String((data && (data.status || data.state || data.jobStatus)) || '').toLowerCase();
+    if (st === 'done' || st === 'completed' || st === 'success') return { status: 'done', anonStatus: status };
+    if (st === 'error' || st === 'failed' || st === 'ko') {
+      return { status: 'error', anonStatus: status, errorMessage: (data && (data.userErrorMessage || data.errorMessage)) || 'Échec du traitement.' };
+    }
+    return { status: 'pending', anonStatus: status };
+  }
+  // --- end anon2 helpers ---
+
   // --- agilo-anon-detect helpers ---
   function normalizeAnonCompare(text) {
     return String(text || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -532,6 +755,7 @@
     state.previewHtml = '';
     state.previewSegments = null;
     state.previewJobId = '';
+    state.previewTypesKey = '';
     const ui = state.ui || createUi();
     if (!ui) return;
     if (ui.preview) ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
@@ -690,7 +914,13 @@
     ui.entityInputs.forEach((input) => {
       input.addEventListener('change', () => {
         const selected = ui.entityInputs.filter((item) => item.checked).map((item) => item.value);
-        state.anonymizationConfig.entityTypes = sanitizeEntityTypes(selected);
+        const next = sanitizeEntityTypes(selected);
+        if (next.length < MIN_ENTITY_TYPES) {
+          input.checked = true;
+          notify('Sélectionnez au moins ' + MIN_ENTITY_TYPES + ' types de données.');
+          return;
+        }
+        state.anonymizationConfig.entityTypes = next;
         persistConfig();
         invalidatePreview();
       });
@@ -741,7 +971,7 @@
     const isSummary = source === 'summary';
     ui.title.textContent = isSummary ? 'Anonymiser le compte-rendu' : 'Anonymiser le transcript';
     ui.lead.textContent = isSummary
-      ? 'Export seulement. Le compte-rendu affiché dans l’éditeur n’est pas modifié.'
+      ? 'Export seulement. Le HTML téléchargé est le texte anonymisé (sans la mise en page du compte-rendu).'
       : 'Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.';
     ui.applyBtn.hidden = isSummary;
     ui.downloadHtmlBtn.hidden = !isSummary;
@@ -770,7 +1000,7 @@
     ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
     const exportOnly = state.previewSource === 'summary';
     setModalStatus(exportOnly
-      ? 'Prévisualisez d’abord ou exportez directement en TXT ou HTML.'
+      ? 'Prévisualisez d’abord ou exportez. Le HTML est un wrap du texte anonymisé, sans la mise en page.'
       : 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.');
     ui.downloadBtn.disabled = !exportOnly;
     ui.downloadHtmlBtn.disabled = !exportOnly;
@@ -779,6 +1009,7 @@
     state.previewHtml = '';
     state.previewSegments = null;
     state.previewJobId = getJobId();
+    state.previewTypesKey = '';
     ui.overlay.classList.add('is-open');
     document.addEventListener('keydown', onModalKeydown);
     (exportOnly ? ui.downloadBtn : (ui.previewBtn || ui.closeBtn))?.focus?.();
@@ -825,7 +1056,8 @@
 
   async function anonymiseContent() {
     const source = state.previewSource === 'summary' ? 'summary' : 'transcript';
-    const entityTypes = sanitizeEntityTypes(state.anonymizationConfig.entityTypes);
+    const entityTypes = assertMinEntityTypes(state.anonymizationConfig.entityTypes);
+    const editorJobId = getJobId() || 'job';
     let inputText = '';
     let inputHtml = '';
     let outputText = '';
@@ -838,14 +1070,9 @@
       if (!inputText && !String(inputHtml || '').trim()) {
         throw new Error('Aucun compte-rendu à anonymiser.');
       }
-      const asHtml = !!(inputHtml && /<[a-z][\s\S]*>/i.test(inputHtml));
-      const payload = asHtml ? inputHtml : inputText;
-      outputText = await requestAnonymisedText(payload, entityTypes, {
-        forceTextFormat: !asHtml,
-        asHtml
-      });
-      const plain = htmlToPlainText(outputText) || outputText;
-      if (!String(plain || '').trim()) {
+      const payload = inputText || htmlToPlainText(inputHtml);
+      outputText = await requestAnon2Text(payload, entityTypes, 'cr-' + editorJobId + '.txt', REQUEST_TIMEOUT_CR_MS);
+      if (!String(outputText || '').trim()) {
         throw new Error('Aucun compte-rendu à anonymiser.');
       }
       return {
@@ -853,8 +1080,8 @@
         inputText,
         inputHtml,
         outputText,
-        previewText: plain,
-        previewHtml: asHtml ? outputText : wrapAnonHtmlDocument('<pre>' + String(outputText || '').replace(/</g, '&lt;') + '</pre>'),
+        previewText: outputText,
+        previewHtml: wrapAnonHtmlDocument('<pre>' + String(outputText || '').replace(/</g, '&lt;') + '</pre>'),
         previewSegments: null,
         ignored: detectIgnoredEntityTypes(inputText || inputHtml, outputText, entityTypes)
       };
@@ -864,7 +1091,7 @@
     if (!inputText || !inputText.trim()) {
       throw new Error('Aucun transcript à anonymiser.');
     }
-    outputText = await requestAnonymisedText(inputText, entityTypes, { forceTextFormat: true, asHtml: false });
+    outputText = await requestAnon2Text(inputText, entityTypes, 'transcript-' + editorJobId + '.txt', REQUEST_TIMEOUT_MS);
     const originalSegments = getTranscriptSegments();
     const mapped = mapPreviewToOriginalSegments(outputText, originalSegments);
     return {
@@ -885,6 +1112,7 @@
     state.previewHtml = result.previewHtml;
     state.previewSegments = result.previewSegments;
     state.previewJobId = getJobId();
+    state.previewTypesKey = typesKey(state.anonymizationConfig.entityTypes);
     const ui = createUi();
     if (!ui) return;
     if (result.source === 'summary') {
@@ -897,10 +1125,10 @@
     ui.applyBtn.disabled = result.source === 'summary' || !state.previewSegments;
 
     let status = result.source === 'summary'
-      ? 'Aperçu prêt (extrait). Export TXT ou HTML sans modifier le compte-rendu de l’éditeur.'
+      ? 'Aperçu prêt (extrait). TXT = texte Anon2. HTML = wrap sans la mise en page du compte-rendu.'
       : (state.previewSegments
         ? 'Prévisualisation prête. Vous pouvez télécharger ou appliquer le brouillon au transcript.'
-        : 'Prévisualisation prête, mais la structure du transcript ne peut pas être reconstruite proprement. Téléchargement uniquement.');
+        : 'Structure changée, téléchargez le TXT. Appliquer est indisponible.');
     if (result.ignored.length) {
       status += ' L’API n’a pas masqué : ' + result.ignored.join(', ') + '.';
       if (result.ignored.some((item) => item.includes('locuteur'))) {
@@ -922,7 +1150,7 @@
       return;
     }
     anonInFlight = true;
-    const busyCrMessage = 'Anonymisation en cours… (10-30 s pour un CR)';
+    const busyCrMessage = 'Traitement Anon2… (souvent 5–30 s)';
     try {
       if (exportOnly && action === 'preview') {
         setModalBusy(true, busyCrMessage);
@@ -933,7 +1161,7 @@
       if (exportOnly && (action === 'download' || action === 'download-html')) {
         setModalBusy(true, busyCrMessage);
         let result;
-        if (state.previewText && state.previewJobId === getJobId() && state.previewSource === 'summary') {
+        if (hasFreshPreview() && state.previewSource === 'summary') {
           result = {
             previewText: state.previewText,
             previewHtml: state.previewHtml,
@@ -944,6 +1172,7 @@
           state.previewText = result.previewText;
           state.previewHtml = result.previewHtml;
           state.previewJobId = getJobId();
+          state.previewTypesKey = typesKey(state.anonymizationConfig.entityTypes);
         }
         if (!result.previewText) throw new Error('Aucun compte-rendu à anonymiser.');
         if (action === 'download-html' && !result.previewHtml) {
@@ -962,8 +1191,8 @@
         return;
       }
 
-      if (action === 'preview' || !state.previewText || state.previewJobId !== getJobId()) {
-        setModalBusy(true, 'Anonymisation en cours…');
+      if (action === 'preview' || !hasFreshPreview()) {
+        setModalBusy(true, 'Traitement Anon2… (souvent 5–30 s)');
         await buildPreview();
       }
 
@@ -993,7 +1222,7 @@
       }
     } catch (err) {
       if (err && (err.name === 'AbortError' || err.message === 'AbortError')) {
-        notify('Anonymisation annulée ou délai dépassé (60 s). Réessayez.');
+        notify('Anonymisation annulée ou délai Anon2 dépassé. Réessayez.');
       } else if (err && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
         notify('Erreur réseau. Vérifiez votre connexion et réessayez.');
       } else {

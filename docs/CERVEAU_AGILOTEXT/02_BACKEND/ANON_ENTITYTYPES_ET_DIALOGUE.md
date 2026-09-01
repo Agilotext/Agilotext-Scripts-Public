@@ -1,12 +1,14 @@
-# anonText : entityTypes et format dialogue
+# Anon2 éditeur + labels dialogue
 
 Date : 2026-09-01. Pour Nico / backend.
 
-## Constat
+## Front (fait)
 
-Le front éditeur (`agilo-editor-anonymiser-transcript-v3.js`) envoie `entityTypes` en JSON dans le FormData `POST /api/v1/anonText`.
+L’éditeur staging `3.3.0` n’appelle plus `/anonText`. Il passe par Anon2 document (`anon2AsyncOfficeText` + poll + `receiveAnon2Text`), comme le MCP / Classic. Les types PER/ORG/TEL/EML sont appliqués via `setAnon2UserDefaults` (save/restore).
 
-`ApiAnonText.java` ne lit **pas** ce champ. `AnonTextProcessor` dépose le fichier et attend le worker Python sans filtrage par type.
+## Reste backend
+
+Les labels `Speaker:` (`Florian de Bauerwebpro:`, `Stéphane:`) restent souvent en clair même sur Anon2. Probe job `1000039453` (bauerwebpro, `ent`).
 
 ## Impact produit
 
