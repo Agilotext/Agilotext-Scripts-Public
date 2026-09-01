@@ -528,6 +528,11 @@
         // (un MutationObserver y réinjecte le loader si l'orchestrateur écrase
         //  summaryEditor pendant la régénération).
         window.__agiloSummaryRegenInProgress = jobId;
+        if (window.__agiloSummaryRegenHelpers && typeof window.__agiloSummaryRegenHelpers.emitSummaryPending === 'function') {
+          window.__agiloSummaryRegenHelpers.emitSummaryPending(jobId);
+        } else {
+          window.dispatchEvent(new CustomEvent('agilo:summary-pending', { detail: { jobId: String(jobId || '') } }));
+        }
 
         const ui = showSummaryRegenLoader(modelName);
         const H = window.__agiloSummaryRegenHelpers;
@@ -560,6 +565,8 @@
               else hideSummaryRegenLoader();
               if (outcome === 'cancelled') {
                 isGenerating = false;
+                if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
+                else window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
                 return;
               }
               if (outcome === 'ready') {
@@ -570,6 +577,8 @@
                 }
                 if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
                 isGenerating = false;
+                if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
+                else window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
                 try {
                   isPopulated = false;
                   cachedModels = null;
@@ -598,6 +607,8 @@
                 window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
               }
               isGenerating = false;
+              if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
+              else window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
               try {
                 isPopulated = false;
                 cachedModels = null;
@@ -620,6 +631,8 @@
                   window.toast('Impossible de vérifier le statut. Actualisez la page.');
                 }
               }
+              if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
+              else window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
             });
         } else {
           ui.statusEl.textContent =

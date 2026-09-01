@@ -54,7 +54,8 @@
     'Code-lottie.js',
     
     // 5. Scripts additionnels
-    'relance-compte-rendu.js'
+    'relance-compte-rendu.js',
+    'agilo-cr-history.js'
   ];
 
   // Fonction pour charger un script

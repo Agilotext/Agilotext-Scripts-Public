@@ -11,6 +11,13 @@
   const log = (...args) => { if (DEBUG) console.log('[AGILO:RELANCE]', ...args); };
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
+  function emitSummaryPending(jobId) {
+    window.dispatchEvent(new CustomEvent('agilo:summary-pending', { detail: { jobId: String(jobId || '') } }));
+  }
+  function emitSummaryReady(jobId) {
+    window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
+  }
+
   /** redoSummary KO : même logique que le reste du site — userErrorMessage puis détails Java. */
   function formatRedoSummaryApiError(result) {
     const synth = {
@@ -1290,6 +1297,7 @@
         // le loader visible même si l'orchestrateur écrase summaryEditor (clearAll,
         // beforeload, polling pendant un fetch). Désactivé dès qu'on rend la main.
         window.__agiloSummaryRegenInProgress = jobId;
+        emitSummaryPending(jobId);
         showSummaryLoading();
         startSummaryLoaderPersistence();
         updateButtonVisibility();
@@ -1320,6 +1328,7 @@
                 hideSummaryLoading();
                 isGenerating = false;
                 updateButtonVisibility();
+                emitSummaryReady(jobId);
                 return;
               }
               if (outcome === 'ready') {
@@ -1331,6 +1340,7 @@
                 showSuccessMessage('Compte-rendu prêt');
                 isGenerating = false;
                 updateButtonVisibility();
+                emitSummaryReady(jobId);
                 return;
               }
               // outcome === 'timeout' : très rare (≈ 25 min). Dernière chance via
@@ -1355,6 +1365,7 @@
               }
               isGenerating = false;
               updateButtonVisibility();
+              emitSummaryReady(jobId);
             })
             .catch((e) => {
               logError('waitForSummaryTerminalState', e);
@@ -1366,6 +1377,7 @@
                 'impossible de vérifier le statut. Actualisez la page ou contactez le support (job ' + jobId + ').'
               );
               updateButtonVisibility();
+              emitSummaryReady(jobId);
             });
         } else {
           isGenerating = false;
@@ -1794,7 +1806,9 @@
     startSummaryLoaderPersistence,
     stopSummaryLoaderPersistence,
     isPhantomIncidentPayload,
-    fetchTranscriptStatusFull
+    fetchTranscriptStatusFull,
+    emitSummaryPending,
+    emitSummaryReady
   };
 
   /**
