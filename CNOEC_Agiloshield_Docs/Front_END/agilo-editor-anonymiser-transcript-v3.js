@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  window.__agiloAnonVersion = '3.2.0';
+  window.__agiloAnonVersion = '3.2.1';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -497,6 +497,8 @@
       .agilo-anon-title{margin:0 0 8px;font-size:1.35rem;font-weight:700}
       .agilo-anon-text{margin:0;color:#525252;line-height:1.45}
       .agilo-anon-grid{display:grid;gap:16px}
+      .agilo-anon-grid.is-export-only{grid-template-columns:1fr}
+      .agilo-anon-preview-section[hidden]{display:none!important}
       .agilo-anon-card{border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:16px;background:#fafafa}
       .agilo-anon-card h4{margin:0 0 12px;font-size:1rem}
       .agilo-anon-types{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:4px 12px}
@@ -536,7 +538,7 @@
           <p class="agilo-anon-text" id="agiloAnonLead">Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.</p>
         </div>
         <div class="agilo-anon-modal__body">
-          <div class="agilo-anon-grid">
+          <div class="agilo-anon-grid" id="agiloAnonGrid">
             <section class="agilo-anon-card">
               <h4>Types de données</h4>
               <div class="agilo-anon-types">
@@ -549,12 +551,13 @@
               </div>
               <button type="button" class="agilo-anon-btn agilo-anon-btn--ghost" data-action="mask-all">Tout masquer</button>
             </section>
-            <section class="agilo-anon-card">
+            <section class="agilo-anon-card agilo-anon-preview-section" id="agiloAnonPreviewSection">
               <h4>Prévisualisation</h4>
               <div class="agilo-anon-preview" id="agiloAnonPreview" tabindex="0">Aucune prévisualisation pour le moment.</div>
               <div class="agilo-anon-status" id="agiloAnonStatus">Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.</div>
             </section>
           </div>
+          <div class="agilo-anon-status" id="agiloAnonExportStatus" hidden></div>
         </div>
         <div class="agilo-anon-actions">
           <button type="button" class="agilo-anon-btn agilo-anon-btn--primary" data-action="preview">Prévisualiser</button>
@@ -591,8 +594,11 @@
       banner,
       title: overlay.querySelector('#agilo-anon-title'),
       lead: overlay.querySelector('#agiloAnonLead'),
+      grid: overlay.querySelector('#agiloAnonGrid'),
+      previewSection: overlay.querySelector('#agiloAnonPreviewSection'),
       preview: overlay.querySelector('#agiloAnonPreview'),
       status: overlay.querySelector('#agiloAnonStatus'),
+      exportStatus: overlay.querySelector('#agiloAnonExportStatus'),
       entityInputs: Array.from(overlay.querySelectorAll('.agilo-anon-check input')),
       previewBtn: overlay.querySelector('[data-action="preview"]'),
       downloadBtn: overlay.querySelector('[data-action="download"]'),
@@ -646,6 +652,13 @@
     });
   }
 
+  function setModalStatus(text) {
+    const ui = createUi();
+    if (!ui) return;
+    if (ui.status) ui.status.textContent = text;
+    if (ui.exportStatus) ui.exportStatus.textContent = text;
+  }
+
   function syncModalMode(source) {
     const ui = createUi();
     if (!ui) return;
@@ -656,6 +669,10 @@
       : 'Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.';
     ui.applyBtn.hidden = isSummary;
     ui.downloadHtmlBtn.hidden = !isSummary;
+    ui.previewBtn.hidden = isSummary;
+    if (ui.previewSection) ui.previewSection.hidden = isSummary;
+    if (ui.grid) ui.grid.classList.toggle('is-export-only', isSummary);
+    if (ui.exportStatus) ui.exportStatus.hidden = !isSummary;
   }
 
   function onModalKeydown(event) {
@@ -675,9 +692,12 @@
     syncConfigToUi();
     syncModalMode(state.previewSource);
     ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
-    ui.status.textContent = 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.';
-    ui.downloadBtn.disabled = true;
-    ui.downloadHtmlBtn.disabled = true;
+    const exportOnly = state.previewSource === 'summary';
+    setModalStatus(exportOnly
+      ? 'Le compte-rendu de l’éditeur n’est pas modifié. Choisissez TXT ou HTML.'
+      : 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.');
+    ui.downloadBtn.disabled = !exportOnly;
+    ui.downloadHtmlBtn.disabled = !exportOnly;
     ui.applyBtn.disabled = true;
     state.previewText = '';
     state.previewHtml = '';
@@ -685,7 +705,7 @@
     state.previewJobId = getJobId();
     ui.overlay.classList.add('is-open');
     document.addEventListener('keydown', onModalKeydown);
-    (ui.closeBtn || ui.previewBtn)?.focus?.();
+    (exportOnly ? ui.downloadBtn : (ui.previewBtn || ui.closeBtn))?.focus?.();
     logEvent('modal_open', { jobId: state.previewJobId, source: state.previewSource });
   }
 
@@ -703,14 +723,18 @@
     const exportOnly = state.previewSource === 'summary';
     [ui.previewBtn, ui.downloadBtn, ui.downloadHtmlBtn, ui.applyBtn, ui.closeBtn].forEach((button) => {
       if (!button) return;
+      if (exportOnly && (button === ui.downloadBtn || button === ui.downloadHtmlBtn || button === ui.closeBtn)) {
+        button.disabled = !!isBusy;
+        return;
+      }
       const needsPreview = button === ui.downloadBtn || button === ui.downloadHtmlBtn || button === ui.applyBtn;
       button.disabled = !!isBusy || (needsPreview ? !state.previewText : false);
     });
     if (exportOnly) ui.applyBtn.disabled = true;
-    if (text) ui.status.textContent = text;
+    if (text) setModalStatus(text);
   }
 
-  async function buildPreview() {
+  async function anonymiseContent() {
     const source = state.previewSource === 'summary' ? 'summary' : 'transcript';
     const entityTypes = sanitizeEntityTypes(state.anonymizationConfig.entityTypes);
     let inputText = '';
@@ -731,73 +755,113 @@
         forceTextFormat: !asHtml,
         asHtml
       });
-      state.previewText = htmlToPlainText(outputText) || outputText;
-      state.previewHtml = asHtml ? outputText : wrapAnonHtmlDocument('<pre>' + String(outputText || '').replace(/</g, '&lt;') + '</pre>');
-      state.previewSegments = null;
-    } else {
-      inputText = getTranscriptContent();
-      if (!inputText || !inputText.trim()) {
-        throw new Error('Aucun transcript à anonymiser.');
+      const plain = htmlToPlainText(outputText) || outputText;
+      if (!String(plain || '').trim()) {
+        throw new Error('Aucun compte-rendu à anonymiser.');
       }
-      outputText = await requestAnonymisedText(inputText, entityTypes, { forceTextFormat: true, asHtml: false });
-      const originalSegments = getTranscriptSegments();
-      const mapped = mapPreviewToOriginalSegments(outputText, originalSegments);
-      state.previewText = outputText;
-      state.previewHtml = '';
-      state.previewSegments = mapped;
+      return {
+        source,
+        inputText,
+        inputHtml,
+        outputText,
+        previewText: plain,
+        previewHtml: asHtml ? outputText : wrapAnonHtmlDocument('<pre>' + String(outputText || '').replace(/</g, '&lt;') + '</pre>'),
+        previewSegments: null,
+        ignored: detectIgnoredEntityTypes(inputText || inputHtml, outputText, entityTypes)
+      };
     }
 
+    inputText = getTranscriptContent();
+    if (!inputText || !inputText.trim()) {
+      throw new Error('Aucun transcript à anonymiser.');
+    }
+    outputText = await requestAnonymisedText(inputText, entityTypes, { forceTextFormat: true, asHtml: false });
+    const originalSegments = getTranscriptSegments();
+    const mapped = mapPreviewToOriginalSegments(outputText, originalSegments);
+    return {
+      source,
+      inputText,
+      inputHtml,
+      outputText,
+      previewText: outputText,
+      previewHtml: '',
+      previewSegments: mapped,
+      ignored: detectIgnoredEntityTypes(inputText, outputText, entityTypes)
+    };
+  }
+
+  async function buildPreview() {
+    const result = await anonymiseContent();
+    state.previewText = result.previewText;
+    state.previewHtml = result.previewHtml;
+    state.previewSegments = result.previewSegments;
     state.previewJobId = getJobId();
-    const ignored = detectIgnoredEntityTypes(inputText || inputHtml, outputText, entityTypes);
     const ui = createUi();
     if (!ui) return;
-    ui.preview.textContent = state.previewText || 'Aucune donnée renvoyée.';
+    if (result.source === 'transcript') {
+      ui.preview.textContent = state.previewText || 'Aucune donnée renvoyée.';
+    }
     ui.downloadBtn.disabled = !state.previewText;
-    ui.downloadHtmlBtn.disabled = source !== 'summary' || !state.previewHtml;
-    ui.applyBtn.disabled = source === 'summary' || !state.previewSegments;
+    ui.downloadHtmlBtn.disabled = result.source !== 'summary' || !state.previewHtml;
+    ui.applyBtn.disabled = result.source === 'summary' || !state.previewSegments;
 
-    let status = source === 'summary'
-      ? 'Prévisualisation prête. Export TXT ou HTML uniquement.'
+    let status = result.source === 'summary'
+      ? 'Export prêt. Le compte-rendu de l’éditeur n’est pas modifié.'
       : (state.previewSegments
         ? 'Prévisualisation prête. Vous pouvez télécharger ou appliquer le brouillon au transcript.'
         : 'Prévisualisation prête, mais la structure du transcript ne peut pas être reconstruite proprement. Téléchargement uniquement.');
-    if (ignored.length) {
-      status += ' L’API n’a pas masqué : ' + ignored.join(', ') + '.';
+    if (result.ignored.length) {
+      status += ' L’API n’a pas masqué : ' + result.ignored.join(', ') + '.';
     }
-    ui.status.textContent = status;
+    setModalStatus(status);
 
-    if (source === 'transcript' && !state.previewSegments) {
-      logEvent('segment_rebuild_failed', { jobId: state.previewJobId, previewLength: (outputText || '').length });
+    if (result.source === 'transcript' && !state.previewSegments) {
+      logEvent('segment_rebuild_failed', { jobId: state.previewJobId, previewLength: (result.outputText || '').length });
     }
   }
 
   async function runModalAction(action) {
     const ui = createUi();
+    const exportOnly = state.previewSource === 'summary';
     try {
+      if (exportOnly && action === 'preview') return;
+
+      if (exportOnly && (action === 'download' || action === 'download-html')) {
+        setModalBusy(true, 'Anonymisation en cours…');
+        const result = await anonymiseContent();
+        if (!result.previewText) throw new Error('Aucun compte-rendu à anonymiser.');
+        if (action === 'download-html' && !result.previewHtml) {
+          throw new Error('Export HTML disponible uniquement pour le compte-rendu.');
+        }
+        if (action === 'download') {
+          downloadTextFile(result.previewText, 'Compte_rendu_anonymise.txt');
+          notify('Fichier téléchargé : Compte_rendu_anonymise.txt');
+          logEvent('download', { jobId: getJobId(), source: 'summary', format: 'txt' });
+        } else {
+          downloadBlob(wrapAnonHtmlDocument(result.previewHtml), 'Compte_rendu_anonymise.html', 'text/html;charset=utf-8');
+          notify('Fichier téléchargé : Compte_rendu_anonymise.html');
+          logEvent('download', { jobId: getJobId(), source: 'summary', format: 'html' });
+        }
+        closeModal();
+        return;
+      }
+
       if (action === 'preview' || !state.previewText || state.previewJobId !== getJobId()) {
         setModalBusy(true, 'Anonymisation en cours…');
         await buildPreview();
       }
 
       if (action === 'download') {
-        const isSummary = state.previewSource === 'summary';
-        const name = isSummary ? 'Compte_rendu_anonymise.txt' : 'Transcript_anonymise.txt';
+        const name = 'Transcript_anonymise.txt';
         downloadTextFile(state.previewText, name);
         notify('Fichier téléchargé : ' + name);
-        logEvent('download', { jobId: state.previewJobId, source: state.previewSource, format: 'txt' });
+        logEvent('download', { jobId: state.previewJobId, source: 'transcript', format: 'txt' });
         closeModal();
         return;
       }
 
       if (action === 'download-html') {
-        if (state.previewSource !== 'summary' || !state.previewHtml) {
-          throw new Error('Export HTML disponible uniquement pour le compte-rendu.');
-        }
-        downloadBlob(wrapAnonHtmlDocument(state.previewHtml), 'Compte_rendu_anonymise.html', 'text/html;charset=utf-8');
-        notify('Fichier téléchargé : Compte_rendu_anonymise.html');
-        logEvent('download', { jobId: state.previewJobId, source: 'summary', format: 'html' });
-        closeModal();
-        return;
+        throw new Error('Export HTML disponible uniquement pour le compte-rendu.');
       }
 
       if (action === 'apply') {
@@ -822,11 +886,17 @@
       logEvent('error', { step: action, message: err?.message || String(err) });
     } finally {
       abortController = null;
-      ui.previewBtn.disabled = false;
+      ui.previewBtn.disabled = exportOnly ? true : false;
       ui.closeBtn.disabled = false;
-      ui.downloadBtn.disabled = !state.previewText;
-      ui.downloadHtmlBtn.disabled = state.previewSource !== 'summary' || !state.previewHtml;
-      ui.applyBtn.disabled = state.previewSource === 'summary' || !state.previewSegments;
+      if (exportOnly) {
+        ui.downloadBtn.disabled = false;
+        ui.downloadHtmlBtn.disabled = false;
+        ui.applyBtn.disabled = true;
+      } else {
+        ui.downloadBtn.disabled = !state.previewText;
+        ui.downloadHtmlBtn.disabled = true;
+        ui.applyBtn.disabled = !state.previewSegments;
+      }
     }
   }
 

@@ -15,7 +15,8 @@ new Function(
   `${src.slice(start, end)}\n` +
   'this.normalizeModelMarkup = normalizeModelMarkup;\n' +
   'this.sanitizeAllowlistedHtml = sanitizeAllowlistedHtml;\n' +
-  'this.looksLikeHtmlTable = looksLikeHtmlTable;\n'
+  'this.looksLikeHtmlTable = looksLikeHtmlTable;\n' +
+  'this.isThinkingMarkup = isThinkingMarkup;\n'
 ).call(helpers);
 
 function assert(cond, msg) {
@@ -46,4 +47,15 @@ const mdTableLine = '| A | B |\n| --- | --- |\n| 1 | 2 |';
 assert(helpers.looksLikeHtmlTable(mdTableLine) === false, 'GFM markdown table n est pas du HTML');
 assert(helpers.normalizeModelMarkup(mdTableLine).includes('| A | B |'), 'GFM table intacte après normalize');
 
-console.log('Résultat : 8 ok, 0 échec(s)');
+const thinkingV05 = '<div class="thinking-indicator mistral-thinking"><div class="thinking-dots"><div class="thinking-dot"></div></div><span>Assistant réfléchit</span></div>';
+const thinkingV06 = '<div class="thinking-indicator mistral-thinking"><div class="mistral-thinking__avatar">x</div><span class="mistral-thinking__label">Assistant réfléchit…</span></div>';
+assert(helpers.isThinkingMarkup(thinkingV05) === true, 'thinking V05 détecté');
+assert(helpers.isThinkingMarkup(thinkingV06) === true, 'thinking V06 détecté');
+assert(helpers.isThinkingMarkup('Voici le PV de la réunion') === false, 'réponse modèle pas thinking');
+const keptV05 = helpers.isThinkingMarkup(thinkingV05) ? thinkingV05 : helpers.normalizeModelMarkup(thinkingV05);
+const keptV06 = helpers.isThinkingMarkup(thinkingV06) ? thinkingV06 : helpers.normalizeModelMarkup(thinkingV06);
+assert(keptV05.includes('thinking-indicator') && keptV05.includes('thinking-dot'), 'thinking V05 non strippé');
+assert(keptV06.includes('mistral-thinking') && keptV06.includes('mistral-thinking__avatar'), 'thinking V06 non strippé');
+assert(!helpers.normalizeModelMarkup(thinkingV05).includes('<div'), 'normalize seul strip encore le thinking (bypass obligatoire)');
+
+console.log('Résultat : 14 ok, 0 échec(s)');

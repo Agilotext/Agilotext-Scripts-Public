@@ -3,7 +3,7 @@
 //      PJ, dictée, LinkedIn, email block, contexte Memberstack, etc.
 // V06 (logo Mistral) : Code-chat_V06.js via chat-loader-v06.js
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow (prod : chat-loader.js)
-window.__agiloChatVersion = 'V05.1';
+window.__agiloChatVersion = 'V05.2';
 
 /* Toujours exposer AgiloChat dès l’arrivée du script : si l’IIFE du DOMContentLoaded
  * lève avant la fin, l’utilisateur a quand même getJobId (URL/LS) pour le debug. */
@@ -58,6 +58,31 @@ function agiloChatInitFromDom() {
   const RECEIVE_RETRY_DELAY = 900;
   const AGILO_EMAIL_COMMENT_SPLIT = /\n\s*---\s*\n|\n+\s*Commentaire interne\s*(?:\(non envoyé\))?\s*:/i;
   const LINKEDIN_THINKING_MSG = 'Je travaille sur la rédaction du post LinkedIn. Je vous le dépose dans un instant dans l\'onglet Conversation.';
+  const MISTRAL_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" focusable="false"><path fill="currentColor" d="M13.3715 16.358H16.1144V13.6486H13.3712L13.3715 16.358H10.6283V13.6486H7.88568V16.358H10.6283V19.0676H2.3999V16.358H5.14279V5.52002H7.88568V8.22963H10.6286V10.939H13.3715V8.22963H16.1144V5.52002H18.8572V16.358H21.5999V19.0676H13.3715V16.358Z"></path></svg>';
+
+  function buildThinkingIndicatorHtml(label) {
+    const raw = String(label || 'Assistant réfléchit').trim();
+    const safe = raw.replace(/</g, '&lt;');
+    const suffix = /\.{2,}$|…$/.test(raw) ? '' : '…';
+    return `<div class="thinking-indicator mistral-thinking" role="status" aria-live="polite">
+      <div class="mistral-thinking__visual">
+        <div class="mistral-thinking__avatar">${MISTRAL_LOGO_SVG}</div>
+        <div class="mistral-thinking__ring" aria-hidden="true"></div>
+      </div>
+      <span class="mistral-thinking__label">${safe}${suffix}</span>
+    </div>`;
+  }
+
+  function pushAssistantThinkingMsg(jobId, runId, label) {
+    const hint = label && String(label).trim() ? String(label).trim() : 'Assistant réfléchit';
+    pushMsg(jobId, {
+      role: 'assistant',
+      id: runId,
+      text: buildThinkingIndicatorHtml(hint),
+      render: 'html',
+      t: new Date().toISOString()
+    });
+  }
   const ATTACHMENTS_ENABLED = window.__agiloAttachmentsEnabled === true;
   const MAX_ATTACH_FILES = 3;
   const MAX_ATTACH_MB = 10;
@@ -122,6 +147,11 @@ function agiloChatInitFromDom() {
 
   function looksLikeHtmlTable(text) {
     return HTML_TABLE_RE.test(String(text || ''));
+  }
+
+  function isThinkingMarkup(text) {
+    const s = String(text || '');
+    return s.includes('thinking-indicator') || s.includes('mistral-thinking') || /Assistant réfléchit/i.test(s);
   }
 
   /** HTML Mistral → markdown sûr. Pas d’innerHTML brut. */
@@ -989,7 +1019,7 @@ function agiloChatInitFromDom() {
     bubbleDiv.className = 'msg-bubble';
 
     if (m.role === 'assistant') {
-      const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
+      const isThinking = isThinkingMarkup(m.text);
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
       /* Détection e-mail élargie :
          1. "Objet :" ou "Sujet :" dans les 3000 premiers caractères (au lieu de 600)
@@ -1003,8 +1033,12 @@ function agiloChatInitFromDom() {
       const hasSignature = /(^|\n)\s*(cordialement|bien\s+à\s+vous|sinc[eè]res?\s+salutations|best\s+regards)\b/i.test(rawStripped);
       const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
       const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent)) || (emailByIntent && (hasGreeting || hasSignature));
-      const displayText = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text) : m.text);
-      const displayTextRich = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text);
+      const displayText = isThinking
+        ? m.text
+        : normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text) : m.text);
+      const displayTextRich = isThinking
+        ? m.text
+        : normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text);
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
@@ -1150,7 +1184,7 @@ function agiloChatInitFromDom() {
           bubbleDiv.style.whiteSpace = 'pre-wrap';
           bubbleDiv.style.lineHeight = '1.6';
         } else if (renderMode === 'html' && isThinking) {
-          bubbleDiv.innerHTML = displayText;
+          bubbleDiv.innerHTML = m.text;
         } else {
           bubbleDiv.innerHTML = mdToHtml(m.text || displayText);
           bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
@@ -1838,17 +1872,7 @@ function agiloChatInitFromDom() {
   // messageHint: optional string (e.g. for LinkedIn: "Je travaille sur la rédaction du post LinkedIn...")
   function updateThinking(jobId, runId, cycle, messageHint) {
     const label = messageHint && messageHint.trim() ? messageHint.trim() : 'Assistant réfléchit';
-    const thinkingHtml = `
-    <div class="thinking-indicator">
-      <span>${String(label).replace(/</g, '&lt;')}</span>
-      <div class="thinking-dots">
-        <div class="thinking-dot"></div>
-        <div class="thinking-dot"></div>
-        <div class="thinking-dot"></div>
-      </div>
-    </div>
-  `;
-    replaceMsgById(jobId, runId, thinkingHtml, { render: 'html' });
+    replaceMsgById(jobId, runId, buildThinkingIndicatorHtml(label), { render: 'html' });
   }
 
 
@@ -2633,8 +2657,8 @@ function agiloChatInitFromDom() {
     const userDisplay = q + (attachNames.length ? `\n\n(📎 ${attachNames.join(', ')})` : '');
     pushMsg(jobId, { role: 'user', text: userDisplay, t: new Date().toISOString(), id: mkRunId() });
     const runId = mkRunId();
-    const initialPlaceholder = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
-    pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
+    const thinkingLabel = intentResolved === 'linkedin' ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit';
+    pushAssistantThinkingMsg(jobId, runId, thinkingLabel);
     {
       const _cp = activeChatPrompt();
       if (_cp) {
@@ -2696,8 +2720,8 @@ function agiloChatInitFromDom() {
     const lbl = String(label || '').toLowerCase();
     const isLi = lbl.includes('linkedin');
     const isMail = (lbl.includes('email') || lbl.includes('mail') || lbl.includes('courriel'));
-    const initialPlaceholder = isLi ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit...';
-    pushMsg(jobId, { role: 'assistant', id: runId, text: initialPlaceholder, t: new Date().toISOString() });
+    const thinkingLabelHidden = isLi ? LINKEDIN_THINKING_MSG : 'Assistant réfléchit';
+    pushAssistantThinkingMsg(jobId, runId, thinkingLabelHidden);
 
     try {
       let prompt = String(hiddenPrompt || '').trim();

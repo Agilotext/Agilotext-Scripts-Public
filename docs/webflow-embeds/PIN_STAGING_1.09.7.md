@@ -1,12 +1,14 @@
-# Pin staging 1.09.7 / anon 3.2 / chat V05.1
+# Pin staging 1.09.7 / anon 3.2.1 / chat V05.2
 
 Après merge de `fix/demo-grand-est-1.09.7` dans `origin/1.09`. **Pas de publish www sans OK Florian.**
 
 ## Embeds Designer (éditeur Free / Pro / Business)
 
-Les pins confidence + chat + anon sont dans les embeds canvas (`code-main-editor`, `code-chat`, embed après `relance-compte-rendu`), pas dans le custom code page (head/footer).
+Les pins confidence + chat + anon sont dans les embeds canvas (`code-main-editor`, `code-chat_CSS&JS`, `Code-Anon_transcript&CR`), pas dans le custom code page (head/footer).
 
-Remplacer `?v=1.09.6` → `?v=1.09.7`, `?v=3.1.0` → `?v=3.2.0`, et bust chat `?v=v05.1`.
+Chat live = `chat-loader.js` → V05 (pas V06). Anon CR = export only (`?v=3.2.1`). Confidence inchangé (`?v=1.09.7`).
+
+Embed page Business `code-cr-history-maquette` : vidé le 01/09/2026. Free / Premium n’avaient pas cet embed.
 
 Pages :
 
@@ -37,4 +39,4 @@ https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pa
 
 ## Rollback
 
-Retirer les `?v=` / revenir à `1.09.6` et `3.1.0`.
+Staging précédent : `@56c20f30` (`?v=1.09.7` / `v05.1` / `3.2.0`). www : ne pas republier.

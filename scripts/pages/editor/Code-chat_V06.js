@@ -3,7 +3,7 @@
 //      Copie de V05 — tester via chat-loader-v06.js sur branche 1.09.
 // V05: scroll, email block, LinkedIn, PJ, dictée, etc. (prod actuelle : chat-loader.js + Code-chat_V05.js)
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow (variante V06)
-window.__agiloChatVersion = 'V06-mistral-thinking';
+window.__agiloChatVersion = 'V06.1';
 
 /* Toujours exposer AgiloChat dès l’arrivée du script : si l’IIFE du DOMContentLoaded
  * lève avant la fin, l’utilisateur a quand même getJobId (URL/LS) pour le debug. */
@@ -147,6 +147,11 @@ function agiloChatInitFromDom() {
 
   function looksLikeHtmlTable(text) {
     return HTML_TABLE_RE.test(String(text || ''));
+  }
+
+  function isThinkingMarkup(text) {
+    const s = String(text || '');
+    return s.includes('thinking-indicator') || s.includes('mistral-thinking') || /Assistant réfléchit/i.test(s);
   }
 
   /** HTML Mistral → markdown sûr. Pas d’innerHTML brut. */
@@ -1014,7 +1019,7 @@ function agiloChatInitFromDom() {
     bubbleDiv.className = 'msg-bubble';
 
     if (m.role === 'assistant') {
-      const isThinking = m.text.includes('thinking-indicator') || m.text.includes('Assistant réfléchit');
+      const isThinking = isThinkingMarkup(m.text);
       const raw = String(m.text || '').replace(/\uFEFF/g, '').replace(/\r\n/g, '\n').trim();
       /* Détection e-mail élargie :
          1. "Objet :" ou "Sujet :" dans les 3000 premiers caractères (au lieu de 600)
@@ -1028,8 +1033,12 @@ function agiloChatInitFromDom() {
       const hasSignature = /(^|\n)\s*(cordialement|bien\s+à\s+vous|sinc[eè]res?\s+salutations|best\s+regards)\b/i.test(rawStripped);
       const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
       const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent)) || (emailByIntent && (hasGreeting || hasSignature));
-      const displayText = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text) : m.text);
-      const displayTextRich = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text);
+      const displayText = isThinking
+        ? m.text
+        : normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text) : m.text);
+      const displayTextRich = isThinking
+        ? m.text
+        : normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text);
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
@@ -1175,7 +1184,7 @@ function agiloChatInitFromDom() {
           bubbleDiv.style.whiteSpace = 'pre-wrap';
           bubbleDiv.style.lineHeight = '1.6';
         } else if (renderMode === 'html' && isThinking) {
-          bubbleDiv.innerHTML = displayText;
+          bubbleDiv.innerHTML = m.text;
         } else {
           bubbleDiv.innerHTML = mdToHtml(m.text || displayText);
           bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';

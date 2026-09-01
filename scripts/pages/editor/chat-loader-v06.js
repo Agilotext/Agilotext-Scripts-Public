@@ -49,7 +49,7 @@
   }
   const BUSTQ = (() => {
     const b = extraBust();
-    return b ? `&bust=${encodeURIComponent(b)}` : '&bust=v05.1';
+    return b ? `&bust=${encodeURIComponent(b)}` : '&bust=v05.2';
   })();
 
   function loadScript(file) {
