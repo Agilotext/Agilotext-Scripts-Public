@@ -3,7 +3,7 @@
 //      PJ, dictée, LinkedIn, email block, contexte Memberstack, etc.
 // V06 (logo Mistral) : Code-chat_V06.js via chat-loader-v06.js
 // ⚠️ Ce fichier est chargé depuis GitHub — Correspond à: code-chat dans Webflow (prod : chat-loader.js)
-window.__agiloChatVersion = 'V05';
+window.__agiloChatVersion = 'V05.1';
 
 /* Toujours exposer AgiloChat dès l’arrivée du script : si l’IIFE du DOMContentLoaded
  * lève avant la fin, l’utilisateur a quand même getJobId (URL/LS) pour le debug. */
@@ -114,9 +114,46 @@ function agiloChatInitFromDom() {
   };
 
   /* ================== MARKDOWN → HTML (robuste) ================== */
+  const HTML_TABLE_RE = /<\s*table\b/i;
+  const ALLOWED_MODEL_TAGS = new Set([
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td',
+    'br', 'strong', 'em', 'b', 'i', 'p', 'ul', 'ol', 'li'
+  ]);
+
+  function looksLikeHtmlTable(text) {
+    return HTML_TABLE_RE.test(String(text || ''));
+  }
+
+  /** HTML Mistral → markdown sûr. Pas d’innerHTML brut. */
+  function normalizeModelMarkup(text) {
+    let s = String(text || '');
+    s = s.replace(/\r\n/g, '\n');
+    s = s.replace(/<br\s*\/?>/gi, '\n');
+    s = s.replace(/<\s*\/?\s*(strong|b)\s*>/gi, '**');
+    s = s.replace(/<\s*\/?\s*(em|i)\s*>/gi, '*');
+    s = s.replace(/<\s*\/\s*p\s*>/gi, '\n\n');
+    s = s.replace(/<\s*p\b[^>]*>/gi, '');
+    s = s.replace(/<\/?[a-zA-Z][^>]*>/g, '');
+    return s;
+  }
+
+  /** Tableaux HTML : unwrap + allowlist, attributs retirés. */
+  function sanitizeAllowlistedHtml(html) {
+    return String(html || '').replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (full, name) => {
+      const tag = String(name).toLowerCase();
+      if (!ALLOWED_MODEL_TAGS.has(tag)) return '';
+      if (/^<\//.test(full)) return `</${tag}>`;
+      return tag === 'br' ? '<br>' : `<${tag}>`;
+    });
+  }
+
   function mdToHtml(md) {
     // Normalisation
     md = String(md || '').replace(/\r\n/g, '\n').trim();
+    if (looksLikeHtmlTable(md)) {
+      return sanitizeAllowlistedHtml(md);
+    }
+    md = normalizeModelMarkup(md);
 
     // Si tout le contenu est dans un fence "texte" → on unwrap
     {
@@ -966,8 +1003,8 @@ function agiloChatInitFromDom() {
       const hasSignature = /(^|\n)\s*(cordialement|bien\s+à\s+vous|sinc[eè]res?\s+salutations|best\s+regards)\b/i.test(rawStripped);
       const emailByIntent = (m.render === 'plain') || (getLastIntent() === 'email' && !isThinking);
       const looksLikeEmail = hasObjet || (hasCommentaire && (hasObjet || emailByIntent)) || (emailByIntent && (hasGreeting || hasSignature));
-      const displayText = looksLikeEmail ? postProcessEmail(m.text) : m.text;
-      const displayTextRich = looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text;
+      const displayText = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text) : m.text);
+      const displayTextRich = normalizeModelMarkup(looksLikeEmail ? postProcessEmail(m.text, { preserveMarkdown: true }) : m.text);
       const renderMode = m.render || (isThinking ? 'html' : (isPlainLike(displayText) ? 'plain' : 'md'));
 
       if (looksLikeEmail && !isThinking && displayText.length > 10) {
@@ -1112,10 +1149,10 @@ function agiloChatInitFromDom() {
           bubbleDiv.textContent = displayText;
           bubbleDiv.style.whiteSpace = 'pre-wrap';
           bubbleDiv.style.lineHeight = '1.6';
-        } else if (renderMode === 'html') {
+        } else if (renderMode === 'html' && isThinking) {
           bubbleDiv.innerHTML = displayText;
         } else {
-          bubbleDiv.innerHTML = mdToHtml(displayText);
+          bubbleDiv.innerHTML = mdToHtml(m.text || displayText);
           bubbleDiv.style.cssText = 'white-space:normal;line-height:1.6';
         }
 
@@ -2617,6 +2654,7 @@ function agiloChatInitFromDom() {
       const intentUsed = resolveIntent(q, intentResolved);
       if (intentUsed === 'linkedin') txt = postProcessLinkedIn(txt);
       else if (intentUsed === 'email') txt = postProcessEmail(txt);
+      if (intentUsed === 'linkedin' || intentUsed === 'email') txt = normalizeModelMarkup(txt);
       const renderMode = (intentUsed === 'linkedin' || intentUsed === 'email') ? 'plain' : 'md';
       if (intentUsed) setLastIntent(intentUsed);
       replaceMsgById(jobId, runId, txt || '(réponse vide)', { render: renderMode });

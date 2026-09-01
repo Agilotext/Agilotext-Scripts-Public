@@ -175,6 +175,31 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------------- Helpers ---------------- */
+  function isFreeSpeakersToggleVisible(checkbox) {
+    if (!checkbox) return false;
+    if (checkbox.offsetParent !== null) return true;
+    try {
+      return typeof checkbox.getClientRects === 'function' && checkbox.getClientRects().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** true sauf si le toggle est visible et décoché (opt-out). */
+  function isFreeSpeakersOn(checkbox) {
+    if (!checkbox) return true;
+    if (!isFreeSpeakersToggleVisible(checkbox)) return true;
+    return !!checkbox.checked;
+  }
+
+  function freeSpeakersExpectedValue(select, speakersOn) {
+    if (!speakersOn) return '';
+    const raw = select && select.value != null ? String(select.value).trim() : '';
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 1) return String(Math.round(n));
+    return '2';
+  }
+
   const hideAllErrors = () => Object.values(errorMessageDivs).forEach(d => d && (d.style.display='none'));
   const showError = key => {
     hideAllErrors();
@@ -758,7 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function buildStreamingUploadFormData(file, email) {
     const fd = new FormData();
-    const speakersChecked = speakersCheckbox && speakersCheckbox.checked;
+    const speakersChecked = isFreeSpeakersOn(speakersCheckbox);
 
     fd.append('fileUpload1', file, file.name);
     fd.append('clientFilesLastModifiedMs', String(Date.now()));
@@ -772,7 +797,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fd.append('doSummary', summaryCheckbox && summaryCheckbox.checked ? 'true' : 'false');
 
     if (speakersChecked) {
-      fd.append('speakersExpected', speakersSelect.value || '2');
+      fd.append('speakersExpected', freeSpeakersExpectedValue(speakersSelect, true));
       fd.append('formatTranscript', 'false');
     } else {
       fd.append(
@@ -932,8 +957,8 @@ document.addEventListener('DOMContentLoaded', () => {
       controller = await createControllerForEmail(currentEmail);
 
       await controller.start({
-        speakerLabels: !!(speakersCheckbox && speakersCheckbox.checked),
-        maxSpeakers: Number((speakersSelect && speakersSelect.value) || 2)
+        speakerLabels: isFreeSpeakersOn(speakersCheckbox),
+        maxSpeakers: Number(freeSpeakersExpectedValue(speakersSelect, isFreeSpeakersOn(speakersCheckbox)) || 2)
       });
 
       setButtons('streaming');
@@ -956,7 +981,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       await controller.resume(
         {
-          speakerLabels: !!(speakersCheckbox && speakersCheckbox.checked),
+          speakerLabels: isFreeSpeakersOn(speakersCheckbox),
           maxSpeakers: Number((speakersSelect && speakersSelect.value) || 2)
         },
         transcriptArea ? transcriptArea.value : ''
@@ -1176,10 +1201,10 @@ document.addEventListener('DOMContentLoaded', () => {
     submitBtn.disabled=true;
     agiloA11yAnnounce('Envoi en cours. Veuillez patienter.');
 
-    const speakersChecked=speakersCheckbox.checked;
+    const speakersChecked = isFreeSpeakersOn(speakersCheckbox);
     const summaryChecked=summaryCheckbox.checked;
     const formatChecked =formatCheckbox.checked;
-    const speakersExpected=speakersSelect.value;
+    const speakersExpected = freeSpeakersExpectedValue(speakersSelect, speakersChecked);
 
     setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 

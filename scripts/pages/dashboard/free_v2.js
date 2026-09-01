@@ -236,6 +236,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const translateCheckbox = document.getElementById('toggle-translate');
   const translateSelect = document.getElementById('translate-select');
 
+  function isFreeSpeakersToggleVisible(checkbox) {
+    if (!checkbox) return false;
+    if (checkbox.offsetParent !== null) return true;
+    try {
+      return typeof checkbox.getClientRects === 'function' && checkbox.getClientRects().length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  function isFreeSpeakersOn(checkbox) {
+    if (!checkbox) return true;
+    if (!isFreeSpeakersToggleVisible(checkbox)) return true;
+    return !!checkbox.checked;
+  }
+
+  function freeSpeakersExpectedValue(select, speakersOn) {
+    if (!speakersOn) return '';
+    const raw = select && select.value != null ? String(select.value).trim() : '';
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 1) return String(Math.round(n));
+    return '2';
+  }
+
   const youtubeInput = document.getElementById('youtube-url-input');
 
   /* ------------ Error mapping ------------- */
@@ -909,10 +933,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (formLoadingDiv) formLoadingDiv.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
 
-      const speakersChecked = speakersCheckbox.checked;
+      const speakersChecked = isFreeSpeakersOn(speakersCheckbox);
       const summaryChecked = summaryCheckbox.checked;
       const formatChecked = formatCheckbox.checked;
-      const speakersExpected = speakersSelect.value;
+      const speakersExpected = freeSpeakersExpectedValue(speakersSelect, speakersChecked);
 
       setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
@@ -936,7 +960,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('edition', edition);
       fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
       if (speakersChecked) {
-        fd.append('speakersExpected', speakersExpected || '');
+        fd.append('speakersExpected', speakersExpected);
         fd.append('formatTranscript', 'false');
       } else {
         fd.append('formatTranscript', formatChecked ? 'true' : 'false');

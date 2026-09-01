@@ -342,21 +342,50 @@ async function run() {
   assert(mobileFloat.width <= 390 - 24, 'largeur flottante bornee au viewport');
   assert(mobileFloat.top >= 96 + 8, 'top mobile sous chrome');
 
-  const noFloatZeroChrome = AC.computeConfidenceFloatingBox(
+  const zeroChromeOffscreen = AC.computeConfidenceFloatingBox(
+    { top: -24 },
+    { left: 320, width: 960, bottom: 800 },
+    0,
+    1440,
+    { tabsBottom: 120 }
+  );
+  assert(zeroChromeOffscreen.shouldFloat === true, 'chromeBottom 0 + sentinel hors ecran → float');
+  assert(zeroChromeOffscreen.top >= 120 + 8, 'float chrome 0 ne recouvre pas un rect d onglets fourni');
+  assert(zeroChromeOffscreen.top !== 72 && zeroChromeOffscreen.top !== 80, 'pas de fallback 72px aveugle');
+
+  const zeroChromePaneFallback = AC.computeConfidenceFloatingBox(
     { top: 0 },
+    { left: 320, width: 960, bottom: 800 },
+    0,
+    1440,
+    { paneTop: 56 }
+  );
+  assert(zeroChromePaneFallback.shouldFloat === true, 'chrome 0 flotte sous 8px');
+  assert(zeroChromePaneFallback.top === 64, 'fallback paneTop si chrome illisible');
+
+  const negativeChromeOffscreen = AC.computeConfidenceFloatingBox(
+    { top: -12 },
+    { left: 320, width: 960, bottom: 800 },
+    -12,
+    1440,
+    { paneTop: 80 }
+  );
+  assert(negativeChromeOffscreen.shouldFloat === true, 'chrome negatif traite comme 0 et flotte');
+  assert(negativeChromeOffscreen.top === 88, 'top = paneTop + 8 si chrome negatif');
+
+  const stillVisibleZeroChrome = AC.computeConfidenceFloatingBox(
+    { top: 200 },
     { left: 320, width: 960, bottom: 800 },
     0,
     1440
   );
-  assert(noFloatZeroChrome.shouldFloat === false, 'pas de float si chromeBottom vaut 0');
+  assert(stillVisibleZeroChrome.shouldFloat === false, 'pas de float si sentinel encore visible (chrome 0)');
 
-  const noFloatNegativeChrome = AC.computeConfidenceFloatingBox(
-    { top: 0 },
-    { left: 320, width: 960, bottom: 800 },
-    -12,
-    1440
-  );
-  assert(noFloatNegativeChrome.shouldFloat === false, 'pas de float si chromeBottom negatif');
+  assert(typeof AC.findConfidenceScrollContainer === 'function', 'findConfidenceScrollContainer expose (scroll parent ≠ window)');
+  assert(typeof AC.resolveConfidenceChromeBottom === 'function', 'resolveConfidenceChromeBottom expose');
+  assert(AC.resolveConfidenceChromeBottom(0, { tabsBottom: 110 }) === 110, 'resolve: tabs visibles avant plancher 8');
+  assert(AC.resolveConfidenceChromeBottom(0, { paneTop: 40 }) === 40, 'resolve: paneTop si pas d onglets');
+  assert(AC.resolveConfidenceChromeBottom(-4, {}) === 8, 'resolve: plancher 8 sans fallback 72');
 
   assert(floatCoveringTabs.top === chromeBottom + 8, 'top flottant = chromeBottom + 8 sans plancher 10px');
 

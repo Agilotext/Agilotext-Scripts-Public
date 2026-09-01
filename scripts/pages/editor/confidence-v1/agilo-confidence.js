@@ -354,8 +354,11 @@
       'main.ed-main nav.ed-tabs',
       'main.ed-main [data-tour="ed-tabs"]',
       'nav.ed-tabs',
+      '[role="tablist"]',
       'main.ed-main .ed-toolbar',
-      '.ed-toolbar'
+      '.ed-toolbar',
+      'header.ed-header',
+      '.ed-header'
     ];
     let bottom = 0;
     selectors.forEach((sel) => {
@@ -369,15 +372,36 @@
     return bottom;
   }
 
-  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth) {
-    const safeChrome = Math.max(0, Number(chromeBottom) || 0);
-    const floatThreshold = Math.max(8, safeChrome + 4);
+  /**
+   * Chrome mesurable, sinon premier bandeau d’onglets visible, sinon
+   * le haut du pane. Jamais 72px aveugle (régression 1.09.2).
+   */
+  function resolveConfidenceChromeBottom(chromeBottom, fallbacks = {}) {
+    const measured = Number(chromeBottom);
+    if (Number.isFinite(measured) && measured > 0) return measured;
+    const tabsBottom = Number(fallbacks.tabsBottom);
+    if (Number.isFinite(tabsBottom) && tabsBottom > 0) return tabsBottom;
+    const paneTop = Number(fallbacks.paneTop);
+    if (Number.isFinite(paneTop) && paneTop > 0) return Math.max(8, paneTop);
+    return 8;
+  }
+
+  function getConfidencePaneTop(el) {
+    const pane = el?.closest?.('#pane-transcript, .edtr-pane, .ag-panel') || el;
+    const top = pane?.getBoundingClientRect?.()?.top;
+    return Number.isFinite(top) ? top : 0;
+  }
+
+  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth, fallbacks) {
+    const measuredChrome = Math.max(0, Number(chromeBottom) || 0);
+    const safeChrome = resolveConfidenceChromeBottom(chromeBottom, fallbacks);
+    const floatThreshold = measuredChrome > 0 ? Math.max(8, measuredChrome + 4) : 8;
     const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
     const cLeft = Number(containerRect?.left) || 0;
     const cWidth = Number(containerRect?.width) || 0;
     const cBottom = Number(containerRect?.bottom) || 0;
     const sTop = Number(sentinelRect?.top) || 0;
-    const shouldFloat = safeChrome > 0 && sTop < floatThreshold && cBottom > safeChrome + 72;
+    const shouldFloat = sTop < floatThreshold && cBottom > safeChrome + 72;
     if (!shouldFloat) {
       return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
     }
@@ -640,11 +664,16 @@
       const sRect = sentinel.getBoundingClientRect();
       const container = transcriptRoot.parentElement || transcriptRoot;
       const cRect = container.getBoundingClientRect();
+      const measuredChrome = getEditorChromeBottom(document);
       const box = computeConfidenceFloatingBox(
         sRect,
         cRect,
-        getEditorChromeBottom(document),
-        window.innerWidth
+        measuredChrome,
+        window.innerWidth,
+        {
+          tabsBottom: measuredChrome,
+          paneTop: getConfidencePaneTop(transcriptRoot)
+        }
       );
 
       if (box.shouldFloat) {
@@ -669,14 +698,39 @@
       }, 16);
     };
 
+    const scrollParent = findConfidenceScrollContainer(panel)
+      || findConfidenceScrollContainer(transcriptRoot)
+      || findConfidenceScrollContainer(transcriptRoot.parentElement);
+    if (scrollParent && scrollParent !== window) {
+      scrollParent.addEventListener('scroll', schedule, { passive: true });
+    }
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
+
+    const chromeEls = [];
+    try {
+      document.querySelectorAll?.('nav.ed-tabs, [data-tour="ed-tabs"], .ed-toolbar, header.ed-header').forEach((el) => {
+        chromeEls.push(el);
+      });
+    } catch { /* ignore */ }
+    let resizeObs = null;
+    if (typeof ResizeObserver === 'function' && chromeEls.length) {
+      resizeObs = new ResizeObserver(schedule);
+      chromeEls.forEach((el) => {
+        try { resizeObs.observe(el); } catch { /* ignore */ }
+      });
+    }
+
     schedule();
 
     __panelFloatRefresh = schedule;
     __panelFloatCleanup = () => {
+      if (scrollParent && scrollParent !== window) {
+        scrollParent.removeEventListener('scroll', schedule);
+      }
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
+      try { resizeObs?.disconnect?.(); } catch { /* ignore */ }
       if (raf && window.cancelAnimationFrame) window.cancelAnimationFrame(raf);
       else if (raf) clearTimeout(raf);
       panel.classList.remove('is-floating');
@@ -1010,22 +1064,25 @@
    * Groupe nav panneau : Passage précédent · compteur · Passage suivant.
    * Navigation circulaire (alignée Alt+← / Alt+→). Prev secondaire, Next primary.
    */
+  const CHEVRON_LEFT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"/></svg>';
+  const CHEVRON_RIGHT_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+
   function buildNavControlsHtml(hasPendingRisk) {
     if (!hasPendingRisk) return '';
     return (
       '<span class="ag-confidence-panel__nav" role="group" aria-label="Navigation passages à relire">' +
-        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-prev"' +
+        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--icon" id="ag-confidence-prev"' +
           ' aria-label="Passage précédent" aria-keyshortcuts="Alt+ArrowLeft"' +
-          ' title="Passage précédent (Alt+←) · boucle en début de liste">' +
-          '<span class="ag-confidence-panel__btn-text">Passage précédent</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">←</span>' +
+          ' title="Passage précédent (Alt+←)">' +
+          `<span class="ag-confidence-panel__btn-icon">${CHEVRON_LEFT_SVG}</span>` +
         '</button>' +
         '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
-        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next"' +
+        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary ag-confidence-panel__btn--icon" id="ag-confidence-next"' +
           ' aria-label="Passage suivant" aria-keyshortcuts="Alt+ArrowRight"' +
           ' title="Passage suivant (Alt+→)">' +
-          '<span class="ag-confidence-panel__btn-text">Passage suivant</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">→</span>' +
+          `<span class="ag-confidence-panel__btn-icon">${CHEVRON_RIGHT_SVG}</span>` +
         '</button>' +
       '</span>'
     );
@@ -1052,9 +1109,10 @@
       ? `<span class="ag-confidence-panel__stat">${plural(modifiedCount, 'modifié', 'modifiés')}</span>`
       : '';
     const toggleHtml =
-      `<button type="button" class="ag-confidence-toggle" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}">` +
+      `<button type="button" class="ag-confidence-toggle${__confidenceVisible ? ' is-on' : ''}" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}"` +
+      ` aria-label="${__confidenceVisible ? 'Masquer les passages à relire' : 'Afficher les passages à relire'}">` +
       '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
-      '<span class="ag-confidence-toggle__label">Passages à relire</span>' +
+      (__confidenceVisible ? '' : '<span class="ag-confidence-toggle__label">Passages à relire</span>') +
       '</button>';
 
     if (__confidenceVisible) {
@@ -1403,6 +1461,7 @@
     goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex,
     getEditorChromeBottom,
+    resolveConfidenceChromeBottom,
     computeConfidenceFloatingBox,
     ensureActiveEditorPane,
     findConfidenceScrollContainer,

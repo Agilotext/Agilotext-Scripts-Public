@@ -2,7 +2,7 @@
 (function () {
   'use strict';
 
-  window.__agiloAnonVersion = '3.1.0';
+  window.__agiloAnonVersion = '3.2.0';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const TOKEN_ENDPOINT = API_BASE + '/getToken';
@@ -11,6 +11,7 @@
   const TOKEN_RETRY_MAX = 3;
   const TOKEN_RETRY_DELAY_MS = 800;
   const DEFAULT_ENTITY_TYPES = ['PER', 'ORG', 'LOC'];
+  const ALL_MASK_ENTITY_TYPES = ['PER', 'ORG', 'LOC', 'EML', 'TEL', 'ADR'];
   const GENERIC_SPEAKER_RE = /^(speaker[_\s-]?[a-z0-9]+|intervenant\s*\d+|locuteur\s*\d+)$/i;
 
   let abortController = null;
@@ -23,9 +24,12 @@
     hasUnsavedAnonymizedDraft: false,
     hasSavedAnonymizedDraft: false,
     previewText: '',
+    previewHtml: '',
     previewSegments: null,
     previewJobId: '',
+    previewSource: 'transcript',
     currentJobId: '',
+    lastFocus: null,
     anonymizationConfig: {
       goal: 'export',
       entityTypes: DEFAULT_ENTITY_TYPES.slice()
@@ -162,12 +166,46 @@
     return node.textContent || node.innerText || '';
   }
 
-  function getSummaryContent() {
-    const el = document.getElementById('summaryEditor')
+  function getSummaryEditorEl() {
+    return document.getElementById('summaryEditor')
+      || document.getElementById('ag-summary')
       || document.getElementById('pane-summary')
       || document.querySelector('[data-editor="summary"]');
+  }
+
+  function getSummaryHtml() {
+    if (typeof window.getSummaryContentForPDF === 'function') {
+      try {
+        const fromFork = window.getSummaryContentForPDF();
+        if (fromFork && String(fromFork).trim()) return String(fromFork);
+      } catch (_) {}
+    }
+    const el = getSummaryEditorEl();
     if (!el) return '';
-    return el.textContent || el.innerText || '';
+    const rawHtml = el.getAttribute('data-raw-html');
+    if (rawHtml && rawHtml.trim()) return rawHtml;
+    const iframe = el.querySelector('iframe.ag-summary-iframe');
+    if (iframe && iframe.contentDocument) {
+      try {
+        const doc = iframe.contentDocument;
+        return doc.documentElement?.outerHTML || doc.body?.innerHTML || '';
+      } catch (_) {}
+    }
+    return el.innerHTML || '';
+  }
+
+  function htmlToPlainText(html) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = String(html || '');
+    return String(tmp.textContent || tmp.innerText || '').trim();
+  }
+
+  function getSummaryContent() {
+    const html = getSummaryHtml();
+    const fromHtml = htmlToPlainText(html);
+    if (fromHtml) return fromHtml;
+    const el = getSummaryEditorEl();
+    return el ? String(el.textContent || el.innerText || '').trim() : '';
   }
 
   function cloneSegments(segments) {
@@ -340,12 +378,20 @@
     renderTranscriptSegments(snapshot.segments);
   }
 
+  function sanitizeEntityTypes(list) {
+    const allowed = new Set(ALL_MASK_ENTITY_TYPES);
+    const next = (Array.isArray(list) ? list : [])
+      .map((code) => String(code || '').toUpperCase())
+      .filter((code) => allowed.has(code));
+    return next.length ? Array.from(new Set(next)) : DEFAULT_ENTITY_TYPES.slice();
+  }
+
   function resolveEntityTypes() {
     const stored = localStorage.getItem('agilo:anon2:entityTypes');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length) return parsed;
+        if (Array.isArray(parsed) && parsed.length) return sanitizeEntityTypes(parsed);
       } catch (_) {}
     }
     return DEFAULT_ENTITY_TYPES.slice();
@@ -366,14 +412,18 @@
     }
   }
 
-  async function requestAnonymisedText(content, entityTypes) {
+  async function requestAnonymisedText(content, entityTypes, options = {}) {
     const creds = await ensureAuth();
+    const forceText = options.forceTextFormat !== false;
+    const isHtml = options.asHtml === true;
     const payload = new FormData();
     payload.append('username', creds.email);
     payload.append('token', creds.token);
     payload.append('edition', creds.edition);
-    payload.append('forceTextFormat', 'true');
-    payload.append('fileUpload1', new Blob([content], { type: 'text/plain;charset=utf-8' }), 'input.txt');
+    if (forceText) payload.append('forceTextFormat', 'true');
+    const mime = isHtml ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8';
+    const fileName = isHtml ? 'input.html' : 'input.txt';
+    payload.append('fileUpload1', new Blob([content], { type: mime }), fileName);
     payload.append('entityTypes', JSON.stringify(entityTypes && entityTypes.length ? entityTypes : DEFAULT_ENTITY_TYPES));
 
     const response = await fetchWithTimeout(ANON_TEXT_ENDPOINT, { method: 'POST', body: payload }, REQUEST_TIMEOUT_MS);
@@ -397,8 +447,8 @@
     return (json && typeof json.anonymisedText === 'string') ? json.anonymisedText : rawText;
   }
 
-  function downloadTextFile(text, fileName) {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  function downloadBlob(content, fileName, mime) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -409,6 +459,29 @@
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
 
+  function downloadTextFile(text, fileName) {
+    downloadBlob(text, fileName, 'text/plain;charset=utf-8');
+  }
+
+  function wrapAnonHtmlDocument(html) {
+    const raw = String(html || '');
+    if (/<html[\s>]/i.test(raw)) return raw;
+    return '<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Compte-rendu anonymisé</title></head><body>' + raw + '</body></html>';
+  }
+
+  function detectIgnoredEntityTypes(input, output, types) {
+    const ignored = [];
+    const src = String(input || '');
+    const out = String(output || '');
+    if (types.includes('EML') && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(src) && /[^\s@]+@[^\s@]+\.[^\s@]+/.test(out)) {
+      ignored.push('Email');
+    }
+    if (types.includes('TEL') && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(src) && /\b0[1-9](?:[\s.-]?\d{2}){4}\b/.test(out)) {
+      ignored.push('Téléphone');
+    }
+    return ignored;
+  }
+
   function createUi() {
     if (state.ui) return state.ui;
     if (!document.body || !document.head) return null;
@@ -417,16 +490,22 @@
     style.textContent = `
       .agilo-anon-overlay{position:fixed;inset:0;z-index:999999;background:rgba(12,18,31,.52);display:none;align-items:center;justify-content:center;padding:24px}
       .agilo-anon-overlay.is-open{display:flex}
-      .agilo-anon-modal{width:min(760px,100%);max-height:85vh;overflow:auto;background:#fff;border-radius:20px;padding:24px;box-shadow:0 32px 80px rgba(0,0,0,.24);font-family:inherit;color:#171717}
+      .agilo-anon-modal{width:min(760px,100%);max-height:85vh;overflow:hidden;display:flex;flex-direction:column;background:#fff;border-radius:20px;box-shadow:0 32px 80px rgba(0,0,0,.24);font-family:inherit;color:#171717}
+      .agilo-anon-modal__head,.agilo-anon-actions{flex-shrink:0;padding:20px 24px}
+      .agilo-anon-modal__head{padding-bottom:8px}
+      .agilo-anon-modal__body{flex:1;min-height:0;overflow:auto;padding:0 24px 12px}
       .agilo-anon-title{margin:0 0 8px;font-size:1.35rem;font-weight:700}
-      .agilo-anon-text{margin:0 0 16px;color:#525252;line-height:1.45}
+      .agilo-anon-text{margin:0;color:#525252;line-height:1.45}
       .agilo-anon-grid{display:grid;gap:16px}
       .agilo-anon-card{border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:16px;background:#fafafa}
       .agilo-anon-card h4{margin:0 0 12px;font-size:1rem}
-      .agilo-anon-choice,.agilo-anon-check{display:flex;align-items:flex-start;gap:10px;margin:10px 0}
-      .agilo-anon-choice input,.agilo-anon-check input{margin-top:3px}
-      .agilo-anon-preview{width:100%;min-height:180px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:12px;background:#fff;white-space:pre-wrap;overflow:auto;font-family:inherit;color:#171717}
-      .agilo-anon-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+      .agilo-anon-types{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:4px 12px}
+      .agilo-anon-check{display:flex;align-items:flex-start;gap:10px;margin:8px 0}
+      .agilo-anon-check input{margin-top:3px}
+      .agilo-anon-check small{display:block;color:#6b7280}
+      .agilo-anon-preview{width:100%;min-height:140px;border:1px solid rgba(0,0,0,.12);border-radius:12px;padding:12px;background:#fff;white-space:pre-wrap;overflow:auto;font-family:inherit;color:#171717}
+      .agilo-anon-actions{display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid rgba(0,0,0,.08);background:#fff}
+      [data-action="anonymiser"].agilo-anon-visible{display:inline-flex!important;visibility:visible!important;opacity:1!important}
       .agilo-anon-btn{appearance:none;border:none;border-radius:999px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
       .agilo-anon-btn--primary{background:#111827;color:#fff}
       .agilo-anon-btn--secondary{background:#e5e7eb;color:#111827}
@@ -452,35 +531,35 @@
     overlay.className = 'agilo-anon-overlay';
     overlay.innerHTML = `
       <div class="agilo-anon-modal" role="dialog" aria-modal="true" aria-labelledby="agilo-anon-title">
-        <h3 id="agilo-anon-title" class="agilo-anon-title">Anonymiser le transcript</h3>
-        <p class="agilo-anon-text">Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.</p>
-        <div class="agilo-anon-grid">
-          <section class="agilo-anon-card">
-            <h4>Objectif</h4>
-            <label class="agilo-anon-choice">
-              <input type="radio" name="agilo-anon-goal" value="export">
-              <span>Exporter anonymisé<br><small>Aucun changement visuel dans l’éditeur.</small></span>
-            </label>
-            <label class="agilo-anon-choice">
-              <input type="radio" name="agilo-anon-goal" value="apply">
-              <span>Remplacer mon transcript dans l’éditeur<br><small>Création d’un brouillon anonymisé local avant sauvegarde.</small></span>
-            </label>
-          </section>
-          <section class="agilo-anon-card">
-            <h4>Types de données</h4>
-            <label class="agilo-anon-check"><input type="checkbox" value="PER"><span>PER</span></label>
-            <label class="agilo-anon-check"><input type="checkbox" value="ORG"><span>ORG</span></label>
-            <label class="agilo-anon-check"><input type="checkbox" value="LOC"><span>LOC</span></label>
-          </section>
-          <section class="agilo-anon-card">
-            <h4>Prévisualisation</h4>
-            <div class="agilo-anon-preview" id="agiloAnonPreview">Aucune prévisualisation pour le moment.</div>
-            <div class="agilo-anon-status" id="agiloAnonStatus">Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.</div>
-          </section>
+        <div class="agilo-anon-modal__head">
+          <h3 id="agilo-anon-title" class="agilo-anon-title">Anonymiser le transcript</h3>
+          <p class="agilo-anon-text" id="agiloAnonLead">Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.</p>
+        </div>
+        <div class="agilo-anon-modal__body">
+          <div class="agilo-anon-grid">
+            <section class="agilo-anon-card">
+              <h4>Types de données</h4>
+              <div class="agilo-anon-types">
+                <label class="agilo-anon-check"><input type="checkbox" value="PER"><span>Personne<small>PER</small></span></label>
+                <label class="agilo-anon-check"><input type="checkbox" value="ORG"><span>Organisation<small>ORG</small></span></label>
+                <label class="agilo-anon-check"><input type="checkbox" value="LOC"><span>Lieu<small>LOC</small></span></label>
+                <label class="agilo-anon-check"><input type="checkbox" value="EML"><span>Email<small>EML</small></span></label>
+                <label class="agilo-anon-check"><input type="checkbox" value="TEL"><span>Téléphone<small>TEL</small></span></label>
+                <label class="agilo-anon-check"><input type="checkbox" value="ADR"><span>Adresse<small>ADR</small></span></label>
+              </div>
+              <button type="button" class="agilo-anon-btn agilo-anon-btn--ghost" data-action="mask-all">Tout masquer</button>
+            </section>
+            <section class="agilo-anon-card">
+              <h4>Prévisualisation</h4>
+              <div class="agilo-anon-preview" id="agiloAnonPreview" tabindex="0">Aucune prévisualisation pour le moment.</div>
+              <div class="agilo-anon-status" id="agiloAnonStatus">Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.</div>
+            </section>
+          </div>
         </div>
         <div class="agilo-anon-actions">
           <button type="button" class="agilo-anon-btn agilo-anon-btn--primary" data-action="preview">Prévisualiser</button>
-          <button type="button" class="agilo-anon-btn agilo-anon-btn--secondary" data-action="download" disabled>Télécharger</button>
+          <button type="button" class="agilo-anon-btn agilo-anon-btn--secondary" data-action="download" disabled>Télécharger TXT</button>
+          <button type="button" class="agilo-anon-btn agilo-anon-btn--secondary" data-action="download-html" disabled hidden>Télécharger HTML</button>
           <button type="button" class="agilo-anon-btn agilo-anon-btn--secondary" data-action="apply" disabled>Appliquer au transcript</button>
           <button type="button" class="agilo-anon-btn agilo-anon-btn--ghost" data-action="close">Annuler</button>
         </div>
@@ -510,13 +589,16 @@
     const ui = {
       overlay,
       banner,
+      title: overlay.querySelector('#agilo-anon-title'),
+      lead: overlay.querySelector('#agiloAnonLead'),
       preview: overlay.querySelector('#agiloAnonPreview'),
       status: overlay.querySelector('#agiloAnonStatus'),
-      goalInputs: Array.from(overlay.querySelectorAll('input[name="agilo-anon-goal"]')),
       entityInputs: Array.from(overlay.querySelectorAll('.agilo-anon-check input')),
       previewBtn: overlay.querySelector('[data-action="preview"]'),
       downloadBtn: overlay.querySelector('[data-action="download"]'),
+      downloadHtmlBtn: overlay.querySelector('[data-action="download-html"]'),
       applyBtn: overlay.querySelector('[data-action="apply"]'),
+      maskAllBtn: overlay.querySelector('[data-action="mask-all"]'),
       closeBtn: overlay.querySelector('[data-action="close"]'),
       bannerTitle: banner.querySelector('.agilo-anon-banner-title'),
       bannerText: banner.querySelector('.agilo-anon-banner-text'),
@@ -525,18 +607,17 @@
       bannerRedoBtn: banner.querySelector('[data-action="redo-summary"]')
     };
 
-    ui.goalInputs.forEach((input) => {
-      input.addEventListener('change', () => {
-        state.anonymizationConfig.goal = input.value;
-        persistConfig();
-      });
-    });
     ui.entityInputs.forEach((input) => {
       input.addEventListener('change', () => {
         const selected = ui.entityInputs.filter((item) => item.checked).map((item) => item.value);
-        state.anonymizationConfig.entityTypes = selected.length ? selected : DEFAULT_ENTITY_TYPES.slice();
+        state.anonymizationConfig.entityTypes = sanitizeEntityTypes(selected);
         persistConfig();
       });
+    });
+    ui.maskAllBtn.addEventListener('click', () => {
+      state.anonymizationConfig.entityTypes = ALL_MASK_ENTITY_TYPES.slice();
+      persistConfig();
+      syncConfigToUi();
     });
 
     overlay.addEventListener('click', (event) => {
@@ -545,6 +626,7 @@
     ui.closeBtn.addEventListener('click', closeModal);
     ui.previewBtn.addEventListener('click', () => runModalAction('preview'));
     ui.downloadBtn.addEventListener('click', () => runModalAction('download'));
+    ui.downloadHtmlBtn.addEventListener('click', () => runModalAction('download-html'));
     ui.applyBtn.addEventListener('click', () => runModalAction('apply'));
     ui.bannerSaveBtn.addEventListener('click', () => triggerSave());
     ui.bannerRevertBtn.addEventListener('click', () => revertDraft());
@@ -558,80 +640,134 @@
   function syncConfigToUi() {
     const ui = createUi();
     if (!ui) return;
-    ui.goalInputs.forEach((input) => {
-      input.checked = input.value === state.anonymizationConfig.goal;
-    });
     const selected = new Set(state.anonymizationConfig.entityTypes || DEFAULT_ENTITY_TYPES);
     ui.entityInputs.forEach((input) => {
       input.checked = selected.has(input.value);
     });
   }
 
-  function openModal() {
+  function syncModalMode(source) {
+    const ui = createUi();
+    if (!ui) return;
+    const isSummary = source === 'summary';
+    ui.title.textContent = isSummary ? 'Anonymiser le compte-rendu' : 'Anonymiser le transcript';
+    ui.lead.textContent = isSummary
+      ? 'Export seulement. Le compte-rendu affiché dans l’éditeur n’est pas modifié.'
+      : 'Le transcript original n’est pas écrasé tant que vous n’avez pas cliqué sur Sauvegarder.';
+    ui.applyBtn.hidden = isSummary;
+    ui.downloadHtmlBtn.hidden = !isSummary;
+  }
+
+  function onModalKeydown(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeModal();
+    }
+  }
+
+  function openModal(source) {
     const ui = createUi();
     if (!ui) {
       throw new Error('Interface d’anonymisation indisponible. Rechargez la page.');
     }
+    state.previewSource = source === 'summary' ? 'summary' : 'transcript';
+    state.lastFocus = document.activeElement;
     syncConfigToUi();
+    syncModalMode(state.previewSource);
     ui.preview.textContent = 'Aucune prévisualisation pour le moment.';
     ui.status.textContent = 'Prévisualisez d’abord la version anonymisée, puis choisissez l’action finale.';
     ui.downloadBtn.disabled = true;
+    ui.downloadHtmlBtn.disabled = true;
     ui.applyBtn.disabled = true;
     state.previewText = '';
+    state.previewHtml = '';
     state.previewSegments = null;
     state.previewJobId = getJobId();
     ui.overlay.classList.add('is-open');
-    logEvent('modal_open', { jobId: state.previewJobId });
+    document.addEventListener('keydown', onModalKeydown);
+    (ui.closeBtn || ui.previewBtn)?.focus?.();
+    logEvent('modal_open', { jobId: state.previewJobId, source: state.previewSource });
   }
 
   function closeModal() {
     const ui = createUi();
     if (!ui) return;
     ui.overlay.classList.remove('is-open');
+    document.removeEventListener('keydown', onModalKeydown);
+    try { state.lastFocus?.focus?.(); } catch (_) {}
   }
 
   function setModalBusy(isBusy, text) {
     const ui = createUi();
     if (!ui) return;
-    [ui.previewBtn, ui.downloadBtn, ui.applyBtn, ui.closeBtn].forEach((button) => {
-      button.disabled = !!isBusy || (button === ui.downloadBtn || button === ui.applyBtn ? !state.previewText : false);
+    const exportOnly = state.previewSource === 'summary';
+    [ui.previewBtn, ui.downloadBtn, ui.downloadHtmlBtn, ui.applyBtn, ui.closeBtn].forEach((button) => {
+      if (!button) return;
+      const needsPreview = button === ui.downloadBtn || button === ui.downloadHtmlBtn || button === ui.applyBtn;
+      button.disabled = !!isBusy || (needsPreview ? !state.previewText : false);
     });
+    if (exportOnly) ui.applyBtn.disabled = true;
     if (text) ui.status.textContent = text;
   }
 
   async function buildPreview() {
-    if (getActiveTab() !== 'transcript') {
-      throw new Error('Anonymisation disponible uniquement sur l’onglet Transcription.');
-    }
-    const content = getTranscriptContent();
-    if (!content || !content.trim()) {
-      throw new Error('Aucun transcript à anonymiser.');
-    }
-
-    const entityTypes = state.anonymizationConfig.entityTypes && state.anonymizationConfig.entityTypes.length
-      ? state.anonymizationConfig.entityTypes
-      : DEFAULT_ENTITY_TYPES.slice();
+    const source = state.previewSource === 'summary' ? 'summary' : 'transcript';
+    const entityTypes = sanitizeEntityTypes(state.anonymizationConfig.entityTypes);
+    let inputText = '';
+    let inputHtml = '';
+    let outputText = '';
 
     abortController = new AbortController();
-    const outputText = await requestAnonymisedText(content, entityTypes);
-    const originalSegments = getTranscriptSegments();
-    const mapped = mapPreviewToOriginalSegments(outputText, originalSegments);
 
-    state.previewText = outputText;
-    state.previewSegments = mapped;
+    if (source === 'summary') {
+      inputHtml = getSummaryHtml();
+      inputText = getSummaryContent();
+      if (!inputText && !String(inputHtml || '').trim()) {
+        throw new Error('Aucun compte-rendu à anonymiser.');
+      }
+      const asHtml = !!(inputHtml && /<[a-z][\s\S]*>/i.test(inputHtml));
+      const payload = asHtml ? inputHtml : inputText;
+      outputText = await requestAnonymisedText(payload, entityTypes, {
+        forceTextFormat: !asHtml,
+        asHtml
+      });
+      state.previewText = htmlToPlainText(outputText) || outputText;
+      state.previewHtml = asHtml ? outputText : wrapAnonHtmlDocument('<pre>' + String(outputText || '').replace(/</g, '&lt;') + '</pre>');
+      state.previewSegments = null;
+    } else {
+      inputText = getTranscriptContent();
+      if (!inputText || !inputText.trim()) {
+        throw new Error('Aucun transcript à anonymiser.');
+      }
+      outputText = await requestAnonymisedText(inputText, entityTypes, { forceTextFormat: true, asHtml: false });
+      const originalSegments = getTranscriptSegments();
+      const mapped = mapPreviewToOriginalSegments(outputText, originalSegments);
+      state.previewText = outputText;
+      state.previewHtml = '';
+      state.previewSegments = mapped;
+    }
+
     state.previewJobId = getJobId();
-
+    const ignored = detectIgnoredEntityTypes(inputText || inputHtml, outputText, entityTypes);
     const ui = createUi();
     if (!ui) return;
-    ui.preview.textContent = outputText || 'Aucune donnée renvoyée.';
-    ui.downloadBtn.disabled = false;
-    ui.applyBtn.disabled = !mapped;
-    ui.status.textContent = mapped
-      ? 'Prévisualisation prête. Vous pouvez télécharger ou appliquer le brouillon au transcript.'
-      : 'Prévisualisation prête, mais la structure du transcript ne peut pas être reconstruite proprement. Téléchargement uniquement.';
+    ui.preview.textContent = state.previewText || 'Aucune donnée renvoyée.';
+    ui.downloadBtn.disabled = !state.previewText;
+    ui.downloadHtmlBtn.disabled = source !== 'summary' || !state.previewHtml;
+    ui.applyBtn.disabled = source === 'summary' || !state.previewSegments;
 
-    if (!mapped) {
-      logEvent('segment_rebuild_failed', { jobId: state.previewJobId, previewLength: outputText.length });
+    let status = source === 'summary'
+      ? 'Prévisualisation prête. Export TXT ou HTML uniquement.'
+      : (state.previewSegments
+        ? 'Prévisualisation prête. Vous pouvez télécharger ou appliquer le brouillon au transcript.'
+        : 'Prévisualisation prête, mais la structure du transcript ne peut pas être reconstruite proprement. Téléchargement uniquement.');
+    if (ignored.length) {
+      status += ' L’API n’a pas masqué : ' + ignored.join(', ') + '.';
+    }
+    ui.status.textContent = status;
+
+    if (source === 'transcript' && !state.previewSegments) {
+      logEvent('segment_rebuild_failed', { jobId: state.previewJobId, previewLength: (outputText || '').length });
     }
   }
 
@@ -644,14 +780,30 @@
       }
 
       if (action === 'download') {
-        downloadTextFile(state.previewText, 'Transcript_anonymise.txt');
-        notify('Fichier téléchargé : Transcript_anonymise.txt');
-        logEvent('download', { jobId: state.previewJobId });
+        const isSummary = state.previewSource === 'summary';
+        const name = isSummary ? 'Compte_rendu_anonymise.txt' : 'Transcript_anonymise.txt';
+        downloadTextFile(state.previewText, name);
+        notify('Fichier téléchargé : ' + name);
+        logEvent('download', { jobId: state.previewJobId, source: state.previewSource, format: 'txt' });
+        closeModal();
+        return;
+      }
+
+      if (action === 'download-html') {
+        if (state.previewSource !== 'summary' || !state.previewHtml) {
+          throw new Error('Export HTML disponible uniquement pour le compte-rendu.');
+        }
+        downloadBlob(wrapAnonHtmlDocument(state.previewHtml), 'Compte_rendu_anonymise.html', 'text/html;charset=utf-8');
+        notify('Fichier téléchargé : Compte_rendu_anonymise.html');
+        logEvent('download', { jobId: state.previewJobId, source: 'summary', format: 'html' });
         closeModal();
         return;
       }
 
       if (action === 'apply') {
+        if (state.previewSource === 'summary') {
+          throw new Error('Le compte-rendu ne peut pas être appliqué dans l’éditeur. Export seulement.');
+        }
         if (!state.previewSegments) {
           throw new Error('Impossible d’appliquer cette version dans l’éditeur. Téléchargement uniquement.');
         }
@@ -673,7 +825,8 @@
       ui.previewBtn.disabled = false;
       ui.closeBtn.disabled = false;
       ui.downloadBtn.disabled = !state.previewText;
-      ui.applyBtn.disabled = !state.previewSegments;
+      ui.downloadHtmlBtn.disabled = state.previewSource !== 'summary' || !state.previewHtml;
+      ui.applyBtn.disabled = state.previewSource === 'summary' || !state.previewSegments;
     }
   }
 
@@ -794,14 +947,16 @@
     const btn = document.querySelector('[data-action="anonymiser"]');
     if (!btn) return;
     const tab = getActiveTab();
-    if (tab === 'transcript') {
+    if (tab === 'transcript' || tab === 'summary') {
       btn.style.display = '';
       btn.style.visibility = '';
       btn.removeAttribute('hidden');
       btn.removeAttribute('aria-hidden');
-      btn.title = 'Anonymiser le transcript';
+      btn.classList.add('agilo-anon-visible');
+      btn.title = tab === 'summary' ? 'Anonymiser le compte-rendu' : 'Anonymiser le transcript';
     } else {
       btn.style.display = 'none';
+      btn.classList.remove('agilo-anon-visible');
       btn.setAttribute('aria-hidden', 'true');
     }
   }
@@ -848,11 +1003,12 @@
   }
 
   function anonymiser() {
-    if (getActiveTab() !== 'transcript') {
-      notify('Anonymisation disponible uniquement sur l’onglet Transcription.');
+    const tab = getActiveTab();
+    if (tab !== 'transcript' && tab !== 'summary') {
+      notify('Anonymisation disponible sur les onglets Transcription et Compte-rendu.');
       return;
     }
-    openModal();
+    openModal(tab);
   }
 
   function init() {

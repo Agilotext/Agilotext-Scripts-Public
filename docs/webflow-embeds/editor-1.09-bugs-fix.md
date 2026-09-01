@@ -12,33 +12,39 @@ Correctif août 2026 (`1.09.5`) : suppression du `z-index: 40` sur la chrome éd
 
 Correctif août 2026 (`1.09.6`) : restauration UI « Passage précédent » (feature `f3bbc9e` jamais mergée dans `1.09` ; disparue quand l'embed a quitté ce hash). Port chirurgical sans reprendre le floating `top:10px` / `z-index:9999` de f3.
 
+Correctif sept 2026 (`1.09.7`) : float passages sans exiger `chromeBottom > 0`, listeners sur le vrai scroll parent, barre compacte (chevrons SVG). Chat V05.1 (HTML Mistral normalisé). Anon `3.2.0` (footer fixe, types FR, export CR). Free speakers ON sauf toggle visible décoché.
+
 ## Fichiers modifiés
 
 | Fichier | Bugs | Version |
 |---------|------|---------|
-| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.6'` |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5, 6 | scroll borné + garde shell + float sûr + `buildNavControlsHtml` (prev/next) |
-| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5, 6 | pas de z-index chrome ; styles `__nav` / icônes mobile |
-| `CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js` | 3, 4 | `window.__agiloAnonVersion = '3.1.0'` |
+| `scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | 1, 2, 5 | `window.__agiloEditorConfidenceVersion = '1.09.7'` |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.js` | 5, 6, 7 | scroll borné + garde shell + float même si chrome = 0 + chevrons |
+| `scripts/pages/editor/confidence-v1/agilo-confidence.css.js` | 5, 6, 7 | pas de z-index chrome ; barre flottante compacte |
+| `CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js` | 3, 4 | `window.__agiloAnonVersion = '3.2.0'` |
 
 ## URLs CDN (@1.09)
 
 ```html
 <!-- Fork confidence (staging / test) — les 3 scripts sur @1.09, même ?v= -->
 <script>window.AGILOTEXT_ENABLE_CONFIDENCE = true;</script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js?v=1.09.6"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=1.09.7"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=1.09.7"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js?v=1.09.7"></script>
 
 <!-- Anonymiser v3 (embed Webflow séparé — confirmer le src dans Designer) -->
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js?v=3.1.0"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/CNOEC_Agiloshield_Docs/Front_END/agilo-editor-anonymiser-transcript-v3.js?v=3.2.0"></script>
+
+<!-- Chat prod : loader V05 (bust v05.1) -->
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/pages/editor/chat-loader.js?v=v05.1"></script>
 ```
 
 ## Vérification console
 
 ```js
-window.__agiloEditorConfidenceVersion  // '1.09.6'
-window.__agiloAnonVersion              // '3.1.0'
+window.__agiloEditorConfidenceVersion  // '1.09.7'
+window.__agiloAnonVersion              // '3.2.0'
+window.__agiloChatVersion              // 'V05.1'
 ```
 
 ## Checklist manuelle

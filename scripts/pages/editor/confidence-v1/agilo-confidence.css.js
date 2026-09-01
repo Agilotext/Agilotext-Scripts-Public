@@ -29,12 +29,13 @@
    des onglets Transcription / Compte rendu / Assistant (bug top:10px / z:9999). */
 .ag-confidence-panel.is-floating {
   position: fixed;
-  top: var(--ag-confidence-floating-top, 72px);
+  top: var(--ag-confidence-floating-top, 8px);
   left: var(--ag-confidence-floating-left, 16px);
   width: var(--ag-confidence-floating-width, min(760px, calc(100vw - 32px)));
   max-width: calc(100vw - 32px);
   margin: 0;
-  padding: 0.38rem 0.52rem;
+  padding: 0.32rem 0.46rem;
+  gap: 6px 8px;
   z-index: 25;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
   border-color: rgba(23, 74, 150, 0.20);
@@ -47,6 +48,7 @@
 }
 
 .ag-confidence-panel.is-floating .ag-confidence-panel__stat:not(.ag-confidence-panel__stat--primary),
+.ag-confidence-panel.is-floating .ag-confidence-panel__score,
 .ag-confidence-panel.is-floating .ag-confidence-helper {
   display: none;
 }
@@ -140,8 +142,24 @@
   text-align: center;
 }
 
+.ag-confidence-panel__btn--icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 28px;
+  padding: 0.22rem 0.4rem;
+}
+
 .ag-confidence-panel__btn-icon {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.ag-confidence-panel__btn-icon svg {
+  display: block;
 }
 
 .ag-confidence-toggle {
@@ -413,12 +431,8 @@
     font-size: 11px;
   }
 
-  .ag-confidence-panel__nav .ag-confidence-panel__btn-text {
-    display: none;
-  }
-
   .ag-confidence-panel__nav .ag-confidence-panel__btn-icon {
-    display: inline;
+    display: inline-flex;
   }
 
   .ag-confidence-panel__nav-count {

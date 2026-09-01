@@ -25,15 +25,38 @@
   const tabIds = ['tab-transcript', 'tab-summary', 'tab-chat'];
   let beforeLoadCount = 0;
 
-  window.__agiloProbe = () => [
-    ...document.querySelectorAll('.ed-body, .ed-main, .edtr-pane'),
-    document.scrollingElement
-  ].map((e) => ({
-    el: e === document.scrollingElement ? 'document' : (e.id || e.className),
-    scrollTop: e.scrollTop,
-    overflowY: getComputedStyle(e).overflowY,
-    scrollable: e.scrollHeight > e.clientHeight + 2
-  }));
+  window.__agiloProbe = () => {
+    const panel = document.getElementById('ag-confidence-panel');
+    const chromeBottom = window.AgiloConfidence?.getEditorChromeBottom?.(document) ?? 0;
+    const ancestors = [];
+    for (let p = panel; p; p = p.parentElement) {
+      const cs = getComputedStyle(p);
+      ancestors.push({
+        el: p.id || p.className,
+        overflowY: cs.overflowY,
+        overflow: cs.overflow
+      });
+      if (p === document.body) break;
+    }
+    return {
+      version: window.__agiloEditorConfidenceVersion || null,
+      anonVersion: window.__agiloAnonVersion || null,
+      chatView: document.querySelector('#chatView')?.dataset || null,
+      floating: !!panel?.classList.contains('is-floating'),
+      chromeBottom,
+      floatingTop: panel ? getComputedStyle(panel).top : null,
+      ancestors,
+      scroll: [
+        ...document.querySelectorAll('.ed-body, .ed-main, .edtr-pane'),
+        document.scrollingElement
+      ].map((e) => ({
+        el: e === document.scrollingElement ? 'document' : (e.id || e.className),
+        scrollTop: e.scrollTop,
+        overflowY: getComputedStyle(e).overflowY,
+        scrollable: e.scrollHeight > e.clientHeight + 2
+      }))
+    };
+  };
 
   const scrollChain = () => {
     const nodes = [
