@@ -62,8 +62,8 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 | 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
 | 2026-06-16 | `aadc13c` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
 | 2026-06-18 | `2b4de42` | agilotext-test uniquement | v2.2.0-fullclient — fetch all + pagination client (API ignore sortDir) |
-| 2026-08-26 | `5094a73` | www + test Mes transcripts ×3 | logic-v2 `2.2.7-demo-row` (pin prod actuel avant UX honnête) |
-| 2026-09-02 | `3fad75c2` | à pinner test puis www | `2.2.8-retention-honest` : audio sans promesse texte, fantôme + jobId |
+| 2026-08-26 | `5094a73` | www + test Mes transcripts ×3 | logic-v2 `2.2.7-demo-row` (rollback UX honnête) |
+| 2026-09-02 | `3fad75c2` | test puis www + apex | `2.2.8-retention-honest` live : symbole `Script-Mes_transcripts_ALL` + lecteur / header / iframe confidence |
 
 ## Pagination v2 — rollback chain (agilotext-test)
 
@@ -76,4 +76,12 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 
 Voir [`docs/webflow-embeds/mes-transcripts-pagination-v2.md`](../../webflow-embeds/mes-transcripts-pagination-v2.md).
 
-Prod **www.agilotext.com** : ne pas modifier (reste `@0de4923` + fichiers v1).
+Prod Mes transcripts **www.agilotext.com** (2 sept. 2026) : `@3fad75c2` (`2.2.8-retention-honest`). Pagination sidebar reste `@2b4de42`.
+
+Rollback Mes transcripts (symbole `Script-Mes_transcripts_ALL`) :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5094a73/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-5094a73"></script>
+```
+
+Puis publish www + apex + subdomain. Purge jsDelivr si le cache sert encore `3fad75c2`.

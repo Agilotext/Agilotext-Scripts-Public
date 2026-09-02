@@ -9,3 +9,4 @@ L’UI ne doit **pas** promettre que le texte reste accessible si `receiveText` 
 - Audio expiré : durée d’offre seulement, zéro phrase « transcription reste accessible ».
 - Transcript fantôme Business : anomalie + support + jobId.
 - Version liste : `__agiloMesTranscriptsLogicVersion === '2.2.8-retention-honest'`.
+- Pin live (2 sept. 2026) : `@3fad75c2` sur www + test. Recette HTML/CDN/tests Node OK. Recette connectée (job fantôme `1000032508`, Pro vs Business) à faire en navigation privée loggée.

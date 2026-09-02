@@ -7,15 +7,16 @@
 
 Messages honnêtes : audio expiré **sans** promettre que le texte reste accessible. Transcript fantôme (`error_transcript_file_not_exists`) = anomalie + support + jobId.
 
-## Inventaire live (2 sept. 2026)
+## Inventaire live (2 sept. 2026, après publish)
 
-Les 3 pages Mes transcripts (Free / Pro / Business) ont **les mêmes** pins, donc symbole ou copie identique.
+Un seul site Webflow (`agilotext-test` = www). Les 3 pages Mes transcripts partagent le symbole `Script-Mes_transcripts_ALL`.
 
-| Site | logic-v2 | agilo-api-error-format | orchestrator |
-|------|----------|------------------------|--------------|
-| www Mes transcripts | `@5094a73` | **absent** | `@1.09` (mensonge audio) |
-| agilotext-test Mes transcripts | `@5094a73` | **absent** | `@1.09` |
-| www éditeur Business | n/a | `@33ee8ba` | `@33ee8ba` + lecteur / ed-header `@33ee8ba` ; iframe confidence `@56c20f30` |
+| Site | logic-v2 | format | lecteurs éditeur |
+|------|----------|--------|------------------|
+| www + test Mes transcripts | `@3fad75c2` + `retention-messages` | absent en head | n/a |
+| www + test éditeur | n/a | head encore `@33ee8ba`, **écrasé** par embed lecteur `@3fad75c2` | header + lecteur `@3fad75c2` ; iframe confidence JS `@3fad75c2` (css/engine `@56c20f30`) |
+
+Publish 2 sept. 2026 : subdomain d’abord, puis `www.agilotext.com` + `agilotext.com`.
 
 ## Embeds à coller (même SHA partout)
 
