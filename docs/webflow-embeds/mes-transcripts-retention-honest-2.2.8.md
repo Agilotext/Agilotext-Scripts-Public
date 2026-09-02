@@ -25,7 +25,7 @@ Remplacer **seulement** le `src` de `Code-mes-transcripts-logic-v2.js`. Ajouter 
 
 ```html
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3fad75c2/scripts/shared/retention-messages.js?v=3fad75c2"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3fad75c2/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-<SHA>"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3fad75c2/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-3fad75c2"></script>
 ```
 
 Ne pas changer sidebar / bridge / bulk (`@2b4de42`) sur cette passe.
