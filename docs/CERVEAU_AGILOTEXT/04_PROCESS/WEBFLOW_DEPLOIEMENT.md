@@ -1,4 +1,14 @@
-# Déploiement Webflow — Rétention juin 2026
+# Déploiement Webflow — Rétention + UX honnête
+
+**Branche cible :** `1.11` (`fix/retention-honest-ux`)  
+**Hash UX honnête :** `3fad75c2` (`2.2.8-retention-honest`)  
+**Rollback Mes transcripts prod :** `@5094a73` (`2.2.7-demo-row`)
+
+Détail embeds : [`docs/webflow-embeds/mes-transcripts-retention-honest-2.2.8.md`](../../webflow-embeds/mes-transcripts-retention-honest-2.2.8.md)
+
+---
+
+## Historique (juin 2026, inchangé ci-dessous)
 
 **Branche :** `1.09`  
 **Hash commit :** `0de4923` (branche `1.09`, 15/06/2026)
@@ -52,6 +62,8 @@ Test prod : navigation privée + `?debug=1` sur un job expiré et un job sans CR
 | 2026-06-15 | `0de4923` | Éditeur + Mes transcripts ×3 tiers | Rétention bandaid front v1.10 |
 | 2026-06-16 | `aadc13c` | agilotext-test uniquement | Pagination v2 (`*-v2.js`), prod v1 inchangée |
 | 2026-06-18 | `2b4de42` | agilotext-test uniquement | v2.2.0-fullclient — fetch all + pagination client (API ignore sortDir) |
+| 2026-08-26 | `5094a73` | www + test Mes transcripts ×3 | logic-v2 `2.2.7-demo-row` (pin prod actuel avant UX honnête) |
+| 2026-09-02 | `3fad75c2` | à pinner test puis www | `2.2.8-retention-honest` : audio sans promesse texte, fantôme + jobId |
 
 ## Pagination v2 — rollback chain (agilotext-test)
 
