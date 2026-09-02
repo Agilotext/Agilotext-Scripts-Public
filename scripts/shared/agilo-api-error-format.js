@@ -6,14 +6,29 @@
  * exposer window.agiloJobErrorParts. Sinon les scripts peuvent contenir une copie tolérée
  * du bloc ensureAgiloJobErrorParts ci-dessous.
  *
- * @version 1.09
+ * @version 1.10
  */
 (function (w) {
   'use strict';
 
   var AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
-  var AUDIO_EXPIRED_MESSAGE = 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
-  var TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+
+  function retentionMsg(kind, opts) {
+    if (w && typeof w.agiloRetentionMessages === 'function') {
+      return w.agiloRetentionMessages((opts && opts.edition) || '', kind, opts);
+    }
+    if (kind === 'audio_expired') {
+      return 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+    }
+    if (kind === 'ghost_transcript') {
+      return 'Cette transcription n’est plus sur le serveur. Contactez le support avec le numéro du job.';
+    }
+    return 'Cette transcription ou ce compte rendu n’est plus disponible.';
+  }
+
+  var AUDIO_EXPIRED_MESSAGE = retentionMsg('audio_expired');
+  var TEXT_ASSET_EXPIRED_MESSAGE = retentionMsg('text_retention');
+  var GHOST_TRANSCRIPT_MESSAGE = retentionMsg('ghost_transcript');
 
   function trimStr(s) {
     return (s === undefined || s === null) ? '' : String(s).trim();
@@ -79,9 +94,16 @@
         alertText: AUDIO_EXPIRED_MESSAGE
       };
     }
+    if (jEx && jEx.toLowerCase().indexOf('error_transcript_file_not_exists') !== -1) {
+      return {
+        primary: GHOST_TRANSCRIPT_MESSAGE,
+        technical: '',
+        alertText: GHOST_TRANSCRIPT_MESSAGE
+      };
+    }
     if (jEx && jEx.toLowerCase().indexOf('error_summary_transcript_file_not_exists') !== -1) {
       return {
-        primary: 'Transcription ou compte rendu archivé — politique de conservation des données.',
+        primary: TEXT_ASSET_EXPIRED_MESSAGE,
         technical: '',
         alertText: TEXT_ASSET_EXPIRED_MESSAGE
       };

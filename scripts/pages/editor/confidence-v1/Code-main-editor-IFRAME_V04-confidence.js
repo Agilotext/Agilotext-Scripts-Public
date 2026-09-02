@@ -890,6 +890,9 @@
       /** receiveSummary KO utilise error_message = error_summary_on_error (distinct du transcript_status READY_SUMMARY_ON_ERROR). */
       ERROR_SUMMARY_ON_ERROR: "La génération du compte-rendu a échoué.",
       ERROR_TRANSCRIPT_NOT_READY: "Le transcript n'est pas encore prêt.",
+      ERROR_TRANSCRIPT_FILE_NOT_EXISTS: (typeof window.agiloRetentionMessages === 'function'
+        ? window.agiloRetentionMessages('', 'ghost_transcript')
+        : "Cette transcription n’est plus sur le serveur. Contactez le support avec le numéro du job."),
       ON_ERROR: "Le serveur a signalé une erreur.",
       ERROR_INVALID_TOKEN: "Session expirée ou invalide. Veuillez vous reconnecter.",
       NETWORK_ERROR: "Problème réseau lors de la récupération des données. Veuillez réessayer.",

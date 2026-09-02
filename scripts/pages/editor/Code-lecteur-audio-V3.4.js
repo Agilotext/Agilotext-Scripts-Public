@@ -21,8 +21,14 @@
   const autoplayParam = qs.get('autoplay') === '1';
   const DEBUG = qs.get('debugAudio') === '1' || window.AGILO_DEBUG;
   const log = (...a) => { if (DEBUG) console.log('[agilo:audio]', ...a); };
-  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  function audioExpiredMessage() {
+    if (typeof window.agiloRetentionMessages === 'function') {
+      return window.agiloRetentionMessages('', 'audio_expired');
+    }
+    return window.agiloAudioExpiredMessage
+      || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+  }
+  const AUDIO_EXPIRED_MESSAGE = audioExpiredMessage();
   const AUDIO_AUTH_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
   const AUDIO_GENERIC_MESSAGE = 'Impossible de charger cet audio pour le moment.';
   const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;

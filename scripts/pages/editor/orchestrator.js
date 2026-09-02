@@ -198,8 +198,10 @@
   // On force toujours un getToken frais puis on reconstruit l’URL (évite Invalid Token sur receiveText / receiveSummary).
   const AGILO_API_V1 = 'https://api.agilotext.com/api/v1';
   const FREE_RESTRICTED_FORMATS = new Set(['doc', 'pdf']);
-  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  const AUDIO_EXPIRED_MESSAGE = (typeof window.agiloRetentionMessages === 'function'
+    ? window.agiloRetentionMessages('', 'audio_expired')
+    : (window.agiloAudioExpiredMessage
+      || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.'));
   const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
 
   function tryParseJson(text) {

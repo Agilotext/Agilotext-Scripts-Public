@@ -7,9 +7,22 @@
   window.__agiloEditorHeader_v5 = true;
 
   const AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
-  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
-  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+  function retentionMessage(kind, opts) {
+    if (typeof window.agiloRetentionMessages === 'function') {
+      return window.agiloRetentionMessages((opts && opts.edition) || '', kind, opts);
+    }
+    if (kind === 'audio_expired') {
+      return window.agiloAudioExpiredMessage
+        || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+    }
+    if (kind === 'ghost_transcript') {
+      return 'Cette transcription n’est plus sur le serveur. Contactez le support avec le numéro du job.';
+    }
+    return 'Cette transcription ou ce compte rendu n’est plus disponible.';
+  }
+  const AUDIO_EXPIRED_MESSAGE = retentionMessage('audio_expired');
+  const TEXT_ASSET_EXPIRED_MESSAGE = retentionMessage('text_retention');
+  const GHOST_TRANSCRIPT_MESSAGE = retentionMessage('ghost_transcript');
 
   /** @returns {typeof window.agiloJobErrorParts} */
   function ensureJobErrorFmt() {
@@ -51,9 +64,16 @@
           alertText: AUDIO_EXPIRED_MESSAGE
         };
       }
+      if (ex && ex.toLowerCase().includes('error_transcript_file_not_exists')) {
+        return {
+          primary: GHOST_TRANSCRIPT_MESSAGE,
+          technical: '',
+          alertText: GHOST_TRANSCRIPT_MESSAGE
+        };
+      }
       if (ex && ex.toLowerCase().includes('error_summary_transcript_file_not_exists')) {
         return {
-          primary: 'Transcription ou compte rendu archivé — politique de conservation des données.',
+          primary: TEXT_ASSET_EXPIRED_MESSAGE,
           technical: '',
           alertText: TEXT_ASSET_EXPIRED_MESSAGE
         };
@@ -356,23 +376,30 @@
   function isExpiredJob(job) {
     const je = String(job?.javaException || '').toLowerCase();
     if (je.includes('error_duration_is_too_long')) return false;
+    if (je.includes('error_transcript_file_not_exists')) return true;
     if (je.includes('error_summary_transcript_file_not_exists')) {
       const pid = Number(job?.promptid ?? job?.promptId);
       if (pid === -1) return false;
       return true;
     }
     const st = String(job?.transcriptStatus || '').toUpperCase();
-    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+      || st === 'ERROR_TRANSCRIPT_FILE_NOT_EXISTS';
   }
 
   function expiredJobMessage(job) {
-    return TEXT_ASSET_EXPIRED_MESSAGE;
+    const je = String(job?.javaException || '').toLowerCase();
+    const st = String(job?.transcriptStatus || '').toUpperCase();
+    if (je.includes('error_transcript_file_not_exists') || st === 'ERROR_TRANSCRIPT_FILE_NOT_EXISTS') {
+      return retentionMessage('ghost_transcript', { jobId: job && (job.jobid || job.jobId) });
+    }
+    return retentionMessage('text_retention', { jobId: job && (job.jobid || job.jobId) });
   }
 
   function updateStatusIcons(status, job) {
     const wrap = $('.state._100'); if (!wrap) return;
     const map = {
-      '.icon-error': ['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE'],
+      '.icon-error': ['ON_ERROR', 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TRANSCRIPT_FILE_NOT_EXISTS', 'ERROR_TOO_MANY_LANGUAGES_CODE'],
       '.icon-inprogress': ['PENDING', 'IN_PROGRESS', 'QUEUED', 'UPLOADING'],
       '.icon-ready_summary_pending': ['READY_SUMMARY_PENDING'],
       '.icon-ready_summary_ready': ['READY_SUMMARY_READY'],

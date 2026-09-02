@@ -13,15 +13,36 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '1.11';
+  window.__agiloMesTranscriptsLogicVersion = '1.11-retention-honest';
 
   const API_BASE = 'https://api.agilotext.com/api/v1';
-  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+  function retentionMessage(kind, opts) {
+    const edition = (opts && opts.edition) || getEdition();
+    if (typeof window.agiloRetentionMessages === 'function') {
+      return window.agiloRetentionMessages(edition, kind, opts);
+    }
+    const jobId = opts && (opts.jobId || opts.jobid);
+    const job = jobId ? ' (job ' + jobId + ')' : '';
+    if (kind === 'audio_expired') {
+      if (edition === 'free') return 'Cet audio n’est plus disponible : il a été supprimé après 24 heures (offre Gratuit).';
+      if (edition === 'pro') return 'Cet audio n’est plus disponible : il a été supprimé après 30 jours (offre Pro).';
+      return 'Cet audio n’est plus disponible : il a été supprimé après 30 jours (offre Business).';
+    }
+    if (kind === 'ghost_transcript') {
+      if (edition === 'ent') {
+        return 'Cette transcription n’est plus sur le serveur. Ce n’est pas le comportement prévu de l’offre Business. Contactez le support avec le numéro du job' + job + '.';
+      }
+      return 'Cette transcription n’est plus sur le serveur. Contactez le support avec le numéro du job' + job + '.';
+    }
+    if (edition === 'free') return 'Cette transcription ou ce compte rendu n’est plus disponible : conservation 7 jours (offre Gratuit).';
+    if (edition === 'pro') return 'Cette transcription ou ce compte rendu n’est plus disponible : conservation 1 an (offre Pro).';
+    return 'Cette transcription n’est plus sur le serveur. Ce n’est pas le comportement prévu de l’offre Business. Contactez le support avec le numéro du job' + job + '.';
+  }
+  const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage || retentionMessage('audio_expired');
   const AUTH_AUDIO_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
   const AUDIO_GENERIC_MESSAGE = 'Impossible de récupérer cet audio pour le moment.';
   const AUDIO_AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
-  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+  const TEXT_ASSET_EXPIRED_MESSAGE = retentionMessage('text_retention');
 
   function tryParseJson(text) {
     try {
@@ -367,8 +388,16 @@
     return 30;
   }
 
+  function isGhostTranscriptJob(job) {
+    const ex = jobJavaException(job);
+    if (ex.includes('error_transcript_file_not_exists')) return true;
+    const st = String(job?.transcriptStatus || '').toUpperCase();
+    return st === 'ERROR_TRANSCRIPT_FILE_NOT_EXISTS';
+  }
+
   function isExpiredJob(job) {
     if (!job || isDurationTooLongError(job)) return false;
+    if (isGhostTranscriptJob(job)) return true;
     const ex = jobJavaException(job);
     if (ex.includes('error_summary_transcript_file_not_exists')) {
       if (isNoSummaryRequested(job)) return false;
@@ -385,7 +414,11 @@
   }
 
   function archivedJobMessage(job) {
-    return TEXT_ASSET_EXPIRED_MESSAGE;
+    const jobId = job && (job.jobid || job.jobId);
+    if (isGhostTranscriptJob(job || {})) {
+      return retentionMessage('ghost_transcript', { jobId });
+    }
+    return retentionMessage('text_retention', { jobId });
   }
 
   function isSummaryReadyForDownload(transcriptStatus) {
@@ -490,6 +523,14 @@
         line = 'Transcription prête ; compte rendu en cours de génération';
         break;
       case 'READY_SUMMARY_READY':
+        if (getEdition() === 'ent' && job) {
+          const d = convertDateStringToDate(job.dtCreation || job.dt_creation);
+          const ageDays = d && d.getTime() ? (Date.now() - d.getTime()) / 86400000 : 0;
+          if (ageDays > 30) {
+            line = 'Audio retiré après 30 jours. Si la transcription ne s’ouvre pas, contactez le support avec le numéro du job.';
+            break;
+          }
+        }
         line = 'Transcription et compte rendu prêts';
         break;
       case 'READY_SUMMARY_ON_ERROR':
