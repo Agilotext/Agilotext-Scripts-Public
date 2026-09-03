@@ -16,7 +16,7 @@ Page : `/app/free/dashboard` (`6815bee5a9c0b57da183550c`).
 
 Le footer doit charger, dans cet ordre :
 
-1. `window.AGILO_SCRIPTS_BASE` = jsDelivr pinné sur `faae68ad4754e1358dc8d954eb4fb6773d137524`
+1. `window.AGILO_SCRIPTS_BASE` = jsDelivr pinné sur `db50ab964d6fd812d9ec758e3cf4c1ebf5aef476`
 2. `scripts/pages/dashboard/Free/free-speakers-daily-trial.js`
 3. `scripts/pages/dashboard/free_v2.js`
 4. `scripts/pages/dashboard/Ent/maestro-context-ent.js`
