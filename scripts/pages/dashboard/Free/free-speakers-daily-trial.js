@@ -2,6 +2,7 @@
  * Agilotext Free — essai quotidien reconnaissance d’intervenants
  * 1 essai / membre / jour (Europe/Paris). Garde client uniquement.
  *
+ * v2.0.3 : infobulle ? à droite du libellé, plus de violet dans le flex
  * v2.0.2 : window.edition accès nommé (div#edition) n’inhibe plus le garde
  * v2.0.1 : visuels Webflow, bind unique, upsell Pro seulement si used
  * v2.0.0 : consentement armed par onglet, exclusivité format, migration v1,
@@ -10,7 +11,7 @@
 (function (root) {
   "use strict";
 
-  var VERSION = "2.0.2";
+  var VERSION = "2.0.3";
   var SCHEMA_VERSION = 2;
   var STORAGE_PREFIX = "agilo_free_speaker_trial:";
   var CHANNEL_NAME = "agilo-free-speaker-trial";
@@ -19,6 +20,7 @@
   var PENDING_TTL_MS = 3 * 60 * 60 * 1000;
   var UNCERTAIN_TTL_MS = 15 * 60 * 1000;
   var HINT_ID = "agilo-speaker-trial-hint";
+  var TIP_WRAP_ID = "agilo-speaker-trial-tip-wrap";
   var MODAL_ID = "agilo-speaker-trial-modal";
   var MS_PRICE_PRO = "prc_pro-qn9f07eb";
   var CERTAIN_API_ERRORS = [
@@ -90,6 +92,22 @@
     var path = pathname || "";
     if (path && path.indexOf("/app/free/") === -1) return false;
     return true;
+  }
+
+  function closestOptionWrap(checkbox) {
+    if (!checkbox) return null;
+    if (typeof checkbox.closest !== "function") return checkbox.parentElement || null;
+    return checkbox.closest(".checkbox-component") ||
+      checkbox.closest(".w-checkbox, label") ||
+      checkbox.parentElement ||
+      null;
+  }
+
+  function hintText(status) {
+    if (status === "pending") return "Envoi de l’essai en cours.";
+    if (status === "uncertain") return "Essai en cours de vérification.";
+    if (status === "used") return "Essai utilisé aujourd’hui. En Pro, illimité.";
+    return "1 essai offert aujourd’hui. Cliquez pour séparer les voix sur ce fichier.";
   }
 
   function speakersIntent(checkboxChecked, armed) {
@@ -571,6 +589,8 @@
     createCore: createCore,
     readEdition: readEdition,
     isFreeEditionContext: isFreeEditionContext,
+    closestOptionWrap: closestOptionWrap,
+    hintText: hintText,
     PENDING_TTL_MS: PENDING_TTL_MS,
     UNCERTAIN_TTL_MS: UNCERTAIN_TTL_MS
   };
@@ -626,8 +646,7 @@
   }
 
   function optionWrap(checkbox) {
-    if (!checkbox) return null;
-    return checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement;
+    return closestOptionWrap(checkbox);
   }
 
   function paintToggle(checkbox, checked) {
@@ -742,7 +761,8 @@
     var nodes = wrap.querySelectorAll("div, span, p, label");
     for (var i = 0; i < nodes.length; i += 1) {
       var el = nodes[i];
-      if (el.id === HINT_ID) continue;
+      if (el.id === HINT_ID || el.id === TIP_WRAP_ID) continue;
+      if (el.closest && el.closest("#" + TIP_WRAP_ID)) continue;
       var text = (el.textContent || "").replace(/\s+/g, " ").trim();
       if (/reconnaissance des intervenants/i.test(text) && el.querySelectorAll("input, .checkbox_toggle").length === 0) {
         return el;
@@ -751,24 +771,62 @@
     return wrap;
   }
 
+  function isolateTipGesture(event) {
+    if (!event) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+  }
+
+  function closeSpeakerTip() {
+    var wrap = document.getElementById(TIP_WRAP_ID);
+    if (wrap) wrap.classList.remove("is-open");
+  }
+
   function ensureHint() {
     var existing = document.getElementById(HINT_ID);
-    if (existing) return existing;
-    var hint = document.createElement("p");
-    hint.id = HINT_ID;
-    hint.className = "agilo-speaker-trial-status";
-    hint.setAttribute("role", "status");
-    hint.setAttribute("aria-live", "polite");
+    if (existing && existing.classList.contains("agilo-speaker-trial-bubble")) return existing;
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+
+    var staleWrap = document.getElementById(TIP_WRAP_ID);
+    if (staleWrap && staleWrap.parentNode) staleWrap.parentNode.removeChild(staleWrap);
+
+    var wrap = document.createElement("span");
+    wrap.id = TIP_WRAP_ID;
+    wrap.className = "agilo-speaker-trial-tip-wrap";
+
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "agilo-speaker-trial-tip";
+    btn.setAttribute("aria-label", "À propos de l’essai intervenants");
+    btn.textContent = "?";
+    btn.addEventListener("click", function (event) {
+      isolateTipGesture(event);
+      wrap.classList.toggle("is-open");
+    }, true);
+    btn.addEventListener("pointerdown", isolateTipGesture, true);
+    btn.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      isolateTipGesture(event);
+      wrap.classList.toggle("is-open");
+    }, true);
+
+    var bubble = document.createElement("span");
+    bubble.id = HINT_ID;
+    bubble.className = "agilo-speaker-trial-bubble";
+    bubble.setAttribute("role", "status");
+    bubble.setAttribute("aria-live", "polite");
+
+    wrap.appendChild(btn);
+    wrap.appendChild(bubble);
+
     var host = findLabelHost();
-    if (host) {
-      if (host.nextSibling) host.parentNode.insertBefore(hint, host.nextSibling);
-      else host.parentNode.appendChild(hint);
-    } else {
-      document.body.appendChild(hint);
-    }
+    if (host) host.appendChild(wrap);
+    else document.body.appendChild(wrap);
+
     var checkbox = speakersCheckbox();
     if (checkbox) checkbox.setAttribute("aria-describedby", HINT_ID);
-    return hint;
+    return bubble;
   }
 
   function injectStatusCss() {
@@ -776,9 +834,13 @@
     var style = document.createElement("style");
     style.id = "agilo-speaker-trial-css";
     style.textContent =
-      ".agilo-speaker-trial-status{display:block;margin:.25rem 0 0;font-size:.78rem;line-height:1.35;max-width:24rem;}" +
-      ".agilo-speaker-trial-status.is-available{color:#5d2de6;}" +
-      ".agilo-speaker-trial-status.is-blocked{color:#666;}" +
+      ".agilo-speaker-trial-tip-wrap{position:relative;display:inline-flex;align-items:center;margin-left:.35rem;vertical-align:middle;}" +
+      ".agilo-speaker-trial-tip{display:inline-flex;align-items:center;justify-content:center;width:1rem;height:1rem;padding:0;border-radius:50%;border:1px solid #525252;background:transparent;color:#525252;font-size:.65rem;font-weight:700;line-height:1;cursor:help;flex-shrink:0;font-family:inherit;}" +
+      ".agilo-speaker-trial-bubble{position:absolute;left:50%;bottom:calc(100% + .4rem);transform:translateX(-50%);width:max-content;max-width:16rem;padding:.5rem .65rem;border-radius:.4rem;background:#020202;color:#fff;font-size:.75rem;font-weight:500;line-height:1.4;text-align:left;z-index:80;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:none;opacity:0;visibility:hidden;}" +
+      ".agilo-speaker-trial-tip-wrap:hover .agilo-speaker-trial-bubble," +
+      ".agilo-speaker-trial-tip-wrap:focus-within .agilo-speaker-trial-bubble," +
+      ".agilo-speaker-trial-tip-wrap.is-open .agilo-speaker-trial-bubble{opacity:1;visibility:visible;}" +
+      ".agilo-speaker-trial-bubble::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#020202;}" +
       "#" + MODAL_ID + "{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);}" +
       "#" + MODAL_ID + " .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;}" +
       "#" + MODAL_ID + " h3{margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202;}" +
@@ -787,13 +849,6 @@
       "#" + MODAL_ID + " .agilo-free-btn-ghost{display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline;}" +
       "#" + MODAL_ID + " .agilo-free-close{position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem}";
     document.head.appendChild(style);
-  }
-
-  function hintText(status) {
-    if (status === "pending") return "Envoi de l’essai en cours";
-    if (status === "uncertain") return "Essai en cours de vérification";
-    if (status === "used") return "Essai utilisé aujourd’hui";
-    return "1 essai gratuit aujourd’hui";
   }
 
   function refreshStatus() {
@@ -841,6 +896,7 @@
 
   function showInfoModal(opts) {
     injectStatusCss();
+    closeSpeakerTip();
     closeModal();
     lastFocus = document.activeElement;
     var overlay = document.createElement("div");
@@ -903,6 +959,7 @@
   }
 
   function showUpgrade(source) {
+    closeSpeakerTip();
     track("free_speaker_trial_upgrade_clicked", { source: source || lastSource || "" });
     if (root.AgiloFreeUpgrade && typeof root.AgiloFreeUpgrade.show === "function") {
       root.AgiloFreeUpgrade.show({
@@ -1219,6 +1276,9 @@
   function start() {
     if (!isFreeContext()) return;
     boot();
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") closeSpeakerTip();
+    }, true);
     [0, 350, 1100].forEach(function (ms) {
       setTimeout(function () {
         boot();

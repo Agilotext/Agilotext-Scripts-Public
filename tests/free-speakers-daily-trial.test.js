@@ -482,6 +482,26 @@ describe("readEdition ignore l’accès nommé window.edition", function () {
   });
 });
 
+describe("closestOptionWrap et copy infobulle", function () {
+  it("préfère .checkbox-component au label Webflow", function () {
+    const component = { id: "row" };
+    const label = {
+      closest: function (sel) {
+        if (sel === ".checkbox-component") return component;
+        return label;
+      }
+    };
+    assert.equal(trial.closestOptionWrap(label), component);
+  });
+
+  it("expose la copy available et used", function () {
+    assert.match(trial.hintText("available"), /1 essai offert aujourd’hui/);
+    assert.match(trial.hintText("used"), /Essai utilisé aujourd’hui/);
+    assert.match(trial.hintText("pending"), /Envoi de l’essai en cours/);
+    assert.match(trial.hintText("uncertain"), /vérification/);
+  });
+});
+
 describe("boot navigateur malgré div#edition", function () {
   const fs = require("fs");
   const path = require("path");
@@ -495,28 +515,95 @@ describe("boot navigateur malgré div#edition", function () {
     const node = {
       id: id || "",
       tagName: extras && extras.tagName || "DIV",
-      className: "",
-      textContent: "",
+      className: extras && extras.className || "",
+      textContent: extras && extras.textContent || "",
       checked: !!(extras && extras.checked),
       style: {},
       attrs: {},
       children: [],
       parentNode: extras && extras.parent || null,
+      parentElement: extras && extras.parent || null,
       nextSibling: null,
       classList: {
         toggle: function () {},
         add: function () {},
-        remove: function () {}
+        remove: function () {},
+        contains: function (name) {
+          return (" " + node.className + " ").indexOf(" " + name + " ") !== -1;
+        }
       },
-      setAttribute: function (name, value) { node.attrs[name] = String(value); },
-      getAttribute: function (name) { return Object.prototype.hasOwnProperty.call(node.attrs, name) ? node.attrs[name] : null; },
+      setAttribute: function (name, value) {
+        node.attrs[name] = String(value);
+        if (name === "id") node.id = String(value);
+        if (name === "class" || name === "className") node.className = String(value);
+      },
+      getAttribute: function (name) {
+        if (name === "id") return node.id || null;
+        return Object.prototype.hasOwnProperty.call(node.attrs, name) ? node.attrs[name] : null;
+      },
       removeAttribute: function (name) { delete node.attrs[name]; },
-      querySelector: function () { return node.children[0] || null; },
-      querySelectorAll: function () { return node.children; },
-      contains: function (other) { return node.children.indexOf(other) !== -1; },
-      appendChild: function (child) { node.children.push(child); child.parentNode = node; return child; },
+      querySelector: function (sel) {
+        return node.querySelectorAll(sel)[0] || null;
+      },
+      querySelectorAll: function (sel) {
+        const out = [];
+        function match(child) {
+          if (sel === "input, .checkbox_toggle") {
+            return child.tagName === "INPUT" || (" " + child.className + " ").indexOf(" checkbox_toggle ") !== -1;
+          }
+          if (sel === "div, span, p, label") {
+            return ["DIV", "SPAN", "P", "LABEL"].indexOf(child.tagName) !== -1;
+          }
+          if (sel === ".checkbox_toggle") {
+            return (" " + child.className + " ").indexOf(" checkbox_toggle ") !== -1;
+          }
+          return false;
+        }
+        function walk(current) {
+          (current.children || []).forEach(function (child) {
+            if (match(child)) out.push(child);
+            walk(child);
+          });
+        }
+        walk(node);
+        return out;
+      },
+      contains: function (other) {
+        let cur = other;
+        while (cur) {
+          if (cur === node) return true;
+          cur = cur.parentNode;
+        }
+        return false;
+      },
+      appendChild: function (child) {
+        if (child.parentNode && child.parentNode.children) {
+          const list = child.parentNode.children;
+          const idx = list.indexOf(child);
+          if (idx !== -1) list.splice(idx, 1);
+        }
+        node.children.push(child);
+        child.parentNode = node;
+        child.parentElement = node;
+        return child;
+      },
       insertBefore: function (child) { return node.appendChild(child); },
-      closest: function () { return node.parentNode || node; },
+      removeChild: function (child) {
+        const idx = node.children.indexOf(child);
+        if (idx !== -1) node.children.splice(idx, 1);
+        child.parentNode = null;
+        return child;
+      },
+      closest: function (sel) {
+        let cur = node;
+        while (cur) {
+          if (sel === ".checkbox-component" && (" " + cur.className + " ").indexOf(" checkbox-component ") !== -1) return cur;
+          if ((sel === ".w-checkbox, label" || sel === "label") && (cur.tagName === "LABEL" || (" " + cur.className + " ").indexOf(" w-checkbox ") !== -1)) return cur;
+          if (sel && sel.charAt(0) === "#" && cur.id === sel.slice(1)) return cur;
+          cur = cur.parentNode;
+        }
+        return null;
+      },
       addEventListener: function () {},
       dispatchEvent: function () { return true; }
     };
@@ -526,14 +613,19 @@ describe("boot navigateur malgré div#edition", function () {
   function loadGuard(edition, pathname) {
     const speakersInput = el("toggle-speakers", { tagName: "INPUT" });
     const formatInput = el("toggle-format-transcript", { tagName: "INPUT", checked: true });
-    const speakersWrap = el("speakers-wrap");
+    const toggleLabel = el("", { tagName: "LABEL", className: "w-checkbox checkbox-field" });
+    const speakersWrap = el("speakers-wrap", { className: "checkbox-component" });
+    const labelHost = el("", {
+      tagName: "DIV",
+      className: "text-size-small text-color-grey",
+      textContent: "Activer la reconnaissance des intervenants"
+    });
     const speakersHost = el("speakers-host");
-    speakersWrap.className = "checkbox-component";
     speakersHost.appendChild(speakersWrap);
-    speakersWrap.appendChild(speakersInput);
-    speakersInput.parentNode = speakersWrap;
-    speakersInput.parentElement = speakersWrap;
-    speakersInput.closest = function () { return speakersWrap; };
+    speakersWrap.appendChild(toggleLabel);
+    toggleLabel.appendChild(speakersInput);
+    speakersWrap.appendChild(labelHost);
+    const created = [];
     const byId = {
       "toggle-speakers": speakersInput,
       "toggle-format-transcript": formatInput,
@@ -548,7 +640,13 @@ describe("boot navigateur malgré div#edition", function () {
         readyState: "complete",
         head: head,
         body: body,
-        getElementById: function (id) { return byId[id] || null; },
+        getElementById: function (id) {
+          if (byId[id]) return byId[id];
+          for (let i = 0; i < created.length; i += 1) {
+            if (created[i].id === id) return created[i];
+          }
+          return null;
+        },
         querySelector: function (sel) {
           if (sel === 'input[name="memberId"]') return null;
           if (sel === 'input[name="memberEmail"]') return null;
@@ -559,6 +657,12 @@ describe("boot navigateur malgré div#edition", function () {
         querySelectorAll: function () { return []; },
         createElement: function (tag) {
           const node = el("", { tagName: String(tag).toUpperCase() });
+          created.push(node);
+          const originalSet = node.setAttribute;
+          node.setAttribute = function (name, value) {
+            originalSet(name, value);
+            if (name === "id") byId[String(value)] = node;
+          };
           return node;
         },
         addEventListener: function () {}
@@ -593,7 +697,14 @@ describe("boot navigateur malgré div#edition", function () {
     sandbox.globalThis = sandbox;
     sandbox.edition = edition;
     vm.runInNewContext(src, sandbox, { timeout: 2000 });
-    return { sandbox: sandbox, speakersWrap: speakersWrap, head: head };
+    return {
+      sandbox: sandbox,
+      speakersWrap: speakersWrap,
+      toggleLabel: toggleLabel,
+      labelHost: labelHost,
+      head: head,
+      created: created
+    };
   }
 
   it("démarre si edition est un objet (div#edition) sur /app/free/", function () {
@@ -601,8 +712,26 @@ describe("boot navigateur malgré div#edition", function () {
     const api = loaded.sandbox.AgiloFreeSpeakerTrial;
     assert.ok(api);
     assert.equal(api.booted, true);
-    assert.equal(loaded.speakersWrap.attrs["data-agilo-speaker-trial"], "2.0.2");
+    assert.equal(loaded.speakersWrap.attrs["data-agilo-speaker-trial"], "2.0.3");
     assert.ok(loaded.head.children.some(function (node) { return node.id === "agilo-speaker-trial-css"; }));
+  });
+
+  it("place l’infobulle après le libellé, pas entre le toggle et le texte", function () {
+    const loaded = loadGuard({ id: "edition", textContent: "Free" }, "/app/free/dashboard");
+    const between = loaded.speakersWrap.children.filter(function (child) {
+      return child !== loaded.toggleLabel && child !== loaded.labelHost;
+    });
+    assert.equal(between.length, 0);
+    const tip = loaded.labelHost.children.find(function (child) {
+      return child.id === "agilo-speaker-trial-tip-wrap";
+    });
+    assert.ok(tip);
+    assert.equal(tip.className, "agilo-speaker-trial-tip-wrap");
+    const bubble = tip.children.find(function (child) { return child.id === "agilo-speaker-trial-hint"; });
+    assert.ok(bubble);
+    assert.match(bubble.textContent, /1 essai offert aujourd’hui/);
+    assert.ok(bubble.classList.contains("agilo-speaker-trial-bubble"));
+    assert.equal(loaded.speakersWrap.children.some(function (child) { return child.tagName === "P"; }), false);
   });
 
   it("ne démarre pas si edition est la string pro", function () {
