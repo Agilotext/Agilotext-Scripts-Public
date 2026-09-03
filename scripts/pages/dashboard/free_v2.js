@@ -1,5 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
+ * v1.12 — essai intervenants : consentement armed, fail-closed, exclusivité format
  * v1.10 — upsell popup ; CR + format Free libres (défaut ON) ; speakers lockés ; hook Maestro
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
@@ -918,18 +919,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (submitBtn) submitBtn.disabled = true;
 
       const sessionInputAtStart = form && form.querySelector('input[name="agilo_record_session_id"]');
-      const speakerIntent = (window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.readIntent === 'function')
-        ? window.AgiloFreeSpeakerTrial.readIntent(sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload')
+      const speakerSourceHint = sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload';
+      const trialApi = window.AgiloFreeSpeakerTrial;
+      const speakerIntent = (trialApi && typeof trialApi.readIntent === 'function')
+        ? trialApi.readIntent(speakerSourceHint)
         : {
-            speakers: !!(speakersCheckbox && speakersCheckbox.checked),
+            speakers: false,
+            armed: false,
+            formatChecked: !!(formatCheckbox && formatCheckbox.checked),
             speakersExpected: (speakersSelect && speakersSelect.value) || '',
-            source: sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload'
+            source: speakerSourceHint
           };
-      const speakersChecked = !!speakerIntent.speakers;
+      const speakersChecked = !!(speakerIntent.speakers && speakerIntent.armed);
       const speakersExpected = speakerIntent.speakersExpected;
       const speakerSource = speakerIntent.source;
       const summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
-      const formatChecked = !!(formatCheckbox && formatCheckbox.checked);
+      const formatChecked = speakerIntent.formatChecked != null
+        ? !!speakerIntent.formatChecked
+        : !!(formatCheckbox && formatCheckbox.checked);
 
       setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
@@ -948,9 +955,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (speakersChecked && window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.reserve === 'function') {
-        speakerReservation = await window.AgiloFreeSpeakerTrial.reserve({ source: speakerSource });
+      if (speakersChecked) {
+        if (!trialApi || typeof trialApi.reserve !== 'function') {
+          speakerReservation = { ok: false, reason: 'guard_missing' };
+        } else {
+          speakerReservation = await trialApi.reserve({ source: speakerSource });
+        }
         if (!speakerReservation || !speakerReservation.ok) {
+          if ((!trialApi || typeof trialApi.reserve !== 'function') && trialApi && typeof trialApi.showStateModal === 'function') {
+            trialApi.showStateModal(speakerReservation && speakerReservation.reason);
+          }
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
           if (submitBtn) submitBtn.disabled = false;
           form.dataset.sending = '0';
@@ -963,13 +977,21 @@ document.addEventListener('DOMContentLoaded', () => {
       fd.append('token', globalToken);
       fd.append('username', email);
       fd.append('edition', edition);
-      const speakersAllowed = speakersChecked && (!window.AgiloFreeSpeakerTrial || !!(speakerReservation && speakerReservation.ok));
+      const payloadCore = window.AgiloFreeSpeakerTrialCore;
+      const speakersPayload = (payloadCore && typeof payloadCore.resolveFreeSpeakersPayload === 'function')
+        ? payloadCore.resolveFreeSpeakersPayload(!!trialApi, {
+            speakers: speakersChecked,
+            armed: !!(speakerIntent && speakerIntent.armed),
+            formatChecked: formatChecked
+          }, speakerReservation || { ok: false })
+        : (speakersChecked && speakerReservation && speakerReservation.ok
+            ? { timestampTranscript: true, formatTranscript: false }
+            : { timestampTranscript: false, formatTranscript: !!formatChecked });
+      const speakersAllowed = !!speakersPayload.timestampTranscript;
       fd.append('timestampTranscript', speakersAllowed ? 'true' : 'false');
+      fd.append('formatTranscript', speakersPayload.formatTranscript ? 'true' : 'false');
       if (speakersAllowed) {
         fd.append('speakersExpected', speakersExpected || '');
-        fd.append('formatTranscript', 'false');
-      } else {
-        fd.append('formatTranscript', formatChecked ? 'true' : 'false');
       }
       fd.append('doSummary', summaryChecked ? 'true' : 'false');
       if (translateCheckbox && translateCheckbox.checked) {
@@ -1375,10 +1397,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureFreeToggleDefaultOn(summaryCheckbox, 'data-agilo-summary-defaulted');
   }
 
-  function ensureFreeFormatDefaultOn() {
-    ensureFreeToggleDefaultOn(formatCheckbox, 'data-agilo-format-defaulted');
-  }
-
   function removeInjectedProBadges(scope) {
     const root = scope || document;
     root.querySelectorAll('.agilo-pro-badge').forEach(b => b.remove());
@@ -1454,8 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
     injectFreeUpsellCss();
     removeFreeDesireCard();
     ensureFreeSummaryDefaultOn();
-    ensureFreeFormatDefaultOn();
-    // Speakers : essai 1/jour via AgiloFreeSpeakerTrial (plus de lock permanent)
+    // Format + speakers : exclusivité et défaut gérés par AgiloFreeSpeakerTrial
     // #toggle-summary + #toggle-format-transcript : libres sur Free
     lockFreeCheckbox(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
     lockFreeSelect(

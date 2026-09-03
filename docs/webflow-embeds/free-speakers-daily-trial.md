@@ -2,6 +2,14 @@
 
 Branche : `feat/free-speakers-daily-trial` (parent `1.11`).
 
+## Comportement v2
+
+- Défaut : intervenants OFF, formatage ON.
+- Un onglet n’envoie speakers que s’il est `armed` après le CTA « Activer mon essai ».
+- Quota client : `available | pending | uncertain | used`.
+- Fail-closed si le garde est absent.
+- TTL pending : 3 h. TTL uncertain : 15 min.
+
 ## Pin dashboard Free seulement
 
 Page : `/app/free/dashboard` (`6815bee5a9c0b57da183550c`).
@@ -16,8 +24,7 @@ Le footer doit charger, dans cet ordre :
 
 Ne pas modifier le symbole partagé `COMP-Options_wrapper` ni `/tarifs`.
 
-## Rollback
+## Rollback v2
 
-Remettre `AGILO_SCRIPTS_BASE` et `free_v2.js` sur `@2c2a315314c0bad8be1b1374a793ca9ce5a518a8`.
-Retirer `free-speakers-daily-trial.js` du footer Free.
-Republier subdomain, www et apex.
+Remettre le footer Free sur `@a07acae09077514aee64eceae496468899c4ef46`.
+Republier subdomain de test, puis www et apex.

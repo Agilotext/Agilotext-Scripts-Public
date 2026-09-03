@@ -347,29 +347,38 @@ function mountAgiloLiveVoice() {
     uploadBlob: async function ({ blob, email, options }) {
       await ensureValidToken(email, true);
 
-      var speakersOn = !!(options && options.speakers);
       var trial = window.AgiloFreeSpeakerTrial;
-      var useTrial = edition === "free" && speakersOn && trial && typeof trial.reserve === "function";
+      var intent = (edition === "free" && trial && typeof trial.readIntent === "function")
+        ? trial.readIntent("dictation")
+        : {
+            speakers: !!(options && options.speakers),
+            armed: edition !== "free",
+            formatChecked: !!(options && options.formatTranscript),
+            speakersExpected: options && options.speakersExpected,
+            source: "dictation"
+          };
+      var speakersWanted = edition === "free"
+        ? !!(intent && intent.speakers && intent.armed)
+        : !!(options && options.speakers);
       var reservation = null;
+      var speakersAllowed = false;
 
-      if (useTrial) {
-        reservation = await trial.reserve({ source: "dictation" });
-        if (!reservation || !reservation.ok) {
-          document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
-            detail: {
-              errorMessage: "speaker_trial_blocked",
-              speakersUsed: false,
-              source: "dictation",
-              trialRequestId: reservation && reservation.requestId
-            }
-          }));
-          var blocked = new Error("speaker_trial_blocked");
-          blocked.type = "speaker_trial_blocked";
-          throw blocked;
+      if (edition === "free") {
+        if (speakersWanted) {
+          if (!trial || typeof trial.reserve !== "function") {
+            speakersAllowed = false;
+          } else {
+            reservation = await trial.reserve({ source: "dictation" });
+            speakersAllowed = !!(reservation && reservation.ok);
+          }
         }
+      } else {
+        speakersAllowed = speakersWanted;
       }
 
-      var speakersAllowed = speakersOn && (!useTrial || !!(reservation && reservation.ok));
+      var formatOn = speakersAllowed
+        ? false
+        : !!(intent && intent.formatChecked != null ? intent.formatChecked : options && options.formatTranscript);
       var fd = new FormData();
 
       fd.append(
@@ -385,10 +394,7 @@ function mountAgiloLiveVoice() {
       fd.append("token", globalToken);
       fd.append("edition", edition);
       fd.append("timestampTranscript", speakersAllowed ? "true" : "false");
-      fd.append(
-        "formatTranscript",
-        speakersAllowed ? "false" : (options.formatTranscript ? "true" : "false")
-      );
+      fd.append("formatTranscript", formatOn ? "true" : "false");
       fd.append("doSummary", options.doSummary ? "true" : "false");
       fd.append("mailTranscription", "true");
 
@@ -397,7 +403,7 @@ function mountAgiloLiveVoice() {
       }
 
       if (speakersAllowed) {
-        fd.append("speakersExpected", String(options.speakersExpected || 0));
+        fd.append("speakersExpected", String((intent && intent.speakersExpected) || (options && options.speakersExpected) || 0));
       }
 
       if (options.translateTo) {
@@ -406,7 +412,7 @@ function mountAgiloLiveVoice() {
 
       try {
         var data = await sendWithRetry(fd, 3, false);
-        if (reservation && trial) {
+        if (reservation && reservation.ok && trial) {
           var jobId = data && data.jobIdList && data.jobIdList[0];
           if (data && data.status === "OK" && jobId) {
             trial.commit(jobId, { requestId: reservation.requestId, source: "dictation" });
@@ -428,7 +434,7 @@ function mountAgiloLiveVoice() {
         }
         return data;
       } catch (err) {
-        if (reservation && trial) {
+        if (reservation && reservation.ok && trial) {
           if (trial.isCertainRejection(err, null)) trial.release({ requestId: reservation.requestId });
           else trial.markUncertain({ requestId: reservation.requestId });
         }
