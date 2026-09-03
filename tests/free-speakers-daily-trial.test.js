@@ -461,3 +461,156 @@ describe("fallback sans Web Locks", function () {
     assert.equal(record.version, 2);
   });
 });
+
+describe("readEdition ignore l’accès nommé window.edition", function () {
+  it("n’accepte qu’une string", function () {
+    assert.equal(trial.readEdition("free"), "free");
+    assert.equal(trial.readEdition("pro"), "pro");
+    assert.equal(trial.readEdition(""), "");
+    assert.equal(trial.readEdition({}), "");
+    assert.equal(trial.readEdition({ id: "edition", textContent: "Free" }), "");
+    assert.equal(trial.readEdition(undefined), "");
+    assert.equal(trial.readEdition(null), "");
+  });
+
+  it("un objet edition n’empêche pas le contexte Free", function () {
+    assert.equal(trial.isFreeEditionContext({}, "/app/free/dashboard", false), true);
+    assert.equal(trial.isFreeEditionContext("free", "/app/free/dashboard", false), true);
+    assert.equal(trial.isFreeEditionContext("pro", "/app/free/dashboard", false), false);
+    assert.equal(trial.isFreeEditionContext("ent", "/app/free/dashboard", false), false);
+    assert.equal(trial.isFreeEditionContext("free", "/app/ent/dashboard", false), false);
+  });
+});
+
+describe("boot navigateur malgré div#edition", function () {
+  const fs = require("fs");
+  const path = require("path");
+  const vm = require("vm");
+  const src = fs.readFileSync(
+    path.join(__dirname, "../scripts/pages/dashboard/Free/free-speakers-daily-trial.js"),
+    "utf8"
+  );
+
+  function el(id, extras) {
+    const node = {
+      id: id || "",
+      tagName: extras && extras.tagName || "DIV",
+      className: "",
+      textContent: "",
+      checked: !!(extras && extras.checked),
+      style: {},
+      attrs: {},
+      children: [],
+      parentNode: extras && extras.parent || null,
+      nextSibling: null,
+      classList: {
+        toggle: function () {},
+        add: function () {},
+        remove: function () {}
+      },
+      setAttribute: function (name, value) { node.attrs[name] = String(value); },
+      getAttribute: function (name) { return Object.prototype.hasOwnProperty.call(node.attrs, name) ? node.attrs[name] : null; },
+      removeAttribute: function (name) { delete node.attrs[name]; },
+      querySelector: function () { return node.children[0] || null; },
+      querySelectorAll: function () { return node.children; },
+      contains: function (other) { return node.children.indexOf(other) !== -1; },
+      appendChild: function (child) { node.children.push(child); child.parentNode = node; return child; },
+      insertBefore: function (child) { return node.appendChild(child); },
+      closest: function () { return node.parentNode || node; },
+      addEventListener: function () {},
+      dispatchEvent: function () { return true; }
+    };
+    return node;
+  }
+
+  function loadGuard(edition, pathname) {
+    const speakersInput = el("toggle-speakers", { tagName: "INPUT" });
+    const formatInput = el("toggle-format-transcript", { tagName: "INPUT", checked: true });
+    const speakersWrap = el("speakers-wrap");
+    const speakersHost = el("speakers-host");
+    speakersWrap.className = "checkbox-component";
+    speakersHost.appendChild(speakersWrap);
+    speakersWrap.appendChild(speakersInput);
+    speakersInput.parentNode = speakersWrap;
+    speakersInput.parentElement = speakersWrap;
+    speakersInput.closest = function () { return speakersWrap; };
+    const byId = {
+      "toggle-speakers": speakersInput,
+      "toggle-format-transcript": formatInput,
+      "speakers-select": el("speakers-select", { tagName: "SELECT" })
+    };
+    const head = el("head");
+    const body = el("body");
+    const mem = {};
+    const sandbox = {
+      window: null,
+      document: {
+        readyState: "complete",
+        head: head,
+        body: body,
+        getElementById: function (id) { return byId[id] || null; },
+        querySelector: function (sel) {
+          if (sel === 'input[name="memberId"]') return null;
+          if (sel === 'input[name="memberEmail"]') return null;
+          if (sel === ".select-container.diarization") return el("diarization");
+          if (sel === 'input[name="agilo_record_session_id"]') return null;
+          return null;
+        },
+        querySelectorAll: function () { return []; },
+        createElement: function (tag) {
+          const node = el("", { tagName: String(tag).toUpperCase() });
+          return node;
+        },
+        addEventListener: function () {}
+      },
+      location: { pathname: pathname },
+      localStorage: {
+        getItem: function (k) { return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null; },
+        setItem: function (k, v) { mem[k] = String(v); },
+        removeItem: function (k) { delete mem[k]; }
+      },
+      navigator: {},
+      addEventListener: function () {},
+      requestAnimationFrame: function (fn) { fn(); },
+      setTimeout: function (fn) { fn(); },
+      fetch: function () { return Promise.resolve({ json: function () { return Promise.resolve({ jobsInfoDtos: [] }); } }); },
+      console: console,
+      Intl: Intl,
+      JSON: JSON,
+      Date: Date,
+      Object: Object,
+      Array: Array,
+      String: String,
+      Number: Number,
+      Boolean: Boolean,
+      Promise: Promise,
+      Error: Error,
+      Math: Math,
+      parseInt: parseInt,
+      encodeURIComponent: encodeURIComponent
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    sandbox.edition = edition;
+    vm.runInNewContext(src, sandbox, { timeout: 2000 });
+    return { sandbox: sandbox, speakersWrap: speakersWrap, head: head };
+  }
+
+  it("démarre si edition est un objet (div#edition) sur /app/free/", function () {
+    const loaded = loadGuard({ id: "edition", textContent: "Free" }, "/app/free/dashboard");
+    const api = loaded.sandbox.AgiloFreeSpeakerTrial;
+    assert.ok(api);
+    assert.equal(api.booted, true);
+    assert.equal(loaded.speakersWrap.attrs["data-agilo-speaker-trial"], "2.0.2");
+    assert.ok(loaded.head.children.some(function (node) { return node.id === "agilo-speaker-trial-css"; }));
+  });
+
+  it("ne démarre pas si edition est la string pro", function () {
+    const loaded = loadGuard("pro", "/app/free/dashboard");
+    const api = loaded.sandbox.AgiloFreeSpeakerTrial;
+    assert.ok(api);
+    assert.equal(api.booted, false);
+    assert.equal(loaded.speakersWrap.attrs["data-agilo-speaker-trial"], undefined);
+    assert.equal(loaded.head.children.length, 0);
+  });
+});

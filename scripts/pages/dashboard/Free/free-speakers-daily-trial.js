@@ -2,6 +2,7 @@
  * Agilotext Free — essai quotidien reconnaissance d’intervenants
  * 1 essai / membre / jour (Europe/Paris). Garde client uniquement.
  *
+ * v2.0.2 : window.edition accès nommé (div#edition) n’inhibe plus le garde
  * v2.0.1 : visuels Webflow, bind unique, upsell Pro seulement si used
  * v2.0.0 : consentement armed par onglet, exclusivité format, migration v1,
  * popup de confirmation, fail-closed, TTL pending 3 h / uncertain 15 min.
@@ -9,7 +10,7 @@
 (function (root) {
   "use strict";
 
-  var VERSION = "2.0.1";
+  var VERSION = "2.0.2";
   var SCHEMA_VERSION = 2;
   var STORAGE_PREFIX = "agilo_free_speaker_trial:";
   var CHANNEL_NAME = "agilo-free-speaker-trial";
@@ -76,6 +77,19 @@
 
   function storageKey(memberId, day) {
     return STORAGE_PREFIX + String(memberId || "") + ":" + String(day || "");
+  }
+
+  function readEdition(value) {
+    return typeof value === "string" ? value : "";
+  }
+
+  function isFreeEditionContext(edition, pathname, off) {
+    if (off) return false;
+    var ed = readEdition(edition);
+    if (ed && ed !== "free") return false;
+    var path = pathname || "";
+    if (path && path.indexOf("/app/free/") === -1) return false;
+    return true;
   }
 
   function speakersIntent(checkboxChecked, armed) {
@@ -555,6 +569,8 @@
     wrapStorage: wrapStorage,
     createMemoryStore: createMemoryStore,
     createCore: createCore,
+    readEdition: readEdition,
+    isFreeEditionContext: isFreeEditionContext,
     PENDING_TTL_MS: PENDING_TTL_MS,
     UNCERTAIN_TTL_MS: UNCERTAIN_TTL_MS
   };
@@ -568,11 +584,11 @@
   if (typeof document === "undefined") return;
 
   function isFreeContext() {
-    if (root.__AGILO_SPEAKER_TRIAL_OFF) return false;
-    if (root.edition && root.edition !== "free") return false;
-    var path = (root.location && root.location.pathname) || "";
-    if (path && path.indexOf("/app/free/") === -1) return false;
-    return true;
+    return isFreeEditionContext(
+      root.edition,
+      (root.location && root.location.pathname) || "",
+      !!root.__AGILO_SPEAKER_TRIAL_OFF
+    );
   }
 
   function readMemberId() {
@@ -1049,7 +1065,7 @@
   function defaultFetchJobs() {
     var email = readMemberEmail();
     var token = root.globalToken;
-    var edition = root.edition || "free";
+    var edition = readEdition(root.edition) || "free";
     if (!email || !token) return Promise.resolve([]);
     var url =
       "https://api.agilotext.com/api/v1/getJobsInfo?username=" +
@@ -1093,6 +1109,9 @@
       });
     }
     bindUi();
+    var wrap = speakersWrap();
+    if (wrap) wrap.setAttribute("data-agilo-speaker-trial", VERSION);
+    if (root.AgiloFreeSpeakerTrial) root.AgiloFreeSpeakerTrial.booted = true;
     var status = core.getState().status;
     if (!armed || !canArm(status)) applyOptionMode("standard");
     refreshStatus();
@@ -1176,6 +1195,7 @@
 
   root.AgiloFreeSpeakerTrial = {
     init: boot,
+    booted: false,
     getState: function () {
       var state = core ? core.getState() : { status: "available" };
       state.armed = !!armed;
