@@ -2,13 +2,14 @@
  * Agilotext Free — essai quotidien reconnaissance d’intervenants
  * 1 essai / membre / jour (Europe/Paris). Garde client uniquement.
  *
+ * v2.0.1 : visuels Webflow, bind unique, upsell Pro seulement si used
  * v2.0.0 : consentement armed par onglet, exclusivité format, migration v1,
  * popup de confirmation, fail-closed, TTL pending 3 h / uncertain 15 min.
  */
 (function (root) {
   "use strict";
 
-  var VERSION = "2.0.0";
+  var VERSION = "2.0.1";
   var SCHEMA_VERSION = 2;
   var STORAGE_PREFIX = "agilo_free_speaker_trial:";
   var CHANNEL_NAME = "agilo-free-speaker-trial";
@@ -97,6 +98,16 @@
       return "standard";
     }
     return mode === "speakers" ? "speakers" : "standard";
+  }
+
+  function canArm(status) {
+    return status === "available";
+  }
+
+  function upsellKind(status) {
+    if (status === "used") return "pro";
+    if (status === "pending" || status === "uncertain") return "info";
+    return "confirm";
   }
 
   function migrationMarkerKey(memberId, day) {
@@ -528,6 +539,8 @@
     speakersIntent: speakersIntent,
     payloadInvariant: payloadInvariant,
     nextUiMode: nextUiMode,
+    canArm: canArm,
+    upsellKind: upsellKind,
     migrateV1Record: migrateV1Record,
     migrationMarkerKey: migrationMarkerKey,
     effectiveStatus: effectiveStatus,
@@ -596,22 +609,39 @@
     } catch (e) { /* ignore */ }
   }
 
-  function setNativeToggle(checkbox, checked) {
+  function optionWrap(checkbox) {
+    if (!checkbox) return null;
+    return checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement;
+  }
+
+  function paintToggle(checkbox, checked) {
     if (!checkbox) return;
     checkbox.checked = !!checked;
-    var rootEl = checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement;
+    var rootEl = optionWrap(checkbox);
     if (!rootEl) return;
     rootEl.querySelectorAll(".checkbox_toggle, .w-checkbox-input").forEach(function (visual) {
+      if (visual.tagName === "INPUT") {
+        visual.checked = !!checked;
+        return;
+      }
       visual.classList.toggle("w--redirected-checked", !!checked);
       visual.classList.toggle("checked", !!checked);
       visual.classList.toggle("unchecked", !checked);
     });
   }
 
+  function setNativeToggle(checkbox, checked) {
+    paintToggle(checkbox, checked);
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(function () { paintToggle(checkbox, checked); });
+    }
+  }
+
   var isApplyingMode = false;
   var armed = false;
   var lastSource = "";
   var lastFocus = null;
+  var lastGestureAt = 0;
   var core = null;
   var booted = false;
   var trackedAvailable = false;
@@ -625,8 +655,22 @@
   }
 
   function speakersWrap() {
-    var checkbox = speakersCheckbox();
-    return checkbox && (checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement);
+    return optionWrap(speakersCheckbox());
+  }
+
+  function formatWrap() {
+    return optionWrap(formatCheckbox());
+  }
+
+  function toggleVisual(wrap) {
+    if (!wrap) return null;
+    return wrap.querySelector(".checkbox_toggle") || wrap.querySelector("[data-visual-for]");
+  }
+
+  function bindRoot(wrap, checkbox) {
+    var visual = toggleVisual(wrap);
+    if (wrap && visual && wrap.contains(visual)) return wrap;
+    return visual || checkbox || wrap;
   }
 
   function syncSpeakersSelect(visible) {
@@ -645,17 +689,21 @@
     }
   }
 
+  function quotaStatus() {
+    return core ? core.getState().status : "available";
+  }
+
   function applyOptionMode(mode) {
+    var status = quotaStatus();
+    var speakersOn = mode === "speakers" && canArm(status);
     isApplyingMode = true;
     try {
-      var speakersOn = mode === "speakers";
       armed = speakersOn;
       setNativeToggle(speakersCheckbox(), speakersOn);
       setNativeToggle(formatCheckbox(), !speakersOn);
       syncSpeakersSelect(speakersOn);
       var wrap = speakersWrap();
-      var state = core ? core.getState() : { status: "available" };
-      var blocked = state.status === "used" || state.status === "pending" || state.status === "uncertain";
+      var blocked = status === "used" || status === "pending" || status === "uncertain";
       if (wrap) {
         wrap.classList.toggle("is-disabled", blocked && !speakersOn);
         if (blocked && !speakersOn) wrap.setAttribute("aria-disabled", "true");
@@ -867,16 +915,23 @@
 
   function confirmSpeakers() {
     if (!core) boot();
+    if (!readMemberId()) {
+      closeModal();
+      applyOptionMode("standard");
+      return;
+    }
     var state = core.getState();
     if (state.status === "used") {
       track("free_speaker_trial_state_conflict", { reason: "used" });
       closeModal();
+      applyOptionMode("standard");
       showUpgrade(lastSource);
       return;
     }
     if (state.status === "pending" || state.status === "uncertain") {
       track("free_speaker_trial_state_conflict", { reason: state.status });
       closeModal();
+      applyOptionMode("standard");
       showStateModal(state.status);
       return;
     }
@@ -920,51 +975,75 @@
     });
   }
 
-  function interceptSpeakers(event) {
-    if (!isFreeContext() || isApplyingMode) return;
+  function shouldIgnoreGesture(event) {
+    if (!event) return false;
+    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return true;
+    if (event.type === "pointerdown" && event.button && event.button !== 0) return true;
+    return false;
+  }
+
+  function consumeGesture(event) {
+    var now = Date.now();
+    if (event && event.type === "click" && now - lastGestureAt < 400) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      return true;
+    }
+    if (event && event.type === "pointerdown") lastGestureAt = now;
     if (event) {
       event.preventDefault();
       event.stopPropagation();
       if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    }
+    return false;
+  }
+
+  function handleSpeakersGesture(event) {
+    if (!isFreeContext() || isApplyingMode) return;
+    if (shouldIgnoreGesture(event)) return;
+    if (consumeGesture(event)) return;
+    var status = quotaStatus();
+    if (status === "used") {
+      applyOptionMode("standard");
+      showUpgrade(lastSource);
+      return;
+    }
+    if (status === "pending" || status === "uncertain") {
+      applyOptionMode("standard");
+      showStateModal(status);
+      return;
     }
     if (armed) {
       applyOptionMode("standard");
       return;
     }
-    showStateModal();
+    showStateModal("available");
   }
 
-  function interceptFormat(event) {
+  function handleFormatGesture(event) {
     if (!isFreeContext() || isApplyingMode || !armed) return;
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-    }
+    if (shouldIgnoreGesture(event)) return;
+    if (consumeGesture(event)) return;
     applyOptionMode("standard");
   }
 
+  function bindTarget(el, handler) {
+    if (!el || el.getAttribute("data-agilo-speaker-bound") === "1") return;
+    el.setAttribute("data-agilo-speaker-bound", "1");
+    el.addEventListener("click", handler, true);
+    el.addEventListener("pointerdown", handler, true);
+    el.addEventListener("keydown", handler, true);
+  }
+
   function bindUi() {
-    if (bindUi.done) return;
-    bindUi.done = true;
     injectStatusCss();
-    var wrap = speakersWrap();
-    var visual = document.querySelector('[data-visual-for="toggle-speakers"]');
-    [speakersCheckbox(), visual, wrap].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener("click", interceptSpeakers, true);
-      el.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") interceptSpeakers(event);
-      }, true);
-    });
-    var formatWrap = formatCheckbox() && (
-      formatCheckbox().closest(".checkbox-component, .w-checkbox, label") || formatCheckbox().parentElement
-    );
-    var formatVisual = document.querySelector('[data-visual-for="toggle-format-transcript"]');
-    [formatCheckbox(), formatVisual, formatWrap].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener("click", interceptFormat, true);
-    });
+    var sCb = speakersCheckbox();
+    if (!sCb) return false;
+    bindTarget(bindRoot(speakersWrap(), sCb), handleSpeakersGesture);
+    var fCb = formatCheckbox();
+    if (fCb) bindTarget(bindRoot(formatWrap(), fCb), handleFormatGesture);
+    return true;
   }
 
   function defaultFetchJobs() {
@@ -1014,7 +1093,8 @@
       });
     }
     bindUi();
-    if (!armed) applyOptionMode("standard");
+    var status = core.getState().status;
+    if (!armed || !canArm(status)) applyOptionMode("standard");
     refreshStatus();
     if (!trackedAvailable && core.getState().status === "available") {
       trackedAvailable = true;
@@ -1027,7 +1107,7 @@
           if (jobs && jobs.length) return core.reconcile(jobs);
         });
       }).then(function () {
-        if (!armed) applyOptionMode("standard");
+        if (!armed || !canArm(core.getState().status)) applyOptionMode("standard");
         refreshStatus();
       }).catch(function () { refreshStatus(); });
     }
@@ -1122,7 +1202,7 @@
     [0, 350, 1100].forEach(function (ms) {
       setTimeout(function () {
         boot();
-        if (!armed) applyOptionMode("standard");
+        if (!armed || !canArm(core.getState().status)) applyOptionMode("standard");
       }, ms);
     });
   }

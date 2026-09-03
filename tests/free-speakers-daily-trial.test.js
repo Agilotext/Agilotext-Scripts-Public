@@ -300,6 +300,17 @@ describe("consentement armed et exclusivité", function () {
       { timestampTranscript: true, formatTranscript: false }
     );
   });
+
+  it("used n’arme pas, pending n’ouvre pas l’upsell Pro", function () {
+    assert.equal(trial.canArm("available"), true);
+    assert.equal(trial.canArm("used"), false);
+    assert.equal(trial.canArm("pending"), false);
+    assert.equal(trial.canArm("uncertain"), false);
+    assert.equal(trial.upsellKind("used"), "pro");
+    assert.equal(trial.upsellKind("pending"), "info");
+    assert.equal(trial.upsellKind("uncertain"), "info");
+    assert.equal(trial.upsellKind("available"), "confirm");
+  });
 });
 
 describe("migration v1 vers v2", function () {
