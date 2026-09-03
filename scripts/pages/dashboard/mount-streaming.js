@@ -347,6 +347,29 @@ function mountAgiloLiveVoice() {
     uploadBlob: async function ({ blob, email, options }) {
       await ensureValidToken(email, true);
 
+      var speakersOn = !!(options && options.speakers);
+      var trial = window.AgiloFreeSpeakerTrial;
+      var useTrial = edition === "free" && speakersOn && trial && typeof trial.reserve === "function";
+      var reservation = null;
+
+      if (useTrial) {
+        reservation = await trial.reserve({ source: "dictation" });
+        if (!reservation || !reservation.ok) {
+          document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
+            detail: {
+              errorMessage: "speaker_trial_blocked",
+              speakersUsed: false,
+              source: "dictation",
+              trialRequestId: reservation && reservation.requestId
+            }
+          }));
+          var blocked = new Error("speaker_trial_blocked");
+          blocked.type = "speaker_trial_blocked";
+          throw blocked;
+        }
+      }
+
+      var speakersAllowed = speakersOn && (!useTrial || !!(reservation && reservation.ok));
       var fd = new FormData();
 
       fd.append(
@@ -361,10 +384,10 @@ function mountAgiloLiveVoice() {
       fd.append("username", email);
       fd.append("token", globalToken);
       fd.append("edition", edition);
-      fd.append("timestampTranscript", options.speakers ? "true" : "false");
+      fd.append("timestampTranscript", speakersAllowed ? "true" : "false");
       fd.append(
         "formatTranscript",
-        options.speakers ? "false" : (options.formatTranscript ? "true" : "false")
+        speakersAllowed ? "false" : (options.formatTranscript ? "true" : "false")
       );
       fd.append("doSummary", options.doSummary ? "true" : "false");
       fd.append("mailTranscription", "true");
@@ -373,7 +396,7 @@ function mountAgiloLiveVoice() {
         fd.append("deviceId", window.DEVICE_ID);
       }
 
-      if (options.speakers) {
+      if (speakersAllowed) {
         fd.append("speakersExpected", String(options.speakersExpected || 0));
       }
 
@@ -381,7 +404,44 @@ function mountAgiloLiveVoice() {
         fd.append("translateTo", options.translateTo);
       }
 
-      return sendWithRetry(fd, 3, false);
+      try {
+        var data = await sendWithRetry(fd, 3, false);
+        if (reservation && trial) {
+          var jobId = data && data.jobIdList && data.jobIdList[0];
+          if (data && data.status === "OK" && jobId) {
+            trial.commit(jobId, { requestId: reservation.requestId, source: "dictation" });
+          } else if (trial.isCertainRejection(null, data)) {
+            trial.release({ requestId: reservation.requestId });
+          } else {
+            trial.markUncertain({ requestId: reservation.requestId });
+          }
+        }
+        if (!data || data.status !== "OK") {
+          document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
+            detail: {
+              errorMessage: (data && data.errorMessage) || "",
+              speakersUsed: speakersAllowed,
+              source: "dictation",
+              trialRequestId: reservation && reservation.requestId
+            }
+          }));
+        }
+        return data;
+      } catch (err) {
+        if (reservation && trial) {
+          if (trial.isCertainRejection(err, null)) trial.release({ requestId: reservation.requestId });
+          else trial.markUncertain({ requestId: reservation.requestId });
+        }
+        document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
+          detail: {
+            errorMessage: (err && (err.message || err.type)) || "",
+            speakersUsed: speakersAllowed,
+            source: "dictation",
+            trialRequestId: reservation && reservation.requestId
+          }
+        }));
+        throw err;
+      }
     },
 
     onLocalAudioReady: function ({ blob, filename }) {
@@ -421,6 +481,17 @@ function mountAgiloLiveVoice() {
     onUploadAccepted: function ({ jobId, email }) {
       localStorage.setItem("currentJobId", jobId);
       document.dispatchEvent(new CustomEvent("newJobIdAvailable"));
+      var trialState = window.AgiloFreeSpeakerTrial && window.AgiloFreeSpeakerTrial.getState
+        ? window.AgiloFreeSpeakerTrial.getState()
+        : null;
+      document.dispatchEvent(new CustomEvent("agilo-upload-confirmed", {
+        detail: {
+          jobId: jobId,
+          speakersUsed: !!(trialState && trialState.status === "used" && trialState.source === "dictation"),
+          source: "dictation",
+          trialRequestId: trialState && trialState.requestId
+        }
+      }));
 
       var fl = document.getElementById("form_loading");
       if (fl) fl.style.display = "none";
@@ -448,6 +519,10 @@ function mountAgiloLiveVoice() {
     },
 
     onError: function (rawOrPresetKey) {
+      if (rawOrPresetKey === "speaker_trial_blocked" ||
+          (rawOrPresetKey && rawOrPresetKey.message === "speaker_trial_blocked")) {
+        return;
+      }
       if (rawOrPresetKey && AGILO_PRESET_ERROR_KEYS[rawOrPresetKey]) {
         showError(rawOrPresetKey);
         return;

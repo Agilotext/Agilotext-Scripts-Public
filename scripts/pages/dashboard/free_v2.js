@@ -917,14 +917,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (formLoadingDiv) formLoadingDiv.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
 
-      const speakersChecked = speakersCheckbox.checked;
-      const summaryChecked = summaryCheckbox.checked;
-      const formatChecked = formatCheckbox.checked;
-      const speakersExpected = speakersSelect.value;
+      const sessionInputAtStart = form && form.querySelector('input[name="agilo_record_session_id"]');
+      const speakerIntent = (window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.readIntent === 'function')
+        ? window.AgiloFreeSpeakerTrial.readIntent(sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload')
+        : {
+            speakers: !!(speakersCheckbox && speakersCheckbox.checked),
+            speakersExpected: (speakersSelect && speakersSelect.value) || '',
+            source: sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload'
+          };
+      const speakersChecked = !!speakerIntent.speakers;
+      const speakersExpected = speakerIntent.speakersExpected;
+      const speakerSource = speakerIntent.source;
+      const summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
+      const formatChecked = !!(formatCheckbox && formatCheckbox.checked);
 
       setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
       let payload;
+      let speakerReservation = null;
 
       // ✅ Anti "trop vite" : attendre que FilePond retourne un File natif
       const file = await waitPondFileReady(3000);
@@ -938,12 +948,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (speakersChecked && window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.reserve === 'function') {
+        speakerReservation = await window.AgiloFreeSpeakerTrial.reserve({ source: speakerSource });
+        if (!speakerReservation || !speakerReservation.ok) {
+          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+          if (submitBtn) submitBtn.disabled = false;
+          form.dataset.sending = '0';
+          window.removeEventListener('beforeunload', beforeUnloadGuard);
+          return;
+        }
+      }
+
       // Remplir proprement le FormData pour l'API
       fd.append('token', globalToken);
       fd.append('username', email);
       fd.append('edition', edition);
-      fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
-      if (speakersChecked) {
+      const speakersAllowed = speakersChecked && (!window.AgiloFreeSpeakerTrial || !!(speakerReservation && speakerReservation.ok));
+      fd.append('timestampTranscript', speakersAllowed ? 'true' : 'false');
+      if (speakersAllowed) {
         fd.append('speakersExpected', speakersExpected || '');
         fd.append('formatTranscript', 'false');
       } else {
@@ -986,19 +1008,46 @@ document.addEventListener('DOMContentLoaded', () => {
           if (data && data.status === 'OK') {
             showSuccess();
             const jobId = data.jobIdList && data.jobIdList[0];
+            if (speakerReservation && window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.commit === 'function' && jobId) {
+              window.AgiloFreeSpeakerTrial.commit(jobId, { requestId: speakerReservation.requestId, source: speakerSource });
+            }
             if (jobId) {
               localStorage.setItem('currentJobId', jobId);
               document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
               var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
               var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', {
+                detail: {
+                  sessionId: recordSessionId,
+                  jobId: jobId,
+                  speakersUsed: speakersAllowed,
+                  source: speakerSource,
+                  trialRequestId: speakerReservation && speakerReservation.requestId
+                }
+              }));
+            } else if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
             }
             if (successDiv) successDiv.style.display = 'flex';
             if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
             checkTranscriptStatus(jobId, email);
             if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
           } else {
-            document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
+            if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              if (window.AgiloFreeSpeakerTrial.isCertainRejection(null, data)) {
+                window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+              } else {
+                window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+              }
+            }
+            document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+              detail: {
+                errorMessage: (data && data.errorMessage) || '',
+                speakersUsed: speakersAllowed,
+                source: speakerSource,
+                trialRequestId: speakerReservation && speakerReservation.requestId
+              }
+            }));
             const err = (data && data.errorMessage) || '';
 
             // ⭐ Gestion COMPLÈTE des erreurs backend
@@ -1037,7 +1086,21 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
           console.error('Erreur lors de l\'envoi:', err);
-          document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: err && err.message || '' } }));
+          if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+            if (window.AgiloFreeSpeakerTrial.isCertainRejection(err, null)) {
+              window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+            } else {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+            }
+          }
+          document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+            detail: {
+              errorMessage: err && err.message || '',
+              speakersUsed: speakersAllowed,
+              source: speakerSource,
+              trialRequestId: speakerReservation && speakerReservation.requestId
+            }
+          }));
           if (err && err.type === 'timeout') {
             if (defaultErrorTextNode) {
               defaultErrorTextNode.innerHTML =
@@ -1392,16 +1455,9 @@ document.addEventListener('DOMContentLoaded', () => {
     removeFreeDesireCard();
     ensureFreeSummaryDefaultOn();
     ensureFreeFormatDefaultOn();
-    // Speakers restent lockés OFF — décocher le format n’active jamais les intervenants
-    lockFreeCheckbox(speakersCheckbox, 'Identifiez automatiquement les intervenants.', 'toggle_speakers');
+    // Speakers : essai 1/jour via AgiloFreeSpeakerTrial (plus de lock permanent)
     // #toggle-summary + #toggle-format-transcript : libres sur Free
     lockFreeCheckbox(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
-
-    lockFreeSelect(
-      document.getElementById('speakers-select') || speakersSelect,
-      'Identifiez automatiquement les intervenants.',
-      'speakers_select'
-    );
     lockFreeSelect(
       document.getElementById('default-template-select'),
       'Utilisez des modèles de compte rendu prêts à l’emploi.',
