@@ -2,24 +2,22 @@
  * Agilotext Free — essai quotidien reconnaissance d’intervenants
  * 1 essai / membre / jour (Europe/Paris). Garde client uniquement.
  *
- * Probe 2026-09-03 :
- * - getJobsInfo expose jobId, filename, creationDate|dtCreation, statuts, promptId.
- *   Aucun champ timestampTranscript / speakersExpected. Réconciliation seulement
- *   via un jobId déjà marqué, jamais un comptage des jobs du jour.
- * - Lock publié : lockFreeCheckbox() dans free_v2.js (pas un embed Webflow).
- * - #toggle-speakers vit dans COMP-Options_wrapper (symbole partagé).
- *
- * Version : 1.0.0
+ * v2.0.0 : consentement armed par onglet, exclusivité format, migration v1,
+ * popup de confirmation, fail-closed, TTL pending 3 h / uncertain 15 min.
  */
 (function (root) {
   "use strict";
 
-  var VERSION = "1.0.0";
+  var VERSION = "2.0.0";
+  var SCHEMA_VERSION = 2;
   var STORAGE_PREFIX = "agilo_free_speaker_trial:";
   var CHANNEL_NAME = "agilo-free-speaker-trial";
   var LOCK_NAME = "agilo-free-speaker-trial";
-  var PENDING_TTL_MS = 15 * 60 * 1000;
+  var LOCK_FALLBACK_KEY = "agilo_free_speaker_trial:lock";
+  var PENDING_TTL_MS = 3 * 60 * 60 * 1000;
+  var UNCERTAIN_TTL_MS = 15 * 60 * 1000;
   var HINT_ID = "agilo-speaker-trial-hint";
+  var MODAL_ID = "agilo-speaker-trial-modal";
   var MS_PRICE_PRO = "prc_pro-qn9f07eb";
   var CERTAIN_API_ERRORS = [
     "error_audio_format_not_supported",
@@ -79,8 +77,74 @@
     return STORAGE_PREFIX + String(memberId || "") + ":" + String(day || "");
   }
 
-  function effectiveStatus(record, memberId, day) {
+  function speakersIntent(checkboxChecked, armed) {
+    return !!(checkboxChecked && armed);
+  }
+
+  function payloadInvariant(intent) {
+    if (intent && intent.speakers) {
+      return { timestampTranscript: true, formatTranscript: false };
+    }
+    return {
+      timestampTranscript: false,
+      formatTranscript: !!(intent && intent.formatChecked)
+    };
+  }
+
+  function nextUiMode(mode, eventName) {
+    if (eventName === "confirm") return "speakers";
+    if (eventName === "formatOn" || eventName === "speakersOff" || eventName === "boot" || eventName === "cancel") {
+      return "standard";
+    }
+    return mode === "speakers" ? "speakers" : "standard";
+  }
+
+  function migrationMarkerKey(memberId, day) {
+    return STORAGE_PREFIX + "migration_v2:" + String(memberId || "") + ":" + String(day || "");
+  }
+
+  function migrateV1Record(record, memberId, day, now, alreadyMigrated) {
+    if (alreadyMigrated) {
+      return { record: record || null, migrated: false, reset: false };
+    }
+    if (!record || record.memberId !== memberId || record.parisDay !== day) {
+      return { record: null, migrated: false, reset: false };
+    }
+    if (record.version >= SCHEMA_VERSION || record.migration_v2) {
+      return { record: record, migrated: false, reset: false };
+    }
+    if (record.status === "used") {
+      return { record: null, migrated: true, reset: true };
+    }
+    var next = Object.assign({}, record);
+    next.version = SCHEMA_VERSION;
+    next.migration_v2 = true;
+    var reservedAt = Number(record.reservedAt || now || 0);
+    if (record.status === "pending" && !next.pendingExpiresAt) {
+      next.pendingExpiresAt = reservedAt + PENDING_TTL_MS;
+    }
+    if (record.status === "uncertain" && !next.uncertainExpiresAt) {
+      next.uncertainExpiresAt = reservedAt + UNCERTAIN_TTL_MS;
+    }
+    return { record: next, migrated: true, reset: false };
+  }
+
+  function isExpired(record, now) {
+    if (!record) return false;
+    if (record.status === "pending") {
+      var pendingAt = record.pendingExpiresAt || ((record.reservedAt || 0) + PENDING_TTL_MS);
+      return now >= pendingAt;
+    }
+    if (record.status === "uncertain") {
+      var uncertainAt = record.uncertainExpiresAt || ((record.reservedAt || 0) + UNCERTAIN_TTL_MS);
+      return now >= uncertainAt;
+    }
+    return false;
+  }
+
+  function effectiveStatus(record, memberId, day, now) {
     if (!record || record.memberId !== memberId || record.parisDay !== day) return "available";
+    if (isExpired(record, typeof now === "number" ? now : Date.now())) return "available";
     if (record.status === "pending" || record.status === "used" || record.status === "uncertain") {
       return record.status;
     }
@@ -92,7 +156,7 @@
   }
 
   function decideReserve(record, memberId, day, now, source) {
-    var status = effectiveStatus(record, memberId, day);
+    var status = effectiveStatus(record, memberId, day, now);
     if (status === "used" || status === "pending" || status === "uncertain") {
       return { ok: false, reason: status, status: status };
     }
@@ -101,7 +165,7 @@
       ok: true,
       requestId: requestId,
       next: {
-        version: 1,
+        version: SCHEMA_VERSION,
         memberId: memberId,
         parisDay: day,
         status: "pending",
@@ -109,7 +173,9 @@
         requestId: requestId,
         jobId: "",
         reservedAt: now,
-        knownJobIds: []
+        pendingExpiresAt: now + PENDING_TTL_MS,
+        knownJobIds: [],
+        migration_v2: true
       }
     };
   }
@@ -119,6 +185,8 @@
     if (requestId && record.requestId && record.requestId !== requestId) return record;
     var next = Object.assign({}, record);
     next.status = "used";
+    next.version = SCHEMA_VERSION;
+    next.migration_v2 = true;
     next.jobId = String(jobId || record.jobId || "");
     return next;
   }
@@ -130,12 +198,15 @@
     return null;
   }
 
-  function applyUncertain(record, requestId) {
+  function applyUncertain(record, requestId, now) {
     if (!record) return null;
     if (record.status === "used") return record;
     if (requestId && record.requestId && record.requestId !== requestId) return record;
     var next = Object.assign({}, record);
     next.status = "uncertain";
+    next.version = SCHEMA_VERSION;
+    next.migration_v2 = true;
+    next.uncertainExpiresAt = (typeof now === "number" ? now : Date.now()) + UNCERTAIN_TTL_MS;
     return next;
   }
 
@@ -169,22 +240,29 @@
 
   function isCertainRejection(err, data) {
     if (data && data.status && data.status !== "OK") {
-      if (isCertainApiErrorMessage(data.errorMessage)) return true;
-      if (data.errorMessage) return true;
+      return isCertainApiErrorMessage(data.errorMessage);
     }
     if (!err) return false;
     if (err === "speaker_trial_blocked" || (err && err.message === "speaker_trial_blocked")) return true;
     var type = err.type || "";
     if (type === "timeout" || type === "offline" || type === "unreachable" || type === "serverError") return false;
     if (type === "invalidToken") return true;
-    if (type === "httpError") {
-      var status = Number(err.status || 0);
-      if (status === 408 || status === 429) return false;
-      if (status >= 400 && status < 500) return true;
-      return false;
-    }
-    if (isCertainApiErrorMessage(err.message || err.errorMessage || err)) return true;
-    return false;
+    return isCertainApiErrorMessage(err.message || err.errorMessage || err);
+  }
+
+  function resolveFreeSpeakersPayload(trialPresent, intent, reservation) {
+    var speakers = !!(
+      trialPresent &&
+      intent &&
+      intent.speakers &&
+      intent.armed &&
+      reservation &&
+      reservation.ok
+    );
+    return payloadInvariant({
+      speakers: speakers,
+      formatChecked: !!(intent && intent.formatChecked)
+    });
   }
 
   function wrapStorage(raw) {
@@ -219,17 +297,45 @@
     });
   }
 
+  function createStorageLock(store, nowFn) {
+    return function withLock(fn) {
+      if (typeof navigator !== "undefined" && navigator.locks && typeof navigator.locks.request === "function") {
+        return navigator.locks.request(LOCK_NAME, fn);
+      }
+      var now = nowFn();
+      var current = store.get(LOCK_FALLBACK_KEY);
+      if (current && current.ts && now - current.ts < 800 && current.id) {
+        return new Promise(function (resolve) {
+          setTimeout(function () { resolve(Promise.resolve().then(fn)); }, 50);
+        });
+      }
+      var token = { id: makeRequestId(now), ts: now };
+      store.set(LOCK_FALLBACK_KEY, token);
+      return Promise.resolve().then(fn).then(function (result) {
+        var after = store.get(LOCK_FALLBACK_KEY);
+        if (after && after.id === token.id) store.remove(LOCK_FALLBACK_KEY);
+        return result;
+      }, function (err) {
+        var after = store.get(LOCK_FALLBACK_KEY);
+        if (after && after.id === token.id) store.remove(LOCK_FALLBACK_KEY);
+        throw err;
+      });
+    };
+  }
+
   function createCore(opts) {
     opts = opts || {};
     var store = opts.store || createMemoryStore();
     var nowFn = opts.now || function () { return Date.now(); };
     var dayFn = opts.parisDay || parisDay;
     var getMemberId = opts.getMemberId || function () { return ""; };
-    var withLock = opts.withLock || function (fn) { return Promise.resolve().then(fn); };
+    var withLock = opts.withLock || createStorageLock(store, nowFn);
     var broadcast = opts.broadcast || function () {};
     var fetchJobs = opts.fetchJobs || null;
-    var ttl = typeof opts.pendingTtlMs === "number" ? opts.pendingTtlMs : PENDING_TTL_MS;
+    var pendingTtl = typeof opts.pendingTtlMs === "number" ? opts.pendingTtlMs : PENDING_TTL_MS;
+    var uncertainTtl = typeof opts.uncertainTtlMs === "number" ? opts.uncertainTtlMs : UNCERTAIN_TTL_MS;
     var onChange = opts.onChange || function () {};
+    var onMigrationReset = opts.onMigrationReset || function () {};
 
     function currentDay() {
       return dayFn(new Date(nowFn()));
@@ -248,7 +354,11 @@
     }
 
     function normalize(record, memberId, day) {
-      var status = effectiveStatus(record, memberId, day);
+      var now = nowFn();
+      var status = effectiveStatus(record, memberId, day, now);
+      if (record && isExpired(record, now) && (record.status === "pending" || record.status === "uncertain")) {
+        status = "available";
+      }
       return {
         version: VERSION,
         status: status,
@@ -257,29 +367,64 @@
         source: record && record.source || "",
         requestId: record && record.requestId || "",
         jobId: record && record.jobId || "",
-        reservedAt: record && record.reservedAt || 0
+        reservedAt: record && record.reservedAt || 0,
+        armed: false
       };
     }
 
-    function getState() {
+    function migrateNow() {
       var memberId = getMemberId();
       var day = currentDay();
-      return normalize(read(memberId, day), memberId, day);
+      var markerKey = migrationMarkerKey(memberId, day);
+      var already = !!store.get(markerKey);
+      var record = read(memberId, day);
+      var result = migrateV1Record(record, memberId, day, nowFn(), already);
+      if (result.migrated) {
+        store.set(markerKey, { done: true, reset: !!result.reset, at: nowFn() });
+        write(memberId, day, result.record);
+        if (result.reset) onMigrationReset({ memberId: memberId, parisDay: day });
+      }
+      return result;
+    }
+
+    function expireIfNeeded(memberId, day, record) {
+      if (record && isExpired(record, nowFn()) && record.status !== "used") {
+        write(memberId, day, null);
+        return null;
+      }
+      return record;
+    }
+
+    function getState() {
+      migrateNow();
+      var memberId = getMemberId();
+      var day = currentDay();
+      var record = expireIfNeeded(memberId, day, read(memberId, day));
+      return normalize(record, memberId, day);
     }
 
     function reserve(input) {
       var source = (input && input.source) || "upload";
       var knownJobIds = (input && input.knownJobIds) || [];
       return withLock(function () {
+        migrateNow();
         var memberId = getMemberId();
         if (!memberId) {
           return { ok: false, reason: "no_member", status: "available" };
         }
         var day = currentDay();
-        var decided = decideReserve(read(memberId, day), memberId, day, nowFn(), source);
+        var record = expireIfNeeded(memberId, day, read(memberId, day));
+        var decided = decideReserve(record, memberId, day, nowFn(), source);
         if (!decided.ok) return decided;
         decided.next.knownJobIds = knownJobIds.slice();
+        if (typeof opts.pendingTtlMs === "number") {
+          decided.next.pendingExpiresAt = nowFn() + pendingTtl;
+        }
         write(memberId, day, decided.next);
+        var verify = read(memberId, day);
+        if (!verify || verify.requestId !== decided.requestId) {
+          return { ok: false, reason: "state_conflict", status: verify && verify.status || "pending" };
+        }
         return {
           ok: true,
           requestId: decided.requestId,
@@ -315,18 +460,24 @@
       return withLock(function () {
         var memberId = getMemberId();
         var day = currentDay();
-        var next = applyUncertain(read(memberId, day), input && input.requestId);
-        if (next) write(memberId, day, next);
+        var next = applyUncertain(read(memberId, day), input && input.requestId, nowFn());
+        if (next) {
+          if (typeof opts.uncertainTtlMs === "number") {
+            next.uncertainExpiresAt = nowFn() + uncertainTtl;
+          }
+          write(memberId, day, next);
+        }
         return normalize(next, memberId, day);
       });
     }
 
     function reconcile(jobs) {
       return withLock(function () {
+        migrateNow();
         var memberId = getMemberId();
         var day = currentDay();
-        var record = read(memberId, day);
-        var status = effectiveStatus(record, memberId, day);
+        var record = expireIfNeeded(memberId, day, read(memberId, day));
+        var status = effectiveStatus(record, memberId, day, nowFn());
         if (status !== "pending" && status !== "uncertain") {
           return normalize(record, memberId, day);
         }
@@ -336,7 +487,7 @@
           write(memberId, day, used);
           return normalize(used, memberId, day);
         }
-        if (nowFn() - (record.reservedAt || 0) >= ttl) {
+        if (isExpired(record, nowFn())) {
           write(memberId, day, null);
           return normalize(null, memberId, day);
         }
@@ -363,15 +514,22 @@
       commit: commit,
       release: release,
       markUncertain: markUncertain,
-      reconcile: reconcile
+      reconcile: reconcile,
+      migrateNow: migrateNow
     };
   }
 
   var api = {
     VERSION: VERSION,
+    SCHEMA_VERSION: SCHEMA_VERSION,
     parisDay: parisDay,
     parseJobDateMs: parseJobDateMs,
     storageKey: storageKey,
+    speakersIntent: speakersIntent,
+    payloadInvariant: payloadInvariant,
+    nextUiMode: nextUiMode,
+    migrateV1Record: migrateV1Record,
+    migrationMarkerKey: migrationMarkerKey,
     effectiveStatus: effectiveStatus,
     decideReserve: decideReserve,
     applyCommit: applyCommit,
@@ -380,10 +538,12 @@
     findReconcileJob: findReconcileJob,
     isCertainRejection: isCertainRejection,
     isCertainApiErrorMessage: isCertainApiErrorMessage,
+    resolveFreeSpeakersPayload: resolveFreeSpeakersPayload,
     wrapStorage: wrapStorage,
     createMemoryStore: createMemoryStore,
     createCore: createCore,
-    PENDING_TTL_MS: PENDING_TTL_MS
+    PENDING_TTL_MS: PENDING_TTL_MS,
+    UNCERTAIN_TTL_MS: UNCERTAIN_TTL_MS
   };
 
   if (typeof module !== "undefined" && module.exports) {
@@ -436,35 +596,7 @@
     } catch (e) { /* ignore */ }
   }
 
-  function showUpgrade(source) {
-    track("free_speaker_trial_upgrade_clicked", { source: source || "" });
-    if (root.AgiloGate && typeof root.AgiloGate.showUpgrade === "function") {
-      root.AgiloGate.showUpgrade("pro", "Reconnaissance des intervenants");
-      return;
-    }
-    if (root.AgiloFreeUpgrade && typeof root.AgiloFreeUpgrade.show === "function") {
-      root.AgiloFreeUpgrade.show({
-        minPlan: "pro",
-        reason: "Vous avez utilisé votre essai du jour pour la reconnaissance des intervenants. Passez en Pro pour l’utiliser sans limite.",
-        source: "speaker_trial"
-      });
-      return;
-    }
-    var sel = '[data-ms-price\\:update="' + MS_PRICE_PRO + '"]';
-    var existing = document.querySelector(sel);
-    if (existing) {
-      existing.click();
-      return;
-    }
-    var link = document.querySelector('a[href*="sign-up-pro"]');
-    if (link) {
-      link.click();
-      return;
-    }
-    root.location.href = "/auth/sign-up-pro";
-  }
-
-  function setToggleVisual(checkbox, checked) {
+  function setNativeToggle(checkbox, checked) {
     if (!checkbox) return;
     checkbox.checked = !!checked;
     var rootEl = checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement;
@@ -474,6 +606,27 @@
       visual.classList.toggle("checked", !!checked);
       visual.classList.toggle("unchecked", !checked);
     });
+  }
+
+  var isApplyingMode = false;
+  var armed = false;
+  var lastSource = "";
+  var lastFocus = null;
+  var core = null;
+  var booted = false;
+  var trackedAvailable = false;
+
+  function speakersCheckbox() {
+    return document.getElementById("toggle-speakers");
+  }
+
+  function formatCheckbox() {
+    return document.getElementById("toggle-format-transcript");
+  }
+
+  function speakersWrap() {
+    var checkbox = speakersCheckbox();
+    return checkbox && (checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement);
   }
 
   function syncSpeakersSelect(visible) {
@@ -492,28 +645,326 @@
     }
   }
 
+  function applyOptionMode(mode) {
+    isApplyingMode = true;
+    try {
+      var speakersOn = mode === "speakers";
+      armed = speakersOn;
+      setNativeToggle(speakersCheckbox(), speakersOn);
+      setNativeToggle(formatCheckbox(), !speakersOn);
+      syncSpeakersSelect(speakersOn);
+      var wrap = speakersWrap();
+      var state = core ? core.getState() : { status: "available" };
+      var blocked = state.status === "used" || state.status === "pending" || state.status === "uncertain";
+      if (wrap) {
+        wrap.classList.toggle("is-disabled", blocked && !speakersOn);
+        if (blocked && !speakersOn) wrap.setAttribute("aria-disabled", "true");
+        else wrap.removeAttribute("aria-disabled");
+      }
+      var checkbox = speakersCheckbox();
+      if (checkbox) {
+        if (blocked && !speakersOn) checkbox.setAttribute("aria-disabled", "true");
+        else checkbox.removeAttribute("aria-disabled");
+      }
+    } finally {
+      isApplyingMode = false;
+    }
+    refreshStatus();
+  }
+
+  function findLabelHost() {
+    var wrap = speakersWrap();
+    if (!wrap) return null;
+    var nodes = wrap.querySelectorAll("div, span, p, label");
+    for (var i = 0; i < nodes.length; i += 1) {
+      var el = nodes[i];
+      if (el.id === HINT_ID) continue;
+      var text = (el.textContent || "").replace(/\s+/g, " ").trim();
+      if (/reconnaissance des intervenants/i.test(text) && el.querySelectorAll("input, .checkbox_toggle").length === 0) {
+        return el;
+      }
+    }
+    return wrap;
+  }
+
   function ensureHint() {
     var existing = document.getElementById(HINT_ID);
     if (existing) return existing;
     var hint = document.createElement("p");
     hint.id = HINT_ID;
+    hint.className = "agilo-speaker-trial-status";
     hint.setAttribute("role", "status");
-    hint.style.cssText = "margin:.35rem 0 0;font-size:.78rem;line-height:1.4;color:#5d2de6;";
-    var host =
-      document.querySelector('[data-visual-for="toggle-speakers"]') ||
-      (document.getElementById("toggle-speakers") &&
-        document.getElementById("toggle-speakers").closest(".checkbox-component, .w-checkbox, label")) ||
-      document.querySelector(".select-container.diarization");
-    if (host && host.parentElement) host.parentElement.insertBefore(hint, host.nextSibling);
-    else if (host) host.appendChild(hint);
-    else document.body.appendChild(hint);
+    hint.setAttribute("aria-live", "polite");
+    var host = findLabelHost();
+    if (host) {
+      if (host.nextSibling) host.parentNode.insertBefore(hint, host.nextSibling);
+      else host.parentNode.appendChild(hint);
+    } else {
+      document.body.appendChild(hint);
+    }
+    var checkbox = speakersCheckbox();
+    if (checkbox) checkbox.setAttribute("aria-describedby", HINT_ID);
     return hint;
   }
 
+  function injectStatusCss() {
+    if (document.getElementById("agilo-speaker-trial-css")) return;
+    var style = document.createElement("style");
+    style.id = "agilo-speaker-trial-css";
+    style.textContent =
+      ".agilo-speaker-trial-status{display:block;margin:.25rem 0 0;font-size:.78rem;line-height:1.35;max-width:24rem;}" +
+      ".agilo-speaker-trial-status.is-available{color:#5d2de6;}" +
+      ".agilo-speaker-trial-status.is-blocked{color:#666;}" +
+      "#" + MODAL_ID + "{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px);}" +
+      "#" + MODAL_ID + " .agilo-free-modal-panel{position:relative;background:#fff;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,.18);width:min(460px,92vw);padding:2.2rem 2rem 1.8rem;text-align:center;font-family:inherit;}" +
+      "#" + MODAL_ID + " h3{margin:0 0 .6rem;font-size:1.1rem;font-weight:700;color:#020202;}" +
+      "#" + MODAL_ID + " .agilo-free-modal-reason{margin:0 0 1.2rem;font-size:.88rem;line-height:1.55;color:#525252;}" +
+      "#" + MODAL_ID + " .agilo-free-btn-primary{display:flex;align-items:center;justify-content:center;width:100%;padding:.75rem 1rem;background:#174a96;color:#fff;border:none;border-radius:10px;font-size:.92rem;font-weight:600;cursor:pointer;font-family:inherit;}" +
+      "#" + MODAL_ID + " .agilo-free-btn-ghost{display:block;margin:.8rem auto 0;background:none;border:none;font-size:.78rem;color:#888;cursor:pointer;font-family:inherit;text-decoration:underline;}" +
+      "#" + MODAL_ID + " .agilo-free-close{position:absolute;top:.6rem;right:.7rem;background:none;border:none;font-size:1.5rem;cursor:pointer;color:#888;line-height:1;padding:.25rem}";
+    document.head.appendChild(style);
+  }
+
   function hintText(status) {
-    if (status === "pending" || status === "uncertain") return "Essai en cours d’envoi";
-    if (status === "used") return "Essai du jour utilisé";
-    return "1 essai gratuit par jour";
+    if (status === "pending") return "Envoi de l’essai en cours";
+    if (status === "uncertain") return "Essai en cours de vérification";
+    if (status === "used") return "Essai utilisé aujourd’hui";
+    return "1 essai gratuit aujourd’hui";
+  }
+
+  function refreshStatus() {
+    if (!isFreeContext()) return;
+    var state = core ? core.getState() : { status: "available" };
+    var hint = ensureHint();
+    hint.textContent = hintText(state.status);
+    hint.classList.toggle("is-available", state.status === "available");
+    hint.classList.toggle("is-blocked", state.status !== "available");
+    var wrap = speakersWrap();
+    if (wrap && state.status !== "available" && !armed) wrap.classList.add("is-disabled");
+    if (wrap && (state.status === "available" || armed)) wrap.classList.remove("is-disabled");
+  }
+
+  function closeModal() {
+    var overlay = document.getElementById(MODAL_ID);
+    if (overlay) overlay.remove();
+    document.removeEventListener("keydown", onModalKey, true);
+    if (lastFocus && typeof lastFocus.focus === "function") {
+      try { lastFocus.focus(); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function onModalKey(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeModal();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    var overlay = document.getElementById(MODAL_ID);
+    if (!overlay) return;
+    var focusable = overlay.querySelectorAll("button, [href], [tabindex]:not([tabindex='-1'])");
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function showInfoModal(opts) {
+    injectStatusCss();
+    closeModal();
+    lastFocus = document.activeElement;
+    var overlay = document.createElement("div");
+    overlay.id = MODAL_ID;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-labelledby", "agilo-speaker-trial-title");
+
+    var panel = document.createElement("div");
+    panel.className = "agilo-free-modal-panel";
+
+    var title = document.createElement("h3");
+    title.id = "agilo-speaker-trial-title";
+    title.textContent = opts.title;
+
+    var reason = document.createElement("p");
+    reason.className = "agilo-free-modal-reason";
+    reason.textContent = opts.reason;
+
+    var closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "agilo-free-close";
+    closeBtn.setAttribute("aria-label", "Fermer");
+    closeBtn.textContent = "\u00D7";
+    closeBtn.onclick = closeModal;
+
+    panel.appendChild(closeBtn);
+    panel.appendChild(title);
+    panel.appendChild(reason);
+
+    if (opts.primary) {
+      var primary = document.createElement("button");
+      primary.type = "button";
+      primary.className = "agilo-free-btn-primary";
+      primary.textContent = opts.primary;
+      primary.onclick = function () {
+        if (typeof opts.onPrimary === "function") opts.onPrimary();
+      };
+      panel.appendChild(primary);
+    }
+
+    var ghost = document.createElement("button");
+    ghost.type = "button";
+    ghost.className = "agilo-free-btn-ghost";
+    ghost.textContent = opts.secondary || "Annuler";
+    ghost.onclick = function () {
+      if (typeof opts.onSecondary === "function") opts.onSecondary();
+      closeModal();
+    };
+    panel.appendChild(ghost);
+
+    overlay.appendChild(panel);
+    overlay.addEventListener("click", function (event) {
+      if (event.target === overlay) closeModal();
+    });
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onModalKey, true);
+    var focusEl = overlay.querySelector(".agilo-free-btn-primary") || closeBtn;
+    focusEl.focus();
+  }
+
+  function showUpgrade(source) {
+    track("free_speaker_trial_upgrade_clicked", { source: source || lastSource || "" });
+    if (root.AgiloFreeUpgrade && typeof root.AgiloFreeUpgrade.show === "function") {
+      root.AgiloFreeUpgrade.show({
+        minPlan: "pro",
+        reason: "Vous avez utilisé votre essai du jour pour la reconnaissance des intervenants. Passez en Pro pour l’utiliser sans limite.",
+        source: "speaker_trial"
+      });
+      return;
+    }
+    if (root.AgiloGate && typeof root.AgiloGate.showUpgrade === "function") {
+      root.AgiloGate.showUpgrade("pro", "Reconnaissance des intervenants");
+      return;
+    }
+    var existing = document.querySelector('[data-ms-price\\:update="' + MS_PRICE_PRO + '"]');
+    if (existing) {
+      existing.click();
+      return;
+    }
+    var link = document.querySelector('a[href*="sign-up-pro"]');
+    if (link) {
+      link.click();
+      return;
+    }
+    root.location.href = "/auth/sign-up-pro";
+  }
+
+  function confirmSpeakers() {
+    if (!core) boot();
+    var state = core.getState();
+    if (state.status === "used") {
+      track("free_speaker_trial_state_conflict", { reason: "used" });
+      closeModal();
+      showUpgrade(lastSource);
+      return;
+    }
+    if (state.status === "pending" || state.status === "uncertain") {
+      track("free_speaker_trial_state_conflict", { reason: state.status });
+      closeModal();
+      showStateModal(state.status);
+      return;
+    }
+    closeModal();
+    applyOptionMode("speakers");
+    track("free_speaker_trial_confirmed", { source: lastSource || "toggle" });
+  }
+
+  function showStateModal(forcedStatus) {
+    if (!core) boot();
+    var status = forcedStatus || (core && core.getState().status) || "available";
+    if (status === "used") {
+      showUpgrade(lastSource);
+      return;
+    }
+    if (status === "pending") {
+      showInfoModal({
+        title: "Essai en cours d’envoi",
+        reason: "Votre essai est en cours d’envoi. Attendez la confirmation avant de recommencer.",
+        secondary: "Fermer"
+      });
+      return;
+    }
+    if (status === "uncertain") {
+      showInfoModal({
+        title: "Vérification de l’essai",
+        reason: "Nous vérifions si votre essai a bien été envoyé.",
+        secondary: "Fermer"
+      });
+      return;
+    }
+    showInfoModal({
+      title: "Tester la reconnaissance des intervenants",
+      reason: "1 essai gratuit aujourd’hui. Le formatage sera désactivé. L’essai n’est consommé que si votre fichier est accepté.",
+      primary: "Activer mon essai",
+      secondary: "Annuler",
+      onPrimary: confirmSpeakers,
+      onSecondary: function () {
+        track("free_speaker_trial_declined", { source: lastSource || "toggle" });
+      }
+    });
+  }
+
+  function interceptSpeakers(event) {
+    if (!isFreeContext() || isApplyingMode) return;
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    }
+    if (armed) {
+      applyOptionMode("standard");
+      return;
+    }
+    showStateModal();
+  }
+
+  function interceptFormat(event) {
+    if (!isFreeContext() || isApplyingMode || !armed) return;
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+    }
+    applyOptionMode("standard");
+  }
+
+  function bindUi() {
+    if (bindUi.done) return;
+    bindUi.done = true;
+    injectStatusCss();
+    var wrap = speakersWrap();
+    var visual = document.querySelector('[data-visual-for="toggle-speakers"]');
+    [speakersCheckbox(), visual, wrap].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener("click", interceptSpeakers, true);
+      el.addEventListener("keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") interceptSpeakers(event);
+      }, true);
+    });
+    var formatWrap = formatCheckbox() && (
+      formatCheckbox().closest(".checkbox-component, .w-checkbox, label") || formatCheckbox().parentElement
+    );
+    var formatVisual = document.querySelector('[data-visual-for="toggle-format-transcript"]');
+    [formatCheckbox(), formatVisual, formatWrap].forEach(function (el) {
+      if (!el) return;
+      el.addEventListener("click", interceptFormat, true);
+    });
   }
 
   function defaultFetchJobs() {
@@ -535,13 +986,6 @@
       .catch(function () { return []; });
   }
 
-  function withWebLock(fn) {
-    if (root.navigator && root.navigator.locks && typeof root.navigator.locks.request === "function") {
-      return root.navigator.locks.request(LOCK_NAME, fn);
-    }
-    return Promise.resolve().then(fn);
-  }
-
   var channel = null;
   try {
     if (typeof BroadcastChannel !== "undefined") channel = new BroadcastChannel(CHANNEL_NAME);
@@ -549,122 +993,61 @@
     channel = null;
   }
 
-  var core = null;
-  var booted = false;
-  var trackedAvailable = false;
-  var lastSource = "";
-
   function broadcast(record) {
     try {
       if (channel) channel.postMessage({ type: "sync", status: record && record.status || "available" });
     } catch (e) { /* ignore */ }
   }
 
-  function refreshUi() {
-    if (!isFreeContext() || !core) return;
-    var state = core.getState();
-    var checkbox = document.getElementById("toggle-speakers");
-    var hint = ensureHint();
-    hint.textContent = hintText(state.status);
-    if (!checkbox) return;
-
-    var wrap = checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement;
-    if (state.status === "available") {
-      checkbox.removeAttribute("aria-disabled");
-      if (wrap) wrap.removeAttribute("aria-disabled");
-      syncSpeakersSelect(!!checkbox.checked);
-      return;
-    }
-
-    checkbox.setAttribute("aria-disabled", "true");
-    if (wrap) wrap.setAttribute("aria-disabled", "true");
-    setToggleVisual(checkbox, false);
-    syncSpeakersSelect(false);
-    try {
-      checkbox.dispatchEvent(new Event("change", { bubbles: true }));
-    } catch (e) { /* ignore */ }
-  }
-
-  function interceptToggle(event) {
-    if (!core || !isFreeContext()) return;
-    var state = core.getState();
-    if (state.status === "available") return;
-    if (event) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-    }
-    setToggleVisual(document.getElementById("toggle-speakers"), false);
-    syncSpeakersSelect(false);
-    if (state.status === "used") showUpgrade(state.source || lastSource);
-    if (state.status === "pending" || state.status === "uncertain") {
-      var hint = ensureHint();
-      hint.textContent = hintText(state.status);
-    }
-  }
-
-  function bindUi() {
-    if (bindUi.done) return;
-    bindUi.done = true;
-    var checkbox = document.getElementById("toggle-speakers");
-    var visual = document.querySelector('[data-visual-for="toggle-speakers"]');
-    var wrap = checkbox && (checkbox.closest(".checkbox-component, .w-checkbox, label") || checkbox.parentElement);
-    [checkbox, visual, wrap].forEach(function (el) {
-      if (!el) return;
-      el.addEventListener("click", interceptToggle, true);
-      el.addEventListener("keydown", function (event) {
-        if (event.key === "Enter" || event.key === " ") interceptToggle(event);
-      }, true);
-    });
-    if (checkbox) {
-      checkbox.addEventListener("change", function () {
-        if (!core) return;
-        var state = core.getState();
-        if (state.status !== "available") {
-          setToggleVisual(checkbox, false);
-          syncSpeakersSelect(false);
-          return;
+  function boot() {
+    if (!isFreeContext()) return;
+    if (!core) {
+      core = createCore({
+        store: wrapStorage(root.localStorage),
+        getMemberId: readMemberId,
+        broadcast: broadcast,
+        fetchJobs: defaultFetchJobs,
+        onChange: function () { refreshStatus(); },
+        onMigrationReset: function () {
+          track("free_speaker_trial_migration_reset", { source: "boot" });
         }
-        syncSpeakersSelect(!!checkbox.checked);
       });
     }
-  }
-
-  function boot() {
-    if (booted || !isFreeContext()) return;
-    booted = true;
-    core = createCore({
-      store: wrapStorage(root.localStorage),
-      getMemberId: readMemberId,
-      withLock: withWebLock,
-      broadcast: broadcast,
-      fetchJobs: defaultFetchJobs,
-      onChange: function () { refreshUi(); }
-    });
     bindUi();
-    refreshUi();
+    if (!armed) applyOptionMode("standard");
+    refreshStatus();
     if (!trackedAvailable && core.getState().status === "available") {
       trackedAvailable = true;
       track("free_speaker_trial_available", { source: "init" });
     }
-    Promise.resolve(core.reconcile([])).then(function () {
-      return defaultFetchJobs().then(function (jobs) {
-        if (jobs && jobs.length) return core.reconcile(jobs);
-      });
-    }).then(function () { refreshUi(); }).catch(function () { refreshUi(); });
+    if (!booted) {
+      booted = true;
+      Promise.resolve(core.reconcile([])).then(function () {
+        return defaultFetchJobs().then(function (jobs) {
+          if (jobs && jobs.length) return core.reconcile(jobs);
+        });
+      }).then(function () {
+        if (!armed) applyOptionMode("standard");
+        refreshStatus();
+      }).catch(function () { refreshStatus(); });
+    }
   }
 
   function publicReserve(input) {
     if (!isFreeContext()) return Promise.resolve({ ok: true, skipped: true, requestId: "" });
     if (!core) boot();
     lastSource = (input && input.source) || "upload";
+    if (!armed) {
+      track("free_speaker_trial_blocked", { source: lastSource, reason: "not_armed" });
+      return Promise.resolve({ ok: false, reason: "not_armed", status: core.getState().status });
+    }
     return Promise.resolve(core.reserve(input)).then(function (result) {
-      refreshUi();
+      refreshStatus();
       if (result && result.ok) {
         track("free_speaker_trial_reserved", { source: lastSource });
       } else {
         track("free_speaker_trial_blocked", { source: lastSource, reason: result && result.reason || "" });
-        if (result && result.reason === "used") showUpgrade(lastSource);
+        showStateModal(result && result.reason);
       }
       return result;
     });
@@ -673,7 +1056,8 @@
   function publicCommit(jobId, input) {
     if (!core) return Promise.resolve(null);
     return Promise.resolve(core.commit(jobId, input)).then(function (state) {
-      refreshUi();
+      armed = false;
+      applyOptionMode("standard");
       track("free_speaker_trial_used", { source: (input && input.source) || lastSource || "" });
       return state;
     });
@@ -682,7 +1066,7 @@
   function publicRelease(input) {
     if (!core) return Promise.resolve(null);
     return Promise.resolve(core.release(input)).then(function (state) {
-      refreshUi();
+      refreshStatus();
       return state;
     });
   }
@@ -690,41 +1074,55 @@
   function publicUncertain(input) {
     if (!core) return Promise.resolve(null);
     return Promise.resolve(core.markUncertain(input)).then(function (state) {
-      refreshUi();
+      refreshStatus();
       return state;
     });
   }
 
+  function publicReadIntent(sourceHint) {
+    var checkbox = speakersCheckbox();
+    var select = document.getElementById("speakers-select");
+    var session = document.querySelector('input[name="agilo_record_session_id"]');
+    var source = sourceHint || (session && session.value ? "recording" : "upload");
+    var checked = !!(checkbox && checkbox.checked);
+    return {
+      speakers: speakersIntent(checked, armed),
+      armed: !!armed,
+      formatChecked: !!(formatCheckbox() && formatCheckbox().checked),
+      speakersExpected: select ? String(select.value || "") : "",
+      source: source
+    };
+  }
+
   root.AgiloFreeSpeakerTrial = {
     init: boot,
-    getState: function () { return core ? core.getState() : { status: "available" }; },
+    getState: function () {
+      var state = core ? core.getState() : { status: "available" };
+      state.armed = !!armed;
+      return state;
+    },
+    isReady: function () { return !!(core && isFreeContext()); },
     reserve: publicReserve,
     commit: publicCommit,
     release: publicRelease,
     markUncertain: publicUncertain,
-    refreshUi: refreshUi,
+    refreshUi: function () {
+      refreshStatus();
+    },
+    applyOptionMode: applyOptionMode,
     showUpgrade: showUpgrade,
+    showStateModal: showStateModal,
     isCertainRejection: isCertainRejection,
-    readIntent: function (sourceHint) {
-      var checkbox = document.getElementById("toggle-speakers");
-      var select = document.getElementById("speakers-select");
-      var session = document.querySelector('input[name="agilo_record_session_id"]');
-      var source = sourceHint || (session && session.value ? "recording" : "upload");
-      return {
-        speakers: !!(checkbox && checkbox.checked),
-        speakersExpected: select ? String(select.value || "") : "",
-        source: source
-      };
-    }
+    readIntent: publicReadIntent
   };
 
   function start() {
     if (!isFreeContext()) return;
     boot();
-    [350, 1100].forEach(function (ms) {
+    [0, 350, 1100].forEach(function (ms) {
       setTimeout(function () {
         boot();
-        refreshUi();
+        if (!armed) applyOptionMode("standard");
       }, ms);
     });
   }
@@ -736,9 +1134,9 @@
   }
 
   if (channel) {
-    channel.onmessage = function () { refreshUi(); };
+    channel.onmessage = function () { refreshStatus(); };
   }
   root.addEventListener("storage", function (event) {
-    if (event && event.key && String(event.key).indexOf(STORAGE_PREFIX) === 0) refreshUi();
+    if (event && event.key && String(event.key).indexOf(STORAGE_PREFIX) === 0) refreshStatus();
   });
 })(typeof window !== "undefined" ? window : globalThis);

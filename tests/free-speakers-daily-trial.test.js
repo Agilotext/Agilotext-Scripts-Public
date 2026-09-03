@@ -211,13 +211,14 @@ describe("réconciliation timeout", function () {
     assert.equal(reserved.ok, true);
   });
 
-  it("expire prudemment après le TTL si aucun job", async function () {
+  it("expire prudemment après le TTL uncertain si aucun job", async function () {
     let now = 1_000;
     const core = trial.createCore({
       store: trial.createMemoryStore(),
       now: function () { return now; },
       getMemberId: function () { return "mem_a"; },
-      pendingTtlMs: 5_000
+      pendingTtlMs: 5_000,
+      uncertainTtlMs: 5_000
     });
     await core.reserve({ source: "upload" });
     await core.markUncertain();
@@ -244,6 +245,14 @@ describe("rejet certain vs ambigu", function () {
   it("invalidToken = certain", function () {
     assert.equal(trial.isCertainRejection({ type: "invalidToken" }), true);
   });
+
+  it("erreur API inconnue = ambiguë", function () {
+    assert.equal(
+      trial.isCertainRejection(null, { status: "KO", errorMessage: "weird_unknown_backend_error" }),
+      false
+    );
+    assert.equal(trial.isCertainRejection({ type: "httpError", status: 500, message: "boom" }), false);
+  });
 });
 
 describe("Pro et Business inactifs", function () {
@@ -254,5 +263,190 @@ describe("Pro et Business inactifs", function () {
       getMemberId: function () { return "mem_pro"; }
     });
     assert.equal(core.getState().status, "available");
+  });
+});
+
+describe("consentement armed et exclusivité", function () {
+  it("démarre en mode standard même si speakers a été coché", function () {
+    assert.equal(trial.nextUiMode("speakers", "boot"), "standard");
+  });
+
+  it("confirmation arme speakers, format ON désarme", function () {
+    assert.equal(trial.nextUiMode("standard", "confirm"), "speakers");
+    assert.equal(trial.nextUiMode("speakers", "formatOn"), "standard");
+    assert.equal(trial.nextUiMode("speakers", "cancel"), "standard");
+    assert.equal(trial.nextUiMode("speakers", "speakersOff"), "standard");
+  });
+
+  it("checkbox ON sans armed refuse speakers", function () {
+    assert.equal(trial.speakersIntent(true, false), false);
+    assert.equal(trial.speakersIntent(true, true), true);
+    assert.deepEqual(
+      trial.resolveFreeSpeakersPayload(true, { speakers: true, armed: false, formatChecked: true }, { ok: true }),
+      { timestampTranscript: false, formatTranscript: true }
+    );
+  });
+
+  it("garde absent : fail-closed Free", function () {
+    assert.deepEqual(
+      trial.resolveFreeSpeakersPayload(false, { speakers: true, armed: true, formatChecked: true }, { ok: true }),
+      { timestampTranscript: false, formatTranscript: true }
+    );
+  });
+
+  it("speakers accepté impose format OFF", function () {
+    assert.deepEqual(
+      trial.payloadInvariant({ speakers: true, formatChecked: true }),
+      { timestampTranscript: true, formatTranscript: false }
+    );
+  });
+});
+
+describe("migration v1 vers v2", function () {
+  const now = Date.parse("2026-09-03T10:00:00+02:00");
+  const day = "2026-09-03";
+
+  it("used v1 du jour est réinitialisé une seule fois", async function () {
+    const store = trial.createMemoryStore();
+    const memberId = "mem_a";
+    store.set(trial.storageKey(memberId, day), {
+      version: 1,
+      memberId: memberId,
+      parisDay: day,
+      status: "used",
+      source: "upload",
+      requestId: "fst-old",
+      jobId: "job-old",
+      reservedAt: now
+    });
+    const core = trial.createCore({
+      store: store,
+      now: function () { return now; },
+      getMemberId: function () { return memberId }
+    });
+    assert.equal(core.getState().status, "available");
+    store.set(trial.storageKey(memberId, day), {
+      version: 1,
+      memberId: memberId,
+      parisDay: day,
+      status: "used",
+      source: "upload",
+      requestId: "fst-old-2",
+      jobId: "job-old-2",
+      reservedAt: now
+    });
+    assert.equal(core.getState().status, "used");
+  });
+
+  it("pending v1 reste bloqué", async function () {
+    const result = trial.migrateV1Record({
+      version: 1,
+      memberId: "mem_a",
+      parisDay: day,
+      status: "pending",
+      reservedAt: now,
+      requestId: "fst-1"
+    }, "mem_a", day, now, false);
+    assert.equal(result.reset, false);
+    assert.equal(result.migrated, true);
+    assert.equal(result.record.status, "pending");
+    assert.equal(result.record.version, 2);
+    assert.equal(result.record.migration_v2, true);
+  });
+
+  it("uncertain v1 reste bloqué", function () {
+    const result = trial.migrateV1Record({
+      version: 1,
+      memberId: "mem_a",
+      parisDay: day,
+      status: "uncertain",
+      reservedAt: now,
+      requestId: "fst-1"
+    }, "mem_a", day, now, false);
+    assert.equal(result.record.status, "uncertain");
+    assert.ok(result.record.uncertainExpiresAt);
+  });
+
+  it("ne migre pas un jour antérieur", function () {
+    const result = trial.migrateV1Record({
+      version: 1,
+      memberId: "mem_a",
+      parisDay: "2026-09-02",
+      status: "used"
+    }, "mem_a", day, now, false);
+    assert.equal(result.migrated, false);
+    assert.equal(result.record, null);
+  });
+});
+
+describe("TTL pending 3 h et uncertain 15 min", function () {
+  it("expose les constantes du plan", function () {
+    assert.equal(trial.PENDING_TTL_MS, 3 * 60 * 60 * 1000);
+    assert.equal(trial.UNCERTAIN_TTL_MS, 15 * 60 * 1000);
+  });
+
+  it("pending expire après 3 heures sans job", async function () {
+    let now = 1_000;
+    const core = trial.createCore({
+      store: trial.createMemoryStore(),
+      now: function () { return now; },
+      getMemberId: function () { return "mem_a"; }
+    });
+    await core.reserve({ source: "upload" });
+    now = 1_000 + (2 * 60 * 60 * 1000);
+    assert.equal(core.getState().status, "pending");
+    now = 1_000 + trial.PENDING_TTL_MS;
+    const state = await core.reconcile([]);
+    assert.equal(state.status, "available");
+  });
+
+  it("uncertain expire après 15 minutes sans job", async function () {
+    let now = 1_000;
+    const core = trial.createCore({
+      store: trial.createMemoryStore(),
+      now: function () { return now; },
+      getMemberId: function () { return "mem_a"; }
+    });
+    await core.reserve({ source: "recording" });
+    await core.markUncertain();
+    now = 1_000 + (10 * 60 * 1000);
+    assert.equal(core.getState().status, "uncertain");
+    now = 1_000 + trial.UNCERTAIN_TTL_MS + 1;
+    const state = await core.reconcile([]);
+    assert.equal(state.status, "available");
+  });
+});
+
+describe("parcours upload, micro et dictée", function () {
+  it("partagent le même quota quotidien", async function () {
+    const core = trial.createCore({
+      store: trial.createMemoryStore(),
+      now: function () { return 1_000; },
+      getMemberId: function () { return "mem_a"; }
+    });
+    const first = await core.reserve({ source: "upload" });
+    await core.commit("job-up", { requestId: first.requestId });
+    const rec = await core.reserve({ source: "recording" });
+    const dic = await core.reserve({ source: "dictation" });
+    assert.equal(rec.ok, false);
+    assert.equal(dic.ok, false);
+    assert.equal(rec.reason, "used");
+    assert.equal(dic.reason, "used");
+  });
+});
+
+describe("fallback sans Web Locks", function () {
+  it("relit le requestId après écriture", async function () {
+    const store = trial.createMemoryStore();
+    const core = trial.createCore({
+      store: store,
+      now: function () { return 1_000; },
+      getMemberId: function () { return "mem_a"; }
+    });
+    const reserved = await core.reserve({ source: "upload" });
+    assert.equal(reserved.ok, true);
+    const record = store.get(trial.storageKey("mem_a", trial.parisDay(new Date(1_000))));
+    assert.equal(record.requestId, reserved.requestId);
+    assert.equal(record.version, 2);
   });
 });
