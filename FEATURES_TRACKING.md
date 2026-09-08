@@ -120,12 +120,12 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 
 | Embed | Fichier | Statut |
 |-------|---------|--------|
-| `code-prompt-library` | `library-main.js` + standards-meta/api/core/catalog + `library.css` | Staging, onglets + wizard, `library2Live: false` |
+| `code-prompt-library` | `library-main.js` + overlay/core/catalog + `library.css` | Staging, overlays fiche/wizard, `library2Live: false` |
 | `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 
-Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@ad069ec8`, jamais `@main`.  
-v1.2 : refresh `error_invalid_token` comme l’éditeur (`getToken(..., true)` + une retry). Preview document, fiche drawer, Mes modèles tableau si > 12, pagination 24, icônes mappées sur les 8 clés library2.  
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@437feb00`, jamais `@main`.  
+v1.3 : isolation boutons Webflow, menu `position:fixed`, fiche/wizard/versions en overlay `body`, chrome Nucleo inline, `iconUrl` intact. Auth 1.2 inchangé.  
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---

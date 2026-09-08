@@ -14,7 +14,7 @@ Deux flags, jamais un seul :
 En `library2Live: false` : listes v1, pin / duplicate / versions / create / rename / delete sur `/api/v1`. **Pas** de fausses cartes pack CSE.  
 En `cse89Live: false` : cadenas (quand library2 les enverra) → mailto `contact@agilotext.com`, pas `CSERENTREE26`.
 
-Page : onglets Modèles Agilotext (défaut, à la une + chips) / Mes modèles (grille ou tableau) / Épinglés (n/5) / Créer un modèle (wizard 4 questions).
+Page : onglets Modèles Agilotext (défaut, à la une + chips) / Mes modèles (grille ou tableau) / Épinglés (n/5) / Créer un modèle (landing + popup 4 questions). Fiche = overlay, pas une page Designer.
 
 ## Fichiers
 
@@ -23,13 +23,14 @@ scripts/pages/library/library.css
 scripts/pages/library/library-standards-meta.js
 scripts/pages/library/library-api.js
 scripts/pages/library/library-core.js
+scripts/pages/library/library-overlay.js
 scripts/pages/library/library-catalog.js
 scripts/pages/library/library-main.js
 scripts/pages/library/library-picker.js
 scripts/pages/auth/post-login-router.js   (v8.2, CSE → business)
 ```
 
-Interdit dans ce dossier public : SVG Nucleo, prompts clients, doc KawanSoft library2.
+Interdit dans ce dossier public : pack / dossier SVG Nucleo, prompts clients, doc KawanSoft library2. Chrome = glyphes Nucleo **inlinés** (comme l’atelier). `iconUrl` serveur inchangé.
 
 ## Auth
 
@@ -52,10 +53,10 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin jsDelivr : commit `ad069ec8` (library + creds). Library + creds + standards-meta.
+Pin jsDelivr : commit `437feb00` (library + creds). Library + creds + standards-meta.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library.css?v=ad069ec8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library.css?v=437feb00">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 
@@ -72,13 +73,14 @@ Pin jsDelivr : commit `ad069ec8` (library + creds). Library + creds + standards-
     ctaMonthlyUrl: "/cse"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/editor/token-resolver.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/editor/agilo-editor-creds.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-standards-meta.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-api.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-core.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-catalog.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-main.js?v=ad069ec8"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/token-resolver.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/agilo-editor-creds.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-standards-meta.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-api.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-core.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-overlay.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-catalog.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-main.js?v=437feb00"></script>
 ```
 
 `atelierEnabled: true` seulement si `agilo-prompt-atelier.css/js` 1.10 est aussi chargé (bouton Modifier ouvre l’atelier). Sinon Modifier envoie vers `/app/{palier}/profile?tab=prompts`.
@@ -127,7 +129,7 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
 2. Embed (même SHA), **sans** `library-main.js` :
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library.css?v=ad069ec8">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library.css?v=437feb00">
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
     library2Live: false,
@@ -135,12 +137,12 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/editor/token-resolver.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/editor/agilo-editor-creds.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-standards-meta.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-api.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-core.js?v=ad069ec8"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-picker.js?v=ad069ec8"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/token-resolver.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/agilo-editor-creds.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-standards-meta.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-api.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-core.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-picker.js?v=437feb00"></script>
 ```
 
 3. **Désactiver** l’embed inline `code-model-default-*` (populateDefaultTemplateSelect) pour éviter un double chargement. Le picker fait le POST `setPromptModelUserDefault`.
@@ -163,12 +165,12 @@ Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=b
 
 | Compte | Attendu |
 |--------|---------|
-| Free | Onglet Agilotext en premier, 3 cartes à la une, Créer bloqué (message plan), pas d’erreur console |
-| Pro | Wizard + duplicate + tableau, Modifier → `/app/premium/profile?tab=prompts` si atelier absent |
-| Business (Bauer) | Agilotext d’abord, chips, recherche, tableau triable, 6e épingle → plafond, duplicate d’un standard → Mes modèles, wizard READY, suppression du défaut → modèle Agilotext |
-| Mobile 375 px | Onglets scrollables, cartes 1 colonne, tableau replié en cartes |
+| Free | Onglet Agilotext en premier, 3 cartes à la une, Créer = popup offres, pas d’erreur console |
+| Pro | Popup 4 questions + duplicate + tableau, Modifier → `/app/premium/profile?tab=prompts` si atelier absent |
+| Business (Bauer) | Bouton primaire bleu lisible, menu … hors du titre, Voir ouvre la fiche overlay, `#creer` ouvre la popup, chips, recherche, tableau triable, 6e épingle → plafond, duplicate d’un standard → Mes modèles, wizard READY, jeton périmé rafraîchi (régression 1.2) |
+| Mobile 375 px | Overlay pleine largeur, onglets scrollables, cartes 1 colonne, tableau replié en cartes |
 
-Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre le wizard.
+Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre la popup de création.
 
 Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 89 (après Java) atterrit Business.
 
@@ -179,7 +181,7 @@ Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 
 3. Dépublier les 3 pages si besoin
 4. Picker : remettre l’inline `code-model-default-*`
 
-Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@ad069ec8/scripts/pages/library/library-main.js`
+Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-main.js`
 
 ## Vérif CDN
 
