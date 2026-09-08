@@ -156,6 +156,7 @@
   }
 
   function isPackCseCard(m) {
+    if (!cfg().library2Live) return false;
     var types = typesList(m);
     if (types.indexOf("cse") !== -1) return true;
     return m.lockReasonCode === "SUBSCRIPTION_ACCESS_REQUIRED";

@@ -280,14 +280,20 @@
       const backend = await verifyAccessViaBackend(email);
       if (!backend) return signals;
 
+      var backendEdition = String(backend.edition || "").toLowerCase();
+      var backendBusiness =
+        backend.hasBusiness ||
+        backendEdition === "business" ||
+        backendEdition === "ent" ||
+        backendEdition === "enterprise";
       return {
         ...signals,
-        hasBusiness: signals.hasBusiness || backend.hasBusiness,
+        hasBusiness: signals.hasBusiness || backendBusiness,
         isSeat: signals.isSeat || backend.isSeat,
-        hasTeamMembership: signals.hasTeamMembership || backend.isSeat || backend.hasBusiness,
+        hasTeamMembership: signals.hasTeamMembership || backend.isSeat || backendBusiness,
         hasTranscription:
           signals.hasTranscription ||
-          backend.hasBusiness ||
+          backendBusiness ||
           backend.isSeat ||
           signals.hasPro ||
           signals.hasFree

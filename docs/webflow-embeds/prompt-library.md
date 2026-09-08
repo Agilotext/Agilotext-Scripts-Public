@@ -42,10 +42,10 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Remplacer `SHA` par le commit après push.
+Pin jsDelivr : commit `bd1f83b4`. Après un nouveau commit, remplacer ce hash partout.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library.css?v=bd1f83b4">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 
@@ -61,30 +61,47 @@ Remplacer `SHA` par le commit après push.
     ctaMonthlyUrl: "/cse"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/editor/token-resolver.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/editor/agilo-editor-creds.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-api.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-core.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-catalog.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-main.js?v=SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/editor/token-resolver.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/editor/agilo-editor-creds.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-api.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-core.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-catalog.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-main.js?v=bd1f83b4"></script>
 ```
 
 L’édition (`free` / `pro` / `ent`) est déduite du chemin `/app/free|premium|business/`. Pas trois JS.
 
+`agilo-editor-creds.js` est sur cette branche (absent de `origin/main`). Ne pas pointer `@1.07` pour la biblio : un seul SHA pour CSS + library + creds.
+
 ## Pages Designer (staging, à la main)
 
-Webflow MCP ne crée pas ces pages ici. À faire dans **agilotext-test** Designer :
+Le MCP Webflow de cette session n’expose que l’auth. Les 3 coquilles se font dans **agilotext-test** Designer.
 
-1. Inventaire nav : symbole `App_dashboard-menu` (ou équivalent). Si c’est un **symbole**, un lien « Bibliothèque » suffit pour dashboard + mes-transcripts + éditeur + mobile. Si chaque page a un clone, toucher les 9+ pages (3 paliers × dashboard / mes-transcripts / éditeur, plus hamburger).
-2. Dupliquer une page déjà gated (ex. Mes transcripts).
-3. Slugs :
+### Inventaire nav (avant de coder les liens)
+
+Dans le panneau Symboles, chercher `App_dashboard-menu`, `nav-app`, `menu-app`, hamburger mobile.
+
+| Surface | Free | Premium | Business |
+|---------|------|---------|----------|
+| Dashboard | `/app/free/dashboard` | `/app/premium/dashboard` | `/app/business/dashboard` |
+| Mes transcripts | `/app/free/mes-transcripts` | `/app/premium/mes-transcripts` | `/app/business/mes-transcripts` |
+| Éditeur | page éditeur du palier | idem | idem |
+| Menu mobile | hamburger du même symbole | idem | idem |
+
+- **Symbole unique** : un lien « Bibliothèque » (slug du palier) propage dashboard + transcripts + éditeur + mobile.
+- **Pas un symbole** : 9+ pages à la main. Ne pas oublier le menu mobile.
+
+### Créer les 3 pages
+
+1. Dupliquer une page déjà gated (ex. Mes transcripts du palier).
+2. Slugs :
    - `/app/free/bibliotheque`
    - `/app/premium/bibliotheque`
    - `/app/business/bibliotheque`
-4. Memberstack : mêmes groupes que le dashboard du palier.
-5. Page settings : `noindex`, hors sitemap marketing.
-6. Body : titre optionnel + ancre `#agilo-prompt-library-anchor` + embed ci-dessus.
-7. Publier **staging only**.
+3. Memberstack : **mêmes groupes** que le dashboard du palier.
+4. Page settings : `noindex`, hors sitemap marketing, titre « Bibliothèque de modèles ».
+5. Body : nav existante + ancre vide `#agilo-prompt-library-anchor` + embed pin SHA. Flags `library2Live: false` et `cse89Live: false` au début.
+6. Publier **staging only** (`agilotext-test.webflow.io`). Prod www inchangée.
 
 CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/bibliotheque` après le routeur v8.2.
 
@@ -96,7 +113,7 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
 2. Embed (même SHA), **sans** `library-main.js` :
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library.css?v=bd1f83b4">
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
     library2Live: false,
@@ -104,11 +121,11 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/editor/token-resolver.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/editor/agilo-editor-creds.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-api.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-core.js?v=SHA"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-picker.js?v=SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/editor/token-resolver.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/editor/agilo-editor-creds.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-api.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-core.js?v=bd1f83b4"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-picker.js?v=bd1f83b4"></script>
 ```
 
 3. **Désactiver** l’embed inline `code-model-default-*` (populateDefaultTemplateSelect) pour éviter un double chargement. Le picker fait le POST `setPromptModelUserDefault`.
@@ -144,7 +161,7 @@ Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger.
 3. Dépublier les 3 pages si besoin
 4. Picker : remettre l’inline `code-model-default-*`
 
-Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-main.js`
+Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@bd1f83b4/scripts/pages/library/library-main.js`
 
 ## Vérif CDN
 
