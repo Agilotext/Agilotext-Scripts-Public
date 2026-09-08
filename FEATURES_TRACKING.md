@@ -114,5 +114,19 @@ Pour activer le mode debug, ajoutez `?debug=1` à l'URL de la page éditeur.
 
 ---
 
-**Dernière mise à jour** : $(date +"%Y-%m-%d")
+## Bibliothèque de modèles (staging, 8 sept 2026)
+
+Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
+
+| Embed | Fichier | Statut |
+|-------|---------|--------|
+| `code-prompt-library` | `scripts/pages/library/library-main.js` + api/core/catalog + `library.css` | Staging, `library2Live: false` |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
+| `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
+
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin SHA jsDelivr, jamais `@main`.
+
+---
+
+**Dernière mise à jour** : 2026-09-08
 

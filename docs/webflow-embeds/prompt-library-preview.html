@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Aperçu local bibliothèque Agilotext</title>
+  <link rel="stylesheet" href="../../scripts/pages/library/library.css">
+</head>
+<body style="margin:0;padding:1.25rem;font-family:Poppins,system-ui,sans-serif;background:#f8f9fa">
+  <p style="font-size:0.85rem;color:#525252">Aperçu local (file:// ou serveur). Pas de Memberstack. Attendu : message de reconnexion, sauf si tu as un token localStorage.</p>
+  <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+  <script>
+    window.__AGILO_PROMPT_LIBRARY__ = {
+      library2Live: false,
+      cse89Live: false,
+      mountSelector: "#agilo-prompt-library-anchor"
+    };
+  </script>
+  <script src="../../scripts/pages/editor/agilo-editor-creds.js"></script>
+  <script src="../../scripts/pages/library/library-api.js"></script>
+  <script src="../../scripts/pages/library/library-core.js"></script>
+  <script src="../../scripts/pages/library/library-catalog.js"></script>
+  <script src="../../scripts/pages/library/library-main.js"></script>
+</body>
+</html>

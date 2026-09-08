@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Embed bibliothèque — coller dans Webflow staging</title>
+</head>
+<body>
+<p>Fichier de référence. Le collage réel est dans <code>prompt-library.md</code>.</p>
+<!-- SHA à remplacer après push feat/prompt-library-webflow -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
+<div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+<script>
+  window.__AGILO_PROMPT_LIBRARY__ = {
+    library2Live: false,
+    cse89Live: false,
+    apiBase: "https://api.agilotext.com/api/v1",
+    library2Base: "https://api.agilotext.com/api/v1/library2",
+    mountSelector: "#agilo-prompt-library-anchor",
+    ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
+    ctaAnnualUrl: "/cse",
+    ctaMonthlyUrl: "/cse"
+  };
+</script>
+</body>
+</html>
