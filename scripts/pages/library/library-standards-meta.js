@@ -2,7 +2,7 @@
  * Métadonnées publiques des modèles Agilotext 0–7.
  * Fallback si le serveur n’a pas encore seedé standard_prompt_model_metadata.
  * Aucun promptContent ici.
- * @version 1.1.0
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
@@ -24,7 +24,7 @@
       cardTitle: "Compte rendu de réunion",
       publicDescription: "Compte rendu polyvalent pour une réunion professionnelle, un point projet ou un rendez-vous client.",
       publicExample: "Décisions, actions et responsables · Points d’accord · Prochaine étape datée",
-      iconKey: "file-text",
+      iconKey: "document",
       categoryKey: "general",
       sortOrder: 10,
       featured: true
@@ -33,7 +33,7 @@
       cardTitle: "Procès-verbal CSE",
       publicDescription: "Procès-verbal détaillé et chronologique d’une réunion plénière du CSE, avec attribution des échanges, décisions et votes.",
       publicExample: "Ordre du jour et quorum · Questions des élus · Votes, décisions et annexes",
-      iconKey: "users",
+      iconKey: "meeting",
       categoryKey: "cse",
       sortOrder: 20,
       featured: true
@@ -42,7 +42,7 @@
       cardTitle: "Dictée vocale",
       publicDescription: "Mise en forme fidèle d’une dictée vocale, avec application des commandes de ponctuation et de présentation.",
       publicExample: "Fidélité à l’oral · Commandes de ponctuation · Aucun résumé du fond",
-      iconKey: "mic",
+      iconKey: "report",
       categoryKey: "dictation",
       sortOrder: 30,
       featured: true
@@ -51,7 +51,7 @@
       cardTitle: "Compte rendu de webinaire",
       publicDescription: "Compte rendu pédagogique d’un webinaire, structuré autour des intervenants, enseignements et questions-réponses.",
       publicExample: "Intervenants et déroulé · Enseignements clés · Questions-réponses",
-      iconKey: "presentation",
+      iconKey: "report",
       categoryKey: "webinar",
       sortOrder: 40,
       featured: false
@@ -69,7 +69,7 @@
       cardTitle: "Analyse SWOT",
       publicDescription: "Analyse d’une réunion selon les forces, faiblesses, opportunités et menaces.",
       publicExample: "Quatre quadrants SWOT · Faits entendus · Pistes d’action",
-      iconKey: "chart",
+      iconKey: "idea",
       categoryKey: "strategy",
       sortOrder: 60,
       featured: false
@@ -78,7 +78,7 @@
       cardTitle: "Résumé de cours",
       publicDescription: "Résumé pédagogique d’un cours ou d’une formation, avec notions clés, exemples et ressources.",
       publicExample: "Notions à retenir · Exemples cités · Ressources mentionnées",
-      iconKey: "graduation-cap",
+      iconKey: "education",
       categoryKey: "education",
       sortOrder: 70,
       featured: false
@@ -87,7 +87,7 @@
       cardTitle: "PV générique (ancien)",
       publicDescription: "Ancien modèle de procès-verbal générique, conservé pour compatibilité avec les usages existants.",
       publicExample: "Décisions · Actions · Informations",
-      iconKey: "archive",
+      iconKey: "document",
       categoryKey: "legacy",
       sortOrder: 80,
       featured: false
@@ -105,7 +105,11 @@
     if (!card.publicDescription) card.publicDescription = meta.publicDescription;
     if (!card.publicExample) card.publicExample = meta.publicExample;
     var key = String(card.iconKey || "");
+    if (global.AgiloLibraryCore && global.AgiloLibraryCore.resolveIconKey && key) {
+      key = global.AgiloLibraryCore.resolveIconKey(key);
+    }
     if (!key || key === "document" || key === "custom") card.iconKey = meta.iconKey;
+    else card.iconKey = key;
     var cat = String(card.categoryKey || "");
     if (!cat || cat === "custom" || (cat === "general" && meta.categoryKey !== "general")) {
       card.categoryKey = meta.categoryKey;

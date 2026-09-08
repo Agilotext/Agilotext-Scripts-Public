@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.1.0
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
@@ -11,6 +11,12 @@
   var LIB2 = API_ORIGIN + "/api/v1/library2";
   var duplicateInFlight = false;
   var PIN_MAX = 5;
+  var TOKEN_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+  var AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
+  var TOKEN_HASH_RE = /v2\.l[a-z0-9]+/i;
+  var AUTH_RETRY_MSG = "Session expirée, reconnexion…";
+  var AUTH_RELOAD_MSG = "Session expirée. Recharge la page.";
+  var refreshInflight = null;
 
   function cfg() {
     var c = global.__AGILO_PROMPT_LIBRARY__ || {};
@@ -67,8 +73,48 @@
     return API_ORIGIN + "/" + u;
   }
 
+  function authBlob(res) {
+    if (!res) return "";
+    if (typeof res === "string") return res;
+    return [res.code, res.errorCode, res.errorMessage, res.message, res.status, res.exceptionName].join(" ");
+  }
+
+  function isAuthStatus(httpStatus) {
+    return httpStatus === 401 || httpStatus === 403;
+  }
+
+  function isAuthParsed(res) {
+    if (!res) return false;
+    if (res.auth) return true;
+    if (isAuthStatus(res.httpStatus)) return true;
+    return AUTH_HINT_RE.test(authBlob(res));
+  }
+
+  function isAuthError(err) {
+    if (!err) return false;
+    if (err.auth) return true;
+    return AUTH_HINT_RE.test(String(err.message || "")) || TOKEN_HASH_RE.test(String(err.message || ""));
+  }
+
+  function sanitizeUserMessage(msg, duringRetry) {
+    var s = String(msg == null ? "" : msg);
+    if (!s) return duringRetry ? AUTH_RETRY_MSG : AUTH_RELOAD_MSG;
+    if (AUTH_HINT_RE.test(s) || TOKEN_HASH_RE.test(s)) {
+      return duringRetry ? AUTH_RETRY_MSG : AUTH_RELOAD_MSG;
+    }
+    return s;
+  }
+
+  function markAuth(parsed) {
+    parsed.auth = true;
+    parsed.retry = true;
+    parsed.message = AUTH_RETRY_MSG;
+    return parsed;
+  }
+
   function humanize(res) {
     if (!res) return "Erreur.";
+    if (isAuthParsed(res)) return sanitizeUserMessage(res.message, !!res.retry);
     if (res.httpStatus === 503 || res.reload) {
       return res.message || "Service occupé. Recharge la page avant de réessayer.";
     }
@@ -84,20 +130,37 @@
     if (low.indexOf("quota") !== -1 || (low.indexOf("limit") !== -1 && low.indexOf("model") !== -1)) {
       return "Limite de modèles atteinte. Supprime un ancien modèle ou contacte le support.";
     }
-    return msg || "Erreur.";
+    return sanitizeUserMessage(msg || "Erreur.", false);
   }
 
   function parsePayload(data, httpStatus) {
+    if (isAuthStatus(httpStatus)) {
+      return markAuth({ ok: false, retry: true, code: String(httpStatus), httpStatus: httpStatus, message: AUTH_RETRY_MSG });
+    }
     if (httpStatus === 503) {
       return { ok: false, retry: false, reload: true, code: "SERVICE_UNAVAILABLE", message: "Service occupé. Recharge la page avant de réessayer." };
     }
     if (!data || typeof data !== "object") {
+      var rawTxt = typeof data === "string" ? data : "";
+      if (AUTH_HINT_RE.test(rawTxt) || TOKEN_HASH_RE.test(rawTxt)) {
+        return markAuth({ ok: false, retry: true, code: "AUTH", message: AUTH_RETRY_MSG });
+      }
       return { ok: false, retry: false, code: "BAD_PAYLOAD", message: "Réponse inattendue." };
+    }
+    var blob = authBlob(data);
+    if (AUTH_HINT_RE.test(blob) || TOKEN_HASH_RE.test(blob)) {
+      return markAuth({
+        ok: false,
+        retry: true,
+        code: String(data.code || data.errorCode || data.errorMessage || "AUTH"),
+        message: AUTH_RETRY_MSG
+      });
     }
     var status = String(data.status || "").toUpperCase();
     if (status === "OK" || status === "SUCCESS" || status === "") {
       if (httpStatus && httpStatus >= 400) {
         var bad = { ok: false, retry: false, code: String(httpStatus), message: data.errorMessage || data.message || "Erreur." };
+        if (isAuthParsed(bad)) return markAuth(bad);
         bad.message = humanize(bad);
         return bad;
       }
@@ -112,6 +175,7 @@
         code: errCode,
         message: data.lockReasonMessage || data.errorMessage || data.message || "Erreur."
       };
+      if (isAuthParsed(parsed)) return markAuth(parsed);
       parsed.message = humanize(parsed);
       return parsed;
     }
@@ -300,57 +364,182 @@
     return root;
   }
 
+  function normEdition(v) {
+    v = String(v || "").toLowerCase().trim();
+    if (v === "business" || v === "enterprise" || v === "entreprise" || v === "biz") return "ent";
+    return v || "ent";
+  }
+
+  function issuedAtMs(edition, email) {
+    try {
+      return parseInt(localStorage.getItem("agilo:tokenIssuedAt:" + edition + ":" + String(email || "").toLowerCase()) || "0", 10) || 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function isFreshToken(edition, email, token) {
+    if (!token || !email) return false;
+    var issued = issuedAtMs(edition, email);
+    if (!issued) return false;
+    return (Date.now() - issued) < TOKEN_MAX_AGE_MS;
+  }
+
+  function snapCreds() {
+    var edition = normEdition(inferEdition());
+    var email = "";
+    var token = "";
+    var creds = global.__agiloEditorCreds;
+    if (creds) {
+      email = creds.pickEmail() || "";
+      token = creds.pickToken(edition, email) || "";
+    }
+    if (!email) {
+      var el = document.querySelector('[name="memberEmail"]') || document.querySelector('[data-ms-member="email"]');
+      email = (el && (el.value || el.textContent) || global.memberEmail || "").trim();
+    }
+    if (!token) token = global.globalToken || "";
+    if (!token && email) {
+      try {
+        token = localStorage.getItem("agilo:token:" + edition + ":" + email.toLowerCase()) ||
+          localStorage.getItem("agilo:token") || "";
+      } catch (_) { /* ignore */ }
+    }
+    return {
+      email: email,
+      token: token,
+      edition: edition,
+      fresh: isFreshToken(edition, email, token)
+    };
+  }
+
+  function waitForTokenEvent(timeoutMs, email) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish(detail) {
+        if (done) return;
+        done = true;
+        global.removeEventListener("agilo:token", onTok);
+        resolve(detail || null);
+      }
+      var timer = setTimeout(function () { finish(null); }, timeoutMs || 8000);
+      function onTok(ev) {
+        var d = (ev && ev.detail) || {};
+        if (!d.token) return;
+        if (email && d.email && String(d.email).toLowerCase() !== String(email).toLowerCase()) return;
+        clearTimeout(timer);
+        finish(d);
+      }
+      global.addEventListener("agilo:token", onTok);
+    });
+  }
+
+  function refreshCreds(creds) {
+    if (refreshInflight) return refreshInflight;
+    creds = creds || {};
+    var email = creds.email || snapCreds().email;
+    var edition = normEdition(creds.edition || inferEdition());
+    refreshInflight = Promise.resolve().then(function () {
+      try { global.globalToken = ""; } catch (_) { /* ignore */ }
+      if (typeof global.getToken === "function" && email) {
+        try { global.getToken(email, edition, true); } catch (_) { /* ignore */ }
+      }
+      return waitForTokenEvent(8000, email);
+    }).then(function (d) {
+      var next = {
+        email: (d && d.email) || email,
+        token: (d && d.token) || global.globalToken || "",
+        edition: normEdition((d && d.edition) || edition)
+      };
+      if (!next.token) {
+        var err = new Error(AUTH_RELOAD_MSG);
+        err.auth = true;
+        throw err;
+      }
+      if (creds) {
+        creds.email = next.email;
+        creds.token = next.token;
+        creds.edition = next.edition;
+      }
+      return next;
+    }).finally(function () {
+      refreshInflight = null;
+    });
+    return refreshInflight;
+  }
+
+  function failAuth(duringRetry) {
+    var err = new Error(duringRetry ? AUTH_RETRY_MSG : AUTH_RELOAD_MSG);
+    err.auth = true;
+    return err;
+  }
+
+  function withAuthRetryRes(creds, run) {
+    return Promise.resolve().then(function () { return run(creds); }).then(function (res) {
+      if (!res || !res.auth) return res;
+      return refreshCreds(creds).then(function () { return run(creds); }).then(function (res2) {
+        if (res2 && res2.auth) {
+          res2.retry = false;
+          res2.message = AUTH_RELOAD_MSG;
+        }
+        return res2;
+      });
+    });
+  }
+
   function waitForCreds(timeoutMs) {
     timeoutMs = timeoutMs || 12000;
     return new Promise(function (resolve, reject) {
-      function pick() {
-        var edition = inferEdition();
-        if (edition === "business" || edition === "enterprise" || edition === "entreprise") edition = "ent";
-        var email = "";
-        var token = "";
-        var creds = global.__agiloEditorCreds;
-        if (creds) {
-          email = creds.pickEmail() || "";
-          token = creds.pickToken(edition, email) || "";
-        }
-        if (!email) {
-          var el = document.querySelector('[name="memberEmail"]') || document.querySelector('[data-ms-member="email"]');
-          email = (el && (el.value || el.textContent) || global.memberEmail || "").trim();
-        }
-        if (!token) token = global.globalToken || "";
-        if (!token && email) {
-          try {
-            token = localStorage.getItem("agilo:token:" + edition + ":" + email.toLowerCase()) ||
-              localStorage.getItem("agilo:token") || "";
-          } catch (_) { /* ignore */ }
-        }
-        if (email && token) return { email: email, token: token, edition: edition };
-        return null;
+      var done = false;
+      function finishOk(c) {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve({ email: c.email, token: c.token, edition: c.edition });
       }
-      var now = pick();
-      if (now) return resolve(now);
-      var timer = setTimeout(function () {
-        global.removeEventListener("agilo:token", onTok);
-        reject(new Error("Session introuvable. Reconnecte-toi."));
-      }, timeoutMs);
+      function finishErr(msg) {
+        if (done) return;
+        done = true;
+        cleanup();
+        reject(new Error(msg || "Session introuvable. Reconnecte-toi."));
+      }
+      function tryForce(s) {
+        if (s.email && typeof global.getToken === "function") {
+          try { global.getToken(s.email, s.edition, true); } catch (_) { /* ignore */ }
+        }
+      }
+      var first = snapCreds();
+      if (first.email && first.token && first.fresh) {
+        finishOk(first);
+        return;
+      }
+      tryForce(first);
       function onTok(ev) {
         var d = (ev && ev.detail) || {};
-        var got = pick();
-        if (got) {
-          clearTimeout(timer);
-          global.removeEventListener("agilo:token", onTok);
-          resolve(got);
+        var s = snapCreds();
+        if (s.email && s.token) {
+          finishOk(s);
           return;
         }
         if (d.email && d.token) {
-          clearTimeout(timer);
-          global.removeEventListener("agilo:token", onTok);
-          resolve({
+          finishOk({
             email: d.email,
             token: d.token,
-            edition: d.edition || inferEdition()
+            edition: normEdition(d.edition || inferEdition())
           });
         }
+      }
+      var timer = setTimeout(function () {
+        var s = snapCreds();
+        if (s.email && s.token) {
+          finishOk(s);
+          return;
+        }
+        finishErr("Session introuvable. Reconnecte-toi.");
+      }, timeoutMs);
+      function cleanup() {
+        clearTimeout(timer);
+        global.removeEventListener("agilo:token", onTok);
       }
       global.addEventListener("agilo:token", onTok);
     });
@@ -375,7 +564,7 @@
     return root + "/" + op + "?" + q;
   }
 
-  function fetchLists(creds) {
+  function fetchListsOnce(creds) {
     var c = cfg();
     var fields = authFields(creds);
     var userP;
@@ -390,8 +579,11 @@
     return Promise.all([userP, stdP]).then(function (pair) {
       var userRes = pair[0];
       var stdRes = pair[1];
+      if (isAuthParsed(userRes) || isAuthParsed(stdRes)) {
+        throw failAuth(true);
+      }
       if (!userRes.ok && !stdRes.ok) {
-        throw new Error(userRes.message || stdRes.message || "Impossible de charger les modèles.");
+        throw new Error(sanitizeUserMessage(userRes.message || stdRes.message || "Impossible de charger les modèles.", false));
       }
       var userData = userRes.ok ? userRes.data : {};
       var stdData = stdRes.ok ? stdRes.data : {};
@@ -414,32 +606,52 @@
     });
   }
 
+  function fetchLists(creds) {
+    return fetchListsOnce(creds).catch(function (err) {
+      if (!isAuthError(err)) throw err;
+      return refreshCreds(creds).then(function () {
+        return fetchListsOnce(creds);
+      }).catch(function (err2) {
+        if (isAuthError(err2)) {
+          var e = new Error(AUTH_RELOAD_MSG);
+          e.auth = true;
+          throw e;
+        }
+        throw err2;
+      });
+    });
+  }
+
+  function parseMemberAccess(res) {
+    if (!res || !res.ok) return { hasCse: false, noun: "compte rendu", sources: [] };
+    var d = res.data || {};
+    var sources = d.sources || d.approvedTypes || [];
+    if (typeof sources === "string") sources = sources.split(",");
+    sources = (sources || []).map(function (s) { return String(s).toLowerCase(); });
+    var hasCse = sources.some(function (s) {
+      return s.indexOf("cse") !== -1 || s.indexOf("pln_cse-") !== -1;
+    });
+    if (d.approvedSubscriptionTypes) {
+      var t = d.approvedSubscriptionTypes;
+      if (typeof t === "string") t = t.split(",");
+      hasCse = hasCse || (t || []).some(function (x) { return String(x).toLowerCase() === "cse"; });
+    }
+    return {
+      hasCse: hasCse,
+      noun: hasCse ? "PV" : "compte rendu",
+      sources: sources,
+      raw: d
+    };
+  }
+
   function fetchMemberAccess(creds) {
     var c = cfg();
     if (!c.library2Live) {
       return Promise.resolve({ hasCse: false, noun: "compte rendu", sources: [] });
     }
-    return postJson(c.library2Base + "/member-access", authFields(creds)).then(function (res) {
-      if (!res.ok) return { hasCse: false, noun: "compte rendu", sources: [] };
-      var d = res.data || {};
-      var sources = d.sources || d.approvedTypes || [];
-      if (typeof sources === "string") sources = sources.split(",");
-      sources = (sources || []).map(function (s) { return String(s).toLowerCase(); });
-      var hasCse = sources.some(function (s) {
-        return s.indexOf("cse") !== -1 || s.indexOf("pln_cse-") !== -1;
-      });
-      if (d.approvedSubscriptionTypes) {
-        var t = d.approvedSubscriptionTypes;
-        if (typeof t === "string") t = t.split(",");
-        hasCse = hasCse || (t || []).some(function (x) { return String(x).toLowerCase() === "cse"; });
-      }
-      return {
-        hasCse: hasCse,
-        noun: hasCse ? "PV" : "compte rendu",
-        sources: sources,
-        raw: d
-      };
-    });
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(c.library2Base + "/member-access", authFields(fresh));
+    }).then(parseMemberAccess);
   }
 
   function duplicate(creds, sourcePromptId, name) {
@@ -447,12 +659,14 @@
       return Promise.resolve({ ok: false, retry: false, message: "Copie déjà en cours." });
     }
     duplicateInFlight = true;
-    return postJson(mutationUrl("duplicatePromptModel"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      sourcePromptId: sourcePromptId,
-      promptName: name
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("duplicatePromptModel"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        sourcePromptId: sourcePromptId,
+        promptName: name
+      });
     }).then(function (res) {
       duplicateInFlight = false;
       if (res.httpStatus === 503 || res.reload) res.retry = false;
@@ -465,49 +679,59 @@
 
   function setDefault(creds, promptId) {
     assertGenerationId(promptId);
-    return postJson(mutationUrl("setPromptModelUserDefault"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("setPromptModelUserDefault"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId
+      });
     });
   }
 
   function setPinned(creds, promptId, pinned) {
-    return postJson(mutationUrl("setPromptModelPinned"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId,
-      pinned: pinned ? "true" : "false"
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("setPromptModelPinned"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId,
+        pinned: pinned ? "true" : "false"
+      });
     });
   }
 
   function rename(creds, promptId, promptName) {
-    return postJson(mutationUrl("renamePromptModel"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId,
-      promptName: promptName
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("renamePromptModel"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId,
+        promptName: promptName
+      });
     });
   }
 
   function deleteModel(creds, promptId) {
-    return postJson(mutationUrl("deletePromptModel"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("deletePromptModel"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId
+      });
     });
   }
 
   function listVersions(creds, promptId) {
-    return postJson(mutationUrl("listPromptModelVersions"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("listPromptModelVersions"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId
+      });
     }).then(function (res) {
       if (!res.ok) return res;
       var d = res.data || {};
@@ -519,33 +743,39 @@
   }
 
   function restoreVersion(creds, promptId, versionId) {
-    return postJson(mutationUrl("restorePromptModelVersion"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId,
-      versionId: versionId
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("restorePromptModelVersion"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId,
+        versionId: versionId
+      });
     });
   }
 
   function createFromWizard(creds, draft) {
-    return postJson(mutationUrl("createPromptModelUser"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptName: draft.name,
-      promptObjective: draft.objective,
-      promptSpecificInfo: draft.specificInfo,
-      promptStructure: draft.structure
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("createPromptModelUser"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptName: draft.name,
+        promptObjective: draft.objective,
+        promptSpecificInfo: draft.specificInfo,
+        promptStructure: draft.structure
+      });
     });
   }
 
   function getStatus(creds, promptId) {
-    return postJson(mutationUrl("getPromptModelUserStatus"), {
-      username: creds.email,
-      token: creds.token,
-      edition: creds.edition,
-      promptId: promptId
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("getPromptModelUserStatus"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId
+      });
     }).then(function (res) {
       if (!res.ok) return res;
       var d = res.data || {};
@@ -602,10 +832,11 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.1.0",
+    VERSION: "1.2.0",
     PIN_MAX: PIN_MAX,
     cfg: cfg,
     waitForCreds: waitForCreds,
+    refreshCreds: refreshCreds,
     fetchLists: fetchLists,
     fetchMemberAccess: fetchMemberAccess,
     duplicate: duplicate,
@@ -626,6 +857,8 @@
     canCreate: canCreate,
     appPath: appPath,
     inferEdition: inferEdition,
-    humanize: humanize
+    humanize: humanize,
+    isAuthError: isAuthError,
+    sanitizeUserMessage: sanitizeUserMessage
   };
 })(typeof window !== "undefined" ? window : globalThis);

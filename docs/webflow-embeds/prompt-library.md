@@ -35,9 +35,16 @@ Interdit dans ce dossier public : SVG Nucleo, prompts clients, doc KawanSoft lib
 
 Même bootstrap que l’éditeur, dans cet ordre :
 
-1. `scripts/pages/editor/token-resolver.js` (pin SHA déjà en prod éditeur)
+1. `scripts/pages/editor/token-resolver.js`
 2. `scripts/pages/editor/agilo-editor-creds.js`
 3. CSS + scripts library
+
+TTL Web ~4 h. `library-api.js` 1.2 :
+
+- ignore un cache `localStorage` sans `agilo:tokenIssuedAt` ou plus vieux que 3 h
+- sur `error_invalid_token` / 401 / 403 : `getToken(email, edition, true)`, event `agilo:token`, **une** retry
+- jamais afficher le hash `v2.l…` : « Session expirée, reconnexion… » puis « Session expirée. Recharge la page. »
+- `library-main` remonte le catalogue si `agilo:token` arrive après une erreur auth
 
 Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 

@@ -283,6 +283,69 @@
 .agilo-lib-card--featured {
   border-color: color-mix(in srgb, var(--lib-blue) 35%, var(--lib-border));
 }
+.agilo-lib-card__preview {
+  height: 5.25rem;
+  margin: -1rem -1rem 0.85rem;
+  border-radius: var(--lib-radius) var(--lib-radius) 0 0;
+  background: linear-gradient(180deg, var(--lib-blue-08), var(--lib-bg));
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.agilo-lib-card--featured .agilo-lib-card__preview { height: 6.5rem; }
+.agilo-lib-drawer__panel .agilo-lib-card__preview {
+  margin: 0 0 1rem;
+  border-radius: var(--lib-radius);
+  height: 7rem;
+  cursor: default;
+}
+.agilo-lib-card__preview-sheet {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 1.05rem;
+  bottom: -6px;
+  background: var(--lib-surface);
+  border-radius: 6px 6px 0 0;
+  box-shadow: 0 4px 14px rgba(23, 74, 150, 0.12);
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--lib-border);
+  border-bottom: 0;
+}
+.agilo-lib-card__preview-sheet span {
+  display: block;
+  height: 4px;
+  background: var(--lib-blue-12);
+  margin-bottom: 5px;
+  border-radius: 2px;
+}
+.agilo-lib-card__preview[data-icon="meeting"] { background: linear-gradient(180deg, var(--lib-blue-12), var(--lib-bg)); }
+.agilo-lib-card__preview[data-icon="report"] { background: linear-gradient(180deg, var(--lib-orange-12), var(--lib-bg)); }
+.agilo-lib-card__preview[data-icon="education"] { background: linear-gradient(180deg, var(--lib-vert-12), var(--lib-bg)); }
+.agilo-lib-card__preview[data-icon="idea"] { background: linear-gradient(180deg, var(--lib-orange-12), var(--lib-bg)); }
+.agilo-lib-card__preview[data-icon="briefcase"] { background: linear-gradient(180deg, var(--lib-blue-08), var(--lib-bg)); }
+.agilo-lib-card__title-btn {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.agilo-lib-card__title-btn:hover { color: var(--lib-blue); }
+.agilo-lib-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  color: var(--lib-muted);
+  font-size: 0.85rem;
+}
 
 .agilo-lib-card__top {
   display: flex;

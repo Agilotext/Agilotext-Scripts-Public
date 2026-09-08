@@ -123,7 +123,12 @@
     });
   }
 
+  var pickerFailed = false;
+  var pickerMounted = false;
+  var pickerLoading = false;
+
   function boot() {
+    if (pickerLoading) return;
     var cfg = global.AgiloLibraryApi.cfg();
     var anchor = document.querySelector(cfg.pickerSelector) || document.getElementById("agilo-prompt-picker-anchor");
     var select = document.getElementById("default-template-select");
@@ -133,13 +138,30 @@
       anchor.id = "agilo-prompt-picker-anchor";
       select.parentNode.insertBefore(anchor, select);
     }
+    pickerLoading = true;
     global.AgiloLibraryApi.waitForCreds().then(function (creds) {
       return global.AgiloLibraryApi.fetchLists(creds).then(function (pack) {
+        pickerFailed = false;
+        pickerMounted = true;
+        pickerLoading = false;
         mount(anchor, creds, pack);
       });
     }).catch(function (err) {
-      if (global.AgiloLibraryCore) global.AgiloLibraryCore.toast(err.message || "Reconnecte-toi.");
+      pickerLoading = false;
+      pickerFailed = true;
+      var msg = "Reconnecte-toi.";
+      if (global.AgiloLibraryApi && global.AgiloLibraryApi.sanitizeUserMessage) {
+        msg = global.AgiloLibraryApi.sanitizeUserMessage(err && err.message ? err.message : msg, false);
+      }
+      if (global.AgiloLibraryCore) global.AgiloLibraryCore.toast(msg);
     });
+    if (!global.__agiloLibPickerTokenBound) {
+      global.__agiloLibPickerTokenBound = true;
+      global.addEventListener("agilo:token", function (e) {
+        if (!e || !e.detail || !e.detail.token) return;
+        if (pickerFailed || !pickerMounted) boot();
+      });
+    }
   }
 
   if (document.readyState === "loading") {

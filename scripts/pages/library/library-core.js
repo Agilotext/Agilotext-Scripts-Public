@@ -1,28 +1,22 @@
 /**
  * Rendu cartes, icônes, tableau, menus. Capacités lues sur le modèle.
- * @version 1.1.0
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
 
   var PATHS = {
-    "file-text": '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/>',
-    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    mic: '<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v4"/>',
-    presentation: '<path d="M3 4h18"/><path d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4"/><path d="M12 16v4"/><path d="M8 20h8"/>',
-    briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/>',
-    chart: '<path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/>',
-    "graduation-cap": '<path d="M22 10L12 4 2 10l10 6 10-6z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
-    archive: '<rect x="3" y="3" width="18" height="4" rx="1"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M10 12h4"/>',
     document: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
-    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
     custom: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
-    wand: '<path d="M15 4l-1 3-3 1 3 1 1 3 1-3 3-1-3-1z"/><path d="M4 20L14 10"/>',
+    meeting: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    report: '<path d="M3 4h18"/><path d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4"/><path d="M12 16v4"/><path d="M8 20h8"/>',
+    checklist: '<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><path d="M4 18l1 1 2-2"/>',
+    briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/>',
+    idea: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 4 12c-.8.7-1 1.5-1 2.5h-6c0-1-.2-1.8-1-2.5A7 7 0 0 1 12 2z"/>',
+    education: '<path d="M22 10L12 4 2 10l10 6 10-6z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
     pin: '<path d="M12 17v5"/><path d="M9 11s-3-1-3-5a6 6 0 0 1 12 0c0 4-3 5-3 5"/><path d="M8 11h8"/>',
     dots: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
     "check-circle": '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
-    code: '<path d="M8 8l-4 4 4 4"/><path d="M16 8l4 4-4 4"/>',
-    history: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v6l4 2"/>',
     trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>',
     pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
     copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
@@ -32,6 +26,28 @@
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
     table: '<path d="M4 4h16v16H4z"/><path d="M4 9h16"/><path d="M10 9v11"/>'
   };
+
+  var ICON_ALIAS = {
+    "file-text": "document",
+    users: "meeting",
+    mic: "report",
+    presentation: "report",
+    chart: "idea",
+    "graduation-cap": "education",
+    archive: "document",
+    wand: "custom",
+    mail: "document",
+    history: "checklist",
+    code: "custom"
+  };
+
+  function resolveIconKey(key) {
+    var k = String(key || "").trim();
+    if (!k) return "document";
+    if (ICON_ALIAS[k]) return ICON_ALIAS[k];
+    if (PATHS[k]) return k;
+    return "document";
+  }
 
   function escapeHtml(s) {
     return String(s == null ? "" : s)
@@ -43,7 +59,7 @@
 
   function svgIcon(key, size) {
     size = size || 22;
-    var inner = PATHS[key] || PATHS.document;
+    var inner = PATHS[resolveIconKey(key)] || PATHS.document;
     return '<svg class="agilo-lib-ico" width="' + size + '" height="' + size +
       '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
       inner + "</svg>";
@@ -54,8 +70,19 @@
     if (m && m.iconUrl) {
       return '<img src="' + escapeHtml(m.iconUrl) + '" alt="" width="' + size + '" height="' + size + '">';
     }
-    var key = (m && m.iconKey) || (m && m.type === "USER" ? "custom" : "document");
+    var key = resolveIconKey((m && m.iconKey) || (m && m.type === "USER" ? "custom" : "document"));
     return svgIcon(key, size);
+  }
+
+  function previewHtml(m) {
+    var lines = ["72%", "88%", "64%", "80%", "52%"];
+    return '<div class="agilo-lib-card__preview" data-act="fiche" data-icon="' +
+      escapeHtml(resolveIconKey(m && m.iconKey)) + '" aria-hidden="true">' +
+      '<div class="agilo-lib-card__preview-sheet">' +
+      lines.map(function (w) {
+        return '<span style="width:' + w + '"></span>';
+      }).join("") +
+      "</div></div>";
   }
 
   function locked(m) {
@@ -152,15 +179,18 @@
         svgIcon("dots", 16) + "</button>"
       : "";
     var delay = opts.index != null ? ' style="--i:' + opts.index + '"' : "";
+    var preview = size === "compact" ? "" : previewHtml(m);
     return (
       '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" tabindex="0"' +
       (isLocked ? ' aria-disabled="true"' : "") + delay + ">" +
+      preview +
       '<div class="agilo-lib-card__top">' +
       '<div class="agilo-lib-card__icon" aria-hidden="true">' + iconHtml(m, size === "featured" ? 26 : 22) +
       (isLocked ? '<span class="agilo-lib-card__lockico">' + svgIcon("lock", 10) + "</span>" : "") +
       "</div>" + more +
       "</div>" +
-      '<h3 class="agilo-lib-card__title">' + escapeHtml(m.cardTitle) + "</h3>" +
+      '<h3 class="agilo-lib-card__title"><button type="button" class="agilo-lib-card__title-btn" data-act="fiche">' +
+      escapeHtml(m.cardTitle) + "</button></h3>" +
       descHtml + exampleHtml +
       '<div class="agilo-lib-card__meta">' + badgeHtml(m) + "</div>" +
       lockLine +
@@ -182,7 +212,7 @@
     return '<tr class="agilo-lib-tr" data-id="' + m.promptModelId + '">' +
       '<td class="agilo-lib-td"><div class="agilo-lib-td--name">' +
       '<span class="agilo-lib-card__icon agilo-lib-card__icon--sm" aria-hidden="true">' + iconHtml(m, 16) + "</span>" +
-      '<span class="agilo-lib-td__title">' + escapeHtml(m.cardTitle) + "</span></div></td>" +
+      '<button type="button" class="agilo-lib-card__title-btn" data-act="fiche">' + escapeHtml(m.cardTitle) + "</button></div></td>" +
       '<td class="agilo-lib-td">' + (def ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") + "</td>" +
       '<td class="agilo-lib-td">' + (pin ? '<span class="agilo-lib-badge agilo-lib-badge--pin">Épinglé</span>' : "") + "</td>" +
       '<td class="agilo-lib-td">' + (html ? '<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>' : "") + "</td>" +
@@ -364,6 +394,8 @@
     promptDialog: promptDialog,
     confirmDialog: confirmDialog,
     closeDialogs: closeDialogs,
-    formatDate: formatDate
+    formatDate: formatDate,
+    resolveIconKey: resolveIconKey,
+    previewHtml: previewHtml
   };
 })(typeof window !== "undefined" ? window : globalThis);

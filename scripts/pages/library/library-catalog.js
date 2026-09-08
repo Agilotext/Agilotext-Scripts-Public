@@ -1,9 +1,11 @@
 /**
  * Catalogue : onglets, recherche, chips, grille / tableau, wizard de création.
- * @version 1.1.0
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
+
+  var PAGE_SIZE = 24;
 
   var TABS = [
     { id: "agilotext", label: "Modèles Agilotext" },
@@ -17,11 +19,14 @@
     tab: "agilotext",
     category: "all",
     view: "grid",
+    viewTouched: false,
+    page: 1,
     sort: { col: "updated", dir: "desc" },
     models: [],
     creds: null,
     access: null,
     pinMax: 5,
+    ficheModel: null,
     wizard: {
       step: 1,
       name: "",
@@ -236,6 +241,24 @@
     return html;
   }
 
+  function pagerHtml(total) {
+    var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (pages <= 1) return "";
+    return '<div class="agilo-lib-pager">' +
+      '<button type="button" class="agilo-lib-btn" data-page="-1"' + (state.page <= 1 ? " disabled" : "") + ">Précédent</button>" +
+      "<span>Page " + state.page + " / " + pages + " · " + total + " modèles</span>" +
+      '<button type="button" class="agilo-lib-btn" data-page="1"' + (state.page >= pages ? " disabled" : "") + ">Suivant</button>" +
+      "</div>";
+  }
+
+  function paginate(list) {
+    var pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var start = (state.page - 1) * PAGE_SIZE;
+    return list.slice(start, start + PAGE_SIZE);
+  }
+
   function panelMine() {
     var C = global.AgiloLibraryCore;
     var list = sortMine(filteredMine());
@@ -254,8 +277,10 @@
       );
       return tools + empty;
     }
-    var body = state.view === "table" ? tableHtml(list) : gridHtml(list, "normal");
-    return tools + body;
+    if (!state.viewTouched && list.length > 12) state.view = "table";
+    var slice = paginate(list);
+    var body = state.view === "table" ? tableHtml(slice) : gridHtml(slice, "normal");
+    return tools + body + pagerHtml(list.length);
   }
 
   function panelPinned() {
@@ -380,6 +405,35 @@
       '<ul class="agilo-lib-versions">' + rows + "</ul></div></div>";
   }
 
+  function ficheDrawerHtml() {
+    if (!state.ficheModel) return "";
+    var C = global.AgiloLibraryCore;
+    var m = state.ficheModel;
+    var layout = m.hasHtml ? "Oui, mise en page HTML" : "Texte structuré";
+    var desc = m.publicDescription || "Pas de description publique pour l’instant.";
+    var example = m.publicExample
+      ? '<p class="agilo-lib-note"><strong>Exemple</strong> : ' + C.escapeHtml(m.publicExample) + "</p>"
+      : "";
+    var acts = C.menuItems(m).map(function (it) {
+      return '<button type="button" class="agilo-lib-btn' + (it.danger ? " agilo-lib-btn--danger" : "") +
+        '" data-act="' + C.escapeHtml(it.act) + '">' + C.escapeHtml(it.label) + "</button>";
+    }).join("");
+    var useBtn = (m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId))
+      ? '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
+        (m.isDefault ? " disabled" : "") + ">Utiliser ce modèle</button>"
+      : "";
+    return '<div class="agilo-lib-drawer is-open" role="dialog" aria-modal="true">' +
+      '<div class="agilo-lib-drawer__panel">' +
+      '<div class="agilo-lib-drawer__head"><h2>' + C.escapeHtml(m.cardTitle) + "</h2>" +
+      '<button type="button" class="agilo-lib-icon-btn" data-close-drawer aria-label="Fermer">' + C.svgIcon("plus", 16) + "</button></div>" +
+      C.previewHtml(m) +
+      '<p class="agilo-lib-lead">' + C.escapeHtml(desc) + "</p>" +
+      example +
+      "<p class=\"agilo-lib-note\">Mise en page : " + layout + "</p>" +
+      '<div class="agilo-lib-card__meta">' + C.badgeHtml(m) + "</div>" +
+      '<div class="agilo-lib-actions-row" data-id="' + m.promptModelId + '">' + useBtn + acts + "</div></div></div>";
+  }
+
   function bannersHtml() {
     var pending = /(?:^|[?&])(?:pack|checkout)=pending(?:&|$)/.test((global.location && global.location.search) || "");
     if (!pending) return "";
@@ -395,11 +449,23 @@
     return panelOfficial();
   }
 
-  function paint(root) {
+  function paint(root, opts) {
+    opts = opts || {};
     writeHash();
+    var drawers = versionsDrawerHtml() + ficheDrawerHtml();
+    if (opts.panelOnly && root.querySelector(".agilo-lib-panel") && root.querySelector("#agilo-lib-q")) {
+      var panel = root.querySelector(".agilo-lib-panel");
+      panel.id = "panel-" + state.tab;
+      panel.setAttribute("aria-labelledby", "tab-" + state.tab);
+      panel.innerHTML = bodyHtml();
+      root.querySelectorAll(".agilo-lib-drawer").forEach(function (d) { d.remove(); });
+      root.insertAdjacentHTML("beforeend", drawers);
+      bindPanel(root);
+      return;
+    }
     root.innerHTML = bannersHtml() + headHtml() + tabsHtml() +
       '<div class="agilo-lib-panel" id="panel-' + state.tab + '" role="tabpanel" aria-labelledby="tab-' + state.tab + '">' +
-      bodyHtml() + "</div>" + versionsDrawerHtml();
+      bodyHtml() + "</div>" + drawers;
     var input = root.querySelector("#agilo-lib-q");
     if (input && document.activeElement && document.activeElement.id === "agilo-lib-q") {
       input.focus();
@@ -410,6 +476,7 @@
 
   function setTab(root, tab) {
     state.tab = tab;
+    state.page = 1;
     if (tab === "creer") state.created = null;
     paint(root);
   }
@@ -418,7 +485,7 @@
     var reload = root.querySelector('[data-act="reload"]');
     if (reload) reload.addEventListener("click", function () { location.reload(); });
 
-    root.querySelectorAll("[data-tab]").forEach(function (btn) {
+    root.querySelectorAll(".agilo-lib-tabs [data-tab], .agilo-lib-head [data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () { setTab(root, btn.getAttribute("data-tab")); });
     });
 
@@ -436,29 +503,42 @@
     }
 
     var input = root.querySelector("#agilo-lib-q");
-    if (input) {
+    if (input && !input.getAttribute("data-bound")) {
+      input.setAttribute("data-bound", "1");
       input.addEventListener("input", function () {
         var v = input.value;
         clearTimeout(searchTimer);
         searchTimer = setTimeout(function () {
           state.q = v;
-          paint(root);
+          state.page = 1;
+          paint(root, { panelOnly: true });
         }, 160);
       });
     }
 
+    bindPanel(root);
+  }
+
+  function bindPanel(root) {
+    var panel = root.querySelector(".agilo-lib-panel") || root;
+    panel.querySelectorAll("[data-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () { setTab(root, btn.getAttribute("data-tab")); });
+    });
+
     root.querySelectorAll("[data-cat]").forEach(function (b) {
       b.addEventListener("click", function () {
         state.category = b.getAttribute("data-cat");
-        paint(root);
+        state.page = 1;
+        paint(root, { panelOnly: true });
       });
     });
 
     root.querySelectorAll("[data-view]").forEach(function (b) {
       b.addEventListener("click", function () {
         state.view = b.getAttribute("data-view");
+        state.viewTouched = true;
         try { sessionStorage.setItem("agilo:lib:view", state.view); } catch (_) { /* ignore */ }
-        paint(root);
+        paint(root, { panelOnly: true });
       });
     });
 
@@ -470,7 +550,14 @@
           state.sort.col = col;
           state.sort.dir = col === "name" ? "asc" : "desc";
         }
-        paint(root);
+        paint(root, { panelOnly: true });
+      });
+    });
+
+    root.querySelectorAll("[data-page]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        state.page += Number(b.getAttribute("data-page") || 0);
+        paint(root, { panelOnly: true });
       });
     });
 
@@ -538,6 +625,12 @@
         });
         return;
       }
+      if (act === "fiche") {
+        state.versionsModel = null;
+        state.ficheModel = model;
+        paint(root);
+        return;
+      }
       if (act === "use" || act === "default") doDefault(root, model, btn, act === "use");
       if (act === "pin") doPin(root, model, btn);
       if (act === "duplicate") askDuplicate(root, model);
@@ -567,6 +660,7 @@
     function closeDrawer() {
       state.versionsModel = null;
       state.versions = [];
+      state.ficheModel = null;
       paint(root);
     }
     var close = root.querySelector("[data-close-drawer]");
@@ -723,6 +817,7 @@
   }
 
   function openVersions(root, model) {
+    state.ficheModel = null;
     state.versionsModel = model;
     state.versionsLoading = true;
     state.versions = [];
