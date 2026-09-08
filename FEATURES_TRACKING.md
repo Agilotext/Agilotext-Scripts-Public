@@ -124,7 +124,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 | `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 
-Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@PIN_SHA`, jamais `@main`.  
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@86a02438`, jamais `@main`.  
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---
