@@ -43,7 +43,7 @@
 
 #pane-transcript .ag-seg,
 .edtr-pane .ag-seg {
-  scroll-margin-block: 96px;
+  scroll-margin-block: calc(96px + var(--ag-editor-audio-dock-height, 0px));
 }
 
 .ag-confidence-panel.is-floating .ag-confidence-panel__stat:not(.ag-confidence-panel__stat--primary),

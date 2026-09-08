@@ -369,8 +369,21 @@
     return bottom;
   }
 
-  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth) {
+  function getAudioDockHeight(doc = document) {
+    try {
+      const raw = doc?.documentElement
+        ? (doc.defaultView || window).getComputedStyle(doc.documentElement).getPropertyValue('--ag-editor-audio-dock-height')
+        : '';
+      const n = parseFloat(raw);
+      return Number.isFinite(n) && n > 0 ? n : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth, audioDockHeight) {
     const safeChrome = Math.max(0, Number(chromeBottom) || 0);
+    const dock = Math.max(0, Number(audioDockHeight) || 0);
     const floatThreshold = Math.max(8, safeChrome + 4);
     const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
     const cLeft = Number(containerRect?.left) || 0;
@@ -379,14 +392,16 @@
     const sTop = Number(sentinelRect?.top) || 0;
     const shouldFloat = safeChrome > 0 && sTop < floatThreshold && cBottom > safeChrome + 72;
     if (!shouldFloat) {
-      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
+      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome, audioDockHeight: dock };
     }
+    const top = safeChrome + 8 + (dock > 0 ? dock + 8 : 0);
     return {
       shouldFloat: true,
       left: Math.max(12, cLeft),
       width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
-      top: safeChrome + 8,
-      chromeBottom: safeChrome
+      top,
+      chromeBottom: safeChrome,
+      audioDockHeight: dock
     };
   }
 
@@ -644,7 +659,8 @@
         sRect,
         cRect,
         getEditorChromeBottom(document),
-        window.innerWidth
+        window.innerWidth,
+        getAudioDockHeight(document)
       );
 
       if (box.shouldFloat) {
@@ -671,12 +687,20 @@
 
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
+    window.addEventListener('agilo:audio-dock-change', schedule);
+    try {
+      window.visualViewport?.addEventListener?.('resize', schedule);
+    } catch { /* ignore */ }
     schedule();
 
     __panelFloatRefresh = schedule;
     __panelFloatCleanup = () => {
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
+      window.removeEventListener('agilo:audio-dock-change', schedule);
+      try {
+        window.visualViewport?.removeEventListener?.('resize', schedule);
+      } catch { /* ignore */ }
       if (raf && window.cancelAnimationFrame) window.cancelAnimationFrame(raf);
       else if (raf) clearTimeout(raf);
       panel.classList.remove('is-floating');
@@ -1403,6 +1427,7 @@
     goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex,
     getEditorChromeBottom,
+    getAudioDockHeight,
     computeConfidenceFloatingBox,
     ensureActiveEditorPane,
     findConfidenceScrollContainer,

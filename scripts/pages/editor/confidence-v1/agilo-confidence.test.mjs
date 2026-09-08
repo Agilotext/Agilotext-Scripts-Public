@@ -358,12 +358,25 @@ async function run() {
   );
   assert(noFloatNegativeChrome.shouldFloat === false, 'pas de float si chromeBottom negatif');
 
+  assert(typeof AC.getAudioDockHeight === 'function', 'getAudioDockHeight exposé');
   assert(floatCoveringTabs.top === chromeBottom + 8, 'top flottant = chromeBottom + 8 sans plancher 10px');
+
+  const stacked = AC.computeConfidenceFloatingBox(
+    { top: 4 },
+    { left: 320, width: 960, bottom: 800 },
+    chromeBottom,
+    1440,
+    44
+  );
+  assert(stacked.shouldFloat === true, 'float actif avec dock audio');
+  assert(stacked.top === chromeBottom + 8 + 44 + 8, 'top confidence sous mini-barre audio');
+  assert(stacked.audioDockHeight === 44, 'audioDockHeight renvoyé');
 
   const cssSrc = readFileSync(path.join(__dirname, 'agilo-confidence.css.js'), 'utf8');
   assert(!cssSrc.includes('main.ed-main > .ed-tabs'), 'CSS sans regle z-index sur ed-tabs');
   assert(!cssSrc.includes('main.ed-main > nav.ed-tabs'), 'CSS sans regle z-index sur nav.ed-tabs');
   assert(!cssSrc.includes('main.ed-main > .ed-toolbar'), 'CSS sans regle z-index sur ed-toolbar');
+  assert(cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin tient compte du dock audio');
 
   // --- Invariant multi-panneaux : toggle ne doit pas tout masquer ---
   function makeEditorDom() {
