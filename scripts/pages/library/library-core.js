@@ -1,30 +1,38 @@
 /**
- * Rendu cartes, icônes, tableau, menus. Capacités lues sur le modèle.
- * @version 1.2.0
+ * Rendu cartes, icônes Nucleo curatées (inline), tableau, menus.
+ * iconUrl serveur inchangé. Fallback = glyphes 18 px, currentColor.
+ * @version 1.3.0
  */
 (function (global) {
   "use strict";
 
   var PATHS = {
-    document: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
-    custom: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
-    meeting: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    report: '<path d="M3 4h18"/><path d="M4 4v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4"/><path d="M12 16v4"/><path d="M8 20h8"/>',
-    checklist: '<path d="M9 6h11"/><path d="M9 12h11"/><path d="M9 18h11"/><path d="M4 6l1 1 2-2"/><path d="M4 12l1 1 2-2"/><path d="M4 18l1 1 2-2"/>',
-    briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><path d="M2 13h20"/>',
-    idea: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 1 4 12c-.8.7-1 1.5-1 2.5h-6c0-1-.2-1.8-1-2.5A7 7 0 0 1 12 2z"/>',
-    education: '<path d="M22 10L12 4 2 10l10 6 10-6z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/>',
-    pin: '<path d="M12 17v5"/><path d="M9 11s-3-1-3-5a6 6 0 0 1 12 0c0 4-3 5-3 5"/><path d="M8 11h8"/>',
-    dots: '<circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/>',
-    "check-circle": '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
-    trash: '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>',
-    pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
-    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
-    search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
-    plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
-    lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
-    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-    table: '<path d="M4 4h16v16H4z"/><path d="M4 9h16"/><path d="M10 9v11"/>'
+    document: '<line x1="5.75" y1="6.75" x2="7.75" y2="6.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="5.75" y1="9.75" x2="12.25" y2="9.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="5.75" y1="12.75" x2="12.25" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M2.75,14.25V3.75c0-1.105,.895-2,2-2h5.586c.265,0,.52,.105,.707,.293l3.914,3.914c.188,.188,.293,.442,.293,.707v7.586c0,1.105-.895,2-2,2H4.75c-1.105,0-2-.895-2-2Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M15.16,6.25h-3.41c-.552,0-1-.448-1-1V1.852" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    custom: '<path d="m12.5717,2.9253L2.9189,12.583c-.3899.39-.3903,1.0221-.0011,1.4127l1.0852,1.0892c.391.39,1.024.39,1.415,0L15.0701,5.4269c.3898-.3901.3903-1.0221.0011-1.4127l-1.0838-1.0878c-.3904-.3918-1.0247-.3923-1.4157-.0011Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="m10.387,5.36l2.25,2.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="m7.243,3.49l-.946-.3099-.316-.9501c-.102-.3099-.609-.3099-.711,0l-.316.9501-.946.3099c-.153.05-.257.2-.257.36s.104.3.257.35l.946.3202.316.95c.051.15.194.25.355.25s.305-.1.355-.25l.316-.95.946-.3202c.153-.0499.257-.1899.257-.35s-.103-.3099-.256-.36Z" fill="currentColor"/><path d="m16.658,11.99l-1.263-.42-.421-1.2599c-.137-.41-.812-.41-.949,0l-.421,1.2599-1.263.42c-.204.0701-.342.26-.342.47,0,.2201.138.4099.342.4799l1.263.4201.421,1.26c.068.21.26.34.475.34s.406-.13.475-.34l.421-1.26,1.263-.4201c.204-.0699.342-.2598.342-.4799,0-.21-.139-.3999-.343-.47Z" fill="currentColor"/>',
+    meeting: '<path d="M5.75 8.25049C6.8546 8.25049 7.75 7.35549 7.75 6.25049C7.75 5.14549 6.8546 4.25049 5.75 4.25049C4.6454 4.25049 3.75 5.14549 3.75 6.25049C3.75 7.35549 4.6454 8.25049 5.75 8.25049Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.60903 15.1225C10.132 14.9475 10.439 14.3785 10.245 13.8635C9.56003 12.0455 7.80903 10.7515 5.75103 10.7515C3.69303 10.7515 1.94203 12.0455 1.25703 13.8635C1.06303 14.3795 1.37003 14.9485 1.89303 15.1225C2.85503 15.4435 4.17403 15.7505 5.75203 15.7505C7.33003 15.7505 8.64803 15.4435 9.60903 15.1225Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M12 5.75049C13.1046 5.75049 14 4.85549 14 3.75049C14 2.64549 13.1046 1.75049 12 1.75049C10.8954 1.75049 10 2.64549 10 3.75049C10 4.85549 10.8954 5.75049 12 5.75049Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M13.154 13.1873C14.2224 13.0845 15.1437 12.8614 15.858 12.6226C16.381 12.4476 16.688 11.8785 16.494 11.3636C15.809 9.54549 14.058 8.2515 12 8.2515C11.1608 8.2515 10.379 8.4771 9.69287 8.8555" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    report: '<rect x="5.75" y="1.75" width="6.5" height="9.5" rx="3.25" ry="3.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M15.25,8c0,3.452-2.798,6.25-6.25,6.25h0c-3.452,0-6.25-2.798-6.25-6.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="9" y1="14.25" x2="9" y2="16.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    checklist: '<polyline points="2.25 13.391 3.609 14.75 7.006 10.333" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="5.25" x2="16.25" y2="5.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="12.75" x2="16.25" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="2.25" y="2.75" width="4.5" height="4.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    briefcase: '<path d="M6.25,4.75V2.25c0-.552,.448-1,1-1h3.5c.552,0,1,.448,1,1v2.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="1.75" y="4.75" width="14.5" height="10.5" rx="2" ry="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    idea: '<rect x="7.75" y="2.75" width="2.5" height="12.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="2.25" y="7.75" width="2.5" height="7.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="13.25" y="11.75" width="2.5" height="3.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    education: '<path d="M9.45801 2.361L15.79 5.621C16.403 5.937 16.403 6.813 15.79 7.129L9.45801 10.389C9.17001 10.537 8.829 10.537 8.542 10.389L2.20999 7.129C1.59699 6.813 1.59699 5.937 2.20999 5.621L8.542 2.361C8.83 2.213 9.17101 2.213 9.45801 2.361Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M16.25 6.375C16.079 7.115 15.932 8.097 15.969 9.25C15.996 10.084 16.113 10.812 16.25 11.406" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M4.25 11.5535V14C4.25 15.104 6.377 16 9 16C11.623 16 13.75 15.104 13.75 14V11.5535" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    pin: '<line x1="9" y1="16.25" x2="9" y2="12.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M14.25,12.25c-.089-.699-.318-1.76-.969-2.875-.335-.574-.703-1.028-1.031-1.375V3.75c0-1.105-.895-2-2-2h-2.5c-1.105,0-2,.895-2,2v4.25c-.329,.347-.697,.801-1.031,1.375-.65,1.115-.88,2.176-.969,2.875H14.25Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    dots: '<circle cx="9" cy="9" r=".5" fill="currentColor" stroke="currentColor" stroke-width="1.5"/><circle cx="3.25" cy="9" r=".5" fill="currentColor" stroke="currentColor" stroke-width="1.5"/><circle cx="14.75" cy="9" r=".5" fill="currentColor" stroke="currentColor" stroke-width="1.5"/>',
+    "check-circle": '<circle cx="9" cy="9" r="7.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M5.5,9c.863,.867,1.537,1.868,2.1,2.962,1.307-2.491,2.94-4.466,4.9-5.923" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    trash: '<path d="M13.6977 7.75L13.35 14.35C13.294 15.4201 12.416 16.25 11.353 16.25H6.64804C5.58404 16.25 4.70703 15.42 4.65103 14.35L4.30334 7.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M2.75 4.75H15.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M6.75 4.75V2.75C6.75 2.2 7.198 1.75 7.75 1.75H10.25C10.802 1.75 11.25 2.2 11.25 2.75V4.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    pencil: '<path d="M13.953 7.57799L15.062 6.46898C15.648 5.88298 15.648 4.93298 15.062 4.34798L13.653 2.93898C13.067 2.35298 12.117 2.35298 11.532 2.93898L10.423 4.04799L13.953 7.57799Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8.6544 5.81461L4.147 10.322C3.897 10.572 3.718 10.884 3.627 11.226L2.5 15.499L6.773 14.372C7.115 14.282 7.427 14.102 7.677 13.852L12.1844 9.3446" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M10.4044 7.56461L6.26501 11.704" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    copy: '<path d="M2.25 6.75V13.25C2.25 14.355 3.145 15.25 4.25 15.25H11.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.25 12.25H13.75C14.8546 12.25 15.75 11.355 15.75 10.25V4.75C15.75 3.645 14.8546 2.75 13.75 2.75H7.25C6.1454 2.75 5.25 3.645 5.25 4.75V10.25C5.25 11.355 6.1454 12.25 7.25 12.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    search: '<path d="M15.75 15.75L11.6386 11.6386" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    plus: '<line x1="9" y1="3.25" x2="9" y2="14.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="3.25" y1="9" x2="14.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    lock: '<path d="M5.75,8.25v-3.25c0-1.795,1.455-3.25,3.25-3.25h0c1.795,0,3.25,1.455,3.25,3.25v3.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="9" y1="11.75" x2="9" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="3.25" y="8.25" width="11.5" height="8" rx="2" ry="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    grid: '<rect x="2.25" y="2.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="10.25" y="2.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2.25" y="10.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="10.25" y="10.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/>',
+    table: '<polyline points="2.25 13.391 3.609 14.75 7.006 10.333" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="5.25" x2="16.25" y2="5.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="12.75" x2="16.25" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="2.25" y="2.75" width="4.5" height="4.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    xmark: '<line x1="14" y1="4" x2="4" y2="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="4" y1="4" x2="14" y2="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    eye: '<path d="M9 11.75C10.5188 11.75 11.75 10.5188 11.75 9C11.75 7.48122 10.5188 6.25 9 6.25C7.48122 6.25 6.25 7.48122 6.25 9C6.25 10.5188 7.48122 11.75 9 11.75Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M15.9557 7.88669C16.3481 8.57939 16.3481 9.42049 15.9557 10.1132C15.0087 11.7849 12.7944 14.4999 9 14.4999C5.2056 14.4999 2.9912 11.7849 2.0443 10.1132C1.6519 9.42049 1.6519 8.57939 2.0443 7.88669C2.9913 6.21499 5.2056 3.5 9 3.5C12.7944 3.5 15.0088 6.21499 15.9557 7.88669Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    sparkle: '<path d="M6.65802 4.02597L5.39502 3.60495L4.97402 2.34195C4.83702 1.93395 4.16202 1.93395 4.02502 2.34195L3.60402 3.60495L2.34102 4.02597C2.13702 4.09397 1.99902 4.28497 1.99902 4.49997C1.99902 4.71497 2.13702 4.90597 2.34102 4.97397L3.60402 5.39499L4.02502 6.65799C4.09302 6.86199 4.28502 6.99997 4.50002 6.99997C4.71502 6.99997 4.90602 6.86199 4.97502 6.65799L5.39602 5.39499L6.65902 4.97397C6.86302 4.90597 7.00102 4.71497 7.00102 4.49997C7.00102 4.28497 6.86202 4.09397 6.65802 4.02597Z" fill="currentColor"/><path d="M15.658 13.026L14.395 12.605L13.974 11.3419C13.837 10.9339 13.162 10.9339 13.025 11.3419L12.604 12.605L11.341 13.026C11.137 13.094 10.999 13.285 10.999 13.5C10.999 13.715 11.137 13.906 11.341 13.974L12.604 14.395L13.025 15.658C13.093 15.862 13.285 16 13.5 16C13.715 16 13.906 15.862 13.975 15.658L14.396 14.395L15.659 13.974C15.863 13.906 16.001 13.715 16.001 13.5C16.001 13.285 15.862 13.094 15.658 13.026Z" fill="currentColor"/><path d="M6 8.75L6.671 11.329L9.25 12L6.671 12.671L6 15.25L5.329 12.671L2.75 12L5.329 11.329L6 8.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2.75L12.671 5.32898L15.25 6L12.671 6.67102L12 9.25L11.329 6.67102L8.75 6L11.329 5.32898L12 2.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    "arrow-left": '<line x1="2.75" y1="9" x2="15.25" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><polyline points="7 13.25 2.75 9 7 4.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    "arrow-right": '<line x1="15.25" y1="9" x2="2.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><polyline points="11 4.75 15.25 9 11 13.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    check: '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    clock: '<circle cx="9" cy="9" r="7.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><polyline points="9 4.75 9 9 12.25 11.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>'
   };
 
   var ICON_ALIAS = {
@@ -39,6 +47,16 @@
     mail: "document",
     history: "checklist",
     code: "custom"
+  };
+
+  var MENU_ICONS = {
+    default: "check-circle",
+    pin: "pin",
+    duplicate: "copy",
+    rename: "pencil",
+    edit: "pencil",
+    versions: "clock",
+    delete: "trash"
   };
 
   function resolveIconKey(key) {
@@ -58,15 +76,14 @@
   }
 
   function svgIcon(key, size) {
-    size = size || 22;
+    size = size || 18;
     var inner = PATHS[resolveIconKey(key)] || PATHS.document;
     return '<svg class="agilo-lib-ico" width="' + size + '" height="' + size +
-      '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      inner + "</svg>";
+      '" viewBox="0 0 18 18" fill="none" aria-hidden="true">' + inner + "</svg>";
   }
 
   function iconHtml(m, size) {
-    size = size || 22;
+    size = size || 18;
     if (m && m.iconUrl) {
       return '<img src="' + escapeHtml(m.iconUrl) + '" alt="" width="' + size + '" height="' + size + '">';
     }
@@ -92,7 +109,7 @@
   function badgeHtml(m) {
     var bits = [];
     if (m.isDefault) bits.push('<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>');
-    if (m.pinned) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pin">Épinglé</span>');
+    if (m.pinned) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pin">' + svgIcon("pin", 12) + " Épinglé</span>");
     if (m.hasHtml) bits.push('<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>');
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
@@ -116,26 +133,26 @@
     var isLocked = locked(m);
     var items = [];
     if (m.canSetDefault && m.canUse && !m.isDefault && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
-      items.push({ act: "default", label: "Définir par défaut" });
+      items.push({ act: "default", label: "Définir par défaut", icon: "check-circle" });
     }
     if (m.canPin && !isLocked) {
-      items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler" });
+      items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler", icon: "pin" });
     }
     if (m.type === "STANDARD" && m.canCopyOfficial) {
-      items.push({ act: "duplicate", label: "Ajouter à mes modèles" });
+      items.push({ act: "duplicate", label: "Ajouter à mes modèles", icon: "copy" });
     }
     if (m.type === "USER" && m.canDuplicate) {
-      items.push({ act: "duplicate", label: "Enregistrer sous" });
+      items.push({ act: "duplicate", label: "Enregistrer sous", icon: "copy" });
     }
     if (m.canEdit) {
-      items.push({ act: "rename", label: "Renommer" });
-      items.push({ act: "edit", label: "Modifier" });
+      items.push({ act: "rename", label: "Renommer", icon: "pencil" });
+      items.push({ act: "edit", label: "Modifier", icon: "pencil" });
     }
     if (m.canManageVersions) {
-      items.push({ act: "versions", label: "Versions" });
+      items.push({ act: "versions", label: "Versions", icon: "clock" });
     }
     if (m.canDelete) {
-      items.push({ act: "delete", label: "Supprimer", danger: true });
+      items.push({ act: "delete", label: "Supprimer", danger: true, icon: "trash" });
     }
     return items;
   }
@@ -149,12 +166,16 @@
     }
     if (m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
-        (m.isDefault ? " disabled" : "") + ">Utiliser ce modèle</button>";
+        (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>";
     }
     if (m.type === "STANDARD" && m.canCopyOfficial) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="duplicate">Ajouter à mes modèles</button>';
     }
     return "";
+  }
+
+  function voirBtn() {
+    return '<button type="button" class="agilo-lib-btn" data-act="fiche">' + svgIcon("eye", 16) + " Voir</button>";
   }
 
   function cardHtml(m, opts) {
@@ -185,16 +206,15 @@
       (isLocked ? ' aria-disabled="true"' : "") + delay + ">" +
       preview +
       '<div class="agilo-lib-card__top">' +
-      '<div class="agilo-lib-card__icon" aria-hidden="true">' + iconHtml(m, size === "featured" ? 26 : 22) +
+      '<div class="agilo-lib-card__icon" aria-hidden="true">' + iconHtml(m, size === "featured" ? 22 : 18) +
       (isLocked ? '<span class="agilo-lib-card__lockico">' + svgIcon("lock", 10) + "</span>" : "") +
       "</div>" + more +
       "</div>" +
-      '<h3 class="agilo-lib-card__title"><button type="button" class="agilo-lib-card__title-btn" data-act="fiche">' +
-      escapeHtml(m.cardTitle) + "</button></h3>" +
+      '<h3 class="agilo-lib-card__title">' + escapeHtml(m.cardTitle) + "</h3>" +
       descHtml + exampleHtml +
       '<div class="agilo-lib-card__meta">' + badgeHtml(m) + "</div>" +
       lockLine +
-      '<div class="agilo-lib-card__actions">' + primaryAction(m) + "</div></article>"
+      '<div class="agilo-lib-card__actions">' + voirBtn() + primaryAction(m) + "</div></article>"
     );
   }
 
@@ -212,15 +232,16 @@
     return '<tr class="agilo-lib-tr" data-id="' + m.promptModelId + '">' +
       '<td class="agilo-lib-td"><div class="agilo-lib-td--name">' +
       '<span class="agilo-lib-card__icon agilo-lib-card__icon--sm" aria-hidden="true">' + iconHtml(m, 16) + "</span>" +
-      '<button type="button" class="agilo-lib-card__title-btn" data-act="fiche">' + escapeHtml(m.cardTitle) + "</button></div></td>" +
+      "<span>" + escapeHtml(m.cardTitle) + "</span></div></td>" +
       '<td class="agilo-lib-td">' + (def ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") + "</td>" +
-      '<td class="agilo-lib-td">' + (pin ? '<span class="agilo-lib-badge agilo-lib-badge--pin">Épinglé</span>' : "") + "</td>" +
+      '<td class="agilo-lib-td">' + (pin ? '<span class="agilo-lib-badge agilo-lib-badge--pin">' + svgIcon("pin", 12) + " Épinglé</span>" : "") + "</td>" +
       '<td class="agilo-lib-td">' + (html ? '<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>' : "") + "</td>" +
       '<td class="agilo-lib-td agilo-lib-td--date">' + escapeHtml(formatDate(m.dtCreation)) + "</td>" +
       '<td class="agilo-lib-td agilo-lib-td--date">' + escapeHtml(formatDate(m.dtUpdate)) + "</td>" +
       '<td class="agilo-lib-td agilo-lib-td--actions">' +
+      '<button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-act="fiche">' + svgIcon("eye", 14) + " Voir</button>" +
       '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-btn--sm" data-act="use"' +
-      (m.isDefault ? " disabled" : "") + ">Utiliser</button>" +
+      (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>" +
       '<button type="button" class="agilo-lib-icon-btn" data-act="more" aria-label="Actions">' + svgIcon("dots", 16) + "</button>" +
       "</td></tr>";
   }
@@ -233,8 +254,11 @@
       '<div class="agilo-lib-skel agilo-lib-skel--line"></div></article>';
   }
 
-  function emptyHtml(title, text, extra) {
-    return '<div class="agilo-lib-empty" role="status">' +
+  function emptyHtml(title, text, extra, iconKey) {
+    var ico = iconKey
+      ? '<div class="agilo-lib-empty__ico" aria-hidden="true">' + svgIcon(iconKey, 28) + "</div>"
+      : "";
+    return '<div class="agilo-lib-empty" role="status">' + ico +
       '<p class="agilo-lib-empty__title">' + escapeHtml(title) + "</p>" +
       '<p class="agilo-lib-empty__text">' + escapeHtml(text) + "</p>" +
       (extra || "") + "</div>";
@@ -266,18 +290,26 @@
     closeMenus();
     if (!items || !items.length) return;
     var menu = document.createElement("div");
-    menu.className = "agilo-lib-menu";
+    menu.className = "agilo-lib agilo-lib-menu";
     menu.setAttribute("role", "menu");
     menu.innerHTML = items.map(function (it) {
+      var ico = svgIcon(it.icon || MENU_ICONS[it.act] || "dots", 16);
       return '<button type="button" role="menuitem" data-menu="' + escapeHtml(it.act) + '"' +
-        (it.danger ? ' class="is-danger"' : "") + ">" + escapeHtml(it.label) + "</button>";
+        (it.danger ? ' class="is-danger"' : "") + ">" + ico + "<span>" + escapeHtml(it.label) + "</span></button>";
     }).join("");
     document.body.appendChild(menu);
     var r = anchor.getBoundingClientRect();
-    var top = r.bottom + window.scrollY + 4;
-    var left = Math.max(8, r.right + window.scrollX - 200);
-    menu.style.top = top + "px";
-    menu.style.left = left + "px";
+    var mw = menu.offsetWidth || 208;
+    var mh = menu.offsetHeight || 160;
+    var left = r.right - mw;
+    var top = r.bottom + 4;
+    if (left + mw > window.innerWidth - 8) left = window.innerWidth - mw - 8;
+    if (left < 8) left = 8;
+    if (top + mh > window.innerHeight - 8) top = r.top - mh - 4;
+    if (top < 8) top = 8;
+    menu.style.position = "fixed";
+    menu.style.top = Math.round(top) + "px";
+    menu.style.left = Math.round(left) + "px";
     menu.addEventListener("click", function (e) {
       var b = e.target.closest("[data-menu]");
       if (!b) return;
@@ -300,14 +332,14 @@
   function promptDialog(opts) {
     closeDialogs();
     var dlg = document.createElement("div");
-    dlg.className = "agilo-lib-dialog is-open";
+    dlg.className = "agilo-lib agilo-lib-dialog is-open";
     dlg.setAttribute("role", "dialog");
     dlg.setAttribute("aria-modal", "true");
     dlg.innerHTML =
       '<div class="agilo-lib-dialog__panel">' +
       "<h2>" + escapeHtml(opts.title || "") + "</h2>" +
       (opts.text ? "<p>" + escapeHtml(opts.text) + "</p>" : "") +
-      '<label>' + escapeHtml(opts.label || "Nom") +
+      "<label>" + escapeHtml(opts.label || "Nom") +
       '<input type="text" maxlength="' + (opts.maxlength || 120) + '" value="' + escapeHtml(opts.value || "") + '"></label>' +
       '<div class="agilo-lib-dialog__actions">' +
       '<button type="button" class="agilo-lib-btn" data-close>Annuler</button>' +
@@ -337,7 +369,7 @@
   function confirmDialog(opts) {
     closeDialogs();
     var dlg = document.createElement("div");
-    dlg.className = "agilo-lib-dialog is-open";
+    dlg.className = "agilo-lib agilo-lib-dialog is-open";
     dlg.setAttribute("role", "dialog");
     dlg.setAttribute("aria-modal", "true");
     dlg.innerHTML =

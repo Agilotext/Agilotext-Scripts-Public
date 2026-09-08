@@ -1,11 +1,18 @@
 /**
- * Catalogue : onglets, recherche, chips, grille / tableau, wizard de création.
- * @version 1.2.0
+ * Catalogue : onglets, recherche, chips, grille / tableau, overlays fiche / wizard / versions.
+ * @version 1.3.0
  */
 (function (global) {
   "use strict";
 
   var PAGE_SIZE = 24;
+  var LOTTIE_JSON = "https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355a2_8zwgooV43N.json";
+  var LOTTIE_PLAYER = "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";
+  var WIZ_EXAMPLES = [
+    "Compte rendu de comité de direction",
+    "Synthèse d’un entretien client",
+    "Note de réunion projet"
+  ];
 
   var TABS = [
     { id: "agilotext", label: "Modèles Agilotext" },
@@ -17,6 +24,7 @@
   var state = {
     q: "",
     tab: "agilotext",
+    prevTab: "agilotext",
     category: "all",
     view: "grid",
     viewTouched: false,
@@ -27,6 +35,7 @@
     access: null,
     pinMax: 5,
     ficheModel: null,
+    wizardOpen: false,
     wizard: {
       step: 1,
       name: "",
@@ -34,14 +43,14 @@
       specificInfo: "",
       structure: "Décisions, actions, prochaine étape"
     },
-    created: null,
-    creating: false,
+    dismissedWizard: false,
     versionsModel: null,
     versions: [],
     versionsLoading: false
   };
 
   var searchTimer = null;
+  var lottieAnim = null;
 
   function byId(id) {
     return state.models.filter(function (m) { return Number(m.promptModelId) === Number(id); })[0];
@@ -113,6 +122,7 @@
     var raw = fromQuery || hash;
     var known = TABS.some(function (t) { return t.id === raw; });
     if (known) state.tab = raw;
+    if (raw === "creer") state.wizardOpen = true;
     try {
       var view = sessionStorage.getItem("agilo:lib:view");
       if (view === "table" || view === "grid") state.view = view;
@@ -121,7 +131,8 @@
 
   function writeHash() {
     if (!global.history || !global.location) return;
-    var next = "#" + state.tab;
+    var id = state.wizardOpen ? "creer" : state.tab;
+    var next = "#" + id;
     if (global.location.hash !== next) {
       global.history.replaceState(null, "", next);
     }
@@ -129,6 +140,13 @@
 
   function noun() {
     return (state.access && state.access.noun) || "compte rendu";
+  }
+
+  function overlayMode() {
+    if (state.wizardOpen) return "wizard";
+    if (state.versionsModel) return "versions";
+    if (state.ficheModel) return "fiche";
+    return "";
   }
 
   function headHtml() {
@@ -142,8 +160,8 @@
       '<label class="visually-hidden" for="agilo-lib-q">Rechercher</label>' +
       '<input id="agilo-lib-q" type="search" placeholder="Rechercher un modèle" value="' +
       C.escapeHtml(state.q) + '"></div>' +
-      '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-tab="creer">' +
-      C.svgIcon("plus", 16) + " Créer un modèle</button>" +
+      '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-open-wizard>' +
+      C.svgIcon("sparkle", 16) + " Créer un modèle</button>" +
       "</div></div>";
   }
 
@@ -219,7 +237,9 @@
     if (!list.length) {
       return C.emptyHtml(
         "Aucun modèle Agilotext",
-        q ? "Aucun modèle ne correspond à « " + q + " »." : "Aucun modèle officiel ne correspond à ce filtre."
+        q ? "Aucun modèle ne correspond à « " + q + " »." : "Aucun modèle officiel ne correspond à ce filtre.",
+        "",
+        "search"
       );
     }
     var featured = [];
@@ -236,7 +256,7 @@
         gridHtml(featured, "featured") + "</section>";
     }
     html += '<section class="agilo-lib-section-block"><h2>Tous les modèles Agilotext</h2>' +
-      (rest.length ? gridHtml(rest, "normal") : C.emptyHtml("Rien d’autre dans ce filtre", "Change de catégorie ou vide la recherche.")) +
+      (rest.length ? gridHtml(rest, "normal") : C.emptyHtml("Rien d’autre dans ce filtre", "Change de catégorie ou vide la recherche.", "", "search")) +
       "</section>";
     return html;
   }
@@ -272,8 +292,9 @@
             ? "Crée un modèle en quatre questions, sans écrire de prompt."
             : "Le plan Gratuit n’autorise pas la création d’un modèle personnel."),
         global.AgiloLibraryApi.canCreate(state.creds)
-          ? '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-tab="creer">Créer un modèle</button>'
-          : ""
+          ? '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-open-wizard>Créer un modèle</button>'
+          : "",
+        q ? "search" : "sparkle"
       );
       return tools + empty;
     }
@@ -292,93 +313,155 @@
       return intro + C.emptyHtml(
         "Aucun épinglé",
         "Épingle jusqu’à 5 modèles depuis le menu Actions.",
-        '<button type="button" class="agilo-lib-btn" data-tab="mes-modeles">Voir mes modèles</button>'
+        '<button type="button" class="agilo-lib-btn" data-tab="mes-modeles">Voir mes modèles</button>',
+        "pin"
       );
     }
     return intro + gridHtml(list, "normal");
   }
 
-  function wizardHtml() {
+  function panelCreateLanding() {
     var C = global.AgiloLibraryCore;
     var Api = global.AgiloLibraryApi;
     if (!Api.canCreate(state.creds)) {
       return C.emptyHtml(
         "Création réservée aux plans Pro et Business",
         "Le plan Gratuit permet d’utiliser les modèles Agilotext, pas d’en créer un personnel.",
-        '<a class="agilo-lib-btn agilo-lib-btn--primary" href="' + C.escapeHtml(Api.cfg().pricingUrl) + '">Voir les offres</a>'
+        '<a class="agilo-lib-btn agilo-lib-btn--primary" href="' + C.escapeHtml(Api.cfg().pricingUrl) + '">Voir les offres</a>',
+        "lock"
       );
     }
+    return C.emptyHtml(
+      "Créer un modèle",
+      "Quatre questions courtes. Tu décris le document souhaité. Tu n’écris pas un prompt.",
+      '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-open-wizard>' +
+        C.svgIcon("sparkle", 16) + " Commencer</button>",
+      "sparkle"
+    );
+  }
+
+  function reducedMotion() {
+    try {
+      return global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function playLottie(box) {
+    if (!box || reducedMotion()) return;
+    function boot() {
+      if (!global.lottie || typeof global.lottie.loadAnimation !== "function") return;
+      if (lottieAnim && typeof lottieAnim.destroy === "function") {
+        try { lottieAnim.destroy(); } catch (_) { /* ignore */ }
+      }
+      lottieAnim = global.lottie.loadAnimation({
+        container: box,
+        renderer: "svg",
+        loop: true,
+        autoplay: true,
+        path: LOTTIE_JSON
+      });
+    }
+    if (global.lottie) {
+      boot();
+      return;
+    }
+    if (document.querySelector("script[data-agilo-lottie]")) {
+      var wait = setInterval(function () {
+        if (global.lottie) {
+          clearInterval(wait);
+          boot();
+        }
+      }, 80);
+      setTimeout(function () { clearInterval(wait); }, 4000);
+      return;
+    }
+    var s = document.createElement("script");
+    s.src = LOTTIE_PLAYER;
+    s.async = true;
+    s.setAttribute("data-agilo-lottie", "1");
+    s.onload = boot;
+    document.head.appendChild(s);
+  }
+
+  function wizardFreeHtml() {
+    var C = global.AgiloLibraryCore;
+    var Api = global.AgiloLibraryApi;
+    return C.emptyHtml(
+      "Création réservée aux plans Pro et Business",
+      "Le plan Gratuit permet d’utiliser les modèles Agilotext, pas d’en créer un personnel.",
+      '<a class="agilo-lib-btn agilo-lib-btn--primary" href="' + C.escapeHtml(Api.cfg().pricingUrl) + '">Voir les offres</a>',
+      "lock"
+    );
+  }
+
+  function wizardHtml() {
+    var C = global.AgiloLibraryCore;
+    var Api = global.AgiloLibraryApi;
+    if (!Api.canCreate(state.creds)) return wizardFreeHtml();
     if (state.creating) {
-      return '<div class="agilo-lib-banner agilo-lib-banner--info agilo-lib-pulse" role="status">' +
-        "Création en cours… Le serveur construit le modèle à partir de tes 4 réponses. Aucun prompt à relire.</div>";
+      return '<div class="agilo-lib-lottie" id="agilo-lib-lottie" aria-hidden="true"></div>' +
+        '<div class="agilo-lib-banner agilo-lib-banner--info" role="status">' +
+        "<span>Création en cours. Tu peux fermer, le modèle arrive dans Mes modèles.</span></div>";
     }
     if (state.created) {
       var m = state.created;
       return '<div class="agilo-lib-banner agilo-lib-banner--success">Modèle créé. Tu peux l’utiliser tout de suite.</div>' +
         C.cardHtml(m, { size: "featured" }) +
         '<div class="agilo-lib-actions-row">' +
-        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use" data-id="' + m.promptModelId + '">Utiliser</button>' +
-        '<button type="button" class="agilo-lib-btn" data-act="edit" data-id="' + m.promptModelId + '">Ouvrir dans l’atelier</button>' +
+        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use" data-id="' + m.promptModelId + '">Utiliser par défaut</button>' +
         '<button type="button" class="agilo-lib-btn" data-tab="mes-modeles">Voir mes modèles</button>' +
         "</div>";
     }
     var w = state.wizard;
+    var Cico = C.svgIcon;
     var steps = [1, 2, 3, 4].map(function (n) {
-      return "<span" + (n <= w.step ? ' class="is-on"' : "") + ">" + n + "</span>";
+      var on = n === w.step ? " is-on" : "";
+      var inner = n < w.step ? Cico("check", 14) : String(n);
+      return "<span class=\"" + (n < w.step ? "is-on" : "") + on + "\">" + inner + "</span>";
     }).join("");
     var body = "";
     if (w.step === 1) {
-      body = '<label>Nom du modèle <span class="agilo-lib-req">*</span>' +
-        '<input id="wiz-name" maxlength="80" value="' + C.escapeHtml(w.name) + '" placeholder="Exemple : Modèle de réunion"></label>' +
-        '<p><button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer</button></p>';
+      body = '<label><span>Nom du modèle <span class="agilo-lib-req">*</span></span>' +
+        '<input id="wiz-name" maxlength="80" value="' + C.escapeHtml(w.name) + '" placeholder="Exemple : Modèle de réunion"></label>';
     } else if (w.step === 2) {
-      body = '<label>Objectif du document <span class="agilo-lib-req">*</span>' +
-        '<textarea id="wiz-obj" rows="5" placeholder="Quel est le résultat attendu (rapport, synthèse, décisions) ? Qui sont tes interlocuteurs ?">' +
+      body = '<label><span>Objectif principal (court) <span class="agilo-lib-req">*</span></span>' +
+        '<textarea id="wiz-obj" rows="4" placeholder="Ex. synthèse actionnable, focus décisions et next steps">' +
         C.escapeHtml(w.objective) + "</textarea></label>" +
-        '<p class="agilo-lib-note">Exemples cliquables :</p>' +
         '<div class="agilo-lib-chips">' +
-        ["Compte rendu de comité de direction", "Synthèse d’un entretien client", "Note de réunion projet"]
-          .map(function (e) { return '<button type="button" class="agilo-lib-btn" data-ex="' + C.escapeHtml(e) + '">' + C.escapeHtml(e) + "</button>"; })
-          .join("") + "</div>" +
-        '<p><button type="button" class="agilo-lib-btn" data-wiz="back">Retour</button> ' +
-        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer</button></p>';
+        WIZ_EXAMPLES.map(function (e) {
+          return '<button type="button" data-ex="' + C.escapeHtml(e) + '">' + C.escapeHtml(e) + "</button>";
+        }).join("") + "</div>";
     } else if (w.step === 3) {
-      body = '<label>Informations à toujours faire figurer' +
-        '<textarea id="wiz-info" rows="4" placeholder="Ex. responsables, échéances, votes, risques.">' +
-        C.escapeHtml(w.specificInfo) + "</textarea></label>" +
-        '<p><button type="button" class="agilo-lib-btn" data-wiz="back">Retour</button> ' +
-        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer</button></p>';
+      body = '<label>Infos clés à ressortir' +
+        '<textarea id="wiz-info" rows="4" placeholder="Décisions, actions, dates, responsables, chiffres…">' +
+        C.escapeHtml(w.specificInfo) + "</textarea></label>";
     } else {
       body = '<label>Structure souhaitée' +
         '<textarea id="wiz-struct" rows="4">' + C.escapeHtml(w.structure) + "</textarea></label>" +
-        '<p class="agilo-lib-note">Décris l’ordre des sections. Le serveur s’en sert pour construire le modèle.</p>' +
-        '<p><button type="button" class="agilo-lib-btn" data-wiz="back">Retour</button> ' +
-        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">Créer le modèle</button></p>';
+        '<p class="agilo-lib-note">Décris l’ordre des sections. Le serveur s’en sert pour construire le modèle.</p>';
     }
-    var official = state.models.filter(function (m) { return m.type === "STANDARD" && m.canCopyOfficial; });
-    official = global.AgiloLibraryCore.sortOfficial(official);
-    var fromStd = official.length
-      ? '<section class="agilo-lib-section-block"><h2>Ou partir d’un modèle Agilotext</h2>' +
-        '<p class="agilo-lib-note">Une copie personnelle est créée. Tu pourras ensuite la modifier.</p>' +
-        '<div class="agilo-lib-chips">' +
-        official.map(function (m) {
-          return '<button type="button" data-dup-std="' + m.promptModelId + '">' +
-            C.iconHtml(m, 14) + " " + C.escapeHtml(m.cardTitle) + "</button>";
-        }).join("") + "</div></section>"
-      : "";
-    return '<div class="agilo-lib-wizard">' +
-      "<h2>Créer un modèle</h2>" +
-      '<p class="agilo-lib-lead">Quatre questions. Tu décris le document souhaité. Tu n’écris pas un prompt.</p>' +
+    var nav = '<div class="agilo-lib-actions-row">';
+    if (w.step > 1) {
+      nav += '<button type="button" class="agilo-lib-btn" data-wiz="back">' + Cico("arrow-left", 16) + " Retour</button>";
+    }
+    if (w.step < 4) {
+      nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer ' +
+        Cico("arrow-right", 16) + "</button>";
+    } else {
+      nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">Créer le modèle</button>';
+    }
+    nav += "</div>";
+    return '<p class="agilo-lib-wizard-kicker">Question ' + w.step + " / 4</p>" +
       '<div class="agilo-lib-wizard-steps" aria-hidden="true">' + steps + "</div>" +
-      '<div class="agilo-lib-form">' + body + "</div>" +
-      '<p class="agilo-lib-note">Le tutoriel vidéo reste disponible dans Mon compte, onglet modèles.</p>' +
-      "</div>" + fromStd;
+      '<div class="agilo-lib-form">' + body + "</div>" + nav;
   }
 
-  function versionsDrawerHtml() {
-    if (!state.versionsModel) return "";
+  function versionsHtml() {
     var C = global.AgiloLibraryCore;
     var m = state.versionsModel;
+    if (!m) return "";
     var rows;
     if (state.versionsLoading) {
       rows = "<li>Chargement des versions…</li>";
@@ -397,18 +480,14 @@
           "</li>";
       }).join("");
     }
-    return '<div class="agilo-lib-drawer is-open" role="dialog" aria-modal="true">' +
-      '<div class="agilo-lib-drawer__panel">' +
-      '<div class="agilo-lib-drawer__head"><h2>Versions · ' + C.escapeHtml(m.cardTitle) + "</h2>" +
-      '<button type="button" class="agilo-lib-icon-btn" data-close-drawer aria-label="Fermer">' + C.svgIcon("plus", 16) + "</button></div>" +
-      '<p class="agilo-lib-note">Jusqu’à 3 snapshots du modèle. Ce n’est pas l’historique du compte rendu. Restaurer remplace l’état courant, l’état remplacé reste dans l’historique.</p>' +
-      '<ul class="agilo-lib-versions">' + rows + "</ul></div></div>";
+    return '<p class="agilo-lib-note">Jusqu’à 3 snapshots du modèle. Ce n’est pas l’historique du compte rendu. Restaurer remplace l’état courant, l’état remplacé reste dans l’historique.</p>' +
+      '<ul class="agilo-lib-versions">' + rows + "</ul>";
   }
 
-  function ficheDrawerHtml() {
-    if (!state.ficheModel) return "";
+  function ficheHtml() {
     var C = global.AgiloLibraryCore;
     var m = state.ficheModel;
+    if (!m) return "";
     var layout = m.hasHtml ? "Oui, mise en page HTML" : "Texte structuré";
     var desc = m.publicDescription || "Pas de description publique pour l’instant.";
     var example = m.publicExample
@@ -416,22 +495,67 @@
       : "";
     var acts = C.menuItems(m).map(function (it) {
       return '<button type="button" class="agilo-lib-btn' + (it.danger ? " agilo-lib-btn--danger" : "") +
-        '" data-act="' + C.escapeHtml(it.act) + '">' + C.escapeHtml(it.label) + "</button>";
+        '" data-act="' + C.escapeHtml(it.act) + '">' + C.svgIcon(it.icon || "dots", 16) + " " +
+        C.escapeHtml(it.label) + "</button>";
     }).join("");
     var useBtn = (m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId))
       ? '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
-        (m.isDefault ? " disabled" : "") + ">Utiliser ce modèle</button>"
+        (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>"
       : "";
-    return '<div class="agilo-lib-drawer is-open" role="dialog" aria-modal="true">' +
-      '<div class="agilo-lib-drawer__panel">' +
-      '<div class="agilo-lib-drawer__head"><h2>' + C.escapeHtml(m.cardTitle) + "</h2>" +
-      '<button type="button" class="agilo-lib-icon-btn" data-close-drawer aria-label="Fermer">' + C.svgIcon("plus", 16) + "</button></div>" +
-      C.previewHtml(m) +
+    return C.previewHtml(m) +
+      '<p class="agilo-lib-prompt-note">Le prompt Agilotext n’est jamais affiché. Description publique et exemple de sortie seulement.</p>' +
       '<p class="agilo-lib-lead">' + C.escapeHtml(desc) + "</p>" +
       example +
       "<p class=\"agilo-lib-note\">Mise en page : " + layout + "</p>" +
       '<div class="agilo-lib-card__meta">' + C.badgeHtml(m) + "</div>" +
-      '<div class="agilo-lib-actions-row" data-id="' + m.promptModelId + '">' + useBtn + acts + "</div></div></div>";
+      '<div class="agilo-lib-actions-row" data-id="' + m.promptModelId + '">' + useBtn + acts + "</div>";
+  }
+
+  function overlayTitle(mode) {
+    if (mode === "wizard") return "Créer un modèle";
+    if (mode === "versions" && state.versionsModel) return "Versions · " + state.versionsModel.cardTitle;
+    if (mode === "fiche" && state.ficheModel) return state.ficheModel.cardTitle;
+    return "";
+  }
+
+  function overlayHtml(mode) {
+    if (mode === "wizard") return wizardHtml();
+    if (mode === "versions") return versionsHtml();
+    if (mode === "fiche") return ficheHtml();
+    return "";
+  }
+
+  function onOverlayClosed(root) {
+    var wasWizard = state.wizardOpen;
+    if (state.creating) state.dismissedWizard = true;
+    state.ficheModel = null;
+    state.versionsModel = null;
+    state.versions = [];
+    state.wizardOpen = false;
+    if (wasWizard) {
+      state.tab = state.prevTab && state.prevTab !== "creer" ? state.prevTab : "agilotext";
+      paint(root);
+    }
+  }
+
+  function syncOverlay(root) {
+    var Overlay = global.AgiloLibraryOverlay;
+    if (!Overlay) return;
+    var mode = overlayMode();
+    if (!mode) {
+      Overlay.close({ silent: true });
+      return;
+    }
+    var payload = {
+      mode: mode,
+      title: overlayTitle(mode),
+      html: overlayHtml(mode),
+      onClose: function () { onOverlayClosed(root); },
+      bind: function (host) { bindOverlay(root, host); }
+    };
+    var same = Overlay.isOpen() && Overlay.host().getAttribute("data-mode") === mode;
+    if (same) Overlay.update(payload);
+    else Overlay.open(payload);
   }
 
   function bannersHtml() {
@@ -445,39 +569,51 @@
   function bodyHtml() {
     if (state.tab === "mes-modeles") return panelMine();
     if (state.tab === "epingles") return panelPinned();
-    if (state.tab === "creer") return wizardHtml();
+    if (state.tab === "creer") return panelCreateLanding();
     return panelOfficial();
   }
 
   function paint(root, opts) {
     opts = opts || {};
     writeHash();
-    var drawers = versionsDrawerHtml() + ficheDrawerHtml();
     if (opts.panelOnly && root.querySelector(".agilo-lib-panel") && root.querySelector("#agilo-lib-q")) {
       var panel = root.querySelector(".agilo-lib-panel");
       panel.id = "panel-" + state.tab;
       panel.setAttribute("aria-labelledby", "tab-" + state.tab);
       panel.innerHTML = bodyHtml();
-      root.querySelectorAll(".agilo-lib-drawer").forEach(function (d) { d.remove(); });
-      root.insertAdjacentHTML("beforeend", drawers);
       bindPanel(root);
+      if (!opts.skipOverlay) syncOverlay(root);
       return;
     }
     root.innerHTML = bannersHtml() + headHtml() + tabsHtml() +
       '<div class="agilo-lib-panel" id="panel-' + state.tab + '" role="tabpanel" aria-labelledby="tab-' + state.tab + '">' +
-      bodyHtml() + "</div>" + drawers;
+      bodyHtml() + "</div>";
     var input = root.querySelector("#agilo-lib-q");
     if (input && document.activeElement && document.activeElement.id === "agilo-lib-q") {
       input.focus();
       try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) { /* ignore */ }
     }
     bind(root);
+    if (!opts.skipOverlay) syncOverlay(root);
+  }
+
+  function openWizard(root) {
+    if (state.tab !== "creer") state.prevTab = state.tab;
+    state.wizardOpen = true;
+    state.ficheModel = null;
+    state.versionsModel = null;
+    state.created = state.creating ? state.created : null;
+    state.tab = "creer";
+    paint(root);
   }
 
   function setTab(root, tab) {
     state.tab = tab;
     state.page = 1;
-    if (tab === "creer") state.created = null;
+    if (tab === "creer") {
+      openWizard(root);
+      return;
+    }
     paint(root);
   }
 
@@ -485,8 +621,12 @@
     var reload = root.querySelector('[data-act="reload"]');
     if (reload) reload.addEventListener("click", function () { location.reload(); });
 
-    root.querySelectorAll(".agilo-lib-tabs [data-tab], .agilo-lib-head [data-tab]").forEach(function (btn) {
+    root.querySelectorAll(".agilo-lib-tabs [data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () { setTab(root, btn.getAttribute("data-tab")); });
+    });
+
+    root.querySelectorAll("[data-open-wizard]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openWizard(root); });
     });
 
     var tablist = root.querySelector(".agilo-lib-tabs");
@@ -523,6 +663,9 @@
     var panel = root.querySelector(".agilo-lib-panel") || root;
     panel.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () { setTab(root, btn.getAttribute("data-tab")); });
+    });
+    panel.querySelectorAll("[data-open-wizard]").forEach(function (btn) {
+      btn.addEventListener("click", function () { openWizard(root); });
     });
 
     root.querySelectorAll("[data-cat]").forEach(function (b) {
@@ -561,26 +704,41 @@
       });
     });
 
-    bindWizard(root);
     bindCards(root);
-    bindDrawer(root);
   }
 
-  function readWizardFields(root) {
-    var name = root.querySelector("#wiz-name");
-    var obj = root.querySelector("#wiz-obj");
-    var info = root.querySelector("#wiz-info");
-    var struct = root.querySelector("#wiz-struct");
+  function bindOverlay(root, host) {
+    bindWizard(root, host);
+    bindCards(host);
+    bindVersions(root, host);
+    host.querySelectorAll("[data-tab]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        global.AgiloLibraryOverlay.close({ silent: true });
+        state.wizardOpen = false;
+        state.created = null;
+        setTab(root, btn.getAttribute("data-tab"));
+      });
+    });
+    var box = host.querySelector("#agilo-lib-lottie");
+    if (box) playLottie(box);
+  }
+
+  function readWizardFields(scope) {
+    var name = scope.querySelector("#wiz-name");
+    var obj = scope.querySelector("#wiz-obj");
+    var info = scope.querySelector("#wiz-info");
+    var struct = scope.querySelector("#wiz-struct");
     if (name) state.wizard.name = name.value;
     if (obj) state.wizard.objective = obj.value;
     if (info) state.wizard.specificInfo = info.value;
     if (struct) state.wizard.structure = struct.value;
   }
 
-  function bindWizard(root) {
-    root.querySelectorAll("[data-wiz]").forEach(function (b) {
+  function bindWizard(root, scope) {
+    scope = scope || root;
+    scope.querySelectorAll("[data-wiz]").forEach(function (b) {
       b.addEventListener("click", function () {
-        readWizardFields(root);
+        readWizardFields(scope);
         var act = b.getAttribute("data-wiz");
         if (act === "back") state.wizard.step = Math.max(1, state.wizard.step - 1);
         if (act === "next") {
@@ -593,26 +751,20 @@
           doCreate(root);
           return;
         }
-        paint(root);
+        syncOverlay(root);
       });
     });
-    root.querySelectorAll("[data-ex]").forEach(function (b) {
+    scope.querySelectorAll("[data-ex]").forEach(function (b) {
       b.addEventListener("click", function () {
-        var ta = root.querySelector("#wiz-obj");
+        var ta = scope.querySelector("#wiz-obj");
         if (ta) ta.value = b.getAttribute("data-ex");
         state.wizard.objective = b.getAttribute("data-ex");
       });
     });
     ["#wiz-name", "#wiz-obj", "#wiz-info", "#wiz-struct"].forEach(function (sel) {
-      var el = root.querySelector(sel);
+      var el = scope.querySelector(sel);
       if (!el) return;
-      el.addEventListener("input", function () { readWizardFields(root); });
-    });
-    root.querySelectorAll("[data-dup-std]").forEach(function (b) {
-      b.addEventListener("click", function () {
-        var model = byId(b.getAttribute("data-dup-std"));
-        if (model) askDuplicate(root, model);
-      });
+      el.addEventListener("input", function () { readWizardFields(scope); });
     });
   }
 
@@ -627,8 +779,9 @@
       }
       if (act === "fiche") {
         state.versionsModel = null;
+        state.wizardOpen = false;
         state.ficheModel = model;
-        paint(root);
+        syncOverlay(root);
         return;
       }
       if (act === "use" || act === "default") doDefault(root, model, btn, act === "use");
@@ -656,22 +809,8 @@
     });
   }
 
-  function bindDrawer(root) {
-    function closeDrawer() {
-      state.versionsModel = null;
-      state.versions = [];
-      state.ficheModel = null;
-      paint(root);
-    }
-    var close = root.querySelector("[data-close-drawer]");
-    if (close) close.addEventListener("click", closeDrawer);
-    var drawer = root.querySelector(".agilo-lib-drawer");
-    if (drawer) {
-      drawer.addEventListener("click", function (e) {
-        if (e.target === drawer) closeDrawer();
-      });
-    }
-    root.querySelectorAll("[data-restore]").forEach(function (b) {
+  function bindVersions(root, host) {
+    host.querySelectorAll("[data-restore]").forEach(function (b) {
       b.addEventListener("click", function () {
         var model = state.versionsModel;
         if (!model) return;
@@ -687,6 +826,7 @@
               }
               global.AgiloLibraryCore.toast("Version restaurée.");
               state.versionsModel = null;
+              global.AgiloLibraryOverlay.close({ silent: true });
               reload(root);
             });
           }
@@ -800,6 +940,10 @@
           global.AgiloLibraryCore.toast(model.isDefault
             ? "Modèle supprimé. Le défaut revient au modèle Agilotext."
             : "Modèle personnel supprimé.");
+          if (state.ficheModel && state.ficheModel.promptModelId === model.promptModelId) {
+            state.ficheModel = null;
+            global.AgiloLibraryOverlay.close({ silent: true });
+          }
           reload(root);
         });
       }
@@ -818,20 +962,21 @@
 
   function openVersions(root, model) {
     state.ficheModel = null;
+    state.wizardOpen = false;
     state.versionsModel = model;
     state.versionsLoading = true;
     state.versions = [];
-    paint(root);
+    syncOverlay(root);
     global.AgiloLibraryApi.listVersions(state.creds, model.promptModelId).then(function (res) {
       state.versionsLoading = false;
       if (!res.ok) {
         global.AgiloLibraryCore.toast(res.message || "Versions indisponibles.");
         state.versionsModel = null;
-        paint(root);
+        syncOverlay(root);
         return;
       }
       state.versions = res.versions || [];
-      paint(root);
+      syncOverlay(root);
     });
   }
 
@@ -839,7 +984,9 @@
     var w = state.wizard;
     if (!w.name.trim()) w.name = "Mon modèle";
     state.creating = true;
-    paint(root);
+    state.created = null;
+    state.dismissedWizard = false;
+    syncOverlay(root);
     global.AgiloLibraryApi.createFromWizard(state.creds, {
       name: w.name.trim(),
       objective: w.objective.trim(),
@@ -848,7 +995,7 @@
     }).then(function (res) {
       if (!res.ok) {
         state.creating = false;
-        paint(root);
+        syncOverlay(root);
         global.AgiloLibraryCore.toast(res.message || "Impossible de créer le modèle.");
         return;
       }
@@ -856,7 +1003,6 @@
       var newId = d.promptModelId || d.promptId;
       if (!newId) {
         state.creating = false;
-        paint(root);
         global.AgiloLibraryCore.toast("Modèle créé, recharge pour le voir.");
         reload(root);
         return;
@@ -864,7 +1010,6 @@
       return global.AgiloLibraryApi.waitPromptReady(state.creds, newId).then(function (ready) {
         state.creating = false;
         if (!ready.ok) {
-          paint(root);
           global.AgiloLibraryCore.toast(ready.message || "Création encore en cours.");
           reload(root);
           return;
@@ -882,14 +1027,24 @@
             canEdit: true,
             canSetDefault: true
           };
+          if (state.dismissedWizard) {
+            state.dismissedWizard = false;
+            state.created = null;
+            state.wizardOpen = false;
+            state.tab = "mes-modeles";
+            global.AgiloLibraryCore.toast("Modèle créé. Il est dans Mes modèles.");
+            paint(root);
+            return;
+          }
           state.created = created;
+          state.wizardOpen = true;
           state.tab = "creer";
           paint(root);
         });
       });
     }).catch(function () {
       state.creating = false;
-      paint(root);
+      syncOverlay(root);
       global.AgiloLibraryCore.toast("Réseau interrompu. Réessaie.");
     });
   }
@@ -898,6 +1053,9 @@
     return global.AgiloLibraryApi.fetchLists(state.creds).then(function (pack) {
       state.models = pack.models;
       state.pinMax = pack.pinMax || 5;
+      if (state.ficheModel) {
+        state.ficheModel = byId(state.ficheModel.promptModelId) || state.ficheModel;
+      }
       paint(root);
     });
   }
@@ -908,13 +1066,15 @@
     state.models = pack.models || [];
     state.pinMax = pack.pinMax || 5;
     readHash();
+    if (state.wizardOpen) state.prevTab = "agilotext";
     paint(root);
     if (!global.__agiloLibHashBound) {
       global.__agiloLibHashBound = true;
       global.addEventListener("hashchange", function () {
         var prev = state.tab;
+        var wasOpen = state.wizardOpen;
         readHash();
-        if (state.tab !== prev && root.isConnected) paint(root);
+        if ((state.tab !== prev || state.wizardOpen !== wasOpen) && root.isConnected) paint(root);
       });
     }
   }

@@ -1,4 +1,4 @@
-/* Bibliothèque Agilotext — embed Webflow. Préfixe BEM agilo-lib-*. Pas de glyphes Nucleo. */
+/* Bibliothèque Agilotext — embed Webflow. Préfixe BEM agilo-lib-*. Chrome Nucleo inline. */
 .agilo-lib {
   --lib-blue: var(--color--blue, #174a96);
   --lib-orange: var(--color--orange, #fd7e14);
@@ -126,8 +126,8 @@
   border: 1px solid var(--lib-border);
   border-radius: var(--lib-radius);
   font: inherit;
-  background: var(--lib-surface);
-  color: var(--lib-text);
+  background: #fff !important;
+  color: #020202 !important;
 }
 
 .agilo-lib-tabs {
@@ -158,9 +158,10 @@
   white-space: nowrap;
 }
 .agilo-lib-tab:hover { background: var(--lib-blue-08); color: var(--lib-text); }
-.agilo-lib-tab.is-active {
-  color: var(--lib-blue);
-  background: var(--lib-blue-12);
+.agilo-lib-tab.is-active,
+.agilo-lib button.agilo-lib-tab.is-active {
+  color: #174a96 !important;
+  background: var(--lib-blue-12) !important;
   font-weight: 600;
 }
 
@@ -210,9 +211,9 @@
   gap: 0.35rem;
 }
 .agilo-lib-chips button.is-active {
-  border-color: var(--lib-blue);
-  color: var(--lib-blue);
-  background: var(--lib-blue-12);
+  border-color: #174a96 !important;
+  color: #174a96 !important;
+  background: var(--lib-blue-12) !important;
   font-weight: 600;
 }
 .agilo-lib-chips button:hover { background: var(--lib-blue-08); }
@@ -293,12 +294,6 @@
   cursor: pointer;
 }
 .agilo-lib-card--featured .agilo-lib-card__preview { height: 6.5rem; }
-.agilo-lib-drawer__panel .agilo-lib-card__preview {
-  margin: 0 0 1rem;
-  border-radius: var(--lib-radius);
-  height: 7rem;
-  cursor: default;
-}
 .agilo-lib-card__preview-sheet {
   position: absolute;
   left: 16%;
@@ -324,19 +319,9 @@
 .agilo-lib-card__preview[data-icon="education"] { background: linear-gradient(180deg, var(--lib-vert-12), var(--lib-bg)); }
 .agilo-lib-card__preview[data-icon="idea"] { background: linear-gradient(180deg, var(--lib-orange-12), var(--lib-bg)); }
 .agilo-lib-card__preview[data-icon="briefcase"] { background: linear-gradient(180deg, var(--lib-blue-08), var(--lib-bg)); }
-.agilo-lib-card__title-btn {
-  display: inline;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-weight: 700;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
+.agilo-lib-card__title {
+  cursor: default;
 }
-.agilo-lib-card__title-btn:hover { color: var(--lib-blue); }
 .agilo-lib-pager {
   display: flex;
   flex-wrap: wrap;
@@ -443,6 +428,7 @@
 .agilo-lib-badge {
   display: inline-flex;
   align-items: center;
+  gap: 0.2rem;
   font-size: 0.68rem;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -457,6 +443,7 @@
 .agilo-lib-badge--default { background: var(--lib-blue); color: #fff; }
 .agilo-lib-badge--html { background: var(--lib-vert-12); color: var(--lib-vert); }
 .agilo-lib-badge--pin { background: var(--lib-blue-08); color: var(--lib-blue); }
+.agilo-lib-badge .agilo-lib-ico { width: 12px; height: 12px; }
 
 .agilo-lib-btn {
   display: inline-flex;
@@ -476,11 +463,39 @@
   text-decoration: none;
   transition: background-color var(--lib-dur) var(--lib-ease), border-color var(--lib-dur) var(--lib-ease);
 }
+.agilo-lib button.agilo-lib-btn,
+.agilo-lib a.agilo-lib-btn {
+  background-color: var(--lib-surface);
+  background-image: none;
+  border: 1px solid var(--lib-border);
+  color: var(--lib-text);
+}
 .agilo-lib-btn:hover { background: var(--lib-blue-08); text-decoration: none; }
-.agilo-lib-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.agilo-lib-btn--primary { background: var(--lib-blue); border-color: var(--lib-blue); color: #fff; }
-.agilo-lib-btn--primary:hover { background: #123a78; }
-.agilo-lib-btn--cta { background: var(--lib-orange); border-color: var(--lib-orange); color: #fff; }
+.agilo-lib-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.agilo-lib button.agilo-lib-btn--primary,
+.agilo-lib a.agilo-lib-btn--primary {
+  background-color: #174a96 !important;
+  background-image: none !important;
+  border-color: #174a96 !important;
+  color: #fff !important;
+}
+.agilo-lib button.agilo-lib-btn--primary:hover:not(:disabled),
+.agilo-lib a.agilo-lib-btn--primary:hover {
+  background-color: #123a78 !important;
+  color: #fff !important;
+}
+.agilo-lib button.agilo-lib-btn--primary:disabled {
+  background-color: #174a96 !important;
+  border-color: #174a96 !important;
+  color: #fff !important;
+  opacity: 0.55;
+}
+.agilo-lib button.agilo-lib-btn--cta,
+.agilo-lib a.agilo-lib-btn--cta {
+  background-color: #fd7e14 !important;
+  border-color: #fd7e14 !important;
+  color: #fff !important;
+}
 .agilo-lib-btn--save { background: var(--lib-vert); border-color: var(--lib-vert); color: #fff; }
 .agilo-lib-btn--danger { color: var(--lib-rouge); border-color: color-mix(in srgb, var(--lib-rouge) 35%, var(--lib-border)); }
 .agilo-lib-btn--sm { min-height: 36px; padding: 0 0.65rem; font-size: 0.8rem; }
@@ -499,6 +514,11 @@
   color: var(--lib-muted);
   cursor: pointer;
 }
+.agilo-lib button.agilo-lib-icon-btn {
+  background: transparent !important;
+  border: none !important;
+  color: var(--lib-muted) !important;
+}
 .agilo-lib-icon-btn:hover { background: var(--lib-blue-08); color: var(--lib-text); }
 .agilo-lib-icon-btn .agilo-lib-ico { width: 16px; height: 16px; }
 
@@ -511,6 +531,17 @@
   background: var(--lib-surface);
   border-radius: var(--lib-radius);
 }
+.agilo-lib-empty__ico {
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: 0 auto 0.75rem;
+  display: grid;
+  place-items: center;
+  color: var(--lib-blue);
+  background: var(--lib-blue-12);
+  border-radius: var(--lib-radius);
+}
+.agilo-lib-empty__ico .agilo-lib-ico { width: 22px; height: 22px; }
 .agilo-lib-empty__title { margin: 0 0 0.35rem; font-weight: 700; color: var(--lib-text); }
 .agilo-lib-empty__text { margin: 0 0 0.85rem; }
 .agilo-lib-note {
@@ -571,17 +602,19 @@
 .agilo-lib-toast.is-out { opacity: 0; transition: opacity 0.35s var(--lib-ease); }
 
 .agilo-lib-menu {
-  position: absolute;
-  z-index: 70;
+  position: fixed;
+  z-index: 200;
   min-width: 13rem;
   background: var(--lib-surface);
   border: 1px solid var(--lib-border);
   border-radius: var(--lib-radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
   padding: 0.3rem;
 }
 .agilo-lib-menu button {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   width: 100%;
   text-align: left;
   font: inherit;
@@ -594,13 +627,14 @@
   border-radius: var(--lib-radius);
   color: var(--lib-text);
 }
+.agilo-lib-menu button .agilo-lib-ico { width: 16px; height: 16px; flex-shrink: 0; }
 .agilo-lib-menu button:hover { background: var(--lib-blue-08); }
 .agilo-lib-menu button.is-danger { color: var(--lib-rouge); }
 
 .agilo-lib-dialog {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 210;
   background: rgba(10, 31, 78, 0.45);
   display: none;
   align-items: center;
@@ -699,6 +733,7 @@
   background: var(--lib-blue);
   color: #fff;
 }
+.agilo-lib-wizard-steps .agilo-lib-ico { width: 14px; height: 14px; }
 .agilo-lib-form { display: grid; gap: 0.75rem; }
 .agilo-lib-form label {
   font-size: 0.85rem;
@@ -725,32 +760,75 @@
   margin-top: 1rem;
 }
 
-.agilo-lib-drawer {
+.agilo-lib-overlay {
   position: fixed;
   inset: 0;
-  z-index: 65;
-  background: rgba(10, 31, 78, 0.45);
+  z-index: 150;
   display: none;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
 }
-.agilo-lib-drawer.is-open { display: flex; }
-.agilo-lib-drawer__panel {
-  width: min(28rem, 100%);
-  height: 100%;
-  background: var(--lib-surface);
-  padding: 1rem 1.1rem;
+.agilo-lib-overlay.is-open { display: flex; }
+.agilo-lib-overlay__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 31, 78, 0.45);
+}
+.agilo-lib-overlay__panel {
+  position: relative;
+  z-index: 1;
+  width: min(36rem, 100%);
+  max-height: min(92vh, 44rem);
   overflow: auto;
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  background: var(--lib-surface);
+  border-radius: var(--lib-radius);
+  padding: 1.15rem 1.2rem 1.35rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
 }
-.agilo-lib-drawer__head {
+.agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel { width: min(32rem, 100%); }
+.agilo-lib-overlay__head {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
 }
-.agilo-lib-drawer__head h2 { margin: 0; font-size: 1.05rem; }
-.agilo-lib-drawer [data-close-drawer] .agilo-lib-ico { transform: rotate(45deg); }
+.agilo-lib-overlay__head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; }
+.agilo-lib-overlay .agilo-lib-card__preview {
+  margin: 0 0 1rem;
+  border-radius: var(--lib-radius);
+  height: 7rem;
+  cursor: default;
+  pointer-events: none;
+}
+.agilo-lib-overlay .agilo-lib-wizard {
+  max-width: none;
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+.agilo-lib-prompt-note {
+  margin: 0 0 0.85rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8rem;
+  color: var(--lib-muted);
+  background: var(--lib-blue-08);
+  border-radius: var(--lib-radius);
+}
+.agilo-lib-lottie {
+  width: 7.5rem;
+  height: 7.5rem;
+  margin: 0 auto 0.75rem;
+}
+.agilo-lib-wizard-kicker {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--lib-blue);
+}
+body.agilo-lib-overlay-lock { overflow: hidden; }
 .agilo-lib-versions { margin: 0; padding: 0; }
 .agilo-lib-versions li {
   display: flex;
@@ -841,7 +919,16 @@
   .agilo-lib-table-cards { display: block; }
   .agilo-lib-head__tools { width: 100%; }
   .agilo-lib-search { width: 100%; }
-  .agilo-lib-drawer__panel { width: 100%; }
+  .agilo-lib-overlay {
+    padding: 0;
+    align-items: stretch;
+  }
+  .agilo-lib-overlay__panel {
+    width: 100%;
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -849,4 +936,5 @@
   .agilo-lib-card,
   .agilo-lib-pulse { animation: none; }
   .agilo-lib-card { transition: none; }
+  .agilo-lib-lottie { display: none; }
 }
