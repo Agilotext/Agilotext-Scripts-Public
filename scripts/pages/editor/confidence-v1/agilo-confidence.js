@@ -25,6 +25,14 @@
   let __shellScrollGuardBound = false;
   let __shellScrollGuardHandler = null;
   let __shellScrollGuardDoc = null;
+  let __lastApply = {
+    jobId: '',
+    available: false,
+    reason: '',
+    segments: 0,
+    matched: 0
+  };
+  let __warnedApplyKey = '';
 
   function debugLog(reason, details) {
     if (window.AGILO_DEBUG) {
@@ -245,6 +253,12 @@
     return n === 1 ? '1 à relire' : `${n} à relire`;
   }
 
+  function ghostChipLabel(qualityTitle) {
+    const m = String(qualityTitle || '').match(/(\d+)\s*%/);
+    const p = m ? m[1] : '0';
+    return `Relu · ${p} %`;
+  }
+
   function qualityLabel(summary) {
     return `Qualité estimée : ${pct(summary?.globalScore)}%`;
   }
@@ -338,18 +352,6 @@
       if (e.key === 'ArrowRight') goToNextConfidenceZone();
       else goToPreviousConfidenceZone();
     });
-  }
-
-  function getAudioDockHeight(doc = document) {
-    try {
-      const raw = doc?.documentElement
-        ? (doc.defaultView || window).getComputedStyle(doc.documentElement).getPropertyValue('--ag-editor-audio-dock-height')
-        : '';
-      const n = parseFloat(raw);
-      return Number.isFinite(n) && n > 0 ? n : 0;
-    } catch {
-      return 0;
-    }
   }
 
   function isScrollableOverflow(value) {
@@ -576,29 +578,59 @@
     return document.getElementById('ag-confidence-chip-host');
   }
 
+  function placeChipHost(host) {
+    if (!host) return false;
+    const tools = document.querySelector('main.ed-main .ed-toolbar .ed-tools, .ed-toolbar .ed-tools, .ed-tools');
+    if (tools) {
+      if (host.parentNode !== tools || tools.firstChild !== host) {
+        tools.insertBefore(host, tools.firstChild || null);
+      }
+      return true;
+    }
+    const srch = document.querySelector('main.ed-main .ed-toolbar .srch, .ed-toolbar .srch, .srch');
+    if (srch?.parentNode) {
+      if (host.parentNode !== srch.parentNode || host.nextElementSibling !== srch) {
+        srch.parentNode.insertBefore(host, srch);
+      }
+      return true;
+    }
+    const toolbar = document.querySelector('main.ed-main .ed-toolbar, .ed-toolbar');
+    if (toolbar) {
+      if (host.parentNode !== toolbar || toolbar.firstChild !== host) {
+        toolbar.insertBefore(host, toolbar.firstChild || null);
+      }
+      return true;
+    }
+    return false;
+  }
+
   function ensureChipHost() {
     let host = getChipHost();
-    if (host && host.isConnected) return host;
+    if (host && host.isConnected) {
+      placeChipHost(host);
+      return host;
+    }
     host = host || document.createElement('div');
     host.id = 'ag-confidence-chip-host';
     host.className = 'ag-confidence-chip-host';
-    const toolbar = document.querySelector('main.ed-main .ed-toolbar, .ed-toolbar');
-    if (toolbar) {
-      const srch = toolbar.querySelector('.srch');
-      toolbar.insertBefore(host, srch || toolbar.firstChild);
-      return host;
-    }
-    const pane = document.getElementById('pane-transcript');
-    if (pane) {
-      pane.insertBefore(host, pane.firstChild);
-      return host;
-    }
-    const root = getTranscriptRoot();
-    if (root?.parentElement) {
-      root.parentElement.insertBefore(host, root);
-      return host;
+    if (!placeChipHost(host)) {
+      const pane = document.getElementById('pane-transcript');
+      if (pane) {
+        pane.insertBefore(host, pane.firstChild || null);
+        return host;
+      }
+      const root = getTranscriptRoot();
+      if (root?.parentElement) {
+        root.parentElement.insertBefore(host, root);
+        return host;
+      }
     }
     return host;
+  }
+
+  function removeChipHost() {
+    const host = getChipHost();
+    if (host) host.remove();
   }
 
   function removeLegacyConfidencePanel() {
@@ -649,8 +681,7 @@
       root.querySelectorAll('.ag-seg').forEach(removeSegmentConfidenceDecorations);
     }
     removeLegacyConfidencePanel();
-    const host = getChipHost();
-    if (host) host.remove();
+    removeChipHost();
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
@@ -944,7 +975,12 @@
 
   function buildConfidenceChipHtml({ visible, pendingCount, qualityTitle, helperHtml }) {
     const n = Number(pendingCount) || 0;
-    if (n <= 0) return '';
+    if (n <= 0) {
+      return (
+        `<button type="button" class="ag-confidence-chip is-ghost" id="ag-confidence-chip-toggle"` +
+          ` title="${escapeAttr(qualityTitle)}">${escapeAttr(ghostChipLabel(qualityTitle))}</button>`
+      );
+    }
     if (!visible) {
       return '<button type="button" class="ag-confidence-chip is-ghost" id="ag-confidence-chip-show">Relire</button>';
     }
@@ -985,6 +1021,11 @@
       e?.stopPropagation?.();
       setConfidenceVisible(true, true);
     });
+    host.querySelector('#ag-confidence-chip-toggle')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      toggleUserConfidenceVisible();
+    });
     host.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
@@ -1001,21 +1042,15 @@
   }
 
   function renderConfidencePanel(transcriptRoot, summary) {
-    if (!summary) return null;
+    if (!summary) {
+      removeChipHost();
+      bindKeyboardShortcuts();
+      return null;
+    }
     removeLegacyConfidencePanel();
 
     const display = effectivePanelSummary(summary);
     const pendingRisk = riskCount(display);
-    if (pendingRisk <= 0) {
-      const existing = getChipHost();
-      if (existing) {
-        existing.innerHTML = '';
-        existing.hidden = true;
-      }
-      bindKeyboardShortcuts();
-      return null;
-    }
-
     const host = ensureChipHost();
     if (!host) return null;
     host.hidden = false;
@@ -1138,22 +1173,40 @@
     mainSegments,
     transcriptRoot
   }) {
+    const id = String(jobId || '');
+    const segmentsCount = Array.isArray(confidenceJson?.segmentsConfidence)
+      ? confidenceJson.segmentsConfidence.length
+      : 0;
+
+    const fail = (reason) => {
+      __lastApply = {
+        jobId: id,
+        available: confidenceJson?.available === true,
+        reason,
+        segments: segmentsCount,
+        matched: 0
+      };
+      warnNotApplied(id, reason);
+      removeChipHost();
+      return { applied: false, reason };
+    };
+
     if (String(confidenceJson?.jobId) !== String(jobId) && confidenceJson?.jobId != null) {
       debugLog('jobId mismatch', { expected: jobId, got: confidenceJson.jobId });
-      return { applied: false, reason: 'jobId_mismatch' };
+      return fail('jobId_mismatch');
     }
 
     if (!confidenceJson || confidenceJson.available !== true) {
-      return { applied: false, reason: 'unavailable' };
+      return fail('unavailable');
     }
 
     if (!Array.isArray(confidenceJson.segmentsConfidence)) {
-      return { applied: false, reason: 'no_segments' };
+      return fail('no_segments');
     }
 
     const reconciled = reconcileConfidenceSegments(mainSegments, confidenceJson);
     if (!reconciled.size) {
-      return { applied: false, reason: 'no_matches' };
+      return fail('no_matches');
     }
 
     __confidenceJson = confidenceJson;
@@ -1170,7 +1223,41 @@
     renderConfidencePanel(transcriptRoot, summary);
     applyConfidenceToDom(transcriptRoot, reconciled);
 
+    __lastApply = {
+      jobId: String(jobId),
+      available: true,
+      reason: 'applied',
+      segments: segmentsCount,
+      matched: reconciled.size
+    };
+
     return { applied: true, count: reconciled.size };
+  }
+
+  function warnNotApplied(jobId, reason) {
+    const key = `${String(jobId || '')}:${String(reason || '')}`;
+    if (__warnedApplyKey === key) return;
+    __warnedApplyKey = key;
+    try {
+      console.warn('[agilo:confidence] non applique', { jobId: String(jobId || ''), reason });
+    } catch {
+      /* ignore sandbox without console */
+    }
+  }
+
+  function getDebugState() {
+    const host = getChipHost();
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    const pending = summary ? riskCount(effectivePanelSummary(summary)) : 0;
+    return {
+      jobId: __currentJobId || __lastApply.jobId || '',
+      available: __lastApply.available === true,
+      reason: __lastApply.reason || '',
+      segments: __lastApply.segments || 0,
+      matched: __lastApply.matched || 0,
+      pending,
+      chipHost: !!(host && host.isConnected)
+    };
   }
 
   async function reloadConfidenceForCurrentJob(opts = {}) {
@@ -1316,7 +1403,9 @@
     goToNextConfidenceZone,
     goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex,
-    getAudioDockHeight,
+    ensureChipHost,
+    ghostChipLabel,
+    getDebugState,
     ensureActiveEditorPane,
     findConfidenceScrollContainer,
     scrollSegmentIntoView,

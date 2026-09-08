@@ -54,12 +54,13 @@
     const chip = document.getElementById('ag-confidence-chip-host')
       || document.getElementById('ag-confidence-chip')
       || document.getElementById('ag-confidence-chip-show');
-    const audioSlot = document.getElementById('ag-editor-audio-slot');
+    const audioRow = document.getElementById('ag-editor-audio-row')
+      || document.getElementById('ag-editor-audio-slot');
     const tabsRect = tabsBar?.getBoundingClientRect?.();
     const chipRect = chip?.getBoundingClientRect?.();
-    const slotRect = audioSlot?.getBoundingClientRect?.();
+    const rowRect = audioRow?.getBoundingClientRect?.();
     const cs = chip ? getComputedStyle(chip) : null;
-    const slotCs = audioSlot ? getComputedStyle(audioSlot) : null;
+    const rowCs = audioRow ? getComputedStyle(audioRow) : null;
     const edBody = document.querySelector('.ed-body');
 
     const overlapTabs = !!(tabsRect && chipRect
@@ -67,7 +68,7 @@
       && chipRect.top < tabsRect.bottom
       && chipRect.right > tabsRect.left
       && chipRect.left < tabsRect.right
-      && (cs?.position === 'fixed' || slotCs?.position === 'fixed'));
+      && (cs?.position === 'fixed' || rowCs?.position === 'fixed'));
 
     const panes = paneIds.map((id) => {
       const el = document.getElementById(id);
@@ -100,9 +101,9 @@
       chipMode: chip?.classList?.contains('is-ghost') ? 'ghost' : (chip ? 'on' : null),
       floating: false,
       panelPos: cs?.position || null,
-      audioSlotOpen: !!audioSlot?.classList?.contains('is-open'),
-      audioSlotPos: slotCs?.position || null,
-      audioSlotHeight: slotRect?.height ?? null,
+      audioRowOpen: !!audioRow?.classList?.contains('is-open'),
+      audioRowPos: rowCs?.position || null,
+      audioRowHeight: rowRect?.height ?? null,
       overlapTabs,
       edBodyScrollTop: edBody?.scrollTop ?? null,
       edBodyOverflowY: edBody ? getComputedStyle(edBody).overflowY : null,
@@ -160,7 +161,7 @@
   paneIds.forEach((id) => observe(document.getElementById(id), id));
   tabIds.forEach((id) => observe(document.getElementById(id), id));
   observe(document.getElementById('ag-confidence-chip-host'), 'ag-confidence-chip-host');
-  observe(document.getElementById('ag-editor-audio-slot'), 'ag-editor-audio-slot');
+  observe(document.getElementById('ag-editor-audio-row') || document.getElementById('ag-editor-audio-slot'), 'ag-editor-audio-row');
 
   const edBody = document.querySelector('.ed-body');
   if (edBody) {

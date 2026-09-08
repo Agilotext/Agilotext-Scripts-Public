@@ -7,9 +7,10 @@
 .ag-confidence-chip-host {
   display: inline-flex;
   align-items: center;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  align-self: center;
   position: relative;
-  margin: 0 8px 0 0;
+  margin: 0 auto 0 0;
   min-width: 0;
   z-index: 2;
 }
@@ -109,7 +110,7 @@
 
 #pane-transcript .ag-seg,
 .edtr-pane .ag-seg {
-  scroll-margin-block: calc(12px + var(--ag-editor-audio-dock-height, 0px));
+  scroll-margin-block: 12px;
 }
 
 .ag-confidence-helper {

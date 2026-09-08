@@ -250,7 +250,7 @@ Le bouton UI n'était jamais sur `1.09` (seulement sur `f3bbc9e`). Port de `buil
 
 ### Rangée audio in-flow + chip relire (staging, post-1.09.6)
 
-Le sticky `@8c7da101` en `position:fixed` recouvrait le transcript. Remplacé par un slot in-flow (`agilo-audio-sticky.js`) + chip toolbar (plus de dalle / toggle / `is-floating`). **Même SHA** pour sticky + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
+Le sticky `@8c7da101` en `position:fixed` recouvrait le transcript, puis le slot sticky dans `#pane-transcript` ne se figeait pas (le panneau est le scroller). Remplacé par une ligne `#ag-editor-audio-row` dans `main.ed-main` + chip toolbar dans `.ed-tools` (fantôme `Relu · xx %` si 0 passage). **Même SHA** pour `agilo-audio-sticky.js` + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
 
 ### Piste iframe (historique, hors toggle)
 

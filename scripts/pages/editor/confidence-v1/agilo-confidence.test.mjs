@@ -295,6 +295,10 @@ async function run() {
     transcriptRoot: root
   });
   assert(mismatch.applied === false && mismatch.reason === 'jobId_mismatch', 'jobId mismatch ignoré');
+  const mismatchState = AC.getDebugState();
+  assert(mismatchState.reason === 'jobId_mismatch', 'getDebugState reason mismatch');
+  assert(mismatchState.available === true, 'mismatch: payload disponible mais non appliqué');
+  assert(mismatchState.chipHost === false, 'mismatch: pas de chip');
 
   let fetchCalled = false;
   const ACOff = boot({
@@ -316,7 +320,11 @@ async function run() {
   assert(typeof AC.getEditorChromeBottom !== 'function', 'getEditorChromeBottom retiré du chrome flottant');
   assert(typeof AC.ensureActiveEditorPane === 'function', 'ensureActiveEditorPane exposé');
   assert(typeof AC.buildConfidenceChipHtml === 'function', 'buildConfidenceChipHtml exposé');
-  assert(typeof AC.getAudioDockHeight === 'function', 'getAudioDockHeight exposé');
+  assert(typeof AC.getAudioDockHeight !== 'function', 'getAudioDockHeight retiré');
+  assert(typeof AC.getDebugState === 'function', 'getDebugState exposé');
+  assert(typeof AC.ensureChipHost === 'function', 'ensureChipHost exposé');
+  assert(typeof AC.ghostChipLabel === 'function', 'ghostChipLabel exposé');
+  assert(AC.ghostChipLabel('Qualité estimée : 97%') === 'Relu · 97 %', 'ghost: Relu · 97 %');
 
   const chipOn = AC.buildConfidenceChipHtml({
     visible: true,
@@ -348,7 +356,10 @@ async function run() {
     pendingCount: 0,
     qualityTitle: 'Qualité estimée : 97%'
   });
-  assert(chipZero === '', '0 passage: pas de chip');
+  assert(chipZero.includes('Relu · 97 %'), '0 passage avec données: chip fantôme Relu');
+  assert(chipZero.includes('is-ghost'), '0 passage: classe ghost');
+  assert(chipZero.includes('id="ag-confidence-chip-toggle"'), '0 passage: clic toggle surlignages');
+  assert(!chipZero.includes('ag-confidence-chip__nav'), '0 passage: pas de chevrons');
 
   const cssSrc = readFileSync(path.join(__dirname, 'agilo-confidence.css.js'), 'utf8');
   assert(!cssSrc.includes('main.ed-main > .ed-tabs'), 'CSS sans regle z-index sur ed-tabs');
@@ -358,8 +369,105 @@ async function run() {
   assert(!cssSrc.includes('ag-confidence-toggle'), 'CSS sans toggle iOS');
   assert(!cssSrc.includes('position: fixed'), 'CSS confidence sans position fixed');
   assert(cssSrc.includes('ag-confidence-chip'), 'CSS chip toolbar');
-  assert(cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin tient compte du dock audio');
-  assert(!cssSrc.includes('calc(96px + var(--ag-editor-audio-dock-height'), 'scroll-margin sans compensation bannière');
+  assert(cssSrc.includes('scroll-margin-block: 12px'), 'scroll-margin fixe 12px');
+  assert(!cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin sans dock audio');
+  assert(cssSrc.includes('margin-right: auto') || cssSrc.includes('margin: 0 auto 0 0'), 'chip host collé à gauche de .ed-tools');
+
+  const tools = {
+    className: 'ed-tools',
+    children: [],
+    firstChild: null,
+    insertBefore(child) {
+      child.parentNode = this;
+      child.parentElement = this;
+      child.isConnected = true;
+      this.children.unshift(child);
+      this.firstChild = child;
+    }
+  };
+  const chipDoc = {
+    getElementById(id) {
+      return tools.children.find((c) => c.id === id) || null;
+    },
+    querySelector(sel) {
+      if (String(sel).includes('.ed-tools')) return tools;
+      return null;
+    },
+    createElement() {
+      return {
+        id: '',
+        className: '',
+        isConnected: false,
+        parentNode: null,
+        parentElement: null,
+        innerHTML: '',
+        hidden: false,
+        setAttribute() {},
+        removeAttribute() {},
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        addEventListener() {}
+      };
+    },
+    readyState: 'complete',
+    addEventListener() {},
+    head: { appendChild() {} },
+    body: { appendChild() {} }
+  };
+  const chipWin = {
+    __agiloConfidence: false,
+    AGILOTEXT_ENABLE_CONFIDENCE: true,
+    addEventListener() {},
+    removeEventListener() {},
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+  chipWin.window = chipWin;
+  const chipSandbox = { window: chipWin, document: chipDoc };
+  vm.runInNewContext(src, chipSandbox);
+  const hostPlaced = chipSandbox.window.AgiloConfidence.ensureChipHost();
+  assert(hostPlaced.parentNode === tools, 'host créé dans .ed-tools');
+  assert(tools.firstChild === hostPlaced, 'host premier enfant de .ed-tools');
+  assert(chipSandbox.window.AgiloConfidence.ensureChipHost() === hostPlaced, 'ensureChipHost idempotent');
+  const noneDoc = {
+    getElementById() { return null; },
+    querySelector() { return null; },
+    createElement() {
+      return {
+        id: '',
+        className: '',
+        isConnected: false,
+        parentNode: null,
+        innerHTML: '',
+        hidden: false,
+        setAttribute() {},
+        removeAttribute() {},
+        remove() { this.isConnected = false; },
+        querySelector() { return null; },
+        querySelectorAll() { return []; }
+      };
+    },
+    readyState: 'complete',
+    addEventListener() {},
+    head: { appendChild() {} },
+    body: { appendChild() {} }
+  };
+  const noneWin = {
+    __agiloConfidence: false,
+    AGILOTEXT_ENABLE_CONFIDENCE: true,
+    addEventListener() {},
+    removeEventListener() {},
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+  noneWin.window = noneWin;
+  vm.runInNewContext(src, { window: noneWin, document: noneDoc });
+  const emptyChip = noneWin.AgiloConfidence.buildConfidenceChipHtml({
+    visible: true,
+    pendingCount: 0,
+    qualityTitle: 'Qualité estimée : 90%'
+  });
+  assert(emptyChip.includes('Relu · 90 %'), 'fantôme même sans host');
+  noneWin.AgiloConfidence.clear();
+  assert(noneWin.AgiloConfidence.getDebugState().chipHost === false, 'clear: pas de chip sans données');
 
   // --- Invariant multi-panneaux : toggle ne doit pas tout masquer ---
   function makeEditorDom() {
