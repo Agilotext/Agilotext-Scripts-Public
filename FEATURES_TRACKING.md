@@ -124,7 +124,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 | `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 
-Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr à coller après le SHA token 1.2, jamais `@main`.  
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@ad069ec8`, jamais `@main`.  
 v1.2 : refresh `error_invalid_token` comme l’éditeur (`getToken(..., true)` + une retry). Preview document, fiche drawer, Mes modèles tableau si > 12, pagination 24, icônes mappées sur les 8 clés library2.  
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
