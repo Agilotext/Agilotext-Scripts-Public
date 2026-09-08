@@ -120,11 +120,12 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 
 | Embed | Fichier | Statut |
 |-------|---------|--------|
-| `code-prompt-library` | `scripts/pages/library/library-main.js` + api/core/catalog + `library.css` | Staging, `library2Live: false` |
+| `code-prompt-library` | `library-main.js` + standards-meta/api/core/catalog + `library.css` | Staging, onglets + wizard, `library2Live: false` |
 | `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 
-Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@f519dd60`, jamais `@main`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@PIN_SHA`, jamais `@main`.  
+v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---
 

@@ -2,12 +2,25 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Aperçu local bibliothèque Agilotext</title>
   <link rel="stylesheet" href="../../scripts/pages/library/library.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body style="margin:0;padding:1.25rem;font-family:Poppins,system-ui,sans-serif;background:#f8f9fa">
-  <p style="font-size:0.85rem;color:#525252">Aperçu local (file:// ou serveur). Pas de Memberstack. Attendu : message de reconnexion, sauf si tu as un token localStorage.</p>
-  <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+<body style="margin:0;font-family:Poppins,system-ui,sans-serif;background:#f8f9fa;color:#020202">
+  <div style="padding:0.75rem 1.25rem;border-bottom:1px solid #343a4040;background:#fff;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+    <strong>Aperçu local</strong>
+    <a href="?mock=free">Gratuit</a>
+    <a href="?mock=pro">Pro</a>
+    <a href="?mock=business">Business</a>
+    <a href="?mock=business-dense">Business dense</a>
+    <a href="?">Session réelle</a>
+    <span style="font-size:0.8rem;color:#525252">Ajouter <code>#creer</code> pour ouvrir l’onglet création.</span>
+  </div>
+  <div style="padding:1.25rem">
+    <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+  </div>
   <script>
     window.__AGILO_PROMPT_LIBRARY__ = {
       library2Live: false,
@@ -17,9 +30,11 @@
   </script>
   <script src="../../scripts/pages/editor/token-resolver.js"></script>
   <script src="../../scripts/pages/editor/agilo-editor-creds.js"></script>
+  <script src="../../scripts/pages/library/library-standards-meta.js"></script>
   <script src="../../scripts/pages/library/library-api.js"></script>
   <script src="../../scripts/pages/library/library-core.js"></script>
   <script src="../../scripts/pages/library/library-catalog.js"></script>
+  <script src="./prompt-library-preview-mock.js"></script>
   <script src="../../scripts/pages/library/library-main.js"></script>
 </body>
 </html>

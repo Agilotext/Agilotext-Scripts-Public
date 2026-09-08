@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.0.0
+ * @version 1.1.0
  */
 (function (global) {
   "use strict";
@@ -10,12 +10,14 @@
   var V1 = API_ORIGIN + "/api/v1";
   var LIB2 = API_ORIGIN + "/api/v1/library2";
   var duplicateInFlight = false;
+  var PIN_MAX = 5;
 
   function cfg() {
     var c = global.__AGILO_PROMPT_LIBRARY__ || {};
     return {
       library2Live: !!c.library2Live,
       cse89Live: !!c.cse89Live,
+      atelierEnabled: !!c.atelierEnabled,
       apiBase: c.apiBase || V1,
       library2Base: c.library2Base || LIB2,
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
@@ -23,7 +25,8 @@
       ctaMailto: c.ctaMailto || "mailto:contact@agilotext.com?subject=Pack%20CSE",
       ctaAnnualUrl: c.ctaAnnualUrl || "/cse",
       ctaMonthlyUrl: c.ctaMonthlyUrl || "/cse",
-      edition: c.edition || ""
+      edition: c.edition || "",
+      pricingUrl: c.pricingUrl || "/tarifs"
     };
   }
 
@@ -64,6 +67,26 @@
     return API_ORIGIN + "/" + u;
   }
 
+  function humanize(res) {
+    if (!res) return "Erreur.";
+    if (res.httpStatus === 503 || res.reload) {
+      return res.message || "Service occupé. Recharge la page avant de réessayer.";
+    }
+    var code = String(res.code || "").toLowerCase();
+    var msg = String(res.message || "");
+    var low = msg.toLowerCase();
+    if (code === "error_pin_limit" || (low.indexOf("pin") !== -1 && low.indexOf("limit") !== -1)) {
+      return "5 épingles maximum. Désépingle un modèle d’abord.";
+    }
+    if (low.indexOf("already") !== -1 || low.indexOf("existe déjà") !== -1 || low.indexOf("duplicate name") !== -1) {
+      return "Ce nom existe déjà. Essaie un autre nom.";
+    }
+    if (low.indexOf("quota") !== -1 || (low.indexOf("limit") !== -1 && low.indexOf("model") !== -1)) {
+      return "Limite de modèles atteinte. Supprime un ancien modèle ou contacte le support.";
+    }
+    return msg || "Erreur.";
+  }
+
   function parsePayload(data, httpStatus) {
     if (httpStatus === 503) {
       return { ok: false, retry: false, reload: true, code: "SERVICE_UNAVAILABLE", message: "Service occupé. Recharge la page avant de réessayer." };
@@ -74,19 +97,23 @@
     var status = String(data.status || "").toUpperCase();
     if (status === "OK" || status === "SUCCESS" || status === "") {
       if (httpStatus && httpStatus >= 400) {
-        return { ok: false, retry: false, code: String(httpStatus), message: data.errorMessage || data.message || "Erreur." };
+        var bad = { ok: false, retry: false, code: String(httpStatus), message: data.errorMessage || data.message || "Erreur." };
+        bad.message = humanize(bad);
+        return bad;
       }
       return { ok: true, data: data };
     }
     if (status === "ERROR" || status === "KO") {
-      var code = String(data.code || data.errorCode || "");
-      return {
+      var errCode = String(data.code || data.errorCode || "");
+      var parsed = {
         ok: false,
         retry: false,
-        reload: code === "REVISION_CONFLICT" || httpStatus === 503,
-        code: code,
+        reload: errCode === "REVISION_CONFLICT" || httpStatus === 503,
+        code: errCode,
         message: data.lockReasonMessage || data.errorMessage || data.message || "Erreur."
       };
+      parsed.message = humanize(parsed);
+      return parsed;
     }
     return { ok: true, data: data };
   }
@@ -116,6 +143,7 @@
         try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
         var parsed = parsePayload(data, res.status);
         parsed.httpStatus = res.status;
+        if (!parsed.ok) parsed.message = humanize(parsed);
         return parsed;
       });
     });
@@ -133,6 +161,7 @@
         try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
         var parsed = parsePayload(data, res.status);
         parsed.httpStatus = res.status;
+        if (!parsed.ok) parsed.message = humanize(parsed);
         return parsed;
       });
     });
@@ -141,6 +170,7 @@
   function listFrom(data) {
     if (!data) return [];
     if (Array.isArray(data.promptModeInfoDTOList)) return data.promptModeInfoDTOList;
+    if (Array.isArray(data.promptModelStandardInfoList)) return data.promptModelStandardInfoList;
     if (Array.isArray(data.models)) return data.models;
     if (Array.isArray(data.items)) return data.items;
     return [];
@@ -162,6 +192,13 @@
     return m.lockReasonCode === "SUBSCRIPTION_ACCESS_REQUIRED";
   }
 
+  function ts(v) {
+    if (v == null || v === "") return 0;
+    if (typeof v === "number") return v;
+    var n = Date.parse(v);
+    return isFinite(n) ? n : 0;
+  }
+
   function normalizeCard(raw, defaultId) {
     var id = modelId(raw);
     var typeField = String(raw.promptModelType || "").toUpperCase();
@@ -175,18 +212,24 @@
     var canUse = raw.canUse;
     if (canUse == null) canUse = isGenerationSafeId(id);
     var canDuplicate = raw.canDuplicate;
-    if (canDuplicate == null) canDuplicate = type === "STANDARD";
-    var canPin = !!raw.canPin;
+    if (canDuplicate == null) canDuplicate = type === "USER";
+    var canPin = raw.canPin;
+    if (canPin == null) canPin = true;
     var canEdit = !!raw.canEdit;
+    var canDelete = !!raw.canDelete;
+    var canSetDefault = raw.canSetDefault;
+    if (canSetDefault == null) canSetDefault = !!canUse && isGenerationSafeId(id);
+    var canManageVersions = !!raw.canManageVersions;
     var requiresCopy = raw.requiresUserCopy;
     if (requiresCopy == null) requiresCopy = id < -1;
     var visible = raw.visible;
     if (visible === false) return null;
     var name = raw.cardTitle || raw.promptModelName || ("Modèle " + id);
-    return {
+    var locked = !!(lockCode || lockMsg) && !canUse;
+    var card = {
       promptModelId: id,
       promptId: raw.promptId != null ? Number(raw.promptId) : id,
-      promptModelName: name,
+      promptModelName: raw.promptModelName || name,
       cardTitle: name,
       publicDescription: raw.publicDescription || raw.description || "",
       publicExample: raw.publicExample || "",
@@ -195,23 +238,37 @@
       iconUrl: absIconUrl(raw.iconUrl),
       iconLabel: raw.iconLabel || "",
       iconKey: raw.iconKey || "",
+      categoryKey: raw.categoryKey || "",
       hasHtml: !!raw.hasHtml,
       pinned: !!raw.pinned,
       isDefault: defaultId != null && Number(defaultId) === id,
       canUse: !!canUse,
       canDuplicate: !!canDuplicate,
-      canPin: canPin,
+      canCopyOfficial: type === "STANDARD" && !locked,
+      canPin: !!canPin,
       canEdit: canEdit,
+      canDelete: canDelete,
+      canSetDefault: !!canSetDefault,
+      canManageVersions: canManageVersions,
       requiresUserCopy: !!requiresCopy,
       lockReasonCode: lockCode,
       lockReasonMessage: lockMsg,
       lockedReason: lockMsg,
       allowedSubscriptionTypes: typesList(raw),
       packCse: isPackCseCard(raw),
-      displayOrder: Number(raw.displayOrder || 0),
+      displayOrder: Number(raw.displayOrder || raw.sortOrder || 0),
+      sortOrder: Number(raw.sortOrder || raw.displayOrder || 0),
       featured: !!raw.featured,
+      dtCreation: ts(raw.dtCreation),
+      dtUpdate: ts(raw.dtUpdate || raw.dtCreation),
       alreadyCopied: canDuplicate === false && type === "STANDARD" && !lockCode
     };
+    if (global.AgiloLibraryStandards && global.AgiloLibraryStandards.applyTo) {
+      global.AgiloLibraryStandards.applyTo(card);
+    }
+    if (!card.iconKey) card.iconKey = type === "USER" ? "custom" : "document";
+    if (!card.categoryKey) card.categoryKey = type === "USER" ? "custom" : "general";
+    return card;
   }
 
   function inferEdition() {
@@ -225,6 +282,22 @@
     if (path.indexOf("/premium") !== -1 || path.indexOf("/app/pro/") !== -1) return "pro";
     if (path.indexOf("/free") !== -1) return "free";
     try { return localStorage.getItem("agilo:edition") || "ent"; } catch (_) { return "ent"; }
+  }
+
+  function canCreate(creds) {
+    var ed = String((creds && creds.edition) || inferEdition() || "").toLowerCase();
+    return ed !== "free" && ed !== "gratuit";
+  }
+
+  function appPath(kind) {
+    var path = (global.location && global.location.pathname || "").toLowerCase();
+    var root = "/app/business";
+    if (path.indexOf("/premium") !== -1) root = "/app/premium";
+    else if (path.indexOf("/free") !== -1) root = "/app/free";
+    else if (path.indexOf("/business") !== -1) root = "/app/business";
+    if (kind === "dashboard") return root + "/dashboard";
+    if (kind === "profile") return root + "/profile?tab=prompts";
+    return root;
   }
 
   function waitForCreds(timeoutMs) {
@@ -283,14 +356,18 @@
     });
   }
 
-  function base(creds) {
+  function base() {
     var c = cfg();
     return c.library2Live ? c.library2Base : c.apiBase;
   }
 
+  function mutationUrl(op) {
+    return base() + "/" + op;
+  }
+
   function listUrl(creds, op) {
     var c = cfg();
-    var root = base(creds);
+    var root = base();
     var q = "username=" + encodeURIComponent(creds.email) +
       "&token=" + encodeURIComponent(creds.token) +
       "&edition=" + encodeURIComponent(creds.edition);
@@ -326,10 +403,13 @@
         map[card.promptModelId] = card;
       });
       var models = Object.keys(map).map(function (k) { return map[k]; });
+      var pinCount = models.filter(function (m) { return m.pinned; }).length;
       return {
         models: models,
         defaultPromptModelId: defaultId,
-        library2Live: c.library2Live
+        library2Live: c.library2Live,
+        pinCount: pinCount,
+        pinMax: PIN_MAX
       };
     });
   }
@@ -366,22 +446,18 @@
     if (duplicateInFlight) {
       return Promise.resolve({ ok: false, retry: false, message: "Copie déjà en cours." });
     }
-    var c = cfg();
-    if (!c.library2Live) {
-      return Promise.resolve({ ok: false, retry: false, message: "La copie catalogue arrive avec la nouvelle API. En attendant, utilise tes modèles existants." });
-    }
     duplicateInFlight = true;
-    return postJson(c.library2Base + "/duplicatePromptModel", {
+    return postJson(mutationUrl("duplicatePromptModel"), {
       username: creds.email,
       token: creds.token,
       edition: creds.edition,
       sourcePromptId: sourcePromptId,
-      promptModelName: name
+      promptName: name
     }).then(function (res) {
       duplicateInFlight = false;
       if (res.httpStatus === 503 || res.reload) res.retry = false;
       return res;
-    }).catch(function (err) {
+    }).catch(function () {
       duplicateInFlight = false;
       return { ok: false, retry: false, reload: true, message: "Réseau interrompu. Recharge avant de réessayer." };
     });
@@ -389,11 +465,7 @@
 
   function setDefault(creds, promptId) {
     assertGenerationId(promptId);
-    var c = cfg();
-    var url = c.library2Live
-      ? c.library2Base + "/setPromptModelUserDefault"
-      : c.apiBase + "/setPromptModelUserDefault";
-    return postJson(url, {
+    return postJson(mutationUrl("setPromptModelUserDefault"), {
       username: creds.email,
       token: creds.token,
       edition: creds.edition,
@@ -402,17 +474,110 @@
   }
 
   function setPinned(creds, promptId, pinned) {
-    var c = cfg();
-    if (!c.library2Live) {
-      return Promise.resolve({ ok: false, message: "Épingles indisponibles tant que library2 n’est pas en ligne." });
-    }
-    return postJson(c.library2Base + "/setPromptModelPinned", {
+    return postJson(mutationUrl("setPromptModelPinned"), {
       username: creds.email,
       token: creds.token,
       edition: creds.edition,
       promptId: promptId,
       pinned: pinned ? "true" : "false"
     });
+  }
+
+  function rename(creds, promptId, promptName) {
+    return postJson(mutationUrl("renamePromptModel"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptId: promptId,
+      promptName: promptName
+    });
+  }
+
+  function deleteModel(creds, promptId) {
+    return postJson(mutationUrl("deletePromptModel"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptId: promptId
+    });
+  }
+
+  function listVersions(creds, promptId) {
+    return postJson(mutationUrl("listPromptModelVersions"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptId: promptId
+    }).then(function (res) {
+      if (!res.ok) return res;
+      var d = res.data || {};
+      var versions = d.versions || d.promptModelVersionList || [];
+      res.versions = versions;
+      res.maxVersions = d.maxVersions || 3;
+      return res;
+    });
+  }
+
+  function restoreVersion(creds, promptId, versionId) {
+    return postJson(mutationUrl("restorePromptModelVersion"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptId: promptId,
+      versionId: versionId
+    });
+  }
+
+  function createFromWizard(creds, draft) {
+    return postJson(mutationUrl("createPromptModelUser"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptName: draft.name,
+      promptObjective: draft.objective,
+      promptSpecificInfo: draft.specificInfo,
+      promptStructure: draft.structure
+    });
+  }
+
+  function getStatus(creds, promptId) {
+    return postJson(mutationUrl("getPromptModelUserStatus"), {
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      promptId: promptId
+    }).then(function (res) {
+      if (!res.ok) return res;
+      var d = res.data || {};
+      res.promptModelStatus = String(d.promptModelStatus || d.status || "").toUpperCase();
+      return res;
+    });
+  }
+
+  function waitPromptReady(creds, promptId, opts) {
+    opts = opts || {};
+    var maxMs = opts.maxMs || 240000;
+    var pollMs = opts.pollMs || 2000;
+    var start = Date.now();
+    function tick() {
+      return getStatus(creds, promptId).then(function (res) {
+        var status = res.promptModelStatus || "";
+        if (typeof opts.onTick === "function") {
+          opts.onTick({ elapsedMs: Date.now() - start, status: status, maxMs: maxMs });
+        }
+        if (status === "READY" || status === "ACTIVE") return { ok: true, status: status, data: res.data };
+        if (status === "ON_ERROR" || status === "ERROR" || status === "KO") {
+          return { ok: false, status: status, message: "La création a échoué. Réessaie ou contacte le support." };
+        }
+        if (Date.now() - start >= maxMs) {
+          return { ok: false, status: status || "TIMEOUT", message: "Création encore en cours. Recharge la page dans un instant." };
+        }
+        return new Promise(function (resolve) {
+          setTimeout(function () { resolve(tick()); }, pollMs);
+        });
+      });
+    }
+    return tick();
   }
 
   function ctaForLocked(packCse) {
@@ -437,7 +602,8 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.0.0",
+    VERSION: "1.1.0",
+    PIN_MAX: PIN_MAX,
     cfg: cfg,
     waitForCreds: waitForCreds,
     fetchLists: fetchLists,
@@ -445,10 +611,21 @@
     duplicate: duplicate,
     setDefault: setDefault,
     setPinned: setPinned,
+    rename: rename,
+    deleteModel: deleteModel,
+    listVersions: listVersions,
+    restoreVersion: restoreVersion,
+    createFromWizard: createFromWizard,
+    getStatus: getStatus,
+    waitPromptReady: waitPromptReady,
     modelId: modelId,
     isGenerationSafeId: isGenerationSafeId,
     assertGenerationId: assertGenerationId,
     ctaForLocked: ctaForLocked,
-    absIconUrl: absIconUrl
+    absIconUrl: absIconUrl,
+    canCreate: canCreate,
+    appPath: appPath,
+    inferEdition: inferEdition,
+    humanize: humanize
   };
 })(typeof window !== "undefined" ? window : globalThis);

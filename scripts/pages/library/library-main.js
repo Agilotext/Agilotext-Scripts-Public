@@ -1,6 +1,6 @@
 /**
  * Page bibliothèque Webflow. Charger après token-resolver + agilo-editor-creds.
- * @version 1.0.0
+ * @version 1.1.0
  */
 (function (global) {
   "use strict";
@@ -13,17 +13,35 @@
       "</span></div></div>";
   }
 
+  function skeletonHtml() {
+    var C = global.AgiloLibraryCore;
+    var cards = C.skeletonCard() + C.skeletonCard() + C.skeletonCard() +
+      C.skeletonCard() + C.skeletonCard() + C.skeletonCard();
+    return '<div class="agilo-lib-head"><div><h1>Modèles de documents</h1>' +
+      "<p>Chargement de tes modèles…</p></div></div>" +
+      '<div class="agilo-lib-tabs" aria-hidden="true">' +
+      '<span class="agilo-lib-tab is-active">Modèles Agilotext</span>' +
+      '<span class="agilo-lib-tab">Mes modèles</span>' +
+      '<span class="agilo-lib-tab">Épinglés</span>' +
+      '<span class="agilo-lib-tab">Créer un modèle</span></div>' +
+      '<div class="agilo-lib-grid">' + cards + "</div>";
+  }
+
   function boot() {
     var cfg = global.AgiloLibraryApi.cfg();
     var host = document.querySelector(cfg.mountSelector);
     if (!host) return;
     host.classList.add("agilo-lib");
-    host.innerHTML =
-      '<div class="agilo-lib-grid">' +
-      global.AgiloLibraryCore.skeletonCard() +
-      global.AgiloLibraryCore.skeletonCard() +
-      global.AgiloLibraryCore.skeletonCard() +
-      "</div>";
+    host.innerHTML = skeletonHtml();
+
+    var mockKey = "";
+    try {
+      mockKey = new URLSearchParams(global.location.search).get("mock") || "";
+    } catch (_) { mockKey = ""; }
+    if (mockKey && global.AgiloLibraryPreviewMock && typeof global.AgiloLibraryPreviewMock.mount === "function") {
+      global.AgiloLibraryPreviewMock.mount(host, mockKey);
+      return;
+    }
 
     global.AgiloLibraryApi.waitForCreds().then(function (creds) {
       return Promise.all([

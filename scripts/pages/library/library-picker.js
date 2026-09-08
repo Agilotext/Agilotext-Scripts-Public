@@ -36,7 +36,7 @@
       return;
     }
     btn.innerHTML =
-      '<span class="agilo-lib-picker__ico" aria-hidden="true">' + C.iconHtml(model) + "</span>" +
+      '<span class="agilo-lib-picker__ico" aria-hidden="true">' + C.iconHtml(model, 16) + "</span>" +
       "<span>" + C.escapeHtml(model.cardTitle) +
       (model.isDefault ? " (défaut)" : "") + "</span>";
   }
@@ -73,7 +73,7 @@
         var active = Number(m.promptModelId) === Number(selectedId);
         return '<button type="button" class="agilo-lib-picker__opt' + (active ? " is-active" : "") +
           '" role="option" data-id="' + m.promptModelId + '" aria-selected="' + active + '">' +
-          '<span class="agilo-lib-picker__ico" aria-hidden="true">' + C.iconHtml(m) + "</span>" +
+          '<span class="agilo-lib-picker__ico" aria-hidden="true">' + C.iconHtml(m, 16) + "</span>" +
           "<span>" + C.escapeHtml(m.cardTitle) + (m.isDefault ? " (défaut)" : "") + "</span></button>";
       }).join("");
     }

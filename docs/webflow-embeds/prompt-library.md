@@ -11,13 +11,16 @@ Deux flags, jamais un seul :
 | `library2Live` | Appeler `/api/v1/library2/` | `false` |
 | `cse89Live` | CTA achat 890 € / 89 € | `false` (`/cse` pas live) |
 
-En `library2Live: false` : listes historiques v1, layout cartes, **pas** de fausses cartes pack CSE.  
+En `library2Live: false` : listes v1, pin / duplicate / versions / create / rename / delete sur `/api/v1`. **Pas** de fausses cartes pack CSE.  
 En `cse89Live: false` : cadenas (quand library2 les enverra) → mailto `contact@agilotext.com`, pas `CSERENTREE26`.
+
+Page : onglets Modèles Agilotext (défaut, à la une + chips) / Mes modèles (grille ou tableau) / Épinglés (n/5) / Créer un modèle (wizard 4 questions).
 
 ## Fichiers
 
 ```
 scripts/pages/library/library.css
+scripts/pages/library/library-standards-meta.js
 scripts/pages/library/library-api.js
 scripts/pages/library/library-core.js
 scripts/pages/library/library-catalog.js
@@ -42,10 +45,10 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin jsDelivr : commit `f519dd60` (library + `agilo-editor-creds.js`). Un commit docs ultérieur peut garder ce hash.
+Pin jsDelivr : commit `PIN_SHA` (library + creds). Remplacer `PIN_SHA` après le commit de refonte.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library.css?v=f519dd60">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library.css?v=PIN_SHA">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 
@@ -53,6 +56,7 @@ Pin jsDelivr : commit `f519dd60` (library + `agilo-editor-creds.js`). Un commit 
   window.__AGILO_PROMPT_LIBRARY__ = {
     library2Live: false,
     cse89Live: false,
+    atelierEnabled: false,
     apiBase: "https://api.agilotext.com/api/v1",
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
@@ -61,13 +65,16 @@ Pin jsDelivr : commit `f519dd60` (library + `agilo-editor-creds.js`). Un commit 
     ctaMonthlyUrl: "/cse"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/editor/token-resolver.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/editor/agilo-editor-creds.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-api.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-core.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-catalog.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-main.js?v=f519dd60"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/token-resolver.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/agilo-editor-creds.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-standards-meta.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-api.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-core.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-catalog.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-main.js?v=PIN_SHA"></script>
 ```
+
+`atelierEnabled: true` seulement si `agilo-prompt-atelier.css/js` 1.10 est aussi chargé (bouton Modifier ouvre l’atelier). Sinon Modifier envoie vers `/app/{palier}/profile?tab=prompts`.
 
 L’édition (`free` / `pro` / `ent`) est déduite du chemin `/app/free|premium|business/`. Pas trois JS.
 
@@ -113,7 +120,7 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
 2. Embed (même SHA), **sans** `library-main.js` :
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library.css?v=f519dd60">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library.css?v=PIN_SHA">
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
     library2Live: false,
@@ -121,11 +128,12 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/editor/token-resolver.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/editor/agilo-editor-creds.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-api.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-core.js?v=f519dd60"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-picker.js?v=f519dd60"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/token-resolver.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/agilo-editor-creds.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-standards-meta.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-api.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-core.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-picker.js?v=PIN_SHA"></script>
 ```
 
 3. **Désactiver** l’embed inline `code-model-default-*` (populateDefaultTemplateSelect) pour éviter un double chargement. Le picker fait le POST `setPromptModelUserDefault`.
@@ -144,15 +152,18 @@ Ticket Java parallèle (hors ce repo) : `DeriveEditionFromMemberstackMember` doi
 
 ## Recette (Bauer + un Free test, pas Astrid)
 
-| Compte | `library2Live` false | Après library2 + clone cse |
-|--------|----------------------|----------------------------|
-| Free | Cartes historiques | Cadenas cse, CTA mailto si `cse89Live` false |
-| Pro | Idem | Idem |
-| Business vanilla | Idem | Cadenas cse |
-| CSE 89 (après Java) | Atterrit Business | Copie → ID positif → upload |
-| Siège | Ce que le serveur dit | Pas de grant Memberstack DOM |
+Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=business`.
 
-Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger.
+| Compte | Attendu |
+|--------|---------|
+| Free | Onglet Agilotext en premier, 3 cartes à la une, Créer bloqué (message plan), pas d’erreur console |
+| Pro | Wizard + duplicate + tableau, Modifier → `/app/premium/profile?tab=prompts` si atelier absent |
+| Business (Bauer) | Agilotext d’abord, chips, recherche, tableau triable, 6e épingle → plafond, duplicate d’un standard → Mes modèles, wizard READY, suppression du défaut → modèle Agilotext |
+| Mobile 375 px | Onglets scrollables, cartes 1 colonne, tableau replié en cartes |
+
+Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre le wizard.
+
+Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 89 (après Java) atterrit Business.
 
 ## Rollback
 
@@ -161,7 +172,7 @@ Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger.
 3. Dépublier les 3 pages si besoin
 4. Picker : remettre l’inline `code-model-default-*`
 
-Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f519dd60/scripts/pages/library/library-main.js`
+Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-main.js`
 
 ## Vérif CDN
 
