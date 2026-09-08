@@ -11,11 +11,10 @@ Donc V1 (mini-barre si le wrap n’intersecte plus le viewport) a un vrai job. P
 
 ## Embed (après le lecteur V3.4)
 
-Ne coller **que** après un pin SHA réel (jamais un placeholder).
+**Garder** la ligne `Code-lecteur-audio-V3.4.js` telle quelle. **Ajouter** seulement, à la fin de l’embed `code-lecteur-audio` :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN/scripts/pages/editor/Code-lecteur-audio-V3.4.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN/scripts/pages/editor/agilo-audio-sticky.js?v=audio-sticky-1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8c7da101/scripts/pages/editor/agilo-audio-sticky.js?v=audio-sticky-1"></script>
 ```
 
 Le HTML `wrapper-audio-api` / `#agilo-audio-wrap` **ne change pas**.
