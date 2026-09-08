@@ -12,6 +12,8 @@ Correctif août 2026 (`1.09.5`) : suppression du `z-index: 40` sur la chrome éd
 
 Correctif août 2026 (`1.09.6`) : restauration UI « Passage précédent » (feature `f3bbc9e` jamais mergée dans `1.09` ; disparue quand l'embed a quitté ce hash). Port chirurgical sans reprendre le floating `top:10px` / `z-index:9999` de f3.
 
+Rangée audio + chip relire (staging) : voir [`editor-audio-sticky.md`](editor-audio-sticky.md). Plus de panneau `is-floating`. Coller sticky + confidence **même SHA**, pas `@8c7da101`.
+
 ## Fichiers modifiés
 
 | Fichier | Bugs | Version |

@@ -1,5 +1,5 @@
 /**
- * Tests unitaires — mini-barre audio flottante
+ * Tests unitaires — rangée audio in-flow
  * Exécution : node scripts/pages/editor/agilo-audio-sticky.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -23,67 +23,86 @@ sandbox.global = sandbox;
 vm.runInNewContext(src, sandbox);
 
 const AS = sandbox.window.AgiloAudioSticky;
-assert(AS && typeof AS.computeAudioStickyBox === 'function', 'computeAudioStickyBox exposé');
-assert(typeof AS.getEditorChromeBottom === 'function', 'getEditorChromeBottom exposé');
-assert(AS.DOCK_GAP === 8, 'DOCK_GAP = 8');
+assert(AS && typeof AS.computeAudioSlotState === 'function', 'computeAudioSlotState exposé');
+assert(typeof AS.getEditorChromeTop === 'function', 'getEditorChromeTop exposé');
+assert(typeof AS.applyIoHysteresis === 'function', 'applyIoHysteresis exposé');
+assert(AS.SLOT_ID === 'ag-editor-audio-slot', 'SLOT_ID');
+assert(AS.IO_SHOW_RATIO === 0.12, 'hystérésis ratio');
 
-const chromeBottom = 120;
-const visible = AS.computeAudioStickyBox(
-  { top: 40, bottom: 200 },
-  { left: 320, width: 960, bottom: 800 },
-  chromeBottom,
-  1440,
-  { wrapIntersecting: true, transcriptTabActive: true, audioUnavailable: false }
-);
-assert(visible.shouldShow === false, 'pas de mini-barre si le player intersecte le viewport');
+const visible = AS.computeAudioSlotState({
+  wrapIntersecting: true,
+  transcriptTabActive: true,
+  audioUnavailable: false,
+  chromeTop: 120
+});
+assert(visible.shouldShow === false, 'slot fermé si le player intersecte le viewport');
 
-const hidden = AS.computeAudioStickyBox(
-  { top: -180, bottom: -20 },
-  { left: 320, width: 960, bottom: 800 },
-  chromeBottom,
-  1440,
-  { wrapIntersecting: false, transcriptTabActive: true, audioUnavailable: false }
-);
-assert(hidden.shouldShow === true, 'mini-barre si player hors ecran et onglet transcription');
-assert(hidden.top === chromeBottom + 8, 'top mini-barre = chrome + 8');
-assert(hidden.left === 320, 'left aligne sur la colonne transcript');
-assert(hidden.width === 960, 'largeur alignee sur la colonne');
+const hidden = AS.computeAudioSlotState({
+  wrapIntersecting: false,
+  transcriptTabActive: true,
+  audioUnavailable: false,
+  chromeTop: 120
+});
+assert(hidden.shouldShow === true, 'slot ouvert si player hors ecran et onglet transcription');
+assert(hidden.chromeTop === 120, 'chromeTop onglets transmis');
 
-const otherTab = AS.computeAudioStickyBox(
-  { top: -180, bottom: -20 },
-  { left: 320, width: 960, bottom: 800 },
-  chromeBottom,
-  1440,
-  { wrapIntersecting: false, transcriptTabActive: false, audioUnavailable: false }
-);
-assert(otherTab.shouldShow === false, 'pas de mini-barre hors onglet transcription');
+const otherTab = AS.computeAudioSlotState({
+  wrapIntersecting: false,
+  transcriptTabActive: false,
+  audioUnavailable: false,
+  chromeTop: 120
+});
+assert(otherTab.shouldShow === false, 'slot fermé hors onglet transcription');
 
-const expired = AS.computeAudioStickyBox(
-  { top: -180, bottom: -20 },
-  { left: 320, width: 960, bottom: 800 },
-  chromeBottom,
-  1440,
-  { wrapIntersecting: false, transcriptTabActive: true, audioUnavailable: true }
-);
-assert(expired.shouldShow === false, 'pas de mini-barre si audio indisponible');
+const expired = AS.computeAudioSlotState({
+  wrapIntersecting: false,
+  transcriptTabActive: true,
+  audioUnavailable: true,
+  chromeTop: 120
+});
+assert(expired.shouldShow === false, 'slot fermé si audio indisponible');
 
-const noChrome = AS.computeAudioStickyBox(
-  { top: -180, bottom: -20 },
-  { left: 320, width: 960, bottom: 800 },
-  0,
-  1440,
-  { wrapIntersecting: false, transcriptTabActive: true, audioUnavailable: false }
-);
-assert(noChrome.shouldShow === false, 'pas de mini-barre si chromeBottom vaut 0');
+const noChrome = AS.computeAudioSlotState({
+  wrapIntersecting: false,
+  transcriptTabActive: true,
+  audioUnavailable: false,
+  chromeTop: 0
+});
+assert(noChrome.shouldShow === true, 'slot possible même si onglets hors viewport');
 
-const mobile = AS.computeAudioStickyBox(
-  { top: -80, bottom: -10 },
-  { left: 8, width: 360, bottom: 640 },
-  96,
-  390,
-  { wrapIntersecting: false, transcriptTabActive: true, audioUnavailable: false }
-);
-assert(mobile.shouldShow === true, 'mini-barre mobile possible');
-assert(mobile.width <= 390 - 24, 'largeur bornee au viewport');
+assert(src.includes("position:sticky"), 'CSS sticky in-flow');
+assert(!/\.agilo-audio-sticky\{[^}]*position:fixed/.test(src.replace(/\n/g, '')), 'rangée sans position:fixed');
+assert(!src.includes('z-index:26'), 'pas de z-index overlay 26');
+assert(src.includes("setAttribute('inert'"), 'inert sur le wrap original quand proxy actif');
+assert(src.includes('height:0'), 'slot hauteur 0 par défaut');
+assert(src.includes('is-open'), 'slot hauteur auto via is-open');
+assert(src.includes('agilo-audio-sticky__ico'), 'icônes mobile 15s/30s');
+assert(src.includes('prefers-reduced-motion'), 'reduced-motion sans animation de hauteur');
+
+const tabsOnly = AS.getEditorChromeTop({
+  querySelector(sel) {
+    if (sel.includes('ed-tabs')) {
+      return {
+        getBoundingClientRect() {
+          return { bottom: 88, height: 44 };
+        }
+      };
+    }
+    if (sel.includes('ed-toolbar')) {
+      return {
+        getBoundingClientRect() {
+          return { bottom: 140, height: 52 };
+        }
+      };
+    }
+    return null;
+  }
+});
+assert(tabsOnly === 88, 'getEditorChromeTop mesure les onglets, pas la toolbar');
+
+assert(AS.applyIoHysteresis(true, { isIntersecting: false, intersectionRatio: 0 }) === false, 'IO: hors ecran → fermer hystérésis');
+assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.5 }) === true, 'IO: ratio haut → player visible');
+assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.02 }) === false, 'IO: ratio trop bas garde l état précédent');
+assert(AS.applyIoHysteresis(true, { isIntersecting: true, intersectionRatio: 0.02 }) === true, 'IO: petite intersection ne flicker pas');
 
 console.log('agilo-audio-sticky.test.mjs OK');

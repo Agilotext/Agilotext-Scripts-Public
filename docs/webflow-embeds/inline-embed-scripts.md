@@ -248,6 +248,10 @@ Embed Webflow (référence branche `@1.09`) :
 
 Le bouton UI n'était jamais sur `1.09` (seulement sur `f3bbc9e`). Port de `buildNavControlsHtml` + CSS nav. Checklist : panneau affiche précédent + suivant ; prev ×5 sans perdre les onglets.
 
+### Rangée audio in-flow + chip relire (staging, post-1.09.6)
+
+Le sticky `@8c7da101` en `position:fixed` recouvrait le transcript. Remplacé par un slot in-flow (`agilo-audio-sticky.js`) + chip toolbar (plus de dalle / toggle / `is-floating`). **Même SHA** pour sticky + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
+
 ### Piste iframe (historique, hors toggle)
 
 L’iframe summary a bien corrigé l’ancienne fuite CSS des templates CR riches (bug Chromium de barre d’onglets). Elle n’est pas appelée par « Passages à relire ». Le fallback `el.innerHTML = html` a été retiré en `1.09.2` pour éviter toute régression CR.

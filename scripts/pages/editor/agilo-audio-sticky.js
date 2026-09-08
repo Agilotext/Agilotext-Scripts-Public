@@ -1,8 +1,9 @@
 /* ================================================================
-   AGILOTEXT - Mini-barre audio flottante (éditeur)
+   AGILOTEXT - Rangée audio in-flow (éditeur)
    Page : /app/{free|pro|business}/editor
    Charge : après Code-lecteur-audio-V3.4.js
    Un seul <audio id="agilo-audio">. Pas de follow-playhead.
+   Pas d’overlay fixed : le slot pousse le transcript.
    ================================================================ */
 
 (function () {
@@ -11,68 +12,67 @@
   if (window.__agiloAudioSticky) return;
   window.__agiloAudioSticky = true;
 
-  var DOCK_GAP = 8;
   var ROOT = typeof document !== 'undefined' ? document.documentElement : null;
   var DOCK_VAR = '--ag-editor-audio-dock-height';
+  var CHROME_VAR = '--ag-editor-chrome-top';
+  var SLOT_ID = 'ag-editor-audio-slot';
+  var IO_ROOT_MARGIN = '40px 0px 0px 0px';
+  var IO_SHOW_RATIO = 0.12;
 
-  function getEditorChromeBottom(doc) {
+  function getEditorChromeTop(doc) {
     doc = doc || document;
     if (!doc || !doc.querySelector) return 0;
     var selectors = [
       'main.ed-main nav.ed-tabs',
       'main.ed-main [data-tour="ed-tabs"]',
-      'nav.ed-tabs',
-      'main.ed-main .ed-toolbar',
-      '.ed-toolbar'
+      'nav.ed-tabs'
     ];
     var bottom = 0;
     for (var i = 0; i < selectors.length; i++) {
       var el = doc.querySelector(selectors[i]);
       if (!el || typeof el.getBoundingClientRect !== 'function') continue;
       var rect = el.getBoundingClientRect();
-      if (rect && Number.isFinite(rect.bottom) && rect.height > 0) {
-        bottom = Math.max(bottom, rect.bottom);
-      }
+      if (!rect || !Number.isFinite(rect.bottom) || rect.height <= 0) continue;
+      if (rect.bottom <= 0) continue;
+      bottom = Math.max(bottom, rect.bottom);
     }
-    return bottom;
+    return Math.max(0, bottom);
   }
 
-  function computeAudioStickyBox(wrapRect, containerRect, chromeBottom, innerWidth, opts) {
+  function computeAudioSlotState(opts) {
     opts = opts || {};
-    var safeChrome = Math.max(0, Number(chromeBottom) || 0);
-    var viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
-    var cLeft = Number(containerRect && containerRect.left) || 0;
-    var cWidth = Number(containerRect && containerRect.width) || 0;
-    var cBottom = Number(containerRect && containerRect.bottom) || 0;
     var wrapIntersecting = !!opts.wrapIntersecting;
     var tabOk = opts.transcriptTabActive !== false;
     var unavailable = !!opts.audioUnavailable;
-    var shouldShow = !wrapIntersecting
-      && tabOk
-      && !unavailable
-      && safeChrome > 0
-      && cBottom > safeChrome + 40;
-    if (!shouldShow) {
-      return { shouldShow: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome };
-    }
+    var chromeTop = Math.max(0, Number(opts.chromeTop) || 0);
     return {
-      shouldShow: true,
-      left: Math.max(12, cLeft),
-      width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
-      top: safeChrome + DOCK_GAP,
-      chromeBottom: safeChrome
+      shouldShow: !wrapIntersecting && tabOk && !unavailable,
+      chromeTop: chromeTop
     };
   }
 
+  function applyIoHysteresis(prevIntersecting, entry) {
+    if (!entry) return !!prevIntersecting;
+    if (!entry.isIntersecting) return false;
+    var ratio = Number(entry.intersectionRatio);
+    if (!Number.isFinite(ratio)) ratio = entry.isIntersecting ? 1 : 0;
+    if (ratio >= IO_SHOW_RATIO) return true;
+    return !!prevIntersecting;
+  }
+
   window.AgiloAudioSticky = {
-    computeAudioStickyBox: computeAudioStickyBox,
-    getEditorChromeBottom: getEditorChromeBottom,
-    DOCK_GAP: DOCK_GAP
+    computeAudioSlotState: computeAudioSlotState,
+    getEditorChromeTop: getEditorChromeTop,
+    applyIoHysteresis: applyIoHysteresis,
+    SLOT_ID: SLOT_ID,
+    IO_ROOT_MARGIN: IO_ROOT_MARGIN,
+    IO_SHOW_RATIO: IO_SHOW_RATIO
   };
 
   if (window.AGILO_AUDIO_STICKY_SKIP_BOOT) return;
   if (typeof document === 'undefined') return;
 
+  var slot = null;
   var bar = null;
   var wrapObserved = null;
   var io = null;
@@ -80,19 +80,22 @@
   var wrapInert = false;
   var raf = 0;
   var lastDockHeight = -1;
+  var lastChromeTop = -1;
 
   function injectCss() {
     if (document.getElementById('agilo-audio-sticky-css')) return;
     var s = document.createElement('style');
     s.id = 'agilo-audio-sticky-css';
     s.textContent = [
+      '.ag-editor-audio-slot{display:block;height:0;overflow:hidden;margin:0;padding:0;',
+      'position:sticky;top:var(--ag-editor-chrome-top,0px);z-index:4;box-sizing:border-box;',
+      'max-width:100%;pointer-events:none}',
+      '.ag-editor-audio-slot.is-open{height:auto;overflow:visible;margin:0 0 8px;pointer-events:auto}',
       '.agilo-audio-sticky{display:none;align-items:center;gap:8px;flex-wrap:nowrap;',
-      'position:fixed;z-index:26;box-sizing:border-box;padding:6px 10px;',
-      'background:rgba(248,249,250,.96);border:1px solid rgba(23,74,150,.20);',
-      'border-radius:8px;box-shadow:0 10px 26px rgba(15,23,42,.16);',
-      'backdrop-filter:blur(8px);font:500 13px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial;',
-      'color:#262626;max-width:calc(100vw - 24px)}',
-      '.agilo-audio-sticky.is-visible{display:flex}',
+      'box-sizing:border-box;padding:6px 10px;width:100%;max-width:100%;',
+      'background:#fff;border:1px solid rgba(23,74,150,.18);border-radius:8px;',
+      'font:500 13px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#262626}',
+      '.ag-editor-audio-slot.is-open .agilo-audio-sticky{display:flex}',
       '.agilo-audio-sticky.is-disabled{opacity:.6;pointer-events:none}',
       '.agilo-audio-sticky__btn{flex:0 0 auto;height:2rem;min-width:2rem;padding:0 .55rem;',
       'border-radius:6px;border:1px solid rgba(52,58,64,.18);background:#fff;color:#174a96;',
@@ -100,15 +103,24 @@
       '.agilo-audio-sticky__btn:hover{background:rgba(23,74,150,.06)}',
       '.agilo-audio-sticky__btn.is-primary{background:#174a96;border-color:#174a96;color:#fff}',
       '.agilo-audio-sticky__btn:focus-visible{outline:2px solid rgba(23,74,150,.55);outline-offset:2px}',
+      '.agilo-audio-sticky__ico{display:none}',
       '.agilo-audio-sticky__track{flex:1 1 120px;position:relative;height:.42rem;min-width:72px;',
       'border-radius:999px;background:rgba(2,2,2,.10);cursor:pointer}',
       '.agilo-audio-sticky__progress{position:absolute;inset:0 auto 0 0;height:100%;width:0%;',
       'border-radius:inherit;background:#174a96;pointer-events:none}',
       '.agilo-audio-sticky__time{flex:0 0 auto;font:600 11px/1 system-ui,sans-serif;color:#525252;',
       'white-space:nowrap;min-width:5.5rem;text-align:right}',
-      '@media (max-width:40rem){.agilo-audio-sticky__btn[data-act="back"],',
-      '.agilo-audio-sticky__btn[data-act="fwd"]{min-width:2rem;padding:0 .35rem}}',
-      '@media (prefers-reduced-motion:reduce){.agilo-audio-sticky{transition:none}}'
+      '@media (max-width:40rem){',
+      '.agilo-audio-sticky{gap:6px;padding:6px 8px}',
+      '.agilo-audio-sticky__txt{display:none}',
+      '.agilo-audio-sticky__ico{display:inline}',
+      '.agilo-audio-sticky__btn[data-act="back"],.agilo-audio-sticky__btn[data-act="fwd"]{',
+      'min-width:2rem;padding:0 .35rem}',
+      '.agilo-audio-sticky__time{min-width:4.5rem;font-size:10px}',
+      '}',
+      '@media (prefers-reduced-motion:reduce){',
+      '.ag-editor-audio-slot,.agilo-audio-sticky{transition:none}',
+      '}'
     ].join('');
     document.head.appendChild(s);
   }
@@ -174,10 +186,13 @@
     return !!(wrap && wrap.classList.contains('is-locked'));
   }
 
-  function getTranscriptContainer() {
-    var pane = document.getElementById('pane-transcript')
-      || document.querySelector('#pane-transcript, .edtr-pane.is-active, main.ed-main');
-    return pane || document.getElementById('editorRoot') || document.body;
+  function setChromeTop(px) {
+    if (!ROOT || !ROOT.style) return;
+    var n = Math.max(0, Number(px) || 0);
+    if (n === lastChromeTop) return;
+    lastChromeTop = n;
+    if (n <= 0) ROOT.style.removeProperty(CHROME_VAR);
+    else ROOT.style.setProperty(CHROME_VAR, n + 'px');
   }
 
   function setDockHeight(px) {
@@ -223,7 +238,39 @@
     });
   }
 
+  function findSlotAnchor() {
+    var pane = document.getElementById('pane-transcript');
+    var toolbar = document.querySelector('main.ed-main .ed-toolbar, .ed-toolbar');
+    return { pane: pane, toolbar: toolbar };
+  }
+
+  function ensureSlot() {
+    if (slot && slot.isConnected) return slot;
+    injectCss();
+    slot = document.getElementById(SLOT_ID);
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = SLOT_ID;
+    }
+    slot.className = 'ag-editor-audio-slot';
+    slot.setAttribute('aria-hidden', 'true');
+    var anchor = findSlotAnchor();
+    if (anchor.pane) {
+      if (slot.parentNode !== anchor.pane) {
+        anchor.pane.insertBefore(slot, anchor.pane.firstChild);
+      }
+    } else if (anchor.toolbar && anchor.toolbar.parentNode) {
+      if (slot.parentNode !== anchor.toolbar.parentNode) {
+        anchor.toolbar.parentNode.insertBefore(slot, anchor.toolbar.nextSibling);
+      }
+    } else if (!slot.parentNode) {
+      document.body.appendChild(slot);
+    }
+    return slot;
+  }
+
   function ensureBar() {
+    var host = ensureSlot();
     if (bar && bar.isConnected) return bar;
     injectCss();
     bar = document.createElement('div');
@@ -232,16 +279,20 @@
     bar.setAttribute('role', 'region');
     bar.setAttribute('aria-label', 'Lecture audio');
     bar.innerHTML = [
-      '<button type="button" class="agilo-audio-sticky__btn" data-act="back" aria-label="Reculer de 15 secondes">15s</button>',
+      '<button type="button" class="agilo-audio-sticky__btn" data-act="back" aria-label="Reculer de 15 secondes">',
+      '<span class="agilo-audio-sticky__txt">15s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">‹‹</span>',
+      '</button>',
       '<button type="button" class="agilo-audio-sticky__btn is-primary" data-act="play" aria-pressed="false" aria-controls="agilo-audio">Lire</button>',
-      '<button type="button" class="agilo-audio-sticky__btn" data-act="fwd" aria-label="Avancer de 30 secondes">30s</button>',
+      '<button type="button" class="agilo-audio-sticky__btn" data-act="fwd" aria-label="Avancer de 30 secondes">',
+      '<span class="agilo-audio-sticky__txt">30s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">››</span>',
+      '</button>',
       '<button type="button" class="agilo-audio-sticky__btn" data-act="speed" aria-label="Vitesse de lecture">1x</button>',
       '<div class="agilo-audio-sticky__track" data-act="track" role="slider" aria-label="Position de lecture" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">',
       '  <div class="agilo-audio-sticky__progress"></div>',
       '</div>',
       '<span class="agilo-audio-sticky__time">0:00 / 0:00</span>'
     ].join('');
-    document.body.appendChild(bar);
+    host.appendChild(bar);
     bindBar(bar);
     return bar;
   }
@@ -309,21 +360,24 @@
     }
   }
 
-  function hideBar() {
-    if (bar) bar.classList.remove('is-visible');
+  function hideSlot() {
+    var host = ensureSlot();
+    host.classList.remove('is-open');
+    host.setAttribute('aria-hidden', 'true');
+    host.setAttribute('inert', '');
     setWrapInert(false);
     setDockHeight(0);
   }
 
-  function applyBox(box) {
-    var el = ensureBar();
-    el.style.left = box.left + 'px';
-    el.style.width = box.width + 'px';
-    el.style.top = box.top + 'px';
-    el.classList.toggle('is-disabled', isLocked(getWrap()));
-    el.classList.add('is-visible');
+  function openSlot() {
+    var host = ensureSlot();
+    ensureBar();
+    host.classList.add('is-open');
+    host.removeAttribute('aria-hidden');
+    host.removeAttribute('inert');
+    if (bar) bar.classList.toggle('is-disabled', isLocked(getWrap()));
     setWrapInert(true);
-    var h = el.getBoundingClientRect().height || 44;
+    var h = (bar && bar.getBoundingClientRect().height) || host.getBoundingClientRect().height || 44;
     setDockHeight(Math.round(h));
     syncFromAudio();
   }
@@ -331,24 +385,20 @@
   function update() {
     var wrap = getWrap();
     var audio = getAudio();
+    var chromeTop = getEditorChromeTop(document);
+    setChromeTop(chromeTop);
     if (!wrap || !audio) {
-      hideBar();
+      hideSlot();
       return;
     }
-    var container = getTranscriptContainer();
-    var box = computeAudioStickyBox(
-      wrap.getBoundingClientRect(),
-      container.getBoundingClientRect(),
-      getEditorChromeBottom(document),
-      window.innerWidth,
-      {
-        wrapIntersecting: wrapIntersecting,
-        transcriptTabActive: isTranscriptTabActive(),
-        audioUnavailable: isAudioUnavailable(wrap)
-      }
-    );
-    if (!box.shouldShow) hideBar();
-    else applyBox(box);
+    var state = computeAudioSlotState({
+      wrapIntersecting: wrapIntersecting,
+      transcriptTabActive: isTranscriptTabActive(),
+      audioUnavailable: isAudioUnavailable(wrap),
+      chromeTop: chromeTop
+    });
+    if (!state.shouldShow) hideSlot();
+    else openSlot();
   }
 
   function schedule() {
@@ -374,9 +424,9 @@
     }
     io = new IntersectionObserver(function (entries) {
       var entry = entries && entries[0];
-      wrapIntersecting = !!(entry && entry.isIntersecting);
+      wrapIntersecting = applyIoHysteresis(wrapIntersecting, entry);
       schedule();
-    }, { threshold: 0, root: null });
+    }, { threshold: [0, IO_SHOW_RATIO, 1], root: null, rootMargin: IO_ROOT_MARGIN });
     io.observe(wrap);
   }
 
@@ -391,6 +441,7 @@
 
   function start() {
     injectCss();
+    ensureSlot();
     observeWrap();
     bindAudioEvents();
     if (!getWrap() && typeof MutationObserver === 'function') {

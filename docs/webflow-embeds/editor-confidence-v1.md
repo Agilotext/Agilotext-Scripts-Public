@@ -146,7 +146,7 @@ window.AgiloConfidence = {
 | `confidence-v1/editor-main-confidence.js` | Loader test isolé |
 | `confidence-v1/Code-main-editor-IFRAME_V04-confidence.js` | V04 + hooks confidence (`__agiloEditorConfidenceVersion`) |
 | `confidence-v1/agilo-confidence.js` | Module V2.4/V3 confidence |
-| `confidence-v1/agilo-confidence.css.js` | Styles badges + panneau + highlights |
+| `confidence-v1/agilo-confidence.css.js` | Styles badges + chip toolbar + highlights |
 | `confidence-v1/DIAGNOSTIC_PASSAGES_A_RELIRE.js` | Diagnostic console recouvrement onglets |
 | `../Code-main-editor-IFRAME_V04.js` | **Prod — ne pas modifier** |
 

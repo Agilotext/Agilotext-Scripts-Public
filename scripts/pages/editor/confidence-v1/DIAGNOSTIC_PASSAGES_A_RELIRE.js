@@ -51,18 +51,23 @@
 
   const snapshot = (label) => {
     const tabsBar = document.querySelector('nav.ed-tabs, [data-tour="ed-tabs"]');
-    const panel = document.getElementById('ag-confidence-panel');
+    const chip = document.getElementById('ag-confidence-chip-host')
+      || document.getElementById('ag-confidence-chip')
+      || document.getElementById('ag-confidence-chip-show');
+    const audioSlot = document.getElementById('ag-editor-audio-slot');
     const tabsRect = tabsBar?.getBoundingClientRect?.();
-    const panelRect = panel?.getBoundingClientRect?.();
-    const cs = panel ? getComputedStyle(panel) : null;
+    const chipRect = chip?.getBoundingClientRect?.();
+    const slotRect = audioSlot?.getBoundingClientRect?.();
+    const cs = chip ? getComputedStyle(chip) : null;
+    const slotCs = audioSlot ? getComputedStyle(audioSlot) : null;
     const edBody = document.querySelector('.ed-body');
 
-    const overlapTabs = !!(tabsRect && panelRect
-      && panelRect.bottom > tabsRect.top
-      && panelRect.top < tabsRect.bottom
-      && panelRect.right > tabsRect.left
-      && panelRect.left < tabsRect.right
-      && cs?.position === 'fixed');
+    const overlapTabs = !!(tabsRect && chipRect
+      && chipRect.bottom > tabsRect.top
+      && chipRect.top < tabsRect.bottom
+      && chipRect.right > tabsRect.left
+      && chipRect.left < tabsRect.right
+      && (cs?.position === 'fixed' || slotCs?.position === 'fixed'));
 
     const panes = paneIds.map((id) => {
       const el = document.getElementById(id);
@@ -89,11 +94,15 @@
     const report = {
       label,
       version: window.__agiloEditorConfidenceVersion || null,
-      confidenceVisible: panel?.querySelector('#ag-confidence-toggle')?.getAttribute('aria-checked'),
-      floating: !!panel?.classList.contains('is-floating'),
+      confidenceVisible: (() => {
+        try { return localStorage.getItem('agilo:confidence-visible:v1'); } catch { return null; }
+      })(),
+      chipMode: chip?.classList?.contains('is-ghost') ? 'ghost' : (chip ? 'on' : null),
+      floating: false,
       panelPos: cs?.position || null,
-      panelZ: cs?.zIndex || null,
-      panelTop: panel?.style?.getPropertyValue('--ag-confidence-floating-top') || null,
+      audioSlotOpen: !!audioSlot?.classList?.contains('is-open'),
+      audioSlotPos: slotCs?.position || null,
+      audioSlotHeight: slotRect?.height ?? null,
       overlapTabs,
       edBodyScrollTop: edBody?.scrollTop ?? null,
       edBodyOverflowY: edBody ? getComputedStyle(edBody).overflowY : null,
@@ -150,7 +159,8 @@
 
   paneIds.forEach((id) => observe(document.getElementById(id), id));
   tabIds.forEach((id) => observe(document.getElementById(id), id));
-  observe(document.getElementById('ag-confidence-panel'), 'ag-confidence-panel');
+  observe(document.getElementById('ag-confidence-chip-host'), 'ag-confidence-chip-host');
+  observe(document.getElementById('ag-editor-audio-slot'), 'ag-editor-audio-slot');
 
   const edBody = document.querySelector('.ed-body');
   if (edBody) {
@@ -163,7 +173,7 @@
     observers.push({ disconnect: () => window.removeEventListener('scroll', scrollWatch, true) });
   }
 
-  const toggle = document.getElementById('ag-confidence-toggle');
+  const toggle = document.getElementById('ag-confidence-chip-host');
   const onToggleClick = () => {
     snapshot('before-toggle-tick');
     setTimeout(() => snapshot('after-toggle'), 0);

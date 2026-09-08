@@ -203,6 +203,9 @@ async function run() {
   assert(AC.panelMainLabel({ verifySegments: 1, lowSegments: 0 }) === '1 passage à relire', 'panneau: pas de zéro prioritaire inutile');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }) === 'Aucun passage signalé à relire', 'panneau: état zéro passage');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }, { verifySegments: 1, lowSegments: 0 }) === 'Tous les passages signalés sont traités', 'panneau: passages traités après revue');
+  assert(AC.chipMainLabel(1) === '1 à relire', 'chip: 1 à relire');
+  assert(AC.chipMainLabel(18) === '18 à relire', 'chip: N à relire');
+  assert(AC.chipMainLabel(0) === '', 'chip: rien si 0 passage');
   assert(AC.qualityLabel({ globalScore: 0.96 }) === 'Qualité estimée : 96%', 'panneau: qualité estimée secondaire');
 
   const nav = AC.buildNavigationOrder(map);
@@ -213,8 +216,8 @@ async function run() {
   const navHtml = AC.buildNavControlsHtml(true);
   assert(navHtml.includes('id="ag-confidence-prev"'), 'nav HTML: bouton précédent');
   assert(navHtml.includes('id="ag-confidence-next"'), 'nav HTML: bouton suivant');
-  assert(navHtml.includes('id="ag-confidence-nav-count"'), 'nav HTML: compteur Passage X / N');
-  assert(navHtml.includes('Passage précédent'), 'nav HTML: libellé Passage précédent');
+  assert(navHtml.includes('id="ag-confidence-nav-count"'), 'nav HTML: compteur X/N');
+  assert(navHtml.includes('aria-label="Passage précédent"'), 'nav HTML: libellé Passage précédent');
   assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowLeft"'), 'nav HTML: raccourci précédent');
   assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowRight"'), 'nav HTML: raccourci suivant');
   assert(navHtml.indexOf('ag-confidence-prev') < navHtml.indexOf('ag-confidence-next'), 'nav HTML: précédent avant suivant');
@@ -308,75 +311,55 @@ async function run() {
   assert(typeof AC.reload === 'function', 'reload exposé');
   assert(typeof AC.clear === 'function', 'clear exposé');
 
-  // --- Non-régression : panneau flottant sous les onglets (bug 1.09.2) ---
-  assert(typeof AC.computeConfidenceFloatingBox === 'function', 'computeConfidenceFloatingBox exposé');
-  assert(typeof AC.getEditorChromeBottom === 'function', 'getEditorChromeBottom exposé');
+  // --- Chip toolbar : plus de panneau flottant ni toggle iOS ---
+  assert(typeof AC.computeConfidenceFloatingBox !== 'function', 'computeConfidenceFloatingBox retiré');
+  assert(typeof AC.getEditorChromeBottom !== 'function', 'getEditorChromeBottom retiré du chrome flottant');
   assert(typeof AC.ensureActiveEditorPane === 'function', 'ensureActiveEditorPane exposé');
-
-  const chromeBottom = 120;
-  const floatCoveringTabs = AC.computeConfidenceFloatingBox(
-    { top: 4 },
-    { left: 320, width: 960, bottom: 800 },
-    chromeBottom,
-    1440
-  );
-  assert(floatCoveringTabs.shouldFloat === true, 'float actif quand sentinel sous chrome');
-  assert(floatCoveringTabs.top >= chromeBottom + 8, 'top flottant sous la barre d onglets');
-  assert(floatCoveringTabs.top > 10, 'top flottant ne reste pas a 10px viewport');
-
-  const noFloat = AC.computeConfidenceFloatingBox(
-    { top: 200 },
-    { left: 320, width: 960, bottom: 800 },
-    chromeBottom,
-    1440
-  );
-  assert(noFloat.shouldFloat === false, 'pas de float si sentinel encore visible sous chrome');
-
-  const mobileFloat = AC.computeConfidenceFloatingBox(
-    { top: 0 },
-    { left: 8, width: 360, bottom: 640 },
-    96,
-    390
-  );
-  assert(mobileFloat.shouldFloat === true, 'float mobile possible');
-  assert(mobileFloat.width <= 390 - 24, 'largeur flottante bornee au viewport');
-  assert(mobileFloat.top >= 96 + 8, 'top mobile sous chrome');
-
-  const noFloatZeroChrome = AC.computeConfidenceFloatingBox(
-    { top: 0 },
-    { left: 320, width: 960, bottom: 800 },
-    0,
-    1440
-  );
-  assert(noFloatZeroChrome.shouldFloat === false, 'pas de float si chromeBottom vaut 0');
-
-  const noFloatNegativeChrome = AC.computeConfidenceFloatingBox(
-    { top: 0 },
-    { left: 320, width: 960, bottom: 800 },
-    -12,
-    1440
-  );
-  assert(noFloatNegativeChrome.shouldFloat === false, 'pas de float si chromeBottom negatif');
-
+  assert(typeof AC.buildConfidenceChipHtml === 'function', 'buildConfidenceChipHtml exposé');
   assert(typeof AC.getAudioDockHeight === 'function', 'getAudioDockHeight exposé');
-  assert(floatCoveringTabs.top === chromeBottom + 8, 'top flottant = chromeBottom + 8 sans plancher 10px');
 
-  const stacked = AC.computeConfidenceFloatingBox(
-    { top: 4 },
-    { left: 320, width: 960, bottom: 800 },
-    chromeBottom,
-    1440,
-    44
-  );
-  assert(stacked.shouldFloat === true, 'float actif avec dock audio');
-  assert(stacked.top === chromeBottom + 8 + 44 + 8, 'top confidence sous mini-barre audio');
-  assert(stacked.audioDockHeight === 44, 'audioDockHeight renvoyé');
+  const chipOn = AC.buildConfidenceChipHtml({
+    visible: true,
+    pendingCount: 1,
+    qualityTitle: 'Qualité estimée : 97%',
+    helperHtml: ''
+  });
+  assert(chipOn.includes('1 à relire'), 'chip on: 1 à relire');
+  assert(chipOn.includes('id="ag-confidence-chip"'), 'chip on: un seul nœud');
+  assert(chipOn.includes('id="ag-confidence-chip-hide"'), 'chip on: clic masque');
+  assert(chipOn.includes('id="ag-confidence-prev"'), 'chip on: chevron précédent');
+  assert(chipOn.includes('Qualité estimée : 97%'), 'qualité en title seulement');
+  assert(!chipOn.includes('ag-confidence-toggle'), 'chip on: pas de switch iOS');
+  assert(!chipOn.includes('101 modifié'), 'pas de compteur modifiés dans le chrome');
+
+  const chipOff = AC.buildConfidenceChipHtml({
+    visible: false,
+    pendingCount: 3,
+    qualityTitle: 'Qualité estimée : 97%',
+    helperHtml: ''
+  });
+  assert(chipOff.includes('id="ag-confidence-chip-show"'), 'chip off: même emplacement Relire');
+  assert(chipOff.includes('Relire'), 'chip off: libellé Relire');
+  assert(!chipOff.includes('à relire'), 'chip off: pas le compteur');
+  assert(!chipOff.includes('ag-confidence-toggle'), 'chip off: pas de switch');
+
+  const chipZero = AC.buildConfidenceChipHtml({
+    visible: true,
+    pendingCount: 0,
+    qualityTitle: 'Qualité estimée : 97%'
+  });
+  assert(chipZero === '', '0 passage: pas de chip');
 
   const cssSrc = readFileSync(path.join(__dirname, 'agilo-confidence.css.js'), 'utf8');
   assert(!cssSrc.includes('main.ed-main > .ed-tabs'), 'CSS sans regle z-index sur ed-tabs');
   assert(!cssSrc.includes('main.ed-main > nav.ed-tabs'), 'CSS sans regle z-index sur nav.ed-tabs');
   assert(!cssSrc.includes('main.ed-main > .ed-toolbar'), 'CSS sans regle z-index sur ed-toolbar');
+  assert(!cssSrc.includes('is-floating'), 'CSS sans overlay is-floating');
+  assert(!cssSrc.includes('ag-confidence-toggle'), 'CSS sans toggle iOS');
+  assert(!cssSrc.includes('position: fixed'), 'CSS confidence sans position fixed');
+  assert(cssSrc.includes('ag-confidence-chip'), 'CSS chip toolbar');
   assert(cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin tient compte du dock audio');
+  assert(!cssSrc.includes('calc(96px + var(--ag-editor-audio-dock-height'), 'scroll-margin sans compensation bannière');
 
   // --- Invariant multi-panneaux : toggle ne doit pas tout masquer ---
   function makeEditorDom() {

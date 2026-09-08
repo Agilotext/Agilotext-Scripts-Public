@@ -1,33 +1,55 @@
-# Webflow — Mini-barre audio flottante (éditeur)
+# Webflow — Rangée audio in-flow + chip relire (éditeur)
 
-**Gate 0 (8 sept. 2026)** mesurée sur le dump live Business `Éditeur de transcripts _ Business.html` (job `1000040008`) et le screenshot client :
+**Staging only.** Ne pas coller sur www tant que la recette ci-dessous n’est pas OK.
 
-- `#agilo-audio-wrap` est dans le flux de `.dashboard-content`, **au-dessus** des onglets et du texte.
-- `.ed-body` / `.ed-main` restent en `overflow: hidden` (filet 1.09.3) : ce n’est pas le scroller.
-- Le document / `.dashboard-right` scrolle. En bas d’un job long, le player quitte le viewport. La barre « passages à relire » flotte déjà.
-- Même coquille page Free / Pro / Business (`edition` change, pas le layout).
+## Comportement
 
-Donc V1 (mini-barre si le wrap n’intersecte plus le viewport) a un vrai job. Pas de follow-playhead.
+- `#agilo-audio-wrap` (lecteur Netflix) reste dans le HTML Webflow, inchangé.
+- Quand il quitte le viewport (onglet Transcription), un slot `#ag-editor-audio-slot` **dans le flux** de `#pane-transcript` s’ouvre (hauteur auto) et **pousse** le texte. Pas de `position:fixed`.
+- Sticky seulement pour rester sous `nav.ed-tabs` (`--ag-editor-chrome-top`). Toolbar et slot ne sont pas mesurés dans ce `top`.
+- Chip « à relire » dans `.ed-toolbar`, à gauche de Rechercher. Plus de dalle grise, plus de switch iOS, plus de panneau `is-floating`.
 
-## Embed (après le lecteur V3.4)
+Le sticky V1 `@8c7da101` (`position:fixed`, z-index 26) est **obsolète**. Le remplacer, ne pas empiler une seconde ligne.
 
-**Garder** la ligne `Code-lecteur-audio-V3.4.js` telle quelle. **Ajouter** seulement, à la fin de l’embed `code-lecteur-audio` :
+## Embed audio (fin de `.code-lecteur-audio`)
+
+Garder `Code-lecteur-audio-V3.4.js`. **Une** ligne sticky, même SHA que confidence :
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8c7da101/scripts/pages/editor/agilo-audio-sticky.js?v=audio-sticky-1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/agilo-audio-sticky.js?v=audio-slot-2"></script>
 ```
 
-Le HTML `wrapper-audio-api` / `#agilo-audio-wrap` **ne change pas**.
+`PIN_SHA` = commit Git qui contient **à la fois** `agilo-audio-sticky.js` et `confidence-v1/agilo-confidence.js` + `.css.js`. Après `git push`.
 
-Staging `agilotext-test` d’abord, puis www. Onglet Transcription seulement. Stack sous les onglets, au-dessus de « passages à relire » via `--ag-editor-audio-dock-height`.
+## Embed confidence (même SHA, staging)
 
-## Recette
+Remplacer les pins JS+CSS confidence (pas le loader iframe sauf besoin) :
 
-- Job ~45 min : scroller jusqu’à disparition du player → mini-barre sous les onglets
-- Toggle « passages à relire » on/off : les deux barres ne se superposent pas
-- Passage suivant : le segment n’est pas sous le dock
-- Édition locuteur : Espace insère un espace ; Play mini met pause
-- Onglet Compte rendu : mini-barre absente
-- Sidebar, mobile 375, cookie / bandeau app
-- Audio expiré : pas de mini-barre
-- Changement de fichier (rail)
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/confidence-v1/agilo-confidence.css.js?v=chip-1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/confidence-v1/agilo-confidence.js?v=chip-1"></script>
+```
+
+Purge jsDelivr après push :
+
+```
+https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/agilo-audio-sticky.js
+https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/confidence-v1/agilo-confidence.js
+https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/confidence-v1/agilo-confidence.css.js
+```
+
+## Recette staging
+
+`https://agilotext-test.webflow.io/app/business/editor?jobId=1000040008&edition=ent`
+
+- Player visible en haut : pas de rangée audio. Chip toolbar si passages (`1 à relire`).
+- Scroll jusqu’à disparition du player : rangée apparaît, **première ligne locuteur lisible** (poussée, pas recouverte). Pas de barre figée par-dessus le texte.
+- Qualité % : tooltip du chip, pas dans la barre. Pas de « N modifiés » dans le chrome.
+- Masquer relire (clic chip ou ×) : même emplacement devient `Relire`. Pas de dalle « masqués ».
+- Onglet Compte rendu : pas de rangée audio.
+- Rail Questions IA (`aside.ed-ia`) intact.
+- Mobile étroit : 15s/30s en icônes, pas de collision Sauvegarder / Anonymiser.
+- Helper « Compris » une fois (localStorage `agilo:confidence-helper-seen:v1`).
+- Alt+← / Alt+→ inchangés. Espace dans un locuteur = espace, pas Play.
+
+**Pas www.**

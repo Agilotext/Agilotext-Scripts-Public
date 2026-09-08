@@ -21,9 +21,6 @@
   let __navIndex = -1;
   let __navKeys = [];
   let __transcriptRoot = null;
-  let __panelSentinel = null;
-  let __panelFloatCleanup = null;
-  let __panelFloatRefresh = null;
   let __keyboardBound = false;
   let __shellScrollGuardBound = false;
   let __shellScrollGuardHandler = null;
@@ -242,6 +239,12 @@
     return priority > 0 ? `${main} · ${plural(priority, 'prioritaire', 'prioritaires')}` : main;
   }
 
+  function chipMainLabel(pendingRisk) {
+    const n = Number(pendingRisk) || 0;
+    if (n <= 0) return '';
+    return n === 1 ? '1 à relire' : `${n} à relire`;
+  }
+
   function qualityLabel(summary) {
     return `Qualité estimée : ${pct(summary?.globalScore)}%`;
   }
@@ -303,11 +306,12 @@
   function updateNavCount() {
     const countEl = document.getElementById('ag-confidence-nav-count');
     if (!countEl) return;
-    if (!__navKeys.length || __navIndex < 0) {
+    if (!__navKeys.length) {
       countEl.textContent = '';
       return;
     }
-    countEl.textContent = `Passage ${__navIndex + 1} / ${__navKeys.length}`;
+    const idx = __navIndex < 0 ? 1 : __navIndex + 1;
+    countEl.textContent = `${idx}/${__navKeys.length}`;
   }
 
   function isEditableShortcutTarget(target) {
@@ -336,39 +340,6 @@
     });
   }
 
-  function teardownPanelFloating() {
-    try { __panelFloatCleanup?.(); } catch { /* ignore */ }
-    __panelFloatCleanup = null;
-    __panelFloatRefresh = null;
-    if (__panelSentinel?.remove) __panelSentinel.remove();
-    __panelSentinel = null;
-  }
-
-  /**
-   * Bas de la chrome éditeur (onglets + toolbar) pour éviter qu'un panneau
-   * `position:fixed` recouvre Transcription / Compte rendu / Assistant.
-   */
-  function getEditorChromeBottom(doc = document) {
-    if (!doc?.querySelector) return 0;
-    const selectors = [
-      'main.ed-main nav.ed-tabs',
-      'main.ed-main [data-tour="ed-tabs"]',
-      'nav.ed-tabs',
-      'main.ed-main .ed-toolbar',
-      '.ed-toolbar'
-    ];
-    let bottom = 0;
-    selectors.forEach((sel) => {
-      const el = doc.querySelector(sel);
-      if (!el || typeof el.getBoundingClientRect !== 'function') return;
-      const rect = el.getBoundingClientRect();
-      if (rect && Number.isFinite(rect.bottom) && rect.height > 0) {
-        bottom = Math.max(bottom, rect.bottom);
-      }
-    });
-    return bottom;
-  }
-
   function getAudioDockHeight(doc = document) {
     try {
       const raw = doc?.documentElement
@@ -379,30 +350,6 @@
     } catch {
       return 0;
     }
-  }
-
-  function computeConfidenceFloatingBox(sentinelRect, containerRect, chromeBottom, innerWidth, audioDockHeight) {
-    const safeChrome = Math.max(0, Number(chromeBottom) || 0);
-    const dock = Math.max(0, Number(audioDockHeight) || 0);
-    const floatThreshold = Math.max(8, safeChrome + 4);
-    const viewportW = Number.isFinite(innerWidth) ? innerWidth : 1024;
-    const cLeft = Number(containerRect?.left) || 0;
-    const cWidth = Number(containerRect?.width) || 0;
-    const cBottom = Number(containerRect?.bottom) || 0;
-    const sTop = Number(sentinelRect?.top) || 0;
-    const shouldFloat = safeChrome > 0 && sTop < floatThreshold && cBottom > safeChrome + 72;
-    if (!shouldFloat) {
-      return { shouldFloat: false, left: 0, width: 0, top: 0, chromeBottom: safeChrome, audioDockHeight: dock };
-    }
-    const top = safeChrome + 8 + (dock > 0 ? dock + 8 : 0);
-    return {
-      shouldFloat: true,
-      left: Math.max(12, cLeft),
-      width: Math.max(260, Math.min(cWidth || 260, viewportW - 24)),
-      top,
-      chromeBottom: safeChrome,
-      audioDockHeight: dock
-    };
   }
 
   function isScrollableOverflow(value) {
@@ -625,90 +572,39 @@
     }
   }
 
-  function setupPanelFloating(panel, transcriptRoot) {
-    if (!panel || !transcriptRoot || !window?.addEventListener) return;
-    if (__panelFloatCleanup && __panelSentinel?.nextElementSibling === panel) {
-      try { __panelFloatRefresh?.(); } catch { /* ignore */ }
-      return;
+  function getChipHost() {
+    return document.getElementById('ag-confidence-chip-host');
+  }
+
+  function ensureChipHost() {
+    let host = getChipHost();
+    if (host && host.isConnected) return host;
+    host = host || document.createElement('div');
+    host.id = 'ag-confidence-chip-host';
+    host.className = 'ag-confidence-chip-host';
+    const toolbar = document.querySelector('main.ed-main .ed-toolbar, .ed-toolbar');
+    if (toolbar) {
+      const srch = toolbar.querySelector('.srch');
+      toolbar.insertBefore(host, srch || toolbar.firstChild);
+      return host;
     }
+    const pane = document.getElementById('pane-transcript');
+    if (pane) {
+      pane.insertBefore(host, pane.firstChild);
+      return host;
+    }
+    const root = getTranscriptRoot();
+    if (root?.parentElement) {
+      root.parentElement.insertBefore(host, root);
+      return host;
+    }
+    return host;
+  }
 
-    teardownPanelFloating();
-
-    const sentinel = document.createElement('span');
-    sentinel.className = 'ag-confidence-panel-sentinel';
-    panel.parentElement?.insertBefore(sentinel, panel);
-    __panelSentinel = sentinel;
-
-    const clearFloatingVars = () => {
-      panel.style.removeProperty('--ag-confidence-floating-left');
-      panel.style.removeProperty('--ag-confidence-floating-width');
-      panel.style.removeProperty('--ag-confidence-floating-top');
-    };
-
-    const update = () => {
-      if (!__confidenceVisible || !panel.isConnected || !sentinel.isConnected) {
-        panel.classList.remove('is-floating');
-        clearFloatingVars();
-        return;
-      }
-
-      const sRect = sentinel.getBoundingClientRect();
-      const container = transcriptRoot.parentElement || transcriptRoot;
-      const cRect = container.getBoundingClientRect();
-      const box = computeConfidenceFloatingBox(
-        sRect,
-        cRect,
-        getEditorChromeBottom(document),
-        window.innerWidth,
-        getAudioDockHeight(document)
-      );
-
-      if (box.shouldFloat) {
-        panel.style.setProperty('--ag-confidence-floating-left', `${box.left}px`);
-        panel.style.setProperty('--ag-confidence-floating-width', `${box.width}px`);
-        panel.style.setProperty('--ag-confidence-floating-top', `${box.top}px`);
-      } else {
-        clearFloatingVars();
-      }
-      panel.classList.toggle('is-floating', box.shouldFloat);
-    };
-
-    let raf = 0;
-    const schedule = () => {
-      if (raf) return;
-      raf = window.requestAnimationFrame?.(() => {
-        raf = 0;
-        update();
-      }) || setTimeout(() => {
-        raf = 0;
-        update();
-      }, 16);
-    };
-
-    window.addEventListener('scroll', schedule, true);
-    window.addEventListener('resize', schedule);
-    window.addEventListener('agilo:audio-dock-change', schedule);
-    try {
-      window.visualViewport?.addEventListener?.('resize', schedule);
-    } catch { /* ignore */ }
-    schedule();
-
-    __panelFloatRefresh = schedule;
-    __panelFloatCleanup = () => {
-      window.removeEventListener('scroll', schedule, true);
-      window.removeEventListener('resize', schedule);
-      window.removeEventListener('agilo:audio-dock-change', schedule);
-      try {
-        window.visualViewport?.removeEventListener?.('resize', schedule);
-      } catch { /* ignore */ }
-      if (raf && window.cancelAnimationFrame) window.cancelAnimationFrame(raf);
-      else if (raf) clearTimeout(raf);
-      panel.classList.remove('is-floating');
-      panel.style.removeProperty('--ag-confidence-floating-left');
-      panel.style.removeProperty('--ag-confidence-floating-width');
-      panel.style.removeProperty('--ag-confidence-floating-top');
-      __panelFloatRefresh = null;
-    };
+  function removeLegacyConfidencePanel() {
+    const panel = document.getElementById('ag-confidence-panel');
+    if (panel) panel.remove();
+    document.querySelectorAll?.('.ag-confidence-panel-sentinel')?.forEach?.((el) => el.remove());
   }
 
   function setReviewState(segId, state) {
@@ -752,9 +648,9 @@
     if (root) {
       root.querySelectorAll('.ag-seg').forEach(removeSegmentConfidenceDecorations);
     }
-    const panel = document.getElementById('ag-confidence-panel');
-    if (panel) panel.remove();
-    teardownPanelFloating();
+    removeLegacyConfidencePanel();
+    const host = getChipHost();
+    if (host) host.remove();
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
@@ -1030,150 +926,142 @@
     updateNavCount();
   }
 
-  /**
-   * Groupe nav panneau : Passage précédent · compteur · Passage suivant.
-   * Navigation circulaire (alignée Alt+← / Alt+→). Prev secondaire, Next primary.
-   */
+  /** Chevrons compactes dans le chip toolbar (alignées Alt+← / Alt+→). */
   function buildNavControlsHtml(hasPendingRisk) {
     if (!hasPendingRisk) return '';
     return (
-      '<span class="ag-confidence-panel__nav" role="group" aria-label="Navigation passages à relire">' +
-        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-prev"' +
+      '<span class="ag-confidence-chip__nav" role="group" aria-label="Navigation passages à relire">' +
+        '<button type="button" class="ag-confidence-chip__nav-btn" id="ag-confidence-prev"' +
           ' aria-label="Passage précédent" aria-keyshortcuts="Alt+ArrowLeft"' +
-          ' title="Passage précédent (Alt+←) · boucle en début de liste">' +
-          '<span class="ag-confidence-panel__btn-text">Passage précédent</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">←</span>' +
-        '</button>' +
-        '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
-        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary" id="ag-confidence-next"' +
+          ' title="Passage précédent (Alt+←)">‹</button>' +
+        '<span id="ag-confidence-nav-count" class="ag-confidence-chip__count" aria-live="polite"></span>' +
+        '<button type="button" class="ag-confidence-chip__nav-btn" id="ag-confidence-next"' +
           ' aria-label="Passage suivant" aria-keyshortcuts="Alt+ArrowRight"' +
-          ' title="Passage suivant (Alt+→)">' +
-          '<span class="ag-confidence-panel__btn-text">Passage suivant</span>' +
-          '<span class="ag-confidence-panel__btn-icon" aria-hidden="true">→</span>' +
-        '</button>' +
+          ' title="Passage suivant (Alt+→)">›</button>' +
       '</span>'
     );
   }
 
-  function renderConfidencePanel(transcriptRoot, summary) {
-    if (!transcriptRoot || !summary) return null;
-
-    let panel = document.getElementById('ag-confidence-panel');
-    if (!panel) {
-      panel = document.createElement('div');
-      panel.id = 'ag-confidence-panel';
-      panel.className = 'ag-confidence-panel';
-      panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Confidence transcription');
-      transcriptRoot.parentElement?.insertBefore(panel, transcriptRoot);
+  function buildConfidenceChipHtml({ visible, pendingCount, qualityTitle, helperHtml }) {
+    const n = Number(pendingCount) || 0;
+    if (n <= 0) return '';
+    if (!visible) {
+      return '<button type="button" class="ag-confidence-chip is-ghost" id="ag-confidence-chip-show">Relire</button>';
     }
+    return (
+      '<div class="ag-confidence-chip" id="ag-confidence-chip" role="group" aria-label="Passages à relire">' +
+        `<button type="button" class="ag-confidence-chip__main" id="ag-confidence-chip-hide" title="${escapeAttr(qualityTitle)}">${escapeAttr(chipMainLabel(n))}</button>` +
+        buildNavControlsHtml(true) +
+        '<button type="button" class="ag-confidence-chip__close" id="ag-confidence-chip-close" aria-label="Masquer les relectures" title="Masquer">×</button>' +
+      '</div>' +
+      (helperHtml || '')
+    );
+  }
 
-    const display = effectivePanelSummary(summary);
-    const pendingRisk = riskCount(display);
-    const hasPendingRisk = pendingRisk > 0;
-    const modifiedCount = Number(display.modifiedSegments) || 0;
-    const modifiedStat = modifiedCount > 0
-      ? `<span class="ag-confidence-panel__stat">${plural(modifiedCount, 'modifié', 'modifiés')}</span>`
-      : '';
-    const toggleHtml =
-      `<button type="button" class="ag-confidence-toggle" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}">` +
-      '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
-      '<span class="ag-confidence-toggle__label">Passages à relire</span>' +
-      '</button>';
-
-    if (__confidenceVisible) {
-      const helperHtml = hasPendingRisk && shouldShowHelper(display)
-        ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
-            '<div class="ag-confidence-helper__copy">' +
-              '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
-              '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
-              '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages.</span>' +
-            '</div>' +
-            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
-            '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
-          '</div>'
-        : '';
-
-      panel.innerHTML =
-        `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
-        `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
-        modifiedStat +
-        buildNavControlsHtml(hasPendingRisk) +
-        toggleHtml +
-        helperHtml;
-    } else {
-      panel.innerHTML =
-        '<span class="ag-confidence-panel__main">Passages à relire masqués</span>' +
-        '<span class="ag-confidence-panel__stat ag-confidence-panel__stat--primary">Réactivez-les pour relire les passages moins sûrs.</span>' +
-        toggleHtml;
-    }
-
-    panel.querySelector('#ag-confidence-prev')?.addEventListener('click', (e) => {
+  function bindConfidenceChip(host) {
+    if (!host?.querySelector) return;
+    host.querySelector('#ag-confidence-prev')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
       goToPreviousConfidenceZone();
     });
-    panel.querySelector('#ag-confidence-next')?.addEventListener('click', (e) => {
+    host.querySelector('#ag-confidence-next')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
       goToNextConfidenceZone();
     });
-    panel.querySelector('#ag-confidence-toggle')?.addEventListener('click', (e) => {
+    host.querySelector('#ag-confidence-chip-hide')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
-      toggleUserConfidenceVisible();
+      setConfidenceVisible(false, true);
     });
-    panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
+    host.querySelector('#ag-confidence-chip-close')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      setConfidenceVisible(false, true);
+    });
+    host.querySelector('#ag-confidence-chip-show')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      setConfidenceVisible(true, true);
+    });
+    host.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
       dismissHelper();
     });
-    panel.querySelector('#ag-confidence-helper-more')?.addEventListener('click', (e) => {
+    host.querySelector('#ag-confidence-helper-more')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
-      const details = panel.querySelector('.ag-confidence-helper__details');
-      const more = panel.querySelector('#ag-confidence-helper-more');
+      const details = host.querySelector('.ag-confidence-helper__details');
+      const more = host.querySelector('#ag-confidence-helper-more');
       if (details) details.hidden = false;
       if (more) more.remove();
     });
+  }
 
-    panel.classList.toggle('is-disabled', !__confidenceVisible);
-    setupPanelFloating(panel, transcriptRoot);
+  function renderConfidencePanel(transcriptRoot, summary) {
+    if (!summary) return null;
+    removeLegacyConfidencePanel();
+
+    const display = effectivePanelSummary(summary);
+    const pendingRisk = riskCount(display);
+    if (pendingRisk <= 0) {
+      const existing = getChipHost();
+      if (existing) {
+        existing.innerHTML = '';
+        existing.hidden = true;
+      }
+      bindKeyboardShortcuts();
+      return null;
+    }
+
+    const host = ensureChipHost();
+    if (!host) return null;
+    host.hidden = false;
+
+    const helperHtml = __confidenceVisible && shouldShowHelper(display)
+      ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
+          '<div class="ag-confidence-helper__copy">' +
+            '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
+            '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
+            '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages.</span>' +
+          '</div>' +
+          '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
+          '<button type="button" class="ag-confidence-helper__dismiss" id="ag-confidence-helper-dismiss">Compris</button>' +
+        '</div>'
+      : '';
+
+    host.innerHTML = buildConfidenceChipHtml({
+      visible: __confidenceVisible,
+      pendingCount: pendingRisk,
+      qualityTitle: qualityLabel(display),
+      helperHtml
+    });
+    bindConfidenceChip(host);
     bindKeyboardShortcuts();
     updateNavCount();
-    return panel;
+    return host;
   }
 
   function setConfidenceVisible(visible, persist = false) {
     __confidenceVisible = visible !== false;
     if (persist) writeConfidenceVisiblePreference(__confidenceVisible);
-    const panel = document.getElementById('ag-confidence-panel');
-    if (panel) {
-      if (!__confidenceVisible) {
-        panel.classList.remove('is-floating');
-        panel.style.removeProperty('--ag-confidence-floating-left');
-        panel.style.removeProperty('--ag-confidence-floating-width');
-        panel.style.removeProperty('--ag-confidence-floating-top');
-      }
-    }
 
     const root = getTranscriptRoot();
-    if (!root) {
-      ensureActiveEditorPane(document);
-      return;
+    if (root) {
+      root.querySelectorAll('.ag-seg').forEach((art) => {
+        const segId = art.dataset.id || '';
+        const item = __reconciledMap.get(segId);
+        if (!item) return;
+
+        if (__confidenceVisible) {
+          decorateSegmentWithConfidence(art, item, item.segmentIndex);
+        } else {
+          removeSegmentConfidenceDecorations(art);
+        }
+      });
     }
-
-    root.querySelectorAll('.ag-seg').forEach((art) => {
-      const segId = art.dataset.id || '';
-      const item = __reconciledMap.get(segId);
-      if (!item) return;
-
-      if (__confidenceVisible) {
-        decorateSegmentWithConfidence(art, item, item.segmentIndex);
-      } else {
-        removeSegmentConfidenceDecorations(art);
-      }
-    });
 
     const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
     if (summary) renderConfidencePanel(root, summary);
@@ -1408,8 +1296,10 @@
     computeSummaryFallback,
     buildNavigationOrder,
     buildNavControlsHtml,
+    buildConfidenceChipHtml,
     badgeLabel,
     panelMainLabel,
+    chipMainLabel,
     qualityLabel,
     textHash,
     normalizeWordIssues,
@@ -1426,9 +1316,7 @@
     goToNextConfidenceZone,
     goToPreviousConfidenceZone,
     getCurrentNavIndex: () => __navIndex,
-    getEditorChromeBottom,
     getAudioDockHeight,
-    computeConfidenceFloatingBox,
     ensureActiveEditorPane,
     findConfidenceScrollContainer,
     scrollSegmentIntoView,
