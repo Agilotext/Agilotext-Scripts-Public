@@ -2,7 +2,11 @@
 
 **voice26** — page publique pour les invités (sans compte Agilotext).
 
-**v26 :** rejets audio backend (plusieurs voix, silence, etc.) traités comme erreurs réessayables — plus de faux succès sur « Merci ! ». Le vrai message de succès (« fichier audio traité et rattaché au compte ») affiche bien le panneau vert.
+**v26 :** rejets audio backend (plusieurs voix, silence, etc.) traités comme erreurs réessayables — plus de faux succès sur « Merci ! ».
+
+**v27 (Magali 8 sept.) :** ne plus coller le titre HTML « n'a pas pu » sur toutes les erreurs. `Accept: application/json`. Messages distincts (plusieurs voix, voix non identifiable, lien déjà utilisé, quota). PostHog : `reason` + `exception_name`.
+
+**Ne pas** changer seulement `?v=` sur le pin `a6119a9` : jsDelivr sert encore l’ancien fichier. Nouveau pin SHA **après** commit + push de `voice-enrollment-invite.js`.
 
 ---
 
@@ -33,16 +37,18 @@ https://www.agilotext.com/auth/voice-invite?inviteToken=sv_...&recipientName=Mar
 
 ## Embed (pin SHA après push)
 
+**Ne jamais coller un placeholder** (`NOUVEAU_SHA`, `@PIN`, etc.) : jsDelivr 404, page blanche.
+
+Rollback immédiat (script actuel encore sur GitHub) :
+
 ```html
 <div id="agilo-voice-invite"></div>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a6119a9/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice26"></script>
 ```
 
-Voir [`voice-invite-page.html`](voice-invite-page.html) pour le SHA courant.
+Le pin v27 (SHA réel) est dans [`voice-invite-page.html`](voice-invite-page.html) **après** commit + push. Les liens déjà envoyés (`/auth/voice-invite?inviteToken=sv_…`) pointent sur cette page. Republier Webflow = tous les prochains essais prennent le nouveau script.
 
 **Où coller :** Embed HTML dans la zone contenu principale (pas dans un composant Memberstack).
-
-**Action Florian :** mettre à jour le query `?v=1.09-voice26` dans l'embed Webflow pour forcer le cache.
 
 ---
 

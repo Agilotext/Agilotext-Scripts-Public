@@ -7,7 +7,7 @@
    Déploiement Webflow :
      1. Embed : <div id="agilo-voice-invite"></div>
      2. Script (pin SHA) :
-        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a6119a9/scripts/pages/auth/voice-enrollment-invite.js?v=1.09-voice26
+        https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN/scripts/pages/auth/voice-enrollment-invite.js?v=1.10-voice27
    API : POST submitSpeakerVoiceInvite (inviteToken, fullName, voiceFile)
    Styles : sync avec voice-enrollment-settings.js injectStyles (voice21)
    ================================================================ */
@@ -82,8 +82,32 @@
     error_invalid_audio_file_content: 'Le fichier ne peut pas être lu comme un audio valide.',
     error_reserved_speaker_label: 'Ce nom est réservé. Utilisez votre prénom et nom (pas S1, S2 ou UU).',
     error_multiple_speakers_in_voice_enrollment: 'L\'audio contient plusieurs voix. Merci d\'envoyer un extrait avec une seule voix.',
-    error_speaker_identifier_not_found: 'Voix non identifiable. Parlez plus distinctement et plus près du micro.'
+    error_speaker_identifier_not_found: 'Voix non identifiable. Parlez plus distinctement et plus près du micro.',
+    error_speaker_voice_not_available_for_edition: 'L\'enregistrement n\'a pas pu être finalisé. La personne qui vous a invité doit contacter le support Agilotext (réf. invitation vocale).',
+    error_speaker_voice_limit_reached: 'Le nombre maximum d\'empreintes vocales est atteint pour ce compte. Demandez à la personne qui vous a invité de libérer une place.',
+    error_speaker_voice_invite_already_used: 'Ce lien a déjà été utilisé. Demandez une nouvelle invitation.',
+    error_speaker_voice_invite_processing: 'Une empreinte est déjà en cours d\'envoi pour ce lien. Attendez une minute, puis réessayez.',
+    error_speaker_voice_invite_not_found: 'Ce lien n\'est plus valide ou a expiré. Demandez un nouveau lien à la personne qui vous a invité(e).',
+    error_speaker_voice_invite_missing_edition: 'Ce lien d\'empreinte vocale doit être recréé. Demandez une nouvelle invitation.',
+    error_audio_format_not_supported: 'Ce format audio n\'est pas accepté. Enregistrez au micro ou importez un MP3 ou un WAV.',
+    error_voice_file_not_found: 'Aucun fichier audio valide. Enregistrez votre voix ou importez un fichier.'
   };
+
+  var GENERIC_ERROR_H1 = 'l\'empreinte vocale n\'a pas pu être envoyée';
+
+  function matchExceptionName(code) {
+    var raw = String(code || '').trim();
+    if (!raw) return null;
+    var key = raw.split(':')[0].trim();
+    if (!ERROR_MESSAGES[key]) return null;
+    var reason = key.replace(/^error_/, '');
+    return { message: ERROR_MESSAGES[key], reason: reason, exceptionName: key };
+  }
+
+  function extractErrorCode(text) {
+    var m = String(text || '').match(/error_[a-z0-9_]+/i);
+    return m ? m[0].toLowerCase() : '';
+  }
 
   function escapeHtml(str) {
     return String(str || '')
@@ -139,12 +163,25 @@
   function matchVoiceError(text, inviteToken) {
     var t = String(text || '').toLowerCase();
     if (!t) return null;
+    var fromCode = matchExceptionName(extractErrorCode(t));
+    if (fromCode) {
+      if (fromCode.exceptionName === 'error_speaker_voice_not_available_for_edition') {
+        warnEditionBackendError(inviteToken, text);
+      }
+      return fromCode;
+    }
     if (t.indexOf('pas disponible pour ce compte') !== -1) {
       warnEditionBackendError(inviteToken, text);
-      return {
-        message: 'L\'enregistrement n\'a pas pu être finalisé. La personne qui vous a invité doit contacter le support Agilotext — réf. invitation vocale.',
-        reason: 'edition_unavailable'
-      };
+      return matchExceptionName('error_speaker_voice_not_available_for_edition');
+    }
+    if (t.indexOf('déjà été utilisé') !== -1 || t.indexOf('deja ete utilise') !== -1) {
+      return matchExceptionName('error_speaker_voice_invite_already_used');
+    }
+    if (t.indexOf('déjà en cours') !== -1 || t.indexOf('en cours d\'envoi') !== -1) {
+      return matchExceptionName('error_speaker_voice_invite_processing');
+    }
+    if (t.indexOf('nombre maximum') !== -1 || t.indexOf('limit reached') !== -1) {
+      return matchExceptionName('error_speaker_voice_limit_reached');
     }
     if (
       t.indexOf('plusieurs voix') !== -1 ||
@@ -152,10 +189,7 @@
       t.indexOf('audio contient plusieurs voix') !== -1 ||
       t.indexOf('multiple speakers') !== -1
     ) {
-      return {
-        message: ERROR_MESSAGES.error_multiple_speakers_in_voice_enrollment,
-        reason: 'multiple_speakers'
-      };
+      return matchExceptionName('error_multiple_speakers_in_voice_enrollment');
     }
     if (t.indexOf('no spoken audio') !== -1 || t.indexOf('silent') !== -1 || t.indexOf('silenc') !== -1 || t.indexOf('aucune voix') !== -1) {
       return {
@@ -163,11 +197,16 @@
         reason: 'silent_audio'
       };
     }
-    if (t.indexOf('speaker identifier not found') !== -1 || t.indexOf('voix non identifiable') !== -1) {
-      return {
-        message: ERROR_MESSAGES.error_speaker_identifier_not_found,
-        reason: 'speaker_not_found'
-      };
+    if (
+      t.indexOf('speaker identifier not found') !== -1 ||
+      t.indexOf('voix non identifiable') !== -1 ||
+      t.indexOf('voix n\'a pas pu être identifiée') !== -1 ||
+      t.indexOf('voix n\'a pas pu etre identifiee') !== -1
+    ) {
+      return matchExceptionName('error_speaker_identifier_not_found');
+    }
+    if (t.indexOf('format audio') !== -1 && (t.indexOf('accepté') !== -1 || t.indexOf('accepte') !== -1)) {
+      return matchExceptionName('error_audio_format_not_supported');
     }
     if (t.indexOf('invalid audio') !== -1 || t.indexOf('job rejected') !== -1) {
       return {
@@ -175,25 +214,22 @@
         reason: 'invalid_audio'
       };
     }
-    if (t.indexOf('invalide') !== -1 || t.indexOf('expir') !== -1 || t.indexOf('introuvable') !== -1 || t.indexOf('not found') !== -1) {
-      return {
-        message: 'Ce lien n\'est plus valide ou a expiré. Demandez un nouveau lien à la personne qui vous a invité(e).',
-        reason: 'invite_expired'
-      };
-    }
     if (t.indexOf('too short') !== -1 || t.indexOf('trop court') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('short') !== -1)) {
-      return { message: ERROR_MESSAGES.error_voice_file_duration_too_short, reason: 'duration_too_short' };
+      return matchExceptionName('error_voice_file_duration_too_short');
     }
     if (t.indexOf('too long') !== -1 || t.indexOf('trop long') !== -1 || (t.indexOf('duration') !== -1 && t.indexOf('long') !== -1)) {
-      return { message: ERROR_MESSAGES.error_voice_file_duration_too_long, reason: 'duration_too_long' };
+      return matchExceptionName('error_voice_file_duration_too_long');
     }
-    if (t.indexOf('fichier audio') !== -1 && t.indexOf('reçu') !== -1) {
-      return {
-        message: 'Aucun fichier audio valide. Enregistrez votre voix ou importez un fichier.',
-        reason: 'missing_audio_file'
-      };
+    if ((t.indexOf('fichier audio') !== -1 && t.indexOf('reçu') !== -1) || t.indexOf('aucun fichier audio') !== -1) {
+      return matchExceptionName('error_voice_file_not_found');
     }
-    if (t.indexOf('speechmatics') !== -1 || t.indexOf('enrollment job') !== -1 || t.indexOf('n\'a pas pu') !== -1) {
+    if (
+      t.indexOf('lien') !== -1 &&
+      (t.indexOf('invalide') !== -1 || t.indexOf('expir') !== -1 || t.indexOf('introuvable') !== -1 || t.indexOf('n\'est pas disponible') !== -1)
+    ) {
+      return matchExceptionName('error_speaker_voice_invite_not_found');
+    }
+    if (t.indexOf('speechmatics') !== -1 || t.indexOf('enrollment job') !== -1) {
       return {
         message: 'L\'enregistrement vocal n\'a pas été accepté. Parlez clairement pendant 15 à 45 secondes dans un endroit calme.',
         reason: 'enrollment_rejected'
@@ -216,14 +252,21 @@
     var doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
     var h1 = decodeHtmlEntities((doc.querySelector('h1') || {}).textContent || '').trim();
     var p = decodeHtmlEntities((doc.querySelector('p') || {}).textContent || '').trim();
-    var combined = (h1 + ' ' + p).trim();
+    var h1Norm = h1.toLowerCase();
+    var specificText = p || (h1Norm !== GENERIC_ERROR_H1 ? h1 : '');
 
-    var voiceErr = matchVoiceError(combined, inviteToken) || matchVoiceError(p, inviteToken) || matchVoiceError(h1, inviteToken);
+    var voiceErr = matchVoiceError(p, inviteToken) || matchVoiceError(specificText, inviteToken);
     if (voiceErr) {
-      return { ok: false, title: h1, message: voiceErr.message, reason: voiceErr.reason };
+      return {
+        ok: false,
+        title: h1,
+        message: voiceErr.message,
+        reason: voiceErr.reason,
+        exceptionName: voiceErr.exceptionName || ''
+      };
     }
 
-    if (isStrictVoiceEnrollmentSuccess(combined)) {
+    if (isStrictVoiceEnrollmentSuccess((h1 + ' ' + p).trim())) {
       return {
         ok: true,
         title: h1,
@@ -231,16 +274,15 @@
       };
     }
 
-    if (/n'a pas pu|pas disponible|invalide|expir|introuvable/i.test(combined)) {
-      var mapped = matchVoiceErrorMessage(combined, inviteToken) || matchVoiceErrorMessage(p, inviteToken) || p || h1;
-      return { ok: false, title: h1, message: mapped, reason: 'backend_rejection' };
+    if (p) {
+      return { ok: false, title: h1, message: p, reason: 'backend_rejection' };
     }
 
-    if (h1 || p) {
+    if (h1 && h1Norm !== GENERIC_ERROR_H1) {
       return {
         ok: false,
         title: h1,
-        message: matchVoiceErrorMessage(combined, inviteToken) || p || h1 || 'Impossible d\'envoyer l\'empreinte vocale. Réessayez.',
+        message: matchVoiceErrorMessage(h1, inviteToken) || h1,
         reason: 'ambiguous_response'
       };
     }
@@ -407,16 +449,24 @@
     fd.append('voiceFile', voiceFile, voiceFile.name);
     var r = await fetch(API_BASE + '/submitSpeakerVoiceInvite', {
       method: 'POST',
+      headers: { Accept: 'application/json' },
       body: fd,
       credentials: 'omit'
     });
     var ct = String(r.headers.get('content-type') || '').toLowerCase();
     if (ct.indexOf('application/json') !== -1) {
       var json = await r.json();
-      if (json.status === 'OK') return { ok: true, message: json.message || 'Empreinte vocale enregistrée.' };
+      if (json.status === 'OK') return { ok: true, message: json.message || json.speakerLabel || 'Empreinte vocale enregistrée.' };
       var raw = json.errorMessage || json.message || json.error || '';
-      var errMatch = matchVoiceError(String(raw), inviteToken);
-      if (errMatch) return { ok: false, message: errMatch.message, reason: errMatch.reason };
+      var errMatch = matchExceptionName(extractErrorCode(raw)) || matchVoiceError(String(raw), inviteToken);
+      if (errMatch) {
+        return {
+          ok: false,
+          message: errMatch.message,
+          reason: errMatch.reason,
+          exceptionName: errMatch.exceptionName || extractErrorCode(raw) || ''
+        };
+      }
       return { ok: false, message: String(raw) || 'Erreur serveur.', reason: 'api_error' };
     }
     return parseSubmitHtml(await r.text(), inviteToken);
@@ -843,7 +893,10 @@
           if (statusEl) statusEl.textContent = '';
           return;
         }
-        trackInviteEvent(false, { reason: result.reason || result.message });
+        trackInviteEvent(false, {
+          reason: result.reason || result.message,
+          exception_name: result.exceptionName || ''
+        });
         resetAfterRejectedVoice(result.message || 'Impossible d\'enregistrer cette voix.');
       }).catch(function (err) {
         if (String(err && err.message || '').indexOf('Failed to fetch') !== -1) {
