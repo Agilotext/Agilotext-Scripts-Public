@@ -1,10 +1,9 @@
 /* ================================================================
-   AGILOTEXT - Rangée audio in-flow (éditeur)
+   AGILOTEXT - Rangée audio in-flow + verrou de coque (éditeur)
    Page : /app/{free|pro|business}/editor
    Charge : après Code-lecteur-audio-V3.4.js
    Un seul <audio id="agilo-audio">. Pas de follow-playhead.
-   Pas d’overlay : la ligne vit dans main.ed-main, hors du panneau
-   scrollable, et pousse le transcript par flexbox.
+   Pas d’overlay nominal : pin-host in-flow, html lock 100dvh.
    ================================================================ */
 
 (function () {
@@ -14,8 +13,10 @@
   window.__agiloAudioSticky = true;
 
   var ROOT = typeof document !== 'undefined' ? document.documentElement : null;
+  var PIN_HOST_ID = 'ag-editor-pin-host';
   var ROW_ID = 'ag-editor-audio-row';
   var LEGACY_SLOT_ID = 'ag-editor-audio-slot';
+  var LOCK_CLASS = 'ag-editor-shell-lock';
   var IO_ROOT_MARGIN = '40px 0px 0px 0px';
   var IO_SHOW_RATIO = 0.12;
 
@@ -28,6 +29,19 @@
     };
   }
 
+  function computeEditorShellLock(opts) {
+    opts = opts || {};
+    var wrapIntersecting = !!opts.wrapIntersecting;
+    var unavailable = !!opts.audioUnavailable;
+    var paneAtTop = opts.paneAtTop !== false;
+    var wheelDeltaY = Number(opts.wheelDeltaY);
+    if (!Number.isFinite(wheelDeltaY)) wheelDeltaY = 0;
+    var locked = !!opts.locked;
+    var shouldLock = !wrapIntersecting && !unavailable;
+    var shouldUnlock = locked && (!shouldLock || (paneAtTop && wheelDeltaY < 0));
+    return { shouldLock: shouldLock, shouldUnlock: shouldUnlock };
+  }
+
   function applyIoHysteresis(prevIntersecting, entry) {
     if (!entry) return !!prevIntersecting;
     if (!entry.isIntersecting) return false;
@@ -37,20 +51,20 @@
     return !!prevIntersecting;
   }
 
-  function placeAudioRow(row, doc) {
+  function placePinHost(host, doc) {
     doc = doc || document;
-    if (!row || !doc || typeof doc.querySelector !== 'function') return false;
+    if (!host || !doc || typeof doc.querySelector !== 'function') return false;
     var main = doc.querySelector('main.ed-main');
     if (main) {
       var pane = typeof main.querySelector === 'function' ? main.querySelector('.edtr-pane') : null;
       if (pane) {
-        if (row.parentNode === main && row.nextElementSibling === pane) return true;
-        main.insertBefore(row, pane);
+        if (host.parentNode === main && host.nextElementSibling === pane) return true;
+        main.insertBefore(host, pane);
         return true;
       }
-      if (row.parentNode !== main) {
-        if (typeof main.appendChild === 'function') main.appendChild(row);
-        else main.insertBefore(row, null);
+      if (host.parentNode !== main) {
+        if (typeof main.appendChild === 'function') main.appendChild(host);
+        else main.insertBefore(host, null);
       }
       return true;
     }
@@ -58,19 +72,35 @@
       ? doc.getElementById('pane-transcript')
       : null;
     if (fallbackPane) {
-      if (row.parentNode !== fallbackPane) {
-        fallbackPane.insertBefore(row, fallbackPane.firstChild || null);
+      if (host.parentNode !== fallbackPane) {
+        fallbackPane.insertBefore(host, fallbackPane.firstChild || null);
       }
       return true;
     }
     return false;
   }
 
+  function placeAudioRow(row, doc) {
+    doc = doc || document;
+    if (!row || !doc) return false;
+    var pin = typeof doc.getElementById === 'function' ? doc.getElementById(PIN_HOST_ID) : null;
+    if (!pin) return false;
+    if (row.parentNode === pin) return true;
+    if (typeof pin.appendChild === 'function') pin.appendChild(row);
+    else if (typeof pin.insertBefore === 'function') pin.insertBefore(row, null);
+    else return false;
+    return true;
+  }
+
   window.AgiloAudioSticky = {
     computeAudioRowState: computeAudioRowState,
+    computeEditorShellLock: computeEditorShellLock,
     applyIoHysteresis: applyIoHysteresis,
+    placePinHost: placePinHost,
     placeAudioRow: placeAudioRow,
+    PIN_HOST_ID: PIN_HOST_ID,
     ROW_ID: ROW_ID,
+    LOCK_CLASS: LOCK_CLASS,
     IO_ROOT_MARGIN: IO_ROOT_MARGIN,
     IO_SHOW_RATIO: IO_SHOW_RATIO
   };
@@ -78,6 +108,7 @@
   if (window.AGILO_AUDIO_STICKY_SKIP_BOOT) return;
   if (typeof document === 'undefined') return;
 
+  var pinHost = null;
   var row = null;
   var bar = null;
   var wrapObserved = null;
@@ -86,13 +117,23 @@
   var mainMo = null;
   var wrapIntersecting = true;
   var wrapInert = false;
+  var shellLocked = false;
+  var fallbackFixed = false;
   var raf = 0;
+  var touchStartY = null;
+  var unlockBound = false;
 
   function injectCss() {
     if (document.getElementById('agilo-audio-sticky-css')) return;
     var s = document.createElement('style');
     s.id = 'agilo-audio-sticky-css';
     s.textContent = [
+      'html.ag-editor-shell-lock,html.ag-editor-shell-lock body{overflow:hidden;height:100dvh;max-height:100dvh}',
+      'html.ag-editor-shell-lock .page-wrapper{overflow:visible}',
+      'html.ag-editor-shell-lock .ed-body{height:100dvh;max-height:100dvh}',
+      '.ag-editor-pin-host{display:block;box-sizing:border-box;width:100%;max-width:100%;',
+      'flex:0 0 auto;margin:0;background:#fff}',
+      '.ag-editor-pin-host.is-fallback-fixed{position:fixed;top:0;z-index:5}',
       '.ag-editor-audio-row{display:none;box-sizing:border-box;width:100%;max-width:100%;',
       'flex:0 0 auto;margin:0}',
       '.ag-editor-audio-row.is-open{display:block;padding:6px 1.25rem 8px;',
@@ -160,6 +201,10 @@
     return document.getElementById('agilo-audio-wrap');
   }
 
+  function getScrollPane() {
+    return document.querySelector('.edtr-pane.is-active') || document.getElementById('pane-transcript');
+  }
+
   function getDuration(audio) {
     var d1 = Number.isFinite(audio && audio.duration) ? audio.duration : 0;
     var dur = (d1 > 0 && d1 < 1e6) ? d1 : 0;
@@ -216,11 +261,30 @@
     });
   }
 
+  function ensurePinHost() {
+    injectCss();
+    if (pinHost && pinHost.isConnected) {
+      placePinHost(pinHost, document);
+      return pinHost;
+    }
+    pinHost = document.getElementById(PIN_HOST_ID);
+    if (!pinHost) {
+      pinHost = document.createElement('div');
+      pinHost.id = PIN_HOST_ID;
+    }
+    pinHost.className = 'ag-editor-pin-host' + (fallbackFixed ? ' is-fallback-fixed' : '');
+    if (!placePinHost(pinHost, document) && !pinHost.parentNode) {
+      document.body.appendChild(pinHost);
+    }
+    return pinHost;
+  }
+
   function ensureRow() {
     injectCss();
     removeLegacySlot();
+    var host = ensurePinHost();
     if (row && row.isConnected) {
-      placeAudioRow(row, document);
+      if (row.parentNode !== host) host.appendChild(row);
       return row;
     }
     row = document.getElementById(ROW_ID);
@@ -230,10 +294,61 @@
     }
     row.className = 'ag-editor-audio-row';
     row.setAttribute('aria-hidden', 'true');
-    if (!placeAudioRow(row, document) && !row.parentNode) {
-      document.body.appendChild(row);
-    }
+    if (row.parentNode !== host) host.appendChild(row);
     return row;
+  }
+
+  function applyFallbackFixed(on) {
+    var host = ensurePinHost();
+    fallbackFixed = !!on;
+    if (!on) {
+      host.classList.remove('is-fallback-fixed');
+      host.style.removeProperty('left');
+      host.style.removeProperty('width');
+      host.style.removeProperty('top');
+      return;
+    }
+    var main = document.querySelector('main.ed-main');
+    var rect = main && typeof main.getBoundingClientRect === 'function'
+      ? main.getBoundingClientRect()
+      : null;
+    host.classList.add('is-fallback-fixed');
+    if (rect) {
+      host.style.left = Math.max(0, rect.left) + 'px';
+      host.style.width = Math.max(0, rect.width) + 'px';
+      host.style.top = '0px';
+    }
+  }
+
+  function pinHostStillOffscreen() {
+    var host = pinHost;
+    if (!host || typeof host.getBoundingClientRect !== 'function') return false;
+    try {
+      return host.getBoundingClientRect().top < -1;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function lockShell() {
+    if (ROOT) ROOT.classList.add(LOCK_CLASS);
+    shellLocked = true;
+    if (pinHostStillOffscreen()) applyFallbackFixed(true);
+    else applyFallbackFixed(false);
+  }
+
+  function unlockShell(opts) {
+    opts = opts || {};
+    if (!shellLocked && !fallbackFixed) return;
+    shellLocked = false;
+    if (ROOT) ROOT.classList.remove(LOCK_CLASS);
+    applyFallbackFixed(false);
+    if (opts.revealPlayer) {
+      var wrap = getWrap();
+      if (wrap && typeof wrap.scrollIntoView === 'function') {
+        try { wrap.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e) { /* ignore */ }
+      }
+    }
   }
 
   function ensureBar() {
@@ -351,14 +466,26 @@
     var audio = getAudio();
     if (!wrap || !audio) {
       hideRow();
+      unlockShell();
       return;
     }
-    var state = computeAudioRowState({
+    var unavailable = isAudioUnavailable(wrap);
+    var rowState = computeAudioRowState({
       wrapIntersecting: wrapIntersecting,
-      audioUnavailable: isAudioUnavailable(wrap)
+      audioUnavailable: unavailable
     });
-    if (!state.shouldShow) hideRow();
+    if (!rowState.shouldShow) hideRow();
     else openRow();
+
+    var lockState = computeEditorShellLock({
+      wrapIntersecting: wrapIntersecting,
+      audioUnavailable: unavailable,
+      paneAtTop: true,
+      wheelDeltaY: 0,
+      locked: shellLocked
+    });
+    if (lockState.shouldLock) lockShell();
+    else unlockShell();
   }
 
   function schedule() {
@@ -400,6 +527,7 @@
     mainObserved = main;
     if (typeof MutationObserver !== 'function') return;
     mainMo = new MutationObserver(function () {
+      ensurePinHost();
       ensureRow();
       schedule();
     });
@@ -415,13 +543,59 @@
     });
   }
 
+  function tryUnlockFromGesture(deltaY) {
+    if (!shellLocked) return false;
+    var pane = getScrollPane();
+    var atTop = !pane || pane.scrollTop <= 0;
+    var unavailable = isAudioUnavailable(getWrap());
+    var state = computeEditorShellLock({
+      wrapIntersecting: wrapIntersecting,
+      audioUnavailable: unavailable,
+      paneAtTop: atTop,
+      wheelDeltaY: deltaY,
+      locked: shellLocked
+    });
+    if (!state.shouldUnlock) return false;
+    unlockShell({ revealPlayer: true });
+    return true;
+  }
+
+  function bindUnlockGestures() {
+    if (unlockBound) return;
+    unlockBound = true;
+    document.addEventListener('wheel', function (e) {
+      if (!shellLocked) return;
+      var pane = getScrollPane();
+      if (!pane) return;
+      if (e.target !== pane && !(e.target && e.target.closest && e.target.closest('.edtr-pane'))) return;
+      if (tryUnlockFromGesture(e.deltaY)) {
+        try { e.preventDefault(); } catch (err) { /* ignore */ }
+      }
+    }, { capture: true, passive: false });
+    document.addEventListener('touchstart', function (e) {
+      var t = e.changedTouches && e.changedTouches[0];
+      touchStartY = t ? t.clientY : null;
+    }, { capture: true, passive: true });
+    document.addEventListener('touchmove', function (e) {
+      if (!shellLocked || touchStartY == null) return;
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      var deltaY = touchStartY - t.clientY;
+      if (tryUnlockFromGesture(deltaY)) {
+        try { e.preventDefault(); } catch (err) { /* ignore */ }
+      }
+    }, { capture: true, passive: false });
+  }
+
   function start() {
     injectCss();
     clearLegacyVars();
+    ensurePinHost();
     ensureRow();
     observeMain();
     observeWrap();
     bindAudioEvents();
+    bindUnlockGestures();
     if ((!getWrap() || !document.querySelector('main.ed-main')) && typeof MutationObserver === 'function') {
       var bootMo = new MutationObserver(function () {
         if (document.querySelector('main.ed-main')) observeMain();
@@ -442,6 +616,7 @@
     window.addEventListener('agilo:load', function () {
       wrapObserved = null;
       observeMain();
+      ensurePinHost();
       ensureRow();
       observeWrap();
       bindAudioEvents();

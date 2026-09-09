@@ -5,42 +5,74 @@
   s.id = 'agilo-confidence-css';
   s.textContent = `
 .ag-confidence-chip-host {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   flex: 0 0 auto;
-  align-self: center;
   position: relative;
-  margin: 0 auto 0 0;
+  margin: 0;
+  padding: 6px 1.25rem 4px;
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   z-index: 2;
 }
 
 .ag-confidence-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
   max-width: 100%;
-  height: 28px;
-  padding: 0 4px 0 8px;
+  min-height: 28px;
+  padding: 2px 8px 2px 10px;
   border-radius: 999px;
   border: 1px solid rgba(23, 74, 150, 0.22);
   background: #ffffff;
   color: #174a96;
-  font: 600 12px/1 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  white-space: nowrap;
+  font: 600 12px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   box-sizing: border-box;
 }
 
-.ag-confidence-chip.is-ghost {
-  height: 28px;
-  padding: 0 10px;
-  border-style: dashed;
-  background: transparent;
-  cursor: pointer;
+.ag-confidence-chip__label {
+  font-weight: 700;
+  white-space: nowrap;
 }
 
-.ag-confidence-chip.is-ghost:hover {
-  background: rgba(23, 74, 150, 0.06);
+.ag-confidence-chip__help,
+.ag-confidence-chip__switch,
+.ag-confidence-chip__nav-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.ag-confidence-chip__help {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 74, 150, 0.22);
+  font-weight: 700;
+  color: #174a96;
+}
+
+.ag-confidence-chip__switch {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(23, 74, 150, 0.28);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ag-confidence-chip__switch[aria-checked="true"] {
+  background: #174a96;
+  color: #fff;
+  border-color: #174a96;
 }
 
 .ag-confidence-chip__main,
@@ -68,11 +100,12 @@
   color: #525252;
 }
 
+.ag-confidence-chip__help:hover,
+.ag-confidence-chip__switch:hover,
 .ag-confidence-chip__close:hover,
 .ag-confidence-chip__nav-btn:hover,
 .ag-confidence-chip__main:hover {
   background: rgba(23, 74, 150, 0.08);
-  border-radius: 999px;
 }
 
 .ag-confidence-chip__nav {
@@ -99,8 +132,9 @@
 
 .ag-confidence-chip__main:focus-visible,
 .ag-confidence-chip__close:focus-visible,
+.ag-confidence-chip__help:focus-visible,
+.ag-confidence-chip__switch:focus-visible,
 .ag-confidence-chip__nav-btn:focus-visible,
-.ag-confidence-chip.is-ghost:focus-visible,
 .ag-confidence-review__btn:focus-visible,
 .ag-confidence-helper__link:focus-visible,
 .ag-confidence-helper__dismiss:focus-visible {
@@ -335,17 +369,18 @@
 
 @media (max-width: 640px) {
   .ag-confidence-chip-host {
-    margin-right: 6px;
+    padding: 6px 0.75rem 4px;
   }
 
   .ag-confidence-chip {
-    height: 26px;
-    padding: 0 2px 0 6px;
+    min-height: 26px;
+    height: auto;
+    padding: 4px 8px;
     font-size: 11px;
   }
 
-  .ag-confidence-chip.is-ghost {
-    padding: 0 8px;
+  .ag-confidence-chip__label {
+    white-space: normal;
   }
 
   .ag-confidence-controls {

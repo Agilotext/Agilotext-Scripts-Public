@@ -248,9 +248,9 @@ Embed Webflow (référence branche `@1.09`) :
 
 Le bouton UI n'était jamais sur `1.09` (seulement sur `f3bbc9e`). Port de `buildNavControlsHtml` + CSS nav. Checklist : panneau affiche précédent + suivant ; prev ×5 sans perdre les onglets.
 
-### Rangée audio in-flow + chip relire (staging, post-1.09.6)
+### Verrou de coque + chip relire (staging, post-1.09.6)
 
-Le sticky `@8c7da101` en `position:fixed` recouvrait le transcript, puis le slot sticky dans `#pane-transcript` ne se figeait pas (le panneau est le scroller). Remplacé par une ligne `#ag-editor-audio-row` dans `main.ed-main` + chip toolbar dans `.ed-tools` (fantôme `Relu · xx %` si 0 passage). **Même SHA** pour `agilo-audio-sticky.js` + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
+Le sticky `@8c7da101` en `position:fixed` recouvrait le transcript. Le pin dock spacer recouvrait aussi dès que la page continuait de scroller. Remplacé par `#ag-editor-pin-host` in-flow (chip + audio) et `html.ag-editor-shell-lock` (`100dvh`, `.page-wrapper` overflow visible) dès que le gros lecteur sort. Interrupteur relire **éteint par défaut** (`agilo:confidence-visible:v2`). **Même SHA** pour `agilo-audio-sticky.js` + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
 
 ### Piste iframe (historique, hors toggle)
 

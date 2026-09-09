@@ -7,7 +7,7 @@
 
   const DEFAULT_API_BASE = 'https://api.agilotext.com/api/v1';
   const STORAGE_HELPER_SEEN = 'agilo:confidence-helper-seen:v1';
-  const STORAGE_VISIBLE = 'agilo:confidence-visible:v1';
+  const STORAGE_VISIBLE = 'agilo:confidence-visible:v2';
   const LEVELS = new Set(['normal', 'verify', 'low']);
   const REVIEW_STATES = new Set(['pending', 'verified', 'ignored']);
 
@@ -61,7 +61,7 @@
   }
 
   function readConfidenceVisiblePreference() {
-    return storageGet(STORAGE_VISIBLE) !== 'false';
+    return storageGet(STORAGE_VISIBLE) === 'true';
   }
 
   function writeConfidenceVisiblePreference(visible) {
@@ -249,8 +249,8 @@
 
   function chipMainLabel(pendingRisk) {
     const n = Number(pendingRisk) || 0;
-    if (n <= 0) return '';
-    return n === 1 ? '1 à relire' : `${n} à relire`;
+    if (n <= 0) return 'Aucun passage à relire';
+    return n === 1 ? '1 passage à relire' : `${n} passages à relire`;
   }
 
   function ghostChipLabel(qualityTitle) {
@@ -264,7 +264,7 @@
   }
 
   function shouldShowHelper(summary) {
-    if (!isConfidenceEnabled() || !__confidenceVisible || isHelperSeen()) return false;
+    if (!isConfidenceEnabled() || isHelperSeen()) return false;
     return riskCount(summary) > 0;
   }
 
@@ -580,6 +580,13 @@
 
   function placeChipHost(host) {
     if (!host) return false;
+    const pin = document.getElementById('ag-editor-pin-host');
+    if (pin) {
+      if (host.parentNode !== pin || pin.firstChild !== host) {
+        pin.insertBefore(host, pin.firstChild || null);
+      }
+      return true;
+    }
     const tools = document.querySelector('main.ed-main .ed-toolbar .ed-tools, .ed-toolbar .ed-tools, .ed-tools');
     if (tools) {
       if (host.parentNode !== tools || tools.firstChild !== host) {
@@ -975,20 +982,19 @@
 
   function buildConfidenceChipHtml({ visible, pendingCount, qualityTitle, helperHtml }) {
     const n = Number(pendingCount) || 0;
-    if (n <= 0) {
-      return (
-        `<button type="button" class="ag-confidence-chip is-ghost" id="ag-confidence-chip-toggle"` +
-          ` title="${escapeAttr(qualityTitle)}">${escapeAttr(ghostChipLabel(qualityTitle))}</button>`
-      );
-    }
-    if (!visible) {
-      return '<button type="button" class="ag-confidence-chip is-ghost" id="ag-confidence-chip-show">Relire</button>';
-    }
+    const on = visible !== false && n > 0;
+    const switchHtml = n > 0
+      ? `<button type="button" class="ag-confidence-chip__switch" id="ag-confidence-chip-switch" role="switch"` +
+          ` aria-checked="${on ? 'true' : 'false'}" aria-pressed="${on ? 'true' : 'false'}"` +
+          ` aria-label="Afficher les passages à relire">${on ? 'On' : 'Off'}</button>`
+      : '';
     return (
       '<div class="ag-confidence-chip" id="ag-confidence-chip" role="group" aria-label="Passages à relire">' +
-        `<button type="button" class="ag-confidence-chip__main" id="ag-confidence-chip-hide" title="${escapeAttr(qualityTitle)}">${escapeAttr(chipMainLabel(n))}</button>` +
-        buildNavControlsHtml(true) +
-        '<button type="button" class="ag-confidence-chip__close" id="ag-confidence-chip-close" aria-label="Masquer les relectures" title="Masquer">×</button>' +
+        `<span class="ag-confidence-chip__label" title="${escapeAttr(qualityTitle)}">${escapeAttr(chipMainLabel(n))}</span>` +
+        '<button type="button" class="ag-confidence-chip__help" id="ag-confidence-chip-help"' +
+          ' aria-label="Qu’est-ce que les passages à relire ?" title="Pourquoi ?">?</button>' +
+        switchHtml +
+        buildNavControlsHtml(on) +
       '</div>' +
       (helperHtml || '')
     );
@@ -1006,25 +1012,43 @@
       e?.stopPropagation?.();
       goToNextConfidenceZone();
     });
-    host.querySelector('#ag-confidence-chip-hide')?.addEventListener('click', (e) => {
-      e?.preventDefault?.();
-      e?.stopPropagation?.();
-      setConfidenceVisible(false, true);
-    });
-    host.querySelector('#ag-confidence-chip-close')?.addEventListener('click', (e) => {
-      e?.preventDefault?.();
-      e?.stopPropagation?.();
-      setConfidenceVisible(false, true);
-    });
-    host.querySelector('#ag-confidence-chip-show')?.addEventListener('click', (e) => {
-      e?.preventDefault?.();
-      e?.stopPropagation?.();
-      setConfidenceVisible(true, true);
-    });
-    host.querySelector('#ag-confidence-chip-toggle')?.addEventListener('click', (e) => {
+    host.querySelector('#ag-confidence-chip-switch')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
       e?.stopPropagation?.();
       toggleUserConfidenceVisible();
+    });
+    host.querySelector('#ag-confidence-chip-help')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      let helper = host.querySelector('#ag-confidence-helper');
+      if (!helper) {
+        host.insertAdjacentHTML('beforeend',
+          '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
+            '<div class="ag-confidence-helper__copy">' +
+              '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
+              '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
+              '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages. Activez l’interrupteur pour les surligner.</span>' +
+            '</div>' +
+            '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
+            '<button type="button" class="ag-confidence-helper__dismiss" id="ag-confidence-helper-dismiss">Compris</button>' +
+          '</div>'
+        );
+        host.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (ev) => {
+          ev?.preventDefault?.();
+          ev?.stopPropagation?.();
+          dismissHelper();
+        });
+        host.querySelector('#ag-confidence-helper-more')?.addEventListener('click', (ev) => {
+          ev?.preventDefault?.();
+          ev?.stopPropagation?.();
+          const details = host.querySelector('.ag-confidence-helper__details');
+          const more = host.querySelector('#ag-confidence-helper-more');
+          if (details) details.hidden = false;
+          if (more) more.remove();
+        });
+        return;
+      }
+      helper.hidden = !helper.hidden;
     });
     host.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
@@ -1055,12 +1079,12 @@
     if (!host) return null;
     host.hidden = false;
 
-    const helperHtml = __confidenceVisible && shouldShowHelper(display)
+    const helperHtml = shouldShowHelper(display)
       ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
           '<div class="ag-confidence-helper__copy">' +
             '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
             '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
-            '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages.</span>' +
+            '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages. Activez l’interrupteur pour les surligner.</span>' +
           '</div>' +
           '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
           '<button type="button" class="ag-confidence-helper__dismiss" id="ag-confidence-helper-dismiss">Compris</button>' +
@@ -1221,7 +1245,7 @@
 
     const summary = getSummaryDisplay(confidenceJson, 0);
     renderConfidencePanel(transcriptRoot, summary);
-    applyConfidenceToDom(transcriptRoot, reconciled);
+    if (__confidenceVisible) applyConfidenceToDom(transcriptRoot, reconciled);
 
     __lastApply = {
       jobId: String(jobId),

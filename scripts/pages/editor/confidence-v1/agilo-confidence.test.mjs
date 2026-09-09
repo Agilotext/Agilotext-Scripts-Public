@@ -203,9 +203,10 @@ async function run() {
   assert(AC.panelMainLabel({ verifySegments: 1, lowSegments: 0 }) === '1 passage à relire', 'panneau: pas de zéro prioritaire inutile');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }) === 'Aucun passage signalé à relire', 'panneau: état zéro passage');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }, { verifySegments: 1, lowSegments: 0 }) === 'Tous les passages signalés sont traités', 'panneau: passages traités après revue');
-  assert(AC.chipMainLabel(1) === '1 à relire', 'chip: 1 à relire');
-  assert(AC.chipMainLabel(18) === '18 à relire', 'chip: N à relire');
-  assert(AC.chipMainLabel(0) === '', 'chip: rien si 0 passage');
+  assert(AC.chipMainLabel(1) === '1 passage à relire', 'chip: 1 passage à relire');
+  assert(AC.chipMainLabel(18) === '18 passages à relire', 'chip: N passages à relire');
+  assert(AC.chipMainLabel(0) === 'Aucun passage à relire', 'chip: zéro passage');
+  assert(AC.readConfidenceVisiblePreference() === false, 'interrupteur off par défaut (v2)');
   assert(AC.qualityLabel({ globalScore: 0.96 }) === 'Qualité estimée : 96%', 'panneau: qualité estimée secondaire');
 
   const nav = AC.buildNavigationOrder(map);
@@ -243,13 +244,18 @@ async function run() {
   const ACHelperSeen = boot({ storage: { 'agilo:confidence-helper-seen:v1': 'true' } });
   assert(ACHelperSeen.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent si localStorage helper vu');
 
-  const ACVisibleOff = boot({ storage: { 'agilo:confidence-visible:v1': 'false' } });
-  assert(ACVisibleOff.readConfidenceVisiblePreference() === false, 'préférence OFF lue depuis localStorage');
-  assert(ACVisibleOff.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === false, 'helper absent si zones désactivées');
+  const ACVisibleOff = boot();
+  assert(ACVisibleOff.readConfidenceVisiblePreference() === false, 'préférence OFF par défaut');
+  assert(ACVisibleOff.shouldShowHelper({ verifySegments: 1, lowSegments: 0 }) === true, 'helper possible même interrupteur off');
   ACVisibleOff.toggle(true, true);
-  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v1') === 'true', 'préférence ON persistée');
+  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v2') === 'true', 'préférence ON persistée (v2)');
   ACVisibleOff.toggle(false, true);
-  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v1') === 'false', 'préférence OFF persistée');
+  assert(ACVisibleOff.__storage.get('agilo:confidence-visible:v2') === 'false', 'préférence OFF persistée (v2)');
+
+  const ACV1Ignored = boot({ storage: { 'agilo:confidence-visible:v1': 'true' } });
+  assert(ACV1Ignored.readConfidenceVisiblePreference() === false, 'clé v1 ignorée, défaut off');
+  const ACV2On = boot({ storage: { 'agilo:confidence-visible:v2': 'true' } });
+  assert(ACV2On.readConfidenceVisiblePreference() === true, 'clé v2 true allume les surlignages');
 
   const textWithIssue = 'S’est passé climatisé. ASH.';
   const lowWordStart = textWithIssue.indexOf('climatisé');
@@ -332,12 +338,16 @@ async function run() {
     qualityTitle: 'Qualité estimée : 97%',
     helperHtml: ''
   });
-  assert(chipOn.includes('1 à relire'), 'chip on: 1 à relire');
+  assert(chipOn.includes('1 passage à relire'), 'chip on: 1 passage à relire');
   assert(chipOn.includes('id="ag-confidence-chip"'), 'chip on: un seul nœud');
-  assert(chipOn.includes('id="ag-confidence-chip-hide"'), 'chip on: clic masque');
+  assert(chipOn.includes('id="ag-confidence-chip-help"'), 'chip on: bouton ?');
+  assert(chipOn.includes('id="ag-confidence-chip-switch"'), 'chip on: interrupteur');
+  assert(chipOn.includes('role="switch"'), 'chip on: role switch');
+  assert(chipOn.includes('aria-pressed="true"'), 'chip on: aria-pressed');
   assert(chipOn.includes('id="ag-confidence-prev"'), 'chip on: chevron précédent');
   assert(chipOn.includes('Qualité estimée : 97%'), 'qualité en title seulement');
   assert(!chipOn.includes('ag-confidence-toggle'), 'chip on: pas de switch iOS');
+  assert(!chipOn.includes('ag-confidence-chip-hide'), 'chip on: pas de croix ×');
   assert(!chipOn.includes('101 modifié'), 'pas de compteur modifiés dans le chrome');
 
   const chipOff = AC.buildConfidenceChipHtml({
@@ -346,20 +356,24 @@ async function run() {
     qualityTitle: 'Qualité estimée : 97%',
     helperHtml: ''
   });
-  assert(chipOff.includes('id="ag-confidence-chip-show"'), 'chip off: même emplacement Relire');
-  assert(chipOff.includes('Relire'), 'chip off: libellé Relire');
-  assert(!chipOff.includes('à relire'), 'chip off: pas le compteur');
-  assert(!chipOff.includes('ag-confidence-toggle'), 'chip off: pas de switch');
+  assert(chipOff.includes('3 passages à relire'), 'chip off: libellé passages à relire');
+  assert(chipOff.includes('id="ag-confidence-chip-help"'), 'chip off: bouton ? disponible');
+  assert(chipOff.includes('id="ag-confidence-chip-switch"'), 'chip off: interrupteur');
+  assert(chipOff.includes('aria-pressed="false"'), 'chip off: switch éteint');
+  assert(chipOff.includes('>Off<'), 'chip off: libellé Off');
+  assert(!chipOff.includes('id="ag-confidence-prev"'), 'chip off: pas de chevrons');
+  assert(!chipOff.includes('ag-confidence-chip-hide'), 'chip off: pas de croix ×');
 
   const chipZero = AC.buildConfidenceChipHtml({
     visible: true,
     pendingCount: 0,
     qualityTitle: 'Qualité estimée : 97%'
   });
-  assert(chipZero.includes('Relu · 97 %'), '0 passage avec données: chip fantôme Relu');
-  assert(chipZero.includes('is-ghost'), '0 passage: classe ghost');
-  assert(chipZero.includes('id="ag-confidence-chip-toggle"'), '0 passage: clic toggle surlignages');
+  assert(chipZero.includes('Aucun passage à relire'), '0 passage: libellé explicite');
+  assert(chipZero.includes('id="ag-confidence-chip-help"'), '0 passage: bouton ?');
+  assert(!chipZero.includes('id="ag-confidence-chip-switch"'), '0 passage: pas d interrupteur');
   assert(!chipZero.includes('ag-confidence-chip__nav'), '0 passage: pas de chevrons');
+  assert(!chipZero.includes('is-ghost'), '0 passage: plus de fantôme Relu');
 
   const cssSrc = readFileSync(path.join(__dirname, 'agilo-confidence.css.js'), 'utf8');
   assert(!cssSrc.includes('main.ed-main > .ed-tabs'), 'CSS sans regle z-index sur ed-tabs');
@@ -368,29 +382,33 @@ async function run() {
   assert(!cssSrc.includes('is-floating'), 'CSS sans overlay is-floating');
   assert(!cssSrc.includes('ag-confidence-toggle'), 'CSS sans toggle iOS');
   assert(!cssSrc.includes('position: fixed'), 'CSS confidence sans position fixed');
-  assert(cssSrc.includes('ag-confidence-chip'), 'CSS chip toolbar');
+  assert(cssSrc.includes('ag-confidence-chip'), 'CSS chip');
+  assert(cssSrc.includes('ag-confidence-chip__switch'), 'CSS interrupteur');
+  assert(cssSrc.includes('ag-confidence-chip__help'), 'CSS bouton aide');
   assert(cssSrc.includes('scroll-margin-block: 12px'), 'scroll-margin fixe 12px');
   assert(!cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin sans dock audio');
-  assert(cssSrc.includes('margin-right: auto') || cssSrc.includes('margin: 0 auto 0 0'), 'chip host collé à gauche de .ed-tools');
+  assert(cssSrc.includes('width: 100%'), 'chip host pleine largeur du pin-host');
 
-  const tools = {
-    className: 'ed-tools',
+  const pinHost = {
+    id: 'ag-editor-pin-host',
     children: [],
     firstChild: null,
-    insertBefore(child) {
+    insertBefore(child, ref) {
       child.parentNode = this;
       child.parentElement = this;
       child.isConnected = true;
-      this.children.unshift(child);
-      this.firstChild = child;
+      const i = ref ? this.children.indexOf(ref) : -1;
+      if (i >= 0) this.children.splice(i, 0, child);
+      else this.children.unshift(child);
+      this.firstChild = this.children[0] || null;
     }
   };
   const chipDoc = {
     getElementById(id) {
-      return tools.children.find((c) => c.id === id) || null;
+      if (id === 'ag-editor-pin-host') return pinHost;
+      return pinHost.children.find((c) => c.id === id) || null;
     },
-    querySelector(sel) {
-      if (String(sel).includes('.ed-tools')) return tools;
+    querySelector() {
       return null;
     },
     createElement() {
@@ -425,9 +443,63 @@ async function run() {
   const chipSandbox = { window: chipWin, document: chipDoc };
   vm.runInNewContext(src, chipSandbox);
   const hostPlaced = chipSandbox.window.AgiloConfidence.ensureChipHost();
-  assert(hostPlaced.parentNode === tools, 'host créé dans .ed-tools');
-  assert(tools.firstChild === hostPlaced, 'host premier enfant de .ed-tools');
+  assert(hostPlaced.parentNode === pinHost, 'host créé dans #ag-editor-pin-host');
+  assert(pinHost.firstChild === hostPlaced, 'host premier enfant du pin-host');
   assert(chipSandbox.window.AgiloConfidence.ensureChipHost() === hostPlaced, 'ensureChipHost idempotent');
+
+  const tools = {
+    className: 'ed-tools',
+    children: [],
+    firstChild: null,
+    insertBefore(child) {
+      child.parentNode = this;
+      child.parentElement = this;
+      child.isConnected = true;
+      this.children.unshift(child);
+      this.firstChild = child;
+    }
+  };
+  const toolsDoc = {
+    getElementById(id) {
+      return tools.children.find((c) => c.id === id) || null;
+    },
+    querySelector(sel) {
+      if (String(sel).includes('.ed-tools')) return tools;
+      return null;
+    },
+    createElement() {
+      return {
+        id: '',
+        className: '',
+        isConnected: false,
+        parentNode: null,
+        parentElement: null,
+        innerHTML: '',
+        hidden: false,
+        setAttribute() {},
+        removeAttribute() {},
+        querySelector() { return null; },
+        querySelectorAll() { return []; },
+        addEventListener() {}
+      };
+    },
+    readyState: 'complete',
+    addEventListener() {},
+    head: { appendChild() {} },
+    body: { appendChild() {} }
+  };
+  const toolsWin = {
+    __agiloConfidence: false,
+    AGILOTEXT_ENABLE_CONFIDENCE: true,
+    addEventListener() {},
+    removeEventListener() {},
+    localStorage: { getItem() { return null; }, setItem() {} }
+  };
+  toolsWin.window = toolsWin;
+  vm.runInNewContext(src, { window: toolsWin, document: toolsDoc });
+  const hostTools = toolsWin.AgiloConfidence.ensureChipHost();
+  assert(hostTools.parentNode === tools, 'repli: host dans .ed-tools sans pin-host');
+  assert(tools.firstChild === hostTools, 'repli: host premier enfant de .ed-tools');
   const noneDoc = {
     getElementById() { return null; },
     querySelector() { return null; },
@@ -465,7 +537,7 @@ async function run() {
     pendingCount: 0,
     qualityTitle: 'Qualité estimée : 90%'
   });
-  assert(emptyChip.includes('Relu · 90 %'), 'fantôme même sans host');
+  assert(emptyChip.includes('Aucun passage à relire'), 'libellé zéro même sans host');
   noneWin.AgiloConfidence.clear();
   assert(noneWin.AgiloConfidence.getDebugState().chipHost === false, 'clear: pas de chip sans données');
 
@@ -590,11 +662,11 @@ async function run() {
   assert(editorB.panes[0].classList.contains('is-active') === true, 'volet transcript conserve');
 
   // Toggle ON/OFF ne doit pas casser la preference ni exposer un chemin beforeload
-  const ACTogglePanes = boot({ storage: { 'agilo:confidence-visible:v1': 'true' } });
+  const ACTogglePanes = boot({ storage: { 'agilo:confidence-visible:v2': 'true' } });
   ACTogglePanes.toggle(false, true);
-  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v1') === 'false', 'toggle OFF persiste sans rechargement');
+  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v2') === 'false', 'toggle OFF persiste sans rechargement');
   ACTogglePanes.toggle(true, true);
-  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v1') === 'true', 'toggle ON persiste sans rechargement');
+  assert(ACTogglePanes.__storage.get('agilo:confidence-visible:v2') === 'true', 'toggle ON persiste sans rechargement');
 
   // --- Non-régression : scroll « Passage suivant » borné (bug 1.09.3) ---
   assert(typeof AC.findConfidenceScrollContainer === 'function', 'findConfidenceScrollContainer exposé');
