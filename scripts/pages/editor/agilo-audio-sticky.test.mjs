@@ -1,5 +1,5 @@
 /**
- * Tests unitaires — pin-host in-flow, sans verrou html
+ * Tests unitaires — dock chrome (panel + audio) dans le transcript
  * Exécution : node scripts/pages/editor/agilo-audio-sticky.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -24,15 +24,21 @@ vm.runInNewContext(src, sandbox);
 
 const AS = sandbox.window.AgiloAudioSticky;
 assert(AS && typeof AS.computeAudioRowState === 'function', 'computeAudioRowState exposé');
-assert(typeof AS.applyShellFit === 'function', 'applyShellFit exposé');
-assert(typeof AS.getShellFitState === 'function', 'getShellFitState exposé');
-assert(AS.FIT_CLASS === 'ag-editor-shell-fit', 'FIT_CLASS');
+assert(typeof AS.applyShellFit !== 'function', 'applyShellFit retiré');
+assert(typeof AS.getShellFitState !== 'function', 'getShellFitState retiré');
+assert(AS.FIT_CLASS === undefined, 'FIT_CLASS retiré');
 assert(typeof AS.computeEditorShellLock !== 'function', 'computeEditorShellLock retiré');
 assert(typeof AS.applyIoHysteresis === 'function', 'applyIoHysteresis exposé');
-assert(typeof AS.placePinHost === 'function', 'placePinHost exposé');
+assert(typeof AS.placePinHost !== 'function', 'placePinHost retiré');
+assert(typeof AS.placeChromeDock === 'function', 'placeChromeDock exposé');
 assert(typeof AS.placeAudioRow === 'function', 'placeAudioRow exposé');
+assert(typeof AS.getEditorChromeBottom === 'function', 'getEditorChromeBottom exposé');
+assert(typeof AS.resolveConfidenceChromeBottom === 'function', 'resolveConfidenceChromeBottom exposé');
+assert(typeof AS.computeChromeDockFloatingBox === 'function', 'computeChromeDockFloatingBox exposé');
+assert(typeof AS.getChromeDockState === 'function', 'getChromeDockState exposé');
 assert(AS.ROW_ID === 'ag-editor-audio-row', 'ROW_ID');
-assert(AS.PIN_HOST_ID === 'ag-editor-pin-host', 'PIN_HOST_ID');
+assert(AS.DOCK_ID === 'ag-editor-chrome-dock', 'DOCK_ID');
+assert(AS.PIN_HOST_ID === undefined, 'PIN_HOST_ID retiré');
 assert(AS.LOCK_CLASS === undefined, 'LOCK_CLASS retiré');
 assert(AS.IO_SHOW_RATIO === 0.12, 'hystérésis ratio');
 assert(typeof AS.getEditorChromeTop !== 'function', 'getEditorChromeTop retiré');
@@ -56,14 +62,15 @@ const expired = AS.computeAudioRowState({
 });
 assert(expired.shouldShow === false, 'ligne fermée si audio indisponible');
 
-assert(!src.includes('position:sticky'), 'CSS sans position:sticky');
-assert(!src.includes('position:fixed'), 'CSS sans position:fixed');
+assert(src.includes('position:sticky'), 'CSS sticky nominal');
+assert(src.includes('.ag-editor-chrome-dock.is-floating{position:fixed;'), 'fixed seulement avec is-floating');
+assert((src.match(/position:fixed/g) || []).length === 1, 'un seul position:fixed');
 assert(!src.includes('z-index:26'), 'pas de z-index overlay 26');
-assert(!src.includes('ag-editor-shell-lock'), 'pas de classe lock html');
-assert(src.includes('html.ag-editor-shell-fit .ed-body{height:100dvh;max-height:100dvh;min-height:0}'), 'fit: ed-body 100dvh');
-assert(src.includes('html.ag-editor-shell-fit main.ed-main{height:100%;min-height:0;display:flex;'), 'fit: ed-main flex column');
-assert(src.includes('html.ag-editor-shell-fit main.ed-main > .edtr-pane{flex:1 1 auto;min-height:0;overflow:auto}'), 'fit: pane overflow auto');
-assert(src.includes('html.ag-editor-shell-fit .ed-body > *:not(main){max-height:100%;min-height:0;overflow:auto}'), 'fit: colonnes latérales bornées');
+assert(!src.includes('z-index:9999'), 'pas de z-index 9999');
+assert(src.includes('z-index:25'), 'z-index 25 sous les menus');
+assert(!src.includes('html.ag-editor-shell-lock'), 'pas de lock html actif');
+assert(!src.includes('ag-editor-shell-fit .ed-body'), 'pas de fit 100dvh');
+assert(!src.includes('.ed-body > *:not(main)'), 'pas de borne sidebar');
 assert(!src.includes('html.ag-editor-shell-fit,html.ag-editor-shell-fit body{overflow:hidden'), 'pas de overflow hidden sur html/body');
 assert(!src.includes('html{overflow:hidden'), 'pas de overflow hidden sur le sélecteur html seul');
 assert(!src.includes('.page-wrapper'), 'pas d override page-wrapper');
@@ -81,6 +88,7 @@ assert(!src.includes('lockShell'), 'lockShell retiré');
 assert(!src.includes('unlockShell'), 'unlockShell retiré');
 assert(!src.includes('is-fallback-fixed'), 'filet fixed retiré');
 assert(!src.includes('bindUnlockGestures'), 'gestes unlock retirés');
+assert(!src.includes('ag-editor-pin-host') || src.includes("LEGACY_PIN_ID = 'ag-editor-pin-host'"), 'pin-host seulement en nettoyage legacy');
 
 function makeNode(id, className) {
   const node = {
@@ -88,8 +96,14 @@ function makeNode(id, className) {
     className: className || '',
     parentNode: null,
     nextElementSibling: null,
+    previousElementSibling: null,
     firstChild: null,
     children: [],
+    isConnected: false,
+    classList: {
+      contains(c) { return String(node.className || '').split(/\s+/).includes(c); }
+    },
+    getBoundingClientRect() { return { top: 40, bottom: 80, left: 24, width: 720, height: 40 }; },
     insertBefore(child, ref) {
       if (child.parentNode && child.parentNode !== this) {
         const prevKids = child.parentNode.children;
@@ -98,113 +112,127 @@ function makeNode(id, className) {
         child.parentNode = null;
       }
       child.parentNode = this;
+      child.isConnected = true;
       const i = ref ? this.children.indexOf(ref) : -1;
       if (i >= 0) this.children.splice(i, 0, child);
       else this.children.push(child);
       this.firstChild = this.children[0] || null;
       this.children.forEach((c, k) => {
         c.nextElementSibling = this.children[k + 1] || null;
+        c.previousElementSibling = this.children[k - 1] || null;
       });
     },
     appendChild(child) { this.insertBefore(child, null); },
-    querySelector(sel) {
-      if (sel === '.edtr-pane') return this.children.find((c) => c.className.includes('edtr-pane')) || null;
-      return null;
-    }
+    querySelector() { return null; }
   };
   return node;
 }
 
-const main = makeNode('', 'ed-main');
-const tabs = makeNode('', 'ed-tabs');
-const toolbar = makeNode('', 'ed-toolbar');
 const pane = makeNode('pane-transcript', 'edtr-pane is-active');
-const summary = makeNode('pane-summary', 'edtr-pane');
-main.insertBefore(tabs, null);
-main.insertBefore(toolbar, null);
-main.insertBefore(pane, null);
-main.insertBefore(summary, null);
+const editor = makeNode('transcriptEditor', '');
+pane.insertBefore(editor, null);
 
-const pin = makeNode('ag-editor-pin-host', 'ag-editor-pin-host');
+const dock = makeNode('ag-editor-chrome-dock', 'ag-editor-chrome-dock');
 const row = makeNode('ag-editor-audio-row', 'ag-editor-audio-row');
 const doc = {
-  querySelector(sel) {
-    if (sel === 'main.ed-main') return main;
-    return null;
-  },
+  querySelector() { return null; },
   getElementById(id) {
     if (id === 'pane-transcript') return pane;
-    if (id === 'ag-editor-pin-host') return pin.parentNode ? pin : null;
+    if (id === 'transcriptEditor') return editor;
+    if (id === 'ag-editor-chrome-dock') return dock.parentNode ? dock : null;
     return null;
   }
 };
 
-assert(AS.placeAudioRow(row, doc) === false, 'placeAudioRow refuse sans pin-host');
-assert(AS.placePinHost(pin, doc) === true, 'placePinHost ancre dans ed-main');
-assert(pin.parentNode === main, 'pin-host enfant de main.ed-main');
-assert(pin.nextElementSibling === pane, 'pin-host avant le premier .edtr-pane');
-assert(main.children.indexOf(pin) === 2, 'pin-host après onglets et toolbar');
-assert(AS.placeAudioRow(row, doc) === true, 'placeAudioRow ancre dans pin-host');
-assert(row.parentNode === pin, 'ligne enfant du pin-host');
-assert(pin.firstChild === row, 'ligne dans le pin-host');
-assert(AS.placePinHost(pin, doc) === true, 'placePinHost idempotent');
+assert(AS.placeAudioRow(row, doc) === false, 'placeAudioRow refuse sans dock');
+assert(AS.placeChromeDock(dock, doc) === true, 'placeChromeDock ancre dans pane-transcript');
+assert(dock.parentNode === pane, 'dock enfant de #pane-transcript');
+assert(dock.nextElementSibling === editor, 'dock avant #transcriptEditor');
+assert(pane.children.indexOf(dock) === 0, 'dock premier enfant du pane');
+assert(AS.placeAudioRow(row, doc) === true, 'placeAudioRow ancre dans le dock');
+assert(row.parentNode === dock, 'ligne enfant du dock');
+assert(AS.placeChromeDock(dock, doc) === true, 'placeChromeDock idempotent');
 assert(AS.placeAudioRow(row, doc) === true, 'placeAudioRow idempotent');
-assert(main.children.filter((c) => c.id === 'ag-editor-pin-host').length === 1, 'un seul pin-host');
-assert(pin.children.filter((c) => c.id === 'ag-editor-audio-row').length === 1, 'une seule ligne');
+assert(pane.children.filter((c) => c.id === 'ag-editor-chrome-dock').length === 1, 'un seul dock');
+assert(dock.children.filter((c) => c.id === 'ag-editor-audio-row').length === 1, 'une seule ligne');
 
 const fallbackPane = makeNode('pane-transcript', 'edtr-pane');
 const fallbackSeg = makeNode('', 'ag-seg');
 fallbackPane.insertBefore(fallbackSeg, null);
-const fallbackPin = makeNode('ag-editor-pin-host', 'ag-editor-pin-host');
+const fallbackDock = makeNode('ag-editor-chrome-dock', 'ag-editor-chrome-dock');
 const fallbackRow = makeNode('ag-editor-audio-row', 'ag-editor-audio-row');
 const fallbackDoc = {
   querySelector() { return null; },
   getElementById(id) {
     if (id === 'pane-transcript') return fallbackPane;
-    if (id === 'ag-editor-pin-host') return fallbackPin.parentNode ? fallbackPin : null;
+    if (id === 'ag-editor-chrome-dock') return fallbackDock.parentNode ? fallbackDock : null;
     return null;
   }
 };
-assert(AS.placePinHost(fallbackPin, fallbackDoc) === true, 'repli pin-host pane-transcript');
-assert(fallbackPin.parentNode === fallbackPane, 'repli: pin-host dans le pane');
-assert(fallbackPane.firstChild === fallbackPin, 'repli: pin-host premier enfant du pane');
-assert(AS.placeAudioRow(fallbackRow, fallbackDoc) === true, 'repli: ligne dans pin-host');
-assert(fallbackRow.parentNode === fallbackPin, 'repli: ligne dans le pin-host');
+assert(AS.placeChromeDock(fallbackDock, fallbackDoc) === true, 'repli dock pane-transcript sans editor');
+assert(fallbackDock.parentNode === fallbackPane, 'repli: dock dans le pane');
+assert(fallbackPane.firstChild === fallbackDock, 'repli: dock premier enfant du pane');
+assert(AS.placeAudioRow(fallbackRow, fallbackDoc) === true, 'repli: ligne dans dock');
+assert(fallbackRow.parentNode === fallbackDock, 'repli: ligne dans le dock');
 
 assert(AS.applyIoHysteresis(true, { isIntersecting: false, intersectionRatio: 0 }) === false, 'IO: hors ecran → fermer hystérésis');
 assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.5 }) === true, 'IO: ratio haut → player visible');
 assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.02 }) === false, 'IO: ratio trop bas garde l état précédent');
 assert(AS.applyIoHysteresis(true, { isIntersecting: true, intersectionRatio: 0.02 }) === true, 'IO: petite intersection ne flicker pas');
 
-const fitRoot = {
-  classList: {
-    _s: new Set(),
-    add(c) { this._s.add(c); },
-    contains(c) { return this._s.has(c); }
-  }
-};
-assert(AS.applyShellFit(fitRoot) === true, 'applyShellFit pose la classe');
-assert(fitRoot.classList.contains('ag-editor-shell-fit') === true, 'html reçoit ag-editor-shell-fit');
-assert(AS.applyShellFit(fitRoot) === true, 'applyShellFit idempotent');
+const chromeBottom = 120;
+const floatCoveringTabs = AS.computeChromeDockFloatingBox(
+  { top: 4 },
+  { left: 320, width: 960, bottom: 800 },
+  chromeBottom,
+  1440
+);
+assert(floatCoveringTabs.shouldFloat === true, 'float actif quand sentinel sous chrome');
+assert(floatCoveringTabs.top === chromeBottom + 8, 'top flottant = chromeBottom + 8');
 
-const fitDoc = {
-  documentElement: fitRoot,
-  scrollingElement: { scrollTop: 80 },
+const noFloat = AS.computeChromeDockFloatingBox(
+  { top: 200 },
+  { left: 320, width: 960, bottom: 800 },
+  chromeBottom,
+  1440
+);
+assert(noFloat.shouldFloat === false, 'pas de float si sentinel encore visible sous chrome');
+
+const mobileFloat = AS.computeChromeDockFloatingBox(
+  { top: 0 },
+  { left: 8, width: 360, bottom: 640 },
+  96,
+  390
+);
+assert(mobileFloat.shouldFloat === true, 'float mobile possible');
+assert(mobileFloat.width <= 390 - 24, 'largeur flottante bornee au viewport');
+assert(mobileFloat.top >= 96 + 8, 'top mobile sous chrome');
+
+const probeDoc = {
   querySelector(sel) {
-    if (sel === '.ed-body') {
-      return { getBoundingClientRect() { return { height: 700, top: 12 }; } };
+    if (sel === 'nav.ed-tabs') {
+      return { getBoundingClientRect() { return { bottom: 110, height: 40 }; } };
     }
-    if (sel === 'main.ed-main') {
-      return { getBoundingClientRect() { return { height: 688, top: 24 }; } };
+    return null;
+  },
+  getElementById(id) {
+    if (id === 'ag-editor-chrome-dock') {
+      return {
+        isConnected: true,
+        classList: { contains(c) { return c === 'is-floating'; } },
+        previousElementSibling: {
+          className: 'ag-editor-chrome-dock-sentinel',
+          getBoundingClientRect() { return { top: 12 }; }
+        }
+      };
     }
     return null;
   }
 };
-const probe = AS.getShellFitState(fitDoc);
-assert(probe.fitClass === true, 'sonde: fitClass true');
-assert(probe.edBodyHeight === 700, 'sonde: hauteur ed-body');
-assert(probe.edBodyTop === 12, 'sonde: top ed-body');
-assert(probe.mainTop === 24, 'sonde: top main.ed-main');
-assert(probe.documentScrollTop === 80, 'sonde: scroll résiduel document');
+const probe = AS.getChromeDockState(probeDoc);
+assert(probe.dockConnected === true, 'sonde: dock connecté');
+assert(probe.isFloating === true, 'sonde: is-floating');
+assert(probe.chromeBottom === 110, 'sonde: chromeBottom onglets');
+assert(probe.sentinelTop === 12, 'sonde: sentinelTop');
 
 console.log('agilo-audio-sticky.test.mjs OK');
