@@ -1,9 +1,9 @@
 /* ================================================================
-   AGILOTEXT - Rangée audio in-flow + verrou de coque (éditeur)
+   AGILOTEXT - Rangée audio in-flow (éditeur)
    Page : /app/{free|pro|business}/editor
    Charge : après Code-lecteur-audio-V3.4.js
    Un seul <audio id="agilo-audio">. Pas de follow-playhead.
-   Pas d’overlay nominal : pin-host in-flow, html lock 100dvh.
+   Pin-host in-flow. Pas de lock html, pas d’overlay.
    ================================================================ */
 
 (function () {
@@ -16,7 +16,6 @@
   var PIN_HOST_ID = 'ag-editor-pin-host';
   var ROW_ID = 'ag-editor-audio-row';
   var LEGACY_SLOT_ID = 'ag-editor-audio-slot';
-  var LOCK_CLASS = 'ag-editor-shell-lock';
   var IO_ROOT_MARGIN = '40px 0px 0px 0px';
   var IO_SHOW_RATIO = 0.12;
 
@@ -27,19 +26,6 @@
     return {
       shouldShow: !wrapIntersecting && !unavailable
     };
-  }
-
-  function computeEditorShellLock(opts) {
-    opts = opts || {};
-    var wrapIntersecting = !!opts.wrapIntersecting;
-    var unavailable = !!opts.audioUnavailable;
-    var paneAtTop = opts.paneAtTop !== false;
-    var wheelDeltaY = Number(opts.wheelDeltaY);
-    if (!Number.isFinite(wheelDeltaY)) wheelDeltaY = 0;
-    var locked = !!opts.locked;
-    var shouldLock = !wrapIntersecting && !unavailable;
-    var shouldUnlock = locked && (!shouldLock || (paneAtTop && wheelDeltaY < 0));
-    return { shouldLock: shouldLock, shouldUnlock: shouldUnlock };
   }
 
   function applyIoHysteresis(prevIntersecting, entry) {
@@ -94,13 +80,11 @@
 
   window.AgiloAudioSticky = {
     computeAudioRowState: computeAudioRowState,
-    computeEditorShellLock: computeEditorShellLock,
     applyIoHysteresis: applyIoHysteresis,
     placePinHost: placePinHost,
     placeAudioRow: placeAudioRow,
     PIN_HOST_ID: PIN_HOST_ID,
     ROW_ID: ROW_ID,
-    LOCK_CLASS: LOCK_CLASS,
     IO_ROOT_MARGIN: IO_ROOT_MARGIN,
     IO_SHOW_RATIO: IO_SHOW_RATIO
   };
@@ -117,23 +101,15 @@
   var mainMo = null;
   var wrapIntersecting = true;
   var wrapInert = false;
-  var shellLocked = false;
-  var fallbackFixed = false;
   var raf = 0;
-  var touchStartY = null;
-  var unlockBound = false;
 
   function injectCss() {
     if (document.getElementById('agilo-audio-sticky-css')) return;
     var s = document.createElement('style');
     s.id = 'agilo-audio-sticky-css';
     s.textContent = [
-      'html.ag-editor-shell-lock,html.ag-editor-shell-lock body{overflow:hidden;height:100dvh;max-height:100dvh}',
-      'html.ag-editor-shell-lock .page-wrapper{overflow:visible}',
-      'html.ag-editor-shell-lock .ed-body{height:100dvh;max-height:100dvh}',
       '.ag-editor-pin-host{display:block;box-sizing:border-box;width:100%;max-width:100%;',
       'flex:0 0 auto;margin:0;background:#fff}',
-      '.ag-editor-pin-host.is-fallback-fixed{position:fixed;top:0;z-index:5}',
       '.ag-editor-audio-row{display:none;box-sizing:border-box;width:100%;max-width:100%;',
       'flex:0 0 auto;margin:0}',
       '.ag-editor-audio-row.is-open{display:block;padding:6px 1.25rem 8px;',
@@ -199,10 +175,6 @@
 
   function getWrap() {
     return document.getElementById('agilo-audio-wrap');
-  }
-
-  function getScrollPane() {
-    return document.querySelector('.edtr-pane.is-active') || document.getElementById('pane-transcript');
   }
 
   function getDuration(audio) {
@@ -272,7 +244,7 @@
       pinHost = document.createElement('div');
       pinHost.id = PIN_HOST_ID;
     }
-    pinHost.className = 'ag-editor-pin-host' + (fallbackFixed ? ' is-fallback-fixed' : '');
+    pinHost.className = 'ag-editor-pin-host';
     if (!placePinHost(pinHost, document) && !pinHost.parentNode) {
       document.body.appendChild(pinHost);
     }
@@ -296,59 +268,6 @@
     row.setAttribute('aria-hidden', 'true');
     if (row.parentNode !== host) host.appendChild(row);
     return row;
-  }
-
-  function applyFallbackFixed(on) {
-    var host = ensurePinHost();
-    fallbackFixed = !!on;
-    if (!on) {
-      host.classList.remove('is-fallback-fixed');
-      host.style.removeProperty('left');
-      host.style.removeProperty('width');
-      host.style.removeProperty('top');
-      return;
-    }
-    var main = document.querySelector('main.ed-main');
-    var rect = main && typeof main.getBoundingClientRect === 'function'
-      ? main.getBoundingClientRect()
-      : null;
-    host.classList.add('is-fallback-fixed');
-    if (rect) {
-      host.style.left = Math.max(0, rect.left) + 'px';
-      host.style.width = Math.max(0, rect.width) + 'px';
-      host.style.top = '0px';
-    }
-  }
-
-  function pinHostStillOffscreen() {
-    var host = pinHost;
-    if (!host || typeof host.getBoundingClientRect !== 'function') return false;
-    try {
-      return host.getBoundingClientRect().top < -1;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function lockShell() {
-    if (ROOT) ROOT.classList.add(LOCK_CLASS);
-    shellLocked = true;
-    if (pinHostStillOffscreen()) applyFallbackFixed(true);
-    else applyFallbackFixed(false);
-  }
-
-  function unlockShell(opts) {
-    opts = opts || {};
-    if (!shellLocked && !fallbackFixed) return;
-    shellLocked = false;
-    if (ROOT) ROOT.classList.remove(LOCK_CLASS);
-    applyFallbackFixed(false);
-    if (opts.revealPlayer) {
-      var wrap = getWrap();
-      if (wrap && typeof wrap.scrollIntoView === 'function') {
-        try { wrap.scrollIntoView({ block: 'nearest', behavior: 'auto' }); } catch (e) { /* ignore */ }
-      }
-    }
   }
 
   function ensureBar() {
@@ -466,7 +385,6 @@
     var audio = getAudio();
     if (!wrap || !audio) {
       hideRow();
-      unlockShell();
       return;
     }
     var unavailable = isAudioUnavailable(wrap);
@@ -476,16 +394,6 @@
     });
     if (!rowState.shouldShow) hideRow();
     else openRow();
-
-    var lockState = computeEditorShellLock({
-      wrapIntersecting: wrapIntersecting,
-      audioUnavailable: unavailable,
-      paneAtTop: true,
-      wheelDeltaY: 0,
-      locked: shellLocked
-    });
-    if (lockState.shouldLock) lockShell();
-    else unlockShell();
   }
 
   function schedule() {
@@ -543,50 +451,6 @@
     });
   }
 
-  function tryUnlockFromGesture(deltaY) {
-    if (!shellLocked) return false;
-    var pane = getScrollPane();
-    var atTop = !pane || pane.scrollTop <= 0;
-    var unavailable = isAudioUnavailable(getWrap());
-    var state = computeEditorShellLock({
-      wrapIntersecting: wrapIntersecting,
-      audioUnavailable: unavailable,
-      paneAtTop: atTop,
-      wheelDeltaY: deltaY,
-      locked: shellLocked
-    });
-    if (!state.shouldUnlock) return false;
-    unlockShell({ revealPlayer: true });
-    return true;
-  }
-
-  function bindUnlockGestures() {
-    if (unlockBound) return;
-    unlockBound = true;
-    document.addEventListener('wheel', function (e) {
-      if (!shellLocked) return;
-      var pane = getScrollPane();
-      if (!pane) return;
-      if (e.target !== pane && !(e.target && e.target.closest && e.target.closest('.edtr-pane'))) return;
-      if (tryUnlockFromGesture(e.deltaY)) {
-        try { e.preventDefault(); } catch (err) { /* ignore */ }
-      }
-    }, { capture: true, passive: false });
-    document.addEventListener('touchstart', function (e) {
-      var t = e.changedTouches && e.changedTouches[0];
-      touchStartY = t ? t.clientY : null;
-    }, { capture: true, passive: true });
-    document.addEventListener('touchmove', function (e) {
-      if (!shellLocked || touchStartY == null) return;
-      var t = e.changedTouches && e.changedTouches[0];
-      if (!t) return;
-      var deltaY = touchStartY - t.clientY;
-      if (tryUnlockFromGesture(deltaY)) {
-        try { e.preventDefault(); } catch (err) { /* ignore */ }
-      }
-    }, { capture: true, passive: false });
-  }
-
   function start() {
     injectCss();
     clearLegacyVars();
@@ -595,7 +459,6 @@
     observeMain();
     observeWrap();
     bindAudioEvents();
-    bindUnlockGestures();
     if ((!getWrap() || !document.querySelector('main.ed-main')) && typeof MutationObserver === 'function') {
       var bootMo = new MutationObserver(function () {
         if (document.querySelector('main.ed-main')) observeMain();

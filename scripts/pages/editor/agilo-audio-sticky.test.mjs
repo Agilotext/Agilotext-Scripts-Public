@@ -1,5 +1,5 @@
 /**
- * Tests unitaires — pin-host in-flow + verrou de coque
+ * Tests unitaires — pin-host in-flow, sans verrou html
  * Exécution : node scripts/pages/editor/agilo-audio-sticky.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -24,13 +24,13 @@ vm.runInNewContext(src, sandbox);
 
 const AS = sandbox.window.AgiloAudioSticky;
 assert(AS && typeof AS.computeAudioRowState === 'function', 'computeAudioRowState exposé');
-assert(typeof AS.computeEditorShellLock === 'function', 'computeEditorShellLock exposé');
+assert(typeof AS.computeEditorShellLock !== 'function', 'computeEditorShellLock retiré');
 assert(typeof AS.applyIoHysteresis === 'function', 'applyIoHysteresis exposé');
 assert(typeof AS.placePinHost === 'function', 'placePinHost exposé');
 assert(typeof AS.placeAudioRow === 'function', 'placeAudioRow exposé');
 assert(AS.ROW_ID === 'ag-editor-audio-row', 'ROW_ID');
 assert(AS.PIN_HOST_ID === 'ag-editor-pin-host', 'PIN_HOST_ID');
-assert(AS.LOCK_CLASS === 'ag-editor-shell-lock', 'LOCK_CLASS');
+assert(AS.LOCK_CLASS === undefined, 'LOCK_CLASS retiré');
 assert(AS.IO_SHOW_RATIO === 0.12, 'hystérésis ratio');
 assert(typeof AS.getEditorChromeTop !== 'function', 'getEditorChromeTop retiré');
 assert(typeof AS.computeAudioSlotState !== 'function', 'computeAudioSlotState retiré');
@@ -53,64 +53,15 @@ const expired = AS.computeAudioRowState({
 });
 assert(expired.shouldShow === false, 'ligne fermée si audio indisponible');
 
-const lockOn = AS.computeEditorShellLock({
-  wrapIntersecting: false,
-  audioUnavailable: false,
-  paneAtTop: false,
-  wheelDeltaY: 0,
-  locked: false
-});
-assert(lockOn.shouldLock === true, 'shouldLock si player hors ecran et audio dispo');
-assert(lockOn.shouldUnlock === false, 'pas d unlock si pas encore locké');
-
-const lockStay = AS.computeEditorShellLock({
-  wrapIntersecting: false,
-  audioUnavailable: false,
-  paneAtTop: false,
-  wheelDeltaY: -40,
-  locked: true
-});
-assert(lockStay.shouldLock === true, 'reste locké si pane pas en haut');
-assert(lockStay.shouldUnlock === false, 'molette haut n unlock pas si pane pas en haut');
-
-const unlockWheel = AS.computeEditorShellLock({
-  wrapIntersecting: false,
-  audioUnavailable: false,
-  paneAtTop: true,
-  wheelDeltaY: -40,
-  locked: true
-});
-assert(unlockWheel.shouldLock === true, 'shouldLock encore vrai tant que player hors ecran');
-assert(unlockWheel.shouldUnlock === true, 'shouldUnlock si lock, pane en haut, molette vers le haut');
-
-const unlockVisible = AS.computeEditorShellLock({
-  wrapIntersecting: true,
-  audioUnavailable: false,
-  paneAtTop: true,
-  wheelDeltaY: 0,
-  locked: true
-});
-assert(unlockVisible.shouldLock === false, 'shouldLock faux si player visible');
-assert(unlockVisible.shouldUnlock === true, 'shouldUnlock si player revient dans le viewport');
-
-const noLockUnavailable = AS.computeEditorShellLock({
-  wrapIntersecting: false,
-  audioUnavailable: true,
-  paneAtTop: true,
-  wheelDeltaY: 0,
-  locked: false
-});
-assert(noLockUnavailable.shouldLock === false, 'pas de lock si audio indisponible');
-
 assert(!src.includes('position:sticky'), 'CSS sans position:sticky');
+assert(!src.includes('position:fixed'), 'CSS sans position:fixed');
 assert(!src.includes('z-index:26'), 'pas de z-index overlay 26');
+assert(!src.includes('ag-editor-shell-lock'), 'pas de classe lock html');
+assert(!src.includes('100dvh'), 'pas de lock 100dvh');
+assert(!src.includes('.page-wrapper'), 'pas d override page-wrapper');
+assert(!/html[^{]*\{[^}]*overflow\s*:\s*hidden/.test(src), 'pas de overflow hidden sur html');
 assert(!src.includes('top:var(--ag-editor-chrome-top'), 'pas de top chrome sticky');
 assert(!/setProperty\([^)]*--ag-editor-chrome-top/.test(src), 'ne pose plus --ag-editor-chrome-top');
-assert(src.includes('html.ag-editor-shell-lock .page-wrapper{overflow:visible}'), 'page-wrapper overflow visible au lock');
-assert(src.includes('100dvh'), 'lock 100dvh');
-assert(src.includes('html.ag-editor-shell-lock,html.ag-editor-shell-lock body{overflow:hidden;height:100dvh'), 'html/body lock overflow hidden');
-assert(src.includes('.ag-editor-pin-host.is-fallback-fixed{position:fixed;top:0;z-index:5}'), 'filet fixed seulement is-fallback-fixed z-index 5');
-assert(!src.includes('z-index:26'), 'chemin nominal sans z-index 26');
 assert(src.includes("setAttribute('inert'"), 'inert sur le wrap original quand proxy actif');
 assert(src.includes('.ag-editor-audio-row{display:none'), 'ligne fermée invisible');
 assert(src.includes('.ag-editor-audio-row.is-open{display:block'), 'ligne ouverte visible');
@@ -118,10 +69,11 @@ assert(src.includes('agilo-audio-sticky__ico'), 'icônes mobile 15s/30s');
 assert(src.includes('prefers-reduced-motion'), 'reduced-motion');
 assert(src.includes("setWrapInert(true)"), 'inert posé à l ouverture seulement');
 assert(src.includes("setWrapInert(false)"), 'inert retiré à la fermeture');
-assert(src.includes("addEventListener('agilo:load'"), 'recalcul lock + IO sur agilo:load');
-assert(src.includes('visualViewport'), 'recalcul au visualViewport.resize');
-assert(src.includes('wheel'), 'déverrouillage molette');
-assert(src.includes('touchmove'), 'déverrouillage touch');
+assert(src.includes("addEventListener('agilo:load'"), 'recalcul IO sur agilo:load');
+assert(!src.includes('lockShell'), 'lockShell retiré');
+assert(!src.includes('unlockShell'), 'unlockShell retiré');
+assert(!src.includes('is-fallback-fixed'), 'filet fixed retiré');
+assert(!src.includes('bindUnlockGestures'), 'gestes unlock retirés');
 
 function makeNode(id, className) {
   const node = {
