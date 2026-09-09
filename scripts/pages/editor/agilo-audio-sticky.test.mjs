@@ -24,6 +24,9 @@ vm.runInNewContext(src, sandbox);
 
 const AS = sandbox.window.AgiloAudioSticky;
 assert(AS && typeof AS.computeAudioRowState === 'function', 'computeAudioRowState exposé');
+assert(typeof AS.applyShellFit === 'function', 'applyShellFit exposé');
+assert(typeof AS.getShellFitState === 'function', 'getShellFitState exposé');
+assert(AS.FIT_CLASS === 'ag-editor-shell-fit', 'FIT_CLASS');
 assert(typeof AS.computeEditorShellLock !== 'function', 'computeEditorShellLock retiré');
 assert(typeof AS.applyIoHysteresis === 'function', 'applyIoHysteresis exposé');
 assert(typeof AS.placePinHost === 'function', 'placePinHost exposé');
@@ -57,9 +60,13 @@ assert(!src.includes('position:sticky'), 'CSS sans position:sticky');
 assert(!src.includes('position:fixed'), 'CSS sans position:fixed');
 assert(!src.includes('z-index:26'), 'pas de z-index overlay 26');
 assert(!src.includes('ag-editor-shell-lock'), 'pas de classe lock html');
-assert(!src.includes('100dvh'), 'pas de lock 100dvh');
+assert(src.includes('html.ag-editor-shell-fit .ed-body{height:100dvh;max-height:100dvh;min-height:0}'), 'fit: ed-body 100dvh');
+assert(src.includes('html.ag-editor-shell-fit main.ed-main{height:100%;min-height:0;display:flex;'), 'fit: ed-main flex column');
+assert(src.includes('html.ag-editor-shell-fit main.ed-main > .edtr-pane{flex:1 1 auto;min-height:0;overflow:auto}'), 'fit: pane overflow auto');
+assert(src.includes('html.ag-editor-shell-fit .ed-body > *:not(main){max-height:100%;min-height:0;overflow:auto}'), 'fit: colonnes latérales bornées');
+assert(!src.includes('html.ag-editor-shell-fit,html.ag-editor-shell-fit body{overflow:hidden'), 'pas de overflow hidden sur html/body');
+assert(!src.includes('html{overflow:hidden'), 'pas de overflow hidden sur le sélecteur html seul');
 assert(!src.includes('.page-wrapper'), 'pas d override page-wrapper');
-assert(!/html[^{]*\{[^}]*overflow\s*:\s*hidden/.test(src), 'pas de overflow hidden sur html');
 assert(!src.includes('top:var(--ag-editor-chrome-top'), 'pas de top chrome sticky');
 assert(!/setProperty\([^)]*--ag-editor-chrome-top/.test(src), 'ne pose plus --ag-editor-chrome-top');
 assert(src.includes("setAttribute('inert'"), 'inert sur le wrap original quand proxy actif');
@@ -168,5 +175,36 @@ assert(AS.applyIoHysteresis(true, { isIntersecting: false, intersectionRatio: 0 
 assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.5 }) === true, 'IO: ratio haut → player visible');
 assert(AS.applyIoHysteresis(false, { isIntersecting: true, intersectionRatio: 0.02 }) === false, 'IO: ratio trop bas garde l état précédent');
 assert(AS.applyIoHysteresis(true, { isIntersecting: true, intersectionRatio: 0.02 }) === true, 'IO: petite intersection ne flicker pas');
+
+const fitRoot = {
+  classList: {
+    _s: new Set(),
+    add(c) { this._s.add(c); },
+    contains(c) { return this._s.has(c); }
+  }
+};
+assert(AS.applyShellFit(fitRoot) === true, 'applyShellFit pose la classe');
+assert(fitRoot.classList.contains('ag-editor-shell-fit') === true, 'html reçoit ag-editor-shell-fit');
+assert(AS.applyShellFit(fitRoot) === true, 'applyShellFit idempotent');
+
+const fitDoc = {
+  documentElement: fitRoot,
+  scrollingElement: { scrollTop: 80 },
+  querySelector(sel) {
+    if (sel === '.ed-body') {
+      return { getBoundingClientRect() { return { height: 700, top: 12 }; } };
+    }
+    if (sel === 'main.ed-main') {
+      return { getBoundingClientRect() { return { height: 688, top: 24 }; } };
+    }
+    return null;
+  }
+};
+const probe = AS.getShellFitState(fitDoc);
+assert(probe.fitClass === true, 'sonde: fitClass true');
+assert(probe.edBodyHeight === 700, 'sonde: hauteur ed-body');
+assert(probe.edBodyTop === 12, 'sonde: top ed-body');
+assert(probe.mainTop === 24, 'sonde: top main.ed-main');
+assert(probe.documentScrollTop === 80, 'sonde: scroll résiduel document');
 
 console.log('agilo-audio-sticky.test.mjs OK');

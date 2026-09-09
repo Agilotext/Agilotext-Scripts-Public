@@ -3,7 +3,7 @@
    Page : /app/{free|pro|business}/editor
    Charge : après Code-lecteur-audio-V3.4.js
    Un seul <audio id="agilo-audio">. Pas de follow-playhead.
-   Pin-host in-flow. Pas de lock html, pas d’overlay.
+   Pin-host in-flow. Coque bornée à 100dvh (pas de lock html, pas d’overlay).
    ================================================================ */
 
 (function () {
@@ -16,6 +16,7 @@
   var PIN_HOST_ID = 'ag-editor-pin-host';
   var ROW_ID = 'ag-editor-audio-row';
   var LEGACY_SLOT_ID = 'ag-editor-audio-slot';
+  var FIT_CLASS = 'ag-editor-shell-fit';
   var IO_ROOT_MARGIN = '40px 0px 0px 0px';
   var IO_SHOW_RATIO = 0.12;
 
@@ -78,13 +79,51 @@
     return true;
   }
 
+  function applyShellFit(root) {
+    root = root || ROOT;
+    if (!root || !root.classList) return false;
+    root.classList.add(FIT_CLASS);
+    return true;
+  }
+
+  function getShellFitState(doc) {
+    doc = doc || (typeof document !== 'undefined' ? document : null);
+    var root = (doc && doc.documentElement) || ROOT;
+    var edBody = doc && typeof doc.querySelector === 'function' ? doc.querySelector('.ed-body') : null;
+    var main = doc && typeof doc.querySelector === 'function' ? doc.querySelector('main.ed-main') : null;
+    var scrolling = doc && (doc.scrollingElement || doc.documentElement);
+    var bodyRect = edBody && typeof edBody.getBoundingClientRect === 'function'
+      ? edBody.getBoundingClientRect()
+      : null;
+    var mainRect = main && typeof main.getBoundingClientRect === 'function'
+      ? main.getBoundingClientRect()
+      : null;
+    var vh = 0;
+    try {
+      vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0;
+    } catch (e) {
+      vh = 0;
+    }
+    return {
+      fitClass: !!(root && root.classList && root.classList.contains(FIT_CLASS)),
+      edBodyHeight: bodyRect ? bodyRect.height : 0,
+      edBodyTop: bodyRect ? bodyRect.top : null,
+      mainTop: mainRect ? mainRect.top : null,
+      documentScrollTop: scrolling ? (Number(scrolling.scrollTop) || 0) : 0,
+      viewportHeight: vh
+    };
+  }
+
   window.AgiloAudioSticky = {
     computeAudioRowState: computeAudioRowState,
     applyIoHysteresis: applyIoHysteresis,
     placePinHost: placePinHost,
     placeAudioRow: placeAudioRow,
+    applyShellFit: applyShellFit,
+    getShellFitState: getShellFitState,
     PIN_HOST_ID: PIN_HOST_ID,
     ROW_ID: ROW_ID,
+    FIT_CLASS: FIT_CLASS,
     IO_ROOT_MARGIN: IO_ROOT_MARGIN,
     IO_SHOW_RATIO: IO_SHOW_RATIO
   };
@@ -108,6 +147,14 @@
     var s = document.createElement('style');
     s.id = 'agilo-audio-sticky-css';
     s.textContent = [
+      'html.ag-editor-shell-fit .ed-body{height:100dvh;max-height:100dvh;min-height:0}',
+      'html.ag-editor-shell-fit main.ed-main{height:100%;min-height:0;display:flex;',
+      'flex-direction:column;overflow:hidden}',
+      'html.ag-editor-shell-fit main.ed-main > nav.ed-tabs,',
+      'html.ag-editor-shell-fit main.ed-main > .ed-toolbar,',
+      'html.ag-editor-shell-fit main.ed-main > #ag-editor-pin-host{flex:0 0 auto}',
+      'html.ag-editor-shell-fit main.ed-main > .edtr-pane{flex:1 1 auto;min-height:0;overflow:auto}',
+      'html.ag-editor-shell-fit .ed-body > *:not(main){max-height:100%;min-height:0;overflow:auto}',
       '.ag-editor-pin-host{display:block;box-sizing:border-box;width:100%;max-width:100%;',
       'flex:0 0 auto;margin:0;background:#fff}',
       '.ag-editor-audio-row{display:none;box-sizing:border-box;width:100%;max-width:100%;',
@@ -453,6 +500,7 @@
 
   function start() {
     injectCss();
+    applyShellFit(ROOT);
     clearLegacyVars();
     ensurePinHost();
     ensureRow();
@@ -477,6 +525,7 @@
       if (window.visualViewport) window.visualViewport.addEventListener('resize', schedule);
     } catch (e) { /* ignore */ }
     window.addEventListener('agilo:load', function () {
+      applyShellFit(ROOT);
       wrapObserved = null;
       observeMain();
       ensurePinHost();
