@@ -294,7 +294,8 @@
     if (pendingRisk <= 0 && originalRisk > 0) return 'Tous les passages signalés sont traités';
     if (pendingRisk <= 0) return 'Aucun passage signalé à relire';
     const main = plural(pendingRisk, 'passage à relire', 'passages à relire');
-    return priority > 0 ? `${main} · ${plural(priority, 'prioritaire', 'prioritaires')}` : main;
+    const prioWord = priority <= 1 ? 'prioritaire' : 'prioritaires';
+    return `${main} · ${priority} ${prioWord}`;
   }
 
   function chipMainLabel(pendingRisk) {
@@ -1118,6 +1119,7 @@
   }
 
   function goToNextConfidenceZone() {
+    if (!__confidenceVisible) return;
     if (!__navKeys.length) {
       __navKeys = buildNavigationOrder(__reconciledMap);
     }
@@ -1129,6 +1131,7 @@
   }
 
   function goToPreviousConfidenceZone() {
+    if (!__confidenceVisible) return;
     if (!__navKeys.length) {
       __navKeys = buildNavigationOrder(__reconciledMap);
     }
@@ -1147,19 +1150,24 @@
   const CHEVRON_RIGHT_SVG =
     '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
 
-  function buildNavControlsHtml(hasPendingRisk) {
+  function buildNavControlsHtml(hasPendingRisk, navEnabled) {
     if (!hasPendingRisk) return '';
+    const on = navEnabled !== false;
+    const disabledAttrs = on ? '' : ' disabled aria-disabled="true"';
+    const nextClass = on
+      ? 'ag-confidence-panel__btn ag-confidence-panel__btn--primary ag-confidence-panel__btn--icon'
+      : 'ag-confidence-panel__btn ag-confidence-panel__btn--icon';
     return (
       '<span class="ag-confidence-panel__nav" role="group" aria-label="Navigation passages à relire">' +
         '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--icon" id="ag-confidence-prev"' +
           ' aria-label="Passage précédent" aria-keyshortcuts="Alt+ArrowLeft"' +
-          ' title="Passage précédent (Alt+←)">' +
+          ` title="${on ? 'Passage précédent (Alt+←)' : 'Activez Surligner pour naviguer'}"${disabledAttrs}>` +
           `<span class="ag-confidence-panel__btn-icon">${CHEVRON_LEFT_SVG}</span>` +
         '</button>' +
         '<span id="ag-confidence-nav-count" class="ag-confidence-panel__nav-count" aria-live="polite"></span>' +
-        '<button type="button" class="ag-confidence-panel__btn ag-confidence-panel__btn--primary ag-confidence-panel__btn--icon" id="ag-confidence-next"' +
+        `<button type="button" class="${nextClass}" id="ag-confidence-next"` +
           ' aria-label="Passage suivant" aria-keyshortcuts="Alt+ArrowRight"' +
-          ' title="Passage suivant (Alt+→)">' +
+          ` title="${on ? 'Passage suivant (Alt+→)' : 'Activez Surligner pour naviguer'}"${disabledAttrs}>` +
           `<span class="ag-confidence-panel__btn-icon">${CHEVRON_RIGHT_SVG}</span>` +
         '</button>' +
       '</span>'
@@ -1203,7 +1211,7 @@
       `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
       `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
       modifiedStat +
-      buildNavControlsHtml(hasPendingRisk) +
+      buildNavControlsHtml(hasPendingRisk, __confidenceVisible) +
       actionsHtml +
       (showHelper ? buildHelperHtml() : '');
 

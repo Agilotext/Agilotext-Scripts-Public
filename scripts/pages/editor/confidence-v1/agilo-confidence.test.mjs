@@ -200,7 +200,7 @@ async function run() {
   const weighted = (0.95 * 3 + 0.52 * 6 + 0.72 * 1) / (3 + 6 + 1);
   assert(Math.abs(fallback.globalScore - weighted) < 0.001, 'fallback pondéré wordCount');
   assert(AC.panelMainLabel({ verifySegments: 16, lowSegments: 2 }) === '18 passages à relire · 2 prioritaires', 'panneau: compteurs avant score');
-  assert(AC.panelMainLabel({ verifySegments: 1, lowSegments: 0 }) === '1 passage à relire', 'panneau: pas de zéro prioritaire inutile');
+  assert(AC.panelMainLabel({ verifySegments: 1, lowSegments: 0 }) === '1 passage à relire · 0 prioritaire', 'panneau: 0 prioritaire visible');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }) === 'Aucun passage signalé à relire', 'panneau: état zéro passage');
   assert(AC.panelMainLabel({ verifySegments: 0, lowSegments: 0 }, { verifySegments: 1, lowSegments: 0 }) === 'Tous les passages signalés sont traités', 'panneau: passages traités après revue');
   assert(AC.chipMainLabel(1) === '1 passage à relire', 'chip: 1 passage à relire');
@@ -222,6 +222,12 @@ async function run() {
   assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowLeft"'), 'nav HTML: raccourci précédent');
   assert(navHtml.includes('aria-keyshortcuts="Alt+ArrowRight"'), 'nav HTML: raccourci suivant');
   assert(navHtml.indexOf('ag-confidence-prev') < navHtml.indexOf('ag-confidence-next'), 'nav HTML: précédent avant suivant');
+  assert(navHtml.includes('ag-confidence-panel__btn--primary'), 'nav on: suivant primary');
+  assert(!navHtml.includes(' disabled'), 'nav on: pas disabled');
+  const navOff = AC.buildNavControlsHtml(true, false);
+  assert(navOff.includes('disabled'), 'nav off: disabled');
+  assert(navOff.includes('aria-disabled="true"'), 'nav off: aria-disabled');
+  assert(!navOff.includes('ag-confidence-panel__btn--primary'), 'nav off: pas de primary');
   assert(AC.buildNavControlsHtml(false) === '', 'nav HTML: vide sans passages à relire');
   assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowRight' }) === true, 'Alt+ArrowRight reconnu');
   assert(AC.isConfidenceShortcutEvent({ altKey: true, key: 'ArrowLeft' }) === true, 'Alt+ArrowLeft reconnu');
@@ -449,6 +455,9 @@ async function run() {
   assert(!cssSrc.includes('z-index:9999'), 'pas de z-index 9999');
   assert(!cssSrc.includes('z-index: 9999'), 'pas de z-index 9999 espace');
   assert(cssSrc.includes('z-index: 25'), 'z-index 25 sous les menus');
+  assert(cssSrc.includes('blur(20px)'), 'CSS flou Mac 20px');
+  assert(cssSrc.includes('-webkit-backdrop-filter'), 'CSS webkit backdrop');
+  assert(!cssSrc.includes('translateZ(0)'), 'CSS panel sans translateZ');
   assert(!cssSrc.includes('ag-confidence-chip'), 'CSS sans chip toolbar');
   assert(cssSrc.includes('scroll-margin-block: 96px'), 'scroll-margin 96px');
   assert(!cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin sans dock audio');

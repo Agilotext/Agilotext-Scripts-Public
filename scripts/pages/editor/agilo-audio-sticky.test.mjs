@@ -68,6 +68,10 @@ assert((src.match(/position:fixed/g) || []).length === 1, 'un seul position:fixe
 assert(!src.includes('z-index:26'), 'pas de z-index overlay 26');
 assert(!src.includes('z-index:9999'), 'pas de z-index 9999');
 assert(src.includes('z-index:25'), 'z-index 25 sous les menus');
+assert(!src.includes('transform:translateZ(0)'), 'dock sans translateZ');
+assert(src.includes('blur(20px)'), 'dock flou Mac 20px');
+assert(src.includes('-webkit-backdrop-filter:blur(20px)'), 'dock webkit backdrop');
+assert(src.includes('background:#fff'), 'audio compact reste blanc');
 assert(!src.includes('html.ag-editor-shell-lock'), 'pas de lock html actif');
 assert(!src.includes('ag-editor-shell-fit .ed-body'), 'pas de fit 100dvh');
 assert(!src.includes('.ed-body > *:not(main)'), 'pas de borne sidebar');

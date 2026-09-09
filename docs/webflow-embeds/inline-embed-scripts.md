@@ -250,7 +250,7 @@ Le bouton UI n'était jamais sur `1.09` (seulement sur `f3bbc9e`). Port de `buil
 
 ### Dock transcript + panneau floating (staging, post-1.09.6)
 
-Le sticky `@8c7da101` recouvrait le transcript. Le verrou html `@15984c83` faisait remonter le scroll. L’in-flow pur `@bfd49ad5` laissait la barre partir. Le fit `100dvh` `@1d2b4ee9` écrasait la sidebar `.ed-rail`. Remplacé par `#ag-editor-chrome-dock` dans `#pane-transcript` : panneau confidence + audio compact, sticky puis `is-floating` sous les onglets. **Sans** toucher `.ed-body`. Switch **Surligner** + bouton `?` (copy d’avant). Interrupteur **éteint par défaut** (`agilo:confidence-visible:v2`). **Même SHA** pour `agilo-audio-sticky.js` + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
+Le sticky `@8c7da101` recouvrait le transcript. Le verrou html `@15984c83` faisait remonter le scroll. L’in-flow pur `@bfd49ad5` laissait la barre partir. Le fit `100dvh` `@1d2b4ee9` écrasait la sidebar `.ed-rail`. Remplacé par `#ag-editor-chrome-dock` dans `#pane-transcript` : panneau confidence + audio compact, sticky puis `is-floating` sous les onglets, verre dépoli Mac. **Sans** toucher `.ed-body`. Switch **Surligner** + `?`. Flèches nav inertes si off. Compteur `· N prioritaire(s)` toujours visible. **Même SHA** pour `agilo-audio-sticky.js` + `agilo-confidence.js` + `.css.js`. Détail et recette : [`editor-audio-sticky.md`](editor-audio-sticky.md). Pas www tant que PIN_SHA n’est pas collé sur `agilotext-test`.
 
 ### Piste iframe (historique, hors toggle)
 

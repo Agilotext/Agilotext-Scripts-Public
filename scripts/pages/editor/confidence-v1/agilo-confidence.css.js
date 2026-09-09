@@ -13,16 +13,17 @@
   padding: 0.5rem 0.7rem;
   font-size: 13px;
   color: #525252;
-  background: rgba(248, 249, 250, 0.96);
+  background: rgba(255, 255, 255, 0.72);
   border: 1px solid rgba(52, 58, 64, 0.15);
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   position: sticky;
   top: 8px;
   z-index: 20;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   box-sizing: border-box;
-  transition: box-shadow .16s ease, padding .16s ease, border-color .16s ease, transform .16s ease;
+  transition: box-shadow .16s ease, padding .16s ease, border-color .16s ease;
 }
 
 /* Flotte sous la chrome éditeur (onglets/toolbar). Ne jamais monter au-dessus
@@ -39,7 +40,6 @@
   z-index: 25;
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
   border-color: rgba(23, 74, 150, 0.20);
-  transform: translateZ(0);
 }
 
 #pane-transcript .ag-seg,
@@ -62,6 +62,9 @@
   z-index: auto;
   margin: 8px 0 8px;
   box-shadow: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .ag-editor-chrome-dock-sentinel {
@@ -80,7 +83,11 @@
 
 .ag-confidence-panel.is-disabled {
   border-color: rgba(52, 58, 64, 0.12);
-  background: rgba(248, 249, 250, 0.92);
+  background: rgba(241, 245, 249, 0.78);
+}
+
+.ag-editor-chrome-dock .ag-confidence-panel.is-disabled {
+  background: transparent;
 }
 
 .ag-confidence-panel-sentinel {
@@ -138,6 +145,22 @@
 
 .ag-confidence-panel__btn--primary:hover {
   background: #123d7c;
+}
+
+.ag-confidence-panel__btn:disabled,
+.ag-confidence-panel__btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: #ffffff;
+  color: #94a3b8;
+  border-color: rgba(52, 58, 64, 0.14);
+  font-weight: 500;
+}
+
+.ag-confidence-panel__btn:disabled:hover,
+.ag-confidence-panel__btn[aria-disabled="true"]:hover {
+  background: #ffffff;
 }
 
 .ag-confidence-panel__btn:focus-visible,
