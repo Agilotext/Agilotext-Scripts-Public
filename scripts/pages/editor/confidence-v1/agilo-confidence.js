@@ -35,6 +35,7 @@
     matched: 0
   };
   let __warnedApplyKey = '';
+  let __helperOpen = null;
 
   function debugLog(reason, details) {
     if (window.AGILO_DEBUG) {
@@ -76,8 +77,55 @@
 
   function dismissHelper() {
     storageSet(STORAGE_HELPER_SEEN, 'true');
+    __helperOpen = false;
     const helper = document.getElementById('ag-confidence-helper');
     if (helper) helper.remove();
+    const helpBtn = document.getElementById('ag-confidence-help');
+    if (helpBtn) helpBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleHelperBanner() {
+    __helperOpen = !document.getElementById('ag-confidence-helper');
+    const root = getTranscriptRoot();
+    const summary = getSummaryDisplay(__confidenceJson, __localModified.size);
+    if (summary && root) renderConfidencePanel(root, summary);
+  }
+
+  const HELPER_TITLE = 'Passages à relire. Agilotext signale les passages où l’audio semble moins sûr.';
+
+  function buildToggleHtml(visible) {
+    const on = visible !== false;
+    return (
+      `<button type="button" class="ag-confidence-toggle${on ? ' is-on' : ''}" id="ag-confidence-toggle" role="switch"` +
+        ` aria-checked="${on ? 'true' : 'false'}"` +
+        ` aria-label="${on ? 'Masquer les passages à relire' : 'Afficher les passages à relire'}">` +
+        '<span class="ag-confidence-toggle__label">Surligner</span>' +
+        '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
+      '</button>'
+    );
+  }
+
+  function buildHelpButtonHtml(expanded) {
+    const open = expanded === true;
+    return (
+      `<button type="button" class="ag-confidence-help" id="ag-confidence-help"` +
+        ` aria-label="Pourquoi ces passages ?" title="${escapeAttr(HELPER_TITLE)}"` +
+        ` aria-expanded="${open ? 'true' : 'false'}" aria-controls="ag-confidence-helper">?</button>`
+    );
+  }
+
+  function buildHelperHtml() {
+    return (
+      '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
+        '<div class="ag-confidence-helper__copy">' +
+          '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
+          '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
+          '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages. Activez l’interrupteur pour les surligner.</span>' +
+        '</div>' +
+        '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
+        '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
+      '</div>'
+    );
   }
 
   function pct(score) {
@@ -815,6 +863,7 @@
       root.querySelectorAll('.ag-seg').forEach(removeSegmentConfidenceDecorations);
     }
     removeConfidencePanel();
+    __helperOpen = null;
     __confidenceJson = null;
     __reconciledMap = new Map();
     __localModified = new Set();
@@ -1131,7 +1180,7 @@
       panel.id = 'ag-confidence-panel';
       panel.className = 'ag-confidence-panel';
       panel.setAttribute('role', 'region');
-      panel.setAttribute('aria-label', 'Confidence transcription');
+      panel.setAttribute('aria-label', 'Passages à relire');
     }
     if (!placeConfidencePanel(panel) && transcriptRoot?.parentElement) {
       transcriptRoot.parentElement.insertBefore(panel, transcriptRoot);
@@ -1144,30 +1193,19 @@
     const modifiedStat = modifiedCount > 0
       ? `<span class="ag-confidence-panel__stat">${plural(modifiedCount, 'modifié', 'modifiés')}</span>`
       : '';
-    const toggleHtml =
-      `<button type="button" class="ag-confidence-toggle${__confidenceVisible ? ' is-on' : ''}" id="ag-confidence-toggle" role="switch" aria-checked="${__confidenceVisible ? 'true' : 'false'}"` +
-      ` aria-label="${__confidenceVisible ? 'Masquer les passages à relire' : 'Afficher les passages à relire'}">` +
-      '<span class="ag-confidence-toggle__track" aria-hidden="true"><span class="ag-confidence-toggle__thumb"></span></span>' +
-      '</button>';
-    const helperHtml = shouldShowHelper(display)
-      ? '<div class="ag-confidence-helper" id="ag-confidence-helper">' +
-          '<div class="ag-confidence-helper__copy">' +
-            '<strong>Passages à relire.</strong> Agilotext signale les passages où l’audio semble moins sûr. Relisez surtout les passages prioritaires avant d’utiliser le transcript.' +
-            '<span class="ag-confidence-helper__details" hidden> Cela peut venir d’un mot rare, d’un bruit, d’une voix qui se chevauche ou d’un passage peu audible. Ce n’est pas forcément une erreur.</span>' +
-            '<span class="ag-confidence-helper__hint"> Astuce : Alt+← et Alt+→ pour naviguer entre les passages. Activez l’interrupteur pour les surligner.</span>' +
-          '</div>' +
-          '<button type="button" class="ag-confidence-helper__link" id="ag-confidence-helper-more">Pourquoi ?</button>' +
-          '<button type="button" class="ag-confidence-panel__btn" id="ag-confidence-helper-dismiss">Compris</button>' +
-        '</div>'
-      : '';
+    if (__helperOpen == null) __helperOpen = shouldShowHelper(display);
+    const showHelper = hasPendingRisk && __helperOpen === true;
+    const actionsHtml = hasPendingRisk
+      ? `<span class="ag-confidence-panel__actions">${buildHelpButtonHtml(showHelper)}${buildToggleHtml(__confidenceVisible)}</span>`
+      : `<span class="ag-confidence-panel__actions">${buildToggleHtml(__confidenceVisible)}</span>`;
 
     panel.innerHTML =
       `<span class="ag-confidence-panel__main">${panelMainLabel(display, summary)}</span>` +
       `<span class="ag-confidence-panel__score" title="Le score global peut rester élevé même si certains passages méritent une relecture.">${qualityLabel(display)}</span>` +
       modifiedStat +
       buildNavControlsHtml(hasPendingRisk) +
-      toggleHtml +
-      helperHtml;
+      actionsHtml +
+      (showHelper ? buildHelperHtml() : '');
 
     panel.querySelector('#ag-confidence-prev')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
@@ -1183,6 +1221,11 @@
       e?.preventDefault?.();
       e?.stopPropagation?.();
       toggleUserConfidenceVisible();
+    });
+    panel.querySelector('#ag-confidence-help')?.addEventListener('click', (e) => {
+      e?.preventDefault?.();
+      e?.stopPropagation?.();
+      toggleHelperBanner();
     });
     panel.querySelector('#ag-confidence-helper-dismiss')?.addEventListener('click', (e) => {
       e?.preventDefault?.();
@@ -1503,6 +1546,7 @@
     toggle: setConfidenceVisible,
     toggleUserConfidenceVisible,
     dismissHelper,
+    toggleHelperBanner,
     // API interne / tests
     isConfidenceEnabled,
     fetchConfidenceJson,
@@ -1510,6 +1554,9 @@
     computeSummaryFallback,
     buildNavigationOrder,
     buildNavControlsHtml,
+    buildToggleHtml,
+    buildHelpButtonHtml,
+    buildHelperHtml,
     badgeLabel,
     panelMainLabel,
     chipMainLabel,

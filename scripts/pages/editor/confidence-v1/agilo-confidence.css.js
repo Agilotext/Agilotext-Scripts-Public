@@ -143,6 +143,7 @@
 .ag-confidence-panel__btn:focus-visible,
 .ag-confidence-review__btn:focus-visible,
 .ag-confidence-toggle:focus-visible,
+.ag-confidence-help:focus-visible,
 .ag-confidence-helper__link:focus-visible {
   outline: 2px solid rgba(23, 74, 150, 0.55);
   outline-offset: 2px;
@@ -187,15 +188,44 @@
   display: block;
 }
 
+.ag-confidence-panel__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ag-confidence-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(23, 74, 150, 0.28);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #174a96;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.ag-confidence-help:hover,
+.ag-confidence-help[aria-expanded="true"] {
+  background: rgba(23, 74, 150, 0.08);
+}
+
 .ag-confidence-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 26px;
-  padding: 0.2rem 0.45rem;
-  border: 1px solid rgba(23, 74, 150, 0.20);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.92);
+  gap: 8px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #174a96;
   cursor: pointer;
   font-size: 12px;
@@ -205,15 +235,20 @@
 }
 
 .ag-confidence-toggle:hover {
-  background: rgba(23, 74, 150, 0.06);
+  background: transparent;
+}
+
+.ag-confidence-toggle:hover .ag-confidence-toggle__track {
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.16);
 }
 
 .ag-confidence-toggle__track {
   position: relative;
-  width: 28px;
-  height: 16px;
+  width: 32px;
+  height: 20px;
+  flex: 0 0 32px;
   border-radius: 999px;
-  background: #cbd5e1;
+  background: #d1d5db;
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.10);
   transition: background .16s ease;
 }
@@ -222,8 +257,8 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);

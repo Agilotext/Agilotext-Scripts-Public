@@ -335,6 +335,25 @@ async function run() {
   assert(src.includes('ag-confidence-toggle'), 'panneau: toggle iOS');
   assert(src.includes("classList.toggle('is-disabled', !__confidenceVisible)"), 'panneau visible, oranges via toggle');
   assert(src.includes('agilo:confidence-visible:v2'), 'préférence v2');
+  assert(typeof AC.buildToggleHtml === 'function', 'buildToggleHtml exposé');
+  assert(typeof AC.buildHelpButtonHtml === 'function', 'buildHelpButtonHtml exposé');
+  assert(typeof AC.buildHelperHtml === 'function', 'buildHelperHtml exposé');
+  const toggleOn = AC.buildToggleHtml(true);
+  assert(toggleOn.includes('Surligner'), 'toggle: label Surligner');
+  assert(toggleOn.includes('ag-confidence-toggle__track'), 'toggle: track iOS');
+  assert(toggleOn.includes('aria-checked="true"'), 'toggle on: aria-checked');
+  const toggleOff = AC.buildToggleHtml(false);
+  assert(toggleOff.includes('Surligner'), 'toggle off: même label');
+  assert(toggleOff.includes('aria-checked="false"'), 'toggle off: aria-checked');
+  const helpBtn = AC.buildHelpButtonHtml(false);
+  assert(helpBtn.includes('id="ag-confidence-help"'), 'help: bouton ? chrome');
+  assert(helpBtn.includes('Pourquoi ces passages'), 'help: aria-label pourquoi');
+  assert(helpBtn.includes('>?<'), 'help: glyphe ?');
+  const helperBanner = AC.buildHelperHtml();
+  assert(helperBanner.includes('Agilotext signale les passages où l’audio semble moins sûr'), 'helper: copy d avant');
+  assert(helperBanner.includes('Pourquoi ?'), 'helper: Pourquoi ?');
+  assert(helperBanner.includes('pas forcément une erreur'), 'helper: détails');
+  assert(helperBanner.includes('id="ag-confidence-helper-dismiss"'), 'helper: Compris');
 
   const chromeBottom = 120;
   const floatCoveringTabs = AC.computeConfidenceFloatingBox(
@@ -418,6 +437,13 @@ async function run() {
   assert(!cssSrc.includes('main.ed-main > .ed-toolbar'), 'CSS sans regle z-index sur ed-toolbar');
   assert(cssSrc.includes('is-floating'), 'CSS overlay is-floating');
   assert(cssSrc.includes('ag-confidence-toggle'), 'CSS toggle iOS');
+  assert(cssSrc.includes('width: 32px'), 'CSS track 32px');
+  assert(cssSrc.includes('height: 20px'), 'CSS track 20px');
+  assert(cssSrc.includes('ag-confidence-panel__actions'), 'CSS cluster droite');
+  assert(cssSrc.includes('margin-left: auto'), 'CSS actions a droite');
+  assert(cssSrc.includes('ag-confidence-help'), 'CSS bouton ?');
+  assert(!/\.ag-confidence-help\s*\{[^}]*display:\s*none/.test(cssSrc), 'floating ne cache pas le ?');
+  assert(cssSrc.includes('background: #d1d5db'), 'CSS track off gris Apple');
   assert(cssSrc.includes('position: fixed'), 'CSS floating en position fixed');
   assert(cssSrc.includes('.ag-confidence-panel.is-floating'), 'CSS panel is-floating');
   assert(!cssSrc.includes('z-index:9999'), 'pas de z-index 9999');
