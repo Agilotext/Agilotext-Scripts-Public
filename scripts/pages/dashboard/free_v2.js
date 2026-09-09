@@ -1129,7 +1129,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function freeUpgradeBenefits(minPlan, source) {
     if (minPlan === 'ent') {
       return [
-        'Joignez jusqu’à 5 PDF, DOCX, TXT de contexte',
+        'Joignez jusqu’à 5 documents de contexte (Word, ODT, PDF, PowerPoint, MD…)',
         'Noms et termes mieux reconnus',
         'Compte rendu plus précis',
         'IA 100 % française (Business)'
@@ -1137,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (source === 'maestro_docs') {
       return [
-        'Joignez 1 PDF, DOCX ou TXT de contexte',
+        'Joignez 1 document de contexte (Word, ODT, PDF, PowerPoint, MD…)',
         'Noms et termes mieux reconnus',
         'Compte rendu plus fiable',
         'Et les atouts Pro (intervenants, modèles…)'
