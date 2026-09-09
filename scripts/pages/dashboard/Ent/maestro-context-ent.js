@@ -25,8 +25,10 @@
 
   var CFG_MAX_BYTES = typeof CFG.maxBytes === 'number' ? CFG.maxBytes : 10 * 1024 * 1024;
   var CFG_MAX_TOTAL = typeof CFG.maxTotalBytes === 'number' ? CFG.maxTotalBytes : 50 * 1024 * 1024;
-  var ACCEPT_EXT = /\.(pdf|docx|txt)$/i;
-  var LABEL_EMPTY = 'Glissez un PDF, DOCX ou TXT ou&nbsp;<span class="browse">Parcourir</span>';
+  var ACCEPT_EXT = /\.(txt|doc|docx|rtf|odt|pdf|ppt|pptx|md)$/i;
+  var ACCEPT_ATTR = '.txt,.doc,.docx,.rtf,.odt,.pdf,.ppt,.pptx,.md,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/rtf,application/vnd.oasis.opendocument.text,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/markdown,text/x-markdown';
+  var FORMATS_LABEL = 'TXT, DOC, DOCX, RTF, ODT, PDF, PPT, PPTX, MD';
+  var LABEL_EMPTY = 'Glissez un document (TXT, Word, ODT, PDF, PowerPoint, MD) ou&nbsp;<span class="browse">Parcourir</span>';
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
   var DEBOUNCE_MS = 400;
@@ -42,7 +44,7 @@
     error_maestro_context_file_too_large: 'Un document dépasse 10 Mo.',
     error_maestro_context_total_too_large: 'Total des documents supérieur à 50 Mo.',
     error_maestro_context_pdf_too_many_pages: 'Plus de 50 pages PDF au total.',
-    error_maestro_context_file_unsupported: 'Formats acceptés : PDF, DOCX, TXT.',
+    error_maestro_context_file_unsupported: 'Formats acceptés : TXT, DOC, DOCX, RTF, ODT, PDF, PPT, PPTX, MD.',
     error_maestro_context_ocr_failed: 'Échec OCR du PDF scanné.',
     error_maestro_context_segment_limit: 'Documents trop longs pour l’analyse.',
     error_maestro_context_json_invalid: 'Analyse structurée invalide.',
@@ -194,16 +196,16 @@
       return 'Disponible dès Pro (1 document). Jusqu’à 5 en Business. L’aperçu est indicatif ; une convocation avec liste de présences garantit les participants.';
     }
     if (state.edition === 'pro') {
-      return '1 document (PDF, DOCX, TXT, 10 Mo). L’aperçu est indicatif ; seule une convocation avec liste de présences garantit les participants. Jusqu’à 5 documents en Business.';
+      return '1 document (' + FORMATS_LABEL + ', 10 Mo). L’aperçu est indicatif ; seule une convocation avec liste de présences garantit les participants. Jusqu’à 5 documents en Business.';
     }
-    return 'Ajoutez jusqu’à 5 documents (PDF, DOCX, TXT, 10 Mo chacun). L’aperçu est indicatif ; une convocation avec liste de présences garantit les participants.';
+    return 'Ajoutez jusqu’à 5 documents (' + FORMATS_LABEL + ', 10 Mo chacun). L’aperçu est indicatif ; une convocation avec liste de présences garantit les participants.';
   }
 
   function helpText() {
     if (state.edition === 'pro') {
-      return 'PDF, DOCX, TXT — 1 document (10 Mo max). Aperçu indicatif.';
+      return FORMATS_LABEL + '. 1 document (10 Mo max). Aperçu indicatif.';
     }
-    return 'PDF, DOCX, TXT — jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
+    return FORMATS_LABEL + '. Jusqu’à 5 documents (10 Mo chacun). Tous sont analysés ensemble.';
   }
 
   function toggleLabel() {
@@ -214,7 +216,7 @@
 
   function toggleSubLabel() {
     if (state.locked) return 'Nouveau — dès l’offre Pro';
-    if (state.edition === 'pro') return 'ODJ / brief → CR plus fiable · 1 PDF';
+    if (state.edition === 'pro') return 'ODJ / brief → CR plus fiable · 1 document';
     return 'ODJ / brief → CR plus fiable · jusqu’à 5 docs';
   }
 
@@ -426,7 +428,7 @@
     if (!file) return 'Aucun fichier.';
     if (state.locked || !state.maxDocs) return 'Documents de contexte — offre Business.';
     if (file.size > state.maxBytes) return 'Fichier trop volumineux (max 10 Mo).';
-    if (!ACCEPT_EXT.test(file.name || '')) return 'Formats acceptés : PDF, DOCX, TXT.';
+    if (!ACCEPT_EXT.test(file.name || '')) return 'Formats acceptés : ' + FORMATS_LABEL + '.';
     return null;
   }
 
@@ -1095,6 +1097,7 @@
 
     if (input.hasAttribute('name')) input.removeAttribute('name');
     input.multiple = state.maxDocs > 1;
+    input.setAttribute('accept', ACCEPT_ATTR);
 
     var help = block.querySelector('.maestro-context-help');
     if (help) help.textContent = helpText();
