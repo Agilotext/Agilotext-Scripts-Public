@@ -73,13 +73,24 @@ if (card.indexOf("Utiliser par défaut") !== -1) throw new Error("old primary la
 if (card.indexOf("data-act=\"default\"") === -1) throw new Error("default act missing");
 if (card.indexOf("agilo-lib-card__actions--v2") === -1) throw new Error("v2 actions grid missing");
 if (card.indexOf("data-act=\"fiche\"") === -1) throw new Error("Voir missing");
+if (card.indexOf("agilo-lib-card__preview") === -1) throw new Error("preview missing on normal card");
+if (card.indexOf('title="Mon CR client"') === -1) throw new Error("title tooltip missing on h3");
+if (card.indexOf('aria-label="Mon CR client"') === -1) throw new Error("aria-label missing on h3");
+if (card.indexOf("agilo-lib-act-primary") === -1) throw new Error("primary grid area missing");
+
+var compactCard = C.cardHtml(user, { size: "compact" });
+if (compactCard.indexOf("agilo-lib-card__preview") !== -1) throw new Error("compact must not have preview");
 
 user.isDefault = true;
 var defCard = C.cardHtml(user);
-if (defCard.indexOf("Modèle par défaut") === -1) throw new Error("default state missing");
+if (defCard.indexOf(" Par défaut") === -1) throw new Error("default state missing");
+if (defCard.indexOf("Modèle par défaut</span>") !== -1) throw new Error("old long default label still visible");
 if (defCard.indexOf("disabled") !== -1 && defCard.indexOf("Définir par défaut") !== -1) {
   throw new Error("disabled default button should be a state, not a button");
 }
+var table = C.tableRowHtml(user);
+if (table.indexOf('title="Mon CR client"') === -1) throw new Error("table title tooltip missing");
+if (table.indexOf(" Par défaut") === -1) throw new Error("table default state missing");
 
 var head = Cat._headHtml();
 if (head.indexOf("agilo-lib-head--v2") === -1) throw new Error("v2 header missing");
@@ -122,6 +133,9 @@ var locked = {
   lockReasonMessage: "Réservé au Pack CSE."
 };
 if (Fiche.previewMode(locked, proCreds) !== "locked") throw new Error("locked mode");
+var lockedCard = C.cardHtml(locked);
+if (lockedCard.indexOf("agilo-lib-act-primary") === -1) throw new Error("locked CTA not in primary grid");
+if (lockedCard.indexOf("Bientôt disponible") === -1) throw new Error("locked CTA label");
 
 var pending = Object.assign({}, user, { promptModelStatus: "PENDING" });
 if (Fiche.previewMode(pending, proCreds) !== "pending") throw new Error("pending mode");
@@ -136,6 +150,12 @@ var proHtml = Fiche.html(user, { previewText: "Tu es un assistant", previewLoadi
 if (proHtml.indexOf("Tu es un assistant") === -1) throw new Error("pro preview missing");
 if (proHtml.indexOf("Modifier le prompt") === -1) throw new Error("edit CTA missing");
 if (proHtml.indexOf("jamais affiché") !== -1) throw new Error("old never-shown copy still there");
+if (proHtml.indexOf("agilo-lib-fiche__scroll") === -1) throw new Error("fiche scroll body missing");
+if (proHtml.indexOf("agilo-lib-fiche__iconwrap") === -1) throw new Error("fiche icon wrap missing");
+if (proHtml.indexOf("agilo-lib-iconpop") !== -1) throw new Error("icon popover should be closed by default");
+
+var openIcon = Fiche.html(user, { iconOpen: true, previewText: "x", previewLoading: false }, proCreds);
+if (openIcon.indexOf("agilo-lib-fiche__iconwrap") === -1) throw new Error("icon wrap missing when picker open");
 
 var stdHtml = Fiche.html(std, { previewText: "Prompt officiel", previewLoading: false }, proCreds);
 if (stdHtml.indexOf("Voir le prompt") === -1) throw new Error("readonly studio label");
@@ -161,6 +181,10 @@ if (css.indexOf("border-left: 1px") === -1) throw new Error("banner 1px border m
 if (css.indexOf("agilo-lib-head--v2") === -1) throw new Error("header css missing");
 if (css.indexOf("agilo-lib-card__actions--v2") === -1) throw new Error("actions css missing");
 if (css.indexOf("agilo-lib-blur") === -1) throw new Error("blur css missing");
+if (css.indexOf("container-type: inline-size") === -1) throw new Error("container query missing");
+if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missing");
+if (css.indexOf("max-height: 12rem") === -1) throw new Error("icon popover max-height missing");
+if (css.indexOf("opacity: 0.5") === -1) throw new Error("pencil rest opacity missing");
 
 var main = fs.readFileSync(path.join(lib, "library-main.js"), "utf8");
 if (main.indexOf("AgiloLibraryCatalogV2") === -1) throw new Error("main switch missing");

@@ -214,17 +214,20 @@
     var badges = (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") + Core.badgeHtml(model);
     return '<div class="agilo-lib-fiche" data-id="' + model.promptModelId + '">' +
       '<header class="agilo-lib-fiche__head">' +
+      '<div class="agilo-lib-fiche__iconwrap">' +
       Core.iconTile(model, 28, { size: "xl" }) +
+      iconPopoverHtml(model, st) +
+      "</div>" +
       '<div class="agilo-lib-fiche__titlewrap">' +
       '<p class="agilo-lib-fiche__kicker">' + esc(typeLabel(model)) + " · " + esc(layout) + "</p>" +
       titleBlock(model, st) +
       (badges ? '<div class="agilo-lib-card__meta">' + badges + "</div>" : "") +
       "</div></header>" +
-      iconPopoverHtml(model, st) +
+      '<div class="agilo-lib-fiche__scroll">' +
       previewSection(model, st, creds) +
       '<section class="agilo-lib-fiche__about">' +
       '<p class="agilo-lib-fiche__desc">' + desc + "</p>" + example +
-      "</section>" +
+      "</section></div>" +
       footHtml(model, creds) +
       "</div>";
   }

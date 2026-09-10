@@ -4,8 +4,8 @@
  *
  * Règles v2 :
  * - une seule action primaire par carte : « Définir par défaut », ou l’état
- *   « Modèle par défaut » quand c’est déjà le cas (pas de bouton grisé) ;
- * - « Voir » + menu « ⋯ » alignés sur une grille 1fr auto auto ;
+ *   « Par défaut » (check) quand c’est déjà le cas ;
+ * - grille d’actions 1fr auto auto, 2 lignes sous 16.5rem (container query) ;
  * - le menu ne contient plus default / icon / edit (portés par la fiche) ;
  * - l’icône des modèles personnels est cliquable (pencil au survol).
  * @version 2.0.0
@@ -61,8 +61,9 @@
   }
 
   function defaultState(size) {
-    return '<span class="agilo-lib-state agilo-lib-state--default' + (size === "sm" ? " agilo-lib-state--sm" : "") +
-      '" aria-label="Modèle par défaut">' + svgIcon("check-circle", 16) + " Modèle par défaut</span>";
+    return '<span class="agilo-lib-state agilo-lib-state--default agilo-lib-act-primary' +
+      (size === "sm" ? " agilo-lib-state--sm" : "") +
+      '" aria-label="Modèle par défaut">' + svgIcon("check-circle", 16) + " Par défaut</span>";
   }
 
   function primaryAction(m, size) {
@@ -71,28 +72,30 @@
     var cta = A.ctaForLocked ? A.ctaForLocked(m.packCse) : null;
     var sm = size === "sm" ? " agilo-lib-btn--sm" : "";
     if (isLocked && m.packCse && cta) {
-      return '<a class="agilo-lib-btn agilo-lib-btn--cta' + sm + '" href="' + escapeHtml(cta.href) + '">' +
+      return '<a class="agilo-lib-btn agilo-lib-btn--cta agilo-lib-act-primary' + sm + '" href="' + escapeHtml(cta.href) + '">' +
         escapeHtml(cta.label) + "</a>";
     }
     if (m.isDefault) return defaultState(size);
     if (m.canUse && A.isGenerationSafeId && A.isGenerationSafeId(m.promptModelId)) {
-      return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary' + sm + '" data-act="default">' +
+      return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="default">' +
         "Définir par défaut</button>";
     }
     if (m.type === "STANDARD" && m.canCopyOfficial) {
-      return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary' + sm + '" data-act="duplicate">Ajouter à mes modèles</button>';
+      return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="duplicate">Ajouter à mes modèles</button>';
     }
-    return '<span class="agilo-lib-state agilo-lib-state--empty" aria-hidden="true"></span>';
+    return '<span class="agilo-lib-state agilo-lib-state--empty agilo-lib-act-primary" aria-hidden="true"></span>';
   }
 
   function voirBtn(size) {
     var sm = size === "sm" ? " agilo-lib-btn--sm" : "";
-    return '<button type="button" class="agilo-lib-btn' + sm + '" data-act="fiche">' + svgIcon("eye", 16) + " Voir</button>";
+    return '<button type="button" class="agilo-lib-btn agilo-lib-act-voir' + sm + '" data-act="fiche">' + svgIcon("eye", 16) + " Voir</button>";
   }
 
   function moreBtn(m, size) {
-    if (!menuItems(m).length) return '<span class="agilo-lib-state agilo-lib-state--empty" aria-hidden="true"></span>';
-    return '<button type="button" class="agilo-lib-icon-btn' + (size === "sm" ? " agilo-lib-icon-btn--sm" : "") +
+    if (!menuItems(m).length) {
+      return '<span class="agilo-lib-state agilo-lib-state--empty agilo-lib-act-more" aria-hidden="true"></span>';
+    }
+    return '<button type="button" class="agilo-lib-icon-btn agilo-lib-act-more' + (size === "sm" ? " agilo-lib-icon-btn--sm" : "") +
       '" data-act="more" aria-label="Autres actions" title="Autres actions">' + svgIcon("dots", 16) + "</button>";
   }
 
@@ -149,13 +152,17 @@
       ? '<p class="agilo-lib-card__example">Exemple : ' + escapeHtml(example) + "</p>"
       : "";
     var delay = opts.index != null ? ' style="--i:' + Math.min(opts.index, 12) + '"' : "";
+    var preview = size === "compact" ? "" : Core.previewHtml(m);
+    var title = escapeHtml(m.cardTitle);
     return (
       '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" tabindex="0"' +
       (isLocked ? ' aria-disabled="true"' : "") + delay + ">" +
+      preview +
       '<div class="agilo-lib-card__top">' +
       iconTile(m, size === "featured" ? 24 : 22, { size: size === "featured" ? "lg" : "" }) +
       '<div class="agilo-lib-card__head">' +
-      '<h3 class="agilo-lib-card__title" data-act="fiche">' + escapeHtml(m.cardTitle) + "</h3>" +
+      '<h3 class="agilo-lib-card__title" data-act="fiche" title="' + title + '" aria-label="' + title + '">' +
+      title + "</h3>" +
       '<div class="agilo-lib-card__meta">' + badgeHtml(m) + "</div>" +
       "</div></div>" +
       descHtml + exampleHtml + lockLine +
@@ -169,7 +176,8 @@
     return '<tr class="agilo-lib-tr" data-id="' + m.promptModelId + '">' +
       '<td class="agilo-lib-td"><div class="agilo-lib-td--name">' +
       iconTile(m, 16, { size: "sm", editable: false }) +
-      '<span class="agilo-lib-td--title" data-act="fiche">' + escapeHtml(m.cardTitle) + "</span></div></td>" +
+      '<span class="agilo-lib-td--title" data-act="fiche" title="' + escapeHtml(m.cardTitle) + '">' +
+      escapeHtml(m.cardTitle) + "</span></div></td>" +
       '<td class="agilo-lib-td"><div class="agilo-lib-card__meta">' +
       (m.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") +
       badgeHtml(m) + "</div></td>" +
