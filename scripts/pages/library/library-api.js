@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.3.0
+ * @version 1.4.0
  */
 (function (global) {
   "use strict";
@@ -24,6 +24,7 @@
       library2Live: !!c.library2Live,
       cse89Live: !!c.cse89Live,
       atelierEnabled: !!c.atelierEnabled,
+      uiV2: !!c.uiV2,
       apiBase: c.apiBase || V1,
       library2Base: c.library2Base || LIB2,
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
@@ -382,7 +383,70 @@
     else if (path.indexOf("/business") !== -1) root = "/app/business";
     if (kind === "dashboard") return root + "/dashboard";
     if (kind === "profile") return root + "/profile?tab=prompts";
+    if (kind === "bibliotheque") return root + "/bibliotheque";
     return root;
+  }
+
+  /* ---- v2 : creds actives (Studio) + contenu prompt v1 ---- */
+  var activeCreds = null;
+  var contentCache = {};
+
+  function setActiveCreds(creds) {
+    activeCreds = creds || null;
+  }
+
+  function credsForStudio() {
+    var c = activeCreds;
+    if (!c || !c.email || !c.token) return null;
+    return { username: c.email, token: c.token, edition: c.edition || "ent" };
+  }
+
+  function extractPromptText(data) {
+    if (typeof data === "string") return data;
+    if (!data || typeof data !== "object") return "";
+    var keys = ["promptModelContent", "promptContent", "content", "text", "result", "promptText", "prompt"];
+    for (var i = 0; i < keys.length; i++) {
+      if (typeof data[keys[i]] === "string") return data[keys[i]];
+    }
+    return "";
+  }
+
+  /**
+   * Corps du prompt (v1 getPromptModelContent, même endpoint que le Studio).
+   * Jamais appelé en Gratuit ni sur un modèle verrouillé : la garde est côté appelant (fiche v2).
+   */
+  function getPromptContent(creds, promptId) {
+    var key = String(promptId);
+    if (contentCache[key]) return Promise.resolve(contentCache[key]);
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(cfg().apiBase + "/getPromptModelContent", {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId
+      });
+    }).then(function (res) {
+      if (!res.ok) return res;
+      res.text = extractPromptText(res.data);
+      if (res.text) contentCache[key] = res;
+      return res;
+    });
+  }
+
+  function forgetPromptContent(promptId) {
+    if (promptId == null) { contentCache = {}; return; }
+    delete contentCache[String(promptId)];
+  }
+
+  /** GA4 optionnel : gtag si présent, sinon dataLayer. Jamais bloquant. */
+  function track(name, params) {
+    try {
+      var p = params || {};
+      if (activeCreds && activeCreds.edition && !p.edition) p.edition = activeCreds.edition;
+      if (typeof global.gtag === "function") { global.gtag("event", name, p); return true; }
+      if (Array.isArray(global.dataLayer)) { global.dataLayer.push(Object.assign({ event: name }, p)); return true; }
+    } catch (_) { /* ignore */ }
+    return false;
   }
 
   function normEdition(v) {
@@ -956,7 +1020,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.3.0",
+    VERSION: "1.4.0",
     PIN_MAX: PIN_MAX,
     cfg: cfg,
     waitForCreds: waitForCreds,
@@ -987,6 +1051,11 @@
     canCreate: canCreate,
     appPath: appPath,
     inferEdition: inferEdition,
+    setActiveCreds: setActiveCreds,
+    credsForStudio: credsForStudio,
+    getPromptContent: getPromptContent,
+    forgetPromptContent: forgetPromptContent,
+    track: track,
     humanize: humanize,
     isAuthError: isAuthError,
     sanitizeUserMessage: sanitizeUserMessage

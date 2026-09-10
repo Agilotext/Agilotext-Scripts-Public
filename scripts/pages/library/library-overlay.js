@@ -14,13 +14,17 @@
 
   function host() {
     var el = document.getElementById(HOST_ID);
-    if (el) return el;
-    el = document.createElement("div");
-    el.id = HOST_ID;
-    el.className = "agilo-lib agilo-lib-overlay";
-    el.hidden = true;
-    el.setAttribute("aria-hidden", "true");
-    document.body.appendChild(el);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = HOST_ID;
+      el.className = "agilo-lib agilo-lib-overlay";
+      el.hidden = true;
+      el.setAttribute("aria-hidden", "true");
+      document.body.appendChild(el);
+    }
+    if (global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().uiV2) {
+      el.classList.add("agilo-lib--v2");
+    }
     return el;
   }
 

@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Redirect Mon compte → Bibliothèque (staging)</title>
+</head>
+<body>
+<p>Coller dans l’onglet « Mes modèles » de Mon compte, staging only. Garde <code>?noredirect=1</code> pour recetter l’onglet sans boucle.</p>
+<div class="agilo-lib" id="agilo-profile-prompts-redirect" style="font-family:inherit;padding:1rem 0">
+  <p style="margin:0 0 .75rem">Vos modèles sont dans la Bibliothèque. Vous pouvez les voir, les modifier et en créer de nouveaux au même endroit.</p>
+  <a class="agilo-lib-btn" id="agilo-profile-prompts-cta" href="/app/business/bibliotheque">Ouvrir la bibliothèque</a>
+</div>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  if (params.get("noredirect") === "1") return;
+  var tab = params.get("tab") || String(location.hash || "").replace(/^#/, "");
+  if (tab !== "prompts") return;
+  var path = (location.pathname || "").toLowerCase();
+  var root = "/app/business";
+  if (path.indexOf("/premium") !== -1) root = "/app/premium";
+  else if (path.indexOf("/free") !== -1) root = "/app/free";
+  var open = params.get("open") || "";
+  var hash = "";
+  if (/^-?\d+$/.test(open)) hash = "#modele=" + open;
+  var cta = document.getElementById("agilo-profile-prompts-cta");
+  if (cta) cta.setAttribute("href", root + "/bibliotheque" + hash);
+  location.replace(root + "/bibliotheque" + hash);
+})();
+</script>
+</body>
+</html>

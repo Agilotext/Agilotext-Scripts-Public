@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aperçu local bibliothèque Agilotext v2</title>
+  <link rel="stylesheet" href="../../scripts/pages/library/library.css">
+  <link rel="stylesheet" href="../../scripts/pages/library/library-v2.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .prev-bar { padding: .6rem 1.25rem; border-bottom: 1px solid #343a4040; background: #fff; display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; font-size: .85rem; }
+    .prev-bar a { color: #174a96; }
+    .prev-bar a.is-on { font-weight: 700; text-decoration: underline; }
+    .prev-bar code { background: #f8f9fa; padding: 0 .3rem; border-radius: 4px; }
+  </style>
+</head>
+<body style="margin:0;font-family:Poppins,system-ui,sans-serif;background:#f8f9fa;color:#020202">
+  <div class="prev-bar">
+    <strong>Aperçu local v2</strong>
+    <a href="?mock=free" data-p="free">Gratuit</a>
+    <a href="?mock=pro" data-p="pro">Pro</a>
+    <a href="?mock=business" data-p="business">Business</a>
+    <a href="?mock=business-dense" data-p="business-dense">Business dense</a>
+    <span style="color:#525252">Deep link : <code>#modele=2000</code> · wizard : <code>#creer</code> · Studio = factice</span>
+  </div>
+  <div style="padding:1.25rem;max-width:1180px;margin:0 auto">
+    <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+  </div>
+  <script>
+    window.__AGILO_PROMPT_LIBRARY__ = {
+      library2Live: true,
+      cse89Live: false,
+      atelierEnabled: true,
+      uiV2: true,
+      pricingUrl: "/tarifs",
+      mountSelector: "#agilo-prompt-library-anchor"
+    };
+    (function () {
+      var p = new URLSearchParams(location.search).get("mock") || "business";
+      var a = document.querySelector('.prev-bar a[data-p="' + p + '"]');
+      if (a) a.classList.add("is-on");
+      if (!new URLSearchParams(location.search).get("mock")) {
+        location.replace("?mock=business" + location.hash);
+      }
+    })();
+  </script>
+  <script src="../../scripts/pages/editor/token-resolver.js"></script>
+  <script src="../../scripts/pages/editor/agilo-editor-creds.js"></script>
+  <script src="../../scripts/shared/agilo-speech-dictate.js"></script>
+  <script src="../../scripts/pages/library/library-standards-meta.js"></script>
+  <script src="../../scripts/pages/library/library-api.js"></script>
+  <script src="../../scripts/pages/library/library-core.js"></script>
+  <script src="../../scripts/pages/library/library-core-v2.js"></script>
+  <script src="../../scripts/pages/library/library-overlay.js"></script>
+  <script src="../../scripts/pages/library/library-icon-picker.js"></script>
+  <script src="../../scripts/pages/library/library-fiche-v2.js"></script>
+  <script src="../../scripts/pages/library/library-wizard-v2.js"></script>
+  <script src="../../scripts/pages/library/library-catalog-v2.js"></script>
+  <script src="./prompt-library-preview-mock-v2.js"></script>
+  <script src="../../scripts/pages/library/library-main.js"></script>
+</body>
+</html>

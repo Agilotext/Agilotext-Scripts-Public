@@ -2,24 +2,38 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
-  <title>Embed bibliothèque — coller dans Webflow staging</title>
+  <title>Embed bibliothèque v2 — coller dans Webflow staging</title>
 </head>
 <body>
-<p>Fichier de référence. Le collage réel est dans <code>prompt-library.md</code>.</p>
+<p>Fichier de référence. Le collage réel est dans <code>prompt-library.md</code> (section v2). SHA à remplacer après commit.</p>
 <!-- Pin jsDelivr : même SHA que prompt-library.md (remplacé après commit) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library.css?v=18c8563a">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-v2.css?v=SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=SHA">
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+<div id="agilo-prompt-studio-anchor" hidden></div>
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = {
     library2Live: true,
     cse89Live: false,
-    atelierEnabled: false,
+    atelierEnabled: true,
+    uiV2: true,
     apiBase: "https://api.agilotext.com/api/v1",
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
+    pricingUrl: "/tarifs",
     ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
     ctaAnnualUrl: "/cse",
     ctaMonthlyUrl: "/cse"
+  };
+  window.__AGILO_PROMPT_STUDIO__ = {
+    enabled: true,
+    mountSelector: "#agilo-prompt-studio-anchor",
+    getAuth: function () {
+      return window.AgiloLibraryApi && window.AgiloLibraryApi.credsForStudio
+        ? window.AgiloLibraryApi.credsForStudio()
+        : null;
+    }
   };
 </script>
 </body>

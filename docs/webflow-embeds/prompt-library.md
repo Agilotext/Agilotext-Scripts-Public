@@ -168,7 +168,7 @@ Ticket Java parallèle (hors ce repo) : `DeriveEditionFromMemberstackMember` doi
 
 ## Recette (Bauer + un Free test, pas Astrid)
 
-Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=business`.
+Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=business` (v1) ou `docs/webflow-embeds/preview-v2.html?mock=business` (v2).
 
 | Compte | Attendu |
 |--------|---------|
@@ -176,6 +176,90 @@ Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=b
 | Pro | Popup 4 questions + duplicate + tableau, Modifier → `/app/premium/profile?tab=prompts` si atelier absent |
 | Business (Bauer) | Bouton primaire bleu lisible, menu … hors du titre, Voir ouvre la fiche overlay, `#creer` ouvre la popup, chips, recherche, tableau triable, 6e épingle → plafond, duplicate d’un standard → Mes modèles, wizard READY, jeton périmé rafraîchi (régression 1.2) |
 | Mobile 375 px | Overlay pleine largeur, onglets scrollables, cartes 1 colonne, tableau replié en cartes |
+
+Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre la popup de création.
+
+## UI v2 (staging, `uiV2: true`)
+
+Nouvelle couche. v1 reste chargeable : `uiV2: false` (rollback). www et Astrid inchangés.
+
+Fichiers en plus : `library-v2.css`, `library-core-v2.js`, `library-fiche-v2.js`, `library-wizard-v2.js`, `library-catalog-v2.js`, Studio `scripts/pages/profile/agilo-atelier-maquette-coach.{js,css}` (commit `f1a365a`), dictée `scripts/shared/agilo-speech-dictate.js`.
+
+Aperçu local : `docs/webflow-embeds/preview-v2.html?mock=free|pro|business`. Studio factice, pas de token.
+
+### Embed page bibliothèque v2 (×3, staging only)
+
+Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/bibliotheque`. SHA `PIN_SHA` (remplacé après commit).
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library.css?v=PIN_SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-v2.css?v=PIN_SHA">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=PIN_SHA">
+
+<div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
+<div id="agilo-prompt-studio-anchor" hidden></div>
+
+<script>
+  window.__AGILO_PROMPT_LIBRARY__ = {
+    library2Live: true,
+    cse89Live: false,
+    atelierEnabled: true,
+    uiV2: true,
+    apiBase: "https://api.agilotext.com/api/v1",
+    library2Base: "https://api.agilotext.com/api/v1/library2",
+    mountSelector: "#agilo-prompt-library-anchor",
+    pricingUrl: "/tarifs",
+    ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
+    ctaAnnualUrl: "/cse",
+    ctaMonthlyUrl: "/cse"
+  };
+  window.__AGILO_PROMPT_STUDIO__ = {
+    enabled: true,
+    mountSelector: "#agilo-prompt-studio-anchor",
+    getAuth: function () {
+      return window.AgiloLibraryApi && window.AgiloLibraryApi.credsForStudio
+        ? window.AgiloLibraryApi.credsForStudio()
+        : null;
+    }
+  };
+</script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/token-resolver.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/agilo-editor-creds.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/shared/agilo-speech-dictate.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-standards-meta.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-api.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-core.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-core-v2.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-overlay.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-icon-picker.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-fiche-v2.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-wizard-v2.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-catalog.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-catalog-v2.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/library/library-main.js?v=PIN_SHA"></script>
+```
+
+Rollback v2 : `uiV2: false` (recharge catalog v1, plus de CSS v2 ni Studio si tu les retires). Pas www.
+
+### Redirect Mon compte → biblio (staging)
+
+Snippet : `docs/webflow-embeds/profile-prompts-redirect.html`. Coller dans l’onglet Modèles des 3 pages Mon compte. `?tab=prompts` redirige vers `/app/{palier}/bibliotheque#modele={open}`. Garde `?noredirect=1`. Le `<select id="default-template-select">` du dashboard n’est pas touché.
+
+Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon compte. Tutoriel driver.js : hors de ce repo, à vérifier à la main si un tooltip pointe encore vers Mes modèles.
+
+### Recette Bauer v2 (compte Bauer, pas Astrid)
+
+1. Business : header une ligne (h1 + recherche + Créer), bandeaux sans trait latéral arrondi.
+2. Carte : « Définir par défaut » aligné, état « Modèle par défaut » si déjà défaut, « Voir » ouvre la fiche.
+3. Fiche Pro/Business : aperçu prompt réel, 2 boutons + menu, pas de doublon « Utiliser / Définir ». « Modifier le prompt » ouvre le Studio. Fermer le Studio → fiche rafraîchie.
+4. Fiche Free (compte test) : flou, CTA Pro, **aucun** appel `getPromptModelContent` dans l’onglet Réseau. Modifier grisé.
+5. CSE verrouillé : CTA pack, pas d’aperçu.
+6. Wizard : 4 questions identiques à l’ancien Mon compte + récap, dictée, icône suggérée, succès.
+7. `#modele=253` ouvre la fiche. Mon compte `?tab=prompts` redirige (sauf `noredirect=1`).
+8. Rollback : `uiV2: false`, hard refresh, v1 revient.
+
+Retrait v1 (catalog.js page, pas picker) : **2 semaines après cette recette**, noté dans `FEATURES_TRACKING.md`.
 
 Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre la popup de création.
 
