@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.2.0
+ * @version 1.3.0
  */
 (function (global) {
   "use strict";
@@ -123,6 +123,12 @@
     var low = msg.toLowerCase();
     if (code === "error_pin_limit" || (low.indexOf("pin") !== -1 && low.indexOf("limit") !== -1)) {
       return "5 épingles maximum. Désépingle un modèle d’abord.";
+    }
+    if (code === "invalid_icon") {
+      return "Cette icône n’est pas disponible. Choisis-en une autre.";
+    }
+    if (code === "invalid_prompt_type") {
+      return "Seuls tes modèles personnels ont une icône modifiable.";
     }
     if (low.indexOf("already") !== -1 || low.indexOf("existe déjà") !== -1 || low.indexOf("duplicate name") !== -1) {
       return "Ce nom existe déjà. Essaie un autre nom.";
@@ -250,10 +256,20 @@
   }
 
   function isPackCseCard(m) {
-    if (!cfg().library2Live) return false;
+    if (!m || !cfg().library2Live) return false;
     var types = typesList(m);
     if (types.indexOf("cse") !== -1) return true;
+    var bt = String(m.businessType || m.business_type || "").toLowerCase();
+    if (bt === "cse") return true;
     return m.lockReasonCode === "SUBSCRIPTION_ACCESS_REQUIRED";
+  }
+
+  function canSetUserIcon(id, type) {
+    if (!cfg().library2Live) return false;
+    var n = Number(id);
+    if (!isFinite(n) || n <= 100) return false;
+    if (type && String(type).toUpperCase() !== "USER") return false;
+    return true;
   }
 
   function ts(v) {
@@ -319,10 +335,15 @@
       lockReasonMessage: lockMsg,
       lockedReason: lockMsg,
       allowedSubscriptionTypes: typesList(raw),
+      businessType: String(raw.businessType || raw.business_type || ""),
       packCse: isPackCseCard(raw),
       displayOrder: Number(raw.displayOrder || raw.sortOrder || 0),
       sortOrder: Number(raw.sortOrder || raw.displayOrder || 0),
       featured: !!raw.featured,
+      // Pass-through DTO (Nico 8.0.22 bonus). Pas affiché tant que le front ne les peint pas.
+      usageCountGlobal: Number(raw.usageCountGlobal || 0),
+      ratingAvg: raw.ratingAvg != null ? Number(raw.ratingAvg) : 0,
+      ratingCount: Number(raw.ratingCount || 0),
       dtCreation: ts(raw.dtCreation),
       dtUpdate: ts(raw.dtUpdate || raw.dtCreation),
       alreadyCopied: canDuplicate === false && type === "STANDARD" && !lockCode
@@ -623,14 +644,18 @@
   }
 
   function parseMemberAccess(res) {
-    if (!res || !res.ok) return { hasCse: false, noun: "compte rendu", sources: [] };
+    if (!res || !res.ok) return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
     var d = res.data || {};
     var sources = d.sources || d.approvedTypes || [];
     if (typeof sources === "string") sources = sources.split(",");
-    sources = (sources || []).map(function (s) { return String(s).toLowerCase(); });
+    sources = (sources || []).map(function (s) { return String(s).toLowerCase(); }).filter(Boolean);
+    var businessTypes = d.businessTypes || d.business_types || [];
+    if (typeof businessTypes === "string") businessTypes = businessTypes.split(",");
+    businessTypes = (businessTypes || []).map(function (s) { return String(s).toLowerCase().trim(); }).filter(Boolean);
     var hasCse = sources.some(function (s) {
       return s.indexOf("cse") !== -1 || s.indexOf("pln_cse-") !== -1;
     });
+    hasCse = hasCse || businessTypes.indexOf("cse") !== -1;
     if (d.approvedSubscriptionTypes) {
       var t = d.approvedSubscriptionTypes;
       if (typeof t === "string") t = t.split(",");
@@ -640,6 +665,7 @@
       hasCse: hasCse,
       noun: hasCse ? "PV" : "compte rendu",
       sources: sources,
+      businessTypes: businessTypes,
       raw: d
     };
   }
@@ -647,7 +673,7 @@
   function fetchMemberAccess(creds) {
     var c = cfg();
     if (!c.library2Live) {
-      return Promise.resolve({ hasCse: false, noun: "compte rendu", sources: [] });
+      return Promise.resolve({ hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] });
     }
     return withAuthRetryRes(creds, function (fresh) {
       return postJson(c.library2Base + "/member-access", authFields(fresh));
@@ -670,6 +696,10 @@
     }).then(function (res) {
       duplicateInFlight = false;
       if (res.httpStatus === 503 || res.reload) res.retry = false;
+      if (res.ok && res.data) {
+        res.alreadyAcquired = !!res.data.alreadyAcquired;
+        res.promptModelId = res.data.promptModelId != null ? res.data.promptModelId : res.data.promptId;
+      }
       return res;
     }).catch(function () {
       duplicateInFlight = false;
@@ -756,7 +786,7 @@
 
   function createFromWizard(creds, draft) {
     return withAuthRetryRes(creds, function (fresh) {
-      return postJson(mutationUrl("createPromptModelUser"), {
+      var fields = {
         username: fresh.email,
         token: fresh.token,
         edition: fresh.edition,
@@ -764,6 +794,100 @@
         promptObjective: draft.objective,
         promptSpecificInfo: draft.specificInfo,
         promptStructure: draft.structure
+      };
+      var iconKey = String((draft && draft.iconKey) || "").trim();
+      if (iconKey) fields.iconKey = iconKey;
+      return postJson(mutationUrl("createPromptModelUser"), fields);
+    });
+  }
+
+  function iconListFrom(data) {
+    if (!data) return [];
+    if (Array.isArray(data.icons)) return data.icons;
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data.promptIconList)) return data.promptIconList;
+    return [];
+  }
+
+  function normalizeCatalogIcon(raw) {
+    if (!raw || typeof raw !== "object") return null;
+    var key = String(raw.iconKey || "").trim();
+    if (!key) return null;
+    return {
+      iconKey: key,
+      labelFr: String(raw.labelFr || ""),
+      label: String(raw.labelFr || raw.label || key),
+      category: String(raw.category || raw.categoryKey || ""),
+      url: absIconUrl(raw.url || raw.iconUrl),
+      version: raw.version != null ? raw.version : 1,
+      hash: String(raw.hash || "")
+    };
+  }
+
+  function getPromptIconCatalog(creds) {
+    var c = cfg();
+    if (!c.library2Live) {
+      return Promise.resolve({ ok: true, icons: [] });
+    }
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(c.library2Base + "/getPromptIconCatalog", authFields(fresh));
+    }).then(function (res) {
+      if (!res.ok) return res;
+      res.icons = iconListFrom(res.data).map(normalizeCatalogIcon).filter(Boolean);
+      return res;
+    });
+  }
+
+  function suggestPromptModelIcon(creds, name, objective) {
+    var c = cfg();
+    if (!c.library2Live) {
+      return Promise.resolve({ ok: false, iconKey: "" });
+    }
+    var promptName = String(name || "").trim().slice(0, 256);
+    var promptObjective = String(objective || "").trim().slice(0, 1024);
+    if (!promptName || !promptObjective) {
+      return Promise.resolve({ ok: false, iconKey: "", code: "MISSING" });
+    }
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(c.library2Base + "/suggestPromptModelIcon", {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptName: promptName,
+        promptObjective: promptObjective
+      });
+    }).then(function (res) {
+      if (res.ok && res.data) {
+        res.iconKey = String(res.data.iconKey || "");
+        res.confidence = res.data.confidence;
+      }
+      return res;
+    });
+  }
+
+  function setPromptModelUserIcon(creds, promptId, iconKey) {
+    if (!canSetUserIcon(promptId, "USER")) {
+      return Promise.resolve({
+        ok: false,
+        code: "INVALID_PROMPT_TYPE",
+        message: "Seuls tes modèles personnels ont une icône modifiable."
+      });
+    }
+    var key = String(iconKey || "").trim();
+    if (!key) {
+      return Promise.resolve({
+        ok: false,
+        code: "INVALID_ICON",
+        message: "Cette icône n’est pas disponible. Choisis-en une autre."
+      });
+    }
+    return withAuthRetryRes(creds, function (fresh) {
+      return postJson(mutationUrl("setPromptModelUserIcon"), {
+        username: fresh.email,
+        token: fresh.token,
+        edition: fresh.edition,
+        promptId: promptId,
+        iconKey: key
       });
     });
   }
@@ -832,13 +956,14 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.2.0",
+    VERSION: "1.3.0",
     PIN_MAX: PIN_MAX,
     cfg: cfg,
     waitForCreds: waitForCreds,
     refreshCreds: refreshCreds,
     fetchLists: fetchLists,
     fetchMemberAccess: fetchMemberAccess,
+    parseMemberAccess: parseMemberAccess,
     duplicate: duplicate,
     setDefault: setDefault,
     setPinned: setPinned,
@@ -847,6 +972,11 @@
     listVersions: listVersions,
     restoreVersion: restoreVersion,
     createFromWizard: createFromWizard,
+    getPromptIconCatalog: getPromptIconCatalog,
+    suggestPromptModelIcon: suggestPromptModelIcon,
+    setPromptModelUserIcon: setPromptModelUserIcon,
+    canSetUserIcon: canSetUserIcon,
+    isPackCseCard: isPackCseCard,
     getStatus: getStatus,
     waitPromptReady: waitPromptReady,
     modelId: modelId,

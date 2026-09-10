@@ -1,6 +1,6 @@
 /**
  * Catalogue : onglets, recherche, chips, grille / tableau, overlays fiche / wizard / versions.
- * @version 1.3.0
+ * @version 1.4.0
  */
 (function (global) {
   "use strict";
@@ -41,19 +41,100 @@
       name: "",
       objective: "",
       specificInfo: "",
-      structure: "Décisions, actions, prochaine étape"
+      structure: "Décisions, actions, prochaine étape",
+      iconKey: "",
+      iconQuery: "",
+      iconTouched: false,
+      suggestedKey: "",
+      suggestSig: "",
+      suggesting: false
     },
     dismissedWizard: false,
     versionsModel: null,
     versions: [],
-    versionsLoading: false
+    versionsLoading: false,
+    iconCatalog: null,
+    iconCatalogLoading: false,
+    iconCatalogError: "",
+    ficheIconOpen: false,
+    ficheIconQuery: "",
+    ficheIconSaving: false
   };
 
   var searchTimer = null;
   var lottieAnim = null;
+  var suggestTimer = null;
+  var PIN_BANNER_KEY = "agilo:lib:pinsBanner:v1";
+
+  function library2Live() {
+    return !!(global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().library2Live);
+  }
 
   function byId(id) {
     return state.models.filter(function (m) { return Number(m.promptModelId) === Number(id); })[0];
+  }
+
+  function iconPickerHtml(selectedKey, query) {
+    if (!library2Live()) return "";
+    var P = global.AgiloLibraryIconPicker;
+    if (!P) return "";
+    return P.html({
+      selectedKey: selectedKey || "",
+      query: query || "",
+      icons: state.iconCatalog || [],
+      loading: state.iconCatalogLoading,
+      error: state.iconCatalogError,
+      suggesting: state.wizard.suggesting
+    });
+  }
+
+  function ensureIconCatalog(root) {
+    if (!library2Live()) return;
+    if (state.iconCatalog || state.iconCatalogLoading) return;
+    var P = global.AgiloLibraryIconPicker;
+    if (!P) return;
+    state.iconCatalogLoading = true;
+    P.load(state.creds).then(function (res) {
+      state.iconCatalogLoading = false;
+      if (res.ok) {
+        state.iconCatalog = res.icons || [];
+        state.iconCatalogError = "";
+      } else {
+        state.iconCatalog = [];
+        state.iconCatalogError = res.message || "Catalogue d’icônes indisponible.";
+      }
+      var mode = overlayMode();
+      if (mode === "wizard" || (mode === "fiche" && state.ficheIconOpen)) {
+        syncOverlay(root);
+      }
+    });
+  }
+
+  function maybeSuggestIcon(root) {
+    if (!library2Live()) return;
+    if (state.wizard.iconTouched) return;
+    var name = String(state.wizard.name || "").trim();
+    var obj = String(state.wizard.objective || "").trim();
+    if (!name || !obj) return;
+    var sig = name + "\n" + obj;
+    if (state.wizard.suggestSig === sig) return;
+    state.wizard.suggestSig = sig;
+    state.wizard.suggesting = true;
+    global.AgiloLibraryApi.suggestPromptModelIcon(state.creds, name, obj).then(function (res) {
+      state.wizard.suggesting = false;
+      if (res.ok && res.iconKey && !state.wizard.iconTouched) {
+        state.wizard.iconKey = res.iconKey;
+        state.wizard.suggestedKey = res.iconKey;
+      }
+      if (overlayMode() === "wizard") syncOverlay(root);
+    }).catch(function () {
+      state.wizard.suggesting = false;
+    });
+  }
+
+  function scheduleSuggest(root) {
+    clearTimeout(suggestTimer);
+    suggestTimer = setTimeout(function () { maybeSuggestIcon(root); }, 400);
   }
 
   function counts() {
@@ -453,9 +534,10 @@
       nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">Créer le modèle</button>';
     }
     nav += "</div>";
+    var picker = state.wizard.step >= 2 ? iconPickerHtml(state.wizard.iconKey, state.wizard.iconQuery) : "";
     return '<p class="agilo-lib-wizard-kicker">Question ' + w.step + " / 4</p>" +
       '<div class="agilo-lib-wizard-steps" aria-hidden="true">' + steps + "</div>" +
-      '<div class="agilo-lib-form">' + body + "</div>" + nav;
+      '<div class="agilo-lib-form">' + body + "</div>" + picker + nav;
   }
 
   function versionsHtml() {
@@ -502,13 +584,21 @@
       ? '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
         (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>"
       : "";
+    var canIcon = global.AgiloLibraryApi.canSetUserIcon &&
+      global.AgiloLibraryApi.canSetUserIcon(m.promptModelId, m.type) && !C.locked(m);
+    var iconBtn = canIcon
+      ? '<button type="button" class="agilo-lib-btn" data-act="icon">' + C.svgIcon("custom", 16) +
+        " Changer l’icône</button>"
+      : "";
+    var picker = (canIcon && state.ficheIconOpen) ? iconPickerHtml(m.iconKey, state.ficheIconQuery) : "";
     return C.previewHtml(m) +
       '<p class="agilo-lib-prompt-note">Le prompt Agilotext n’est jamais affiché. Description publique et exemple de sortie seulement.</p>' +
       '<p class="agilo-lib-lead">' + C.escapeHtml(desc) + "</p>" +
       example +
       "<p class=\"agilo-lib-note\">Mise en page : " + layout + "</p>" +
       '<div class="agilo-lib-card__meta">' + C.badgeHtml(m) + "</div>" +
-      '<div class="agilo-lib-actions-row" data-id="' + m.promptModelId + '">' + useBtn + acts + "</div>";
+      '<div class="agilo-lib-actions-row" data-id="' + m.promptModelId + '">' + useBtn + iconBtn + acts + "</div>" +
+      picker;
   }
 
   function overlayTitle(mode) {
@@ -532,6 +622,7 @@
     state.versionsModel = null;
     state.versions = [];
     state.wizardOpen = false;
+    state.ficheIconOpen = false;
     if (wasWizard) {
       state.tab = state.prevTab && state.prevTab !== "creer" ? state.prevTab : "agilotext";
       paint(root);
@@ -558,12 +649,24 @@
     else Overlay.open(payload);
   }
 
+  function pinsBannerSeen() {
+    try { return !!localStorage.getItem(PIN_BANNER_KEY); } catch (_) { return true; }
+  }
+
   function bannersHtml() {
+    var bits = [];
     var pending = /(?:^|[?&])(?:pack|checkout)=pending(?:&|$)/.test((global.location && global.location.search) || "");
-    if (!pending) return "";
-    return '<div class="agilo-lib-banner agilo-lib-banner--upgrade" role="status">' +
-      "<span>Pack en cours d’activation (quelques secondes).</span>" +
-      '<button type="button" class="agilo-lib-btn" data-act="reload">Recharger</button></div>';
+    if (pending) {
+      bits.push('<div class="agilo-lib-banner agilo-lib-banner--upgrade" role="status">' +
+        "<span>Pack en cours d’activation (quelques secondes).</span>" +
+        '<button type="button" class="agilo-lib-btn" data-act="reload">Recharger</button></div>');
+    }
+    if (library2Live() && counts().pinned === 0 && !pinsBannerSeen()) {
+      bits.push('<div class="agilo-lib-banner agilo-lib-banner--info" role="status" data-pins-banner>' +
+        "<span>Tes épingles se recochent ici. Le modèle par défaut partagé n’a pas bougé.</span>" +
+        '<button type="button" class="agilo-lib-btn" data-dismiss-pins-banner>OK</button></div>');
+    }
+    return bits.join("");
   }
 
   function bodyHtml() {
@@ -620,6 +723,15 @@
   function bind(root) {
     var reload = root.querySelector('[data-act="reload"]');
     if (reload) reload.addEventListener("click", function () { location.reload(); });
+
+    var dismissPins = root.querySelector("[data-dismiss-pins-banner]");
+    if (dismissPins) {
+      dismissPins.addEventListener("click", function () {
+        try { localStorage.setItem(PIN_BANNER_KEY, "1"); } catch (_) { /* ignore */ }
+        var bar = root.querySelector("[data-pins-banner]");
+        if (bar) bar.remove();
+      });
+    }
 
     root.querySelectorAll(".agilo-lib-tabs [data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () { setTab(root, btn.getAttribute("data-tab")); });
@@ -709,8 +821,9 @@
 
   function bindOverlay(root, host) {
     bindWizard(root, host);
-    bindCards(host);
+    bindCards(root, host);
     bindVersions(root, host);
+    bindIconPicker(root, host);
     host.querySelectorAll("[data-tab]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         global.AgiloLibraryOverlay.close({ silent: true });
@@ -721,6 +834,53 @@
     });
     var box = host.querySelector("#agilo-lib-lottie");
     if (box) playLottie(box);
+  }
+
+  function bindIconPicker(root, host) {
+    var P = global.AgiloLibraryIconPicker;
+    if (!P || !host.querySelector(".agilo-lib-iconpick")) return;
+    var inWizard = overlayMode() === "wizard";
+    function onSelect(key) {
+      if (inWizard) {
+        state.wizard.iconKey = key;
+        state.wizard.iconTouched = true;
+        syncOverlay(root);
+        return;
+      }
+      var model = state.ficheModel;
+      if (!model || !global.AgiloLibraryApi.canSetUserIcon(model.promptModelId, model.type)) {
+        global.AgiloLibraryCore.toast("Seuls tes modèles personnels ont une icône modifiable.");
+        return;
+      }
+      if (state.ficheIconSaving) return;
+      state.ficheIconSaving = true;
+      global.AgiloLibraryApi.setPromptModelUserIcon(state.creds, model.promptModelId, key).then(function (res) {
+        state.ficheIconSaving = false;
+        if (!res.ok) {
+          global.AgiloLibraryCore.toast(res.message || "Icône non enregistrée.");
+          return;
+        }
+        global.AgiloLibraryCore.toast("Icône enregistrée.");
+        reload(root);
+      }).catch(function () {
+        state.ficheIconSaving = false;
+        global.AgiloLibraryCore.toast("Réseau interrompu. Réessaie.");
+      });
+    }
+    P.bind(host, {
+      onFilter: function (q) {
+        if (inWizard) state.wizard.iconQuery = q;
+        else state.ficheIconQuery = q;
+        P.applyFilter(
+          host,
+          state.iconCatalog || [],
+          inWizard ? state.wizard.iconKey : (state.ficheModel && state.ficheModel.iconKey),
+          q
+        );
+        P.bindCells(host, { onSelect: onSelect });
+      },
+      onSelect: onSelect
+    });
   }
 
   function readWizardFields(scope) {
@@ -752,6 +912,10 @@
           return;
         }
         syncOverlay(root);
+        if (state.wizard.step >= 2) {
+          ensureIconCatalog(root);
+          maybeSuggestIcon(root);
+        }
       });
     });
     scope.querySelectorAll("[data-ex]").forEach(function (b) {
@@ -759,16 +923,24 @@
         var ta = scope.querySelector("#wiz-obj");
         if (ta) ta.value = b.getAttribute("data-ex");
         state.wizard.objective = b.getAttribute("data-ex");
+        if (state.wizard.step >= 2) {
+          ensureIconCatalog(root);
+          scheduleSuggest(root);
+        }
       });
     });
     ["#wiz-name", "#wiz-obj", "#wiz-info", "#wiz-struct"].forEach(function (sel) {
       var el = scope.querySelector(sel);
       if (!el) return;
-      el.addEventListener("input", function () { readWizardFields(scope); });
+      el.addEventListener("input", function () {
+        readWizardFields(scope);
+        if (sel === "#wiz-name" || sel === "#wiz-obj") scheduleSuggest(root);
+      });
     });
   }
 
-  function bindCards(root) {
+  function bindCards(root, scope) {
+    scope = scope || root;
     function handle(model, act, btn) {
       if (!model) return;
       if (act === "more") {
@@ -781,6 +953,7 @@
         state.versionsModel = null;
         state.wizardOpen = false;
         state.ficheModel = model;
+        state.ficheIconOpen = false;
         syncOverlay(root);
         return;
       }
@@ -791,8 +964,9 @@
       if (act === "edit") openEdit(model);
       if (act === "versions") openVersions(root, model);
       if (act === "delete") askDelete(root, model);
+      if (act === "icon") openIconPicker(root, model);
     }
-    root.querySelectorAll("[data-id]").forEach(function (el) {
+    scope.querySelectorAll("[data-id]").forEach(function (el) {
       el.addEventListener("click", function (e) {
         var btn = e.target.closest("[data-act]");
         if (!btn || btn.disabled) return;
@@ -807,6 +981,21 @@
         }
       });
     });
+  }
+
+  function openIconPicker(root, model) {
+    if (!global.AgiloLibraryApi.canSetUserIcon ||
+      !global.AgiloLibraryApi.canSetUserIcon(model.promptModelId, model.type) ||
+      global.AgiloLibraryCore.locked(model)) {
+      global.AgiloLibraryCore.toast("Seuls tes modèles personnels ont une icône modifiable.");
+      return;
+    }
+    state.wizardOpen = false;
+    state.versionsModel = null;
+    state.ficheModel = model;
+    state.ficheIconOpen = true;
+    ensureIconCatalog(root);
+    syncOverlay(root);
   }
 
   function bindVersions(root, host) {
@@ -896,6 +1085,18 @@
           if (!res.ok) {
             global.AgiloLibraryCore.toast(res.message || "Copie impossible.");
             return;
+          }
+          if (res.alreadyAcquired) {
+            global.AgiloLibraryCore.toast("Ce modèle est déjà dans Mes modèles.");
+            state.tab = "mes-modeles";
+            var copyId = res.promptModelId;
+            return reload(root).then(function () {
+              if (copyId) {
+                state.ficheModel = byId(copyId) || null;
+                state.ficheIconOpen = false;
+                syncOverlay(root);
+              }
+            });
           }
           global.AgiloLibraryCore.toast("Modèle ajouté.");
           state.tab = "mes-modeles";
@@ -991,7 +1192,8 @@
       name: w.name.trim(),
       objective: w.objective.trim(),
       specificInfo: w.specificInfo.trim(),
-      structure: w.structure.trim()
+      structure: w.structure.trim(),
+      iconKey: (w.iconKey || "").trim()
     }).then(function (res) {
       if (!res.ok) {
         state.creating = false;
@@ -1022,7 +1224,8 @@
             publicDescription: w.objective || "Modèle créé depuis le wizard.",
             publicExample: w.structure,
             hasHtml: true,
-            iconKey: "wand",
+            iconKey: d.iconKey || w.iconKey || "",
+            iconUrl: global.AgiloLibraryApi.absIconUrl(d.iconUrl),
             canUse: true,
             canEdit: true,
             canSetDefault: true

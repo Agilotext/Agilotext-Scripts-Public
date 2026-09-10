@@ -29,4 +29,5 @@ var ico = C.iconHtml({
   type: "STANDARD"
 }, 18);
 if (ico.indexOf('<img src="https://cdn.example/icon.svg"') === -1) throw new Error("iconUrl must stay img");
+if (ico.indexOf("onerror=") === -1) throw new Error("iconUrl img must fallback on error");
 console.log("library-ui.test.js ok");

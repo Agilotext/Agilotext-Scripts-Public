@@ -105,11 +105,14 @@
     if (!card.publicDescription) card.publicDescription = meta.publicDescription;
     if (!card.publicExample) card.publicExample = meta.publicExample;
     var key = String(card.iconKey || "");
-    if (global.AgiloLibraryCore && global.AgiloLibraryCore.resolveIconKey && key) {
-      key = global.AgiloLibraryCore.resolveIconKey(key);
+    var live = global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().library2Live;
+    if (!live) {
+      if (global.AgiloLibraryCore && global.AgiloLibraryCore.resolveIconKey && key) {
+        key = global.AgiloLibraryCore.resolveIconKey(key);
+      }
+      if (!key || key === "document" || key === "custom") card.iconKey = meta.iconKey;
+      else card.iconKey = key;
     }
-    if (!key || key === "document" || key === "custom") card.iconKey = meta.iconKey;
-    else card.iconKey = key;
     var cat = String(card.categoryKey || "");
     if (!cat || cat === "custom" || (cat === "general" && meta.categoryKey !== "general")) {
       card.categoryKey = meta.categoryKey;
@@ -126,7 +129,7 @@
   }
 
   global.AgiloLibraryStandards = {
-    VERSION: "1.1.0",
+    VERSION: "1.2.0",
     CATEGORIES: CATEGORIES,
     BY_ID: BY_ID,
     get: get,

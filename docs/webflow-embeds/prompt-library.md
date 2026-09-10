@@ -4,6 +4,8 @@
 **Staging seulement :** `https://agilotext-test.webflow.io`  
 **Prod www :** ne pas coller tant que library2 n’est pas confirmé live.
 
+Recette Bauer 10 sept 16h22 : API **8.0.26** catalog **125**, persist / duplicate / delete library2 OK. Picker dans ce SHA. `library2Live: true` seulement sur **staging** après collage. Détail : `Clients/_interne_flo/RECETTE_8_0_26_LIBRARY2_2026-09-10.md`.
+
 Deux flags, jamais un seul :
 
 | Flag | Rôle | Valeur initiale |
@@ -11,7 +13,8 @@ Deux flags, jamais un seul :
 | `library2Live` | Appeler `/api/v1/library2/` | `false` |
 | `cse89Live` | CTA achat 890 € / 89 € | `false` (`/cse` pas live) |
 
-En `library2Live: false` : listes v1, pin / duplicate / versions / create / rename / delete sur `/api/v1`. **Pas** de fausses cartes pack CSE.  
+En `library2Live: false` : listes v1, pin / duplicate / versions / create / rename / delete sur `/api/v1`. **Pas** de fausses cartes pack CSE. Picker icônes inerte.
+En `library2Live: true` : listes library2, SVG 0–7, picker USER (wizard dès l’étape 2 + fiche), suggest nom+objectif seulement.  
 En `cse89Live: false` : cadenas (quand library2 les enverra) → mailto `contact@agilotext.com`, pas `CSERENTREE26`.
 
 Page : onglets Modèles Agilotext (défaut, à la une + chips) / Mes modèles (grille ou tableau) / Épinglés (n/5) / Créer un modèle (landing + popup 4 questions). Fiche = overlay, pas une page Designer.
@@ -24,6 +27,7 @@ scripts/pages/library/library-standards-meta.js
 scripts/pages/library/library-api.js
 scripts/pages/library/library-core.js
 scripts/pages/library/library-overlay.js
+scripts/pages/library/library-icon-picker.js
 scripts/pages/library/library-catalog.js
 scripts/pages/library/library-main.js
 scripts/pages/library/library-picker.js
@@ -84,6 +88,8 @@ Pin jsDelivr : commit `437feb00` (library + creds). Library + creds + standards-
 ```
 
 `atelierEnabled: true` seulement si `agilo-prompt-atelier.css/js` 1.10 est aussi chargé (bouton Modifier ouvre l’atelier). Sinon Modifier envoie vers `/app/{palier}/profile?tab=prompts`.
+
+`library-api.js` lit `usageCountGlobal`, `ratingAvg`, `ratingCount` s’ils arrivent du serveur. Le catalogue **ne les affiche pas** (v1).
 
 L’édition (`free` / `pro` / `ent`) est déduite du chemin `/app/free|premium|business/`. Pas trois JS.
 

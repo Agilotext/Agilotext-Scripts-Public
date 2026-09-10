@@ -56,7 +56,8 @@
     rename: "pencil",
     edit: "pencil",
     versions: "clock",
-    delete: "trash"
+    delete: "trash",
+    icon: "custom"
   };
 
   function resolveIconKey(key) {
@@ -84,10 +85,13 @@
 
   function iconHtml(m, size) {
     size = size || 18;
-    if (m && m.iconUrl) {
-      return '<img src="' + escapeHtml(m.iconUrl) + '" alt="" width="' + size + '" height="' + size + '">';
-    }
     var key = resolveIconKey((m && m.iconKey) || (m && m.type === "USER" ? "custom" : "document"));
+    if (m && m.iconUrl) {
+      return '<span class="agilo-lib-ico-wrap">' +
+        '<img src="' + escapeHtml(m.iconUrl) + '" alt="" width="' + size + '" height="' + size +
+        '" onerror="this.onerror=null;this.hidden=true;var n=this.nextElementSibling;if(n)n.hidden=false;">' +
+        "<span hidden>" + svgIcon(key, size) + "</span></span>";
+    }
     return svgIcon(key, size);
   }
 
@@ -143,6 +147,10 @@
     }
     if (m.type === "USER" && m.canDuplicate) {
       items.push({ act: "duplicate", label: "Enregistrer sous", icon: "copy" });
+    }
+    if (m.type === "USER" && global.AgiloLibraryApi && global.AgiloLibraryApi.canSetUserIcon &&
+      global.AgiloLibraryApi.canSetUserIcon(m.promptModelId, m.type) && !isLocked) {
+      items.push({ act: "icon", label: "Changer l’icône", icon: "custom" });
     }
     if (m.canEdit) {
       items.push({ act: "rename", label: "Renommer", icon: "pencil" });
