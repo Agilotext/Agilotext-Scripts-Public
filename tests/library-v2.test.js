@@ -232,4 +232,32 @@ var main = fs.readFileSync(path.join(lib, "library-main.js"), "utf8");
 if (main.indexOf("AgiloLibraryCatalogV2") === -1) throw new Error("main switch missing");
 if (main.indexOf("uiV2") === -1) throw new Error("uiV2 switch missing");
 
+var coreSrc = fs.readFileSync(path.join(lib, "library-core.js"), "utf8");
+if (coreSrc.indexOf("{ once: true }") !== -1) throw new Error("menu still uses once:true");
+if (coreSrc.indexOf("aria-expanded") === -1) throw new Error("aria-expanded missing");
+if (coreSrc.indexOf("menuAnchor === anchor") === -1) throw new Error("menu toggle missing");
+if (coreSrc.indexOf("addEventListener(\"scroll\"") === -1) throw new Error("scroll close missing");
+if (coreSrc.indexOf("addEventListener(\"resize\"") === -1) throw new Error("resize close missing");
+
+var overlaySrc = fs.readFileSync(path.join(lib, "library-overlay.js"), "utf8");
+var overlayOpen = overlaySrc.slice(overlaySrc.indexOf("function open("), overlaySrc.indexOf("function update("));
+var overlayUpdate = overlaySrc.slice(overlaySrc.indexOf("function update("), overlaySrc.indexOf("function close("));
+var overlayClose = overlaySrc.slice(overlaySrc.indexOf("function close("), overlaySrc.indexOf("function isOpen("));
+if (overlayOpen.indexOf("closeLibMenus") === -1) throw new Error("overlay.open missing closeMenus");
+if (overlayClose.indexOf("closeLibMenus") === -1) throw new Error("overlay.close missing closeMenus");
+if (overlayUpdate.indexOf("closeLibMenus") !== -1 || overlayUpdate.indexOf("closeMenus") !== -1) {
+  throw new Error("overlay.update must not closeMenus");
+}
+if (overlaySrc.indexOf('querySelector(".agilo-lib-menu")') === -1) throw new Error("overlay Escape menu check missing");
+
+var catSrc = fs.readFileSync(path.join(lib, "library-catalog-v2.js"), "utf8");
+var paintFn = catSrc.slice(catSrc.indexOf("function paint("), catSrc.indexOf("function versionsHtml("));
+var handleActFn = catSrc.slice(catSrc.indexOf("function handleAct("), catSrc.indexOf("function dashboardLink("));
+var openFicheFn = catSrc.slice(catSrc.indexOf("function openFiche("), catSrc.indexOf("function openFicheIcons("));
+var openWizardFn = catSrc.slice(catSrc.indexOf("function openWizard("), catSrc.indexOf("function openVersions("));
+if (paintFn.indexOf("closeMenus") === -1) throw new Error("catalog paint missing closeMenus");
+if (handleActFn.indexOf("closeMenus") === -1) throw new Error("handleAct missing closeMenus");
+if (openFicheFn.indexOf("closeMenus") === -1) throw new Error("openFiche missing closeMenus");
+if (openWizardFn.indexOf("closeMenus") === -1) throw new Error("openWizard missing closeMenus");
+
 console.log("library-v2.test.js ok");

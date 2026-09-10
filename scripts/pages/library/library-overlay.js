@@ -39,10 +39,20 @@
     keyHandler = null;
   }
 
+  function closeLibMenus() {
+    var C = global.AgiloLibraryCore;
+    if (C && typeof C.closeMenus === "function") C.closeMenus();
+  }
+
   function bindKeys(panel) {
     unbindKeys();
     keyHandler = function (e) {
       if (e.key === "Escape") {
+        if (document.querySelector(".agilo-lib-menu")) {
+          e.preventDefault();
+          closeLibMenus();
+          return;
+        }
         e.preventDefault();
         close();
         return;
@@ -89,6 +99,7 @@
 
   function open(opts) {
     opts = opts || {};
+    closeLibMenus();
     var el = host();
     if (!isOpen()) lastFocus = document.activeElement;
     onCloseCb = opts.onClose || null;
@@ -123,6 +134,7 @@
 
   function close(opts) {
     opts = opts || {};
+    closeLibMenus();
     var el = document.getElementById(HOST_ID);
     unbindKeys();
     var cb = onCloseCb;

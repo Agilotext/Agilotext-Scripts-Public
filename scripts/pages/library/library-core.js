@@ -290,13 +290,36 @@
     setTimeout(function () { el.remove(); }, 4800);
   }
 
+  var menuAnchor = null;
+  var onDocClick = null;
+  var onDocScroll = null;
+  var onWinResize = null;
+  var onDocKey = null;
+
+  function unbindMenuListeners() {
+    if (onDocClick) document.removeEventListener("click", onDocClick);
+    if (onDocScroll) document.removeEventListener("scroll", onDocScroll, true);
+    if (onWinResize) window.removeEventListener("resize", onWinResize);
+    if (onDocKey) document.removeEventListener("keydown", onDocKey, true);
+    onDocClick = onDocScroll = onWinResize = onDocKey = null;
+  }
+
   function closeMenus() {
     document.querySelectorAll(".agilo-lib-menu").forEach(function (n) { n.remove(); });
+    if (menuAnchor && menuAnchor.setAttribute && menuAnchor.isConnected) {
+      menuAnchor.setAttribute("aria-expanded", "false");
+    }
+    menuAnchor = null;
+    unbindMenuListeners();
   }
 
   function openCardMenu(anchor, items, onPick) {
+    if (menuAnchor === anchor && document.querySelector(".agilo-lib-menu")) {
+      closeMenus();
+      return;
+    }
     closeMenus();
-    if (!items || !items.length) return;
+    if (!items || !items.length || !anchor) return;
     var menu = document.createElement("div");
     menu.className = "agilo-lib agilo-lib-menu";
     menu.setAttribute("role", "menu");
@@ -306,6 +329,8 @@
         (it.danger ? ' class="is-danger"' : "") + ">" + ico + "<span>" + escapeHtml(it.label) + "</span></button>";
     }).join("");
     document.body.appendChild(menu);
+    menuAnchor = anchor;
+    if (anchor.setAttribute) anchor.setAttribute("aria-expanded", "true");
     var r = anchor.getBoundingClientRect();
     var mw = menu.offsetWidth || 208;
     var mh = menu.offsetHeight || 160;
@@ -325,8 +350,27 @@
       closeMenus();
       if (typeof onPick === "function") onPick(act);
     });
+    var first = menu.querySelector("[role=\"menuitem\"]");
+    if (first && first.focus) first.focus();
+    onDocClick = function (e) {
+      if (e.target.closest && e.target.closest(".agilo-lib-menu")) return;
+      if (e.target.closest && e.target.closest("[data-act=\"more\"]")) return;
+      closeMenus();
+    };
+    onDocScroll = function () { closeMenus(); };
+    onWinResize = function () { closeMenus(); };
+    onDocKey = function (e) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenus();
+    };
     setTimeout(function () {
-      document.addEventListener("click", closeMenus, { once: true });
+      if (!menuAnchor) return;
+      document.addEventListener("click", onDocClick);
+      document.addEventListener("scroll", onDocScroll, true);
+      window.addEventListener("resize", onWinResize);
+      document.addEventListener("keydown", onDocKey, true);
     }, 0);
   }
 

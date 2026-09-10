@@ -418,6 +418,7 @@
 
   function paint(root, opts) {
     opts = opts || {};
+    if (C().closeMenus) C().closeMenus();
     writeHash();
     if (opts.panelOnly && root.querySelector(".agilo-lib-panel") && root.querySelector("#agilo-lib-q")) {
       var panel = root.querySelector(".agilo-lib-panel");
@@ -560,6 +561,7 @@
   function openFiche(root, model, opts) {
     opts = opts || {};
     if (!model) return;
+    if (C().closeMenus) C().closeMenus();
     state.versionsModel = null;
     state.wizardOpen = false;
     F = {
@@ -668,6 +670,7 @@
 
   /* ---------------- wizard ---------------- */
   function openWizard(root) {
+    if (C().closeMenus) C().closeMenus();
     if (state.tab !== "creer") state.prevTab = state.tab;
     state.wizardOpen = true;
     F = null;
@@ -818,6 +821,7 @@
 
   /* ---------------- versions ---------------- */
   function openVersions(root, model) {
+    if (C().closeMenus) C().closeMenus();
     F = null;
     state.wizardOpen = false;
     state.versionsModel = model;
@@ -954,6 +958,7 @@
       });
       return;
     }
+    if (C().closeMenus) C().closeMenus();
     if (act === "fiche") { openFiche(root, model); return; }
     if (act === "use" || act === "default") { doDefault(root, model, btn); return; }
     if (act === "pin") { doPin(root, model, btn); return; }
