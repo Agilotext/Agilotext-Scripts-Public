@@ -948,7 +948,8 @@
   function handleAct(root, model, act, btn) {
     if (!model) return;
     if (act === "more") {
-      C().openCardMenu(btn, C().menuItems(model, { inFiche: !!(F && F.model === model) }), function (picked) {
+      var inFiche = !!(btn && btn.closest && btn.closest(".agilo-lib-fiche"));
+      C().openCardMenu(btn, C().menuItems(model, { surface: inFiche ? "fiche" : "card" }), function (picked) {
         handleAct(root, model, picked, btn);
       });
       return;
@@ -1195,16 +1196,17 @@
     scope.querySelectorAll("[data-id]").forEach(function (el) {
       el.addEventListener("click", function (e) {
         var btn = e.target.closest("[data-act]");
-        if (!btn || btn.disabled) return;
-        e.preventDefault();
-        e.stopPropagation();
-        handleAct(root, byId(el.getAttribute("data-id")), btn.getAttribute("data-act"), btn);
-      });
-      el.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" && e.target === el) {
+        if (btn) {
+          if (btn.disabled) return;
           e.preventDefault();
-          handleAct(root, byId(el.getAttribute("data-id")), "fiche", el);
+          e.stopPropagation();
+          handleAct(root, byId(el.getAttribute("data-id")), btn.getAttribute("data-act"), btn);
+          return;
         }
+        if (!el.classList.contains("agilo-lib-card--v2")) return;
+        if (e.target.closest("button, a, input, textarea, select, [role=\"button\"]")) return;
+        e.preventDefault();
+        handleAct(root, byId(el.getAttribute("data-id")), "fiche", el);
       });
     });
   }

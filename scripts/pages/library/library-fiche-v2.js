@@ -211,7 +211,7 @@
       ? '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Exemple</span> ' + esc(model.publicExample) + "</p>"
       : "";
     var layout = model.hasHtml ? "Mise en page HTML" : "Texte structuré";
-    var badges = (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") + Core.badgeHtml(model);
+    var badges = (Core.defaultBadgeHtml ? Core.defaultBadgeHtml(model) : (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "")) + Core.badgeHtml(model);
     return '<div class="agilo-lib-fiche" data-id="' + model.promptModelId + '">' +
       '<header class="agilo-lib-fiche__head">' +
       '<div class="agilo-lib-fiche__iconwrap">' +

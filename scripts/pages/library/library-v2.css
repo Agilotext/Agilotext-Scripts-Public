@@ -136,8 +136,6 @@
   border-radius: var(--lib-radius);
   box-shadow: var(--lib-shadow-1);
   border-color: transparent;
-  container-type: inline-size;
-  container-name: agilocard;
   transition: box-shadow var(--lib-dur) var(--lib-ease), border-color var(--lib-dur) var(--lib-ease), transform var(--lib-dur) var(--lib-ease);
 }
 .agilo-lib-card--v2:hover { box-shadow: var(--lib-shadow-2); border-color: var(--lib-blue-35); transform: translateY(-1px); }
@@ -151,19 +149,38 @@
   margin: 0;
   font-size: 1rem;
   line-height: 1.3;
-  cursor: pointer;
-  overflow: hidden;
+}
+.agilo-lib-card__titlebtn {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 700;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
-.agilo-lib-card--v2 .agilo-lib-card__title:hover { color: var(--lib-blue); }
+.agilo-lib-card__titlebtn:hover,
+.agilo-lib-card__titlebtn:focus-visible { color: var(--lib-blue); }
 .agilo-lib-card--v2 .agilo-lib-card__meta { margin: 0; min-height: 0; }
 .agilo-lib-card--v2 .agilo-lib-card__meta:empty { display: none; }
 .agilo-lib-card--v2 .agilo-lib-card__desc { margin: 0 0 0.35rem; color: var(--lib-muted); }
 .agilo-lib-card--v2 .agilo-lib-card__example { margin: 0 0 0.5rem; }
 .agilo-lib-card--v2 .agilo-lib-card__lock { margin: 0 0 0.5rem; }
+.agilo-lib-card__cta-link {
+  display: inline-block;
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--lib-blue);
+}
 
 /* pastille icône (carte, tableau, fiche) */
 .agilo-lib--v2 .agilo-lib-card__icon,
@@ -221,33 +238,73 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 .agilo-lib-card--v2.agilo-lib-card--featured .agilo-lib-card__preview { height: 5.2rem; }
 
-/* actions alignées : 1 ligne si la carte est large, 2 sous 16.5rem */
+/* toolbar icônes : check + ⋯ */
 .agilo-lib-card__actions--v2 {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  grid-template-areas: "primary voir more";
-  gap: 0.4rem;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
+  gap: 0.25rem;
   margin-top: auto;
   padding-top: 0.35rem;
+  min-height: 36px;
 }
-.agilo-lib-card__actions--v2 .agilo-lib-act-primary { grid-area: primary; min-width: 0; }
-.agilo-lib-card__actions--v2 .agilo-lib-act-voir { grid-area: voir; }
-.agilo-lib-card__actions--v2 .agilo-lib-act-more { grid-area: more; }
-.agilo-lib-card__actions--v2 .agilo-lib-btn { min-height: 40px; white-space: nowrap; }
-.agilo-lib-card__actions--v2 .agilo-lib-btn--primary,
-.agilo-lib-card__actions--v2 .agilo-lib-btn--cta,
-.agilo-lib-card__actions--v2 .agilo-lib-state--default { width: 100%; min-width: 0; }
-@container agilocard (max-width: 16.5rem) {
-  .agilo-lib-card__actions--v2 {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "primary primary"
-      "voir more";
-  }
-  .agilo-lib-card__actions--v2 .agilo-lib-act-primary { white-space: normal; }
-  .agilo-lib-card__actions--v2 .agilo-lib-btn--primary,
-  .agilo-lib-card__actions--v2 .agilo-lib-btn--cta { white-space: normal; }
+.agilo-lib-card__actions--v2 .agilo-lib-icon-btn,
+.agilo-lib-card__actions--v2 .agilo-lib-quick,
+.agilo-lib-td__actions .agilo-lib-icon-btn,
+.agilo-lib-td__actions .agilo-lib-quick {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 0 !important;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--lib-muted);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+}
+.agilo-lib-card__actions--v2 .agilo-lib-quick.is-on,
+.agilo-lib-td__actions .agilo-lib-quick.is-on {
+  background: var(--lib-blue-12);
+  color: var(--lib-blue);
+  cursor: default;
+}
+.agilo-lib-card__actions--v2 .agilo-lib-icon-btn:hover,
+.agilo-lib-card__actions--v2 .agilo-lib-icon-btn:focus-visible,
+.agilo-lib-td__actions .agilo-lib-icon-btn:hover,
+.agilo-lib-td__actions .agilo-lib-icon-btn:focus-visible {
+  background: var(--lib-blue-08);
+  color: var(--lib-blue);
+}
+.agilo-lib-card__actions--v2 .agilo-lib-icon-btn:disabled,
+.agilo-lib-td__actions .agilo-lib-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+.agilo-lib-quick[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 4;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: #1a1d21;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(2px);
+}
+.agilo-lib-quick[data-tip]:hover::after,
+.agilo-lib-quick[data-tip]:focus-visible::after { opacity: 1; transform: none; }
+@media (hover: none) {
+  .agilo-lib-quick[data-tip]::after { display: none; }
 }
 .agilo-lib-state {
   display: inline-flex;
@@ -272,7 +329,6 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib button.agilo-lib-icon-btn--sm { width: 36px; height: 36px; }
 .agilo-lib--v2 .agilo-lib-icon-btn,
 .agilo-lib-overlay .agilo-lib-icon-btn { border: 1px solid transparent !important; }
-.agilo-lib-card__actions--v2 .agilo-lib-icon-btn { border-color: var(--lib-border) !important; }
 .agilo-lib--v2 .agilo-lib-badge,
 .agilo-lib-overlay .agilo-lib-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; }
 .agilo-lib-badge--pending { background: var(--lib-orange-12); color: #b85a0c; }
@@ -299,9 +355,8 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-table--v2 th, .agilo-lib-table--v2 td { height: 52px; }
 .agilo-lib-table--v2 .agilo-lib-th--actions { text-align: right; }
 .agilo-lib-td__actions {
-  display: inline-grid;
-  grid-template-columns: auto minmax(8.25rem, auto) 36px;
-  gap: 0.35rem;
+  display: inline-flex;
+  gap: 0.25rem;
   align-items: center;
   justify-content: end;
 }
@@ -317,8 +372,17 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   line-clamp: 2;
   overflow: hidden;
   white-space: normal;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
 }
-.agilo-lib-td--title:hover { color: var(--lib-blue); }
+.agilo-lib-td--title:hover,
+.agilo-lib-td--title:focus-visible { color: var(--lib-blue); }
 .agilo-lib-table--v2 .agilo-lib-card__meta { margin: 0; }
 
 /* ---------- overlay / fiche ---------- */
@@ -548,8 +612,11 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   .agilo-lib-head--v2 .agilo-lib-head__tools { width: 100%; flex-wrap: wrap; }
   .agilo-lib-head--v2 .agilo-lib-search { width: 100%; }
   .agilo-lib-search__kbd { display: none; }
-  .agilo-lib-card__actions--v2 { grid-template-columns: minmax(0, 1fr) auto auto; }
-  .agilo-lib-card__actions--v2 .agilo-lib-btn, .agilo-lib-state { min-height: 44px; }
+  .agilo-lib-card__actions--v2 { min-height: 44px; }
+  .agilo-lib-card__actions--v2 .agilo-lib-icon-btn,
+  .agilo-lib-card__actions--v2 .agilo-lib-quick,
+  .agilo-lib-td__actions .agilo-lib-icon-btn,
+  .agilo-lib-td__actions .agilo-lib-quick { width: 44px; height: 44px; }
   .agilo-lib-overlay[data-mode="fiche"] { align-items: flex-end; }
   .agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel {
     height: auto;

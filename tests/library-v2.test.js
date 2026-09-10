@@ -48,11 +48,14 @@ var user = {
 };
 
 var items = C.menuItems(user);
-if (items.some(function (it) { return it.act === "default" || it.act === "edit" || it.act === "icon"; })) {
-  throw new Error("v2 menu still has default/edit/icon");
+if (!items.some(function (it) { return it.act === "default"; })) throw new Error("card menu missing default");
+if (items.some(function (it) { return it.act === "edit" || it.act === "icon"; })) {
+  throw new Error("v2 menu still has edit/icon");
 }
 if (!items.some(function (it) { return it.act === "pin"; })) throw new Error("pin missing");
 if (!items.some(function (it) { return it.act === "rename"; })) throw new Error("rename missing from menu");
+var ficheItems = C.menuItems(user, { surface: "fiche" });
+if (ficheItems.some(function (it) { return it.act === "default"; })) throw new Error("fiche menu still has default");
 
 var std = {
   promptModelId: 0,
@@ -64,33 +67,56 @@ var std = {
   isDefault: false
 };
 var stdItems = C.menuItems(std);
-if (stdItems.some(function (it) { return it.act === "default"; })) throw new Error("STANDARD menu still has default");
 if (!stdItems.some(function (it) { return it.act === "duplicate"; })) throw new Error("duplicate missing");
 
+var stdCopy = {
+  promptModelId: 0,
+  cardTitle: "Compte rendu de réunion",
+  type: "STANDARD",
+  canUse: false,
+  canCopyOfficial: true,
+  canPin: true,
+  isDefault: false
+};
+if (C.menuItems(stdCopy).some(function (it) { return it.act === "default"; })) {
+  throw new Error("copy-only STANDARD menu has default");
+}
+if (!C.menuItems(stdCopy).some(function (it) { return it.act === "duplicate"; })) {
+  throw new Error("copy-only duplicate missing");
+}
+
 var card = C.cardHtml(user);
-if (card.indexOf("Définir par défaut") === -1) throw new Error("primary label");
 if (card.indexOf("Utiliser par défaut") !== -1) throw new Error("old primary label still present");
+if (card.indexOf('class="agilo-lib-btn agilo-lib-btn--primary') !== -1) throw new Error("full primary button on card");
+if (card.indexOf(">Définir par défaut</button>") !== -1) throw new Error("full default label on card");
 if (card.indexOf("data-act=\"default\"") === -1) throw new Error("default act missing");
-if (card.indexOf("agilo-lib-card__actions--v2") === -1) throw new Error("v2 actions grid missing");
-if (card.indexOf("data-act=\"fiche\"") === -1) throw new Error("Voir missing");
+if (card.indexOf('data-tip="Définir par défaut"') === -1) throw new Error("default tip missing");
+if (card.indexOf('aria-label="Définir par défaut"') === -1) throw new Error("default aria missing");
+if (card.indexOf("agilo-lib-card__actions--v2") === -1) throw new Error("v2 toolbar missing");
+if (card.indexOf("agilo-lib-card__titlebtn") === -1) throw new Error("title button missing");
+if (card.indexOf("tabindex") !== -1) throw new Error("article still focusable");
+if (card.indexOf("> Voir<") !== -1 || card.indexOf(">Voir<") !== -1) throw new Error("Voir still on card");
 if (card.indexOf("agilo-lib-card__preview") === -1) throw new Error("preview missing on normal card");
-if (card.indexOf('title="Mon CR client"') === -1) throw new Error("title tooltip missing on h3");
-if (card.indexOf('aria-label="Mon CR client"') === -1) throw new Error("aria-label missing on h3");
-if (card.indexOf("agilo-lib-act-primary") === -1) throw new Error("primary grid area missing");
+if (card.indexOf('title="Mon CR client"') === -1) throw new Error("title tooltip missing");
+if (card.indexOf('aria-label="Mon CR client"') === -1) throw new Error("aria-label missing on title");
+
+var copyCard = C.cardHtml(stdCopy);
+if (copyCard.indexOf("data-act=\"default\"") !== -1) throw new Error("copy-only STANDARD has default quick");
 
 var compactCard = C.cardHtml(user, { size: "compact" });
 if (compactCard.indexOf("agilo-lib-card__preview") !== -1) throw new Error("compact must not have preview");
 
 user.isDefault = true;
 var defCard = C.cardHtml(user);
-if (defCard.indexOf(" Par défaut") === -1) throw new Error("default state missing");
+if (defCard.indexOf("data-act=\"default\"") !== -1) throw new Error("default state still clickable");
+if (defCard.indexOf("is-on") === -1) throw new Error("default check missing is-on");
+if ((defCard.match(/agilo-lib-badge--default/g) || []).length !== 1) throw new Error("default badge not unique on card");
 if (defCard.indexOf("Modèle par défaut</span>") !== -1) throw new Error("old long default label still visible");
-if (defCard.indexOf("disabled") !== -1 && defCard.indexOf("Définir par défaut") !== -1) {
-  throw new Error("disabled default button should be a state, not a button");
-}
 var table = C.tableRowHtml(user);
-if (table.indexOf('title="Mon CR client"') === -1) throw new Error("table title tooltip missing");
-if (table.indexOf(" Par défaut") === -1) throw new Error("table default state missing");
+if (table.indexOf("agilo-lib-td--title") === -1) throw new Error("table title button missing");
+if (table.indexOf("> Voir<") !== -1 || table.indexOf(">Voir<") !== -1) throw new Error("Voir still in table");
+if ((table.match(/agilo-lib-badge--default/g) || []).length !== 1) throw new Error("default badge not unique in table");
+if (table.indexOf("is-on") === -1) throw new Error("table default check missing");
 
 var head = Cat._headHtml();
 if (head.indexOf("agilo-lib-head--v2") === -1) throw new Error("v2 header missing");
@@ -134,8 +160,11 @@ var locked = {
 };
 if (Fiche.previewMode(locked, proCreds) !== "locked") throw new Error("locked mode");
 var lockedCard = C.cardHtml(locked);
-if (lockedCard.indexOf("agilo-lib-act-primary") === -1) throw new Error("locked CTA not in primary grid");
+if (lockedCard.indexOf("agilo-lib-card__cta-link") === -1) throw new Error("locked CTA link missing");
 if (lockedCard.indexOf("Bientôt disponible") === -1) throw new Error("locked CTA label");
+if (lockedCard.indexOf("mailto:contact@agilotext.com") === -1) throw new Error("locked CTA href");
+if (lockedCard.indexOf("agilo-lib-btn--cta") !== -1) throw new Error("fat CSE CTA on card");
+if (lockedCard.indexOf("data-act=\"default\"") !== -1) throw new Error("locked card has default quick");
 
 var pending = Object.assign({}, user, { promptModelStatus: "PENDING" });
 if (Fiche.previewMode(pending, proCreds) !== "pending") throw new Error("pending mode");
@@ -149,6 +178,9 @@ if (freeHtml.indexOf("disabled") === -1) throw new Error("edit must be disabled 
 var proHtml = Fiche.html(user, { previewText: "Tu es un assistant", previewLoading: false }, proCreds);
 if (proHtml.indexOf("Tu es un assistant") === -1) throw new Error("pro preview missing");
 if (proHtml.indexOf("Modifier le prompt") === -1) throw new Error("edit CTA missing");
+if (proHtml.indexOf("Définir par défaut") === -1 && proHtml.indexOf("Par défaut") === -1) {
+  throw new Error("fiche primary missing");
+}
 if (proHtml.indexOf("jamais affiché") !== -1) throw new Error("old never-shown copy still there");
 if (proHtml.indexOf("agilo-lib-fiche__scroll") === -1) throw new Error("fiche scroll body missing");
 if (proHtml.indexOf("agilo-lib-fiche__iconwrap") === -1) throw new Error("fiche icon wrap missing");
@@ -181,7 +213,11 @@ if (css.indexOf("border-left: 1px") === -1) throw new Error("banner 1px border m
 if (css.indexOf("agilo-lib-head--v2") === -1) throw new Error("header css missing");
 if (css.indexOf("agilo-lib-card__actions--v2") === -1) throw new Error("actions css missing");
 if (css.indexOf("agilo-lib-blur") === -1) throw new Error("blur css missing");
-if (css.indexOf("container-type: inline-size") === -1) throw new Error("container query missing");
+if (css.indexOf("container-type: inline-size") !== -1) throw new Error("container query should be gone");
+if (css.indexOf("grid-template-areas") !== -1) throw new Error("action grid still present");
+if (css.indexOf("[data-tip]") === -1) throw new Error("tooltip css missing");
+if (css.indexOf("width: 36px") === -1) throw new Error("36px toolbar missing");
+if (css.indexOf("width: 44px") === -1) throw new Error("44px mobile toolbar missing");
 if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missing");
 if (css.indexOf("max-height: 12rem") === -1) throw new Error("icon popover max-height missing");
 if (css.indexOf("opacity: 0.5") === -1) throw new Error("pencil rest opacity missing");
