@@ -124,7 +124,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 | `code-prompt-picker` | `scripts/pages/library/library-picker.js` | Staging dashboards |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 
-Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@6bf08b5c`, jamais `@main`.  
+Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat). Pin jsDelivr `@18c8563a`, jamais `@main`.  
 v1.3 : isolation boutons Webflow, menu `position:fixed`, fiche/wizard/versions en overlay `body`, chrome Nucleo inline, `iconUrl` intact. Auth 1.2 inchangé.  
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
