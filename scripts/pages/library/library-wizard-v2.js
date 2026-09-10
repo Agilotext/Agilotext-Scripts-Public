@@ -153,19 +153,18 @@
   /* ---------- rendu ---------- */
   function stepsHtml() {
     var Core = C();
+    var label = W.step === 5 ? "Récapitulatif" : "Étape " + W.step + " sur 4";
     var dots = [1, 2, 3, 4].map(function (n) {
       var done = n < W.step;
       var on = n === W.step;
-      return '<span class="' + (done ? "is-done" : "") + (on ? " is-on" : "") + '" aria-current="' + (on ? "step" : "false") + '">' +
+      return '<span class="' + (done ? "is-done" : "") + (on ? " is-on" : "") + '"' +
+        (on ? ' aria-current="step"' : "") + ">" +
         (done ? Core.svgIcon("check", 14) : String(n)) + "</span>";
     }).join("");
-    var recap = '<span class="' + (W.step === 5 ? "is-on" : "") + '">' + Core.svgIcon("checklist", 14) + "</span>";
-    return '<div class="agilo-lib-wizard-steps" aria-hidden="true">' + dots + recap + "</div>";
-  }
-
-  function kicker() {
-    if (W.step === 5) return "Récapitulatif";
-    return "Question " + W.step + " / 4";
+    var recap = '<span class="' + (W.step === 5 ? "is-on" : "") + '"' +
+      (W.step === 5 ? ' aria-current="step"' : "") + ">" + Core.svgIcon("checklist", 14) + "</span>";
+    return '<div class="agilo-lib-wizard-steps" role="group" aria-label="' + esc(label) + '">' +
+      dots + recap + "</div>";
   }
 
   function iconBlockHtml(ctx) {
@@ -337,8 +336,9 @@
     if (W.step < 5) nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer ' + Core.svgIcon("arrow-right", 16) + "</button>";
     else nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">' + Core.svgIcon("sparkle", 16) + " Créer le modèle</button>";
     nav += "</div>";
+    var kicker = W.step === 5 ? '<p class="agilo-lib-wizard-kicker">Récapitulatif</p>' : "";
     return '<div class="agilo-lib-wiz">' +
-      '<p class="agilo-lib-wizard-kicker">' + esc(kicker()) + "</p>" +
+      kicker +
       stepsHtml() +
       restored +
       '<div class="agilo-lib-form">' + body + "</div>" + err + nav +

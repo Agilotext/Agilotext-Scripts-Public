@@ -136,6 +136,12 @@ Wiz.state().specificInfo = "Décisions";
 Wiz.state().structure = "Résumé puis détail";
 if (Wiz.validateAll()) throw new Error("valid draft still invalid");
 if (Wiz.validateStep(1)) throw new Error("step 1 should pass with name");
+Wiz.state().step = 2;
+var q2 = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
+if (q2.indexOf("Question 2") !== -1 || q2.indexOf("Question 2 / 4") !== -1) {
+  throw new Error("duplicate question kicker still present");
+}
+if (q2.indexOf("Étape 2 sur 4") === -1) throw new Error("stepper aria label missing");
 Wiz.state().step = 5;
 var recap = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
 if (recap.indexOf("Récapitulatif") === -1 && recap.indexOf("agilo-lib-recap") === -1) {

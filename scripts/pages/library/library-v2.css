@@ -550,7 +550,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 
 /* ---------- wizard ---------- */
 .agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__panel { width: min(42rem, 100%); max-height: min(94vh, 54rem); }
-.agilo-lib-wiz .agilo-lib-wizard-steps { gap: 0.35rem; margin-bottom: 1.1rem; }
+.agilo-lib-wiz .agilo-lib-wizard-steps { gap: 0.35rem; margin: 0 0 1.1rem; }
 .agilo-lib-wiz .agilo-lib-wizard-steps span { min-width: 1.85rem; height: 1.85rem; font-size: 0.78rem; background: var(--lib-bg); color: var(--lib-muted); border: 1px solid var(--lib-border); }
 .agilo-lib-wiz .agilo-lib-wizard-steps span.is-done { background: var(--lib-blue-12); color: var(--lib-blue); border-color: transparent; }
 .agilo-lib-wiz .agilo-lib-wizard-steps span.is-on { background: var(--lib-blue); color: #fff; border-color: var(--lib-blue); }
