@@ -13,10 +13,14 @@
   --lib-dur: 180ms;
 }
 
-.agilo-lib-overlay { z-index: 10050; }
-.agilo-lib-menu { z-index: 10100; }
-.agilo-lib-dialog { z-index: 10110; }
-.agilo-lib-toasts { z-index: 10120; }
+.agilo-lib-overlay { z-index: 100050; }
+.agilo-lib-menu { z-index: 100100; }
+.agilo-lib-dialog { z-index: 100110; }
+.agilo-lib-toasts { z-index: 100120; }
+#agilo-lib-overlay.agilo-lib-overlay {
+  position: fixed;
+  inset: 0;
+}
 
 /* ---------- header une ligne ---------- */
 .agilo-lib-head--v2 {
@@ -98,7 +102,13 @@
   flex-wrap: wrap;
 }
 .agilo-lib--v2 .agilo-lib-panel-tools .agilo-lib-count { margin: 0; }
-.agilo-lib--v2 .agilo-lib-section-block h2 { font-size: 0.95rem; color: var(--lib-muted); font-weight: 600; letter-spacing: 0; }
+.agilo-lib--v2 .agilo-lib-grid,
+.agilo-lib--v2 .agilo-lib-featured { align-items: stretch; }
+.agilo-lib--v2 .agilo-lib-chips button.is-active {
+  background: var(--lib-blue) !important;
+  color: #fff !important;
+  border-color: var(--lib-blue) !important;
+}
 
 /* ---------- bandeaux : plus de trait latéral ---------- */
 .agilo-lib--v2 .agilo-lib-banner,
@@ -131,6 +141,9 @@
 
 /* ---------- cartes ---------- */
 .agilo-lib-card--v2 {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 1rem;
   min-height: 0;
   border-radius: var(--lib-radius);
@@ -171,7 +184,15 @@
 .agilo-lib-card__titlebtn:focus-visible { color: var(--lib-blue); }
 .agilo-lib-card--v2 .agilo-lib-card__meta { margin: 0; min-height: 0; }
 .agilo-lib-card--v2 .agilo-lib-card__meta:empty { display: none; }
-.agilo-lib-card--v2 .agilo-lib-card__desc { margin: 0 0 0.35rem; color: var(--lib-muted); }
+.agilo-lib-card--v2 .agilo-lib-card__desc {
+  margin: 0 0 0.35rem;
+  color: var(--lib-muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
 .agilo-lib-card--v2 .agilo-lib-card__example { margin: 0 0 0.5rem; }
 .agilo-lib-card--v2 .agilo-lib-card__lock { margin: 0 0 0.5rem; }
 .agilo-lib-card__cta-link {
@@ -495,11 +516,11 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__example { margin: 0; font-size: 0.85rem; color: var(--lib-muted); }
 .agilo-lib-fiche__example .agilo-lib-fiche__label { margin-right: 0.35rem; }
 .agilo-lib-fiche__foot {
-  display: grid;
-  grid-template-columns: auto auto 40px;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
-  justify-content: start;
+  justify-content: flex-start;
   flex-shrink: 0;
   margin-top: 0.9rem;
   padding-top: 0.75rem;
@@ -587,6 +608,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-wiz-nav .agilo-lib-btn--primary { min-width: 9rem; }
 .agilo-lib-wiz-icon { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--lib-border); display: grid; gap: 0.6rem; }
 .agilo-lib-wiz-icon__row { display: flex; align-items: center; gap: 0.75rem; }
+.agilo-lib-wiz-icon__row .agilo-lib-btn { margin-left: auto; }
 .agilo-lib-wiz-icon__txt { display: grid; gap: 0.1rem; flex: 1; min-width: 0; }
 .agilo-lib-wiz-icon__name { font-weight: 600; font-size: 0.92rem; }
 .agilo-lib-wiz-icon .agilo-lib-iconpick { margin-top: 0.25rem; }
@@ -624,8 +646,8 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
     border-radius: var(--lib-radius) var(--lib-radius) 0 0;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
-  .agilo-lib-fiche__foot { grid-template-columns: 1fr 1fr 44px; }
-  .agilo-lib-fiche__foot .agilo-lib-btn { white-space: normal; min-height: 44px; }
+  .agilo-lib-fiche__foot { display: flex; }
+  .agilo-lib-fiche__foot .agilo-lib-btn { white-space: normal; min-height: 44px; flex: 1; }
   .agilo-lib-fiche__rename { grid-template-columns: 1fr; }
   .agilo-lib-wiz-nav { justify-content: stretch; }
   .agilo-lib-wiz-nav .agilo-lib-btn { flex: 1; }

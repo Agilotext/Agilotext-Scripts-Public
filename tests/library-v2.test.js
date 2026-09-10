@@ -15,6 +15,7 @@ globalThis.__AGILO_PROMPT_LIBRARY__ = {
 };
 
 eval(fs.readFileSync(path.join(lib, "library-api.js"), "utf8"));
+eval(fs.readFileSync(path.join(lib, "library-standards-meta.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-core.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-core-v2.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-fiche-v2.js"), "utf8"));
@@ -259,5 +260,28 @@ if (paintFn.indexOf("closeMenus") === -1) throw new Error("catalog paint missing
 if (handleActFn.indexOf("closeMenus") === -1) throw new Error("handleAct missing closeMenus");
 if (openFicheFn.indexOf("closeMenus") === -1) throw new Error("openFiche missing closeMenus");
 if (openWizardFn.indexOf("closeMenus") === -1) throw new Error("openWizard missing closeMenus");
+if (catSrc.indexOf("ce filtre") !== -1) throw new Error("empty copy still says ce filtre");
+if (catSrc.indexOf("Voir tous les modèles") === -1) throw new Error("reset chip CTA missing");
+if (catSrc.indexOf("state.category = \"all\"") === -1) throw new Error("setTab does not reset category");
+if (catSrc.indexOf("Épinglez jusqu’à 5 modèles depuis le menu") === -1) throw new Error("pins banner copy stale");
+
+Cat._state().q = "";
+Cat._state().category = "cse";
+var cseCount = Cat._countLine(8, 1);
+if (cseCount.indexOf("1 modèle dans CSE / PV") === -1) throw new Error("filtered count missing: " + cseCount);
+var cseEmpty = Cat._countLine(8, 0);
+if (cseEmpty.indexOf("Aucun modèle dans CSE / PV") === -1) throw new Error("empty filtered count missing");
+Cat._state().category = "all";
+if (Cat._countLine(8, 8).indexOf("8 modèles") === -1) throw new Error("all count missing");
+
+var mdUser = Object.assign({}, user, { isDefault: false });
+var mdHtml = Fiche.html(mdUser, { previewText: "**Hello** world", previewLoading: false }, proCreds);
+if (mdHtml.indexOf("**Hello**") !== -1) throw new Error("markdown stars leaked in preview");
+if (mdHtml.indexOf("Hello world") === -1) throw new Error("stripped preview missing");
+var defFiche = Fiche.html(Object.assign({}, user, { isDefault: true }), { previewText: "x", previewLoading: false }, proCreds);
+if ((defFiche.match(/Par défaut/g) || []).length !== 1) throw new Error("fiche Par défaut not unique");
+if (css.indexOf("line-clamp: 3") === -1) throw new Error("desc clamp missing");
+if (css.indexOf("100050") === -1) throw new Error("overlay z-index bump missing");
+if (css.indexOf("margin-left: auto") === -1) throw new Error("wizard icon align missing");
 
 console.log("library-v2.test.js ok");

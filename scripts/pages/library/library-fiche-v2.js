@@ -55,6 +55,13 @@
     return (A && A.cfg && A.cfg().pricingUrl) || "/tarifs";
   }
 
+  function previewDisplay(text) {
+    return String(text || "")
+      .replace(/\*\*([^*]*)\*\*/g, "$1")
+      .replace(/__([^_]*)__/g, "$1")
+      .replace(/\*\*/g, "");
+  }
+
   function previewBody(model, st, creds) {
     var Core = C();
     var mode = previewMode(model, creds);
@@ -96,7 +103,7 @@
     var lines = text.split(/\r?\n/);
     var long = lines.length > PREVIEW_LINES || text.length > 900;
     var clamped = long && !st.previewExpanded;
-    return '<pre class="agilo-lib-fiche__pre' + (clamped ? " is-clamped" : "") + '" tabindex="0">' + esc(text) + "</pre>" +
+    return '<pre class="agilo-lib-fiche__pre' + (clamped ? " is-clamped" : "") + '" tabindex="0">' + esc(previewDisplay(text)) + "</pre>" +
       (long
         ? '<button type="button" class="agilo-lib-linkbtn" data-act="preview-toggle" aria-expanded="' + (!clamped) + '">' +
           (clamped ? "Afficher tout" : "Réduire") + "</button>"
@@ -156,7 +163,7 @@
         Core.svgIcon("dots", 16) + "</button>"
       : "";
     return '<footer class="agilo-lib-fiche__foot" data-id="' + model.promptModelId + '">' +
-      Core.primaryAction(model) + secondaryBtn(model, creds) + more +
+      (model.isDefault ? "" : Core.primaryAction(model)) + secondaryBtn(model, creds) + more +
       "</footer>";
   }
 

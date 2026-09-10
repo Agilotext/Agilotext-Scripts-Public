@@ -247,11 +247,25 @@
       "</div>";
   }
 
+  function categoryLabel() {
+    var cats = (global.AgiloLibraryStandards && global.AgiloLibraryStandards.CATEGORIES) || [];
+    var hit = cats.filter(function (c) { return c.key === state.category; })[0];
+    return hit && hit.key !== "all" ? hit.label : "";
+  }
+
   function countLine(total, shown) {
     var q = state.q.trim();
+    var cat = categoryLabel();
     var txt;
-    if (q) txt = (shown === 0 ? "Aucun résultat" : shown + (shown > 1 ? " résultats" : " résultat")) + " pour « " + esc(q) + " »";
-    else txt = total + (total > 1 ? " modèles" : " modèle");
+    if (q) {
+      txt = (shown === 0 ? "Aucun résultat" : shown + (shown > 1 ? " résultats" : " résultat")) + " pour « " + esc(q) + " »";
+    } else if (cat) {
+      txt = shown === 0
+        ? "Aucun modèle dans " + esc(cat)
+        : shown + (shown > 1 ? " modèles" : " modèle") + " dans " + esc(cat);
+    } else {
+      txt = total + (total > 1 ? " modèles" : " modèle");
+    }
     return '<p class="agilo-lib-count" role="status">' + txt + "</p>";
   }
 
@@ -309,12 +323,14 @@
     var q = state.q.trim();
     var head = countLine(counts().official, list.length);
     if (!list.length) {
-      return chipsHtml() + head + Core.emptyHtml(
-        "Aucun modèle Agilotext",
-        q ? "Aucun modèle ne correspond à « " + q + " »." : "Aucun modèle officiel ne correspond à ce filtre.",
-        q ? '<button type="button" class="agilo-lib-btn" data-clear-q>Effacer la recherche</button>' : "",
-        "search"
-      );
+      var cat = categoryLabel();
+      var extra = q
+        ? '<button type="button" class="agilo-lib-btn" data-clear-q>Effacer la recherche</button>'
+        : (cat ? '<button type="button" class="agilo-lib-btn" data-cat="all">Voir tous les modèles</button>' : "");
+      var text = q
+        ? "Aucun modèle ne correspond à « " + q + " »."
+        : (cat ? "Aucun modèle dans " + cat + "." : "Aucun modèle officiel n’est disponible pour l’instant.");
+      return chipsHtml() + head + Core.emptyHtml("Aucun modèle Agilotext", text, extra, "search");
     }
     var featured = [];
     var rest = list;
@@ -355,9 +371,9 @@
     var Core = C();
     var list = sortMine(filteredMine());
     var q = state.q.trim();
-    var tools = '<div class="agilo-lib-panel-tools">' + countLine(counts().mine, list.length) + viewToggleHtml() + "</div>";
     if (!list.length) {
       var canCreate = !isFree();
+      var tools = q ? '<div class="agilo-lib-panel-tools">' + countLine(counts().mine, list.length) + "</div>" : "";
       return tools + Core.emptyHtml(
         q ? "Aucun résultat" : "Pas encore de modèle personnel",
         q ? "Aucun modèle ne correspond à « " + q + " »."
@@ -369,6 +385,7 @@
       );
     }
     if (!state.viewTouched && list.length > 12) state.view = "table";
+    var tools = '<div class="agilo-lib-panel-tools">' + countLine(counts().mine, list.length) + viewToggleHtml() + "</div>";
     var slice = paginate(list);
     var body = state.view === "table" ? tableHtml(slice) : gridHtml(slice, "normal");
     return tools + body + pagerHtml(list.length);
@@ -404,7 +421,7 @@
     }
     if (library2Live() && counts().pinned === 0 && !pinsBannerSeen()) {
       bits.push('<div class="agilo-lib-banner agilo-lib-banner--info" role="status" data-pins-banner>' + Core.svgIcon("pin", 16) +
-        "<span>Vos épingles sont ici. Le modèle par défaut n’a pas changé.</span>" +
+        "<span>Épinglez jusqu’à 5 modèles depuis le menu ⋯. Ça ne change pas le modèle par défaut.</span>" +
         '<button type="button" class="agilo-lib-icon-btn agilo-lib-icon-btn--sm" data-dismiss-pins-banner aria-label="Fermer">' + Core.svgIcon("xmark", 14) + "</button></div>");
     }
     return bits.join("");
@@ -1073,6 +1090,7 @@
     if (tab === "creer") { openWizard(root); return; }
     state.tab = tab;
     state.page = 1;
+    state.category = "all";
     paint(root, { panelOnly: true });
   }
 
@@ -1315,6 +1333,7 @@
     _fiche: function () { return F; },
     _headHtml: headHtml,
     _bannersHtml: bannersHtml,
+    _countLine: countLine,
     _readHash: readHash
   };
 })(typeof window !== "undefined" ? window : globalThis);
