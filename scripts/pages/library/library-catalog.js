@@ -126,9 +126,20 @@
         state.wizard.iconKey = res.iconKey;
         state.wizard.suggestedKey = res.iconKey;
       }
-      if (overlayMode() === "wizard") syncOverlay(root);
+      markSelectedIcon(state.wizard.iconKey);
     }).catch(function () {
       state.wizard.suggesting = false;
+    });
+  }
+
+  function markSelectedIcon(key) {
+    var Overlay = global.AgiloLibraryOverlay;
+    var host = Overlay && Overlay.isOpen() ? Overlay.host() : null;
+    if (!host) return;
+    host.querySelectorAll("[data-icon-key]").forEach(function (btn) {
+      var on = btn.getAttribute("data-icon-key") === String(key || "");
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
     });
   }
 
