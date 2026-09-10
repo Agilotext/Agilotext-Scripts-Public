@@ -189,12 +189,12 @@ Aperçu local : `docs/webflow-embeds/preview-v2.html?mock=free|pro|business`. St
 
 ### Embed page bibliothèque v2 (×3, staging only)
 
-Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/bibliotheque`. Pin jsDelivr `9d01da4b`.
+Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/bibliotheque`. Pin jsDelivr `a316ed82`.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library.css?v=9d01da4b">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-v2.css?v=9d01da4b">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=9d01da4b">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library.css?v=a316ed82">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-v2.css?v=a316ed82">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=a316ed82">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 <div id="agilo-prompt-studio-anchor" hidden></div>
@@ -223,21 +223,21 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     }
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/editor/token-resolver.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/editor/agilo-editor-creds.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/shared/agilo-speech-dictate.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-standards-meta.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-api.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-core.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-core-v2.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-overlay.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-icon-picker.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-fiche-v2.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-wizard-v2.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-catalog.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-catalog-v2.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=9d01da4b"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9d01da4b/scripts/pages/library/library-main.js?v=9d01da4b"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/editor/token-resolver.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/editor/agilo-editor-creds.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/shared/agilo-speech-dictate.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-standards-meta.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-api.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-core.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-core-v2.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-overlay.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-icon-picker.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-fiche-v2.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-wizard-v2.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-catalog.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-catalog-v2.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=a316ed82"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@a316ed82/scripts/pages/library/library-main.js?v=a316ed82"></script>
 ```
 
 Rollback v2 : `uiV2: false` (recharge catalog v1, plus de CSS v2 ni Studio si tu les retires). Pas www.
@@ -251,8 +251,8 @@ Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon
 ### Recette Bauer v2 (compte Bauer, pas Astrid)
 
 1. Business : header une ligne (h1 + recherche + Créer), bandeaux sans trait latéral arrondi.
-2. Carte : « Définir par défaut » aligné, état « Par défaut » si déjà défaut, « Voir » ouvre la fiche. Titre 2 lignes + tooltip. Preview feuille. Actions 2 lignes si carte étroite.
-3. Fiche Pro/Business : aperçu prompt réel, 2 boutons + menu, pas de doublon « Utiliser / Définir ». « Modifier le prompt » ouvre le Studio. Fermer le Studio → fiche rafraîchie.
+2. Carte : toolbar check + ⋯ (tooltip « Définir par défaut »), badge si déjà défaut, clic carte = fiche. Pas de gros bouton Voir.
+3. Fiche Pro/Business : header et pied collés, picker icône en popover, aperçu prompt réel, 2 boutons + menu. « Modifier le prompt » ouvre le Studio. Fermer le Studio → fiche rafraîchie.
 4. Fiche Free (compte test) : flou, CTA Pro, **aucun** appel `getPromptModelContent` dans l’onglet Réseau. Modifier grisé.
 5. CSE verrouillé : CTA pack, pas d’aperçu.
 6. Wizard : 4 questions identiques à l’ancien Mon compte + récap, dictée, icône suggérée, succès.
