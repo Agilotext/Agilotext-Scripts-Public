@@ -57,16 +57,16 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin jsDelivr : commit `437feb00` (library + creds). Library + creds + standards-meta.
+Pin jsDelivr : commit `6bf08b5c` (library + creds + icon-picker). Staging : `library2Live: true`. `cse89Live` reste false. Pas www.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library.css?v=437feb00">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library.css?v=6bf08b5c">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = {
-    library2Live: false,
+    library2Live: true,
     cse89Live: false,
     atelierEnabled: false,
     apiBase: "https://api.agilotext.com/api/v1",
@@ -77,14 +77,15 @@ Pin jsDelivr : commit `437feb00` (library + creds). Library + creds + standards-
     ctaMonthlyUrl: "/cse"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/token-resolver.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/agilo-editor-creds.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-standards-meta.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-api.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-core.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-overlay.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-catalog.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-main.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/editor/token-resolver.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/editor/agilo-editor-creds.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-standards-meta.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-api.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-core.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-overlay.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-icon-picker.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-catalog.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-main.js?v=6bf08b5c"></script>
 ```
 
 `atelierEnabled: true` seulement si `agilo-prompt-atelier.css/js` 1.10 est aussi chargé (bouton Modifier ouvre l’atelier). Sinon Modifier envoie vers `/app/{palier}/profile?tab=prompts`.
@@ -135,7 +136,7 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
 2. Embed (même SHA), **sans** `library-main.js` :
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library.css?v=437feb00">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library.css?v=6bf08b5c">
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
     library2Live: false,
@@ -143,12 +144,12 @@ Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le 
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/token-resolver.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/editor/agilo-editor-creds.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-standards-meta.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-api.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-core.js?v=437feb00"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-picker.js?v=437feb00"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/editor/token-resolver.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/editor/agilo-editor-creds.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-standards-meta.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-api.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-core.js?v=6bf08b5c"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-picker.js?v=6bf08b5c"></script>
 ```
 
 3. **Désactiver** l’embed inline `code-model-default-*` (populateDefaultTemplateSelect) pour éviter un double chargement. Le picker fait le POST `setPromptModelUserDefault`.
@@ -178,6 +179,15 @@ Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=b
 
 Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger. Hash `#creer` ouvre la popup de création.
 
+Library2 staging (Bauer, après collage SHA + `library2Live: true`) :
+
+- Cartes 0 / 6 / 7 en SVG (`file-text` / `mic` / `users`), titres FR
+- Prompt 7 : pas « Changer l’icône »
+- USER existant : changer icône, refresh, icône encore là
+- Wizard étape 2 : suggestion + grille + filtre. **Ne pas** cliquer Créer
+- Onglet Épinglés : bandeau une fois si liste vide
+- Rollback : `library2Live: false`, republier staging only. Pas www.
+
 Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 89 (après Java) atterrit Business.
 
 ## Rollback
@@ -187,7 +197,7 @@ Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 
 3. Dépublier les 3 pages si besoin
 4. Picker : remettre l’inline `code-model-default-*`
 
-Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@437feb00/scripts/pages/library/library-main.js`
+Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6bf08b5c/scripts/pages/library/library-main.js`
 
 ## Vérif CDN
 
