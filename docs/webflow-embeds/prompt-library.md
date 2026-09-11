@@ -90,7 +90,9 @@ Pin jsDelivr : commit `18c8563a` (library + creds + icon-picker). Staging : `lib
 
 `atelierEnabled: true` seulement si `agilo-prompt-atelier.css/js` 1.10 est aussi chargé (bouton Modifier ouvre l’atelier). Sinon Modifier envoie vers `/app/{palier}/profile?tab=prompts`.
 
-`library-api.js` lit `usageCountGlobal`, `ratingAvg`, `ratingCount` s’ils arrivent du serveur. Le catalogue **ne les affiche pas** (v1).
+`library-api.js` mappe `acquiredPromptModelId` (badge « Dans Mes modèles », pas de 2e Ajouter). Il lit `usageCountGlobal`, `ratingAvg`, `ratingCount` s’ils arrivent du serveur. Le catalogue **ne les affiche pas**. Chips métier à 0 modèles : masqués.
+
+Outil admin STANDARD (hidden → HTML → publish) : `docs/webflow-embeds/library2-standard-admin.md`. Pas `create_prompt` MCP.
 
 L’édition (`free` / `pro` / `ent`) est déduite du chemin `/app/free|premium|business/`. Pas trois JS.
 

@@ -353,6 +353,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib--v2 .agilo-lib-badge,
 .agilo-lib-overlay .agilo-lib-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; }
 .agilo-lib-badge--pending { background: var(--lib-orange-12); color: #b85a0c; }
+.agilo-lib-badge--acquired { background: var(--lib-vert-12); color: var(--lib-vert); }
 .agilo-lib-linkbtn {
   display: inline-flex;
   align-items: center;

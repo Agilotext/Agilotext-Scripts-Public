@@ -443,6 +443,7 @@
 .agilo-lib-badge--default { background: var(--lib-blue); color: #fff; }
 .agilo-lib-badge--html { background: var(--lib-vert-12); color: var(--lib-vert); }
 .agilo-lib-badge--pin { background: var(--lib-blue-08); color: var(--lib-blue); }
+.agilo-lib-badge--acquired { background: var(--lib-vert-12); color: var(--lib-vert); }
 .agilo-lib-badge .agilo-lib-ico { width: 12px; height: 12px; }
 
 .agilo-lib-btn {

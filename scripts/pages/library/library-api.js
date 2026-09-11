@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.4.0
+ * @version 1.5.0
  */
 (function (global) {
   "use strict";
@@ -280,6 +280,13 @@
     return isFinite(n) ? n : 0;
   }
 
+  /** Copie USER déjà acquise depuis un STANDARD. 0 si absent. */
+  function acquiredUserId(raw) {
+    if (!raw) return 0;
+    var n = Number(raw.acquiredPromptModelId);
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
   function normalizeCard(raw, defaultId) {
     var id = modelId(raw);
     var typeField = String(raw.promptModelType || "").toUpperCase();
@@ -341,13 +348,14 @@
       displayOrder: Number(raw.displayOrder || raw.sortOrder || 0),
       sortOrder: Number(raw.sortOrder || raw.displayOrder || 0),
       featured: !!raw.featured,
-      // Pass-through DTO (Nico 8.0.22 bonus). Pas affiché tant que le front ne les peint pas.
+      // Pass-through DTO. Ne jamais peindre tant que Nico n’incrémente pas vraiment.
       usageCountGlobal: Number(raw.usageCountGlobal || 0),
       ratingAvg: raw.ratingAvg != null ? Number(raw.ratingAvg) : 0,
       ratingCount: Number(raw.ratingCount || 0),
       dtCreation: ts(raw.dtCreation),
       dtUpdate: ts(raw.dtUpdate || raw.dtCreation),
-      alreadyCopied: canDuplicate === false && type === "STANDARD" && !lockCode
+      acquiredPromptModelId: acquiredUserId(raw),
+      alreadyCopied: type === "STANDARD" && acquiredUserId(raw) > 0
     };
     if (global.AgiloLibraryStandards && global.AgiloLibraryStandards.applyTo) {
       global.AgiloLibraryStandards.applyTo(card);
@@ -1020,7 +1028,9 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.4.0",
+    VERSION: "1.5.0",
+    _normalizeCard: normalizeCard,
+    _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,
     cfg: cfg,
     waitForCreds: waitForCreds,

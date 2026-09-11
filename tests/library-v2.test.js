@@ -283,5 +283,75 @@ if ((defFiche.match(/Par défaut/g) || []).length !== 1) throw new Error("fiche 
 if (css.indexOf("line-clamp: 3") === -1) throw new Error("desc clamp missing");
 if (css.indexOf("100050") === -1) throw new Error("overlay z-index bump missing");
 if (css.indexOf("margin-left: auto") === -1) throw new Error("wizard icon align missing");
+if (css.indexOf("agilo-lib-badge--acquired") === -1) throw new Error("acquired badge css missing");
+
+var acquiredRaw = {
+  promptModelId: 0,
+  promptModelType: "STANDARD",
+  promptModelName: "Compte rendu de réunion",
+  canDuplicate: true,
+  canUse: true,
+  acquiredPromptModelId: 736,
+  usageCountGlobal: 0,
+  ratingAvg: 0,
+  ratingCount: 0
+};
+var acquiredCard = Api._normalizeCard(acquiredRaw, null);
+if (acquiredCard.acquiredPromptModelId !== 736) throw new Error("acquiredPromptModelId not mapped");
+if (!acquiredCard.alreadyCopied) throw new Error("alreadyCopied should follow acquiredPromptModelId");
+if (acquiredCard.usageCountGlobal !== 0) throw new Error("usage still expected 0");
+
+var heuristicRaw = {
+  promptModelId: -2,
+  promptModelType: "STANDARD",
+  promptModelName: "Isolé",
+  canDuplicate: true,
+  canUse: false,
+  requiresUserCopy: true
+};
+var heuristicCard = Api._normalizeCard(heuristicRaw, null);
+if (heuristicCard.alreadyCopied) throw new Error("canDuplicate true must not mean alreadyCopied");
+if (heuristicCard.acquiredPromptModelId !== 0) throw new Error("missing acquired should be 0");
+
+var isoCopied = {
+  promptModelId: -3,
+  cardTitle: "PV isolé",
+  type: "STANDARD",
+  canUse: false,
+  canCopyOfficial: true,
+  alreadyCopied: true,
+  acquiredPromptModelId: 900,
+  canPin: true,
+  isDefault: false
+};
+var isoItems = C.menuItems(isoCopied);
+if (isoItems.some(function (it) { return it.act === "duplicate"; })) {
+  throw new Error("already copied still offers Ajouter");
+}
+if (!isoItems.some(function (it) { return it.act === "open-copy"; })) {
+  throw new Error("open-copy missing from menu");
+}
+var isoCard = C.cardHtml(isoCopied);
+if (isoCard.indexOf("Dans Mes modèles") === -1) throw new Error("acquired badge missing");
+if (isoCard.indexOf("usageCount") !== -1 || isoCard.indexOf("ratingAvg") !== -1) {
+  throw new Error("usage/rating leaked into card HTML");
+}
+if (isoCard.indexOf("data-act=\"duplicate\"") !== -1) throw new Error("Ajouter still on acquired card");
+var isoFiche = Fiche.html(isoCopied, { previewText: "x", previewLoading: false }, proCreds);
+if (isoFiche.indexOf("Voir dans Mes modèles") === -1) throw new Error("fiche missing Voir dans Mes modèles");
+if (isoFiche.indexOf("Ajouter à mes modèles") !== -1) throw new Error("Ajouter still in acquired fiche");
+if (isoFiche.indexOf("usageCount") !== -1) throw new Error("usage leaked into fiche");
+
+Cat._state().models = [
+  { promptModelId: 0, type: "STANDARD", categoryKey: "general", cardTitle: "Réunion" },
+  { promptModelId: 7, type: "STANDARD", categoryKey: "cse", cardTitle: "PV" }
+];
+Cat._state().category = "all";
+var chips = Cat._chipsHtml();
+if (chips.indexOf("data-cat=\"education\"") !== -1) throw new Error("empty Formation chip still visible");
+if (chips.indexOf("data-cat=\"cse\"") === -1) throw new Error("CSE chip missing");
+if (chips.indexOf("data-cat=\"all\"") === -1) throw new Error("Tous chip missing");
+if (handleActFn.indexOf("open-copy") === -1) throw new Error("handleAct missing open-copy");
+if (catSrc.indexOf("function openAcquiredCopy") === -1) throw new Error("openAcquiredCopy missing");
 
 console.log("library-v2.test.js ok");

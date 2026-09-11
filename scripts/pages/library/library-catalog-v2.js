@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.0.0
+ * @version 2.1.0
  */
 (function (global) {
   "use strict";
@@ -269,13 +269,31 @@
     return '<p class="agilo-lib-count" role="status">' + txt + "</p>";
   }
 
+  function officialCategoryCounts() {
+    var countsByKey = {};
+    state.models.forEach(function (m) {
+      if (m.type !== "STANDARD") return;
+      var key = m.categoryKey || "general";
+      countsByKey[key] = (countsByKey[key] || 0) + 1;
+    });
+    return countsByKey;
+  }
+
   function chipsHtml() {
     var cats = (global.AgiloLibraryStandards && global.AgiloLibraryStandards.CATEGORIES) || [];
     if (!cats.length) return "";
+    var nByCat = officialCategoryCounts();
+    var visible = cats.filter(function (c) {
+      if (c.key === "all") return true;
+      return (nByCat[c.key] || 0) > 0;
+    });
+    if (!visible.length) return "";
+    var current = state.category;
+    if (current !== "all" && !(nByCat[current] > 0)) current = "all";
     return '<div class="agilo-lib-chips" role="group" aria-label="Filtres métier">' +
-      cats.map(function (c) {
+      visible.map(function (c) {
         return '<button type="button" data-cat="' + c.key + '"' +
-          (c.key === state.category ? ' class="is-active"' : "") + ">" + esc(c.label) + "</button>";
+          (c.key === current ? ' class="is-active"' : "") + ">" + esc(c.label) + "</button>";
       }).join("") + "</div>";
   }
 
@@ -319,6 +337,8 @@
 
   function panelOfficial() {
     var Core = C();
+    var nByCat = officialCategoryCounts();
+    if (state.category !== "all" && !(nByCat[state.category] > 0)) state.category = "all";
     var list = Core.sortOfficial(filteredOfficial());
     var q = state.q.trim();
     var head = countLine(counts().official, list.length);
@@ -966,6 +986,18 @@
   /* ------------------------------------------------------------------ */
   /* Actions                                                             */
   /* ------------------------------------------------------------------ */
+  function openAcquiredCopy(root, model) {
+    var copyId = Number(model && model.acquiredPromptModelId);
+    var copy = byId(copyId);
+    if (!copy) {
+      C().toast("Ce modèle est déjà dans Mes modèles. Recharge la page si tu ne le vois pas.");
+      return;
+    }
+    state.tab = "mes-modeles";
+    paint(root, { skipOverlay: true });
+    openFiche(root, copy);
+  }
+
   function handleAct(root, model, act, btn) {
     if (!model) return;
     if (act === "more") {
@@ -980,6 +1012,7 @@
     if (act === "use" || act === "default") { doDefault(root, model, btn); return; }
     if (act === "pin") { doPin(root, model, btn); return; }
     if (act === "duplicate") { askDuplicate(root, model); return; }
+    if (act === "open-copy") { openAcquiredCopy(root, model); return; }
     if (act === "rename") { askRename(root, model); return; }
     if (act === "edit") { openEdit(root, model); return; }
     if (act === "versions") { openVersions(root, model); return; }
@@ -1325,7 +1358,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.0.0",
+    VERSION: "2.1.0",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */
@@ -1334,6 +1367,8 @@
     _headHtml: headHtml,
     _bannersHtml: bannersHtml,
     _countLine: countLine,
+    _chipsHtml: chipsHtml,
+    _officialCategoryCounts: officialCategoryCounts,
     _readHash: readHash
   };
 })(typeof window !== "undefined" ? window : globalThis);

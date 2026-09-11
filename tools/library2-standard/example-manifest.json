@@ -1,0 +1,13 @@
+{
+  "promptName": "[DRAFT] ne pas publier",
+  "promptContent": "Tu rédiges un compte rendu clair, fidèle à la transcription. Décisions, actions, responsables.",
+  "htmlInline": "skeleton",
+  "publicDescription": "Brouillon admin, invisible tant que visible=false.",
+  "publicExample": "Décisions · Actions · Prochaine étape",
+  "iconKey": "file-text",
+  "categoryKey": "general",
+  "businessType": "generic",
+  "featured": false,
+  "sortOrder": 1000,
+  "reason": "Recette Flo pipeline library2 hidden"
+}

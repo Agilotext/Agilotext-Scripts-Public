@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.0
+ * @version 2.1.1
  */
 (function (global) {
   "use strict";
@@ -56,7 +56,9 @@
     if (m.canPin && !isLocked) {
       items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler", icon: "pin" });
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial) {
+    if (m.type === "STANDARD" && m.alreadyCopied) {
+      items.push({ act: "open-copy", label: "Voir dans Mes modèles", icon: "copy" });
+    } else if (m.type === "STANDARD" && m.canCopyOfficial) {
       items.push({ act: "duplicate", label: "Ajouter à mes modèles", icon: "copy" });
     }
     if (m.type === "USER" && m.canDuplicate) {
@@ -93,6 +95,10 @@
     if (canSetDefault(m)) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="default">' +
         "Définir par défaut</button>";
+    }
+    if (m.type === "STANDARD" && m.alreadyCopied) {
+      return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="open-copy">' +
+        "Voir dans Mes modèles</button>";
     }
     if (m.type === "STANDARD" && m.canCopyOfficial) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="duplicate">Ajouter à mes modèles</button>';
@@ -165,6 +171,9 @@
   function badgeHtml(m) {
     var bits = [];
     if (m.pinned) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pin">' + svgIcon("pin", 12) + " Épinglé</span>");
+    if (m.alreadyCopied && m.type === "STANDARD") {
+      bits.push('<span class="agilo-lib-badge agilo-lib-badge--acquired">Dans Mes modèles</span>');
+    }
     if (m.hasHtml) bits.push('<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>');
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
@@ -228,7 +237,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.0",
+    VERSION: "2.1.1",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,
