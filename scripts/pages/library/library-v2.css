@@ -4,8 +4,8 @@
    Préfixe agilo-lib-*. Rien n'est écrit ici pour la v1. */
 
 .agilo-lib {
-  --lib-radius: 10px;
-  --lib-radius-sm: 8px;
+  --lib-radius: 0.625rem;
+  --lib-radius-sm: 0.5rem;
   --lib-shadow-1: 0 1px 2px rgba(2, 2, 2, 0.06), 0 0 0 1px rgba(23, 74, 150, 0.04);
   --lib-shadow-2: 0 8px 24px rgba(23, 74, 150, 0.12), 0 1px 2px rgba(2, 2, 2, 0.06);
   --lib-blue-20: color-mix(in srgb, var(--lib-blue) 20%, transparent);
@@ -106,6 +106,15 @@
 .agilo-lib--v2 .agilo-lib-featured { align-items: stretch; }
 .agilo-lib--v2 .agilo-lib-featured {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 16.5rem), 1fr));
+}
+.agilo-lib--v2 .agilo-lib-chips,
+.agilo-lib--v2 .agilo-lib-chips--ex {
+  flex-wrap: wrap;
+}
+.agilo-lib--v2 .agilo-lib-chips button,
+.agilo-lib--v2 .agilo-lib-chips--ex button {
+  border-radius: var(--lib-radius);
+  min-height: 2.5rem;
 }
 .agilo-lib--v2 .agilo-lib-chips button.is-active {
   background: var(--lib-blue) !important;
@@ -319,17 +328,17 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   gap: 0.25rem;
   margin-top: auto;
   padding-top: 0.35rem;
-  min-height: 36px;
+  min-height: 2.5rem;
 }
 .agilo-lib-card__actions--v2 .agilo-lib-icon-btn,
 .agilo-lib-card__actions--v2 .agilo-lib-quick,
 .agilo-lib-td__actions .agilo-lib-icon-btn,
 .agilo-lib-td__actions .agilo-lib-quick {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 2.5rem;
+  height: 2.5rem;
   border: 0 !important;
-  border-radius: 6px;
+  border-radius: var(--lib-radius-sm);
   background: transparent;
   color: var(--lib-muted);
   display: grid;
@@ -585,45 +594,110 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__foot .agilo-lib-btn, .agilo-lib-fiche__foot .agilo-lib-state { white-space: nowrap; }
 .agilo-lib-fiche__foot .agilo-lib-icon-btn { border-color: var(--lib-border) !important; }
 
+/* ---------- spinner unique ---------- */
+.agilo-lib-spin {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 0.125rem solid var(--lib-blue-20);
+  border-top-color: var(--lib-blue);
+  border-radius: 50%;
+  animation: agilo-lib-spin 0.7s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.agilo-lib-spin--lg { width: 2rem; height: 2rem; border-width: 0.1875rem; }
+.agilo-lib-iconpick__wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4.5rem;
+}
+@keyframes agilo-lib-spin { to { transform: rotate(360deg); } }
+
 /* ---------- popover icônes ---------- */
 .agilo-lib-iconpop {
   position: absolute;
   left: 0;
-  top: calc(100% + 8px);
+  top: calc(100% + 0.5rem);
   z-index: 4;
+  display: flex;
+  flex-direction: column;
   width: min(22rem, calc(100vw - 3.5rem));
-  max-height: 12rem;
-  overflow: auto;
+  max-height: min(22rem, 70vh);
+  overflow: hidden;
   border: 1px solid var(--lib-blue-35);
   border-radius: var(--lib-radius);
   background: var(--lib-surface);
   padding: 0.75rem 0.85rem 0.85rem;
   box-shadow: var(--lib-shadow-2);
 }
-.agilo-lib-iconpop .agilo-lib-iconpick__grid { max-height: none; overflow: visible; }
-.agilo-lib-iconpop__head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
-.agilo-lib-iconpop .agilo-lib-iconpick { margin: 0.5rem 0 0; padding-top: 0.6rem; }
+.agilo-lib-iconpop__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.35rem;
+  flex-shrink: 0;
+  background: var(--lib-surface);
+}
+.agilo-lib-iconpop .agilo-lib-iconpick__sugg { flex-shrink: 0; }
+.agilo-lib-iconpop .agilo-lib-iconpick {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin: 0.5rem 0 0;
+  padding-top: 0.6rem;
+}
 .agilo-lib-iconpop .agilo-lib-iconpick__title { display: none; }
+.agilo-lib-iconpop .agilo-lib-iconpick__chrome { flex-shrink: 0; }
+.agilo-lib-iconpop .agilo-lib-iconpick__grid {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  max-height: none;
+}
 .agilo-lib-iconpick__sugg .agilo-lib-iconpick__title { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0.4rem; font-size: 0.8rem; }
 .agilo-lib-iconpick__grid--sugg { max-height: none; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); overflow: visible; padding: 0; }
 .agilo-lib-iconpick__cell { border-radius: var(--lib-radius-sm); position: relative; }
 .agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); }
+.agilo-lib-iconpick__cell--solo { justify-content: center; min-height: 2.75rem; }
 .agilo-lib-iconpick__tag {
   position: absolute;
-  top: -7px;
-  right: -4px;
+  top: -0.4rem;
+  right: -0.25rem;
   font-style: normal;
   font-size: 0.6rem;
   font-weight: 700;
   padding: 0.05rem 0.4rem;
-  border-radius: 999px;
+  border-radius: var(--lib-radius-sm);
   background: var(--lib-blue);
   color: #fff;
 }
 .agilo-lib-iconpick__q { border-radius: var(--lib-radius-sm); }
 
 /* ---------- wizard ---------- */
-.agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__panel { width: min(42rem, 100%); max-height: min(94vh, 54rem); }
+.agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__panel {
+  width: min(42rem, 100%);
+  max-height: min(94vh, 54rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__head {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--lib-surface);
+  margin-bottom: 0.75rem;
+}
+.agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 .agilo-lib-wiz .agilo-lib-wizard-steps { gap: 0.35rem; margin: 0 0 1.1rem; }
 .agilo-lib-wiz .agilo-lib-wizard-steps span { min-width: 1.85rem; height: 1.85rem; font-size: 0.78rem; background: var(--lib-bg); color: var(--lib-muted); border: 1px solid var(--lib-border); }
 .agilo-lib-wiz .agilo-lib-wizard-steps span.is-done { background: var(--lib-blue-12); color: var(--lib-blue); border-color: transparent; }
@@ -639,9 +713,9 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   position: absolute;
   right: 0.5rem;
   top: 0.5rem;
-  width: 36px;
-  height: 36px;
-  border-radius: 99px;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
   border: 1px solid var(--lib-border);
   background: var(--lib-surface);
   color: var(--lib-muted);
@@ -654,18 +728,28 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-dictate.is-recording { background: var(--lib-rouge-12); color: var(--lib-rouge); border-color: var(--lib-rouge); animation: agilo-lib-pulse 1.2s ease-in-out infinite; }
 .agilo-lib-dictate svg { width: 16px; height: 16px; }
 .agilo-lib-chips--ex { margin: 0.25rem 0 0; }
-.agilo-lib-chips--ex button { min-height: 34px; font-size: 0.78rem; border-radius: 999px; }
+.agilo-lib-chips--ex button { min-height: 2.5rem; font-size: 0.78rem; }
 .agilo-lib-wiz-error { margin: 0.6rem 0 0; font-size: 0.85rem; color: var(--lib-rouge); font-weight: 600; }
 .agilo-lib-wiz-draft { margin: -0.4rem 0 0.8rem; display: flex; gap: 0.3rem; align-items: center; }
 .agilo-lib-wiz-nav { justify-content: flex-end; margin-top: 1.1rem; }
 .agilo-lib-wiz-nav .agilo-lib-btn--primary { min-width: 9rem; }
-.agilo-lib-wiz-icon { margin-top: 0.9rem; padding-top: 0.9rem; border-top: 1px solid var(--lib-border); display: grid; gap: 0.6rem; }
+.agilo-lib-wiz-intro { margin: 0 0 0.85rem; }
+.agilo-lib-wiz-icon { margin-top: 0.65rem; padding-top: 0.65rem; border-top: 1px solid var(--lib-border); display: grid; gap: 0.5rem; }
 .agilo-lib-wiz-icon__row { display: flex; align-items: center; gap: 0.75rem; }
 .agilo-lib-wiz-icon__row .agilo-lib-btn { margin-left: auto; }
 .agilo-lib-wiz-icon__txt { display: grid; gap: 0.1rem; flex: 1; min-width: 0; }
 .agilo-lib-wiz-icon__name { font-weight: 600; font-size: 0.92rem; }
-.agilo-lib-wiz-icon .agilo-lib-iconpick { margin-top: 0.25rem; }
+.agilo-lib-wiz-icon__txt .agilo-lib-fiche__label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.agilo-lib-wiz-icon .agilo-lib-iconpick {
+  display: flex;
+  flex-direction: column;
+  max-height: min(22rem, 70vh);
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
 .agilo-lib-wiz-icon .agilo-lib-iconpick__title { display: none; }
+.agilo-lib-wiz-icon .agilo-lib-iconpick__chrome { flex-shrink: 0; }
+.agilo-lib-wiz-icon .agilo-lib-iconpick__grid { flex: 1; min-height: 0; overflow: auto; }
 .agilo-lib-recap { display: grid; gap: 0.6rem; }
 .agilo-lib-recap__head { display: flex; align-items: center; gap: 0.75rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--lib-border); }
 .agilo-lib-recap__head > div { flex: 1; min-width: 0; }
@@ -674,24 +758,33 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-recap__row:last-of-type { border-bottom: 0; }
 .agilo-lib-recap__k { display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--lib-muted); }
 .agilo-lib-recap__v { font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 7.5rem; overflow: auto; }
-.agilo-lib-wiz-creating { text-align: center; padding: 0.5rem 0 0.25rem; }
-.agilo-lib-wiz-creating h3 { margin: 0.25rem 0 0.4rem; font-size: 1.2rem; }
-.agilo-lib-wiz-creating p { margin: 0 auto 0.5rem; max-width: 30rem; color: var(--lib-text); }
+.agilo-lib-wiz-creating {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  padding: 1.25rem 0 0.5rem;
+  gap: 0.5rem;
+}
+.agilo-lib-wiz-creating h3 { margin: 0.35rem 0 0.15rem; font-size: 1.2rem; }
+.agilo-lib-wiz-creating p { margin: 0 auto; max-width: 30rem; color: var(--lib-text); }
+.agilo-lib-wiz-creating .agilo-lib-lottie { margin: 0.25rem auto 0; min-height: 0; }
+.agilo-lib-wiz-creating .agilo-lib-lottie:empty { display: none; }
 .agilo-lib-wiz-done { display: grid; gap: 0.85rem; }
 .agilo-lib-wiz-done .agilo-lib-card { animation: none; }
+.agilo-lib-banner .agilo-lib-spin { margin-right: 0.15rem; }
 
 /* ---------- mobile ---------- */
-@media (max-width: 767px) {
+@media (max-width: 47.99em) {
   .agilo-lib-head--v2 { flex-wrap: wrap; }
   .agilo-lib-head--v2 h1 { white-space: normal; width: 100%; }
   .agilo-lib-head--v2 .agilo-lib-head__tools { width: 100%; flex-wrap: wrap; }
   .agilo-lib-head--v2 .agilo-lib-search { width: 100%; }
   .agilo-lib-search__kbd { display: none; }
-  .agilo-lib-card__actions--v2 { min-height: 44px; }
+  .agilo-lib-card__actions--v2 { min-height: 2.75rem; }
   .agilo-lib-card__actions--v2 .agilo-lib-icon-btn,
   .agilo-lib-card__actions--v2 .agilo-lib-quick,
   .agilo-lib-td__actions .agilo-lib-icon-btn,
-  .agilo-lib-td__actions .agilo-lib-quick { width: 44px; height: 44px; }
+  .agilo-lib-td__actions .agilo-lib-quick { width: 2.75rem; height: 2.75rem; }
   .agilo-lib-overlay[data-mode="fiche"] { align-items: flex-end; }
   .agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel {
     height: auto;
@@ -699,14 +792,23 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
     border-radius: var(--lib-radius) var(--lib-radius) 0 0;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
-  .agilo-lib-fiche__foot { display: flex; }
-  .agilo-lib-fiche__foot .agilo-lib-btn { white-space: normal; min-height: 44px; flex: 1; }
+  .agilo-lib-overlay[data-mode="wizard"] { align-items: stretch; }
+  .agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__panel {
+    width: 100%;
+    max-height: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+  .agilo-lib-fiche__foot { display: flex; flex-wrap: wrap; }
+  .agilo-lib-fiche__foot .agilo-lib-btn { white-space: normal; min-height: 2.75rem; flex: 1; }
   .agilo-lib-fiche__rename { grid-template-columns: 1fr; }
   .agilo-lib-wiz-nav { justify-content: stretch; }
   .agilo-lib-wiz-nav .agilo-lib-btn { flex: 1; }
+  .agilo-lib-iconpop { max-height: min(22rem, 70vh); width: min(22rem, calc(100vw - 1.5rem)); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agilo-lib-card--v2, .agilo-lib-dictate, .agilo-lib-fiche__skel span { transition: none; animation: none; }
+  .agilo-lib-card--v2, .agilo-lib-dictate, .agilo-lib-fiche__skel span, .agilo-lib-spin { transition: none; animation: none; }
   .agilo-lib-card--v2:hover { transform: none; }
+  .agilo-lib-spin { border-top-color: var(--lib-blue); opacity: 0.7; }
 }

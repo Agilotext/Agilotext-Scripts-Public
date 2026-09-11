@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.0.0
+ * @version 1.1.0
  */
 (function (global) {
   "use strict";
@@ -14,9 +14,53 @@
     return !!(global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().library2Live);
   }
 
+  function esc(s) {
+    var C = global.AgiloLibraryCore;
+    return C && C.escapeHtml ? C.escapeHtml(s) : String(s || "");
+  }
+
   function labelOf(icon) {
     if (!icon) return "";
     return String(icon.labelFr || icon.label || icon.iconKey || "");
+  }
+
+  function displayLabel(icon) {
+    return String((icon && icon.labelFr) || "").trim();
+  }
+
+  function titleOf(icon) {
+    var fr = displayLabel(icon);
+    if (fr) return fr;
+    return String((icon && (icon.iconKey || icon.label)) || "");
+  }
+
+  function spinHtml(aria, size) {
+    var C = global.AgiloLibraryCore;
+    if (C && C.spinHtml) return C.spinHtml(aria, size);
+    var lab = esc(aria || "Chargement");
+    var cls = "agilo-lib-spin" + (size === "lg" ? " agilo-lib-spin--lg" : "");
+    return '<span class="' + cls + '" role="status" aria-label="' + lab + '">' +
+      '<span class="visually-hidden">' + lab + "</span></span>";
+  }
+
+  function cellHtml(icon, selectedKey, extra) {
+    extra = extra || {};
+    var on = icon.iconKey === selectedKey;
+    var src = icon.url || "";
+    var fr = displayLabel(icon);
+    var title = titleOf(icon);
+    var img = src
+      ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
+      : "";
+    var cap = fr ? "<span>" + esc(fr) + "</span>" : "";
+    var cls = "agilo-lib-iconpick__cell" +
+      (extra.className ? " " + extra.className : "") +
+      (on ? " is-on" : "") +
+      (fr ? "" : " agilo-lib-iconpick__cell--solo");
+    return '<button type="button" class="' + cls +
+      '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(title) +
+      '" aria-label="' + esc(title) + '">' +
+      img + cap + (extra.tag || "") + "</button>";
   }
 
   function matchesQuery(icon, q) {
@@ -56,26 +100,27 @@
     return catalogInflight;
   }
 
+  function chromeHtml(q) {
+    return '<div class="agilo-lib-iconpick__chrome">' +
+      '<p class="agilo-lib-iconpick__title">Icône du modèle</p>' +
+      '<label class="visually-hidden" for="agilo-lib-icon-q">Filtrer les icônes</label>' +
+      '<input id="agilo-lib-icon-q" class="agilo-lib-iconpick__q" type="search" placeholder="Rechercher une icône" value="' +
+      esc(q) + '">' +
+      "</div>";
+  }
+
   function html(opts) {
     opts = opts || {};
-    var C = global.AgiloLibraryCore;
-    var esc = C && C.escapeHtml ? C.escapeHtml : function (s) { return String(s || ""); };
     var selected = String(opts.selectedKey || "");
     var q = String(opts.query || "");
     var icons = opts.icons || catalogCache || [];
     var loading = !!opts.loading;
     var error = opts.error || (!loading && !icons.length && catalogError ? catalogError : "");
-    var suggesting = !!opts.suggesting;
 
-    var head = '<div class="agilo-lib-iconpick">' +
-      '<p class="agilo-lib-iconpick__title">Icône du modèle</p>' +
-      (suggesting ? '<p class="agilo-lib-note" role="status">Suggestion en cours…</p>' : "") +
-      '<label class="visually-hidden" for="agilo-lib-icon-q">Filtrer les icônes</label>' +
-      '<input id="agilo-lib-icon-q" class="agilo-lib-iconpick__q" type="search" placeholder="Filtrer (nom ou clé)" value="' +
-      esc(q) + '">';
+    var head = '<div class="agilo-lib-iconpick">' + chromeHtml(q);
 
     if (loading && !icons.length) {
-      return head + '<p class="agilo-lib-note">Chargement des icônes…</p></div>';
+      return head + '<div class="agilo-lib-iconpick__wait">' + spinHtml("Chargement") + "</div></div>";
     }
     if (error && !icons.length) {
       return head + '<p class="agilo-lib-note">' + esc(error) +
@@ -84,15 +129,7 @@
 
     var filtered = icons.filter(function (icon) { return matchesQuery(icon, q.trim().toLowerCase()); });
     var cells = filtered.map(function (icon) {
-      var on = icon.iconKey === selected;
-      var src = icon.url || "";
-      var lab = labelOf(icon);
-      var img = src
-        ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
-        : "";
-      return '<button type="button" class="agilo-lib-iconpick__cell' + (on ? " is-on" : "") +
-        '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(lab) + '">' +
-        img + '<span>' + esc(lab) + "</span></button>";
+      return cellHtml(icon, selected);
     }).join("");
     if (!filtered.length) {
       cells = '<p class="agilo-lib-note">Aucune icône pour ce filtre.</p>';
@@ -126,8 +163,6 @@
   function applyFilter(host, icons, selectedKey, q) {
     var grid = host.querySelector(".agilo-lib-iconpick__grid");
     if (!grid) return;
-    var C = global.AgiloLibraryCore;
-    var esc = C && C.escapeHtml ? C.escapeHtml : function (s) { return String(s || ""); };
     var filtered = (icons || []).filter(function (icon) {
       return matchesQuery(icon, String(q || "").trim().toLowerCase());
     });
@@ -136,26 +171,22 @@
       return;
     }
     grid.innerHTML = filtered.map(function (icon) {
-      var on = icon.iconKey === selectedKey;
-      var src = icon.url || "";
-      var lab = labelOf(icon);
-      var img = src
-        ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
-        : "";
-      return '<button type="button" class="agilo-lib-iconpick__cell' + (on ? " is-on" : "") +
-        '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(lab) + '">' +
-        img + '<span>' + esc(lab) + "</span></button>";
+      return cellHtml(icon, selectedKey);
     }).join("");
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.0.0",
+    VERSION: "1.1.0",
     html: html,
     bind: bind,
     bindCells: bindCells,
     applyFilter: applyFilter,
     load: load,
     labelOf: labelOf,
+    displayLabel: displayLabel,
+    titleOf: titleOf,
+    cellHtml: cellHtml,
+    spinHtml: spinHtml,
     resetCache: resetCache,
     matchesQuery: matchesQuery
   };

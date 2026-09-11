@@ -10,7 +10,8 @@
   "use strict";
 
   var DRAFT_KEY = "agilo:lib:wizardDraft:v2";
-  var TITLE = "Configurer votre modèle personnalisé";
+  var TITLE = "Nouveau modèle";
+  var STEP_SHORT = ["", "Nom", "Contexte", "Infos", "Structure"];
 
   var QUESTIONS = [
     {
@@ -24,19 +25,22 @@
     {
       id: "objective",
       field: "wiz-obj",
-      label: "Quels types d’échanges gérez-vous habituellement avec vos interlocuteurs (ex. entretiens, réunions de suivi, échanges commerciaux) ? Quel est l’objectif principal de ces échanges dans votre contexte professionnel ?",
+      label: "Quels échanges, quel objectif ?",
+      hint: "Quels types d’échanges gérez-vous habituellement avec vos interlocuteurs (ex. entretiens, réunions de suivi, échanges commerciaux) ? Quel est l’objectif principal de ces échanges dans votre contexte professionnel ?",
       placeholder: "Exemple : Décrivez le contexte des échanges que vous gérez, leur fréquence, et leur objectif. Cela peut inclure des réunions, des entretiens, des discussions stratégiques, des suivis, ou des négociations. Ajoutez un maximum de détails : Qui sont vos interlocuteurs (clients, collègues, candidats, etc.) ? Quel est le résultat attendu (rapport, présentation, synthèse, décisions, etc.) ?"
     },
     {
       id: "specificInfo",
       field: "wiz-info",
-      label: "Quelles informations clés doivent apparaître dans vos comptes rendus ?",
+      label: "Quelles informations clés ?",
+      hint: "Quelles informations clés doivent apparaître dans vos comptes rendus ?",
       placeholder: "Exemple : Indiquez les éléments que vous souhaitez voir systématiquement ressortir dans vos comptes rendus. Cela peut inclure des noms, des dates, des points importants discutés, des décisions prises, ou des actions à réaliser. Ajoutez autant de détails que possible pour rendre vos comptes rendus plus utiles : par exemple, chiffres clés, délais, projets discutés, ou personnes impliquées."
     },
     {
       id: "structure",
       field: "wiz-struct",
-      label: "Quelle structure préférez-vous pour vos comptes rendus ?",
+      label: "Quelle structure pour vos comptes rendus ?",
+      hint: "Quelle structure préférez-vous pour vos comptes rendus ?",
       placeholder: "Exemple : Précisez le format qui correspond le mieux à vos besoins. Vous pouvez demander un résumé en tête de rapport, suivi d’un détail étape par étape, ou un format intégral sans résumé."
     }
   ];
@@ -157,7 +161,9 @@
     var dots = [1, 2, 3, 4].map(function (n) {
       var done = n < W.step;
       var on = n === W.step;
+      var short = STEP_SHORT[n];
       return '<span class="' + (done ? "is-done" : "") + (on ? " is-on" : "") + '"' +
+        ' title="' + esc(short) + '" aria-label="' + esc(short) + '"' +
         (on ? ' aria-current="step"' : "") + ">" +
         (done ? Core.svgIcon("check", 14) : String(n)) + "</span>";
     }).join("");
@@ -178,28 +184,27 @@
     var selHtml = sel && sel.url
       ? '<img src="' + esc(sel.url) + '" alt="" width="26" height="26" onerror="this.onerror=null;this.hidden=true;">'
       : Core.svgIcon("custom", 26);
-    var selLabel = sel ? P.labelOf(sel) : (W.iconKey || "Icône proposée automatiquement");
+    var selFr = sel && P.displayLabel ? P.displayLabel(sel) : "";
+    var selLabel = selFr || (W.iconKey ? "" : "Icône proposée automatiquement");
     var sugg = "";
-    if (W.suggestions.length || W.suggesting) {
+    var keys = (W.suggestions || []).slice(0, 3);
+    if (keys.length) {
       sugg = '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' +
-        W.suggestions.map(function (k, i) {
-          var ic = byKey[k] || { iconKey: k, labelFr: k };
-          var on = k === W.iconKey;
-          return '<button type="button" class="agilo-lib-iconpick__cell agilo-lib-iconpick__cell--sugg' + (on ? " is-on" : "") +
-            '" data-icon-key="' + esc(k) + '" aria-pressed="' + on + '" title="' + esc(P.labelOf(ic)) + '">' +
-            (ic.url ? '<img src="' + esc(ic.url) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">' : "") +
-            "<span>" + esc(P.labelOf(ic)) + "</span>" +
-            (i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : "") +
-            "</button>";
+        keys.map(function (k, i) {
+          var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
+          return P.cellHtml(ic, W.iconKey, {
+            className: "agilo-lib-iconpick__cell--sugg",
+            tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
+          });
         }).join("") +
-        (W.suggesting ? '<p class="agilo-lib-note agilo-lib-pulse" role="status">Recherche d’icônes…</p>' : "") +
         "</div>";
     }
+    var spin = W.suggesting && Core.spinHtml ? Core.spinHtml("Suggestion d’icône") : "";
     return '<div class="agilo-lib-wiz-icon">' +
       '<div class="agilo-lib-wiz-icon__row">' +
       '<span class="agilo-lib-card__icon agilo-lib-card__icon--xl" aria-hidden="true">' + selHtml + "</span>" +
-      '<div class="agilo-lib-wiz-icon__txt"><span class="agilo-lib-fiche__label">Icône</span>' +
-      '<span class="agilo-lib-wiz-icon__name">' + esc(selLabel) + "</span></div>" +
+      '<div class="agilo-lib-wiz-icon__txt"><span class="agilo-lib-fiche__label">Icône' + spin + "</span>" +
+      (selLabel ? '<span class="agilo-lib-wiz-icon__name">' + esc(selLabel) + "</span>" : "") + "</div>" +
       '<button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-wiz="icon-toggle" aria-expanded="' + !!W.iconOpen + '">' +
       Core.svgIcon("grid", 14) + (W.iconOpen ? " Masquer" : " Plus d’icônes") + "</button>" +
       "</div>" +
@@ -223,15 +228,16 @@
       ? '<button type="button" class="agilo-lib-dictate" id="' + q.field + '-dictate" aria-label="Dicter la réponse" title="Dicter (navigateur)" aria-pressed="false" hidden>' +
         Core.svgIcon("report", 16) + "</button>"
       : "";
+    var hint = q.hint ? '<p class="agilo-lib-note">' + esc(q.hint) + "</p>" : "";
     if (q.input) {
       return '<label for="' + q.field + '"><span>' + esc(q.label) + req + "</span></label>" +
         '<input id="' + q.field + '" type="text" maxlength="' + (q.maxlength || 120) + '" required value="' + esc(value) +
-        '" placeholder="' + esc(q.placeholder) + '" autocomplete="off">';
+        '" placeholder="' + esc(q.placeholder) + '" autocomplete="off">' + hint;
     }
     return '<label for="' + q.field + '"><span>' + esc(q.label) + req + "</span></label>" +
       '<div class="agilo-lib-field">' +
       '<textarea id="' + q.field + '" rows="6" required placeholder="' + esc(q.placeholder) + '">' + esc(value) + "</textarea>" +
-      dictate + "</div>";
+      dictate + "</div>" + hint;
   }
 
   function recapRow(label, value, step) {
@@ -252,7 +258,7 @@
     return '<div class="agilo-lib-recap">' +
       '<div class="agilo-lib-recap__head">' +
       '<span class="agilo-lib-card__icon agilo-lib-card__icon--xl" aria-hidden="true">' + iconHtml + "</span>" +
-      '<div><p class="agilo-lib-fiche__kicker">Modèle personnel · ' + esc(ic && P ? P.labelOf(ic) : "icône automatique") + "</p>" +
+      '<div><p class="agilo-lib-fiche__kicker">Votre modèle</p>' +
       '<h3 class="agilo-lib-recap__title">' + esc(W.name || "Sans nom") + "</h3></div>" +
       '<button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-wiz="goto" data-step="1">' + Core.svgIcon("pencil", 14) + " Nom et icône</button>" +
       "</div>" +
@@ -264,11 +270,14 @@
   }
 
   function creatingHtml() {
-    return '<div class="agilo-lib-wiz-creating">' +
+    var Core = C();
+    var spin = Core.spinHtml ? Core.spinHtml("Création en cours", "lg") : "";
+    return '<div class="agilo-lib-wiz-creating" aria-live="polite">' +
+      spin +
       '<div class="agilo-lib-lottie" id="agilo-lib-lottie" aria-hidden="true"></div>' +
-      "<h3>Félicitations !</h3>" +
-      "<p>Votre modèle personnalisé est en cours de création grâce à notre IA. Ce processus prend quelques secondes.</p>" +
-      '<p class="agilo-lib-note">Vous pouvez fermer cette fenêtre : le modèle apparaîtra dans Mes modèles dès qu’il sera prêt.</p>' +
+      "<h3>Agilotext rédige votre modèle</h3>" +
+      "<p>Quelques secondes. Laissez cette fenêtre ouverte.</p>" +
+      '<p class="agilo-lib-note">Vous pouvez aussi fermer : le modèle arrivera dans Mes modèles.</p>' +
       "</div>";
   }
 
@@ -276,9 +285,10 @@
     var Core = C();
     var m = ctx.created;
     var ready = !ctx.createdPending;
+    var spin = !ready && Core.spinHtml ? Core.spinHtml("Création en cours") : "";
     return '<div class="agilo-lib-wiz-done">' +
-      '<div class="agilo-lib-banner agilo-lib-banner--' + (ready ? "success" : "info") + '" role="status">' +
-      Core.svgIcon(ready ? "check-circle" : "clock", 16) +
+      '<div class="agilo-lib-banner agilo-lib-banner--' + (ready ? "success" : "info") + '" role="status" aria-live="polite">' +
+      (ready ? Core.svgIcon("check-circle", 16) : spin + Core.svgIcon("clock", 16)) +
       "<span>" + (ready ? "Modèle créé. Vous pouvez l’utiliser tout de suite." : "Modèle enregistré. Le prompt est en cours de rédaction…") + "</span></div>" +
       Core.cardHtml(m, { size: "featured" }) +
       '<div class="agilo-lib-actions-row">' +
@@ -337,7 +347,11 @@
     else nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">' + Core.svgIcon("sparkle", 16) + " Créer le modèle</button>";
     nav += "</div>";
     var kicker = W.step === 5 ? '<p class="agilo-lib-wizard-kicker">Récapitulatif</p>' : "";
+    var intro = W.step <= 4
+      ? '<p class="agilo-lib-note agilo-lib-wiz-intro">Agilotext rédige le prompt à partir de vos réponses.</p>'
+      : "";
     return '<div class="agilo-lib-wiz">' +
+      intro +
       kicker +
       stepsHtml() +
       restored +
@@ -513,8 +527,9 @@
   }
 
   global.AgiloLibraryWizardV2 = {
-    VERSION: "2.0.0",
+    VERSION: "2.0.1",
     TITLE: TITLE,
+    STEP_SHORT: STEP_SHORT,
     QUESTIONS: QUESTIONS,
     EXAMPLES: EXAMPLES,
     DRAFT_KEY: DRAFT_KEY,

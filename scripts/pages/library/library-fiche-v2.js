@@ -38,7 +38,7 @@
   }
 
   function typeLabel(model) {
-    if (model.type === "USER") return "Modèle personnel";
+    if (model.type === "USER") return "Votre modèle";
     if (model.packCse) return "Modèle Pack CSE";
     return "Modèle Agilotext";
   }
@@ -118,7 +118,8 @@
       tools = '<button type="button" class="agilo-lib-linkbtn" data-act="preview-copy">' + Core.svgIcon("copy", 14) + " Copier</button>";
     }
     return '<section class="agilo-lib-fiche__prompt" data-mode="' + mode + '">' +
-      '<div class="agilo-lib-fiche__prompt-head"><span class="agilo-lib-fiche__label">Prompt</span>' + tools + "</div>" +
+      '<div class="agilo-lib-fiche__prompt-head"><span class="agilo-lib-fiche__label">' +
+      (model.type === "USER" ? "Votre prompt" : "Prompt") + "</span>" + tools + "</div>" +
       previewBody(model, st, creds) +
       "</section>";
   }
@@ -149,11 +150,23 @@
     var pending = Core.isReady && !Core.isReady(model);
     var label = model.type === "USER" && model.canEdit ? "Modifier le prompt" : "Voir le prompt";
     var ico = model.type === "USER" && model.canEdit ? "pencil" : "eye";
+    var userPrimary = model.type === "USER" && model.canEdit;
+    var cls = userPrimary ? "agilo-lib-btn agilo-lib-btn--primary" : "agilo-lib-btn";
     var attrs = "";
     if (free) attrs = ' disabled aria-disabled="true" title="Réservé aux plans Pro et Business"';
     else if (pending) attrs = ' disabled aria-disabled="true" title="Disponible dès que la création est terminée"';
-    return '<button type="button" class="agilo-lib-btn" data-act="edit"' + attrs + ">" +
+    return '<button type="button" class="' + cls + '" data-act="edit"' + attrs + ">" +
       Core.svgIcon(ico, 16) + " " + label + "</button>";
+  }
+
+  function defaultFootBtn(model) {
+    var Core = C();
+    if (model.isDefault) return "";
+    var html = Core.primaryAction(model);
+    if (model.type === "USER") {
+      html = html.replace("agilo-lib-btn--primary ", "");
+    }
+    return html;
   }
 
   function footHtml(model, creds) {
@@ -162,33 +175,37 @@
       ? '<button type="button" class="agilo-lib-icon-btn" data-act="more" aria-label="Autres actions" title="Autres actions">' +
         Core.svgIcon("dots", 16) + "</button>"
       : "";
+    var edit = secondaryBtn(model, creds);
+    var def = defaultFootBtn(model);
+    var main = model.type === "USER" ? edit + def : def + edit;
     return '<footer class="agilo-lib-fiche__foot" data-id="' + model.promptModelId + '">' +
-      (model.isDefault ? "" : Core.primaryAction(model)) + secondaryBtn(model, creds) + more +
+      main + more +
       "</footer>";
   }
 
   function suggestionsHtml(st, model) {
     var Core = C();
-    var keys = st.iconSuggestions || [];
+    var P = global.AgiloLibraryIconPicker;
+    var keys = (st.iconSuggestions || []).slice(0, 3);
     var icons = st.iconCatalog || [];
     if (!keys.length && !st.iconSuggesting) return "";
     var byKey = {};
     icons.forEach(function (ic) { byKey[ic.iconKey] = ic; });
+    var spin = st.iconSuggesting && Core.spinHtml ? Core.spinHtml("Suggestion d’icône") : "";
     var cells = keys.map(function (k, i) {
-      var ic = byKey[k] || { iconKey: k, labelFr: k, url: "" };
-      var on = k === model.iconKey;
-      var lab = global.AgiloLibraryIconPicker ? global.AgiloLibraryIconPicker.labelOf(ic) : k;
-      return '<button type="button" class="agilo-lib-iconpick__cell agilo-lib-iconpick__cell--sugg' + (on ? " is-on" : "") +
-        '" data-icon-key="' + esc(k) + '" aria-pressed="' + on + '" title="' + esc(lab) + '">' +
-        (ic.url ? '<img src="' + esc(ic.url) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">' : "") +
-        "<span>" + esc(lab) + "</span>" +
-        (i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : "") +
-        "</button>";
+      var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
+      if (P && P.cellHtml) {
+        return P.cellHtml(ic, model.iconKey, {
+          className: "agilo-lib-iconpick__cell--sugg",
+          tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
+        });
+      }
+      return "";
     }).join("");
     return '<div class="agilo-lib-iconpick__sugg">' +
-      '<p class="agilo-lib-iconpick__title">' + Core.svgIcon("sparkle", 14) + " Suggestions" +
-      (st.iconSuggesting ? ' <span class="agilo-lib-note" role="status">(recherche…)</span>' : "") + "</p>" +
-      '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' + cells + "</div></div>";
+      '<p class="agilo-lib-iconpick__title">' + Core.svgIcon("sparkle", 14) + " Suggestions" + spin + "</p>" +
+      (cells ? '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' + cells + "</div>" : "") +
+      "</div>";
   }
 
   function iconPopoverHtml(model, st) {
@@ -213,11 +230,23 @@
     var Core = C();
     if (!model) return "";
     st = st || {};
-    var desc = model.publicDescription ? esc(model.publicDescription) : '<span class="agilo-lib-muted">Pas de description publique pour l’instant.</span>';
+    var user = model.type === "USER";
+    var layout = model.hasHtml ? "Mise en page HTML" : "Texte structuré";
     var example = model.publicExample
       ? '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Exemple</span> ' + esc(model.publicExample) + "</p>"
       : "";
-    var layout = model.hasHtml ? "Mise en page HTML" : "Texte structuré";
+    var kicker = user
+      ? '<p class="agilo-lib-fiche__kicker">Votre modèle</p>'
+      : '<p class="agilo-lib-fiche__kicker">' + esc(typeLabel(model)) + " · " + esc(layout) + "</p>";
+    var about = "";
+    if (!user || model.publicDescription || model.publicExample) {
+      var desc = model.publicDescription
+        ? '<p class="agilo-lib-fiche__desc">' + esc(model.publicDescription) + "</p>"
+        : (user ? "" : '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-muted">Pas de description publique pour l’instant.</span></p>');
+      about = (desc || example)
+        ? '<section class="agilo-lib-fiche__about">' + desc + example + "</section>"
+        : "";
+    }
     var badges = (Core.defaultBadgeHtml ? Core.defaultBadgeHtml(model) : (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "")) + Core.badgeHtml(model);
     return '<div class="agilo-lib-fiche" data-id="' + model.promptModelId + '">' +
       '<header class="agilo-lib-fiche__head">' +
@@ -226,15 +255,13 @@
       iconPopoverHtml(model, st) +
       "</div>" +
       '<div class="agilo-lib-fiche__titlewrap">' +
-      '<p class="agilo-lib-fiche__kicker">' + esc(typeLabel(model)) + " · " + esc(layout) + "</p>" +
+      kicker +
       titleBlock(model, st) +
       (badges ? '<div class="agilo-lib-card__meta">' + badges + "</div>" : "") +
       "</div></header>" +
       '<div class="agilo-lib-fiche__scroll">' +
       previewSection(model, st, creds) +
-      '<section class="agilo-lib-fiche__about">' +
-      '<p class="agilo-lib-fiche__desc">' + desc + "</p>" + example +
-      "</section></div>" +
+      about + "</div>" +
       footHtml(model, creds) +
       "</div>";
   }
@@ -345,7 +372,7 @@
   }
 
   global.AgiloLibraryFicheV2 = {
-    VERSION: "2.0.0",
+    VERSION: "2.0.1",
     PREVIEW_LINES: PREVIEW_LINES,
     html: html,
     bind: bind,

@@ -262,6 +262,13 @@
       '<div class="agilo-lib-skel agilo-lib-skel--line"></div></article>';
   }
 
+  function spinHtml(aria, size) {
+    var lab = escapeHtml(aria || "Chargement");
+    var cls = "agilo-lib-spin" + (size === "lg" ? " agilo-lib-spin--lg" : "");
+    return '<span class="' + cls + '" role="status" aria-label="' + lab + '">' +
+      '<span class="visually-hidden">' + lab + "</span></span>";
+  }
+
   function emptyHtml(title, text, extra, iconKey) {
     var ico = iconKey
       ? '<div class="agilo-lib-empty__ico" aria-hidden="true">' + svgIcon(iconKey, 28) + "</div>"
@@ -468,6 +475,7 @@
     tableRowHtml: tableRowHtml,
     skeletonCard: skeletonCard,
     emptyHtml: emptyHtml,
+    spinHtml: spinHtml,
     toast: toast,
     sortModels: sortModels,
     sortOfficial: sortOfficial,

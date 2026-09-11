@@ -523,7 +523,11 @@
   }
 
   function overlayTitle(mode) {
-    if (mode === "wizard") return state.created ? "Modèle créé" : Wiz().TITLE;
+    if (mode === "wizard") {
+      if (state.creating || (state.created && state.createdPending)) return "Création en cours";
+      if (state.created) return "Modèle créé";
+      return Wiz().TITLE;
+    }
     if (mode === "versions" && state.versionsModel) return "Versions · " + state.versionsModel.cardTitle;
     if (mode === "fiche" && F && F.model) return F.model.cardTitle;
     return "";
@@ -1369,6 +1373,8 @@
     _countLine: countLine,
     _chipsHtml: chipsHtml,
     _officialCategoryCounts: officialCategoryCounts,
-    _readHash: readHash
+    _readHash: readHash,
+    _paint: paint,
+    _overlayTitle: overlayTitle
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -18,6 +18,7 @@ eval(fs.readFileSync(path.join(lib, "library-api.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-standards-meta.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-core.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-core-v2.js"), "utf8"));
+eval(fs.readFileSync(path.join(lib, "library-icon-picker.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-fiche-v2.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-wizard-v2.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-overlay.js"), "utf8"));
@@ -132,9 +133,11 @@ if (head.indexOf("Question") !== -1) throw new Error("wizard kicker leaked into 
 Wiz.reset({ restore: false });
 var w0 = Wiz.state();
 if (w0.step !== 1) throw new Error("wizard start");
+if (Wiz.TITLE !== "Nouveau modèle") throw new Error("wizard title");
 if (Wiz.QUESTIONS.length !== 4) throw new Error("4 questions");
 if (Wiz.QUESTIONS[0].placeholder.indexOf("Modèle de réunion") === -1) throw new Error("name placeholder");
-if (Wiz.QUESTIONS[1].label.indexOf("interlocuteurs") === -1) throw new Error("objective question");
+if (Wiz.QUESTIONS[1].label.indexOf("échanges") === -1) throw new Error("objective short label");
+if (!Wiz.QUESTIONS[1].hint || Wiz.QUESTIONS[1].hint.indexOf("interlocuteurs") === -1) throw new Error("objective hint");
 Wiz.state().name = "Comité";
 Wiz.state().objective = "Suivi hebdo";
 Wiz.state().specificInfo = "Décisions";
@@ -147,6 +150,50 @@ if (q2.indexOf("Question 2") !== -1 || q2.indexOf("Question 2 / 4") !== -1) {
   throw new Error("duplicate question kicker still present");
 }
 if (q2.indexOf("Étape 2 sur 4") === -1) throw new Error("stepper aria label missing");
+if (q2.indexOf('aria-label="Contexte"') === -1) throw new Error("step 2 short name missing");
+if (q2.indexOf("Agilotext rédige le prompt à partir de vos réponses.") === -1) throw new Error("wizard intro missing");
+if (q2.indexOf("Recherche d’icônes") !== -1) throw new Error("wizard still shows Recherche d’icônes");
+Wiz.reset({ restore: false });
+Wiz.state().name = "Comité";
+Wiz.state().suggesting = true;
+var wSuggest = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
+if (wSuggest.indexOf("Recherche d’icônes") !== -1) throw new Error("suggest copy still visible");
+if (wSuggest.indexOf("(recherche") !== -1) throw new Error("fiche-like recherche copy in wizard");
+if (wSuggest.indexOf("agilo-lib-spin") === -1) throw new Error("wizard suggest spin missing");
+Wiz.reset({ restore: false });
+var creating = Wiz.html({ canCreate: true, creating: true });
+if (creating.indexOf("Félicitations") !== -1) throw new Error("creating still says Félicitations");
+if (creating.indexOf("Agilotext rédige votre modèle") === -1) throw new Error("creating title missing");
+if (creating.indexOf("Quelques secondes") === -1) throw new Error("creating wait copy missing");
+if (creating.indexOf("agilo-lib-spin") === -1) throw new Error("creating spin missing");
+var createdReady = Wiz.html({
+  canCreate: true,
+  created: { promptModelId: 901, cardTitle: "Comité", type: "USER", isDefault: false, canSetDefault: true, canUse: true },
+  createdPending: false
+});
+if (createdReady.indexOf("Modèle créé. Vous pouvez") === -1) throw new Error("success banner copy lost");
+if (createdReady.indexOf("agilo-lib-banner--success") === -1) throw new Error("ready success banner missing");
+var createdPend = Wiz.html({
+  canCreate: true,
+  created: { promptModelId: 901, cardTitle: "Comité", type: "USER", isDefault: false, canSetDefault: true, canUse: true },
+  createdPending: true
+});
+if (createdPend.indexOf("agilo-lib-banner--success") !== -1) throw new Error("pending still green");
+if (createdPend.indexOf("agilo-lib-banner--info") === -1) throw new Error("pending info banner missing");
+if (createdPend.indexOf("agilo-lib-spin") === -1) throw new Error("pending spin missing");
+if (Cat._overlayTitle) {
+  Cat._state().creating = true;
+  Cat._state().created = null;
+  Cat._state().createdPending = false;
+  if (Cat._overlayTitle("wizard") !== "Création en cours") throw new Error("overlay creating title");
+  Cat._state().creating = false;
+  Cat._state().created = { cardTitle: "X" };
+  Cat._state().createdPending = true;
+  if (Cat._overlayTitle("wizard") !== "Création en cours") throw new Error("overlay pending title");
+  Cat._state().createdPending = false;
+  if (Cat._overlayTitle("wizard") !== "Modèle créé") throw new Error("overlay ready title");
+  Cat._state().created = null;
+}
 Wiz.state().step = 5;
 var recap = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
 if (recap.indexOf("Récapitulatif") === -1 && recap.indexOf("agilo-lib-recap") === -1) {
@@ -189,6 +236,10 @@ if (freeHtml.indexOf("disabled") === -1) throw new Error("edit must be disabled 
 var proHtml = Fiche.html(user, { previewText: "Tu es un assistant", previewLoading: false }, proCreds);
 if (proHtml.indexOf("Tu es un assistant") === -1) throw new Error("pro preview missing");
 if (proHtml.indexOf("Modifier le prompt") === -1) throw new Error("edit CTA missing");
+if (proHtml.indexOf("Votre modèle") === -1) throw new Error("USER kicker missing");
+if (proHtml.indexOf("Modèle personnel") !== -1) throw new Error("old USER kicker still there");
+if (proHtml.indexOf("Votre prompt") === -1) throw new Error("USER prompt label missing");
+if (proHtml.indexOf("jamais affiché") !== -1) throw new Error("old never-shown copy still there");
 if (proHtml.indexOf("Définir par défaut") === -1 && proHtml.indexOf("Par défaut") === -1) {
   throw new Error("fiche primary missing");
 }
@@ -202,6 +253,45 @@ if (openIcon.indexOf("agilo-lib-fiche__iconwrap") === -1) throw new Error("icon 
 
 var stdHtml = Fiche.html(std, { previewText: "Prompt officiel", previewLoading: false }, proCreds);
 if (stdHtml.indexOf("Voir le prompt") === -1) throw new Error("readonly studio label");
+if (stdHtml.indexOf("Votre modèle") !== -1) throw new Error("STANDARD got USER kicker");
+if (stdHtml.indexOf("Modèle Agilotext") === -1) throw new Error("STANDARD kicker missing");
+
+var bareUser = Object.assign({}, user, { publicDescription: "", publicExample: "", isDefault: false });
+var bareHtml = Fiche.html(bareUser, { previewText: "x", previewLoading: false }, proCreds);
+if (bareHtml.indexOf("Pas de description publique") !== -1) throw new Error("USER empty official copy");
+if (bareHtml.indexOf("agilo-lib-fiche__about") !== -1) throw new Error("USER empty about still shown");
+if (bareHtml.indexOf("class=\"agilo-lib-btn agilo-lib-btn--primary\" data-act=\"edit\"") === -1) {
+  throw new Error("USER edit is not primary");
+}
+if (bareHtml.indexOf("agilo-lib-btn--primary agilo-lib-act-primary") !== -1) {
+  throw new Error("USER default still hero primary");
+}
+
+var iconWait = Fiche.html(bareUser, {
+  iconOpen: true,
+  iconCatalogLoading: true,
+  iconCatalog: [],
+  iconSuggesting: true,
+  previewText: "x",
+  previewLoading: false
+}, proCreds);
+if (iconWait.indexOf("Recherche d’icônes") !== -1) throw new Error("fiche picker Recherche copy");
+if (iconWait.indexOf("(recherche") !== -1) throw new Error("fiche (recherche…) still visible");
+if (iconWait.indexOf("agilo-lib-spin") === -1) throw new Error("fiche picker spin missing");
+
+var Picker = globalThis.AgiloLibraryIconPicker;
+if (!Picker) throw new Error("icon picker missing in tests");
+var enCell = Picker.cellHtml({ iconKey: "at-sign", label: "At sign", labelFr: "", url: "" }, "");
+if (enCell.indexOf("At sign") !== -1) throw new Error("EN label leaked into cell");
+if (enCell.indexOf("<span>") !== -1) throw new Error("EN caption span in cell");
+if (enCell.indexOf('title="at-sign"') === -1) throw new Error("cell title should be key");
+var frCell = Picker.cellHtml({ iconKey: "users", labelFr: "Réunion", label: "Users", url: "" }, "users");
+if (frCell.indexOf("Réunion") === -1) throw new Error("FR label missing");
+if (frCell.indexOf("Users") !== -1) throw new Error("EN label shown beside FR");
+var loadPick = Picker.html({ loading: true, icons: [] });
+if (loadPick.indexOf("Chargement des icônes") !== -1) throw new Error("visible loading copy");
+if (loadPick.indexOf("agilo-lib-spin") === -1) throw new Error("picker loading spin missing");
+if (loadPick.indexOf("Rechercher une icône") === -1) throw new Error("picker placeholder");
 
 if (typeof Api.credsForStudio !== "function") throw new Error("credsForStudio missing");
 Api.setActiveCreds({ email: "preview@agilotext.com", token: "mock", edition: "ent" });
@@ -227,10 +317,16 @@ if (css.indexOf("agilo-lib-blur") === -1) throw new Error("blur css missing");
 if (css.indexOf("container-type: inline-size") !== -1) throw new Error("container query should be gone");
 if (css.indexOf("grid-template-areas") !== -1) throw new Error("action grid still present");
 if (css.indexOf("[data-tip]") === -1) throw new Error("tooltip css missing");
-if (css.indexOf("width: 36px") === -1) throw new Error("36px toolbar missing");
-if (css.indexOf("width: 44px") === -1) throw new Error("44px mobile toolbar missing");
+if (css.indexOf("width: 2.5rem") === -1) throw new Error("2.5rem toolbar missing");
+if (css.indexOf("width: 2.75rem") === -1) throw new Error("2.75rem mobile toolbar missing");
 if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missing");
-if (css.indexOf("max-height: 12rem") === -1) throw new Error("icon popover max-height missing");
+if (css.indexOf("max-height: min(22rem, 70vh)") === -1) throw new Error("icon popover max-height missing");
+if (css.indexOf(".agilo-lib-spin") === -1) throw new Error("spin css missing");
+if (css.indexOf(".agilo-lib--v2 .agilo-lib-chips button") === -1) throw new Error("chips radius rule missing");
+if (css.indexOf("border-radius: var(--lib-radius)") === -1) throw new Error("chips radius token missing");
+if (css.indexOf("@media (max-width: 47.99em)") === -1) throw new Error("47.99em breakpoint missing");
+if (css.indexOf("max-width: 767px") !== -1) throw new Error("v2 still uses 767px");
+if (css.indexOf("--lib-radius: 0.625rem") === -1) throw new Error("radius rem token missing");
 if (css.indexOf("opacity: 0.5") === -1) throw new Error("pencil rest opacity missing");
 
 var main = fs.readFileSync(path.join(lib, "library-main.js"), "utf8");

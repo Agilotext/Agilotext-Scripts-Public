@@ -369,6 +369,27 @@
     var Cat = global.AgiloLibraryCatalogV2 || global.AgiloLibraryCatalog;
     if (global.AgiloLibraryApi.setActiveCreds) global.AgiloLibraryApi.setActiveCreds(built.creds);
     Cat.mount(host, built.creds, built.access, { models: store.models, pinMax: 5, pinCount: built.pinCount });
+    var screen = "";
+    try { screen = new URLSearchParams(location.search).get("screen") || ""; } catch (_) { screen = ""; }
+    if (screen === "creating" || screen === "created" || screen === "pending") {
+      var st = Cat._state && Cat._state();
+      var Wiz = global.AgiloLibraryWizardV2;
+      if (st && Wiz) {
+        Wiz.reset({ restore: false });
+        st.wizardOpen = true;
+        st.creating = screen === "creating";
+        if (screen === "creating") {
+          st.created = null;
+          st.createdPending = false;
+        } else {
+          var um = store.models.filter(function (m) { return m.type === "USER"; })[0] || store.models[0];
+          st.created = um;
+          st.createdPending = screen === "pending";
+          st.creating = false;
+        }
+        if (typeof Cat._paint === "function") Cat._paint(host);
+      }
+    }
   }
 
   global.AgiloLibraryPreviewMock = { mount: mount, packFor: packFor, ICONS: ICONS, PROMPT_SAMPLE: PROMPT_SAMPLE };
