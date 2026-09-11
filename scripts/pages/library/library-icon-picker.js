@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.2.0
+ * @version 1.3.0
  */
 (function (global) {
   "use strict";
@@ -24,8 +24,29 @@
     return String(icon.labelFr || icon.label || icon.iconKey || "");
   }
 
+  var FR_OVERRIDES = {
+    custom: "Personnalisé"
+  };
+
+  function nucleoCaption(icon) {
+    var key = String((icon && icon.iconKey) || "").trim();
+    if (!key) return "";
+    return key.replace(/-/g, " ");
+  }
+
   function displayLabel(icon) {
-    return String((icon && icon.labelFr) || "").trim();
+    if (!icon) return "";
+    var key = String(icon.iconKey || "").trim();
+    if (FR_OVERRIDES[key]) return FR_OVERRIDES[key];
+    var fr = String(icon.labelFr || "").trim();
+    if (!fr) return "";
+    var en = String(icon.label || "").trim();
+    var nucleo = nucleoCaption(icon);
+    if (en && fr.toLowerCase() === en.toLowerCase() && fr.toLowerCase() === nucleo.toLowerCase()) {
+      return "";
+    }
+    if (fr.toLowerCase() === nucleo.toLowerCase()) return "";
+    return fr;
   }
 
   function titleOf(icon) {
@@ -176,7 +197,7 @@
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.1.0",
+    VERSION: "1.3.0",
     html: html,
     bind: bind,
     bindCells: bindCells,

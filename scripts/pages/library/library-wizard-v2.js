@@ -1,9 +1,9 @@
 /**
  * Wizard v2 « Configurer votre modèle personnalisé ».
  * Les 4 questions (ordre Mon compte), placeholders courts, dictée,
- * récapitulatif, brouillon localStorage, écran de succès avec statut.
+ * récapitulatif, brouillon localStorage, attente spinner, écran de succès.
  * Rendu + liaison ; les appels API restent dans library-catalog-v2.js.
- * @version 2.1.0
+ * @version 2.2.0
  */
 (function (global) {
   "use strict";
@@ -25,21 +25,18 @@
       id: "objective",
       field: "wiz-obj",
       label: "Quels échanges, quel objectif ?",
-      hint: "Quels types d’échanges gérez-vous, et quel est leur objectif ?",
       placeholder: "Ex. comités, entretiens clients, suivi commercial"
     },
     {
       id: "specificInfo",
       field: "wiz-info",
       label: "Quelles informations clés ?",
-      hint: "Quelles informations clés doivent apparaître dans vos comptes rendus ?",
       placeholder: "Ex. décisions, responsables, échéances, chiffres"
     },
     {
       id: "structure",
       field: "wiz-struct",
       label: "Quelle structure pour vos comptes rendus ?",
-      hint: "Quelle structure préférez-vous pour vos comptes rendus ?",
       placeholder: "Ex. résumé puis détail, ou compte rendu intégral"
     }
   ];
@@ -133,7 +130,9 @@
       objective: W.objective.trim(),
       specificInfo: W.specificInfo.trim(),
       structure: W.structure.trim(),
-      iconKey: (W.iconKey || "").trim()
+      iconKey: (W.iconKey || "").trim(),
+      publicDescription: W.objective.trim(),
+      publicExample: W.structure.trim()
     };
   }
 
@@ -215,9 +214,11 @@
         Core.svgIcon("report", 16) + "</button>"
       : "";
     var hint = q.hint ? '<p class="agilo-lib-note">' + esc(q.hint) + "</p>" : "";
+    var reqAttr = q.optional ? "" : " required";
+    if (q.optional) req = "";
     if (q.input) {
       return '<label for="' + q.field + '"><span>' + esc(q.label) + req + "</span></label>" +
-        '<input id="' + q.field + '" type="text" maxlength="' + (q.maxlength || 120) + '" required value="' + esc(value) +
+        '<input id="' + q.field + '" type="text" maxlength="' + (q.maxlength || 120) + '"' + reqAttr + ' value="' + esc(value) +
         '" placeholder="' + esc(q.placeholder) + '" autocomplete="off">' + hint;
     }
     return '<label for="' + q.field + '"><span>' + esc(q.label) + req + "</span></label>" +
@@ -255,33 +256,33 @@
       "</div>";
   }
 
+  function reducedMotion() {
+    try { return global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) { return false; }
+  }
+
   function creatingHtml() {
     var Core = C();
-    var spin = Core.spinHtml ? Core.spinHtml("Création en cours", "lg") : "";
+    var spin = (!reducedMotion() && Core.spinHtml) ? Core.spinHtml("Création du modèle", "lg") : "";
     return '<div class="agilo-lib-wiz-creating" aria-live="polite">' +
       spin +
-      '<div class="agilo-lib-lottie" id="agilo-lib-lottie" aria-hidden="true"></div>' +
-      "<h3>Agilotext rédige votre modèle</h3>" +
-      "<p>Quelques secondes. Laissez cette fenêtre ouverte.</p>" +
-      '<p class="agilo-lib-note">Vous pouvez aussi fermer : le modèle arrivera dans Mes modèles.</p>' +
+      "<h3>Création du modèle…</h3>" +
+      "<p>Restez ici. Ça prend quelques secondes.</p>" +
       "</div>";
   }
 
   function createdHtml(ctx) {
     var Core = C();
     var m = ctx.created;
-    var ready = !ctx.createdPending;
-    var spin = !ready && Core.spinHtml ? Core.spinHtml("Création en cours") : "";
     return '<div class="agilo-lib-wiz-done">' +
-      '<div class="agilo-lib-banner agilo-lib-banner--' + (ready ? "success" : "info") + '" role="status" aria-live="polite">' +
-      (ready ? Core.svgIcon("check-circle", 16) : spin + Core.svgIcon("clock", 16)) +
-      "<span>" + (ready ? "Modèle créé. Vous pouvez l’utiliser tout de suite." : "Modèle enregistré. Le prompt est en cours de rédaction…") + "</span></div>" +
+      '<div class="agilo-lib-banner agilo-lib-banner--success" role="status" aria-live="polite">' +
+      Core.svgIcon("check-circle", 16) +
+      "<span>Modèle créé. Vous pouvez l’utiliser tout de suite.</span></div>" +
       Core.cardHtml(m, { size: "featured" }) +
       '<div class="agilo-lib-actions-row">' +
       (m.isDefault
         ? Core.defaultState()
         : '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="default" data-id="' + m.promptModelId + '">Définir par défaut</button>') +
-      '<button type="button" class="agilo-lib-btn" data-act="edit" data-id="' + m.promptModelId + '"' + (ready ? "" : ' disabled title="Disponible dès que la création est terminée"') + ">" +
+      '<button type="button" class="agilo-lib-btn" data-act="edit" data-id="' + m.promptModelId + '">' +
       Core.svgIcon("pencil", 16) + " Ouvrir dans l’éditeur</button>" +
       '<button type="button" class="agilo-lib-btn" data-tab="mes-modeles">Voir mes modèles</button>' +
       "</div></div>";
@@ -304,8 +305,8 @@
   function html(ctx) {
     ctx = ctx || {};
     if (!ctx.canCreate) return freeHtml(ctx);
-    if (ctx.creating) return creatingHtml();
-    if (ctx.created) return createdHtml(ctx);
+    if (ctx.created && !ctx.createdPending) return createdHtml(ctx);
+    if (ctx.creating || ctx.createdPending) return creatingHtml();
     var Core = C();
     var body = "";
     if (W.step === 1) {
@@ -508,7 +509,7 @@
   }
 
   global.AgiloLibraryWizardV2 = {
-    VERSION: "2.1.0",
+    VERSION: "2.2.0",
     TITLE: TITLE,
     STEP_SHORT: STEP_SHORT,
     QUESTIONS: QUESTIONS,

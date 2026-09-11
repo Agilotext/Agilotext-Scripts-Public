@@ -257,7 +257,7 @@ Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon
 3. Fiche Pro/Business : header et pied collés, picker icône en popover, aperçu prompt réel, 2 boutons + menu. « Modifier le prompt » ouvre le Studio. Fermer le Studio → fiche rafraîchie.
 4. Fiche Free (compte test) : flou, CTA Pro, **aucun** appel `getPromptModelContent` dans l’onglet Réseau. Modifier grisé.
 5. CSE verrouillé : CTA pack, pas d’aperçu.
-6. Wizard : 4 questions identiques à l’ancien Mon compte + récap, dictée, icône suggérée, succès.
+6. Wizard : 4 questions (une seule par écran), tag Suggérée lisible, attente spinner 32 px (pas Lottie), succès check + carte. `createPromptModelUser` n’enregistre pas `publicDescription` : l’overlay reprend l’objectif, un F5 vide la carte. Ticket Nico : `updatePromptModelUserMetadata` (ou renvoyer ces champs dans `getPromptModelsUserInfo`).
 7. `#modele=253` ouvre la fiche. Mon compte `?tab=prompts` redirige (sauf `noredirect=1`).
 8. Rollback : `uiV2: false`, hard refresh, v1 revient.
 
@@ -275,6 +275,13 @@ Library2 staging (Bauer, après collage SHA + `library2Live: true`) :
 - Rollback : `library2Live: false`, republier staging only. Pas www.
 
 Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 89 (après Java) atterrit Business.
+
+### Ticket Nico — descriptions USER
+
+`createPromptModelUser` accepte `promptName` / `promptObjective` / `promptSpecificInfo` / `promptStructure` / `iconKey`. Un POST avec `publicDescription` + `publicExample` (probe USER 750, puis supprimé) : HTTP 200, champs **absents** de `getPromptModelsUserInfo`. `updatePromptModelUserMetadata` : 404.
+
+Les STANDARD ont déjà ces champs via `updatePromptModelStandardMetadata`. Pour les cartes « Mes modèles », il faut le même couple en USER (create + update + list).
+
 
 ## Rollback
 

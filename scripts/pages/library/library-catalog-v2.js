@@ -3,16 +3,15 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.2.0
+ * @version 2.3.0
  */
 (function (global) {
   "use strict";
 
   var PAGE_SIZE = 24;
-  var LOTTIE_JSON = "https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355a2_8zwgooV43N.json";
-  var LOTTIE_PLAYER = "https://cdn.jsdelivr.net/npm/lottie-web@5.12.2/build/player/lottie.min.js";
   var PIN_BANNER_KEY = "agilo:lib:pinsBanner:v2";
   var SUGGEST_DELAY = 600;
+  var WAIT_SHOW_MS = 300;
 
   var TABS = [
     { id: "agilotext", label: "Modèles Agilotext" },
@@ -37,6 +36,8 @@
     creating: false,
     created: null,
     createdPending: false,
+    waitShown: false,
+    waitTimer: null,
     dismissedWizard: false,
     versionsModel: null,
     versions: [],
@@ -53,7 +54,6 @@
 
   var searchTimer = null;
   var suggestTimer = null;
-  var lottieAnim = null;
   var bodyObserver = null;
 
   function Api() { return global.AgiloLibraryApi; }
@@ -550,6 +550,11 @@
   function onOverlayClosed(root) {
     var wasWizard = state.wizardOpen;
     if (state.creating) state.dismissedWizard = true;
+    if (state.waitTimer) {
+      clearTimeout(state.waitTimer);
+      state.waitTimer = null;
+    }
+    state.waitShown = false;
     if (global.AgiloSpeechDictate && global.AgiloSpeechDictate.stop) {
       try { global.AgiloSpeechDictate.stop(); } catch (_) { /* ignore */ }
     }
@@ -604,8 +609,6 @@
         setTab(root, btn.getAttribute("data-tab"));
       });
     });
-    var box = host.querySelector("#agilo-lib-lottie");
-    if (box) playLottie(box);
   }
 
   /* ---------------- fiche ---------------- */
@@ -792,6 +795,7 @@
   }
 
   function doCreate(root) {
+    if (state.creating || state.createdPending) return;
     var Wz = Wiz();
     var W = Wz.state();
     var d = Wz.draft();
@@ -800,10 +804,22 @@
     state.created = null;
     state.createdPending = false;
     state.dismissedWizard = false;
-    syncOverlay(root);
+    state.waitShown = false;
+    if (state.waitTimer) clearTimeout(state.waitTimer);
+    state.waitTimer = setTimeout(function () {
+      state.waitTimer = null;
+      if (!state.wizardOpen) return;
+      if (state.creating || state.createdPending) {
+        state.waitShown = true;
+        syncOverlay(root);
+      }
+    }, WAIT_SHOW_MS);
     Api().createFromWizard(state.creds, d).then(function (res) {
       if (!res.ok) {
         state.creating = false;
+        state.createdPending = false;
+        if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; }
+        state.waitShown = false;
         syncOverlay(root);
         C().toast(res.message || "Impossible de créer le modèle.");
         return;
@@ -814,18 +830,18 @@
       track("lib_wizard_created", { promptModelId: newId || 0 });
       if (!newId) {
         state.creating = false;
+        if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; }
+        state.waitShown = false;
         C().toast("Modèle créé, rechargez pour le voir.");
         reload(root);
         return;
       }
-      state.creating = false;
-      state.createdPending = true;
-      state.created = {
+      var localCard = {
         promptModelId: Number(newId),
         cardTitle: d.name,
         type: "USER",
-        publicDescription: d.objective,
-        publicExample: d.structure,
+        publicDescription: d.publicDescription || d.objective,
+        publicExample: d.publicExample || d.structure,
         hasHtml: false,
         iconKey: data.iconKey || d.iconKey || "",
         iconUrl: Api().absIconUrl(data.iconUrl),
@@ -835,15 +851,20 @@
         canSetDefault: true,
         canPin: true
       };
+      state.creating = false;
+      state.createdPending = true;
+      state.created = localCard;
       if (state.dismissedWizard) {
         state.dismissedWizard = false;
         state.created = null;
         state.wizardOpen = false;
         state.tab = "mes-modeles";
       }
-      paint(root);
+      paint(root, { skipOverlay: !state.waitShown });
       return Api().waitPromptReady(state.creds, newId).then(function (ready) {
         state.createdPending = false;
+        if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; }
+        state.waitShown = false;
         if (!ready.ok) {
           C().toast(ready.message || "Création encore en cours.");
         }
@@ -852,11 +873,16 @@
           applyIcon = Api().setPromptModelUserIcon(state.creds, newId, d.iconKey).catch(function () { return null; });
         }
         return applyIcon.then(function () {
-        return reload(root).then(function () {
+        return reload(root, { skipOverlay: true }).then(function () {
           var fresh = byId(newId);
           if (fresh) {
             if (!fresh.promptModelStatus) fresh.promptModelStatus = ready.ok ? "READY" : "PENDING";
-            if (state.created) state.created = fresh;
+            if (!fresh.publicDescription) fresh.publicDescription = localCard.publicDescription;
+            if (!fresh.publicExample) fresh.publicExample = localCard.publicExample;
+            state.created = state.wizardOpen ? fresh : state.created;
+          } else if (state.wizardOpen) {
+            localCard.promptModelStatus = ready.ok ? "READY" : "PENDING";
+            state.created = localCard;
           }
           if (state.wizardOpen) syncOverlay(root);
           else if (ready.ok) C().toast("Modèle « " + d.name + " » prêt dans Mes modèles.");
@@ -865,6 +891,9 @@
       });
     }).catch(function () {
       state.creating = false;
+      state.createdPending = false;
+      if (state.waitTimer) { clearTimeout(state.waitTimer); state.waitTimer = null; }
+      state.waitShown = false;
       syncOverlay(root);
       C().toast("Réseau interrompu. Réessayez.");
     });
@@ -1282,37 +1311,10 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Lottie                                                              */
-  /* ------------------------------------------------------------------ */
-  function reducedMotion() {
-    try { return global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (_) { return false; }
-  }
-
-  function playLottie(box) {
-    if (!box || reducedMotion()) return;
-    function boot() {
-      if (!global.lottie || typeof global.lottie.loadAnimation !== "function") return;
-      if (lottieAnim && typeof lottieAnim.destroy === "function") { try { lottieAnim.destroy(); } catch (_) { /* ignore */ } }
-      lottieAnim = global.lottie.loadAnimation({ container: box, renderer: "svg", loop: true, autoplay: true, path: LOTTIE_JSON });
-    }
-    if (global.lottie) { boot(); return; }
-    if (document.querySelector("script[data-agilo-lottie]")) {
-      var wait = setInterval(function () { if (global.lottie) { clearInterval(wait); boot(); } }, 80);
-      setTimeout(function () { clearInterval(wait); }, 4000);
-      return;
-    }
-    var s = document.createElement("script");
-    s.src = LOTTIE_PLAYER;
-    s.async = true;
-    s.setAttribute("data-agilo-lottie", "1");
-    s.onload = boot;
-    document.head.appendChild(s);
-  }
-
-  /* ------------------------------------------------------------------ */
   /* Données                                                             */
   /* ------------------------------------------------------------------ */
-  function reload(root) {
+  function reload(root, opts) {
+    opts = opts || {};
     return Api().fetchLists(state.creds).then(function (pack) {
       state.models = pack.models;
       state.pinMax = pack.pinMax || 5;
@@ -1323,7 +1325,7 @@
           F.model = fresh;
         }
       }
-      paint(root);
+      paint(root, opts);
     }).catch(function (err) {
       C().toast(Api().sanitizeUserMessage ? Api().sanitizeUserMessage(err && err.message, false) : "Rechargement impossible.");
     });
@@ -1372,7 +1374,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.2.0",
+    VERSION: "2.3.0",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */

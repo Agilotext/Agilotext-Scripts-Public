@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.0
+ * @version 1.5.1
  */
 (function (global) {
   "use strict";
@@ -865,7 +865,9 @@
         promptName: draft.name,
         promptObjective: draft.objective,
         promptSpecificInfo: draft.specificInfo,
-        promptStructure: draft.structure
+        promptStructure: draft.structure,
+        publicDescription: String(draft.publicDescription || draft.objective || "").trim().slice(0, 500),
+        publicExample: String(draft.publicExample || draft.structure || "").trim().slice(0, 240)
       };
       var iconKey = String((draft && draft.iconKey) || "").trim();
       if (iconKey) fields.iconKey = iconKey;
@@ -1028,7 +1030,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.0",
+    VERSION: "1.5.1",
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,

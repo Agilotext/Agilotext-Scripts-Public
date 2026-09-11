@@ -137,8 +137,9 @@ if (Wiz.TITLE !== "Nouveau modèle") throw new Error("wizard title");
 if (Wiz.QUESTIONS.length !== 4) throw new Error("4 questions");
 if (Wiz.QUESTIONS[0].placeholder.indexOf("Modèle de réunion") === -1) throw new Error("name placeholder");
 if (Wiz.QUESTIONS[1].label.indexOf("échanges") === -1) throw new Error("objective short label");
-if (!Wiz.QUESTIONS[1].hint || Wiz.QUESTIONS[1].hint.indexOf("échanges") === -1) throw new Error("objective hint");
-if (Wiz.QUESTIONS[1].hint.indexOf("Ajoutez un maximum") !== -1) throw new Error("hint still a Webflow paragraph");
+if (Wiz.QUESTIONS[1].hint) throw new Error("objective hint still duplicated");
+if (Wiz.QUESTIONS[2].hint) throw new Error("info hint still duplicated");
+if (Wiz.QUESTIONS[3].hint) throw new Error("structure hint still duplicated");
 if (Wiz.QUESTIONS[1].placeholder.indexOf("Ajoutez un maximum de détails") !== -1) {
   throw new Error("step 2 placeholder still a Webflow paragraph");
 }
@@ -150,6 +151,8 @@ Wiz.state().objective = "Suivi hebdo";
 Wiz.state().specificInfo = "Décisions";
 Wiz.state().structure = "Résumé puis détail";
 if (Wiz.validateAll()) throw new Error("valid draft still invalid");
+if (Wiz.draft().publicDescription !== "Suivi hebdo") throw new Error("draft desc should map objective");
+if (Wiz.draft().publicExample !== "Résumé puis détail") throw new Error("draft example should map structure");
 if (Wiz.validateStep(1)) throw new Error("step 1 should pass with name");
 Wiz.state().step = 2;
 var q2 = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
@@ -161,6 +164,7 @@ if (q2.indexOf('aria-label="Contexte"') !== -1) throw new Error("step dots aria 
 if (q2.indexOf("agilo-lib-wiz-intro") !== -1) throw new Error("wizard intro still in body");
 if (q2.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wizard main scroll missing");
 if (q2.indexOf("agilo-lib-wiz-nav") === -1) throw new Error("wizard nav missing");
+if (q2.indexOf("Quels types d’échanges") !== -1) throw new Error("duplicate hint still under field");
 if (Wiz.stepMeta().text !== "2 / 4") throw new Error("step meta 2 / 4 missing");
 if (Wiz.stepMeta().aria !== "Étape 2 sur 4") throw new Error("step meta aria missing");
 if (q2.indexOf("Recherche d’icônes") !== -1) throw new Error("wizard still shows Recherche d’icônes");
@@ -184,9 +188,11 @@ if (wSuggest.indexOf("agilo-lib-spin") === -1) throw new Error("wizard suggest s
 Wiz.reset({ restore: false });
 var creating = Wiz.html({ canCreate: true, creating: true });
 if (creating.indexOf("Félicitations") !== -1) throw new Error("creating still says Félicitations");
-if (creating.indexOf("Agilotext rédige votre modèle") === -1) throw new Error("creating title missing");
-if (creating.indexOf("Quelques secondes") === -1) throw new Error("creating wait copy missing");
+if (creating.indexOf("Création du modèle") === -1) throw new Error("creating title missing");
+if (creating.indexOf("Restez ici") === -1) throw new Error("creating wait copy missing");
 if (creating.indexOf("agilo-lib-spin") === -1) throw new Error("creating spin missing");
+if (creating.indexOf("agilo-lib-lottie") !== -1) throw new Error("lottie still in wait");
+if (creating.indexOf("8zwgoo") !== -1) throw new Error("lottie json leaked");
 var createdReady = Wiz.html({
   canCreate: true,
   created: { promptModelId: 901, cardTitle: "Comité", type: "USER", isDefault: false, canSetDefault: true, canUse: true },
@@ -200,7 +206,9 @@ var createdPend = Wiz.html({
   createdPending: true
 });
 if (createdPend.indexOf("agilo-lib-banner--success") !== -1) throw new Error("pending still green");
-if (createdPend.indexOf("agilo-lib-banner--info") === -1) throw new Error("pending info banner missing");
+if (createdPend.indexOf("Création du modèle") === -1) throw new Error("pending wait copy missing");
+if (createdPend.indexOf("agilo-lib-lottie") !== -1) throw new Error("lottie in pending wait");
+if (createdPend.indexOf("agilo-lib-card--featured") !== -1) throw new Error("card shown during wait");
 if (createdPend.indexOf("agilo-lib-spin") === -1) throw new Error("pending spin missing");
 if (Cat._overlayTitle) {
   Cat._state().creating = true;
@@ -319,9 +327,15 @@ if (enCell.indexOf('title="at-sign"') === -1) throw new Error("cell title should
 if (Picker.titleOf({ iconKey: "stethoscope", label: "Medicine", labelFr: "" }) !== "stethoscope") {
   throw new Error("titleOf leaked EN label");
 }
-var frCell = Picker.cellHtml({ iconKey: "users", labelFr: "Réunion", label: "Users", url: "" }, "users");
-if (frCell.indexOf("Réunion") === -1) throw new Error("FR label missing");
-if (frCell.indexOf("Users") !== -1) throw new Error("EN label shown beside FR");
+var nucleoCell = Picker.cellHtml({ iconKey: "at-sign", label: "At sign", labelFr: "At sign", url: "" }, "");
+if (nucleoCell.indexOf("At sign") !== -1) throw new Error("API EN labelFr leaked");
+if (nucleoCell.indexOf("agilo-lib-iconpick__cell--solo") === -1) throw new Error("nucleo EN should be icon-only");
+var customCell = Picker.cellHtml({ iconKey: "custom", labelFr: "Personnalise", label: "Personnalise", url: "" }, "");
+if (customCell.indexOf("Personnalisé") === -1) throw new Error("custom FR override missing");
+if (customCell.indexOf("Personnalise<") !== -1) throw new Error("unaccented Personnalise still shown");
+var suggCell = Picker.cellHtml({ iconKey: "users", labelFr: "Réunion", url: "" }, "", { tag: '<em class="agilo-lib-iconpick__tag">Suggérée</em>', className: "agilo-lib-iconpick__cell--sugg" });
+if (suggCell.indexOf("agilo-lib-iconpick__tag") === -1) throw new Error("suggérée tag missing");
+if (suggCell.indexOf("Suggérée") === -1) throw new Error("suggérée label missing");
 var loadPick = Picker.html({ loading: true, icons: [] });
 if (loadPick.indexOf("Chargement des icônes") !== -1) throw new Error("visible loading copy");
 if (loadPick.indexOf("agilo-lib-spin") === -1) throw new Error("picker loading spin missing");

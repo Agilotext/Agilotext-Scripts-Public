@@ -668,7 +668,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   padding: 0.5rem 0.4rem;
 }
 .agilo-lib-iconpick__cell { border-radius: var(--lib-radius-sm); position: relative; }
-.agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); }
+.agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); padding-top: 0.95rem; }
 .agilo-lib--v2 .agilo-lib-iconpick__cell--solo,
 .agilo-lib-overlay .agilo-lib-iconpick__cell--solo {
   justify-content: center;
@@ -693,12 +693,14 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 .agilo-lib-iconpick__tag {
   position: absolute;
-  top: -0.4rem;
-  right: -0.25rem;
+  top: 0.28rem;
+  right: 0.28rem;
+  z-index: 1;
   font-style: normal;
   font-size: 0.6rem;
   font-weight: 700;
-  padding: 0.05rem 0.4rem;
+  line-height: 1.2;
+  padding: 0.12rem 0.4rem;
   border-radius: var(--lib-radius-sm);
   background: var(--lib-blue);
   color: #fff;
@@ -812,7 +814,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-dictate:hover { color: var(--lib-blue); border-color: var(--lib-blue-35); }
 .agilo-lib-dictate.is-recording { background: var(--lib-rouge-12); color: var(--lib-rouge); border-color: var(--lib-rouge); animation: agilo-lib-pulse 1.2s ease-in-out infinite; }
 .agilo-lib-dictate svg { width: 16px; height: 16px; }
-.agilo-lib-chips--ex { margin: 0.25rem 0 0; }
+.agilo-lib-chips--ex { margin: 0.25rem 0 0.85rem; }
 .agilo-lib-chips--ex button { min-height: 2.5rem; font-size: 0.78rem; }
 .agilo-lib-wiz-error { margin: 0.6rem 0 0; font-size: 0.85rem; color: var(--lib-rouge); font-weight: 600; }
 .agilo-lib-wiz-draft { margin: -0.4rem 0 0.8rem; display: flex; gap: 0.3rem; align-items: center; }
@@ -820,7 +822,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   flex-shrink: 0;
   justify-content: flex-end;
   margin-top: 0;
-  padding-top: 0.85rem;
+  padding-top: 1.15rem;
   border-top: 1px solid var(--lib-border);
   background: var(--lib-surface);
 }
@@ -864,8 +866,6 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 .agilo-lib-wiz-creating h3 { margin: 0.35rem 0 0.15rem; font-size: 1.2rem; }
 .agilo-lib-wiz-creating p { margin: 0 auto; max-width: 30rem; color: var(--lib-text); }
-.agilo-lib-wiz-creating .agilo-lib-lottie { margin: 0.25rem auto 0; min-height: 0; }
-.agilo-lib-wiz-creating .agilo-lib-lottie:empty { display: none; }
 .agilo-lib-wiz-done { display: grid; gap: 0.85rem; }
 .agilo-lib-wiz-done .agilo-lib-card { animation: none; }
 .agilo-lib-banner .agilo-lib-spin { margin-right: 0.15rem; }
@@ -908,4 +908,5 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   .agilo-lib-card--v2, .agilo-lib-dictate, .agilo-lib-fiche__skel span, .agilo-lib-spin { transition: none; animation: none; }
   .agilo-lib-card--v2:hover { transform: none; }
   .agilo-lib-spin { border-top-color: var(--lib-blue); opacity: 0.7; }
+  .agilo-lib-wiz-creating .agilo-lib-spin { display: none; }
 }
