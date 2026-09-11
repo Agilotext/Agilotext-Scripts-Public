@@ -1,7 +1,7 @@
 /**
  * Overlay unique (fiche, wizard, versions) sur document.body.
  * Hors du paint() catalogue. Escape, focus, scroll lock.
- * @version 1.4.0
+ * @version 1.4.1
  */
 (function (global) {
   "use strict";
@@ -178,6 +178,7 @@
     mode = "";
     if (el) {
       el.classList.remove("is-open");
+      el.classList.remove("agilo-lib-overlay--iconopen");
       el.hidden = true;
       el.setAttribute("aria-hidden", "true");
       el.removeAttribute("data-mode");

@@ -8,7 +8,7 @@
  * - Gratuit : aucun appel, fausses lignes floutées + CTA ;
  * - CSE verrouillé : CTA pack, aucun appel ;
  * - en création : message, bouton Modifier grisé.
- * @version 2.0.0
+ * @version 2.0.2
  */
 (function (global) {
   "use strict";
@@ -69,7 +69,7 @@
       var cta = Api().ctaForLocked ? Api().ctaForLocked(model.packCse) : null;
       return '<div class="agilo-lib-fiche__gate" role="note">' +
         '<span class="agilo-lib-fiche__gate-ico">' + Core.svgIcon("lock", 18) + "</span>" +
-        "<p>" + esc(model.lockReasonMessage || "Ce modèle est réservé au Pack CSE.") + "</p>" +
+        "<p>" + esc((Core.lockMessage ? Core.lockMessage(model, "Ce modèle est réservé au Pack CSE.") : (model.lockReasonMessage || "Ce modèle est réservé au Pack CSE."))) + "</p>" +
         (cta ? '<a class="agilo-lib-btn agilo-lib-btn--cta" href="' + esc(cta.href) + '">' + esc(cta.label) + "</a>" : "") +
         "</div>";
     }
@@ -189,9 +189,14 @@
     var keys = (st.iconSuggestions || []).slice(0, 3);
     var icons = st.iconCatalog || [];
     if (!keys.length && !st.iconSuggesting) return "";
+    var hidden = st.iconSuggHidden != null
+      ? !!st.iconSuggHidden
+      : !!(P && P.isSuggHidden && P.isSuggHidden());
     var byKey = {};
     icons.forEach(function (ic) { byKey[ic.iconKey] = ic; });
     var spin = st.iconSuggesting && Core.spinHtml ? Core.spinHtml("Suggestion d’icône") : "";
+    var toggle = '<button type="button" class="agilo-lib-linkbtn" data-act="icon-sugg-toggle">' +
+      (hidden ? "Afficher" : "Masquer") + "</button>";
     var cells = keys.map(function (k, i) {
       var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
       if (P && P.cellHtml) {
@@ -204,8 +209,8 @@
       return "";
     }).join("");
     return '<div class="agilo-lib-iconpick__sugg">' +
-      '<p class="agilo-lib-iconpick__title">' + Core.svgIcon("sparkle", 14) + " Suggestions" + spin + "</p>" +
-      (cells ? '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' + cells + "</div>" : "") +
+      '<p class="agilo-lib-iconpick__title">' + Core.svgIcon("sparkle", 14) + " Suggestions" + spin + toggle + "</p>" +
+      (!hidden && cells ? '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' + cells + "</div>" : "") +
       "</div>";
   }
 
@@ -249,7 +254,7 @@
         : "";
     }
     var badges = (Core.defaultBadgeHtml ? Core.defaultBadgeHtml(model) : (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "")) + Core.badgeHtml(model);
-    return '<div class="agilo-lib-fiche" data-id="' + model.promptModelId + '">' +
+    return '<div class="agilo-lib-fiche' + (st.iconOpen ? " agilo-lib-fiche--iconopen" : "") + '" data-id="' + model.promptModelId + '">' +
       '<header class="agilo-lib-fiche__head">' +
       '<div class="agilo-lib-fiche__iconwrap">' +
       Core.iconTile(model, 28, { size: "xl" }) +
@@ -339,6 +344,7 @@
         return;
       }
       if (act === "icon-close") { if (handlers.onIconClose) handlers.onIconClose(); return; }
+      if (act === "icon-sugg-toggle") { if (handlers.onIconSuggToggle) handlers.onIconSuggToggle(); return; }
       if (handlers.onAct) handlers.onAct(act, btn);
     });
     var input = root.querySelector("#agilo-lib-rename");
@@ -373,7 +379,7 @@
   }
 
   global.AgiloLibraryFicheV2 = {
-    VERSION: "2.0.1",
+    VERSION: "2.0.2",
     PREVIEW_LINES: PREVIEW_LINES,
     html: html,
     bind: bind,

@@ -3,7 +3,7 @@
  * Les 4 questions (ordre Mon compte), placeholders courts, dictée,
  * récapitulatif, brouillon localStorage, attente spinner, écran de succès.
  * Rendu + liaison ; les appels API restent dans library-catalog-v2.js.
- * @version 2.2.0
+ * @version 2.2.1
  */
 (function (global) {
   "use strict";
@@ -61,6 +61,10 @@
       suggestions: [],
       suggestSig: "",
       suggesting: false,
+      suggHidden: (function () {
+        var P = global.AgiloLibraryIconPicker;
+        return !!(P && P.isSuggHidden && P.isSuggHidden());
+      })(),
       error: "",
       draftRestored: false
     };
@@ -171,25 +175,33 @@
       : Core.svgIcon("custom", 26);
     var selFr = sel && P.displayLabel ? P.displayLabel(sel) : "";
     var selLabel = selFr || (W.iconKey ? "" : "Icône proposée automatiquement");
+    var spin = W.suggesting && Core.spinHtml ? Core.spinHtml("Suggestion d’icône") : "";
     var sugg = "";
     var keys = (W.suggestions || []).slice(0, 3);
-    if (keys.length) {
-      sugg = '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' +
-        keys.map(function (k, i) {
-          var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
-          return P.cellHtml(ic, W.iconKey, {
-            className: "agilo-lib-iconpick__cell--sugg",
-            showCaption: true,
-            tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
-          });
-        }).join("") +
-        "</div>";
+    if (keys.length || W.suggesting) {
+      var toggle = '<button type="button" class="agilo-lib-linkbtn" data-wiz="sugg-toggle">' +
+        (W.suggHidden ? "Afficher" : "Masquer") + "</button>";
+      var cells = "";
+      if (!W.suggHidden && keys.length) {
+        cells = '<div class="agilo-lib-iconpick__grid agilo-lib-iconpick__grid--sugg">' +
+          keys.map(function (k, i) {
+            var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
+            return P.cellHtml(ic, W.iconKey, {
+              className: "agilo-lib-iconpick__cell--sugg",
+              showCaption: true,
+              tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
+            });
+          }).join("") +
+          "</div>";
+      }
+      sugg = '<div class="agilo-lib-iconpick__sugg">' +
+        '<p class="agilo-lib-iconpick__title">' + Core.svgIcon("sparkle", 14) + " Suggestions" + spin + toggle + "</p>" +
+        cells + "</div>";
     }
-    var spin = W.suggesting && Core.spinHtml ? Core.spinHtml("Suggestion d’icône") : "";
     return '<div class="agilo-lib-wiz-icon">' +
       '<div class="agilo-lib-wiz-icon__row">' +
       '<span class="agilo-lib-card__icon agilo-lib-card__icon--xl" aria-hidden="true">' + selHtml + "</span>" +
-      '<div class="agilo-lib-wiz-icon__txt"><span class="agilo-lib-fiche__label">Icône' + spin + "</span>" +
+      '<div class="agilo-lib-wiz-icon__txt"><span class="agilo-lib-fiche__label">Icône</span>' +
       (selLabel ? '<span class="agilo-lib-wiz-icon__name">' + esc(selLabel) + "</span>" : "") + "</div>" +
       '<button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-wiz="icon-toggle" aria-expanded="' + !!W.iconOpen + '">' +
       Core.svgIcon("grid", 14) + (W.iconOpen ? " Masquer" : " Plus d’icônes") + "</button>" +
@@ -414,6 +426,11 @@
           return;
         } else if (act === "icon-toggle") {
           W.iconOpen = !W.iconOpen;
+        } else if (act === "sugg-toggle") {
+          W.suggHidden = !W.suggHidden;
+          if (global.AgiloLibraryIconPicker && global.AgiloLibraryIconPicker.setSuggHidden) {
+            global.AgiloLibraryIconPicker.setSuggHidden(W.suggHidden);
+          }
         } else if (act === "draft-clear") {
           clearDraft();
           reset({ restore: false });
@@ -510,7 +527,7 @@
   }
 
   global.AgiloLibraryWizardV2 = {
-    VERSION: "2.2.0",
+    VERSION: "2.2.1",
     TITLE: TITLE,
     STEP_SHORT: STEP_SHORT,
     QUESTIONS: QUESTIONS,

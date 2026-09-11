@@ -470,9 +470,9 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 
 /* ---------- overlay / fiche ---------- */
 .agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel {
-  width: min(38rem, 100%);
+  width: min(44rem, calc(100vw - 2rem));
   padding: 1.1rem 1.25rem max(1rem, env(safe-area-inset-bottom));
-  max-height: min(92vh, 50rem);
+  max-height: min(94vh, 56rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -487,6 +487,11 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   flex: 1;
   overflow: hidden;
 }
+.agilo-lib-overlay--iconopen[data-mode="fiche"] .agilo-lib-overlay__panel,
+.agilo-lib-overlay--iconopen[data-mode="fiche"] .agilo-lib-overlay__body {
+  overflow: visible;
+}
+.agilo-lib-overlay--iconopen[data-mode="fiche"] .agilo-lib-fiche__iconwrap { z-index: 20; }
 .agilo-lib-fiche { display: flex; flex-direction: column; gap: 0; min-height: 0; flex: 1; }
 .agilo-lib-fiche__head {
   display: flex;
@@ -541,7 +546,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   border-radius: var(--lib-radius-sm);
 }
 .agilo-lib-fiche__pre.is-clamped {
-  max-height: 8.5rem;
+  max-height: 11rem;
   overflow: hidden;
   -webkit-mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
   mask-image: linear-gradient(180deg, #000 60%, transparent 100%);
@@ -620,11 +625,11 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   position: absolute;
   left: 0;
   top: calc(100% + 0.5rem);
-  z-index: 4;
+  z-index: 30;
   display: flex;
   flex-direction: column;
-  width: min(22rem, calc(100vw - 3.5rem));
-  max-height: min(22rem, 70vh);
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(32rem, 75vh);
   overflow: hidden;
   border: 1px solid var(--lib-blue-35);
   border-radius: var(--lib-radius);
@@ -660,7 +665,8 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
 }
 .agilo-lib-iconpick__sugg .agilo-lib-iconpick__title { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0.4rem; font-size: 0.8rem; }
-.agilo-lib-iconpick__grid--sugg { max-height: none; grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); overflow: visible; padding: 0; }
+.agilo-lib-iconpick__sugg .agilo-lib-linkbtn { margin-left: auto; font-size: 0.75rem; }
+.agilo-lib-iconpick__grid--sugg { max-height: none; grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr)); overflow: visible; padding: 0; }
 .agilo-lib--v2 .agilo-lib-iconpick__cell,
 .agilo-lib-overlay .agilo-lib-iconpick__cell {
   min-height: 2.75rem;
@@ -668,7 +674,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   padding: 0.35rem 0.25rem;
 }
 .agilo-lib-iconpick__cell { border-radius: var(--lib-radius-sm); position: relative; }
-.agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); padding-top: 0.85rem; min-height: 3.25rem; }
+.agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); min-height: 2.75rem; }
 .agilo-lib--v2 .agilo-lib-iconpick__cell--solo,
 .agilo-lib-overlay .agilo-lib-iconpick__cell--solo {
   justify-content: center;
@@ -685,7 +691,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib--v2 .agilo-lib-iconpick__cell--sugg span,
 .agilo-lib-overlay .agilo-lib-iconpick__cell--sugg span {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
@@ -902,7 +908,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   .agilo-lib-fiche__rename { grid-template-columns: 1fr; }
   .agilo-lib-wiz-nav { justify-content: stretch; }
   .agilo-lib-wiz-nav .agilo-lib-btn { flex: 1; }
-  .agilo-lib-iconpop { max-height: min(22rem, 70vh); width: min(22rem, calc(100vw - 1.5rem)); }
+  .agilo-lib-iconpop { max-height: min(32rem, 75vh); width: min(28rem, calc(100vw - 1.5rem)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

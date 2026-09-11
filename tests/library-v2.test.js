@@ -229,6 +229,24 @@ if (Cat._overlayTitle) {
   if (Cat._overlayMeta("wizard").text !== "2 / 4") throw new Error("form meta 2 / 4");
   if (Cat._overlayMeta("fiche").text !== "") throw new Error("fiche meta should be empty");
 }
+Wiz.reset({ restore: false });
+Wiz.state().suggestions = ["users"];
+Wiz.state().suggHidden = false;
+var wizSugg = Wiz.html({
+  canCreate: true,
+  library2Live: true,
+  iconCatalog: [{ iconKey: "users", labelFr: "Réunion", url: "" }]
+});
+if (wizSugg.indexOf("data-wiz=\"sugg-toggle\"") === -1) throw new Error("wizard sugg toggle missing");
+if (wizSugg.indexOf("agilo-lib-iconpick__grid--sugg") === -1) throw new Error("wizard sugg grid missing");
+Wiz.state().suggHidden = true;
+var wizSuggOff = Wiz.html({
+  canCreate: true,
+  library2Live: true,
+  iconCatalog: [{ iconKey: "users", labelFr: "Réunion", url: "" }]
+});
+if (wizSuggOff.indexOf("agilo-lib-iconpick__grid--sugg") !== -1) throw new Error("wizard hidden sugg still shown");
+if (wizSuggOff.indexOf("Afficher") === -1) throw new Error("wizard Afficher missing");
 Wiz.state().step = 5;
 var recap = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
 if (recap.indexOf("Récapitulatif") === -1 && recap.indexOf("agilo-lib-recap") === -1) {
@@ -289,6 +307,53 @@ if (proHtml.indexOf("agilo-lib-iconpop") !== -1) throw new Error("icon popover s
 
 var openIcon = Fiche.html(user, { iconOpen: true, previewText: "x", previewLoading: false }, proCreds);
 if (openIcon.indexOf("agilo-lib-fiche__iconwrap") === -1) throw new Error("icon wrap missing when picker open");
+if (openIcon.indexOf("agilo-lib-iconpop") === -1) throw new Error("icon popover missing when iconOpen");
+if (openIcon.indexOf("agilo-lib-fiche--iconopen") === -1) throw new Error("fiche --iconopen missing");
+if (openIcon.indexOf("Modifier le prompt") === -1) throw new Error("foot Modifier missing with picker open");
+
+var copyLock = {
+  promptModelId: -6,
+  cardTitle: "Entretien individuel",
+  type: "STANDARD",
+  canUse: false,
+  requiresUserCopy: true,
+  lockReasonCode: "USER_COPY_REQUIRED",
+  lockReasonMessage: "Ajoute ce modele a tes modeles pour l'utiliser."
+};
+var copyCard = C.cardHtml(copyLock);
+if (copyCard.indexOf("à tes modèles") === -1) throw new Error("USER_COPY lock missing accents");
+if (copyCard.indexOf("a tes modeles") !== -1) throw new Error("ASCII lock still shown");
+if (copyCard.indexOf("Ajoute ce modèle à tes modèles pour l'utiliser.") === -1) {
+  throw new Error("USER_COPY lock copy");
+}
+var copyFiche = Fiche.html(copyLock, {}, proCreds);
+if (copyFiche.indexOf("à tes modèles") === -1) throw new Error("fiche USER_COPY missing accents");
+if (copyFiche.indexOf("a tes modeles") !== -1) throw new Error("fiche ASCII lock still shown");
+
+var suggOpen = Fiche.html(user, {
+  iconOpen: true,
+  iconSuggestions: ["users", "meeting", "briefcase"],
+  iconCatalog: [
+    { iconKey: "users", labelFr: "Réunion", url: "" },
+    { iconKey: "meeting", labelFr: "Équipe", url: "" },
+    { iconKey: "briefcase", labelFr: "Client", url: "" }
+  ],
+  previewText: "x",
+  previewLoading: false
+}, proCreds);
+if (suggOpen.indexOf("agilo-lib-iconpick__grid--sugg") === -1) throw new Error("sugg grid missing");
+if (suggOpen.indexOf("data-act=\"icon-sugg-toggle\"") === -1) throw new Error("sugg Masquer missing");
+if (suggOpen.indexOf("Masquer") === -1) throw new Error("Masquer label missing");
+var suggHidden = Fiche.html(user, {
+  iconOpen: true,
+  iconSuggHidden: true,
+  iconSuggestions: ["users"],
+  iconCatalog: [{ iconKey: "users", labelFr: "Réunion", url: "" }],
+  previewText: "x",
+  previewLoading: false
+}, proCreds);
+if (suggHidden.indexOf("agilo-lib-iconpick__grid--sugg") !== -1) throw new Error("hidden sugg grid still there");
+if (suggHidden.indexOf("Afficher") === -1) throw new Error("Afficher missing when sugg hidden");
 
 var stdHtml = Fiche.html(std, { previewText: "Prompt officiel", previewLoading: false }, proCreds);
 if (stdHtml.indexOf("Voir le prompt") === -1) throw new Error("readonly studio label");
@@ -388,10 +453,14 @@ if (css.indexOf("[data-tip]") === -1) throw new Error("tooltip css missing");
 if (css.indexOf("width: 2.5rem") === -1) throw new Error("2.5rem toolbar missing");
 if (css.indexOf("width: 2.75rem") === -1) throw new Error("2.75rem mobile toolbar missing");
 if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missing");
-if (css.indexOf("max-height: min(22rem, 70vh)") === -1) throw new Error("icon popover max-height missing");
+if (css.indexOf("max-height: min(32rem, 75vh)") === -1) throw new Error("icon popover max-height missing");
 if (css.indexOf("max-height: min(16rem, 50vh)") === -1) throw new Error("wizard picker contained height missing");
 if (css.indexOf("minmax(3.25rem") === -1) throw new Error("picker minmax 3.25rem missing");
-if (css.indexOf("minmax(6.5rem") === -1) throw new Error("sugg minmax 6.5rem missing");
+if (css.indexOf("minmax(3.5rem") === -1) throw new Error("sugg minmax 3.5rem missing");
+if (css.indexOf("minmax(6.5rem") !== -1) throw new Error("old sugg minmax 6.5rem still there");
+if (css.indexOf("agilo-lib-overlay--iconopen") === -1) throw new Error("iconopen overlay css missing");
+if (css.indexOf("width: min(44rem") === -1) throw new Error("fiche 44rem missing");
+if (css.indexOf("max-height: 11rem") === -1) throw new Error("prompt clamp 11rem missing");
 if (css.indexOf("min-height: 2.75rem") === -1) throw new Error("cell min-height 2.75rem missing");
 if (css.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wiz-main css missing");
 if (css.indexOf("agilo-lib-overlay__meta") === -1) throw new Error("overlay meta css missing");
@@ -552,7 +621,8 @@ if (chipsRh.indexOf("data-cat=\"rh\"") === -1) throw new Error("RH chip missing 
 if (globalThis.AgiloLibraryStandards.CATEGORIES.some(function (c) { return c.key === "rh"; }) === false) {
   throw new Error("RH missing from AgiloLibraryStandards.CATEGORIES");
 }
-if (handleActFn.indexOf("open-copy") === -1) throw new Error("handleAct missing open-copy");
+if (catSrc.indexOf("agilo-lib-overlay--iconopen") === -1) throw new Error("catalog missing overlay --iconopen toggle");
+if (catSrc.indexOf("onIconSuggToggle") === -1) throw new Error("catalog missing sugg toggle");
 if (catSrc.indexOf("function openAcquiredCopy") === -1) throw new Error("openAcquiredCopy missing");
 
 console.log("library-v2.test.js ok");

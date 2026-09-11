@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.2
+ * @version 2.1.3
  */
 (function (global) {
   "use strict";
@@ -153,7 +153,8 @@
     var link = cta
       ? ' <a class="agilo-lib-card__cta-link" href="' + escapeHtml(cta.href) + '">' + escapeHtml(cta.label) + "</a>"
       : "";
-    return '<p class="agilo-lib-card__lock">' + escapeHtml(m.lockReasonMessage || "Réservé.") + link + "</p>";
+    var msg = Core.lockMessage ? Core.lockMessage(m) : (m.lockReasonMessage || "Réservé.");
+    return '<p class="agilo-lib-card__lock">' + escapeHtml(msg) + link + "</p>";
   }
 
   function titleButton(m, cls) {
@@ -251,7 +252,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.2",
+    VERSION: "2.1.3",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,

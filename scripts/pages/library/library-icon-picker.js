@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.3.1
+ * @version 1.3.2
  */
 (function (global) {
   "use strict";
@@ -27,6 +27,16 @@
   var FR_OVERRIDES = {
     custom: "Personnalisé"
   };
+
+  var SUGG_HIDE_KEY = "agilo-lib-icon-sugg-hidden";
+
+  function isSuggHidden() {
+    try { return sessionStorage.getItem(SUGG_HIDE_KEY) === "1"; } catch (_) { return false; }
+  }
+
+  function setSuggHidden(hidden) {
+    try { sessionStorage.setItem(SUGG_HIDE_KEY, hidden ? "1" : "0"); } catch (_) { /* ignore */ }
+  }
 
   function nucleoCaption(icon) {
     var key = String((icon && icon.iconKey) || "").trim();
@@ -199,7 +209,10 @@
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.3.1",
+    VERSION: "1.3.2",
+    SUGG_HIDE_KEY: SUGG_HIDE_KEY,
+    isSuggHidden: isSuggHidden,
+    setSuggHidden: setSuggHidden,
     html: html,
     bind: bind,
     bindCells: bindCells,

@@ -1,7 +1,7 @@
 /**
  * Rendu cartes, icônes Nucleo curatées (inline), tableau, menus.
  * iconUrl serveur inchangé. Fallback = glyphes 18 px, currentColor.
- * @version 1.3.0
+ * @version 1.3.1
  */
 (function (global) {
   "use strict";
@@ -110,6 +110,30 @@
     return !!(m.lockReasonCode || m.lockReasonMessage) && !m.canUse;
   }
 
+  var USER_COPY_FR = "Ajoute ce modèle à tes modèles pour l'utiliser.";
+  var USER_COPY_ASCII = "ajoute ce modele a tes modeles pour l'utiliser.";
+
+  function stripAccents(s) {
+    return String(s || "")
+      .replace(/[àáâä]/gi, "a")
+      .replace(/[èéêë]/gi, "e")
+      .replace(/[ìíîï]/gi, "i")
+      .replace(/[òóôö]/gi, "o")
+      .replace(/[ùúûü]/gi, "u")
+      .replace(/ç/gi, "c")
+      .replace(/’/g, "'");
+  }
+
+  /** Copy cadenas : l’API lot D envoie USER_COPY_REQUIRED en ASCII sans accents. */
+  function lockMessage(m, fallback) {
+    m = m || {};
+    var code = String(m.lockReasonCode || "");
+    var raw = String(m.lockReasonMessage || "").trim();
+    if (code === "USER_COPY_REQUIRED") return USER_COPY_FR;
+    if (raw && stripAccents(raw).toLowerCase() === USER_COPY_ASCII) return USER_COPY_FR;
+    return raw || fallback || "Réservé.";
+  }
+
   function badgeHtml(m) {
     var bits = [];
     if (m.isDefault) bits.push('<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>');
@@ -199,7 +223,7 @@
     var desc = m.publicDescription || "";
     var example = m.publicExample || "";
     var lockLine = isLocked
-      ? '<p class="agilo-lib-card__lock">' + escapeHtml(m.lockReasonMessage || "Réservé.") + "</p>"
+      ? '<p class="agilo-lib-card__lock">' + escapeHtml(lockMessage(m)) + "</p>"
       : "";
     var descHtml = "";
     if (size !== "compact" && desc) {
@@ -486,6 +510,7 @@
     sortModels: sortModels,
     sortOfficial: sortOfficial,
     locked: locked,
+    lockMessage: lockMessage,
     menuItems: menuItems,
     openCardMenu: openCardMenu,
     closeMenus: closeMenus,

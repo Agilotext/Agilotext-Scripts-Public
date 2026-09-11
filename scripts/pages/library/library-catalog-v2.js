@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.3.0
+ * @version 2.3.1
  */
 (function (global) {
   "use strict";
@@ -592,6 +592,10 @@
     var same = O.isOpen() && O.host().getAttribute("data-mode") === mode;
     if (same) O.update(payload);
     else O.open(payload);
+    var hostEl = O.host();
+    if (hostEl) {
+      hostEl.classList.toggle("agilo-lib-overlay--iconopen", !!(mode === "fiche" && F && F.iconOpen));
+    }
     writeHash();
   }
 
@@ -629,6 +633,10 @@
       iconQuery: "",
       iconSuggestions: [],
       iconSuggesting: false,
+      iconSuggHidden: (function () {
+        var P = global.AgiloLibraryIconPicker;
+        return !!(P && P.isSuggHidden && P.isSuggHidden());
+      })(),
       iconCatalog: state.iconCatalog || [],
       iconCatalogLoading: state.iconCatalogLoading,
       iconCatalogError: state.iconCatalogError,
@@ -699,6 +707,13 @@
         });
       },
       onIconClose: function () { F.iconOpen = false; syncOverlay(root); },
+      onIconSuggToggle: function () {
+        F.iconSuggHidden = !F.iconSuggHidden;
+        if (global.AgiloLibraryIconPicker && global.AgiloLibraryIconPicker.setSuggHidden) {
+          global.AgiloLibraryIconPicker.setSuggHidden(F.iconSuggHidden);
+        }
+        syncOverlay(root);
+      },
       onIconSelect: function (key) { setIcon(root, model, key); }
     });
   }
@@ -1386,7 +1401,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.3.0",
+    VERSION: "2.3.1",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */
