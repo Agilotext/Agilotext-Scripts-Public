@@ -2,7 +2,7 @@
 
 **share-v1** — page publique pour un invité **sans compte** (transcription, compte rendu, PV, etc.). Même dossier que voice-invite et join-team : **Auth**.
 
-**Ne jamais coller `@PIN`.** Scripts jsDelivr **après** commit + push. Pin actuel : `1d9362e1`. Mount : `#editorRoot` (pas de carte 960 px, pas de `body.appendChild`).
+**Ne jamais coller `@PIN`.** Scripts jsDelivr **après** commit + push. Pin actuel : `b2b6a258`. Mount : `#editorRoot` (pas de carte 960 px, pas de `body.appendChild`).
 
 ---
 
@@ -47,9 +47,9 @@ Squelette **éditeur** (sans scripts d’édition) :
 - Nav marketing + footer **masqués** sur cette page
 - Access control **Public** (retirer `data-ms-content="!members"`)
 
-HtmlEmbed jsDelivr **dans** `#editorRoot` (scripts seulement, pas un 2e mount) :
+HtmlEmbed jsDelivr **dans** `.dashboard-right`, **frère** de `#editorRoot` (scripts seulement, pas un 2e mount) :
 
-Scripts jsDelivr : **après** push (je te donnerai le SHA). Sinon page blanche.
+L’HtmlEmbed est **frère** de `#editorRoot` (pas dedans) : le JS remplace `innerHTML` du mount.
 
 Recette maquette, une fois les scripts pinnés :
 
@@ -70,8 +70,8 @@ https://agilotext-test.webflow.io/auth/share?mock=1&doc=transcript
 ## Embed complet (plus tard, SHA réel)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1d9362e1/scripts/shared/agilo-share-url.js?v=share-v1"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1d9362e1/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b2b6a258/scripts/shared/agilo-share-url.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b2b6a258/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
 ```
 
 ---
