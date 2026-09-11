@@ -392,11 +392,7 @@
     }
 
     root.innerHTML =
-      '<div class="wrapper-dashboard">' +
-      '<div class="breadcrumb profile"><span class="breadcrumb_text-link">' + escapeHtml(vm.pageKicker) + '</span></div>' +
-      '<div class="wrapper-title_compte"><h2 class="h1-small">' + escapeHtml(vm.title) + '</h2></div>' +
-      '</div>' +
-      '<div class="wrapper-dashboard flex"><div class="dashboard-content">' +
+      '<div class="dashboard-content">' +
       '<div class="ed-header"><div class="ed-wrap">' +
       '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span></div>' +
       '<span class="ri-job-id">' + escapeHtml(vm.metaBy) +
@@ -409,7 +405,7 @@
       '<div class="agilo-share-cta">' +
       '<p>' + escapeHtml(COPY.ctaBody) + '</p>' +
       '<a id="agilo-share-cta" href="' + SIGNUP_URL + '">' + escapeHtml(COPY.ctaButton) + '</a>' +
-      '</div></div></div>';
+      '</div></div>';
 
     var audioWrap = $('#agilo-share-audio', root);
     if (audioOk) {
