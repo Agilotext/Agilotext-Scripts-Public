@@ -281,10 +281,13 @@ if (mdHtml.indexOf("Hello world") === -1) throw new Error("stripped preview miss
 var defFiche = Fiche.html(Object.assign({}, user, { isDefault: true }), { previewText: "x", previewLoading: false }, proCreds);
 if ((defFiche.match(/Par défaut/g) || []).length !== 1) throw new Error("fiche Par défaut not unique");
 if (css.indexOf("line-clamp: 3") === -1) throw new Error("desc clamp missing");
-if (css.indexOf("max-height: 4.35em") === -1) throw new Error("desc max-height missing");
-if (css.indexOf("line-clamp: 1") === -1) throw new Error("example clamp missing");
+if (css.indexOf("flex: 0 0 auto") === -1) throw new Error("desc flex lock missing");
+if (css.indexOf("line-clamp: 2") === -1) throw new Error("example clamp missing");
 if (css.indexOf("minmax(min(100%, 16.5rem), 1fr)") === -1) throw new Error("featured grid missing");
 if (css.indexOf("overflow: hidden") === -1) throw new Error("card overflow hidden missing");
+if (css.indexOf("max-height: 4.35em") !== -1) throw new Error("desc max-height should be gone");
+if (css.indexOf("max-height: 1.45em") !== -1) throw new Error("example max-height should be gone");
+if (css.indexOf("min-height: 2.6em") !== -1) throw new Error("title min-height should be gone");
 if (css.indexOf("100050") === -1) throw new Error("overlay z-index bump missing");
 if (css.indexOf("margin-left: auto") === -1) throw new Error("wizard icon align missing");
 if (css.indexOf("agilo-lib-badge--acquired") === -1) throw new Error("acquired badge css missing");
