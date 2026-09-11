@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.1.0
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
@@ -31,7 +31,7 @@
   function titleOf(icon) {
     var fr = displayLabel(icon);
     if (fr) return fr;
-    return String((icon && (icon.iconKey || icon.label)) || "");
+    return String((icon && icon.iconKey) || "");
   }
 
   function spinHtml(aria, size) {

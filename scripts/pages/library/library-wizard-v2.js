@@ -1,10 +1,9 @@
 /**
  * Wizard v2 « Configurer votre modèle personnalisé ».
- * Les 4 questions et placeholders sont ceux de la page Mon compte (Webflow),
- * plus : icône (suggestions), dictée (AgiloSpeechDictate), récapitulatif,
- * brouillon localStorage, écran de succès avec statut de création.
+ * Les 4 questions (ordre Mon compte), placeholders courts, dictée,
+ * récapitulatif, brouillon localStorage, écran de succès avec statut.
  * Rendu + liaison ; les appels API restent dans library-catalog-v2.js.
- * @version 2.0.0
+ * @version 2.1.0
  */
 (function (global) {
   "use strict";
@@ -26,22 +25,22 @@
       id: "objective",
       field: "wiz-obj",
       label: "Quels échanges, quel objectif ?",
-      hint: "Quels types d’échanges gérez-vous habituellement avec vos interlocuteurs (ex. entretiens, réunions de suivi, échanges commerciaux) ? Quel est l’objectif principal de ces échanges dans votre contexte professionnel ?",
-      placeholder: "Exemple : Décrivez le contexte des échanges que vous gérez, leur fréquence, et leur objectif. Cela peut inclure des réunions, des entretiens, des discussions stratégiques, des suivis, ou des négociations. Ajoutez un maximum de détails : Qui sont vos interlocuteurs (clients, collègues, candidats, etc.) ? Quel est le résultat attendu (rapport, présentation, synthèse, décisions, etc.) ?"
+      hint: "Quels types d’échanges gérez-vous, et quel est leur objectif ?",
+      placeholder: "Ex. comités, entretiens clients, suivi commercial"
     },
     {
       id: "specificInfo",
       field: "wiz-info",
       label: "Quelles informations clés ?",
       hint: "Quelles informations clés doivent apparaître dans vos comptes rendus ?",
-      placeholder: "Exemple : Indiquez les éléments que vous souhaitez voir systématiquement ressortir dans vos comptes rendus. Cela peut inclure des noms, des dates, des points importants discutés, des décisions prises, ou des actions à réaliser. Ajoutez autant de détails que possible pour rendre vos comptes rendus plus utiles : par exemple, chiffres clés, délais, projets discutés, ou personnes impliquées."
+      placeholder: "Ex. décisions, responsables, échéances, chiffres"
     },
     {
       id: "structure",
       field: "wiz-struct",
       label: "Quelle structure pour vos comptes rendus ?",
       hint: "Quelle structure préférez-vous pour vos comptes rendus ?",
-      placeholder: "Exemple : Précisez le format qui correspond le mieux à vos besoins. Vous pouvez demander un résumé en tête de rapport, suivi d’un détail étape par étape, ou un format intégral sans résumé."
+      placeholder: "Ex. résumé puis détail, ou compte rendu intégral"
     }
   ];
 
@@ -155,22 +154,9 @@
   }
 
   /* ---------- rendu ---------- */
-  function stepsHtml() {
-    var Core = C();
-    var label = W.step === 5 ? "Récapitulatif" : "Étape " + W.step + " sur 4";
-    var dots = [1, 2, 3, 4].map(function (n) {
-      var done = n < W.step;
-      var on = n === W.step;
-      var short = STEP_SHORT[n];
-      return '<span class="' + (done ? "is-done" : "") + (on ? " is-on" : "") + '"' +
-        ' title="' + esc(short) + '" aria-label="' + esc(short) + '"' +
-        (on ? ' aria-current="step"' : "") + ">" +
-        (done ? Core.svgIcon("check", 14) : String(n)) + "</span>";
-    }).join("");
-    var recap = '<span class="' + (W.step === 5 ? "is-on" : "") + '"' +
-      (W.step === 5 ? ' aria-current="step"' : "") + ">" + Core.svgIcon("checklist", 14) + "</span>";
-    return '<div class="agilo-lib-wizard-steps" role="group" aria-label="' + esc(label) + '">' +
-      dots + recap + "</div>";
+  function stepMeta() {
+    if (W.step === 5) return { text: "Récap", aria: "Récapitulatif" };
+    return { text: W.step + " / 4", aria: "Étape " + W.step + " sur 4" };
   }
 
   function iconBlockHtml(ctx) {
@@ -346,16 +332,11 @@
     if (W.step < 5) nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="next">Continuer ' + Core.svgIcon("arrow-right", 16) + "</button>";
     else nav += '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-wiz="create">' + Core.svgIcon("sparkle", 16) + " Créer le modèle</button>";
     nav += "</div>";
-    var kicker = W.step === 5 ? '<p class="agilo-lib-wizard-kicker">Récapitulatif</p>' : "";
-    var intro = W.step <= 4
-      ? '<p class="agilo-lib-note agilo-lib-wiz-intro">Agilotext rédige le prompt à partir de vos réponses.</p>'
-      : "";
     return '<div class="agilo-lib-wiz">' +
-      intro +
-      kicker +
-      stepsHtml() +
+      '<div class="agilo-lib-wiz-main">' +
       restored +
-      '<div class="agilo-lib-form">' + body + "</div>" + err + nav +
+      '<div class="agilo-lib-form">' + body + "</div>" + err +
+      "</div>" + nav +
       "</div>";
   }
 
@@ -527,7 +508,7 @@
   }
 
   global.AgiloLibraryWizardV2 = {
-    VERSION: "2.0.1",
+    VERSION: "2.1.0",
     TITLE: TITLE,
     STEP_SHORT: STEP_SHORT,
     QUESTIONS: QUESTIONS,
@@ -544,6 +525,7 @@
     saveDraft: saveDraft,
     loadDraft: loadDraft,
     clearDraft: clearDraft,
-    suggestSignature: suggestSignature
+    suggestSignature: suggestSignature,
+    stepMeta: stepMeta
   };
 })(typeof window !== "undefined" ? window : globalThis);

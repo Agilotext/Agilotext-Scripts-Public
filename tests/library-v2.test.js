@@ -137,7 +137,14 @@ if (Wiz.TITLE !== "Nouveau modèle") throw new Error("wizard title");
 if (Wiz.QUESTIONS.length !== 4) throw new Error("4 questions");
 if (Wiz.QUESTIONS[0].placeholder.indexOf("Modèle de réunion") === -1) throw new Error("name placeholder");
 if (Wiz.QUESTIONS[1].label.indexOf("échanges") === -1) throw new Error("objective short label");
-if (!Wiz.QUESTIONS[1].hint || Wiz.QUESTIONS[1].hint.indexOf("interlocuteurs") === -1) throw new Error("objective hint");
+if (!Wiz.QUESTIONS[1].hint || Wiz.QUESTIONS[1].hint.indexOf("échanges") === -1) throw new Error("objective hint");
+if (Wiz.QUESTIONS[1].hint.indexOf("Ajoutez un maximum") !== -1) throw new Error("hint still a Webflow paragraph");
+if (Wiz.QUESTIONS[1].placeholder.indexOf("Ajoutez un maximum de détails") !== -1) {
+  throw new Error("step 2 placeholder still a Webflow paragraph");
+}
+if (Wiz.QUESTIONS[1].placeholder.indexOf("comités") === -1) throw new Error("step 2 short placeholder missing");
+if (Wiz.QUESTIONS[2].placeholder.indexOf("décisions") === -1) throw new Error("step 3 short placeholder missing");
+if (Wiz.QUESTIONS[3].placeholder.indexOf("résumé") === -1) throw new Error("step 4 short placeholder missing");
 Wiz.state().name = "Comité";
 Wiz.state().objective = "Suivi hebdo";
 Wiz.state().specificInfo = "Décisions";
@@ -149,10 +156,24 @@ var q2 = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
 if (q2.indexOf("Question 2") !== -1 || q2.indexOf("Question 2 / 4") !== -1) {
   throw new Error("duplicate question kicker still present");
 }
-if (q2.indexOf("Étape 2 sur 4") === -1) throw new Error("stepper aria label missing");
-if (q2.indexOf('aria-label="Contexte"') === -1) throw new Error("step 2 short name missing");
-if (q2.indexOf("Agilotext rédige le prompt à partir de vos réponses.") === -1) throw new Error("wizard intro missing");
+if (q2.indexOf("agilo-lib-wizard-steps") !== -1) throw new Error("step dots still in wizard body");
+if (q2.indexOf('aria-label="Contexte"') !== -1) throw new Error("step dots aria still in body");
+if (q2.indexOf("agilo-lib-wiz-intro") !== -1) throw new Error("wizard intro still in body");
+if (q2.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wizard main scroll missing");
+if (q2.indexOf("agilo-lib-wiz-nav") === -1) throw new Error("wizard nav missing");
+if (Wiz.stepMeta().text !== "2 / 4") throw new Error("step meta 2 / 4 missing");
+if (Wiz.stepMeta().aria !== "Étape 2 sur 4") throw new Error("step meta aria missing");
 if (q2.indexOf("Recherche d’icônes") !== -1) throw new Error("wizard still shows Recherche d’icônes");
+Wiz.reset({ restore: false });
+Wiz.state().name = "Comité";
+Wiz.state().iconOpen = true;
+var wPick = Wiz.html({
+  canCreate: true,
+  library2Live: true,
+  iconCatalog: [{ iconKey: "users", labelFr: "Réunion", url: "" }]
+});
+if (wPick.indexOf("Continuer") === -1) throw new Error("Continuer missing with picker open");
+if (wPick.indexOf("agilo-lib-wiz-nav") === -1) throw new Error("nav missing with picker open");
 Wiz.reset({ restore: false });
 Wiz.state().name = "Comité";
 Wiz.state().suggesting = true;
@@ -186,19 +207,29 @@ if (Cat._overlayTitle) {
   Cat._state().created = null;
   Cat._state().createdPending = false;
   if (Cat._overlayTitle("wizard") !== "Création en cours") throw new Error("overlay creating title");
+  if (Cat._overlayMeta("wizard").text !== "") throw new Error("creating meta should be empty");
   Cat._state().creating = false;
   Cat._state().created = { cardTitle: "X" };
   Cat._state().createdPending = true;
   if (Cat._overlayTitle("wizard") !== "Création en cours") throw new Error("overlay pending title");
   Cat._state().createdPending = false;
   if (Cat._overlayTitle("wizard") !== "Modèle créé") throw new Error("overlay ready title");
+  if (Cat._overlayMeta("wizard").text !== "") throw new Error("created meta should be empty");
   Cat._state().created = null;
+  Wiz.reset({ restore: false });
+  Wiz.state().step = 2;
+  if (Cat._overlayMeta("wizard").text !== "2 / 4") throw new Error("form meta 2 / 4");
+  if (Cat._overlayMeta("fiche").text !== "") throw new Error("fiche meta should be empty");
 }
 Wiz.state().step = 5;
 var recap = Wiz.html({ canCreate: true, library2Live: true, iconCatalog: [] });
 if (recap.indexOf("Récapitulatif") === -1 && recap.indexOf("agilo-lib-recap") === -1) {
   throw new Error("recap missing at step 5");
 }
+if (recap.indexOf("Agilotext rédige le prompt à partir de ces réponses") === -1) {
+  throw new Error("recap note missing");
+}
+if (Wiz.stepMeta().text !== "Récap") throw new Error("recap meta text");
 if (recap.indexOf("Créer le modèle") === -1) throw new Error("create CTA missing");
 
 var freeCreds = { email: "a@b.c", token: "t", edition: "free" };
@@ -285,6 +316,9 @@ var enCell = Picker.cellHtml({ iconKey: "at-sign", label: "At sign", labelFr: ""
 if (enCell.indexOf("At sign") !== -1) throw new Error("EN label leaked into cell");
 if (enCell.indexOf("<span>") !== -1) throw new Error("EN caption span in cell");
 if (enCell.indexOf('title="at-sign"') === -1) throw new Error("cell title should be key");
+if (Picker.titleOf({ iconKey: "stethoscope", label: "Medicine", labelFr: "" }) !== "stethoscope") {
+  throw new Error("titleOf leaked EN label");
+}
 var frCell = Picker.cellHtml({ iconKey: "users", labelFr: "Réunion", label: "Users", url: "" }, "users");
 if (frCell.indexOf("Réunion") === -1) throw new Error("FR label missing");
 if (frCell.indexOf("Users") !== -1) throw new Error("EN label shown beside FR");
@@ -321,6 +355,13 @@ if (css.indexOf("width: 2.5rem") === -1) throw new Error("2.5rem toolbar missing
 if (css.indexOf("width: 2.75rem") === -1) throw new Error("2.75rem mobile toolbar missing");
 if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missing");
 if (css.indexOf("max-height: min(22rem, 70vh)") === -1) throw new Error("icon popover max-height missing");
+if (css.indexOf("max-height: min(16rem, 50vh)") === -1) throw new Error("wizard picker contained height missing");
+if (css.indexOf("minmax(8rem") === -1) throw new Error("picker minmax 8rem missing");
+if (css.indexOf("min-height: 4.5rem") === -1) throw new Error("cell min-height 4.5rem missing");
+if (css.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wiz-main css missing");
+if (css.indexOf("agilo-lib-overlay__meta") === -1) throw new Error("overlay meta css missing");
+if (css.indexOf("0 0 0 0.125rem var(--lib-blue)") === -1) throw new Error("focus ring box-shadow missing");
+if (css.indexOf("padding: 1.25rem 1.5rem 1.5rem") === -1) throw new Error("wizard panel padding missing");
 if (css.indexOf(".agilo-lib-spin") === -1) throw new Error("spin css missing");
 if (css.indexOf(".agilo-lib--v2 .agilo-lib-chips button") === -1) throw new Error("chips radius rule missing");
 if (css.indexOf("border-radius: var(--lib-radius)") === -1) throw new Error("chips radius token missing");
@@ -350,6 +391,8 @@ if (overlayUpdate.indexOf("closeLibMenus") !== -1 || overlayUpdate.indexOf("clos
   throw new Error("overlay.update must not closeMenus");
 }
 if (overlaySrc.indexOf('querySelector(".agilo-lib-menu")') === -1) throw new Error("overlay Escape menu check missing");
+if (overlaySrc.indexOf("agilo-lib-overlay__meta") === -1) throw new Error("overlay meta slot missing");
+if (overlayUpdate.indexOf("applyMeta") === -1) throw new Error("overlay.update does not refresh meta");
 
 var catSrc = fs.readFileSync(path.join(lib, "library-catalog-v2.js"), "utf8");
 var paintFn = catSrc.slice(catSrc.indexOf("function paint("), catSrc.indexOf("function versionsHtml("));

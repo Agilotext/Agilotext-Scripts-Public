@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.1.0
+ * @version 2.2.0
  */
 (function (global) {
   "use strict";
@@ -533,6 +533,13 @@
     return "";
   }
 
+  function overlayMeta(mode) {
+    if (mode !== "wizard") return { text: "", aria: "" };
+    if (state.creating || state.created) return { text: "", aria: "" };
+    var W = Wiz();
+    return W.stepMeta ? W.stepMeta() : { text: "", aria: "" };
+  }
+
   function overlayHtml(mode) {
     if (mode === "wizard") return Wiz().html(wizardCtx());
     if (mode === "versions") return versionsHtml();
@@ -567,10 +574,13 @@
       writeHash();
       return;
     }
+    var meta = overlayMeta(mode);
     var payload = {
       mode: mode,
       title: overlayTitle(mode),
       html: overlayHtml(mode),
+      meta: meta.text,
+      metaAria: meta.aria,
       onClose: function () { onOverlayClosed(root); },
       bind: function (host) { bindOverlay(root, host); }
     };
@@ -1362,7 +1372,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.1.0",
+    VERSION: "2.2.0",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */
@@ -1375,6 +1385,7 @@
     _officialCategoryCounts: officialCategoryCounts,
     _readHash: readHash,
     _paint: paint,
-    _overlayTitle: overlayTitle
+    _overlayTitle: overlayTitle,
+    _overlayMeta: overlayMeta
   };
 })(typeof window !== "undefined" ? window : globalThis);
