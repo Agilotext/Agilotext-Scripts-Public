@@ -130,7 +130,7 @@ Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat) et de `uiV2` (f
 v1.3 : isolation boutons Webflow, menu `position:fixed`, fiche/wizard/versions en overlay `body`, chrome Nucleo inline, `iconUrl` intact. Auth 1.2 inchangé.  
 v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard aligné Mon compte, header une ligne, bandeaux sans trait latéral. Rollback = `uiV2: false`. **Retrait v1 prévu 2 semaines après recette Bauer** (catalog.js / core.js page, pas le picker dashboard).
 
-11 sept 2026 : slug réel `/library` (plus `/bibliotheque`). Plan Gratuit : pas de duplicate, pas de défaut, pas de pin officiel, wizard = parcourir. Pin jsDelivr à remplacer après commit.
+11 sept 2026 : slug réel `/library` (plus `/bibliotheque`). Plan Gratuit : pas de duplicate, pas de défaut, pas de pin officiel, wizard = parcourir. Pin jsDelivr `93b3af91`.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
