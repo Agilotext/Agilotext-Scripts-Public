@@ -332,6 +332,7 @@
       isDefault: defaultId != null && Number(defaultId) === id,
       canUse: !!canUse,
       canDuplicate: !!canDuplicate,
+      // Flag catalogue. Le plan Gratuit masque duplicate / défaut dans core-v2 (pas de creds ici).
       canCopyOfficial: type === "STANDARD" && !locked,
       canPin: !!canPin,
       canEdit: canEdit,
@@ -391,7 +392,7 @@
     else if (path.indexOf("/business") !== -1) root = "/app/business";
     if (kind === "dashboard") return root + "/dashboard";
     if (kind === "profile") return root + "/profile?tab=prompts";
-    if (kind === "bibliotheque") return root + "/bibliotheque";
+    if (kind === "bibliotheque") return root + "/library";
     return root;
   }
 

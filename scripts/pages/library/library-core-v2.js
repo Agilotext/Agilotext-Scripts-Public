@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.1
+ * @version 2.1.2
  */
 (function (global) {
   "use strict";
@@ -33,10 +33,21 @@
     return s === "READY" || s === "ACTIVE";
   }
 
+  function isFreePlan() {
+    var A = Api();
+    if (!A.canCreate) return false;
+    return !A.canCreate();
+  }
+
   function canSetDefault(m) {
     var A = Api();
+    if (isFreePlan()) return false;
     if (!m || locked(m) || !m.canUse) return false;
     return !!(A.isGenerationSafeId && A.isGenerationSafeId(m.promptModelId));
+  }
+
+  function canCopyOfficial(m) {
+    return !!(m && m.type === "STANDARD" && m.canCopyOfficial && !isFreePlan());
   }
 
   function menuSurface(opts) {
@@ -53,12 +64,12 @@
     if (surface !== "fiche" && canSetDefault(m) && !m.isDefault) {
       items.push({ act: "default", label: "Définir par défaut", icon: "check-circle" });
     }
-    if (m.canPin && !isLocked) {
+    if (m.canPin && !isLocked && !(isFreePlan() && m.type === "STANDARD")) {
       items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler", icon: "pin" });
     }
-    if (m.type === "STANDARD" && m.alreadyCopied) {
+    if (m.type === "STANDARD" && m.alreadyCopied && !isFreePlan()) {
       items.push({ act: "open-copy", label: "Voir dans Mes modèles", icon: "copy" });
-    } else if (m.type === "STANDARD" && m.canCopyOfficial) {
+    } else if (canCopyOfficial(m)) {
       items.push({ act: "duplicate", label: "Ajouter à mes modèles", icon: "copy" });
     }
     if (m.type === "USER" && m.canDuplicate) {
@@ -96,11 +107,11 @@
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="default">' +
         "Définir par défaut</button>";
     }
-    if (m.type === "STANDARD" && m.alreadyCopied) {
+    if (m.type === "STANDARD" && m.alreadyCopied && !isFreePlan()) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="open-copy">' +
         "Voir dans Mes modèles</button>";
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial) {
+    if (canCopyOfficial(m)) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-act-primary' + sm + '" data-act="duplicate">Ajouter à mes modèles</button>';
     }
     return '<span class="agilo-lib-state agilo-lib-state--empty agilo-lib-act-primary" aria-hidden="true"></span>';
@@ -240,7 +251,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.1",
+    VERSION: "2.1.2",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,

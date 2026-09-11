@@ -1071,6 +1071,10 @@
   }
 
   function doDefault(root, model, btn) {
+    if (isFree()) {
+      C().toast("Le plan Gratuit ne permet pas de définir un modèle par défaut.");
+      return;
+    }
     try { Api().assertGenerationId(model.promptModelId); } catch (err) { C().toast(err.message); return; }
     if (C().locked(model)) return;
     if (btn) btn.disabled = true;
@@ -1085,6 +1089,10 @@
   }
 
   function doPin(root, model, btn) {
+    if (isFree() && model.type === "STANDARD") {
+      C().toast("Le plan Gratuit ne permet pas d’épingler un modèle officiel.");
+      return;
+    }
     if (C().locked(model)) return;
     if (!model.pinned && counts().pinned >= state.pinMax) {
       C().toast(state.pinMax + " épingles maximum. Désépinglez un modèle d’abord.");
@@ -1100,6 +1108,10 @@
   }
 
   function askDuplicate(root, model) {
+    if (isFree()) {
+      C().toast("Le plan Gratuit ne permet pas d’ajouter un modèle à votre bibliothèque.");
+      return;
+    }
     C().promptDialog({
       title: model.type === "STANDARD" ? "Ajouter à mes modèles" : "Enregistrer sous",
       text: "Donnez un nom personnel. La copie vous appartient et reste modifiable.",

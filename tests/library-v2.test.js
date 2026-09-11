@@ -350,10 +350,23 @@ if (typeof Api.getPromptContent !== "function") throw new Error("getPromptConten
 if (typeof Api.appPath !== "function") throw new Error("appPath missing");
 
 globalThis.location = { pathname: "/app/premium/profile", search: "", hash: "", href: "" };
-if (Api.appPath("bibliotheque") !== "/app/premium/bibliotheque") throw new Error("bibliotheque path");
+if (Api.appPath("bibliotheque") !== "/app/premium/library") throw new Error("library path");
 if (Api.appPath("profile").indexOf("tab=prompts") === -1) throw new Error("profile path kept for fallback");
 
-globalThis.location = { search: "", hash: "#modele=253", pathname: "/app/business/bibliotheque" };
+globalThis.location = { pathname: "/app/free/library", search: "", hash: "", href: "" };
+if (Api.appPath("bibliotheque") !== "/app/free/library") throw new Error("free library path");
+if (Api.canCreate({ edition: "free" })) throw new Error("free canCreate");
+if (!Api.canCreate({ edition: "ent" })) throw new Error("ent canCreate");
+var freeStdItems = C.menuItems(std);
+if (freeStdItems.some(function (it) { return it.act === "duplicate"; })) throw new Error("free still has duplicate");
+if (freeStdItems.some(function (it) { return it.act === "default"; })) throw new Error("free still has default");
+if (freeStdItems.some(function (it) { return it.act === "pin"; })) throw new Error("free still has official pin");
+if (C.primaryAction(std).indexOf("duplicate") !== -1) throw new Error("free primary still duplicate");
+var wizFree = Wiz.html({ canCreate: false, pricingUrl: "/tarifs" });
+if (wizFree.indexOf("parcourir") === -1) throw new Error("free wizard copy");
+if (wizFree.indexOf("utiliser les modèles") !== -1) throw new Error("old free wizard copy");
+
+globalThis.location = { search: "", hash: "#modele=253", pathname: "/app/business/library" };
 Cat._readHash();
 if (Cat._state().pendingDeepLink !== 253) throw new Error("deep link #modele=");
 

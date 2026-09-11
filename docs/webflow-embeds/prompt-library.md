@@ -120,15 +120,15 @@ Dans le panneau Symboles, chercher `App_dashboard-menu`, `nav-app`, `menu-app`, 
 
 1. Dupliquer une page déjà gated (ex. Mes transcripts du palier).
 2. Slugs :
-   - `/app/free/bibliotheque`
-   - `/app/premium/bibliotheque`
-   - `/app/business/bibliotheque`
+   - `/app/free/library`
+   - `/app/premium/library`
+   - `/app/business/library`
 3. Memberstack : **mêmes groupes** que le dashboard du palier.
 4. Page settings : `noindex`, hors sitemap marketing, titre « Bibliothèque de modèles ».
 5. Body : nav existante + ancre vide `#agilo-prompt-library-anchor` + embed pin SHA. Flags `library2Live: false` et `cse89Live: false` au début.
 6. Publier **staging only** (`agilotext-test.webflow.io`). Prod www inchangée.
 
-CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/bibliotheque` après le routeur v8.2.
+CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/library` après le routeur v8.2.
 
 ## Picker dashboard (après la page biblio)
 
@@ -174,7 +174,7 @@ Aperçu local sans API : `docs/webflow-embeds/prompt-library-preview.html?mock=b
 
 | Compte | Attendu |
 |--------|---------|
-| Free | Onglet Agilotext en premier, 3 cartes à la une, Créer = popup offres, pas d’erreur console |
+| Free | Onglet Agilotext en premier, 3 cartes à la une, Créer = popup offres, 0 appel `getPromptModelContent`, pas de Définir par défaut / Ajouter à mes modèles, pas d’erreur console |
 | Pro | Popup 4 questions + duplicate + tableau, Modifier → `/app/premium/profile?tab=prompts` si atelier absent |
 | Business (Bauer) | Bouton primaire bleu lisible, menu … hors du titre, Voir ouvre la fiche overlay, `#creer` ouvre la popup, chips, recherche, tableau triable, 6e épingle → plafond, duplicate d’un standard → Mes modèles, wizard READY, jeton périmé rafraîchi (régression 1.2) |
 | Mobile 375 px | Overlay pleine largeur, onglets scrollables, cartes 1 colonne, tableau replié en cartes |
@@ -191,7 +191,7 @@ Aperçu local : `docs/webflow-embeds/preview-v2.html?mock=free|pro|business`. St
 
 ### Embed page bibliothèque v2 (×3, staging only)
 
-Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/bibliotheque`. Pin jsDelivr `838957f6`.
+Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/library`. Pin jsDelivr `838957f6`.
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@838957f6/scripts/pages/library/library.css?v=838957f6">
@@ -246,7 +246,7 @@ Rollback v2 : `uiV2: false` (recharge catalog v1, plus de CSS v2 ni Studio si tu
 
 ### Redirect Mon compte → biblio (staging)
 
-Snippet : `docs/webflow-embeds/profile-prompts-redirect.html`. Coller dans l’onglet Modèles des 3 pages Mon compte. `?tab=prompts` redirige vers `/app/{palier}/bibliotheque#modele={open}`. Garde `?noredirect=1`. Le `<select id="default-template-select">` du dashboard n’est pas touché.
+Snippet : `docs/webflow-embeds/profile-prompts-redirect.html`. Coller dans l’onglet Modèles des 3 pages Mon compte. `?tab=prompts` redirige vers `/app/{palier}/library#modele={open}`. Garde `?noredirect=1`. Le `<select id="default-template-select">` du dashboard n’est pas touché.
 
 Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon compte. Tutoriel driver.js : hors de ce repo, à vérifier à la main si un tooltip pointe encore vers Mes modèles.
 

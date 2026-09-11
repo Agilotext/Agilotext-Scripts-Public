@@ -292,7 +292,7 @@
     var Core = C();
     return Core.emptyHtml(
       "Création réservée aux plans Pro et Business",
-      "Le plan Gratuit permet d’utiliser les modèles Agilotext, pas d’en créer un personnel.",
+      "Le plan Gratuit permet de parcourir les modèles Agilotext, pas d’en créer un personnel.",
       '<a class="agilo-lib-btn agilo-lib-btn--primary" href="' + esc(ctx.pricingUrl || "/tarifs") + '" data-track="lib_upgrade_cta_click">Voir les offres</a>',
       "lock"
     );

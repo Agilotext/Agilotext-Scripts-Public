@@ -133,19 +133,25 @@
     return c.join(" ");
   }
 
+  function isFreePlan() {
+    var A = global.AgiloLibraryApi;
+    if (!A || !A.canCreate) return false;
+    return !A.canCreate();
+  }
+
   function menuItems(m) {
     var isLocked = locked(m);
     var items = [];
-    if (m.canSetDefault && m.canUse && !m.isDefault && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
+    if (!isFreePlan() && m.canSetDefault && m.canUse && !m.isDefault && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
       items.push({ act: "default", label: "Définir par défaut", icon: "check-circle" });
     }
-    if (m.canPin && !isLocked) {
+    if (m.canPin && !isLocked && !(isFreePlan() && m.type === "STANDARD")) {
       items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler", icon: "pin" });
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial) {
+    if (m.type === "STANDARD" && m.canCopyOfficial && !isFreePlan()) {
       items.push({ act: "duplicate", label: "Ajouter à mes modèles", icon: "copy" });
     }
-    if (m.type === "USER" && m.canDuplicate) {
+    if (m.type === "USER" && m.canDuplicate && !isFreePlan()) {
       items.push({ act: "duplicate", label: "Enregistrer sous", icon: "copy" });
     }
     if (m.type === "USER" && global.AgiloLibraryApi && global.AgiloLibraryApi.canSetUserIcon &&
@@ -172,11 +178,11 @@
       return '<a class="agilo-lib-btn agilo-lib-btn--cta" href="' + escapeHtml(cta.href) + '">' +
         escapeHtml(cta.label) + "</a>";
     }
-    if (m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
+    if (!isFreePlan() && m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
         (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>";
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial) {
+    if (m.type === "STANDARD" && m.canCopyOfficial && !isFreePlan()) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="duplicate">Ajouter à mes modèles</button>';
     }
     return "";
