@@ -2,7 +2,7 @@
 
 **share-v1** — page publique pour un invité **sans compte** (transcription, compte rendu, PV, etc.). Même dossier que voice-invite et join-team : **Auth**.
 
-**Ne jamais coller `@PIN` / `@SHA`.** Scripts jsDelivr **après** commit + push. Aujourd’hui : créer la page + meta, coller seulement le `<div>`.
+**Ne jamais coller `@PIN`.** Scripts jsDelivr **après** commit + push. Pin actuel : `1d9362e1`. Mount : `#editorRoot` (pas de carte 960 px, pas de `body.appendChild`).
 
 ---
 
@@ -39,15 +39,15 @@ Puis dans la page : **renommer** si Webflow a laissé « Rejoindre une équipe C
 
 ## 2) Canvas : garder le cadre, vider le formulaire
 
-Garder : logo, fond, container (comme voice-invite).
+Squelette **éditeur** (sans scripts d’édition) :
 
-Supprimer : formulaire « rejoindre une équipe », textes d’invitation d’équipe, scripts join-team.
+- `section.section_hero.app` > `.dashboard.mes-transcript`
+- `.dashboard-left` : logo + Aide / Créer un compte (pas Mes fichiers)
+- `.dashboard-right` > `#editorRoot.editorroot`
+- Nav marketing + footer **masqués** sur cette page
+- Access control **Public** (retirer `data-ms-content="!members"`)
 
-À la place, un **Embed** dans la zone contenu :
-
-```html
-<div id="agilo-share-view"></div>
-```
+HtmlEmbed jsDelivr **dans** `#editorRoot` (scripts seulement, pas un 2e mount) :
 
 Scripts jsDelivr : **après** push (je te donnerai le SHA). Sinon page blanche.
 
@@ -70,9 +70,8 @@ https://agilotext-test.webflow.io/auth/share?mock=1&doc=transcript
 ## Embed complet (plus tard, SHA réel)
 
 ```html
-<div id="agilo-share-view"></div>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/shared/agilo-share-url.js?v=share-v1"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1d9362e1/scripts/shared/agilo-share-url.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1d9362e1/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
 ```
 
 ---
