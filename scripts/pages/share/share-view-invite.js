@@ -4,7 +4,7 @@
    Prod    : https://www.agilotext.com/auth/share?token=…
    Staging : https://agilotext-test.webflow.io/auth/share?token=…
    Embed Webflow :
-     <div id="agilo-share-view"></div>
+     <div id="editorRoot" class="editorroot"></div>
      <script src="…/scripts/shared/agilo-share-url.js"></script>
      <script src="…/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
    API : GET /api/v1/getSharedJobView?shareToken=…  (Nico)
@@ -19,7 +19,10 @@
 
   var API_BASE = 'https://api.agilotext.com/api/v1';
   var SIGNUP_URL = 'https://www.agilotext.com/?utm_source=share_link&utm_medium=referral&utm_campaign=share_guest';
-  var ROOT_ID = 'agilo-share-view';
+  var HELP_URL = 'https://www.agilotext.com/contact';
+  var LOGO_SRC = 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg';
+  var ROOT_ID = 'editorRoot';
+  var FALLBACK_ROOT_ID = 'agilo-share-view';
 
   /** Type document par défaut si l’API n’envoie pas sharedDocumentType (cr | pv | note | transcript). */
   var SHARE_DOCUMENT_TYPE_DEFAULT = 'cr';
@@ -113,34 +116,23 @@
   function injectStyles() {
     if (document.getElementById('agilo-share-view-styles')) return;
     var css = [
-      '#agilo-share-view{scroll-margin-top:5.5rem}',
-      '#agilo-share-view .agilo-share-ed-shell{max-width:960px;width:100%;margin:0 auto;font-family:inherit;color:var(--color--gris_foncé,#020202)}',
-      '#agilo-share-view .agilo-share-ed-body{background:#fff;border:1px solid rgba(82,82,82,.14);border-radius:var(--0-5_radius,0.5rem);padding:20px 18px 28px}',
-      '#agilo-share-view .agilo-share-kicker{margin:0 0 6px;font-size:.82rem;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--color--blue,#174a96)}',
-      '#agilo-share-view .agilo-share-title{margin:0 0 8px;font-size:1.45rem;line-height:1.3}',
-      '#agilo-share-view .agilo-share-meta{margin:0 0 14px;color:var(--color--gris,#525252);font-size:.88rem;line-height:1.5}',
-      '#agilo-share-view .agilo-share-banner{margin:0 0 16px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);background:rgba(23,74,150,.07);border:1px solid rgba(23,74,150,.16);font-size:.86rem;line-height:1.5;color:var(--color--gris,#525252)}',
-      '#agilo-share-view .agilo-share-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}',
-      '#agilo-share-view .agilo-share-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border-radius:var(--0-5_radius,0.5rem);border:1px solid rgba(82,82,82,.22);background:#fff;color:#020202;font:inherit;font-size:.9rem;cursor:pointer;text-decoration:none}',
-      '#agilo-share-view .agilo-share-btn:hover{background:#f5f5f5}',
-      '#agilo-share-view .agilo-share-audio{margin:0 0 16px}',
-      '#agilo-share-view .agilo-share-audio audio{width:100%;height:40px}',
-      '#agilo-share-view nav.editor-tabs.ed-tabs{display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid rgba(82,82,82,.14);margin:0 0 14px}',
-      '#agilo-share-view nav.editor-tabs .ed-tab{padding:8px 12px;border:0;background:none;font:inherit;font-weight:600;color:#525252;cursor:pointer;border-bottom:2px solid transparent}',
-      '#agilo-share-view nav.editor-tabs .ed-tab.is-active{color:var(--color--blue,#174a96);border-bottom-color:var(--color--blue,#174a96)}',
-      '#agilo-share-view .ed-main[data-ed-tabs] .edtr-pane{display:none;font-size:.95rem;line-height:1.65}',
-      '#agilo-share-view .ed-main[data-ed-tabs] .edtr-pane.is-active{display:block}',
-      '#agilo-share-view .edtr-pane h2,#agilo-share-view .edtr-pane h3{margin:1.1em 0 .4em}',
-      '#agilo-share-view #pane-transcript .ag-seg{margin:0 0 12px}',
-      '#agilo-share-view #pane-transcript .ag-seg__head .speaker{font-size:.78rem;font-weight:700;color:var(--color--blue,#174a96)}',
-      '#agilo-share-view .agilo-share-cta{margin:22px 0 0;padding:18px 16px;border-radius:var(--0-5_radius,0.5rem);background:#174a96;color:#fff;text-align:center}',
-      '#agilo-share-view .agilo-share-cta p{margin:0 0 12px;font-size:.95rem;line-height:1.5}',
-      '#agilo-share-view .agilo-share-cta a{display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:var(--0-5_radius,0.5rem);background:#fff;color:#174a96;font-weight:700;text-decoration:none}',
-      '#agilo-share-view .agilo-share-error{text-align:center;padding:28px 12px}',
-      '#agilo-share-view .agilo-share-error h2{margin:0 0 8px;font-size:1.25rem}',
-      '#agilo-share-view .agilo-share-status{margin:0 0 12px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);font-size:.9rem;display:none}',
-      '#agilo-share-view .agilo-share-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
-      '#agilo-share-view .agilo-share-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}'
+      'html.agilo-share-page .nav_component,html.agilo-share-page footer.footer{display:none!important}',
+      'html.agilo-share-page .main-wrapper{min-height:100vh}',
+      '#editorRoot .agilo-share-banner,#agilo-share-view .agilo-share-banner{margin:0 0 16px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);background:rgba(23,74,150,.07);border:1px solid rgba(23,74,150,.16);font-size:.86rem;line-height:1.5;color:var(--color--gris,#525252)}',
+      '#editorRoot .agilo-share-status,#agilo-share-view .agilo-share-status{margin:0 0 12px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);font-size:.9rem;display:none}',
+      '#editorRoot .agilo-share-status.is-info,#agilo-share-view .agilo-share-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
+      '#editorRoot .agilo-share-status.is-error,#agilo-share-view .agilo-share-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
+      '#editorRoot .edtr-pane{display:none;font-size:.95rem;line-height:1.65}',
+      '#editorRoot .edtr-pane.is-active{display:block}',
+      '#editorRoot .edtr-pane h2,#editorRoot .edtr-pane h3{margin:1.1em 0 .4em}',
+      '#editorRoot #pane-transcript .ag-seg{margin:0 0 12px}',
+      '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.78rem;font-weight:700;color:var(--color--blue,#174a96)}',
+      '#editorRoot .agilo-share-cta{margin:22px 0 0;padding:18px 16px;border-radius:var(--0-5_radius,0.5rem);background:var(--color--blue,#174a96);color:#fff;text-align:center}',
+      '#editorRoot .agilo-share-cta p{margin:0 0 12px;font-size:.95rem;line-height:1.5}',
+      '#editorRoot .agilo-share-cta a{display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:var(--0-5_radius,0.5rem);background:#fff;color:#174a96;font-weight:700;text-decoration:none}',
+      '#editorRoot .agilo-share-error{text-align:center;padding:28px 12px}',
+      '#editorRoot .wrapper-audio-api audio{width:100%;height:40px}',
+      '#editorRoot .ed-wrap.vertical{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
     ].join('');
     var st = document.createElement('style');
     st.id = 'agilo-share-view-styles';
@@ -185,11 +177,82 @@
   function renderError(root, code) {
     var copy = errorCopy(code);
     root.innerHTML =
-      '<div class="agilo-share-ed-shell ed-shell" lang="fr"><div class="agilo-share-ed-body ed-body agilo-share-error">' +
-      '<h2>' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
-      '<p style="margin-top:18px"><a class="agilo-share-btn" href="' + SIGNUP_URL + '">Essayer Agilotext gratuitement</a></p>' +
-      '</div></div>';
+      '<div class="dashboard-content agilo-share-error" lang="fr">' +
+      '<h2 class="h1-small">' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
+      '<p style="margin-top:18px"><a class="button-secondary" href="' + SIGNUP_URL + '">Essayer Agilotext gratuitement</a></p>' +
+      '</div>';
     capture('share_view_error', { code: code });
+  }
+
+  function inMain(el) {
+    return !!(el && el.closest && el.closest('.main-wrapper'));
+  }
+
+  function fillGuestRail(left) {
+    if (!left) return;
+    var menu = left.querySelector('.dashboard-menu') || left;
+    if (menu.getAttribute('data-agilo-share-rail') === '1') return;
+    menu.setAttribute('data-agilo-share-rail', '1');
+    menu.innerHTML =
+      '<a href="https://www.agilotext.com/" class="nav_logo-link app-center w-nav-brand">' +
+      '<img src="' + LOGO_SRC + '" loading="lazy" alt="Agilotext" class="nav_logo app-center">' +
+      '</a>' +
+      '<div class="full-width">' +
+      '<a href="' + HELP_URL + '" class="dashboard-link w-inline-block"><div>Aide</div></a>' +
+      '<a href="' + SIGNUP_URL + '" class="dashboard-link w-inline-block"><div>Créer un compte</div></a>' +
+      '</div>';
+  }
+
+  function ensureChrome() {
+    try { document.documentElement.classList.add('agilo-share-page'); } catch (_) { /* ignore */ }
+    var main = document.querySelector('.main-wrapper');
+    if (!main) return null;
+
+    var section = main.querySelector('.section_hero') || main.querySelector('section') || main.querySelector('.section');
+    if (section) {
+      section.removeAttribute('data-ms-content');
+      section.classList.add('section_hero', 'app');
+      section.classList.remove('section');
+    }
+
+    var dash = main.querySelector('.dashboard');
+    if (!dash && section) {
+      dash = document.createElement('div');
+      dash.className = 'dashboard mes-transcript';
+      section.appendChild(dash);
+    }
+
+    var left = main.querySelector('.dashboard-left');
+    if (!left && dash) {
+      left = document.createElement('div');
+      left.className = 'dashboard-left';
+      dash.appendChild(left);
+    }
+    fillGuestRail(left);
+
+    var right = main.querySelector('.dashboard-right');
+    if (!right && dash) {
+      right = document.createElement('div');
+      right.className = 'dashboard-right';
+      dash.appendChild(right);
+    }
+
+    var mount = document.getElementById(ROOT_ID) || document.getElementById(FALLBACK_ROOT_ID);
+    if (mount && !inMain(mount)) mount = null;
+    if (!mount && right) {
+      mount = document.createElement('div');
+      mount.id = ROOT_ID;
+      mount.className = 'editorroot';
+      right.appendChild(mount);
+    }
+    if (!mount && section) {
+      mount = document.createElement('div');
+      mount.id = ROOT_ID;
+      mount.className = 'editorroot';
+      section.appendChild(mount);
+    }
+    if (mount) mount.classList.add('editorroot');
+    return mount || null;
   }
 
   function setStatus(el, kind, text) {
@@ -297,20 +360,20 @@
 
     var actions = '';
     if (vm.showTranscript) {
-      actions += '<button type="button" class="agilo-share-btn" data-act="copy-transcript">' +
+      actions += '<button type="button" class="button-secondary black" data-act="copy-transcript">' +
         escapeHtml(COPY.copyTranscript) + '</button>';
     }
     if (vm.showSummary) {
-      actions += '<button type="button" class="agilo-share-btn" data-act="copy-summary">' +
+      actions += '<button type="button" class="button-secondary black" data-act="copy-summary">' +
         escapeHtml(vm.copySummaryLabel) + '</button>';
     }
-    actions += '<a class="agilo-share-btn" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
+    actions += '<a class="button-secondary black" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
       escapeHtml(COPY.download) + '</a>';
 
     var tabs = '';
     if (vm.useTabs) {
       tabs =
-        '<nav class="editor-tabs ed-tabs" role="tablist">' +
+        '<nav class="ed-tabs" role="tablist">' +
         '<button type="button" class="ed-tab' + (vm.defaultTab === 'transcript' ? ' is-active' : '') +
         '" data-tab="transcript" role="tab">' + escapeHtml(COPY.transcriptTab) + '</button>' +
         '<button type="button" class="ed-tab' + (vm.defaultTab === 'summary' ? ' is-active' : '') +
@@ -318,7 +381,7 @@
         '</nav>';
     }
 
-    var panels = '<div class="ed-main" data-ed-tabs>';
+    var panels = '';
     if (vm.showTranscript) {
       panels += '<div class="edtr-pane' + (vm.defaultTab === 'transcript' ? ' is-active' : '') +
         '" id="pane-transcript" role="tabpanel">' + transcript + '</div>';
@@ -327,18 +390,21 @@
       panels += '<div class="edtr-pane' + (vm.defaultTab === 'summary' ? ' is-active' : '') +
         '" id="pane-summary" role="tabpanel">' + summary + '</div>';
     }
-    panels += '</div>';
 
     root.innerHTML =
-      '<div class="agilo-share-ed-shell ed-shell" lang="fr"><div class="agilo-share-ed-body ed-body">' +
-      '<p class="agilo-share-kicker">' + escapeHtml(vm.pageKicker) + '</p>' +
-      '<h1 class="agilo-share-title">' + escapeHtml(vm.title) + '</h1>' +
-      '<p class="agilo-share-meta">' + escapeHtml(vm.metaBy) +
-      (job.expiresAt ? ' · Lien à durée limitée' : '') + '</p>' +
+      '<div class="wrapper-dashboard">' +
+      '<div class="breadcrumb profile"><span class="breadcrumb_text-link">' + escapeHtml(vm.pageKicker) + '</span></div>' +
+      '<div class="wrapper-title_compte"><h2 class="h1-small">' + escapeHtml(vm.title) + '</h2></div>' +
+      '</div>' +
+      '<div class="wrapper-dashboard flex"><div class="dashboard-content">' +
+      '<div class="ed-header"><div class="ed-wrap">' +
+      '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span></div>' +
+      '<span class="ri-job-id">' + escapeHtml(vm.metaBy) +
+      (job.expiresAt ? ' · Lien à durée limitée' : '') + '</span>' +
+      '</div><div class="ed-wrap vertical">' + actions + '</div></div>' +
       '<div class="agilo-share-banner">' + escapeHtml(COPY.banner) + '</div>' +
       '<div class="agilo-share-status" id="agilo-share-status"></div>' +
-      '<div class="agilo-share-actions">' + actions + '</div>' +
-      '<div class="agilo-share-audio" id="agilo-share-audio"></div>' +
+      '<div class="wrapper-audio-api" id="agilo-share-audio"></div>' +
       tabs + panels +
       '<div class="agilo-share-cta">' +
       '<p>' + escapeHtml(COPY.ctaBody) + '</p>' +
@@ -349,7 +415,7 @@
     if (audioOk) {
       audioWrap.innerHTML = '<audio controls preload="metadata" src="' + escapeHtml(job.audioUrl) + '"></audio>';
     } else {
-      audioWrap.innerHTML = '<p class="agilo-share-meta">' + escapeHtml(COPY.audioMissing) + '</p>';
+      audioWrap.innerHTML = '<p class="text-size-small text-color-grey">' + escapeHtml(COPY.audioMissing) + '</p>';
     }
 
     var statusEl = $('#agilo-share-status', root);
@@ -439,12 +505,8 @@
 
   async function init() {
     injectStyles();
-    var mount = document.getElementById(ROOT_ID);
-    if (!mount) {
-      mount = document.createElement('div');
-      mount.id = ROOT_ID;
-      document.body.appendChild(mount);
-    }
+    var mount = ensureChrome();
+    if (!mount) return;
 
     var token = parseToken();
     var useMock = qs('mock') === '1';
