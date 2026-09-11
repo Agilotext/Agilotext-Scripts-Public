@@ -2,7 +2,7 @@
  * Métadonnées publiques des modèles Agilotext 0–7.
  * Fallback si le serveur n’a pas encore seedé standard_prompt_model_metadata.
  * Aucun promptContent ici.
- * @version 1.2.0
+ * @version 1.3.0
  */
 (function (global) {
   "use strict";
@@ -10,6 +10,7 @@
   var CATEGORIES = [
     { key: "all", label: "Tous" },
     { key: "general", label: "Réunions" },
+    { key: "rh", label: "RH" },
     { key: "cse", label: "CSE / PV" },
     { key: "dictation", label: "Dictée" },
     { key: "webinar", label: "Webinaire" },
@@ -129,7 +130,7 @@
   }
 
   global.AgiloLibraryStandards = {
-    VERSION: "1.2.0",
+    VERSION: "1.3.0",
     CATEGORIES: CATEGORIES,
     BY_ID: BY_ID,
     get: get,

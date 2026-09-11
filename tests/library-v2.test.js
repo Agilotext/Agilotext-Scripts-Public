@@ -538,8 +538,20 @@ Cat._state().models = [
 Cat._state().category = "all";
 var chips = Cat._chipsHtml();
 if (chips.indexOf("data-cat=\"education\"") !== -1) throw new Error("empty Formation chip still visible");
+if (chips.indexOf("data-cat=\"rh\"") !== -1) throw new Error("empty RH chip still visible");
 if (chips.indexOf("data-cat=\"cse\"") === -1) throw new Error("CSE chip missing");
 if (chips.indexOf("data-cat=\"all\"") === -1) throw new Error("Tous chip missing");
+Cat._state().models.push({
+  promptModelId: -6,
+  type: "STANDARD",
+  categoryKey: "rh",
+  cardTitle: "Entretien individuel"
+});
+var chipsRh = Cat._chipsHtml();
+if (chipsRh.indexOf("data-cat=\"rh\"") === -1) throw new Error("RH chip missing when RH standard present");
+if (globalThis.AgiloLibraryStandards.CATEGORIES.some(function (c) { return c.key === "rh"; }) === false) {
+  throw new Error("RH missing from AgiloLibraryStandards.CATEGORIES");
+}
 if (handleActFn.indexOf("open-copy") === -1) throw new Error("handleAct missing open-copy");
 if (catSrc.indexOf("function openAcquiredCopy") === -1) throw new Error("openAcquiredCopy missing");
 
