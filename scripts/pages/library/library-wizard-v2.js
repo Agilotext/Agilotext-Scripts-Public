@@ -179,6 +179,7 @@
           var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
           return P.cellHtml(ic, W.iconKey, {
             className: "agilo-lib-iconpick__cell--sugg",
+            showCaption: true,
             tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
           });
         }).join("") +

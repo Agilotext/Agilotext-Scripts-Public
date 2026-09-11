@@ -197,6 +197,7 @@
       if (P && P.cellHtml) {
         return P.cellHtml(ic, model.iconKey, {
           className: "agilo-lib-iconpick__cell--sugg",
+          showCaption: true,
           tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
         });
       }

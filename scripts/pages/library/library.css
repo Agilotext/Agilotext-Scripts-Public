@@ -864,7 +864,7 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
 }
 .agilo-lib-iconpick__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
   gap: 0.4rem;
   max-height: 14rem;
   overflow: auto;
@@ -889,8 +889,8 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
 }
 .agilo-lib-iconpick__cell img,
 .agilo-lib-iconpick__cell .agilo-lib-ico {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   object-fit: contain;
 }
 .agilo-lib-iconpick__cell span {

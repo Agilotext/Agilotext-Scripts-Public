@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.3.0
+ * @version 1.3.1
  */
 (function (global) {
   "use strict";
@@ -69,18 +69,20 @@
     var on = icon.iconKey === selectedKey;
     var src = icon.url || "";
     var fr = displayLabel(icon);
-    var title = titleOf(icon);
+    var aria = titleOf(icon);
+    var showCaption = !!extra.showCaption;
     var img = src
-      ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
+      ? '<img src="' + esc(src) + '" alt="" width="18" height="18" onerror="this.onerror=null;this.hidden=true;">'
       : "";
-    var cap = fr ? "<span>" + esc(fr) + "</span>" : "";
+    var cap = "";
+    if (showCaption) cap = "<span>" + (fr ? esc(fr) : "&nbsp;") + "</span>";
     var cls = "agilo-lib-iconpick__cell" +
       (extra.className ? " " + extra.className : "") +
       (on ? " is-on" : "") +
-      (fr ? "" : " agilo-lib-iconpick__cell--solo");
+      (showCaption ? "" : " agilo-lib-iconpick__cell--solo");
     return '<button type="button" class="' + cls +
-      '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(title) +
-      '" aria-label="' + esc(title) + '">' +
+      '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on +
+      '" aria-label="' + esc(aria) + '">' +
       img + cap + (extra.tag || "") + "</button>";
   }
 
@@ -197,7 +199,7 @@
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.3.0",
+    VERSION: "1.3.1",
     html: html,
     bind: bind,
     bindCells: bindCells,

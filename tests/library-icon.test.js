@@ -66,11 +66,13 @@ var html = P.html({
     { iconKey: "file-text", label: "File text", url: "https://api.agilotext.com/ft.svg" }
   ]
 });
-if (html.indexOf("Bouclier") === -1) throw new Error("labelFr missing");
+if (html.indexOf("Bouclier") === -1) throw new Error("labelFr missing from aria");
+if (html.indexOf(">Bouclier<") !== -1) throw new Error("grid must not show Bouclier caption");
 if (html.indexOf("is-on") === -1) throw new Error("selected cell missing");
 if (html.indexOf("agilo-lib-iconpick__q") === -1) throw new Error("filter missing");
 if (html.indexOf("File text") !== -1) throw new Error("EN label should not show in cell");
-if (html.indexOf('title="file-text"') === -1) throw new Error("icon key title missing");
+if (html.indexOf('title="file-text"') !== -1) throw new Error("title slug must not leak");
+if (html.indexOf('aria-label="file-text"') === -1) throw new Error("icon key aria-label missing");
 if (html.indexOf("Rechercher une icône") === -1) throw new Error("picker placeholder");
 
 if (!P.matchesQuery({ iconKey: "shield", labelFr: "Bouclier" }, "bouc")) {
