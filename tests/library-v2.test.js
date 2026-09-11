@@ -98,6 +98,10 @@ if (card.indexOf("agilo-lib-card__titlebtn") === -1) throw new Error("title butt
 if (card.indexOf("tabindex") !== -1) throw new Error("article still focusable");
 if (card.indexOf("> Voir<") !== -1 || card.indexOf(">Voir<") !== -1) throw new Error("Voir still on card");
 if (card.indexOf("agilo-lib-card__preview") === -1) throw new Error("preview missing on normal card");
+if (card.indexOf("agilo-lib-card__clamp") === -1) throw new Error("clamp span missing");
+if (card.indexOf('data-icon="') === -1) throw new Error("card data-icon missing");
+var reportCard = C.cardHtml(Object.assign({}, user, { iconKey: "report" }));
+if (reportCard.indexOf('data-icon="report"') === -1) throw new Error("report icon tint key missing");
 if (card.indexOf('title="Mon CR client"') === -1) throw new Error("title tooltip missing");
 if (card.indexOf('aria-label="Mon CR client"') === -1) throw new Error("aria-label missing on title");
 
@@ -281,8 +285,12 @@ if (mdHtml.indexOf("Hello world") === -1) throw new Error("stripped preview miss
 var defFiche = Fiche.html(Object.assign({}, user, { isDefault: true }), { previewText: "x", previewLoading: false }, proCreds);
 if ((defFiche.match(/Par défaut/g) || []).length !== 1) throw new Error("fiche Par défaut not unique");
 if (css.indexOf("line-clamp: 3") === -1) throw new Error("desc clamp missing");
+if (css.indexOf("agilo-lib-card__clamp") === -1) throw new Error("clamp css missing");
 if (css.indexOf("flex: 0 0 auto") === -1) throw new Error("desc flex lock missing");
 if (css.indexOf("line-clamp: 2") === -1) throw new Error("example clamp missing");
+if (css.indexOf("--lib-tint") === -1) throw new Error("card tint token missing");
+if (css.indexOf('[data-icon="report"]') === -1) throw new Error("report tint missing");
+if (css.indexOf('[data-icon="education"]') === -1) throw new Error("education tint missing");
 if (css.indexOf("minmax(min(100%, 16.5rem), 1fr)") === -1) throw new Error("featured grid missing");
 if (css.indexOf("overflow: hidden") === -1) throw new Error("card overflow hidden missing");
 if (css.indexOf("max-height: 4.35em") !== -1) throw new Error("desc max-height should be gone");

@@ -198,15 +198,18 @@
     var size = opts.size || "normal";
     var desc = m.publicDescription || "";
     var example = m.publicExample || "";
-    var descHtml = size !== "compact" && desc ? '<p class="agilo-lib-card__desc">' + escapeHtml(desc) + "</p>" : "";
+    var descHtml = size !== "compact" && desc
+      ? '<p class="agilo-lib-card__desc"><span class="agilo-lib-card__clamp">' + escapeHtml(desc) + "</span></p>"
+      : "";
     var exampleHtml = size !== "compact" && example
-      ? '<p class="agilo-lib-card__example">Exemple : ' + escapeHtml(example) + "</p>"
+      ? '<p class="agilo-lib-card__example"><span class="agilo-lib-card__clamp">Exemple : ' + escapeHtml(example) + "</span></p>"
       : "";
     var delay = opts.index != null ? ' style="--i:' + Math.min(opts.index, 12) + '"' : "";
     var preview = size === "compact" ? "" : Core.previewHtml(m);
     var meta = defaultBadgeHtml(m) + badgeHtml(m);
+    var iconKey = Core.resolveIconKey(m && m.iconKey);
     return (
-      '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '"' +
+      '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" data-icon="' + escapeHtml(iconKey) + '"' +
       (locked(m) ? ' aria-disabled="true"' : "") + delay + ">" +
       preview +
       '<div class="agilo-lib-card__top">' +
