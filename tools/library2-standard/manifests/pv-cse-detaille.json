@@ -1,0 +1,13 @@
+{
+  "promptName": "Procès-verbal CSE détaillé",
+  "promptContentPath": "/Users/florianbauer/Documents/AGILOTEXT/Marketing/AGILOTEXT_GROWTH_BRAIN/09_PRODUCT_MARKETING/prompts_packs/cse/PROMPT_PV_CSE_DETAILLE.txt",
+  "htmlPath": "/Users/florianbauer/Documents/AGILOTEXT/Marketing/AGILOTEXT_GROWTH_BRAIN/09_PRODUCT_MARKETING/prompts_packs/cse/template_pv_cse_word.html",
+  "publicDescription": "Procès-verbal de CSE en déroulé horodaté, collable dans un Word : présents, quorum, ordre du jour et interventions attribuées.",
+  "publicExample": "Déroulé horodaté · Quorum et ODJ · Interventions attribuées",
+  "iconKey": "meeting",
+  "categoryKey": "cse",
+  "businessType": "cse",
+  "featured": false,
+  "sortOrder": 30,
+  "reason": "Pack CSE hidden Flo 2026-09-12 PV détaillé (trame Word, JSON 12 champs)"
+}

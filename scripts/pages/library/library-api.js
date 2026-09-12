@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.1
+ * @version 1.5.2
  */
 (function (global) {
   "use strict";
@@ -299,8 +299,14 @@
     var lockMsg = raw.lockReasonMessage || raw.lockedReason || "";
     var canUse = raw.canUse;
     if (canUse == null) canUse = isGenerationSafeId(id);
+    var requiresCopy = raw.requiresUserCopy;
+    if (requiresCopy == null) requiresCopy = id < -1;
     var canDuplicate = raw.canDuplicate;
-    if (canDuplicate == null) canDuplicate = type === "USER";
+    if (canDuplicate == null) {
+      canDuplicate = type === "USER" ||
+        (type === "STANDARD" && lockCode !== "SUBSCRIPTION_ACCESS_REQUIRED" &&
+          (lockCode === "USER_COPY_REQUIRED" || requiresCopy || id < -1));
+    }
     var canPin = raw.canPin;
     if (canPin == null) canPin = true;
     var canEdit = !!raw.canEdit;
@@ -308,8 +314,6 @@
     var canSetDefault = raw.canSetDefault;
     if (canSetDefault == null) canSetDefault = !!canUse && isGenerationSafeId(id);
     var canManageVersions = !!raw.canManageVersions;
-    var requiresCopy = raw.requiresUserCopy;
-    if (requiresCopy == null) requiresCopy = id < -1;
     var visible = raw.visible;
     if (visible === false) return null;
     var name = raw.cardTitle || raw.promptModelName || ("Modèle " + id);
@@ -333,9 +337,9 @@
       canUse: !!canUse,
       canDuplicate: !!canDuplicate,
       // Flag catalogue. Le plan Gratuit masque duplicate / défaut dans core-v2 (pas de creds ici).
-      canCopyOfficial: type === "STANDARD" && !locked,
+      canCopyOfficial: type === "STANDARD" && !!canDuplicate && lockCode !== "SUBSCRIPTION_ACCESS_REQUIRED",
       canPin: !!canPin,
-      canEdit: canEdit,
+      canEdit: type === "USER" && canEdit,
       canDelete: canDelete,
       canSetDefault: !!canSetDefault,
       canManageVersions: canManageVersions,

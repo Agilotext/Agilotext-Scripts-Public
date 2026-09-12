@@ -319,19 +319,30 @@ var copyLock = {
   cardTitle: "Entretien individuel",
   type: "STANDARD",
   canUse: false,
+  canDuplicate: true,
+  canCopyOfficial: true,
   requiresUserCopy: true,
   lockReasonCode: "USER_COPY_REQUIRED",
   lockReasonMessage: "Ajoute ce modele a tes modeles pour l'utiliser."
 };
 var copyCard = C.cardHtml(copyLock);
-if (copyCard.indexOf("à tes modèles") === -1) throw new Error("USER_COPY lock missing accents");
 if (copyCard.indexOf("a tes modeles") !== -1) throw new Error("ASCII lock still shown");
-if (copyCard.indexOf("Ajoute ce modèle à tes modèles pour l'utiliser.") === -1) {
-  throw new Error("USER_COPY lock copy");
-}
+if (copyCard.indexOf("agilo-lib-badge--lock") !== -1) throw new Error("Pro copy-required still shows Verrouillé");
+if (copyCard.indexOf("agilo-lib-card__lock") !== -1) throw new Error("Pro copy-required still shows lock line");
+if (copyCard.indexOf("data-act=\"duplicate\"") === -1) throw new Error("Pro copy-required missing Ajouter");
 var copyFiche = Fiche.html(copyLock, {}, proCreds);
 if (copyFiche.indexOf("à tes modèles") === -1) throw new Error("fiche USER_COPY missing accents");
 if (copyFiche.indexOf("a tes modeles") !== -1) throw new Error("fiche ASCII lock still shown");
+if (copyFiche.indexOf("Ajouter à mes modèles") === -1) throw new Error("fiche missing Ajouter for uncopied official");
+
+var copyLockFreePath = globalThis.location;
+globalThis.location = { pathname: "/app/free/library", search: "", hash: "", href: "" };
+var copyCardFree = C.cardHtml(copyLock);
+if (copyCardFree.indexOf("Ajoute ce modèle à tes modèles pour l'utiliser.") === -1) {
+  throw new Error("Free USER_COPY lock copy");
+}
+if (copyCardFree.indexOf("agilo-lib-badge--lock") === -1) throw new Error("Free missing Verrouillé");
+globalThis.location = copyLockFreePath || { pathname: "/app/business/library", search: "", hash: "", href: "" };
 
 var suggOpen = Fiche.html(user, {
   iconOpen: true,
@@ -611,6 +622,29 @@ var heuristicCard = Api._normalizeCard(heuristicRaw, null);
 if (heuristicCard.alreadyCopied) throw new Error("canDuplicate true must not mean alreadyCopied");
 if (heuristicCard.acquiredPromptModelId !== 0) throw new Error("missing acquired should be 0");
 
+var copyNorm = Api._normalizeCard({
+  promptModelId: -6,
+  promptModelType: "STANDARD",
+  promptModelName: "Entretien individuel",
+  canUse: false,
+  requiresUserCopy: true,
+  lockReasonCode: "USER_COPY_REQUIRED"
+}, null);
+if (!copyNorm.canDuplicate) throw new Error("isolated USER_COPY canDuplicate default");
+if (!copyNorm.canCopyOfficial) throw new Error("isolated USER_COPY should be copyable");
+if (copyNorm.canEdit) throw new Error("STANDARD must not be editable");
+
+var accessNorm = Api._normalizeCard({
+  promptModelId: -11,
+  promptModelType: "STANDARD",
+  promptModelName: "PV CSE détaillé",
+  canUse: false,
+  lockReasonCode: "SUBSCRIPTION_ACCESS_REQUIRED",
+  businessType: "cse"
+}, null);
+if (accessNorm.canCopyOfficial) throw new Error("CSE access must not copy");
+if (!accessNorm.packCse) throw new Error("cse businessType should be packCse");
+
 var isoCopied = {
   promptModelId: -3,
   cardTitle: "PV isolé",
@@ -619,6 +653,8 @@ var isoCopied = {
   canCopyOfficial: true,
   alreadyCopied: true,
   acquiredPromptModelId: 900,
+  lockReasonCode: "USER_COPY_REQUIRED",
+  lockReasonMessage: "Ajoute ce modele a tes modeles pour l'utiliser.",
   canPin: true,
   isDefault: false
 };
@@ -631,6 +667,8 @@ if (!isoItems.some(function (it) { return it.act === "open-copy"; })) {
 }
 var isoCard = C.cardHtml(isoCopied);
 if (isoCard.indexOf("Dans Mes modèles") === -1) throw new Error("acquired badge missing");
+if (isoCard.indexOf("agilo-lib-badge--lock") !== -1) throw new Error("acquired card still Verrouillé");
+if (isoCard.indexOf("agilo-lib-card__lock") !== -1) throw new Error("acquired card still lock line");
 if (isoCard.indexOf("usageCount") !== -1 || isoCard.indexOf("ratingAvg") !== -1) {
   throw new Error("usage/rating leaked into card HTML");
 }
@@ -664,5 +702,7 @@ if (globalThis.AgiloLibraryStandards.CATEGORIES.some(function (c) { return c.key
 if (catSrc.indexOf("agilo-lib-overlay--iconopen") === -1) throw new Error("catalog missing overlay --iconopen toggle");
 if (catSrc.indexOf("onIconSuggToggle") === -1) throw new Error("catalog missing sugg toggle");
 if (catSrc.indexOf("function openAcquiredCopy") === -1) throw new Error("openAcquiredCopy missing");
+if (catSrc.indexOf("function openFicheOrCopy") === -1) throw new Error("openFicheOrCopy missing");
+if (catSrc.indexOf("openFicheOrCopy(root, model)") === -1) throw new Error("fiche click not routed to copy");
 
 console.log("library-v2.test.js ok");

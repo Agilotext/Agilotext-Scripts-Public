@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.3.1
+ * @version 2.3.2
  */
 (function (global) {
   "use strict";
@@ -1017,7 +1017,7 @@
       Api().forgetPromptContent && Api().forgetPromptContent(id);
       reload(root).then(function () {
         var m = byId(id);
-        if (m && root.isConnected) openFiche(root, m);
+        if (m && root.isConnected) openFicheOrCopy(root, m);
       });
     });
     bodyObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
@@ -1046,14 +1046,38 @@
   /* ------------------------------------------------------------------ */
   function openAcquiredCopy(root, model) {
     var copyId = Number(model && model.acquiredPromptModelId);
-    var copy = byId(copyId);
-    if (!copy) {
-      C().toast("Ce modèle est déjà dans Mes modèles. Recharge la page si tu ne le vois pas.");
+    function go() {
+      var copy = byId(copyId);
+      if (!copy) {
+        C().toast("Ce modèle est déjà dans Mes modèles. Recharge la page si tu ne le vois pas.");
+        return;
+      }
+      state.tab = "mes-modeles";
+      paint(root, { skipOverlay: true });
+      openFiche(root, copy);
+    }
+    if (!copyId) return;
+    if (byId(copyId)) {
+      go();
       return;
     }
-    state.tab = "mes-modeles";
-    paint(root, { skipOverlay: true });
-    openFiche(root, copy);
+    reload(root, { skipOverlay: true }).then(function () {
+      go();
+    });
+  }
+
+  function shouldOpenAcquiredCopy(model) {
+    var Core = C();
+    if (Core.useAcquiredCopy) return Core.useAcquiredCopy(model);
+    return !!(model && model.type === "STANDARD" && Number(model.acquiredPromptModelId) > 0 && !isFree());
+  }
+
+  function openFicheOrCopy(root, model, opts) {
+    if (shouldOpenAcquiredCopy(model) && !(opts && opts.iconOpen)) {
+      openAcquiredCopy(root, model);
+      return;
+    }
+    openFiche(root, model, opts);
   }
 
   function handleAct(root, model, act, btn) {
@@ -1066,7 +1090,7 @@
       return;
     }
     if (C().closeMenus) C().closeMenus();
-    if (act === "fiche") { openFiche(root, model); return; }
+    if (act === "fiche") { openFicheOrCopy(root, model); return; }
     if (act === "use" || act === "default") { doDefault(root, model, btn); return; }
     if (act === "pin") { doPin(root, model, btn); return; }
     if (act === "duplicate") { askDuplicate(root, model); return; }
@@ -1374,7 +1398,7 @@
       if (target) {
         if (target.type === "USER") state.tab = "mes-modeles";
         paint(root, { skipOverlay: true });
-        openFiche(root, target);
+        openFicheOrCopy(root, target);
       } else {
         C().toast("Ce modèle n’est plus disponible.");
         writeHash();
@@ -1392,7 +1416,7 @@
         if (state.pendingDeepLink != null) {
           var t = byId(state.pendingDeepLink);
           state.pendingDeepLink = null;
-          if (t && root.isConnected) openFiche(root, t);
+          if (t && root.isConnected) openFicheOrCopy(root, t);
           return;
         }
         if ((state.tab !== prevTab || state.wizardOpen !== wasOpen) && root.isConnected) paint(root);
@@ -1401,7 +1425,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.3.1",
+    VERSION: "2.3.2",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */

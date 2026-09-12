@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.3
+ * @version 2.1.4
  */
 (function (global) {
   "use strict";
@@ -18,6 +18,46 @@
   var svgIcon = Core.svgIcon;
   var iconHtml = Core.iconHtml;
   var locked = Core.locked;
+
+  function Api() { return global.AgiloLibraryApi || {}; }
+
+  function canEditIcon(m) {
+    var A = Api();
+    return !!(m && m.type === "USER" && A.canSetUserIcon && A.canSetUserIcon(m.promptModelId, m.type) && !locked(m));
+  }
+
+  /** Statut de création (READY par défaut quand le serveur ne dit rien). */
+  function isReady(m) {
+    var s = String((m && (m.promptModelStatus || m.status)) || "").toUpperCase();
+    if (!s) return true;
+    return s === "READY" || s === "ACTIVE";
+  }
+
+  function isFreePlan() {
+    var A = Api();
+    if (!A.canCreate) return false;
+    return !A.canCreate();
+  }
+
+  function isCopyRequiredLock(m) {
+    return String((m && m.lockReasonCode) || "") === "USER_COPY_REQUIRED";
+  }
+
+  /** Pro/Business + copie obligatoire generic : pas de chrome cadenas (CSE Access inchangé). */
+  function softenCopyLock(m) {
+    if (!m || m.packCse) return false;
+    if (!isCopyRequiredLock(m)) return false;
+    if (isFreePlan()) return false;
+    return true;
+  }
+
+  function useAcquiredCopy(m) {
+    return !!(softenCopyLock(m) && Number(m.acquiredPromptModelId) > 0);
+  }
+
+  function showLockChrome(m) {
+    return !!(locked(m) && !softenCopyLock(m));
+  }
 
   function Api() { return global.AgiloLibraryApi || {}; }
 
@@ -146,8 +186,14 @@
     return '<div class="agilo-lib-card__actions agilo-lib-card__actions--v2">' + bits + "</div>";
   }
 
+  function copyCtaHtml(m) {
+    if (isFreePlan() || m.type !== "STANDARD" || m.alreadyCopied || m.packCse) return "";
+    if (!canCopyOfficial(m)) return "";
+    return '<p class="agilo-lib-card__copycta"><button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-act="duplicate">Ajouter à mes modèles</button></p>';
+  }
+
   function lockLineHtml(m) {
-    if (!locked(m)) return "";
+    if (!showLockChrome(m)) return "";
     var A = Api();
     var cta = m.packCse && A.ctaForLocked ? A.ctaForLocked(m.packCse) : null;
     var link = cta
@@ -170,7 +216,7 @@
     var cls = "agilo-lib-card__icon" + (opts.size ? " agilo-lib-card__icon--" + opts.size : "") +
       (editable ? " agilo-lib-card__icon--editable" : "");
     var inner = iconHtml(m, px) +
-      (locked(m) ? '<span class="agilo-lib-card__lockico">' + svgIcon("lock", 10) + "</span>" : "") +
+      (showLockChrome(m) ? '<span class="agilo-lib-card__lockico">' + svgIcon("lock", 10) + "</span>" : "") +
       (editable ? '<span class="agilo-lib-card__icon-edit" aria-hidden="true">' + svgIcon("pencil", 11) + "</span>" : "");
     var cat = ' data-cat="' + escapeHtml(m.categoryKey || (m.type === "USER" ? "custom" : "general")) + '"';
     if (editable) {
@@ -190,7 +236,7 @@
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
     if (!isReady(m)) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pending">' + svgIcon("clock", 12) + " En création</span>");
-    if (m.lockReasonCode || m.lockReasonMessage) {
+    if (showLockChrome(m) && (m.lockReasonCode || m.lockReasonMessage)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
     }
     return bits.join("");
@@ -199,7 +245,7 @@
   function cardClass(m, size) {
     var c = ["agilo-lib-card", "agilo-lib-card--v2"];
     if (size) c.push("agilo-lib-card--" + size);
-    if (locked(m)) c.push("agilo-lib-card--locked");
+    if (showLockChrome(m)) c.push("agilo-lib-card--locked");
     if (m.isDefault) c.push("agilo-lib-card--default");
     if (m.featured && size === "featured") c.push("agilo-lib-card--featured");
     return c.join(" ");
@@ -222,7 +268,7 @@
     var iconKey = Core.resolveIconKey(m && m.iconKey);
     return (
       '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" data-icon="' + escapeHtml(iconKey) + '"' +
-      (locked(m) ? ' aria-disabled="true"' : "") + delay + ">" +
+      (showLockChrome(m) ? ' aria-disabled="true"' : "") + delay + ">" +
       preview +
       '<div class="agilo-lib-card__top">' +
       iconTile(m, size === "featured" ? 24 : 22, { size: size === "featured" ? "lg" : "" }) +
@@ -230,7 +276,7 @@
       '<h3 class="agilo-lib-card__title">' + titleButton(m, "agilo-lib-card__titlebtn") + "</h3>" +
       (meta ? '<div class="agilo-lib-card__meta">' + meta + "</div>" : "") +
       "</div></div>" +
-      descHtml + exampleHtml + lockLineHtml(m) +
+      descHtml + exampleHtml + lockLineHtml(m) + copyCtaHtml(m) +
       cardToolbarHtml(m) +
       "</article>"
     );
@@ -265,6 +311,9 @@
     cardHtml: cardHtml,
     tableRowHtml: tableRowHtml,
     canEditIcon: canEditIcon,
-    isReady: isReady
+    isReady: isReady,
+    softenCopyLock: softenCopyLock,
+    useAcquiredCopy: useAcquiredCopy,
+    showLockChrome: showLockChrome
   });
 })(typeof window !== "undefined" ? window : globalThis);

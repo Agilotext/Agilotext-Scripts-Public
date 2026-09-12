@@ -1,0 +1,13 @@
+{
+  "promptName": "Procès-verbal CSE synthétique",
+  "promptContentPath": "/Users/florianbauer/Documents/AGILOTEXT/Marketing/AGILOTEXT_GROWTH_BRAIN/09_PRODUCT_MARKETING/prompts_packs/cse/PROMPT_PV_CSE_SYNTHETIQUE.txt",
+  "htmlPath": "/Users/florianbauer/Documents/AGILOTEXT/Marketing/AGILOTEXT_GROWTH_BRAIN/09_PRODUCT_MARKETING/prompts_packs/cse/template_pv_cse_word.html",
+  "publicDescription": "Procès-verbal de CSE condensé, même trame Word : faits de la consultation fusionnés, avis s’il est dit, hors-sujet en encart.",
+  "publicExample": "Déroulé fusionné · Avis du CSE · Hors-sujet en encart",
+  "iconKey": "meeting",
+  "categoryKey": "cse",
+  "businessType": "cse",
+  "featured": false,
+  "sortOrder": 31,
+  "reason": "Pack CSE hidden Flo 2026-09-12 PV synthétique (même HTML Word)"
+}
