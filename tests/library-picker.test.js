@@ -12,6 +12,7 @@ globalThis.__AGILO_PROMPT_LIBRARY__ = {
 };
 
 eval(fs.readFileSync(path.join(lib, "library-api.js"), "utf8"));
+eval(fs.readFileSync(path.join(lib, "library-core.js"), "utf8"));
 eval(fs.readFileSync(path.join(lib, "library-picker.js"), "utf8"));
 
 var P = globalThis.AgiloLibraryPicker;
@@ -205,5 +206,47 @@ if (css.indexOf(".agilo-lib-picker__sec--off") !== -1 &&
     css.indexOf("border-top: 1px solid var(--lib-border)") === -1) {
   throw new Error("sec--off border missing");
 }
+
+if (typeof P._sortMine !== "function" || typeof P._titleText !== "function") {
+  throw new Error("_sortMine/_titleText missing");
+}
+var older = {
+  promptModelId: 101,
+  type: "USER",
+  cardTitle: "Ancien",
+  canUse: true,
+  dtCreation: 1000,
+  dtUpdate: 1000
+};
+var newer = {
+  promptModelId: 102,
+  type: "USER",
+  cardTitle: "Recent",
+  canUse: true,
+  dtCreation: 1000,
+  dtUpdate: 200000
+};
+var stdFirst = { promptModelId: 7, type: "STANDARD", cardTitle: "PV", canUse: true, categoryKey: "cse" };
+var stdSecond = { promptModelId: 0, type: "STANDARD", cardTitle: "Réunion", canUse: true, categoryKey: "general" };
+var sorted = P._groups([older, newer, stdFirst, stdSecond], "");
+if (sorted.mine[0].promptModelId !== 102) throw new Error("recent USER should be first");
+if (sorted.mine[1].promptModelId !== 101) throw new Error("older USER should be second");
+if (sorted.off[0].promptModelId !== 7 || sorted.off[1].promptModelId !== 0) {
+  throw new Error("official order must stay");
+}
+var filtered = P._groups([older, newer, stdFirst], "recent");
+if (filtered.mine.length !== 1 || filtered.mine[0].promptModelId !== 102) {
+  throw new Error("filter plus sort failed");
+}
+if (P._titleText(stdFirst) !== "PV") throw new Error("standard title is name only");
+if (P._titleText({ promptModelId: 103, type: "USER", cardTitle: "Sans date", dtUpdate: 0, dtCreation: 0 }) !== "Sans date") {
+  throw new Error("zero date must be name only");
+}
+var createdTip = P._titleText(older);
+if (createdTip.indexOf("créé le") === -1) throw new Error("same ts is créé le");
+if (createdTip.indexOf("Ancien") === -1) throw new Error("created title missing name");
+var editedTip = P._titleText(newer);
+if (editedTip.indexOf("modifié le") === -1) throw new Error("distinct ts is modifié le");
+if (editedTip.indexOf("Recent") === -1) throw new Error("edited title missing name");
 
 console.log("library-picker.test.js ok");

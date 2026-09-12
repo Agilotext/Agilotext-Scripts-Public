@@ -40,7 +40,33 @@
       if (String(row.type || "").toUpperCase() === "USER") mine.push(row);
       else off.push(row);
     });
+    mine.sort(sortMine);
     return { mine: mine, off: off };
+  }
+
+  function rowTime(m) {
+    var n = Number(m && (m.dtUpdate || m.dtCreation));
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function sortMine(a, b) {
+    var diff = rowTime(b) - rowTime(a);
+    if (diff) return diff;
+    return String((a && a.cardTitle) || "").localeCompare(String((b && b.cardTitle) || ""), "fr");
+  }
+
+  function titleText(m) {
+    var name = String((m && m.cardTitle) || "");
+    if (!m || String(m.type || "").toUpperCase() !== "USER") return name;
+    var created = Number(m.dtCreation) || 0;
+    var updated = Number(m.dtUpdate) || 0;
+    var ts = updated || created;
+    if (!ts) return name;
+    var createdOnly = !created || !updated || Math.abs(updated - created) < 60000;
+    var C = Core();
+    var day = C && C.formatDate ? C.formatDate(ts) : "";
+    if (!day || day === "-") return name;
+    return name + " · " + (createdOnly ? "créé le " : "modifié le ") + day;
   }
 
   function canSelect(m) {
@@ -225,7 +251,7 @@
       btn.innerHTML =
         iconTile(model, false) +
         '<span class="agilo-lib-picker__grow"><span class="agilo-lib-picker__title" title="' +
-        Core().escapeHtml(model.cardTitle) + '">' +
+        Core().escapeHtml(titleText(model)) + '">' +
         Core().escapeHtml(model.cardTitle) + "</span></span>" +
         (showDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") +
         '<span class="agilo-lib-picker__chev" aria-hidden="true">▾</span>';
@@ -257,7 +283,7 @@
         iconTile(m, locked) +
         '<div class="agilo-lib-picker__opt-body">' +
         '<div class="agilo-lib-picker__opt-title">' +
-        '<span class="agilo-lib-picker__opt-label" title="' + C.escapeHtml(m.cardTitle) + '">' +
+        '<span class="agilo-lib-picker__opt-label" title="' + C.escapeHtml(titleText(m)) + '">' +
         C.escapeHtml(m.cardTitle) + "</span>" +
         rowBadges(m, canCreate) + check + "</div>" +
         cta +
@@ -367,7 +393,9 @@
             iconKey: src.iconKey,
             canUse: true,
             promptModelStatus: "READY",
-            isDefault: true
+            isDefault: true,
+            dtCreation: Date.now(),
+            dtUpdate: Date.now()
           });
         }
         applyChoice(newId);
@@ -524,6 +552,8 @@
     _visibleModels: visibleModels,
     _showAdd: showAdd,
     _addKind: addKind,
-    _chooseId: chooseId
+    _chooseId: chooseId,
+    _sortMine: sortMine,
+    _titleText: titleText
   };
 })(typeof window !== "undefined" ? window : globalThis);
