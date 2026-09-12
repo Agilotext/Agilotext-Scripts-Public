@@ -799,7 +799,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__rename input:focus-visible {
   outline: none;
   border-color: var(--lib-blue);
-  box-shadow: 0 0 0 0.125rem var(--lib-blue);
+  box-shadow: 0 0 0 1px var(--lib-blue);
 }
 .agilo-lib--v2 .agilo-lib-iconpick__cell:focus,
 .agilo-lib--v2 .agilo-lib-iconpick__cell:focus-visible,
@@ -807,7 +807,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-overlay .agilo-lib-iconpick__cell:focus-visible {
   outline: none;
   border-color: var(--lib-blue);
-  box-shadow: 0 0 0 0.125rem var(--lib-blue);
+  box-shadow: 0 0 0 1px var(--lib-blue);
 }
 .agilo-lib-field { position: relative; }
 .agilo-lib-dictate {

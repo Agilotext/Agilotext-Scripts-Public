@@ -515,7 +515,8 @@ if (css.indexOf("max-height: 11rem") === -1) throw new Error("prompt clamp 11rem
 if (css.indexOf("min-height: 2.75rem") === -1) throw new Error("cell min-height 2.75rem missing");
 if (css.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wiz-main css missing");
 if (css.indexOf("agilo-lib-overlay__meta") === -1) throw new Error("overlay meta css missing");
-if (css.indexOf("0 0 0 0.125rem var(--lib-blue)") === -1) throw new Error("focus ring box-shadow missing");
+if (css.indexOf("0 0 0 1px var(--lib-blue)") === -1) throw new Error("focus ring box-shadow missing");
+if (css.indexOf("0 0 0 0.125rem var(--lib-blue)") !== -1) throw new Error("old 2px focus ring still there");
 if (css.indexOf("padding: 1.25rem 1.5rem 1.5rem") === -1) throw new Error("wizard panel padding missing");
 if (css.indexOf(".agilo-lib-spin") === -1) throw new Error("spin css missing");
 if (css.indexOf(".agilo-lib--v2 .agilo-lib-chips button") === -1) throw new Error("chips radius rule missing");

@@ -248,9 +248,6 @@
         var href = (Api().cfg() && Api().cfg().ctaMailto) || "mailto:contact@agilotext.com?subject=Pack%20CSE";
         cta = '<a class="agilo-lib-picker__add" href="' + C.escapeHtml(href) + '">Demander le pack</a>';
       }
-      var desc = m.publicDescription
-        ? '<p class="agilo-lib-picker__opt-desc">' + C.escapeHtml(m.publicDescription) + "</p>"
-        : "";
       var check = active
         ? '<span class="agilo-lib-picker__check" aria-hidden="true">' + C.svgIcon("check", 14) + "</span>"
         : "";
@@ -258,9 +255,11 @@
         '" aria-selected="' + active + '">' +
         iconTile(m, locked) +
         '<div class="agilo-lib-picker__opt-body">' +
-        '<div class="agilo-lib-picker__opt-title">' + C.escapeHtml(m.cardTitle) + rowBadges(m, canCreate) + "</div>" +
-        desc + cta +
-        "</div>" + check + "</div>";
+        '<div class="agilo-lib-picker__opt-title">' +
+        '<span class="agilo-lib-picker__opt-label">' + C.escapeHtml(m.cardTitle) + "</span>" +
+        rowBadges(m, canCreate) + check + "</div>" +
+        cta +
+        "</div></div>";
     }
 
     function paintList() {

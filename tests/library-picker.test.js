@@ -168,6 +168,24 @@ if (css.indexOf("max-height: min(20rem, 70vh)") === -1) throw new Error("mobile 
 if (css.indexOf(".agilo-lib-picker-on #default-template-select.agilo-lib-native-select") === -1) {
   throw new Error("hide select rule missing");
 }
+if (css.indexOf("outline: 1px solid var(--lib-blue)") === -1) throw new Error("global focus 1px missing");
+if (css.indexOf("outline: 2px solid var(--lib-blue)") !== -1) throw new Error("old 2px focus still there");
+if (css.indexOf(".agilo-lib-picker__search:focus") === -1) throw new Error("search :focus missing");
+if (css.indexOf(".agilo-lib-picker__opt-title {\n  font-weight: 400") === -1) {
+  throw new Error("opt-title must be weight 400");
+}
+if (css.indexOf(".agilo-lib-picker__opt-title {\n  font-weight: 600") !== -1) {
+  throw new Error("opt-title still 600");
+}
+if (css.indexOf("text-transform: uppercase") !== -1 && css.indexOf(".agilo-lib-picker__sec") !== -1) {
+  var secBlock = css.slice(css.indexOf(".agilo-lib-picker__sec"));
+  secBlock = secBlock.slice(0, secBlock.indexOf(".agilo-lib-picker__empty"));
+  if (secBlock.indexOf("uppercase") !== -1) throw new Error("sec still uppercase");
+  if (secBlock.indexOf("font-weight: 700") !== -1) throw new Error("sec still 700");
+}
+if (css.indexOf(".agilo-lib-picker__opt.is-hi { outline:") !== -1) {
+  throw new Error("is-hi still has outline");
+}
 
 var js = fs.readFileSync(path.join(lib, "library-picker.js"), "utf8");
 if (js.indexOf('edition: \'ent\'') !== -1 || js.indexOf('edition: "ent"') !== -1) {
@@ -175,5 +193,6 @@ if (js.indexOf('edition: \'ent\'') !== -1 || js.indexOf('edition: "ent"') !== -1
 }
 if (js.indexOf("agilo-lib-picker-on") === -1) throw new Error("picker-on class missing");
 if (js.indexOf("assertGenerationId") === -1) throw new Error("assertGenerationId missing");
+if (js.indexOf("opt-desc") !== -1) throw new Error("picker list still renders publicDescription");
 
 console.log("library-picker.test.js ok");
