@@ -8,6 +8,8 @@
 
 **Hors scope :** refonte de `share_url_download_step1.html`. Florian remplace la vue lecture. **Garder** le suffixe `-download` (export zip) inchangé.
 
+**Contournement front (déjà codé) :** la page Webflow tente `GET …/api/d8478fa34a…-download`, dézippe, affiche transcript + CR. Ça marche **sans compte** dès que ce servlet envoie `Access-Control-Allow-Origin: *` (comme `/api/v1/*`). Aujourd’hui le zip se télécharge, mais `fetch` depuis `agilotext-test.webflow.io` est bloqué CORS. Une ligne d’en-tête CORS sur `ApiGetSharerUrlClick2` débloque la lecture sans attendre `getSharedJobView`.
+
 ---
 
 ## Résumé

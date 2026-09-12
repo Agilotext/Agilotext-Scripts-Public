@@ -6,10 +6,12 @@
    Embed Webflow :
      <div id="editorRoot" class="editorroot"></div>
      <script src="…/scripts/shared/agilo-share-url.js"></script>
+     <script src="…/scripts/pages/share/share-zip-parse.js"></script>
      <script src="…/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
-   API : GET /api/v1/getSharedJobView?shareToken=…  (Nico)
+   Guest : GET /api/d8478fa34a…-download (zip public, sans compte), puis lecture locale.
+   API JSON : GET /api/v1/getSharedJobView?shareToken=…  (Nico, pas encore en prod)
    Mock  : ?mock=1
-   Job ID (compte connecté, contournement) : ?token=1000040476 ou ?jobId=1000040476
+   Job ID (aperçu propriétaire connecté) : ?jobId=1000040476
    ================================================================ */
 (function () {
   'use strict';
@@ -19,6 +21,7 @@
   window.__agiloShareViewInit = true;
 
   var API_BASE = 'https://api.agilotext.com/api/v1';
+  var JSZIP_SRC = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
   var SIGNUP_URL = 'https://www.agilotext.com/?utm_source=share_link&utm_medium=referral&utm_campaign=share_guest';
   var HELP_URL = 'https://www.agilotext.com/contact';
   var LOGO_SRC = 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg';
@@ -84,6 +87,17 @@
 
   function shareHelpers() {
     return window.AgiloShareUrl || null;
+  }
+
+  function zipHelpers() {
+    return window.AgiloShareZip || null;
+  }
+
+  function maskEmail(email) {
+    var s = String(email || '');
+    var at = s.indexOf('@');
+    if (at < 1) return '';
+    return s.slice(0, 1) + '…' + s.slice(at);
   }
 
   function parseJobId() {
@@ -227,8 +241,109 @@
   function parseToken() {
     var raw = qs('token') || qs('shareToken') || '';
     var helpers = shareHelpers();
-    if (helpers && helpers.parseShareToken) return helpers.parseShareToken(raw) || raw;
-    return String(raw).replace(/-download$/i, '');
+    if (helpers && helpers.parseShareToken) {
+      var parsed = helpers.parseShareToken(raw);
+      if (parsed) return parsed;
+    }
+    var s = String(raw).replace(/-download$/i, '');
+    if (/^d8478fa34a/i.test(s)) return s;
+    return '';
+  }
+
+  function downloadUrlFor(token) {
+    var helpers = shareHelpers();
+    if (helpers && helpers.toApiDownloadUrl && token) return helpers.toApiDownloadUrl(token);
+    if (token && /^d8478fa34a/i.test(token)) return 'https://api.agilotext.com/api/' + token + '-download';
+    return '';
+  }
+
+  function loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = JSZIP_SRC;
+      s.async = true;
+      s.onload = function () {
+        if (window.JSZip) resolve(window.JSZip);
+        else reject(new Error('jszip'));
+      };
+      s.onerror = function () { reject(new Error('jszip')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function createSharedToken(jobId, auth) {
+    var body = new URLSearchParams({
+      username: auth.email,
+      token: auth.token,
+      edition: auth.edition,
+      jobId: String(jobId)
+    });
+    try {
+      var r = await fetch(API_BASE + '/getSharedUrl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: body.toString(),
+        credentials: 'omit'
+      });
+      var j = await r.json().catch(function () { return {}; });
+      if (!r.ok || String(j.status || '').toUpperCase() !== 'OK' || !j.url) return '';
+      var helpers = shareHelpers();
+      return (helpers && helpers.parseShareToken) ? (helpers.parseShareToken(j.url) || '') : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  async function filesFromZipBuffer(buf) {
+    var JSZip = await loadJSZip();
+    var zip = await JSZip.loadAsync(buf);
+    var names = Object.keys(zip.files || {});
+    var out = [];
+    var i;
+    for (i = 0; i < names.length; i++) {
+      var entry = zip.files[names[i]];
+      if (!entry || entry.dir) continue;
+      var text = await entry.async('string');
+      out.push({ name: names[i], text: text });
+    }
+    return out;
+  }
+
+  async function fetchJobFromShareZip(token) {
+    var z = zipHelpers();
+    var url = downloadUrlFor(token);
+    if (!url) return { error: 'missing_token' };
+    var r;
+    try {
+      r = await fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store' });
+    } catch (_) {
+      return { error: 'zip_cors' };
+    }
+    var buf;
+    try {
+      buf = await r.arrayBuffer();
+    } catch (_) {
+      return { error: 'zip_cors' };
+    }
+    var htmlGuess = '';
+    try {
+      htmlGuess = new TextDecoder('utf-8').decode(buf.slice(0, Math.min(buf.byteLength, 800)));
+    } catch (_) { htmlGuess = ''; }
+    if (z && z.looksLikeGoneHtml(htmlGuess)) return { error: 'error_share_not_found' };
+    if (z && !z.isZipBuffer(buf)) {
+      if (/<!doctype html|<html/i.test(htmlGuess)) return { error: 'error_share_not_found' };
+      return { error: 'error_share_not_ready' };
+    }
+    var files;
+    try {
+      files = await filesFromZipBuffer(buf);
+    } catch (_) {
+      return { error: 'error_share_not_ready' };
+    }
+    var job = z && z.jobFromZipFiles ? z.jobFromZipFiles(files) : null;
+    if (!job) return { error: 'error_share_not_ready' };
+    return { job: job };
   }
 
   function $(sel, root) {
@@ -324,15 +439,19 @@
       },
       missing_token: {
         title: 'Lien incomplet',
-        text: 'Ce lien de lecture est invalide ou incomplet. Ouvrez le lien reçu par email ou message.'
+        text: 'Le lien public commence par d8478fa34a, ce n’est pas le numéro du fichier dans l’éditeur. Dans l’éditeur, cliquez Partager un lien, puis ouvrez cette URL.'
       },
       need_login: {
-        title: 'Connexion requise pour ce test',
-        text: 'Ce n’est pas encore un lien public. Connectez-vous avec le compte propriétaire du fichier, puis rechargez. L’API de lecture sans compte (getSharedJobView) n’est pas en production.'
+        title: 'Ce n’est pas le lien public',
+        text: 'Un numéro du type 1000040476 est l’identifiant interne. Pour un invité sans compte, envoyez le lien Partager (il contient d8478fa34a). Ou connectez-vous avec le compte propriétaire, puis rechargez.'
       },
       error_job_not_found: {
-        title: 'Document introuvable',
-        text: 'Ce numéro de fichier n’est pas dans votre compte, ou le jeton de session a expiré. Ouvrez l’éditeur, puis rechargez cette page.'
+        title: 'Ce n’est pas le lien public',
+        text: 'Ce numéro de fichier n’est pas dans le compte actuellement connecté. Pour un invité, utilisez le lien Partager (d8478fa34a…), pas le jobId. Le zip derrière Télécharger contient déjà la transcription et le compte rendu.'
+      },
+      zip_cors: {
+        title: 'Le zip public existe, la page ne peut pas le lire',
+        text: 'Le bouton Télécharger fonctionne sans compte. Le serveur n’autorise pas encore la lecture de ce zip depuis Webflow (en-tête CORS manquant sur le servlet -download). En attendant, téléchargez le zip, ou ouvrez le lien d’origine sur api.agilotext.com.'
       },
       api_pending: {
         title: 'Page en cours de mise à jour',
@@ -346,19 +465,26 @@
     return map[code] || map.network;
   }
 
-  function renderError(root, code) {
+  function renderError(root, code, extra) {
+    extra = extra || {};
     var copy = errorCopy(code);
     var jobId = parseJobId();
-    var href = SIGNUP_URL;
-    var label = 'Essayer Agilotext gratuitement';
-    if (code === 'need_login' || code === 'error_job_not_found') {
-      href = 'https://www.agilotext.com/app/business/editor?jobId=' + encodeURIComponent(jobId || '') + '&edition=ent';
+    var href = extra.href || SIGNUP_URL;
+    var label = extra.label || 'Essayer Agilotext gratuitement';
+    if (!extra.href && (code === 'need_login' || code === 'error_job_not_found') && jobId) {
+      href = 'https://www.agilotext.com/app/business/editor?jobId=' + encodeURIComponent(jobId) + '&edition=ent';
       label = 'Ouvrir l’éditeur (connexion)';
     }
+    if (!extra.href && extra.downloadUrl) {
+      href = extra.downloadUrl;
+      label = 'Télécharger le zip (transcript + compte rendu)';
+    }
+    var note = extra.note ? '<p>' + escapeHtml(extra.note) + '</p>' : '';
     root.innerHTML =
       '<div class="dashboard-content agilo-share-error" lang="fr">' +
       '<h2 class="h1-small">' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
-      '<p style="margin-top:18px"><a class="button-secondary" href="' + href + '">' + escapeHtml(label) + '</a></p>' +
+      note +
+      '<p style="margin-top:18px"><a class="button-secondary" href="' + escapeHtml(href) + '">' + escapeHtml(label) + '</a></p>' +
       '</div>';
     capture('share_view_error', { code: code });
   }
@@ -529,10 +655,7 @@
 
   function renderJob(root, job, token) {
     var vm = resolveShareViewModel(job);
-    var helpers = shareHelpers();
-    var downloadUrl = helpers && helpers.toApiDownloadUrl
-      ? helpers.toApiDownloadUrl(token)
-      : ('https://api.agilotext.com/api/' + token + '-download');
+    var downloadUrl = downloadUrlFor(token);
     var audioOk = job.audioAvailable !== false && !!job.audioUrl;
     var transcript = buildTranscriptHtml(job);
     var summary = buildSummaryHtml(job);
@@ -548,8 +671,10 @@
       actions += '<button type="button" class="agilo-share-act" data-act="copy-summary">' +
         escapeHtml(vm.copySummaryLabel) + '</button>';
     }
-    actions += '<a class="agilo-share-act" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
-      escapeHtml(COPY.download) + '</a>';
+    if (downloadUrl) {
+      actions += '<a class="agilo-share-act" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
+        escapeHtml(COPY.download) + '</a>';
+    }
 
     var tabs = '';
     if (vm.useTabs) {
@@ -704,28 +829,67 @@
     }
 
     try {
+      if (token) {
+        var fromZip = await fetchJobFromShareZip(token);
+        if (fromZip.job) {
+          renderJob(mount, fromZip.job, token);
+          return;
+        }
+        if (fromZip.error && fromZip.error !== 'zip_cors') {
+          var jsonView = await fetchJob(token);
+          if (jsonView.job) {
+            renderJob(mount, jsonView.job, token);
+            return;
+          }
+          renderError(mount, fromZip.error, { downloadUrl: downloadUrlFor(token) });
+          return;
+        }
+        if (fromZip.error === 'zip_cors') {
+          var pending = await fetchJob(token);
+          if (pending.job) {
+            renderJob(mount, pending.job, token);
+            return;
+          }
+          renderError(mount, 'zip_cors', { downloadUrl: downloadUrlFor(token) });
+          return;
+        }
+      }
+
       if (jobId) {
         var auth = await resolveAuth();
         if (!auth.email || !auth.token) {
           renderError(mount, 'need_login');
           return;
         }
+        var sharedToken = await createSharedToken(jobId, auth);
+        if (sharedToken) {
+          try {
+            history.replaceState({}, '', (location.pathname || '/auth/share') + '?token=' + encodeURIComponent(sharedToken));
+          } catch (_) { /* ignore */ }
+          var sharedZip = await fetchJobFromShareZip(sharedToken);
+          if (sharedZip.job) {
+            renderJob(mount, sharedZip.job, sharedToken);
+            return;
+          }
+        }
         var byId = await fetchJobById(jobId, auth);
         if (byId.job) {
-          renderJob(mount, byId.job, jobId);
+          renderJob(mount, byId.job, sharedToken || '');
           return;
         }
-        renderError(mount, byId.error || 'error_job_not_found');
+        var who = maskEmail(auth.email);
+        renderError(mount, byId.error || 'error_job_not_found', {
+          note: who ? ('Connecté en tant que ' + who + '.') : '',
+          downloadUrl: sharedToken ? downloadUrlFor(sharedToken) : ''
+        });
         return;
       }
-      var res = await fetchJob(token);
-      if (res.job) {
-        renderJob(mount, res.job, token);
-        return;
-      }
-      renderError(mount, res.error || 'network');
+
+      renderError(mount, token ? 'network' : 'missing_token');
     } catch (_) {
-      renderError(mount, jobId ? 'need_login' : 'network');
+      renderError(mount, jobId ? 'need_login' : (token ? 'zip_cors' : 'network'), {
+        downloadUrl: downloadUrlFor(token)
+      });
     }
   }
 
