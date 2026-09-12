@@ -122,7 +122,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 |-------|---------|--------|
 | `code-prompt-library` | `library-main.js` + overlay/icon-picker/core/catalog + `library.css` | Staging v1, `library2Live: true` |
 | `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true` (10 sept) |
-| `code-prompt-picker` | `scripts/pages/library/library-picker.js` 2.1 (popover + hint CR OFF + CTA `/offres/cse`) | Pin `3d328e9c` rollback ; coller SHA après commit 2.1 |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` 2.1 (popover + hint CR OFF + CTA `/offres/cse`) | Pin `938fe94e`, dashboards staging ; rollback `3d328e9c` |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 | `code-profile-prompts-redirect` | `docs/webflow-embeds/profile-prompts-redirect.html` | Staging Mon compte `?tab=prompts` |
 
@@ -138,7 +138,7 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 12 sept 2026 (soir) : fiche v2 compacte (dates, about USER stub, bandeau lock, overlay cadenas cartes). Id 7 fallback legacy. Pack CSE `-10`/`-11` icône sparkle, glow `data-pack=cse`. Staging `cse89Live: true`, CTA `/offres/cse`. Pin jsDelivr à coller après ce commit. Pas www.
 
-12 sept 2026 (picker dashboard 2.1) : picker utilisable si « Générer le compte rendu » OFF (bandeau hint). CTA pack CSE → `https://www.agilotext.com/offres/cse` (plus mailto). Lock picker discret + titres 2 lignes. Rollback pin picker `3d328e9c`. Pas www.
+12 sept 2026 (picker dashboard 2.1) : picker utilisable si « Générer le compte rendu » OFF (bandeau hint). CTA pack CSE → `https://www.agilotext.com/offres/cse` (plus mailto). Lock picker discret + titres 2 lignes. Pin picker `938fe94e`. Rollback `3d328e9c`. Biblio reste `f30b89fe`. Pas www.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : landing `/offres/cse` tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
