@@ -224,7 +224,8 @@
       var showDefault = !!model.isDefault;
       btn.innerHTML =
         iconTile(model, false) +
-        '<span class="agilo-lib-picker__grow"><span class="agilo-lib-picker__title">' +
+        '<span class="agilo-lib-picker__grow"><span class="agilo-lib-picker__title" title="' +
+        Core().escapeHtml(model.cardTitle) + '">' +
         Core().escapeHtml(model.cardTitle) + "</span></span>" +
         (showDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") +
         '<span class="agilo-lib-picker__chev" aria-hidden="true">▾</span>';
@@ -256,7 +257,8 @@
         iconTile(m, locked) +
         '<div class="agilo-lib-picker__opt-body">' +
         '<div class="agilo-lib-picker__opt-title">' +
-        '<span class="agilo-lib-picker__opt-label">' + C.escapeHtml(m.cardTitle) + "</span>" +
+        '<span class="agilo-lib-picker__opt-label" title="' + C.escapeHtml(m.cardTitle) + '">' +
+        C.escapeHtml(m.cardTitle) + "</span>" +
         rowBadges(m, canCreate) + check + "</div>" +
         cta +
         "</div></div>";
@@ -267,8 +269,8 @@
       var html = "";
       var choosable = selectableFlat();
       var hiId = choosable[hiIndex] ? choosable[hiIndex].promptModelId : null;
-      function block(title, rows) {
-        html += '<p class="agilo-lib-picker__sec">' + title + "</p>";
+      function block(title, rows, extraClass) {
+        html += '<p class="agilo-lib-picker__sec' + (extraClass ? " " + extraClass : "") + '">' + title + "</p>";
         if (!rows.length) {
           html += '<p class="agilo-lib-picker__empty">' +
             (query ? "Aucun modèle ne correspond." : "Aucun modèle dans cette liste.") + "</p>";
@@ -279,7 +281,7 @@
         });
       }
       if (canCreate) block("Mes modèles", g.mine);
-      block("Modèles Agilotext", g.off);
+      block("Modèles Agilotext", g.off, canCreate ? "agilo-lib-picker__sec--off" : "");
       list.innerHTML = html;
       var libHref = Api().appPath("bibliotheque");
       foot.innerHTML =

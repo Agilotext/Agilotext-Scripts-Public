@@ -1024,6 +1024,11 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   font-size: 0.85rem;
   color: var(--lib-muted);
 }
+.agilo-lib-picker__sec--off {
+  border-top: 1px solid var(--lib-border);
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+}
 .agilo-lib-picker__opt {
   width: 100%;
   min-height: 44px;

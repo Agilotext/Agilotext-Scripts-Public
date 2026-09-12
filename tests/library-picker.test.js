@@ -194,5 +194,16 @@ if (js.indexOf('edition: \'ent\'') !== -1 || js.indexOf('edition: "ent"') !== -1
 if (js.indexOf("agilo-lib-picker-on") === -1) throw new Error("picker-on class missing");
 if (js.indexOf("assertGenerationId") === -1) throw new Error("assertGenerationId missing");
 if (js.indexOf("opt-desc") !== -1) throw new Error("picker list still renders publicDescription");
+if (js.indexOf('agilo-lib-picker__opt-label" title="') === -1 &&
+    js.indexOf("agilo-lib-picker__opt-label\" title=\"") === -1 &&
+    js.indexOf("opt-label\" title=\"") === -1) {
+  throw new Error("opt-label title missing");
+}
+if (js.indexOf("agilo-lib-picker__sec--off") === -1) throw new Error("sec--off class missing in JS");
+if (css.indexOf(".agilo-lib-picker__sec--off") === -1) throw new Error("sec--off CSS missing");
+if (css.indexOf(".agilo-lib-picker__sec--off") !== -1 &&
+    css.indexOf("border-top: 1px solid var(--lib-border)") === -1) {
+  throw new Error("sec--off border missing");
+}
 
 console.log("library-picker.test.js ok");
