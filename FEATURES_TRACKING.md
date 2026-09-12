@@ -144,6 +144,8 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 12 sept 2026 (soir, régression corrigée) : le commit `3472556a` avait rsync le HTML Downloads du dashboard et écrasé `library-main.js` / `library-core.js` / `library-catalog.js` (v1). Pin `9af5cd97` montait donc le catalogue v1 malgré `uiV2: true` (fiche bandeau + « Changer l’icône » en double, wizard « Question 1 / 4 »). Restauré depuis `71feb7fa`, patch CSE restacké seulement. Pin `4c834597`. Ne plus jamais rsync `Downloads/…_files/` dans les sources biblio. Pas www.
 
+12 sept 2026 (CSE Access Business) : Pro + `pln_cse-ic00nme` → `/app/business/dashboard` (routeur déjà OK). Mur réel = groupe Memberstack Access Business sans le plan CSE neuf. Lié additif. Test post-login Pro+CSE. Pas www.
+
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : landing `/offres/cse` tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---

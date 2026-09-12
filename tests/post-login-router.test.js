@@ -147,6 +147,34 @@ describe("resolveRoute", () => {
     assert.equal(route.decisionReason, "active_cse_plan");
   });
 
+  it("Pro trial + pln_cse-ic00nme -> /app/business/dashboard", () => {
+    const proPlusCse = {
+      planConnections: [
+        {
+          status: "ACTIVE",
+          planId: "pln_pro-jf6u05qw",
+          type: "ONETIME",
+          active: true,
+          payment: { priceId: "prc_cb2026-pro-trial-30j-kj8r0ocv" }
+        },
+        {
+          status: "ACTIVE",
+          planId: "pln_cse-ic00nme",
+          type: "SUBSCRIPTION",
+          active: true,
+          payment: { priceId: "prc_cse89y-vf20nyv" }
+        }
+      ]
+    };
+    const signals = getEditionSignals(proPlusCse);
+    assert.equal(signals.hasPro, true);
+    assert.equal(signals.hasCse, true);
+    assert.equal(signals.hasBusiness, false);
+    const route = resolveRoute(signals, true);
+    assert.equal(route.targetRoute, "/app/business/dashboard");
+    assert.equal(route.decisionReason, "active_cse_plan");
+  });
+
   it("price CSE annuel sans team -> /app/business/dashboard", () => {
     const cseYear = {
       planConnections: [
