@@ -121,8 +121,8 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 | Embed | Fichier | Statut |
 |-------|---------|--------|
 | `code-prompt-library` | `library-main.js` + overlay/icon-picker/core/catalog + `library.css` | Staging v1, `library2Live: true` |
-| `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true`, pin `9af5cd97`, masque STANDARD 7, `hasCse` unlock |
-| `code-prompt-picker` | `scripts/pages/library/library-picker.js` v2.2.0 | Staging dashboards, `fetchMemberAccess` + `hasCse`, pin `9af5cd97` |
+| `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true`, pin `4c834597`, masque STANDARD 7, `hasCse` unlock |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` v2.2.0 | Staging dashboards, `fetchMemberAccess` + `hasCse`, pin `4c834597` |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.7 | CSE `pln_cse-*` + prices neufs → `/app/business/dashboard` |
 | `code-profile-prompts-redirect` | `docs/webflow-embeds/profile-prompts-redirect.html` | Staging Mon compte `?tab=prompts` |
 
@@ -141,6 +141,8 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 12 sept 2026 (picker dashboard 2.1) : picker utilisable si « Générer le compte rendu » OFF (bandeau hint). CTA pack CSE → `https://www.agilotext.com/offres/cse` (plus mailto). Lock picker discret + titres 2 lignes. Focus search/bouton = bordure arrondie (`--lib-radius`), plus d’outline carré. Pin picker `71feb7fa`. Rollback `3d328e9c`. Biblio reste `f30b89fe`. Pas www.
 
 12 sept 2026 (CSE unlock) : picker + catalog-v2 lisent `member-access`. Si `hasCse`, STANDARD `-10`/`-11` = **Ajouter pour l’utiliser**, plus « Voir l’offre CSE ». STANDARD `7` masqué. Embeds staging `cse89Live: true`, CTA `/offres/cse`. Pin `9af5cd97`. Pas www.
+
+12 sept 2026 (soir, régression corrigée) : le commit `3472556a` avait rsync le HTML Downloads du dashboard et écrasé `library-main.js` / `library-core.js` / `library-catalog.js` (v1). Pin `9af5cd97` montait donc le catalogue v1 malgré `uiV2: true` (fiche bandeau + « Changer l’icône » en double, wizard « Question 1 / 4 »). Restauré depuis `71feb7fa`, patch CSE restacké seulement. Pin `4c834597`. Ne plus jamais rsync `Downloads/…_files/` dans les sources biblio. Pas www.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : landing `/offres/cse` tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 

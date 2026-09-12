@@ -21,12 +21,12 @@ STANDARD `promptModelId === 7` (ancien PV CSE) : **masqué** pour tout le monde 
 ```
 scripts/pages/library/library.css
 scripts/pages/library/library-api.js          (1.5.6)
-scripts/pages/library/library-core.js         (1.3.1)
+scripts/pages/library/library-core.js         (1.3.3)
 scripts/pages/library/library-standards-meta.js
 scripts/pages/library/library-overlay.js
 scripts/pages/library/library-icon-picker.js
-scripts/pages/library/library-catalog.js      (1.4.1)
-scripts/pages/library/library-main.js         (1.3.1)
+scripts/pages/library/library-catalog.js      (1.4.2)
+scripts/pages/library/library-main.js         (1.4.1)
 scripts/pages/library/library-picker.js       (2.2.0)
 scripts/pages/auth/post-login-router.js       (v8.7, préfixe pln_cse- + prices neufs)
 ```
@@ -47,7 +47,9 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin staging actuel : `9af5cd97` (picker v2.2.0 + catalog-v2 unlock `hasCse`, denylist id 7). Remplacer `SHA` par ce commit.
+Pin staging actuel : `4c834597` (biblio v2 dispatch restauré + picker v2.2.0 + `hasCse`, denylist id 7). Remplacer `SHA` par ce commit.
+
+Régression 12 sept ~16h54 : pin `9af5cd97` servait `library-main.js` 1.3.1 (rsync dashboard dans `3472556a`), donc `uiV2: true` montait encore Catalog v1. Corrigé en restaurant `71feb7fa` puis le seul patch CSE. Ne plus rsync `Downloads/…_files/`.
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
