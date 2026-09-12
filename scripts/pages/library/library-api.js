@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.4
+ * @version 1.5.5
  */
 (function (global) {
   "use strict";
@@ -30,6 +30,7 @@
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
       pickerSelector: c.pickerSelector || "#agilo-prompt-picker-anchor",
       ctaMailto: c.ctaMailto || "mailto:contact@agilotext.com?subject=Pack%20CSE",
+      ctaCseLandingUrl: c.ctaCseLandingUrl || "https://www.agilotext.com/offres/cse",
       ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse?pay=prc_cse89y-jl40a31",
       ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse?pay=prc_cse89-8230aqy",
       edition: c.edition || "",
@@ -1056,14 +1057,20 @@
     return tick();
   }
 
+  function ctaCsePackHref() {
+    var c = cfg();
+    if (c.cse89Live) return c.ctaAnnualUrl;
+    return c.ctaCseLandingUrl;
+  }
+
   function ctaForLocked(packCse) {
     var c = cfg();
     if (!packCse) return null;
     if (!c.cse89Live) {
       return {
         kind: "soft",
-        label: "Bientôt disponible",
-        href: c.ctaMailto,
+        label: "Voir l’offre CSE",
+        href: c.ctaCseLandingUrl,
         annualLabel: "890 € TTC / an",
         monthlyLabel: "89 € TTC / mois"
       };
@@ -1078,7 +1085,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.4",
+    VERSION: "1.5.5",
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,
@@ -1107,6 +1114,7 @@
     modelId: modelId,
     isGenerationSafeId: isGenerationSafeId,
     assertGenerationId: assertGenerationId,
+    ctaCsePackHref: ctaCsePackHref,
     ctaForLocked: ctaForLocked,
     absIconUrl: absIconUrl,
     canCreate: canCreate,

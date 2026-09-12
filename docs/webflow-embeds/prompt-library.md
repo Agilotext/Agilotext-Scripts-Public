@@ -11,11 +11,12 @@ Deux flags, jamais un seul :
 | Flag | Rôle | Valeur initiale |
 |------|------|-----------------|
 | `library2Live` | Appeler `/api/v1/library2/` | `false` |
-| `cse89Live` | CTA achat 890 € / 89 € | `false` (`/cse` pas live) |
+| `cse89Live` | CTA achat 890 € / 89 € | `false` (landing `/offres/cse`, pas checkout Stripe) |
+| `ctaCseLandingUrl` | Page offre CSE (picker, fiche, cartes) | `https://www.agilotext.com/offres/cse` |
 
 En `library2Live: false` : listes v1, pin / duplicate / versions / create / rename / delete sur `/api/v1`. **Pas** de fausses cartes pack CSE. Picker icônes inerte.
 En `library2Live: true` : listes library2, SVG 0–7, picker USER (wizard dès l’étape 2 + fiche), suggest nom+objectif seulement.  
-En `cse89Live: false` : cadenas (quand library2 les enverra) → mailto `contact@agilotext.com`, pas `CSERENTREE26`.
+En `cse89Live: false` : cadenas pack CSE → landing `https://www.agilotext.com/offres/cse` (libellé « Voir l’offre CSE »), pas mailto. Override legacy : `ctaMailto` dans l’embed seulement.
 
 Page : onglets Modèles Agilotext (défaut, à la une + chips) / Mes modèles (grille ou tableau) / Épinglés (n/5) / Créer un modèle (landing + popup 4 questions). Fiche = overlay, pas une page Designer.
 
@@ -72,7 +73,7 @@ Pin jsDelivr : commit `18c8563a` (library + creds + icon-picker). Staging : `lib
     apiBase: "https://api.agilotext.com/api/v1",
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
-    ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
+    ctaCseLandingUrl: "https://www.agilotext.com/offres/cse",
     ctaAnnualUrl: "/offres/cse?pay=prc_cse89y-jl40a31",
     ctaMonthlyUrl: "/offres/cse?pay=prc_cse89-8230aqy"
   };
@@ -134,7 +135,9 @@ CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/library` apr
 
 Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le picker le masque **après** `fetchLists` OK (`body.agilo-lib-picker-on`). Jamais d’id &lt; -1 dans le select.
 
-Pin JS : `3d328e9c`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
+Le picker **reste utilisable** si « Générer le compte rendu » est OFF : bandeau `.agilo-lib-picker__hint`, le choix enregistre quand même le défaut compte. `doSummary` continue de gouverner l’upload.
+
+Pin JS : `3d328e9c` (rollback). Après ce lot, coller le SHA du commit picker 2.1. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
 
 **Publish 1** (jsDelivr 200) : coller l’embed, **laisser** `code-model-default-*` actif.
 
@@ -147,7 +150,8 @@ Pin JS : `3d328e9c`. `library2Live: true`, `cse89Live: false`. Pas de `library-m
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
     library2Live: true,
     cse89Live: false,
-    pickerSelector: "#agilo-prompt-picker-anchor"
+    pickerSelector: "#agilo-prompt-picker-anchor",
+    ctaCseLandingUrl: "https://www.agilotext.com/offres/cse"
   };
 </script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3d328e9c/scripts/pages/editor/token-resolver.js?v=3d328e9c"></script>
@@ -223,7 +227,7 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
     pricingUrl: "/tarifs",
-    ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
+    ctaCseLandingUrl: "https://www.agilotext.com/offres/cse",
     ctaAnnualUrl: "/offres/cse?pay=prc_cse89y-jl40a31",
     ctaMonthlyUrl: "/offres/cse?pay=prc_cse89-8230aqy"
   };
@@ -272,7 +276,7 @@ Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon
 6. Wizard : 4 questions (une seule par écran), tag Suggérée lisible, attente spinner 32 px (pas Lottie), succès check + carte. `createPromptModelUser` n’enregistre pas `publicDescription` : l’overlay reprend l’objectif, un F5 vide la carte. Ticket Nico : `updatePromptModelUserMetadata` (ou renvoyer ces champs dans `getPromptModelsUserInfo`).
 7. `#modele=253` ouvre la fiche. Mon compte `?tab=prompts` redirige (sauf `noredirect=1`).
 8. Rollback : `uiV2: false`, hard refresh, v1 revient.
-9. Pro/Business RH (-6 à -9) : pas de cadenas sans bouton. **Ajouter à mes modèles** une fois, puis Utiliser / clic carte ouvre la copie USER. Gratuit : toujours flou. CSE sans pack : cadenas Access (mailto tant que `cse89Live` est false).
+9. Pro/Business RH (-6 à -9) : pas de cadenas sans bouton. **Ajouter à mes modèles** une fois, puis Utiliser / clic carte ouvre la copie USER. Gratuit : toujours flou. CSE sans pack : CTA **Voir l’offre CSE** → `https://www.agilotext.com/offres/cse` tant que `cse89Live` est false.
 
 Retrait v1 (catalog.js page, pas picker) : **2 semaines après cette recette**, noté dans `FEATURES_TRACKING.md`.
 
@@ -287,7 +291,7 @@ Library2 staging (Bauer, après collage SHA + `library2Live: true`) :
 - Onglet Épinglés : bandeau une fois si liste vide
 - Rollback : `library2Live: false`, republier staging only. Pas www.
 
-Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 89 (après Java) atterrit Business.
+Après library2 + clone cse : cadenas cse, CTA landing `/offres/cse` si `cse89Live` false. CSE 89 (après Java) atterrit Business.
 
 ### Ticket Nico — descriptions USER
 

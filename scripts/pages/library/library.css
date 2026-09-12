@@ -928,6 +928,16 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   cursor: not-allowed;
   pointer-events: none;
 }
+.agilo-lib-picker__hint {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--lib-text);
+  background: var(--lib-blue-08);
+  border-bottom: 1px solid var(--lib-border);
+}
+.agilo-lib-picker__hint[hidden] { display: none !important; }
 .agilo-lib-picker__grow { flex: 1; min-width: 0; }
 .agilo-lib-picker__title {
   display: block;
@@ -948,11 +958,31 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  overflow: visible;
+  overflow: hidden;
   position: relative;
 }
 .agilo-lib-picker__ico .agilo-lib-ico,
 .agilo-lib-picker__ico img { width: 16px; height: 16px; object-fit: contain; }
+.agilo-lib-picker__ico--locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--lib-surface) 55%, transparent);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.agilo-lib-picker__locksoft {
+  position: absolute;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%);
+  z-index: 1;
+  color: var(--lib-muted);
+  display: grid;
+  place-items: center;
+}
+.agilo-lib-picker__locksoft .agilo-lib-ico { width: 10px; height: 10px; }
+.agilo-lib-picker__ico .agilo-lib-card__lockico { display: none; }
 .agilo-lib-picker__list {
   position: absolute;
   z-index: 40;
@@ -1051,7 +1081,7 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   color: var(--lib-text);
   opacity: 1;
 }
-.agilo-lib-picker__opt.is-off { opacity: 0.7; cursor: default; }
+.agilo-lib-picker__opt.is-off { opacity: 0.7; cursor: pointer; }
 .agilo-lib-picker__opt.is-active.is-off { opacity: 1; }
 .agilo-lib-picker__opt-body { flex: 1; min-width: 0; }
 .agilo-lib-picker__opt-title {
@@ -1059,14 +1089,20 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   font-size: inherit;
   color: var(--lib-text);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 0.35rem;
   min-width: 0;
 }
 .agilo-lib-picker__opt-label {
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  min-width: 0;
+  flex: 1;
 }
 .agilo-lib-picker__opt-desc {
   margin: 0.15rem 0 0;

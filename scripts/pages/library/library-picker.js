@@ -1,6 +1,6 @@
 /**
  * Picker dashboard A : popover sections + recherche. Synchronise #default-template-select.
- * @version 2.0.0
+ * @version 2.1.0
  */
 (function (global) {
   "use strict";
@@ -92,7 +92,7 @@
 
   function addKind(m, canCreate) {
     if (!m) return "none";
-    if (m.packCse) return "mailto";
+    if (m.packCse) return "cse-pack";
     if (acquiredId(m)) return "select-copy";
     if (showAdd(m, canCreate)) return "duplicate";
     if (canSelect(m)) return "select";
@@ -159,10 +159,30 @@
     return !!el.checked;
   }
 
+  function hintHtml(summaryEnabled) {
+    if (summaryEnabled) return "";
+    return '<div class="agilo-lib-picker__hint" role="status" aria-live="polite">' +
+      "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut." +
+      "</div>";
+  }
+
+  function packCta() {
+    var A = Api();
+    if (A.ctaForLocked) {
+      var pack = A.ctaForLocked(true);
+      if (pack) return pack;
+    }
+    return {
+      href: A.ctaCsePackHref ? A.ctaCsePackHref() : "https://www.agilotext.com/offres/cse",
+      label: "Voir l’offre CSE"
+    };
+  }
+
   function iconTile(m, locked) {
     var C = Core();
-    return '<span class="agilo-lib-picker__ico" aria-hidden="true">' + C.iconHtml(m, 16) +
-      (locked ? '<span class="agilo-lib-card__lockico">' + C.svgIcon("lock", 10) + "</span>" : "") +
+    var cls = "agilo-lib-picker__ico" + (locked ? " agilo-lib-picker__ico--locked" : "");
+    return '<span class="' + cls + '" aria-hidden="true">' + C.iconHtml(m, 16) +
+      (locked ? '<span class="agilo-lib-picker__locksoft">' + C.svgIcon("lock-soft", 10) + "</span>" : "") +
       "</span>";
   }
 
@@ -213,6 +233,7 @@
     wrap.innerHTML =
       '<button type="button" class="agilo-lib-picker__btn" aria-haspopup="listbox" aria-expanded="false"></button>' +
       '<div class="agilo-lib-picker__panel" role="listbox">' +
+      '<div class="agilo-lib-picker__hint" role="status" aria-live="polite" hidden></div>' +
       '<input type="search" class="agilo-lib-picker__search" placeholder="Rechercher un modèle" autocomplete="off">' +
       '<div class="agilo-lib-picker__list"></div>' +
       '<div class="agilo-lib-picker__foot"></div></div>';
@@ -221,6 +242,7 @@
 
     var btn = wrap.querySelector(".agilo-lib-picker__btn");
     var panel = wrap.querySelector(".agilo-lib-picker__panel");
+    var hint = wrap.querySelector(".agilo-lib-picker__hint");
     var search = wrap.querySelector(".agilo-lib-picker__search");
     var list = wrap.querySelector(".agilo-lib-picker__list");
     var foot = wrap.querySelector(".agilo-lib-picker__foot");
@@ -271,9 +293,10 @@
       if (kind === "duplicate") {
         cta = '<button type="button" class="agilo-lib-picker__add" data-add="' +
           m.promptModelId + '"' + (adding ? " disabled" : "") + ">Ajouter pour l’utiliser</button>";
-      } else if (kind === "mailto") {
-        var href = (Api().cfg() && Api().cfg().ctaMailto) || "mailto:contact@agilotext.com?subject=Pack%20CSE";
-        cta = '<a class="agilo-lib-picker__add" href="' + C.escapeHtml(href) + '">Demander le pack</a>';
+      } else if (kind === "cse-pack") {
+        var pack = packCta();
+        cta = '<a class="agilo-lib-picker__add" href="' + C.escapeHtml(pack.href) + '">' +
+          C.escapeHtml(pack.label) + "</a>";
       }
       var check = active
         ? '<span class="agilo-lib-picker__check" aria-hidden="true">' + C.svgIcon("check", 14) + "</span>"
@@ -288,6 +311,17 @@
         rowBadges(m, canCreate) + check + "</div>" +
         cta +
         "</div></div>";
+    }
+
+    function paintHint() {
+      if (!hint) return;
+      if (summaryOn()) {
+        hint.hidden = true;
+        hint.textContent = "";
+      } else {
+        hint.hidden = false;
+        hint.textContent = "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.";
+      }
     }
 
     function paintList() {
@@ -306,6 +340,7 @@
           html += rowHtml(row, Number(row.promptModelId) === Number(hiId));
         });
       }
+      paintHint();
       if (canCreate) block("Mes modèles", g.mine);
       block("Modèles Agilotext", g.off, canCreate ? "agilo-lib-picker__sec--off" : "");
       list.innerHTML = html;
@@ -315,19 +350,12 @@
         '<a href="' + Core().escapeHtml(libHref) + '">Bibliothèque</a>';
     }
 
-    function setDisabled(on) {
-      btn.setAttribute("aria-disabled", on ? "true" : "false");
-      if (on) wrap.classList.remove("is-open");
-      btn.setAttribute("aria-expanded", wrap.classList.contains("is-open") ? "true" : "false");
-    }
-
     function close() {
       wrap.classList.remove("is-open");
       btn.setAttribute("aria-expanded", "false");
     }
 
     function open() {
-      if (!summaryOn()) return;
       paintList();
       wrap.classList.add("is-open");
       btn.setAttribute("aria-expanded", "true");
@@ -411,11 +439,9 @@
 
     renderButton();
     paintList();
-    setDisabled(!summaryOn());
 
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (!summaryOn()) return;
       if (wrap.classList.contains("is-open")) close();
       else open();
     });
@@ -446,7 +472,12 @@
       if (!opt) return;
       var id = Number(opt.getAttribute("data-id"));
       var row = models.filter(function (m) { return Number(m.promptModelId) === id; })[0];
-      if (!row || !canSelect(row)) return;
+      if (!row || !canSelect(row)) {
+        if (opt.classList.contains("is-off")) {
+          Core().toast("Ajoutez ce modèle à Mes modèles pour l’utiliser.");
+        }
+        return;
+      }
       applyChoice(chooseId(row));
     });
 
@@ -483,9 +514,8 @@
     if (toggle && !toggle.__agiloPickerBound) {
       toggle.__agiloPickerBound = true;
       toggle.addEventListener("change", function () {
-        var on = summaryOn();
-        setDisabled(!on);
-        if (!on) close();
+        if (wrap.classList.contains("is-open")) paintList();
+        else paintHint();
       });
     }
   }
@@ -541,7 +571,7 @@
   }
 
   global.AgiloLibraryPicker = {
-    VERSION: "2.0.0",
+    VERSION: "2.1.0",
     mount: mount,
     boot: boot,
     _groups: groups,
@@ -554,6 +584,8 @@
     _addKind: addKind,
     _chooseId: chooseId,
     _sortMine: sortMine,
-    _titleText: titleText
+    _titleText: titleText,
+    _hintHtml: hintHtml,
+    _packCta: packCta
   };
 })(typeof window !== "undefined" ? window : globalThis);

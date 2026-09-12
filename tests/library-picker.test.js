@@ -17,7 +17,7 @@ eval(fs.readFileSync(path.join(lib, "library-picker.js"), "utf8"));
 
 var P = globalThis.AgiloLibraryPicker;
 var Api = globalThis.AgiloLibraryApi;
-if (!P || P.VERSION !== "2.0.0") throw new Error("AgiloLibraryPicker 2.0 missing");
+if (!P || P.VERSION !== "2.1.0") throw new Error("AgiloLibraryPicker 2.1 missing");
 if (typeof P._groups !== "function") throw new Error("_groups missing");
 if (typeof P._syncNative !== "function") throw new Error("_syncNative missing");
 
@@ -123,7 +123,20 @@ if (P._showAdd(acquired, true)) throw new Error("already copied must not show Aj
 if (P._addKind(acquired, true) !== "select-copy") throw new Error("alreadyAcquired is select-copy");
 if (P._addKind(isolated, true) !== "duplicate") throw new Error("isolated Pro is duplicate");
 if (P._addKind(isolated, false) !== "none") throw new Error("isolated Free is none");
-if (P._addKind(pack, true) !== "mailto") throw new Error("pack is mailto");
+if (P._addKind(pack, true) !== "cse-pack") throw new Error("pack is cse-pack");
+if (P._addKind(isolated, true) === "cse-pack") throw new Error("isolated Pro must not be cse-pack");
+
+var hintOff = P._hintHtml(false);
+if (hintOff.indexOf("agilo-lib-picker__hint") === -1) throw new Error("hint missing when summary OFF");
+if (hintOff.indexOf("compte rendu est désactivé") === -1) throw new Error("hint copy missing");
+if (P._hintHtml(true) !== "") throw new Error("hint should be empty when summary ON");
+
+var cseCta = P._packCta();
+if (!cseCta || String(cseCta.href).indexOf("agilotext.com/offres/cse") === -1) {
+  throw new Error("pack CTA should land on /offres/cse");
+}
+if (String(cseCta.href).indexOf("mailto:") !== -1) throw new Error("pack CTA still mailto");
+if (cseCta.label.indexOf("offre CSE") === -1) throw new Error("pack CTA label");
 
 var freeList = P._visibleModels(all, false);
 if (freeList.some(function (m) { return Number(m.promptModelId) < -1; })) {
@@ -193,7 +206,12 @@ if (js.indexOf('edition: \'ent\'') !== -1 || js.indexOf('edition: "ent"') !== -1
   throw new Error("picker hardcoded edition ent");
 }
 if (js.indexOf("agilo-lib-picker-on") === -1) throw new Error("picker-on class missing");
-if (js.indexOf("assertGenerationId") === -1) throw new Error("assertGenerationId missing");
+if (js.indexOf("if (!summaryOn()) return") !== -1) throw new Error("picker still blocks when summary OFF");
+if (js.indexOf("setDisabled(!summaryOn())") !== -1) throw new Error("picker still disables on summary");
+if (js.indexOf("ctaMailto") !== -1) throw new Error("picker still uses ctaMailto");
+if (js.indexOf("agilo-lib-picker__hint") === -1) throw new Error("hint class missing in JS");
+if (js.indexOf("agilo-lib-picker__ico--locked") === -1) throw new Error("locked ico class missing");
+if (js.indexOf("agilo-lib-card__lockico") !== -1) throw new Error("picker still uses lockico");
 if (js.indexOf("opt-desc") !== -1) throw new Error("picker list still renders publicDescription");
 if (js.indexOf('agilo-lib-picker__opt-label" title="') === -1 &&
     js.indexOf("agilo-lib-picker__opt-label\" title=\"") === -1 &&
@@ -202,10 +220,9 @@ if (js.indexOf('agilo-lib-picker__opt-label" title="') === -1 &&
 }
 if (js.indexOf("agilo-lib-picker__sec--off") === -1) throw new Error("sec--off class missing in JS");
 if (css.indexOf(".agilo-lib-picker__sec--off") === -1) throw new Error("sec--off CSS missing");
-if (css.indexOf(".agilo-lib-picker__sec--off") !== -1 &&
-    css.indexOf("border-top: 1px solid var(--lib-border)") === -1) {
-  throw new Error("sec--off border missing");
-}
+if (css.indexOf(".agilo-lib-picker__hint") === -1) throw new Error("hint CSS missing");
+if (css.indexOf("line-clamp: 2") === -1) throw new Error("opt-label 2-line clamp missing");
+if (css.indexOf(".agilo-lib-picker__ico--locked::after") === -1) throw new Error("locked ico overlay missing");
 
 if (typeof P._sortMine !== "function" || typeof P._titleText !== "function") {
   throw new Error("_sortMine/_titleText missing");
