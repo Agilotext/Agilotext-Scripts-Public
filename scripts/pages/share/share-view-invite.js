@@ -47,27 +47,32 @@
     copyTranscript: 'Copier la transcription',
     copySummaryPrefix: 'Copier',
     download: 'Télécharger',
-    banner: 'Document confidentiel. Ne le republiez pas. Hébergement en France. Vous pouvez lire, copier et télécharger, sans modifier l’original.',
-    audioMissing: 'Audio cloud indisponible (conservation limitée, 30 jours en Business). Le texte reste lisible.',
-    ctaBody: 'Vous aussi, transformez vos échanges en texte structuré avec Agilotext.',
-    ctaButton: 'Créer un compte gratuit',
+    banner: 'Document confidentiel. Lecture seule. Hébergement en France.',
+    audioMissing: '',
+    ctaBody: '',
+    ctaButton: 'Créer un compte',
     transcriptEmpty: 'Transcription indisponible.',
     summaryEmpty: 'Document indisponible.'
   };
 
   var MOCK_JOB = {
     status: 'OK',
-    jobTitle: 'Entretien d’admission (exemple)',
-    filename: 'admission-demo.mp3',
-    sharedByName: 'Équipe Agilotext',
+    jobTitle: 'Démo équipe commerciale',
+    filename: 'demo-equipe-commerciale.m4a',
+    sharedByName: 'Florian',
     expiresAt: '',
     audioUrl: '',
     audioAvailable: false,
-    transcriptHtml: '<p><strong>Intervenant 1</strong> — Bonjour, merci d’être venu pour cet entretien d’admission.</p><p><strong>Intervenant 2</strong> — Merci, je vais vous présenter la situation de Madame Dupont.</p>',
-    summaryHtml: '<h2>Compte rendu</h2><p>Entretien d’admission. Points abordés : dossier, autonomie, suite à donner.</p><ul><li>Décision : dossier à compléter</li><li>Relance prévue sous 8 jours</li></ul>',
+    sharedDocumentType: 'cr',
+    transcriptHtml: '',
+    summaryHtml:
+      '<h2>Décisions</h2><ul><li>Relancer le compte avant vendredi</li><li>Envoyer le devis révisé d’ici mercredi</li></ul>' +
+      '<h2>Prochaines étapes</h2><ul><li>Point terrain lundi 9h</li><li>Partager le compte rendu au siège</li></ul>' +
+      '<h2>Points abordés</h2><p>Revue du pipeline, blocage devis, besoin d’un compte rendu propre à envoyer sans compte Agilotext.</p>',
     segments: [
-      { speaker: 'Intervenant 1', start: 0, text: 'Bonjour, merci d’être venu pour cet entretien d’admission.' },
-      { speaker: 'Intervenant 2', start: 12, text: 'Merci, je vais vous présenter la situation de Madame Dupont.' }
+      { speaker: 'Intervenant 1', start: 0, text: 'On reprend le point de la semaine dernière : le devis n’est toujours pas parti.' },
+      { speaker: 'Intervenant 2', start: 14, text: 'J’ai la version révisée. Je l’envoie dès que le compte rendu est calé.' },
+      { speaker: 'Intervenant 1', start: 28, text: 'Parfait. On a besoin d’un lien de lecture, pas d’un export zip illisible.' }
     ]
   };
 
@@ -118,21 +123,40 @@
     var css = [
       'html.agilo-share-page .nav_component,html.agilo-share-page footer.footer{display:none!important}',
       'html.agilo-share-page .main-wrapper{min-height:100vh}',
-      '#editorRoot .agilo-share-banner,#agilo-share-view .agilo-share-banner{margin:0 0 16px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);background:rgba(23,74,150,.07);border:1px solid rgba(23,74,150,.16);font-size:.86rem;line-height:1.5;color:var(--color--gris,#525252)}',
-      '#editorRoot .agilo-share-status,#agilo-share-view .agilo-share-status{margin:0 0 12px;padding:10px 12px;border-radius:var(--0-5_radius,0.5rem);font-size:.9rem;display:none}',
-      '#editorRoot .agilo-share-status.is-info,#agilo-share-view .agilo-share-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
-      '#editorRoot .agilo-share-status.is-error,#agilo-share-view .agilo-share-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
-      '#editorRoot .edtr-pane{display:none;font-size:.95rem;line-height:1.65}',
+      'html.agilo-share-page .dashboard.mes-transcript{min-height:100vh;align-items:stretch}',
+      'html.agilo-share-page .dashboard-left,html.agilo-share-page .dashboard-menu.menu-app{height:auto!important;min-height:0!important;max-height:none!important}',
+      'html.agilo-share-page .dashboard-menu.menu-app{justify-content:flex-start!important;padding:16px 18px 20px!important;gap:12px!important}',
+      'html.agilo-share-page .dashboard-menu .nav_logo.app-center{max-height:28px}',
+      'html.agilo-share-page .dashboard-right{padding:20px 24px 40px}',
+      'html.agilo-share-page #editorRoot{max-width:860px}',
+      '#editorRoot .agilo-share-doc{max-width:100%}',
+      '#editorRoot .ed-header{display:flex;flex-direction:column;gap:8px;padding:0 0 12px;border-bottom:0}',
+      '#editorRoot .ed-header .ed-wrap{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px 16px}',
+      '#editorRoot .ed-title-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-width:0}',
+      '#editorRoot .ed-title{font-size:1.35rem;line-height:1.25;font-weight:700;margin:0}',
+      '#editorRoot .agilo-share-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96);font-size:.72rem;font-weight:700;letter-spacing:.02em;text-transform:uppercase}',
+      '#editorRoot .agilo-share-meta{margin:0;color:var(--color--gris,#525252);font-size:.82rem;line-height:1.4}',
+      '#editorRoot .agilo-share-actions{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}',
+      '#editorRoot .agilo-share-act{appearance:none;border:0;background:none;padding:0;font:inherit;font-size:.86rem;font-weight:600;color:var(--color--blue,#174a96);cursor:pointer;text-decoration:none}',
+      '#editorRoot .agilo-share-act:hover{text-decoration:underline}',
+      '#editorRoot .agilo-player, #editorRoot .wrapper-audio-api{margin:0 0 14px;padding:10px 12px;border:1px solid rgba(52,58,64,.16);border-radius:var(--0-5_radius,.5rem);background:#fff}',
+      '#editorRoot .wrapper-audio-api audio,#editorRoot .agilo-player audio{width:100%;height:40px}',
+      '#editorRoot nav.ed-tabs{display:flex;gap:4px;margin:4px 0 14px;padding:0;border-bottom:1px solid rgba(52,58,64,.14)}',
+      '#editorRoot .ed-tab{appearance:none;border:0;background:none;padding:10px 12px 12px;font:inherit;font-weight:600;color:#525252;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}',
+      '#editorRoot .ed-tab.is-active{color:var(--color--blue,#174a96);border-bottom-color:var(--color--blue,#174a96)}',
+      '#editorRoot .agilo-share-banner{margin:0 0 14px;font-size:.8rem;line-height:1.45;color:var(--color--gris,#525252)}',
+      '#editorRoot .agilo-share-status{margin:0 0 12px;padding:8px 10px;border-radius:var(--0-5_radius,.5rem);font-size:.86rem;display:none}',
+      '#editorRoot .agilo-share-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
+      '#editorRoot .agilo-share-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
+      '#editorRoot .edtr-pane{display:none;font-size:.95rem;line-height:1.65;color:var(--color--gris_foncé,#020202)}',
       '#editorRoot .edtr-pane.is-active{display:block}',
-      '#editorRoot .edtr-pane h2,#editorRoot .edtr-pane h3{margin:1.1em 0 .4em}',
-      '#editorRoot #pane-transcript .ag-seg{margin:0 0 12px}',
-      '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.78rem;font-weight:700;color:var(--color--blue,#174a96)}',
-      '#editorRoot .agilo-share-cta{margin:22px 0 0;padding:18px 16px;border-radius:var(--0-5_radius,0.5rem);background:var(--color--blue,#174a96);color:#fff;text-align:center}',
-      '#editorRoot .agilo-share-cta p{margin:0 0 12px;font-size:.95rem;line-height:1.5}',
-      '#editorRoot .agilo-share-cta a{display:inline-flex;align-items:center;justify-content:center;padding:11px 18px;border-radius:var(--0-5_radius,0.5rem);background:#fff;color:#174a96;font-weight:700;text-decoration:none}',
-      '#editorRoot .agilo-share-error{text-align:center;padding:28px 12px}',
-      '#editorRoot .wrapper-audio-api audio{width:100%;height:40px}',
-      '#editorRoot .ed-wrap.vertical{display:flex;flex-wrap:wrap;gap:8px;align-items:center}'
+      '#editorRoot .edtr-pane h2,#editorRoot .edtr-pane h3{margin:1.15em 0 .4em;font-size:1.05rem}',
+      '#editorRoot .edtr-pane h2:first-child,#editorRoot .edtr-pane h3:first-child{margin-top:0}',
+      '#editorRoot #pane-transcript .ag-seg{margin:0 0 16px}',
+      '#editorRoot #pane-transcript .ag-seg__head{margin:0 0 4px}',
+      '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.75rem;font-weight:700;letter-spacing:.02em;color:var(--color--blue,#174a96)}',
+      '#editorRoot .agilo-share-error{text-align:center;padding:48px 12px}',
+      '@media (max-width:991px){html.agilo-share-page .dashboard-menu.menu-app{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;padding:10px 16px!important}html.agilo-share-page .dashboard-menu .full-width{display:flex;flex-direction:row;gap:8px;width:auto!important}html.agilo-share-page .dashboard-right{padding:12px 16px 32px}#editorRoot .ed-title{font-size:1.2rem}}'
     ].join('');
     var st = document.createElement('style');
     st.id = 'agilo-share-view-styles';
@@ -194,12 +218,12 @@
     if (menu.getAttribute('data-agilo-share-rail') === '1') return;
     menu.setAttribute('data-agilo-share-rail', '1');
     menu.innerHTML =
-      '<a href="https://www.agilotext.com/" class="nav_logo-link app-center w-nav-brand">' +
-      '<img src="' + LOGO_SRC + '" loading="lazy" alt="Agilotext" class="nav_logo app-center">' +
+      '<a href="https://www.agilotext.com/" class="nav_logo-link w-nav-brand">' +
+      '<img src="' + LOGO_SRC + '" loading="lazy" alt="Agilotext" class="nav_logo">' +
       '</a>' +
       '<div class="full-width">' +
       '<a href="' + HELP_URL + '" class="dashboard-link w-inline-block"><div>Aide</div></a>' +
-      '<a href="' + SIGNUP_URL + '" class="dashboard-link w-inline-block"><div>Créer un compte</div></a>' +
+      '<a href="' + SIGNUP_URL + '" class="dashboard-link w-inline-block"><div>' + escapeHtml(COPY.ctaButton) + '</div></a>' +
       '</div>';
   }
 
@@ -311,7 +335,9 @@
     }
 
     var useTabs = showTranscript && showSummary;
-    var defaultTab = showTranscript ? 'transcript' : 'summary';
+    var defaultTab = 'summary';
+    if (!showSummary && showTranscript) defaultTab = 'transcript';
+    if (docType === 'transcript' && showTranscript) defaultTab = 'transcript';
     var pageKicker = job.pageKicker || COPY.pageKicker;
     var title = job.jobTitle || job.filename || COPY.defaultTitle;
     var copySummaryLabel = COPY.copySummaryPrefix + ' ' + summaryTabLabel.toLowerCase();
@@ -360,14 +386,14 @@
 
     var actions = '';
     if (vm.showTranscript) {
-      actions += '<button type="button" class="button-secondary black" data-act="copy-transcript">' +
+      actions += '<button type="button" class="agilo-share-act" data-act="copy-transcript">' +
         escapeHtml(COPY.copyTranscript) + '</button>';
     }
     if (vm.showSummary) {
-      actions += '<button type="button" class="button-secondary black" data-act="copy-summary">' +
+      actions += '<button type="button" class="agilo-share-act" data-act="copy-summary">' +
         escapeHtml(vm.copySummaryLabel) + '</button>';
     }
-    actions += '<a class="button-secondary black" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
+    actions += '<a class="agilo-share-act" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
       escapeHtml(COPY.download) + '</a>';
 
     var tabs = '';
@@ -391,28 +417,26 @@
         '" id="pane-summary" role="tabpanel">' + summary + '</div>';
     }
 
-    root.innerHTML =
-      '<div class="dashboard-content">' +
-      '<div class="ed-header"><div class="ed-wrap">' +
-      '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span></div>' +
-      '<span class="ri-job-id">' + escapeHtml(vm.metaBy) +
-      (job.expiresAt ? ' · Lien à durée limitée' : '') + '</span>' +
-      '</div><div class="ed-wrap vertical">' + actions + '</div></div>' +
-      '<div class="agilo-share-banner">' + escapeHtml(COPY.banner) + '</div>' +
-      '<div class="agilo-share-status" id="agilo-share-status"></div>' +
-      '<div class="wrapper-audio-api" id="agilo-share-audio"></div>' +
-      tabs + panels +
-      '<div class="agilo-share-cta">' +
-      '<p>' + escapeHtml(COPY.ctaBody) + '</p>' +
-      '<a id="agilo-share-cta" href="' + SIGNUP_URL + '">' + escapeHtml(COPY.ctaButton) + '</a>' +
-      '</div></div>';
-
-    var audioWrap = $('#agilo-share-audio', root);
+    var audioBlock = '';
     if (audioOk) {
-      audioWrap.innerHTML = '<audio controls preload="metadata" src="' + escapeHtml(job.audioUrl) + '"></audio>';
-    } else {
-      audioWrap.innerHTML = '<p class="text-size-small text-color-grey">' + escapeHtml(COPY.audioMissing) + '</p>';
+      audioBlock = '<div id="agilo-audio-wrap" class="agilo-player wrapper-audio-api">' +
+        '<audio controls preload="metadata" src="' + escapeHtml(job.audioUrl) + '"></audio></div>';
     }
+
+    root.innerHTML =
+      '<div class="dashboard-content agilo-share-doc">' +
+      '<header class="ed-header"><div class="ed-wrap">' +
+      '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span>' +
+      '<span class="agilo-share-chip">' + escapeHtml(COPY.lectureSeule) + '</span></div>' +
+      '<div class="agilo-share-actions">' + actions + '</div></div>' +
+      '<p class="agilo-share-meta">' + escapeHtml(vm.metaBy) +
+      (job.expiresAt ? ' · Lien à durée limitée' : '') + '</p></header>' +
+      audioBlock +
+      tabs +
+      '<p class="agilo-share-banner">' + escapeHtml(COPY.banner) + '</p>' +
+      '<div class="agilo-share-status" id="agilo-share-status"></div>' +
+      panels +
+      '</div>';
 
     var statusEl = $('#agilo-share-status', root);
 
@@ -453,10 +477,6 @@
         capture('share_copy', { kind: 'summary', docType: vm.docType });
       });
     }
-    var cta = $('#agilo-share-cta', root);
-    if (cta) {
-      cta.addEventListener('click', function () { capture('share_cta_click', { href: SIGNUP_URL }); });
-    }
     capture('share_view_opened', { mock: qs('mock') === '1', audio: audioOk, docType: vm.docType });
   }
 
@@ -486,6 +506,7 @@
     var j = {};
     try { j = await r.json(); } catch (_) { j = {}; }
     if (r.status === 404) return { error: 'api_pending', raw: j };
+    if (!j || typeof j !== 'object' || !Object.keys(j).length) return { error: 'api_pending', raw: j };
     var code = j.errorMessage || j.error || j.exceptionName || '';
     if (!r.ok || String(j.status || '').toUpperCase() === 'KO') {
       if (/expired/i.test(code)) return { error: 'error_share_expired', raw: j };
@@ -518,8 +539,6 @@
       if (mockDoc) mockJob.sharedDocumentType = mockDoc;
       if (qs('kicker')) mockJob.pageKicker = qs('kicker');
       renderJob(mount, mockJob, token || 'd8478fa34amock');
-      var st = $('#agilo-share-status', mount);
-      setStatus(st, 'info', 'Aperçu maquette (mock=1). Les vrais liens attendront getSharedJobView.');
       return;
     }
 
