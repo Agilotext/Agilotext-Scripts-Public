@@ -375,7 +375,7 @@
   place-items: center;
   color: var(--lib-rouge);
 }
-.agilo-lib-card__lockico .agilo-lib-ico { width: 10px; height: 10px; }
+.agilo-lib-card--v2 .agilo-lib-card__lockico { display: none; }
 .agilo-lib-card__title {
   margin: 0 0 0.35rem;
   font-size: 1rem;

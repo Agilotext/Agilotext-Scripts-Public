@@ -8,7 +8,7 @@
  * - Gratuit : aucun appel, fausses lignes floutées + CTA ;
  * - CSE verrouillé : CTA pack, aucun appel ;
  * - en création : message, bouton Modifier grisé.
- * @version 2.0.3
+ * @version 2.1.0
  */
 (function (global) {
   "use strict";
@@ -71,17 +71,16 @@
     var mode = previewMode(model, creds);
     if (mode === "locked") {
       var cta = Api().ctaForLocked ? Api().ctaForLocked(model.packCse) : null;
-      return '<div class="agilo-lib-fiche__gate" role="note">' +
-        '<span class="agilo-lib-fiche__gate-ico">' + Core.svgIcon("lock", 18) + "</span>" +
+      var showCta = !!(model.packCse && cta && String(model.lockReasonCode || "") === "SUBSCRIPTION_ACCESS_REQUIRED");
+      return '<div class="agilo-lib-fiche__lock-banner" role="note">' +
         "<p>" + esc((Core.lockMessage ? Core.lockMessage(model, "Ce modèle est réservé au Pack CSE.") : (model.lockReasonMessage || "Ce modèle est réservé au Pack CSE."))) + "</p>" +
-        (cta ? '<a class="agilo-lib-btn agilo-lib-btn--cta" href="' + esc(cta.href) + '">' + esc(cta.label) + "</a>" : "") +
+        (showCta ? '<a class="agilo-lib-btn agilo-lib-btn--cta" href="' + esc(cta.href) + '">' + esc(cta.label) + "</a>" : "") +
         "</div>";
     }
     if (mode === "free") {
       return '<div class="agilo-lib-blur">' +
         '<div class="agilo-lib-blur__lines" aria-hidden="true">' + fakeLines() + "</div>" +
         '<div class="agilo-lib-blur__cta">' +
-        '<span class="agilo-lib-fiche__gate-ico">' + Core.svgIcon("lock", 18) + "</span>" +
         "<p><strong>Voir et modifier le prompt</strong> est réservé aux plans Pro et Business.</p>" +
         '<a class="agilo-lib-btn agilo-lib-btn--primary" href="' + esc(pricingHref()) + '" data-track="lib_upgrade_cta_click">Passer en Pro</a>' +
         "</div>" +
@@ -117,6 +116,7 @@
   function previewSection(model, st, creds) {
     var Core = C();
     var mode = previewMode(model, creds);
+    if (mode === "locked") return previewBody(model, st, creds);
     var tools = "";
     if (mode === "text" && st.previewText && !st.previewLoading) {
       tools = '<button type="button" class="agilo-lib-linkbtn" data-act="preview-copy">' + Core.svgIcon("copy", 14) + " Copier</button>";
@@ -236,6 +236,57 @@
       "</div>";
   }
 
+  function metaDatesHtml(model) {
+    var Core = C();
+    var created = Number(model.dtCreation) || 0;
+    var updated = Number(model.dtUpdate) || 0;
+    if (created <= 0 && updated <= 0) return "";
+    var bits = [];
+    if (created > 0) bits.push("Créé le " + Core.formatDate(created));
+    if (updated > 0 && (created <= 0 || updated !== created)) bits.push("Modifié le " + Core.formatDate(updated));
+    if (!bits.length) return "";
+    return '<p class="agilo-lib-fiche__dates">' + esc(bits.join(" · ")) + "</p>";
+  }
+
+  function userAboutHtml(model, st) {
+    if (model.type !== "USER") return "";
+    var desc = st.aboutDesc != null ? st.aboutDesc : (model.publicDescription || "");
+    var example = st.aboutExample != null ? st.aboutExample : (model.publicExample || "");
+    var canEdit = !!model.canEdit;
+    if (canEdit && st.editingAbout) {
+      var saving = !!st.aboutSaving;
+      return '<section class="agilo-lib-fiche__about agilo-lib-fiche__about--user agilo-lib-fiche__about--edit">' +
+        '<label class="agilo-lib-fiche__label" for="agilo-lib-about-desc">Contexte</label>' +
+        '<textarea id="agilo-lib-about-desc" maxlength="500" rows="4"' + (saving ? " disabled" : "") + ">" + esc(desc) + "</textarea>" +
+        '<label class="agilo-lib-fiche__label" for="agilo-lib-about-example">Structure</label>' +
+        '<textarea id="agilo-lib-about-example" maxlength="240" rows="3"' + (saving ? " disabled" : "") + ">" + esc(example) + "</textarea>" +
+        '<div class="agilo-lib-fiche__about-actions">' +
+        '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary agilo-lib-btn--sm" data-act="about-save"' + (saving ? " disabled" : "") + ">Enregistrer</button>" +
+        '<button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-act="about-cancel"' + (saving ? " disabled" : "") + ">Annuler</button>" +
+        "</div></section>";
+    }
+    var has = !!(String(model.publicDescription || "").trim() || String(model.publicExample || "").trim());
+    if (!has) {
+      if (!canEdit) return "";
+      return '<section class="agilo-lib-fiche__about agilo-lib-fiche__about--user agilo-lib-fiche__about--empty">' +
+        '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-muted">Pas de contexte pour l’instant.</span></p>' +
+        '<button type="button" class="agilo-lib-linkbtn" data-act="about-edit">Ajouter un contexte</button>' +
+        "</section>";
+    }
+    var bits = "";
+    if (model.publicDescription) {
+      bits += '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-fiche__label">Contexte</span> ' +
+        esc(model.publicDescription) + "</p>";
+    }
+    if (model.publicExample) {
+      bits += '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Structure</span> ' +
+        esc(model.publicExample) + "</p>";
+    }
+    return '<section class="agilo-lib-fiche__about agilo-lib-fiche__about--user">' + bits +
+      (canEdit ? '<button type="button" class="agilo-lib-linkbtn" data-act="about-edit">Modifier</button>' : "") +
+      "</section>";
+  }
+
   function html(model, st, creds) {
     var Core = C();
     if (!model) return "";
@@ -245,19 +296,7 @@
     var kicker = user
       ? '<p class="agilo-lib-fiche__kicker">Votre modèle</p>'
       : '<p class="agilo-lib-fiche__kicker">' + esc(typeLabel(model)) + " · " + esc(layout) + "</p>";
-    var userAbout = "";
-    if (user && (model.publicDescription || model.publicExample)) {
-      var userBits = "";
-      if (model.publicDescription) {
-        userBits += '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-fiche__label">Contexte</span> ' +
-          esc(model.publicDescription) + "</p>";
-      }
-      if (model.publicExample) {
-        userBits += '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Structure</span> ' +
-          esc(model.publicExample) + "</p>";
-      }
-      userAbout = '<section class="agilo-lib-fiche__about agilo-lib-fiche__about--user">' + userBits + "</section>";
-    }
+    var userAbout = userAboutHtml(model, st);
     var about = "";
     if (!user) {
       var example = model.publicExample
@@ -269,21 +308,30 @@
       about = '<section class="agilo-lib-fiche__about">' + desc + example + "</section>";
     }
     var badges = (Core.defaultBadgeHtml ? Core.defaultBadgeHtml(model) : (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "")) + Core.badgeHtml(model);
+    var dates = metaDatesHtml(model);
+    var mode = previewMode(model, creds);
+    var scrollInner = userAbout;
+    if (mode === "locked") {
+      if (!user) scrollInner += about;
+      scrollInner += previewSection(model, st, creds);
+    } else {
+      scrollInner += previewSection(model, st, creds);
+      if (!user) scrollInner += about;
+    }
     return '<div class="agilo-lib-fiche' + (st.iconOpen ? " agilo-lib-fiche--iconopen" : "") + '" data-id="' + model.promptModelId + '">' +
       '<header class="agilo-lib-fiche__head">' +
       '<div class="agilo-lib-fiche__iconwrap">' +
-      Core.iconTile(model, 28, { size: "xl" }) +
+      Core.iconTile(model, 28, { surface: "fiche", size: "xl" }) +
       iconPopoverHtml(model, st) +
       "</div>" +
       '<div class="agilo-lib-fiche__titlewrap">' +
       kicker +
       titleBlock(model, st) +
       (badges ? '<div class="agilo-lib-card__meta">' + badges + "</div>" : "") +
+      dates +
       "</div></header>" +
       '<div class="agilo-lib-fiche__scroll">' +
-      userAbout +
-      previewSection(model, st, creds) +
-      about + "</div>" +
+      scrollInner + "</div>" +
       footHtml(model, creds) +
       "</div>";
   }
@@ -359,6 +407,9 @@
         if (handlers.onRename) handlers.onRename(name);
         return;
       }
+      if (act === "about-edit") { if (handlers.onAboutEdit) handlers.onAboutEdit(); return; }
+      if (act === "about-cancel") { if (handlers.onAboutCancel) handlers.onAboutCancel(); return; }
+      if (act === "about-save") { if (handlers.onAboutSave) handlers.onAboutSave(); return; }
       if (act === "icon-close") { if (handlers.onIconClose) handlers.onIconClose(); return; }
       if (act === "icon-sugg-toggle") { if (handlers.onIconSuggToggle) handlers.onIconSuggToggle(); return; }
       if (handlers.onAct) handlers.onAct(act, btn);
@@ -372,6 +423,14 @@
         if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); if (handlers.onRenameCancel) handlers.onRenameCancel(); }
       }, true);
       input.addEventListener("input", function () { st.renameValue = input.value; });
+    }
+    var aboutDesc = root.querySelector("#agilo-lib-about-desc");
+    var aboutEx = root.querySelector("#agilo-lib-about-example");
+    if (aboutDesc) {
+      aboutDesc.addEventListener("input", function () { st.aboutDesc = aboutDesc.value; });
+    }
+    if (aboutEx) {
+      aboutEx.addEventListener("input", function () { st.aboutExample = aboutEx.value; });
     }
     var P = global.AgiloLibraryIconPicker;
     var pop = root.querySelector(".agilo-lib-iconpop");
@@ -395,7 +454,7 @@
   }
 
   global.AgiloLibraryFicheV2 = {
-    VERSION: "2.0.3",
+    VERSION: "2.1.0",
     PREVIEW_LINES: PREVIEW_LINES,
     html: html,
     bind: bind,
@@ -404,6 +463,7 @@
     canShowPrompt: canShowPrompt,
     typeLabel: typeLabel,
     suggestionsHtml: suggestionsHtml,
-    previewDisplay: previewDisplay
+    previewDisplay: previewDisplay,
+    metaDatesHtml: metaDatesHtml
   };
 })(typeof window !== "undefined" ? window : globalThis);

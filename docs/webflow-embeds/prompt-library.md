@@ -73,8 +73,8 @@ Pin jsDelivr : commit `18c8563a` (library + creds + icon-picker). Staging : `lib
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
     ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
-    ctaAnnualUrl: "/cse",
-    ctaMonthlyUrl: "/cse"
+    ctaAnnualUrl: "/offres/cse",
+    ctaMonthlyUrl: "/offres/cse"
   };
 </script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/editor/token-resolver.js?v=18c8563a"></script>
@@ -216,7 +216,7 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = {
     library2Live: true,
-    cse89Live: false,
+    cse89Live: true,
     atelierEnabled: true,
     uiV2: true,
     apiBase: "https://api.agilotext.com/api/v1",
@@ -224,8 +224,8 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     mountSelector: "#agilo-prompt-library-anchor",
     pricingUrl: "/tarifs",
     ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
-    ctaAnnualUrl: "/cse",
-    ctaMonthlyUrl: "/cse"
+    ctaAnnualUrl: "/offres/cse",
+    ctaMonthlyUrl: "/offres/cse"
   };
   window.__AGILO_PROMPT_STUDIO__ = {
     enabled: true,
@@ -291,9 +291,15 @@ Après library2 + clone cse : cadenas cse, CTA mailto si `cse89Live` false. CSE 
 
 ### Ticket Nico — descriptions USER
 
+Fichier : `Clients/_interne_flo/TICKET_NICO_USER_METADATA_2026-09-12.md` (pas d’envoi mail).
+
 `createPromptModelUser` accepte `promptName` / `promptObjective` / `promptSpecificInfo` / `promptStructure` / `iconKey`. Un POST avec `publicDescription` + `publicExample` (probe USER 750, puis supprimé) : HTTP 200, champs **absents** de `getPromptModelsUserInfo`. `updatePromptModelUserMetadata` : 404.
 
+**Attendu Java :** persister au create, renvoyer en liste USER, nouveau `updatePromptModelUserMetadata` (owner only, vide = clear). Front : UI fiche + stub API, toast « bientôt disponible » tant que 404.
+
 Les STANDARD ont déjà ces champs via `updatePromptModelStandardMetadata`. Pour les cartes « Mes modèles », il faut le même couple en USER (create + update + list).
+
+Ticket 403 Free (`getPromptModelContent`) : `TICKET_NICO_FREE_LIBRARY_403_2026-09-11.md`, toujours ouvert, pas bloquant pour le pin CSE.
 
 
 ## Rollback

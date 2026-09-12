@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.2
+ * @version 1.5.3
  */
 (function (global) {
   "use strict";
@@ -30,8 +30,8 @@
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
       pickerSelector: c.pickerSelector || "#agilo-prompt-picker-anchor",
       ctaMailto: c.ctaMailto || "mailto:contact@agilotext.com?subject=Pack%20CSE",
-      ctaAnnualUrl: c.ctaAnnualUrl || "/cse",
-      ctaMonthlyUrl: c.ctaMonthlyUrl || "/cse",
+      ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse",
+      ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse",
       edition: c.edition || "",
       pricingUrl: c.pricingUrl || "/tarifs"
     };
@@ -880,6 +880,49 @@
     });
   }
 
+  function updateUserMetadata(creds, promptId, fields) {
+    fields = fields || {};
+    return withAuthRetryRes(creds, function (fresh) {
+      var body = new URLSearchParams();
+      body.append("username", fresh.email);
+      body.append("token", fresh.token);
+      body.append("edition", fresh.edition);
+      body.append("promptId", String(promptId));
+      if (Object.prototype.hasOwnProperty.call(fields, "publicDescription")) {
+        body.append("publicDescription", String(fields.publicDescription || "").slice(0, 500));
+      }
+      if (Object.prototype.hasOwnProperty.call(fields, "publicExample")) {
+        body.append("publicExample", String(fields.publicExample || "").slice(0, 240));
+      }
+      return fetch(mutationUrl("updatePromptModelUserMetadata"), {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: body,
+        cache: "no-store",
+        credentials: "omit"
+      }).then(function (res) {
+        return res.text().then(function (txt) {
+          var data = null;
+          try { data = txt ? JSON.parse(txt) : null; } catch (_) { data = null; }
+          if (res.status === 404) {
+            return { ok: false, code: "NOT_READY", httpStatus: 404, message: "Enregistrement bientôt disponible." };
+          }
+          var parsed = parsePayload(data, res.status);
+          parsed.httpStatus = res.status;
+          var code = String(parsed.code || "").toUpperCase();
+          if (code === "UNKNOWN_ROUTE" || code === "NOT_FOUND" || code === "404") {
+            return { ok: false, code: "NOT_READY", httpStatus: res.status, message: "Enregistrement bientôt disponible." };
+          }
+          if (!parsed.ok) parsed.message = humanize(parsed);
+          return parsed;
+        });
+      });
+    });
+  }
+
   function iconListFrom(data) {
     if (!data) return [];
     if (Array.isArray(data.icons)) return data.icons;
@@ -1035,7 +1078,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.1",
+    VERSION: "1.5.3",
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,
@@ -1053,6 +1096,7 @@
     listVersions: listVersions,
     restoreVersion: restoreVersion,
     createFromWizard: createFromWizard,
+    updateUserMetadata: updateUserMetadata,
     getPromptIconCatalog: getPromptIconCatalog,
     suggestPromptModelIcon: suggestPromptModelIcon,
     setPromptModelUserIcon: setPromptModelUserIcon,

@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.4
+ * @version 2.1.5
  */
 (function (global) {
   "use strict";
@@ -57,26 +57,6 @@
 
   function showLockChrome(m) {
     return !!(locked(m) && !softenCopyLock(m));
-  }
-
-  function Api() { return global.AgiloLibraryApi || {}; }
-
-  function canEditIcon(m) {
-    var A = Api();
-    return !!(m && m.type === "USER" && A.canSetUserIcon && A.canSetUserIcon(m.promptModelId, m.type) && !locked(m));
-  }
-
-  /** Statut de création (READY par défaut quand le serveur ne dit rien). */
-  function isReady(m) {
-    var s = String((m && (m.promptModelStatus || m.status)) || "").toUpperCase();
-    if (!s) return true;
-    return s === "READY" || s === "ACTIVE";
-  }
-
-  function isFreePlan() {
-    var A = Api();
-    if (!A.canCreate) return false;
-    return !A.canCreate();
   }
 
   function canSetDefault(m) {
@@ -212,13 +192,17 @@
   /** Pastille icône. Cliquable (pencil) sur les modèles personnels. */
   function iconTile(m, px, opts) {
     opts = opts || {};
+    var surface = opts.surface || "card";
     var editable = canEditIcon(m) && opts.editable !== false;
+    var cardLock = surface !== "fiche" && showLockChrome(m);
     var cls = "agilo-lib-card__icon" + (opts.size ? " agilo-lib-card__icon--" + opts.size : "") +
-      (editable ? " agilo-lib-card__icon--editable" : "");
+      (editable ? " agilo-lib-card__icon--editable" : "") +
+      (cardLock ? " agilo-lib-card__icon--locked" : "");
     var inner = iconHtml(m, px) +
-      (showLockChrome(m) ? '<span class="agilo-lib-card__lockico">' + svgIcon("lock", 10) + "</span>" : "") +
+      (cardLock ? '<span class="agilo-lib-card__locksoft" aria-hidden="true">' + svgIcon("lock-soft", 12) + "</span>" : "") +
       (editable ? '<span class="agilo-lib-card__icon-edit" aria-hidden="true">' + svgIcon("pencil", 11) + "</span>" : "");
     var cat = ' data-cat="' + escapeHtml(m.categoryKey || (m.type === "USER" ? "custom" : "general")) + '"';
+    if (m.packCse) cat += ' data-pack="cse"';
     if (editable) {
       return '<button type="button" class="' + cls + '"' + cat + ' data-act="icon" aria-label="Changer l’icône" title="Changer l’icône">' +
         inner + "</button>";
@@ -237,7 +221,8 @@
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
     if (!isReady(m)) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pending">' + svgIcon("clock", 12) + " En création</span>");
     if (showLockChrome(m) && (m.lockReasonCode || m.lockReasonMessage)) {
-      bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
+      bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">' +
+        (isCopyRequiredLock(m) ? "Accès restreint" : "Verrouillé") + "</span>");
     }
     return bits.join("");
   }
@@ -268,6 +253,7 @@
     var iconKey = Core.resolveIconKey(m && m.iconKey);
     return (
       '<article class="' + cardClass(m, size) + '" data-id="' + m.promptModelId + '" data-icon="' + escapeHtml(iconKey) + '"' +
+      (m.packCse ? ' data-pack="cse"' : "") +
       (showLockChrome(m) ? ' aria-disabled="true"' : "") + delay + ">" +
       preview +
       '<div class="agilo-lib-card__top">' +
@@ -298,7 +284,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.3",
+    VERSION: "2.1.5",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,

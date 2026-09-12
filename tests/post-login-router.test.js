@@ -1,5 +1,5 @@
 /**
- * Tests logique post-login v8.2 (CSE 89 € → dashboard business)
+ * Tests logique post-login v8.4 (CSE 89 € → dashboard business, refresh jeton)
  * Exécution : node --test tests/post-login-router.test.js
  */
 
@@ -53,8 +53,8 @@ const freePlusAnon = {
 };
 
 describe("version", () => {
-  it("exporte v8.2", () => {
-    assert.equal(VERSION, "v8.2");
+  it("exporte v8.4", () => {
+    assert.equal(VERSION, "v8.4");
   });
 });
 

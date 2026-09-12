@@ -1,19 +1,26 @@
 /* ===================================================== */
-/* AGILOTEXT - POST LOGIN ROUTER v8.1 (/auth/post-login) */
+/* AGILOTEXT - POST LOGIN ROUTER v8.3 (/auth/post-login) */
 /* Transcription (Free/Pro/Business) prime sur Agiloshield */
 /* v8: sièges business via joinedTeams (sans garde ownedTeams===0) */
 /* v8.1: legacy pln_anonymisation → /tools/agiloshield/premium/dashboard */
 /* v8.2: pln_cse-* (pas pln_pack-cse) → dashboard business */
+/* v8.3: price IDs CSE89 / CSE89Y → dashboard business */
+/* v8.4: POST /auth/refresh si jeton Free encore en cache après élévation CSE/Business */
 /* ===================================================== */
 /* Déploiement Webflow : coller ce script sur la page /auth/post-login */
+/* Collage live : seulement après OK Florian. Fichier repo ≠ page Webflow. */
 
 (function (root) {
   "use strict";
 
-  const VERSION = "v8.2";
+  const VERSION = "v8.4";
   const API_BASE = "https://api.agilotext.com/api/v1";
   const FREE_PLAN_ID = "pln_free-njg10umr";
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
+  const CSE_PRICE_IDS = new Set([
+    "prc_cse89y-jl40a31",
+    "prc_cse89-8230aqy"
+  ]);
   const ACTIVE_STATUSES = new Set(["ACTIVE", "TRIALING", "GRACE"]);
 
   function normalizeStatus(status) {
@@ -99,6 +106,20 @@
     return getPlans(member).some((p) => isPlanObjectActive(p) && matches(p));
   }
 
+  function hasCsePlan(member) {
+    if (hasPlanPrefix(member, "pln_cse-")) return true;
+
+    function matchesPrice(plan) {
+      return CSE_PRICE_IDS.has(getPriceId(plan));
+    }
+
+    const connections = getConnections(member);
+    if (connections.length > 0) {
+      return connections.some((p) => ACTIVE_STATUSES.has(normalizeStatus(p?.status)) && matchesPrice(p));
+    }
+    return getPlans(member).some((p) => isPlanObjectActive(p) && matchesPrice(p));
+  }
+
   function hasFreePlan(member) {
     if (hasPlanPrefix(member, "pln_free")) return true;
 
@@ -141,7 +162,7 @@
     const hasLegacyAnon = hasPlanPrefix(member, "pln_anonymisation");
     const hasAgiloshield = hasAgiloshieldClassic(member);
     const hasBusiness = hasPlanPrefix(member, "pln_business");
-    const hasCse = hasPlanPrefix(member, "pln_cse-");
+    const hasCse = hasCsePlan(member);
     const hasPro = hasPlanPrefix(member, "pln_pro");
     const hasFree = hasFreePlan(member);
     const hasTranscription = hasBusiness || hasCse || hasPro || hasFree || team.hasTeamMembership;
@@ -201,6 +222,7 @@
     getTeamSignals: getTeamSignals,
     hasPlanPrefix: hasPlanPrefix,
     hasFreePlan: hasFreePlan,
+    hasCsePlan: hasCsePlan,
     hasAgiloshieldClassic: hasAgiloshieldClassic
   };
   if (typeof module !== "undefined" && module.exports) {
@@ -228,6 +250,52 @@
     };
 
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function refreshAgilotextSession(email, fromEdition, sessionToken) {
+      if (!email || !sessionToken) return null;
+      try {
+        const r = await fetch(API_BASE + "/auth/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          cache: "no-store",
+          credentials: "omit",
+          body: JSON.stringify({
+            email: email,
+            sessionToken: sessionToken,
+            edition: fromEdition || "free"
+          })
+        });
+        const data = await r.json();
+        if (!r.ok || String(data.status || "").toUpperCase() !== "OK") {
+          log("auth_refresh_http", { http: r.status, status: data.status || "" });
+          return null;
+        }
+        log("auth_refresh_ok", {
+          memberEdition: (data.member && data.member.edition) || data.edition || ""
+        });
+        return data;
+      } catch (err) {
+        log("auth_refresh_error", { error: String((err && err.message) || err) });
+        return null;
+      }
+    }
+
+    function persistRefreshedSession(email, data) {
+      const member = data.member || {};
+      const specEd = String(member.edition || data.edition || "business").toLowerCase();
+      const tokenEd = (specEd === "business" || specEd === "enterprise" || specEd === "ent") ? "ent" : specEd;
+      const token = data.sessionToken || data.token || "";
+      if (!token) {
+        log("auth_refresh_no_new_token");
+        return;
+      }
+      const keyEmail = String(email || "").toLowerCase();
+      try {
+        localStorage.setItem("agilo:edition", specEd === "ent" ? "business" : specEd);
+        localStorage.setItem("agilo:token:" + tokenEd + ":" + keyEmail, token);
+        window.globalToken = token;
+      } catch (_) { /* ignore */ }
+    }
 
     async function waitForMemberstack(timeoutMs = 12000) {
       const started = Date.now();
@@ -280,20 +348,14 @@
       const backend = await verifyAccessViaBackend(email);
       if (!backend) return signals;
 
-      var backendEdition = String(backend.edition || "").toLowerCase();
-      var backendBusiness =
-        backend.hasBusiness ||
-        backendEdition === "business" ||
-        backendEdition === "ent" ||
-        backendEdition === "enterprise";
       return {
         ...signals,
-        hasBusiness: signals.hasBusiness || backendBusiness,
+        hasBusiness: signals.hasBusiness || backend.hasBusiness,
         isSeat: signals.isSeat || backend.isSeat,
-        hasTeamMembership: signals.hasTeamMembership || backend.isSeat || backendBusiness,
+        hasTeamMembership: signals.hasTeamMembership || backend.isSeat || backend.hasBusiness,
         hasTranscription:
           signals.hasTranscription ||
-          backendBusiness ||
+          backend.hasBusiness ||
           backend.isSeat ||
           signals.hasPro ||
           signals.hasFree
@@ -518,6 +580,24 @@
     } catch (_) { /* non critique, Memberstack DOM peut ne pas exposer loginRedirect */ }
 
     const route = resolveRoute(signals, onboardingDone);
+
+    if (edition === "business") {
+      const email = (member.auth && member.auth.email) || member.email || "";
+      const keyEmail = String(email || "").toLowerCase();
+      let oldToken = "";
+      try {
+        oldToken = localStorage.getItem("agilo:token:free:" + keyEmail) || "";
+        if (!oldToken) oldToken = localStorage.getItem("agilo:token:ent:" + keyEmail) || "";
+        if (!oldToken && window.globalToken) oldToken = String(window.globalToken);
+      } catch (_) { /* ignore */ }
+      if (oldToken) {
+        const refreshed = await refreshAgilotextSession(email, "free", oldToken);
+        if (refreshed) persistRefreshedSession(email, refreshed);
+        else log("auth_refresh_failed_or_empty");
+      } else {
+        log("auth_refresh_no_cached_token");
+      }
+    }
 
     log("route_decision", {
       memberId: member.id,

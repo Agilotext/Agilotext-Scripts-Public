@@ -309,6 +309,47 @@ button.agilo-lib-card__icon--editable:hover { background: var(--lib-blue-20); }
   transition: opacity var(--lib-dur) var(--lib-ease);
 }
 .agilo-lib-card__icon-edit .agilo-lib-ico { width: 11px; height: 11px; }
+.agilo-lib--v2 .agilo-lib-card--v2 .agilo-lib-card__lockico { display: none; }
+.agilo-lib-card__icon--locked {
+  position: relative;
+  overflow: hidden;
+}
+.agilo-lib-card__icon--locked::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--lib-muted) 22%, transparent);
+  pointer-events: none;
+}
+.agilo-lib-card__locksoft {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  transform: translateX(-50%);
+  z-index: 1;
+  color: var(--lib-muted);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.agilo-lib-card__locksoft .agilo-lib-ico { width: 12px; height: 12px; }
+.agilo-lib-fiche .agilo-lib-card__icon--locked::after,
+.agilo-lib-fiche .agilo-lib-card__locksoft { display: none; }
+.agilo-lib-card--v2[data-pack="cse"] .agilo-lib-card__icon {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--lib-blue) 32%, transparent),
+    0 0 10px color-mix(in srgb, var(--lib-blue) 22%, transparent);
+  animation: agilo-lib-cse-glow 2.6s ease-in-out infinite;
+}
+@keyframes agilo-lib-cse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--lib-blue) 28%, transparent),
+      0 0 8px color-mix(in srgb, var(--lib-blue) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--lib-blue) 48%, transparent),
+      0 0 14px color-mix(in srgb, var(--lib-blue) 32%, transparent);
+  }
+}
 button.agilo-lib-card__icon--editable:hover .agilo-lib-card__icon-edit,
 button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche button.agilo-lib-card__icon--editable .agilo-lib-card__icon-edit { opacity: 1; }
@@ -470,9 +511,9 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 
 /* ---------- overlay / fiche ---------- */
 .agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel {
-  width: min(44rem, calc(100vw - 2rem));
-  padding: 1.1rem 1.25rem max(1rem, env(safe-area-inset-bottom));
-  max-height: min(94vh, 56rem);
+  width: min(36rem, calc(100vw - 2rem));
+  padding: 0.95rem 1.1rem max(1rem, env(safe-area-inset-bottom));
+  max-height: min(88vh, 46rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -496,9 +537,9 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__head {
   display: flex;
   align-items: flex-start;
-  gap: 0.9rem;
+  gap: 0.65rem;
   padding-right: 2.75rem;
-  padding-bottom: 0.9rem;
+  padding-bottom: 0.75rem;
   flex-shrink: 0;
   position: relative;
   z-index: 3;
@@ -514,7 +555,8 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__titlewrap { min-width: 0; flex: 1; display: grid; gap: 0.35rem; }
 .agilo-lib-fiche__kicker { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--lib-muted); }
 .agilo-lib-fiche__titlerow { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
-.agilo-lib-fiche__title { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.agilo-lib-fiche__title { margin: 0; font-size: 1.125rem; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere; }
+.agilo-lib-fiche__dates { margin: 0; font-size: 0.78rem; color: var(--lib-muted); }
 .agilo-lib-fiche__rename { display: grid; grid-template-columns: 1fr auto auto; gap: 0.4rem; align-items: center; }
 .agilo-lib-fiche__rename input {
   min-height: 40px;
@@ -565,7 +607,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 .agilo-lib-fiche__gate { display: grid; gap: 0.5rem; justify-items: start; padding: 0.35rem 0; }
 .agilo-lib-fiche__gate p { margin: 0; font-size: 0.875rem; color: var(--lib-text); }
 .agilo-lib-fiche__gate-ico { width: 2rem; height: 2rem; border-radius: 8px; background: var(--lib-surface); border: 1px solid var(--lib-border); display: grid; place-items: center; color: var(--lib-muted); }
-.agilo-lib-blur { position: relative; min-height: 9.5rem; }
+.agilo-lib-blur { position: relative; min-height: 7rem; }
 .agilo-lib-blur__lines { filter: blur(6px); opacity: 0.9; padding: 0.35rem 0.25rem; user-select: none; pointer-events: none; }
 .agilo-lib-blur__cta {
   position: absolute;
@@ -579,6 +621,28 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 .agilo-lib-blur__cta p { margin: 0; font-size: 0.875rem; max-width: 22rem; }
 .agilo-lib-fiche__about { display: grid; gap: 0.5rem; }
+.agilo-lib-fiche__about--edit textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 0.875rem;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  background: var(--lib-surface);
+  resize: vertical;
+}
+.agilo-lib-fiche__about-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.agilo-lib-fiche__lock-banner {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: start;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius-sm);
+  background: var(--lib-bg);
+}
+.agilo-lib-fiche__lock-banner p { margin: 0; font-size: 0.875rem; color: var(--lib-text); }
 .agilo-lib-fiche__desc { margin: 0; font-size: 0.92rem; color: var(--lib-text); }
 .agilo-lib-fiche__example { margin: 0; font-size: 0.85rem; color: var(--lib-muted); }
 .agilo-lib-fiche__example .agilo-lib-fiche__label { margin-right: 0.35rem; }
@@ -901,9 +965,9 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   .agilo-lib-overlay[data-mode="fiche"] { align-items: flex-end; }
   .agilo-lib-overlay[data-mode="fiche"] .agilo-lib-overlay__panel {
     height: auto;
-    max-height: 94vh;
+    max-height: 88vh;
     border-radius: var(--lib-radius) var(--lib-radius) 0 0;
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
   .agilo-lib-overlay[data-mode="wizard"] { align-items: stretch; }
   .agilo-lib-overlay[data-mode="wizard"] .agilo-lib-overlay__panel {
@@ -921,7 +985,8 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .agilo-lib-card--v2, .agilo-lib-dictate, .agilo-lib-fiche__skel span, .agilo-lib-spin { transition: none; animation: none; }
+  .agilo-lib-card--v2, .agilo-lib-dictate, .agilo-lib-fiche__skel span, .agilo-lib-spin,
+  .agilo-lib-card--v2[data-pack="cse"] .agilo-lib-card__icon { transition: none; animation: none; }
   .agilo-lib-card--v2:hover { transform: none; }
   .agilo-lib-spin { border-top-color: var(--lib-blue); opacity: 0.7; }
   .agilo-lib-wiz-creating .agilo-lib-spin { display: none; }

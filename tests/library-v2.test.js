@@ -381,7 +381,7 @@ if (stdHtml.indexOf("Modèle Agilotext") === -1) throw new Error("STANDARD kicke
 var bareUser = Object.assign({}, user, { publicDescription: "", publicExample: "", isDefault: false });
 var bareHtml = Fiche.html(bareUser, { previewText: "x", previewLoading: false }, proCreds);
 if (bareHtml.indexOf("Pas de description publique") !== -1) throw new Error("USER empty official copy");
-if (bareHtml.indexOf("agilo-lib-fiche__about") !== -1) throw new Error("USER empty about still shown");
+if (bareHtml.indexOf("Ajouter un contexte") === -1) throw new Error("empty USER missing add context");
 if (bareHtml.indexOf("Contexte") !== -1) throw new Error("empty USER shows Contexte");
 var ctxUser = Object.assign({}, user, { publicDescription: "Comités hebdo", publicExample: "Décisions puis actions", isDefault: false });
 var ctxHtml = Fiche.html(ctxUser, { previewText: "Tu es un assistant", previewLoading: false }, proCreds);
@@ -510,7 +510,10 @@ if (css.indexOf(".agilo-lib-wiz-icon .agilo-lib-iconpick__chrome { flex-shrink: 
 }
 if (css.indexOf("minmax(6.5rem") !== -1) throw new Error("old sugg minmax 6.5rem still there");
 if (css.indexOf("agilo-lib-overlay--iconopen") === -1) throw new Error("iconopen overlay css missing");
-if (css.indexOf("width: min(44rem") === -1) throw new Error("fiche 44rem missing");
+if (css.indexOf("width: min(36rem") === -1) throw new Error("fiche 36rem missing");
+if (css.indexOf("agilo-lib-fiche__lock-banner") === -1) throw new Error("lock-banner css missing");
+if (css.indexOf("agilo-lib-fiche__dates") === -1) throw new Error("dates css missing");
+if (css.indexOf("data-pack=\"cse\"") === -1 && css.indexOf("[data-pack=\"cse\"]") === -1) throw new Error("pack glow css missing");
 if (css.indexOf("max-height: 11rem") === -1) throw new Error("prompt clamp 11rem missing");
 if (css.indexOf("min-height: 2.75rem") === -1) throw new Error("cell min-height 2.75rem missing");
 if (css.indexOf("agilo-lib-wiz-main") === -1) throw new Error("wiz-main css missing");
@@ -705,5 +708,68 @@ if (catSrc.indexOf("onIconSuggToggle") === -1) throw new Error("catalog missing 
 if (catSrc.indexOf("function openAcquiredCopy") === -1) throw new Error("openAcquiredCopy missing");
 if (catSrc.indexOf("function openFicheOrCopy") === -1) throw new Error("openFicheOrCopy missing");
 if (catSrc.indexOf("openFicheOrCopy(root, model)") === -1) throw new Error("fiche click not routed to copy");
+
+var dated = Fiche.html(Object.assign({}, user, {
+  isDefault: false,
+  dtCreation: Date.UTC(2026, 8, 3),
+  dtUpdate: Date.UTC(2026, 8, 10)
+}), { previewText: "x", previewLoading: false }, proCreds);
+if (dated.indexOf("agilo-lib-fiche__dates") === -1) throw new Error("dates missing");
+if (dated.indexOf("Créé le") === -1) throw new Error("created label missing");
+if (dated.indexOf("Modifié le") === -1) throw new Error("updated label missing");
+var noDates = Fiche.html(Object.assign({}, user, { isDefault: false, dtCreation: 0, dtUpdate: 0 }), { previewText: "x", previewLoading: false }, proCreds);
+if (noDates.indexOf("agilo-lib-fiche__dates") !== -1) throw new Error("dates without timestamps");
+
+var userEmpty = {
+  promptModelId: 801,
+  cardTitle: "Sans contexte",
+  type: "USER",
+  publicDescription: "",
+  publicExample: "",
+  canUse: true,
+  canEdit: true
+};
+var emptyAbout = Fiche.html(userEmpty, { previewText: "x", previewLoading: false }, proCreds);
+if (emptyAbout.indexOf("Ajouter un contexte") === -1) throw new Error("empty USER missing add context");
+if (emptyAbout.indexOf("data-act=\"about-edit\"") === -1) throw new Error("about-edit missing on empty USER");
+if (proHtml.indexOf("<span class=\"agilo-lib-fiche__label\">Contexte</span>") === -1) throw new Error("filled USER missing Contexte");
+if (proHtml.indexOf("<span class=\"agilo-lib-fiche__label\">Structure</span>") === -1) throw new Error("filled USER missing Structure");
+if (proHtml.indexOf("data-act=\"about-edit\"") === -1) throw new Error("Modifier about missing");
+var editAbout = Fiche.html(userEmpty, { editingAbout: true, aboutDesc: "ctx", aboutExample: "struct", previewText: "x", previewLoading: false }, proCreds);
+if (editAbout.indexOf("<textarea") === -1) throw new Error("about textarea missing");
+if (editAbout.indexOf("Enregistrer") === -1) throw new Error("about save missing");
+if (editAbout.indexOf("id=\"agilo-lib-about-desc\"") === -1) throw new Error("context textarea id missing");
+
+var lockedFiche = Fiche.html(locked, {}, proCreds);
+if (lockedFiche.indexOf("agilo-lib-card__lockico") !== -1) throw new Error("fiche still has lockico");
+if (lockedFiche.indexOf("agilo-lib-fiche__lock-banner") === -1) throw new Error("lock banner missing");
+if (lockedFiche.indexOf("agilo-lib-fiche__prompt") !== -1) throw new Error("locked fiche still has prompt box");
+if (lockedFiche.indexOf("agilo-lib-fiche__gate-ico") !== -1) throw new Error("gate ico still in fiche");
+if (lockedCard.indexOf('data-pack="cse"') === -1) throw new Error("pack data-pack missing");
+if (lockedCard.indexOf("agilo-lib-card__locksoft") === -1) throw new Error("card lock-soft missing");
+if (lockedCard.indexOf("agilo-lib-card__icon--locked") === -1) throw new Error("locked icon class missing");
+if (copyCardFree.indexOf("Accès restreint") === -1) throw new Error("Free missing Accès restreint");
+
+var prevCse = globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live;
+globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live = true;
+var buyCta = Api.ctaForLocked(true);
+if (!buyCta || String(buyCta.href).indexOf("/offres/cse") === -1) throw new Error("buy CTA should be /offres/cse");
+globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live = prevCse;
+if (Api.cfg().ctaAnnualUrl !== "/offres/cse") throw new Error("default CTA still /cse");
+
+var meta7 = globalThis.AgiloLibraryStandards.get(7);
+if (meta7.categoryKey !== "legacy") throw new Error("id 7 should be legacy");
+if (meta7.featured) throw new Error("id 7 should not be featured");
+var applied7 = globalThis.AgiloLibraryStandards.applyTo({
+  promptModelId: 7,
+  type: "STANDARD",
+  categoryKey: "cse",
+  featured: true,
+  cardTitle: "Procès-verbal CSE"
+});
+if (applied7.categoryKey !== "legacy") throw new Error("applyTo 7 not legacy");
+if (applied7.featured) throw new Error("applyTo 7 still featured");
+
+if (typeof Api.updateUserMetadata !== "function") throw new Error("updateUserMetadata missing");
 
 console.log("library-v2.test.js ok");

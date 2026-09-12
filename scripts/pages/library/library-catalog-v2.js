@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.3.2
+ * @version 2.3.3
  */
 (function (global) {
   "use strict";
@@ -641,7 +641,11 @@
       iconCatalogLoading: state.iconCatalogLoading,
       iconCatalogError: state.iconCatalogError,
       renaming: false,
-      renameValue: null
+      renameValue: null,
+      editingAbout: false,
+      aboutDesc: model.publicDescription || "",
+      aboutExample: model.publicExample || "",
+      aboutSaving: false
     };
     syncOverlay(root);
     track("lib_fiche_open", { promptModelId: model.promptModelId, type: model.type });
@@ -714,7 +718,62 @@
         }
         syncOverlay(root);
       },
-      onIconSelect: function (key) { setIcon(root, model, key); }
+      onIconSelect: function (key) { setIcon(root, model, key); },
+      onAboutEdit: function () {
+        F.editingAbout = true;
+        F.aboutDesc = model.publicDescription || "";
+        F.aboutExample = model.publicExample || "";
+        syncOverlay(root);
+      },
+      onAboutCancel: function () {
+        F.editingAbout = false;
+        F.aboutSaving = false;
+        F.aboutDesc = model.publicDescription || "";
+        F.aboutExample = model.publicExample || "";
+        syncOverlay(root);
+      },
+      onAboutSave: function () { saveAbout(root, model); }
+    });
+  }
+
+  function saveAbout(root, model) {
+    if (!F || F.aboutSaving) return;
+    if (!Api().updateUserMetadata) {
+      C().toast("Enregistrement bientôt disponible.");
+      return;
+    }
+    F.aboutSaving = true;
+    syncOverlay(root);
+    var desc = String(F.aboutDesc || "").trim().slice(0, 500);
+    var example = String(F.aboutExample || "").trim().slice(0, 240);
+    Api().updateUserMetadata(state.creds, model.promptModelId, {
+      publicDescription: desc,
+      publicExample: example
+    }).then(function (res) {
+      if (F) F.aboutSaving = false;
+      if (res && res.code === "NOT_READY") {
+        C().toast("Enregistrement bientôt disponible.");
+        if (F) F.editingAbout = false;
+        syncOverlay(root);
+        return;
+      }
+      if (!res || !res.ok) {
+        C().toast((res && res.message) || "Enregistrement impossible.");
+        syncOverlay(root);
+        return;
+      }
+      C().toast("Contexte enregistré.");
+      model.publicDescription = desc;
+      model.publicExample = example;
+      if (F) {
+        F.editingAbout = false;
+        F.model = model;
+      }
+      reload(root);
+    }).catch(function () {
+      if (F) F.aboutSaving = false;
+      C().toast("Réseau interrompu. Réessayez.");
+      syncOverlay(root);
     });
   }
 
@@ -1425,7 +1484,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.3.2",
+    VERSION: "2.3.3",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */

@@ -2,7 +2,7 @@
  * Métadonnées publiques des modèles Agilotext 0–7.
  * Fallback si le serveur n’a pas encore seedé standard_prompt_model_metadata.
  * Aucun promptContent ici.
- * @version 1.3.0
+ * @version 1.4.0
  */
 (function (global) {
   "use strict";
@@ -31,13 +31,13 @@
       featured: true
     },
     7: {
-      cardTitle: "Procès-verbal CSE",
-      publicDescription: "Procès-verbal détaillé et chronologique d’une réunion plénière du CSE, avec attribution des échanges, décisions et votes.",
-      publicExample: "Ordre du jour et quorum · Questions des élus · Votes, décisions et annexes",
-      iconKey: "meeting",
-      categoryKey: "cse",
-      sortOrder: 20,
-      featured: true
+      cardTitle: "Procès-verbal CSE (ancien modèle)",
+      publicDescription: "Ancien modèle de procès-verbal CSE, conservé pour compatibilité. Les modèles officiels sont désormais les PV CSE détaillé et synthétique.",
+      publicExample: "Ordre du jour · Décisions · Votes",
+      iconKey: "archive",
+      categoryKey: "legacy",
+      sortOrder: 85,
+      featured: false
     },
     6: {
       cardTitle: "Dictée vocale",
@@ -118,6 +118,11 @@
     if (!cat || cat === "custom" || (cat === "general" && meta.categoryKey !== "general")) {
       card.categoryKey = meta.categoryKey;
     }
+    if (Number(card.promptModelId) === 7) {
+      card.categoryKey = meta.categoryKey;
+      card.featured = false;
+      if (meta.iconKey) card.iconKey = meta.iconKey;
+    }
     if (!card.featured && meta.featured) card.featured = true;
     var order = Number(card.displayOrder || card.sortOrder || 0);
     if (!order || order === 1000) card.displayOrder = meta.sortOrder;
@@ -130,7 +135,7 @@
   }
 
   global.AgiloLibraryStandards = {
-    VERSION: "1.3.0",
+    VERSION: "1.4.0",
     CATEGORIES: CATEGORIES,
     BY_ID: BY_ID,
     get: get,

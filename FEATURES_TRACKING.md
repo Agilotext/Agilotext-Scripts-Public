@@ -136,6 +136,8 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 12 sept 2026 (après-midi) : Pro/Business, STANDARDS RH isolés (-6 à -9) : plus de cul-de-sac cadenas. Bouton **Ajouter à mes modèles** (`canDuplicate`), puis génération sur la copie USER. Badge Verrouillé masqué si déjà copié. Gratuit et cadenas pack CSE (`SUBSCRIPTION_ACCESS_REQUIRED`) inchangés. Pas de génération sur l’ID officiel tant que Nico n’a pas `canUse=true`. Pin jsDelivr `f30b89fe`. `cse89Live` reste false.
 
+12 sept 2026 (soir) : fiche v2 compacte (dates, about USER stub, bandeau lock, overlay cadenas cartes). Id 7 fallback legacy. Pack CSE `-10`/`-11` icône sparkle, glow `data-pack=cse`. Staging `cse89Live: true`, CTA `/offres/cse`. Pin jsDelivr à coller après ce commit. Pas www.
+
 12 sept 2026 (picker dashboard A) : popover recherche + sections Mes modèles / Agilotext. Mes modèles triés par dernière modif, date dans le `title` seulement. Pin picker `3d328e9c`. Aligner `@PIN` et `?v=PIN`. Pas de MCP, pas www. Biblio reste `f30b89fe`.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.

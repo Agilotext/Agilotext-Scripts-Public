@@ -236,6 +236,27 @@ class Library2Admin:
             html,
         )
 
+    def update_text(self, prompt_id: int, name: str, content: str, revision: int, reason: str) -> dict[str, Any]:
+        payload = {
+            "promptId": prompt_id,
+            "promptName": name,
+            "promptContent": content,
+            "reason": reason,
+        }
+        if revision:
+            payload["expectedRevision"] = revision
+        return self.post_form(LIB2 + "/updatePromptModelStandard", payload)
+
+    def delete_standard(self, prompt_id: int, revision: int, reason: str) -> dict[str, Any]:
+        payload = {
+            "promptId": prompt_id,
+            "confirmDelete": "true",
+            "reason": reason,
+        }
+        if revision:
+            payload["expectedRevision"] = revision
+        return self.post_form(LIB2 + "/deletePromptModel", payload)
+
     def get_user_content(self, prompt_id: int) -> dict[str, Any]:
         return self.post_form(API + "/getPromptModelContent", {"promptId": prompt_id})
 
@@ -343,13 +364,28 @@ def public_card(card: dict[str, Any] | None) -> dict[str, Any]:
     return {k: card.get(k) for k in keys}
 
 
+def assert_plain_cr(content: str) -> None:
+    if "UNIQUEMENT un JSON" in content or '"tag-to-fill"' in content:
+        raise SystemExit("PROMPT encore JSON / tag-to-fill. Refus (lot D = CR titres).")
+    import re
+    if re.search(r"\$\{[a-z0-9-]+-filled\}", content):
+        raise SystemExit("PROMPT contient encore un slot ${…-filled}. Refus.")
+
+
 def cmd_create(api: Library2Admin, args: argparse.Namespace) -> int:
     man_path = Path(args.manifest).expanduser()
     man = read_manifest(man_path)
     base = man_path.parent
     name = str(man.get("promptName") or "").strip()
-    content = resolve_text(man, "promptContent", "promptContentPath", base).strip()
+    if getattr(args, "prompt_file", None):
+        content = Path(args.prompt_file).expanduser().read_text(encoding="utf-8").strip()
+    else:
+        content = resolve_text(man, "promptContent", "promptContentPath", base).strip()
     reason = str(man.get("reason") or args.reason or "Flo library2 hidden create").strip()
+    if getattr(args, "skip_html", False):
+        assert_plain_cr(content)
+        man.pop("htmlPath", None)
+        man.pop("htmlInline", None)
     if not name or not content:
         raise SystemExit("Manifest: promptName + promptContent (ou promptContentPath) requis.")
     if args.publish and not args.i_reviewed:
@@ -386,7 +422,10 @@ def cmd_create(api: Library2Admin, args: argparse.Namespace) -> int:
         revision = Number(card.get("revision") if card else revision + 1)
         print("metadata ok revision=%s" % revision)
     html = b""
-    if man.get("htmlPath"):
+    skip_html = bool(getattr(args, "skip_html", False))
+    if skip_html:
+        print("skip-html: pas d’upload (hasHtml doit rester false)")
+    elif man.get("htmlPath"):
         html_path = Path(man["htmlPath"])
         if not html_path.is_absolute():
             html_path = base / html_path
@@ -467,6 +506,58 @@ def cmd_show(api: Library2Admin, prompt_id: int) -> int:
     return 0
 
 
+def cmd_update(api: Library2Admin, args: argparse.Namespace) -> int:
+    """Remplace le texte d’un STANDARD isolé. L’HTML associé est préservé par l’API.
+
+    Pour hasHtml=false : create --skip-html puis delete l’ancien ID (pas d’endpoint strip).
+    """
+    if args.id >= -1:
+        raise SystemExit("update: ID isolé < -1 uniquement.")
+    content = Path(args.prompt_file).expanduser().read_text(encoding="utf-8").strip()
+    assert_plain_cr(content)
+    card = api.card(args.id)
+    if not card:
+        eprint("STANDARD %s introuvable." % args.id)
+        return 1
+    if card.get("visible") is True:
+        raise SystemExit("update: le STANDARD est visible. Pas d’écriture sans hide d’abord.")
+    name = str(card.get("promptModelName") or "").strip()
+    revision = Number(card.get("revision"))
+    reason = args.reason or "Lot D update texte hidden"
+    res = api.update_text(args.id, name, content, revision, reason)
+    if res.get("_http") != 200 or str(res.get("status", "")).upper() != "OK":
+        eprint("updatePromptModelStandard échoué")
+        print_json(res)
+        return 1
+    card = api.card(args.id)
+    print("updated", json.dumps(public_card(card), ensure_ascii=False))
+    if card and card.get("hasHtml"):
+        eprint("ATTENTION: hasHtml=true encore (l’API préserve le fichier). create --skip-html + delete pour strip.")
+        return 3
+    return 0
+
+
+def cmd_delete(api: Library2Admin, args: argparse.Namespace) -> int:
+    if not args.i_reviewed:
+        raise SystemExit("delete: --i-reviewed requis (pas d’undelete).")
+    if args.id >= -1:
+        raise SystemExit("delete: ID isolé < -1 uniquement (pas 0–7).")
+    card = api.card(args.id)
+    if not card:
+        eprint("STANDARD %s introuvable." % args.id)
+        return 1
+    if card.get("visible") is True:
+        raise SystemExit("delete: visible=true. Hide d’abord, pas de delete catalogue public.")
+    revision = Number(card.get("revision"))
+    res = api.delete_standard(args.id, revision, args.reason)
+    if res.get("_http") != 200 or str(res.get("status", "")).upper() != "OK":
+        eprint("deletePromptModel échoué")
+        print_json(res)
+        return 1
+    print("deleted promptModelId=%s (copies USER inchangées)" % args.id)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--env-file", help="Fichier KEY=value (jamais loggé)")
@@ -478,8 +569,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("check-admin", parents=[common], help="listPromptLibraryAudit: 200 vs 403 ADMIN_REQUIRED")
 
-    c = sub.add_parser("create", parents=[common], help="create hidden + metadata + HTML. Pas de publish par défaut.")
+    c = sub.add_parser("create", parents=[common], help="create hidden + metadata. HTML seulement si htmlPath / skeleton.")
     c.add_argument("--manifest", required=True)
+    c.add_argument("--prompt-file", default="", help="PROMPT.txt (sinon promptContent du manifest)")
+    c.add_argument("--skip-html", action="store_true", help="Jamais d’upload HTML (lot D).")
     c.add_argument("--reason", default="")
     c.add_argument("--publish", action="store_true")
     c.add_argument("--i-reviewed", action="store_true")
@@ -498,6 +591,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     sh = sub.add_parser("show", parents=[common], help="Carte publique (pas le prompt)")
     sh.add_argument("--id", type=int, required=True)
+
+    up = sub.add_parser("update", parents=[common], help="Texte STANDARD hidden. HTML préservé par l’API.")
+    up.add_argument("--id", type=int, required=True)
+    up.add_argument("--prompt-file", required=True)
+    up.add_argument("--reason", required=True)
+
+    dl = sub.add_parser("delete", parents=[common], help="Supprime un STANDARD isolé hidden. Pas 0–7.")
+    dl.add_argument("--id", type=int, required=True)
+    dl.add_argument("--reason", required=True)
+    dl.add_argument("--i-reviewed", action="store_true", required=True)
     return p
 
 
@@ -514,6 +617,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_publish(api, args.id, args.reason)
     if args.cmd == "show":
         return cmd_show(api, args.id)
+    if args.cmd == "update":
+        return cmd_update(api, args)
+    if args.cmd == "delete":
+        return cmd_delete(api, args)
     raise SystemExit("commande inconnue")
 
 
