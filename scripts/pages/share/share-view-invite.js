@@ -8,7 +8,8 @@
      <script src="…/scripts/shared/agilo-share-url.js"></script>
      <script src="…/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
    API : GET /api/v1/getSharedJobView?shareToken=…  (Nico)
-   Mock  : ?mock=1 (&doc=transcript|cr|pv|note pour tester les libellés)
+   Mock  : ?mock=1
+   Job ID (compte connecté, contournement) : ?token=1000040476 ou ?jobId=1000040476
    ================================================================ */
 (function () {
   'use strict';
@@ -83,6 +84,144 @@
 
   function shareHelpers() {
     return window.AgiloShareUrl || null;
+  }
+
+  function parseJobId() {
+    var fromQ = qs('jobId');
+    if (/^\d{6,}$/.test(fromQ)) return fromQ;
+    var t = String(qs('token') || qs('shareToken') || '').trim();
+    if (/^\d{6,}$/.test(t)) return t;
+    return '';
+  }
+
+  function parseMaybeJson(raw) {
+    var s = String(raw || '').trim();
+    if (!s) return null;
+    if (s.charAt(0) !== '{' && s.charAt(0) !== '[') return null;
+    try { return JSON.parse(s); } catch (_) { return null; }
+  }
+
+  function mapNicoSegments(j) {
+    var arr = (j && Array.isArray(j.segments)) ? j.segments : [];
+    return arr.map(function (r, i) {
+      var startMs = r.milli_start != null ? r.milli_start : r.start;
+      return {
+        speaker: String(r.speaker || '').trim() || ('Intervenant ' + (i + 1)),
+        start: Math.max(0, Math.floor((+startMs || 0) / (String(startMs).length > 6 ? 1000 : 1))),
+        text: String(r.text || '').replace(/\\n/g, '\n')
+      };
+    }).filter(function (s) { return String(s.text || '').trim(); });
+  }
+
+  async function memberEmailFromMs() {
+    var i;
+    for (i = 0; i < 15; i++) {
+      try {
+        if (window.$memberstackDom && typeof window.$memberstackDom.getCurrentMember === 'function') {
+          var res = await window.$memberstackDom.getCurrentMember();
+          var d = (res && (res.data || res.member || res)) || {};
+          var email = String((d.email || (d.auth && d.auth.email) || '') || '').trim();
+          if (email) return email;
+        }
+      } catch (_) { /* ignore */ }
+      await new Promise(function (ok) { setTimeout(ok, 100); });
+    }
+    return '';
+  }
+
+  async function resolveAuth() {
+    var edition = qs('edition') || localStorage.getItem('agilo:edition') || 'ent';
+    var email =
+      (document.querySelector('[name="memberEmail"]') || {}).value ||
+      window.memberEmail ||
+      localStorage.getItem('agilo:username') ||
+      '';
+    var token =
+      (typeof window.globalToken === 'string' && window.globalToken) ||
+      localStorage.getItem('agilo:token:' + String(edition).toLowerCase() + ':' + String(email).toLowerCase()) ||
+      localStorage.getItem('agilo:token') ||
+      '';
+    if (!email) email = await memberEmailFromMs();
+    if (!token && email) {
+      try {
+        var r = await fetch(API_BASE + '/getToken?username=' + encodeURIComponent(email) + '&edition=' + encodeURIComponent(edition), { credentials: 'omit' });
+        var j = await r.json().catch(function () { return {}; });
+        if (j && j.status === 'OK' && j.token) token = j.token;
+      } catch (_) { /* ignore */ }
+    }
+    if (email) {
+      try { localStorage.setItem('agilo:username', email); } catch (_) { /* ignore */ }
+    }
+    if (token) window.globalToken = token;
+    return { email: email, token: token, edition: edition };
+  }
+
+  async function fetchJobById(jobId, auth) {
+    var q = 'jobId=' + encodeURIComponent(jobId) +
+      '&username=' + encodeURIComponent(auth.email) +
+      '&token=' + encodeURIComponent(auth.token) +
+      '&edition=' + encodeURIComponent(auth.edition);
+    var sumUrl = API_BASE + '/receiveSummary?' + q + '&format=html';
+    var txtUrl = API_BASE + '/receiveTextJson?' + q;
+    var infoUrl = API_BASE + '/getJobsInfo?username=' + encodeURIComponent(auth.email) +
+      '&token=' + encodeURIComponent(auth.token) +
+      '&edition=' + encodeURIComponent(auth.edition) +
+      '&jobId=' + encodeURIComponent(jobId) + '&limit=5&offset=0';
+
+    var sumRaw = '';
+    var txtRaw = '';
+    var info = {};
+    try {
+      var pack = await Promise.all([
+        fetch(sumUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }),
+        fetch(txtUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }),
+        fetch(infoUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }).catch(function () { return ''; })
+      ]);
+      sumRaw = pack[0];
+      txtRaw = pack[1];
+      info = parseMaybeJson(pack[2]) || {};
+    } catch (_) {
+      return { error: 'network' };
+    }
+
+    var sumJson = parseMaybeJson(sumRaw);
+    var txtJson = parseMaybeJson(txtRaw);
+    var sumCode = (sumJson && (sumJson.errorMessage || sumJson.error)) || '';
+    var txtCode = (txtJson && (txtJson.errorMessage || txtJson.error)) || '';
+    var code = String(sumCode || txtCode);
+    if (/invalid[_-]?token/i.test(code)) return { error: 'need_login' };
+    if (sumJson && String(sumJson.status || '').toUpperCase() === 'KO' && txtJson && String(txtJson.status || '').toUpperCase() === 'KO') {
+      return { error: 'error_job_not_found' };
+    }
+
+    var summaryHtml = '';
+    if (sumJson && String(sumJson.status || '').toUpperCase() === 'KO') summaryHtml = '';
+    else if (sumJson && (sumJson.summary || sumJson.content || sumJson.html)) {
+      summaryHtml = String(sumJson.summary || sumJson.content || sumJson.html);
+    } else if (!sumJson && sumRaw && /<[a-z][\s\S]*>/i.test(sumRaw)) {
+      summaryHtml = sumRaw;
+    }
+
+    var segments = mapNicoSegments(txtJson || {});
+    var hit = (info.jobsInfoDtos || []).find(function (x) {
+      return String(x.jobid || x.jobId) === String(jobId);
+    }) || {};
+
+    var job = {
+      status: 'OK',
+      jobTitle: (hit.jobTitle != null ? String(hit.jobTitle) : '').trim() || hit.filename || ('Fichier ' + jobId),
+      filename: hit.filename || '',
+      sharedByName: auth.email ? String(auth.email).split('@')[0] : '',
+      expiresAt: '',
+      audioUrl: '',
+      audioAvailable: false,
+      transcriptHtml: '',
+      summaryHtml: summaryHtml,
+      segments: segments,
+      sharedDocumentType: 'cr'
+    };
+    if (!hasTranscriptContent(job) && !hasSummaryContent(job)) return { error: 'error_job_not_found' };
+    return { job: job };
   }
 
   function parseToken() {
@@ -187,6 +326,14 @@
         title: 'Lien incomplet',
         text: 'Ce lien de lecture est invalide ou incomplet. Ouvrez le lien reçu par email ou message.'
       },
+      need_login: {
+        title: 'Connexion requise pour ce test',
+        text: 'Ce n’est pas encore un lien public. Connectez-vous avec le compte propriétaire du fichier, puis rechargez. L’API de lecture sans compte (getSharedJobView) n’est pas en production.'
+      },
+      error_job_not_found: {
+        title: 'Document introuvable',
+        text: 'Ce numéro de fichier n’est pas dans votre compte, ou le jeton de session a expiré. Ouvrez l’éditeur, puis rechargez cette page.'
+      },
       api_pending: {
         title: 'Page en cours de mise à jour',
         text: 'La lecture brandée Agilotext arrive. L’API publique n’est pas encore en production. Réessayez plus tard, ou ouvrez le lien d’origine si on vous l’a aussi envoyé.'
@@ -201,10 +348,17 @@
 
   function renderError(root, code) {
     var copy = errorCopy(code);
+    var jobId = parseJobId();
+    var href = SIGNUP_URL;
+    var label = 'Essayer Agilotext gratuitement';
+    if (code === 'need_login' || code === 'error_job_not_found') {
+      href = 'https://www.agilotext.com/app/business/editor?jobId=' + encodeURIComponent(jobId || '') + '&edition=ent';
+      label = 'Ouvrir l’éditeur (connexion)';
+    }
     root.innerHTML =
       '<div class="dashboard-content agilo-share-error" lang="fr">' +
       '<h2 class="h1-small">' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
-      '<p style="margin-top:18px"><a class="button-secondary" href="' + SIGNUP_URL + '">Essayer Agilotext gratuitement</a></p>' +
+      '<p style="margin-top:18px"><a class="button-secondary" href="' + href + '">' + escapeHtml(label) + '</a></p>' +
       '</div>';
     capture('share_view_error', { code: code });
   }
@@ -503,7 +657,12 @@
 
   async function fetchJob(token) {
     var url = API_BASE + '/getSharedJobView?shareToken=' + encodeURIComponent(token);
-    var r = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'omit' });
+    var r;
+    try {
+      r = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, credentials: 'omit' });
+    } catch (_) {
+      return { error: 'api_pending', raw: {} };
+    }
     var j = {};
     try { j = await r.json(); } catch (_) { j = {}; }
     if (r.status === 404) return { error: 'api_pending', raw: j };
@@ -527,9 +686,10 @@
     if (!mount) return;
 
     var token = parseToken();
+    var jobId = parseJobId();
     var useMock = qs('mock') === '1';
 
-    if (!token && !useMock) {
+    if (!token && !jobId && !useMock) {
       renderError(mount, 'missing_token');
       return;
     }
@@ -544,6 +704,20 @@
     }
 
     try {
+      if (jobId) {
+        var auth = await resolveAuth();
+        if (!auth.email || !auth.token) {
+          renderError(mount, 'need_login');
+          return;
+        }
+        var byId = await fetchJobById(jobId, auth);
+        if (byId.job) {
+          renderJob(mount, byId.job, jobId);
+          return;
+        }
+        renderError(mount, byId.error || 'error_job_not_found');
+        return;
+      }
       var res = await fetchJob(token);
       if (res.job) {
         renderJob(mount, res.job, token);
@@ -551,7 +725,7 @@
       }
       renderError(mount, res.error || 'network');
     } catch (_) {
-      renderError(mount, 'network');
+      renderError(mount, jobId ? 'need_login' : 'network');
     }
   }
 
