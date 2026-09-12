@@ -1,7 +1,7 @@
 /**
  * Overlay unique (fiche, wizard, versions) sur document.body.
  * Hors du paint() catalogue. Escape, focus, scroll lock.
- * @version 1.3.0
+ * @version 1.4.1
  */
 (function (global) {
   "use strict";
@@ -14,13 +14,17 @@
 
   function host() {
     var el = document.getElementById(HOST_ID);
-    if (el) return el;
-    el = document.createElement("div");
-    el.id = HOST_ID;
-    el.className = "agilo-lib agilo-lib-overlay";
-    el.hidden = true;
-    el.setAttribute("aria-hidden", "true");
-    document.body.appendChild(el);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = HOST_ID;
+      el.className = "agilo-lib agilo-lib-overlay";
+      el.hidden = true;
+      el.setAttribute("aria-hidden", "true");
+      document.body.appendChild(el);
+    }
+    if (global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().uiV2) {
+      el.classList.add("agilo-lib--v2");
+    }
     return el;
   }
 
@@ -35,10 +39,20 @@
     keyHandler = null;
   }
 
+  function closeLibMenus() {
+    var C = global.AgiloLibraryCore;
+    if (C && typeof C.closeMenus === "function") C.closeMenus();
+  }
+
   function bindKeys(panel) {
     unbindKeys();
     keyHandler = function (e) {
       if (e.key === "Escape") {
+        if (document.querySelector(".agilo-lib-menu")) {
+          e.preventDefault();
+          closeLibMenus();
+          return;
+        }
         e.preventDefault();
         close();
         return;
@@ -59,6 +73,40 @@
     document.addEventListener("keydown", keyHandler, true);
   }
 
+  function escAttr(s) {
+    var C = global.AgiloLibraryCore;
+    return (C && C.escapeHtml) ? C.escapeHtml(s) : String(s || "");
+  }
+
+  function metaMarkup(opts) {
+    var text = String(opts.meta || "");
+    var aria = String(opts.metaAria || "");
+    var hidden = text ? "" : " hidden";
+    var extra = text
+      ? (aria ? ' aria-label="' + escAttr(aria) + '"' : "")
+      : ' aria-hidden="true"';
+    return '<span class="agilo-lib-overlay__meta"' + hidden + extra + ">" + escAttr(text) + "</span>";
+  }
+
+  function applyMeta(el, opts) {
+    var metaEl = el.querySelector(".agilo-lib-overlay__meta");
+    if (!metaEl) return;
+    var text = String(opts.meta || "");
+    var aria = String(opts.metaAria || "");
+    metaEl.textContent = text;
+    metaEl.hidden = !text;
+    if (text && aria) {
+      metaEl.setAttribute("aria-label", aria);
+      metaEl.removeAttribute("aria-hidden");
+    } else if (text) {
+      metaEl.removeAttribute("aria-label");
+      metaEl.removeAttribute("aria-hidden");
+    } else {
+      metaEl.removeAttribute("aria-label");
+      metaEl.setAttribute("aria-hidden", "true");
+    }
+  }
+
   function panelMarkup(opts) {
     var C = global.AgiloLibraryCore;
     var title = (C && C.escapeHtml) ? C.escapeHtml(opts.title || "") : String(opts.title || "");
@@ -67,6 +115,7 @@
       '<div class="agilo-lib-overlay__panel" role="dialog" aria-modal="true" aria-labelledby="agilo-lib-overlay-title">' +
       '<div class="agilo-lib-overlay__head">' +
       '<h2 id="agilo-lib-overlay-title">' + title + "</h2>" +
+      metaMarkup(opts) +
       '<button type="button" class="agilo-lib-icon-btn" data-overlay-close aria-label="Fermer">' + closeIco + "</button>" +
       "</div>" +
       '<div class="agilo-lib-overlay__body">' + (opts.html || "") + "</div></div>";
@@ -85,6 +134,7 @@
 
   function open(opts) {
     opts = opts || {};
+    closeLibMenus();
     var el = host();
     if (!isOpen()) lastFocus = document.activeElement;
     onCloseCb = opts.onClose || null;
@@ -111,6 +161,7 @@
     if (h && opts.title != null) {
       h.textContent = opts.title;
     }
+    if (opts.meta != null || opts.metaAria != null) applyMeta(el, opts);
     if (body && opts.html != null) body.innerHTML = opts.html;
     var panel = el.querySelector(".agilo-lib-overlay__panel");
     bindKeys(panel);
@@ -119,6 +170,7 @@
 
   function close(opts) {
     opts = opts || {};
+    closeLibMenus();
     var el = document.getElementById(HOST_ID);
     unbindKeys();
     var cb = onCloseCb;
@@ -126,6 +178,7 @@
     mode = "";
     if (el) {
       el.classList.remove("is-open");
+      el.classList.remove("agilo-lib-overlay--iconopen");
       el.hidden = true;
       el.setAttribute("aria-hidden", "true");
       el.removeAttribute("data-mode");

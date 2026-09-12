@@ -3,7 +3,7 @@
  * fiche v2 (aperçu prompt), wizard v2, Prompt Studio en overlay, deep link #modele=<id>.
  * Activé par window.__AGILO_PROMPT_LIBRARY__.uiV2 === true (library-main.js).
  * library-catalog.js (v1) reste intact.
- * @version 2.3.3
+ * @version 2.3.4
  */
 (function (global) {
   "use strict";
@@ -149,6 +149,8 @@
     var q = state.q.trim().toLowerCase();
     return state.models.filter(function (m) {
       if (m.type !== "STANDARD") return false;
+      if (global.AgiloLibraryApi && global.AgiloLibraryApi.isHiddenOfficial &&
+          global.AgiloLibraryApi.isHiddenOfficial(m.promptModelId)) return false;
       if (state.category !== "all" && m.categoryKey !== state.category) return false;
       return matchesQuery(m, q);
     });
@@ -1484,7 +1486,7 @@
   }
 
   global.AgiloLibraryCatalogV2 = {
-    VERSION: "2.3.3",
+    VERSION: "2.3.4",
     TABS: TABS,
     mount: mount,
     /* exposé pour les tests */

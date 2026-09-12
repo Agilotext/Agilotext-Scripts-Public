@@ -6,7 +6,7 @@
  * - toolbar carte : check (défaut) + ⋯, sans boutons pleins ni « Voir » ;
  * - fiche : CTA écrits via primaryAction() ;
  * - menu ⋯ hors fiche : « Définir par défaut » si éligible.
- * @version 2.1.5
+ * @version 2.1.6
  */
 (function (global) {
   "use strict";
@@ -167,7 +167,8 @@
   }
 
   function copyCtaHtml(m) {
-    if (isFreePlan() || m.type !== "STANDARD" || m.alreadyCopied || m.packCse) return "";
+    if (isFreePlan() || m.type !== "STANDARD" || m.alreadyCopied) return "";
+    if (m.packCse && !(Api().hasCseAccess && Api().hasCseAccess())) return "";
     if (!canCopyOfficial(m)) return "";
     return '<p class="agilo-lib-card__copycta"><button type="button" class="agilo-lib-btn agilo-lib-btn--sm" data-act="duplicate">Ajouter à mes modèles</button></p>';
   }
@@ -284,7 +285,7 @@
   }
 
   global.AgiloLibraryCoreV2 = Object.assign({}, Core, {
-    VERSION: "2.1.5",
+    VERSION: "2.1.6",
     menuItems: menuItems,
     primaryAction: primaryAction,
     defaultState: defaultState,
