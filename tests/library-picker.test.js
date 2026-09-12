@@ -185,6 +185,9 @@ if (css.indexOf(".agilo-lib-picker-on #default-template-select.agilo-lib-native-
 if (css.indexOf("outline: 1px solid var(--lib-blue)") === -1) throw new Error("global focus 1px missing");
 if (css.indexOf("outline: 2px solid var(--lib-blue)") !== -1) throw new Error("old 2px focus still there");
 if (css.indexOf(".agilo-lib-picker__search:focus") === -1) throw new Error("search :focus missing");
+if (css.indexOf("box-shadow: 0 0 0 1px var(--lib-blue)") === -1) {
+  throw new Error("picker search focus must follow radius, not square outline");
+}
 if (css.indexOf(".agilo-lib-picker__opt-title {\n  font-weight: 400") === -1) {
   throw new Error("opt-title must be weight 400");
 }

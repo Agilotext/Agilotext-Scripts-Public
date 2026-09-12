@@ -1027,12 +1027,14 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   border-radius: 0;
 }
 .agilo-lib-picker__search {
-  width: 100%;
+  display: block;
+  width: auto;
+  align-self: stretch;
+  margin: 0.5rem 0.75rem 0.35rem;
   min-height: 44px;
-  border: 0;
-  border-bottom: 1px solid var(--lib-border);
-  border-radius: 0;
-  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--lib-border);
+  border-radius: var(--lib-radius);
+  padding: 0.55rem 0.75rem;
   appearance: none;
   -webkit-appearance: none;
   font: inherit;
@@ -1040,9 +1042,29 @@ body.agilo-lib-overlay-lock { overflow: hidden; }
   background: var(--lib-surface);
   color: var(--lib-text);
 }
+.agilo-lib-picker__search::-webkit-search-decoration,
+.agilo-lib-picker__search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
 .agilo-lib-picker__search::placeholder { color: var(--lib-muted); font-weight: 400; }
-.agilo-lib-picker__search:focus,
-.agilo-lib-picker__search:focus-visible { outline: none; }
+.agilo-lib.agilo-lib-picker .agilo-lib-picker__search:focus,
+.agilo-lib.agilo-lib-picker .agilo-lib-picker__search:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  border-color: var(--lib-blue);
+  box-shadow: 0 0 0 1px var(--lib-blue);
+}
+.agilo-lib.agilo-lib-picker .agilo-lib-picker__btn:focus-visible {
+  outline: none;
+  outline-offset: 0;
+  border-color: var(--lib-blue);
+  box-shadow: 0 0 0 1px var(--lib-blue);
+}
+.agilo-lib.agilo-lib-picker .agilo-lib-picker__opt:focus,
+.agilo-lib.agilo-lib-picker .agilo-lib-picker__opt:focus-visible {
+  outline: none;
+  outline-offset: 0;
+}
 .agilo-lib-picker__sec {
   margin: 0.4rem 0.75rem 0.2rem;
   font-size: inherit;
