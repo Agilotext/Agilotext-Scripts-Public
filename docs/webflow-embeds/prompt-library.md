@@ -203,12 +203,12 @@ Aperçu local : `docs/webflow-embeds/preview-v2.html?mock=free|pro|business`. St
 
 ### Embed page bibliothèque v2 (×3, staging only)
 
-Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/library`. Pin jsDelivr `f30b89fe`.
+Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/library`. Pin jsDelivr `97d2a488`.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library.css?v=f30b89fe">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-v2.css?v=f30b89fe">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=f30b89fe">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library.css?v=97d2a488">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-v2.css?v=97d2a488">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=97d2a488">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 <div id="agilo-prompt-studio-anchor" hidden></div>
@@ -237,21 +237,21 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     }
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/editor/token-resolver.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/editor/agilo-editor-creds.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/shared/agilo-speech-dictate.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-standards-meta.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-api.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-core.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-core-v2.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-overlay.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-icon-picker.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-fiche-v2.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-wizard-v2.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-catalog.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-catalog-v2.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=f30b89fe"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-main.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/editor/token-resolver.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/editor/agilo-editor-creds.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/shared/agilo-speech-dictate.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-standards-meta.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-api.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-core.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-core-v2.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-overlay.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-icon-picker.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-fiche-v2.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-wizard-v2.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-catalog.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-catalog-v2.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=97d2a488"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@97d2a488/scripts/pages/library/library-main.js?v=97d2a488"></script>
 ```
 
 Rollback v2 : `uiV2: false` (recharge catalog v1, plus de CSS v2 ni Studio si tu les retires). Pas www.
