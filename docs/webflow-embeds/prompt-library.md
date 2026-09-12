@@ -134,12 +134,12 @@ CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/library` apr
 
 Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le picker le masque **après** `fetchLists` OK (`body.agilo-lib-picker-on`). Jamais d’id &lt; -1 dans le select.
 
-Pin JS : `39757492`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
+Pin JS : `75bca56a`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
 
 **Publish 1** (jsDelivr 200) : coller l’embed, **laisser** `code-model-default-*` actif.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library.css?v=39757492">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library.css?v=75bca56a">
 <style>
   .wrapper-select, .select-container, .custom-select-wrapper { overflow: visible; }
 </style>
@@ -150,12 +150,12 @@ Pin JS : `39757492`. `library2Live: true`, `cse89Live: false`. Pas de `library-m
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/editor/token-resolver.js?v=39757492"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/editor/agilo-editor-creds.js?v=39757492"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-standards-meta.js?v=39757492"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-api.js?v=39757492"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-core.js?v=39757492"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-picker.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/editor/token-resolver.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/editor/agilo-editor-creds.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-standards-meta.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-api.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-core.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-picker.js?v=75bca56a"></script>
 ```
 
 `boot()` crée `#agilo-prompt-picker-anchor` tout seul s’il manque. Classe embed : `code-prompt-picker`. Répéter free / premium / business.
