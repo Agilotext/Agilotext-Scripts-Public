@@ -239,6 +239,9 @@ var wizSugg = Wiz.html({
 });
 if (wizSugg.indexOf("data-wiz=\"sugg-toggle\"") === -1) throw new Error("wizard sugg toggle missing");
 if (wizSugg.indexOf("agilo-lib-iconpick__grid--sugg") === -1) throw new Error("wizard sugg grid missing");
+if (wizSugg.indexOf("agilo-lib-iconpick__tag") !== -1) throw new Error("wizard Suggérée on glyph");
+if (wizSugg.indexOf("agilo-lib-iconpick__cell--best") === -1) throw new Error("wizard best cell missing");
+if (wizSugg.indexOf(">Réunion<") !== -1) throw new Error("wizard sugg caption still in cell");
 Wiz.state().suggHidden = true;
 var wizSuggOff = Wiz.html({
   canCreate: true,
@@ -344,6 +347,10 @@ var suggOpen = Fiche.html(user, {
 if (suggOpen.indexOf("agilo-lib-iconpick__grid--sugg") === -1) throw new Error("sugg grid missing");
 if (suggOpen.indexOf("data-act=\"icon-sugg-toggle\"") === -1) throw new Error("sugg Masquer missing");
 if (suggOpen.indexOf("Masquer") === -1) throw new Error("Masquer label missing");
+if (suggOpen.indexOf("agilo-lib-iconpick__tag") !== -1) throw new Error("Suggérée tag still on glyph");
+if (suggOpen.indexOf("agilo-lib-iconpick__cell--best") === -1) throw new Error("best sugg cell missing");
+if (suggOpen.indexOf("suggérée") === -1) throw new Error("best aria suffix missing");
+if (suggOpen.indexOf(">Réunion<") !== -1) throw new Error("sugg caption still in cell");
 var suggHidden = Fiche.html(user, {
   iconOpen: true,
   iconSuggHidden: true,
@@ -364,6 +371,19 @@ var bareUser = Object.assign({}, user, { publicDescription: "", publicExample: "
 var bareHtml = Fiche.html(bareUser, { previewText: "x", previewLoading: false }, proCreds);
 if (bareHtml.indexOf("Pas de description publique") !== -1) throw new Error("USER empty official copy");
 if (bareHtml.indexOf("agilo-lib-fiche__about") !== -1) throw new Error("USER empty about still shown");
+if (bareHtml.indexOf("Contexte") !== -1) throw new Error("empty USER shows Contexte");
+var ctxUser = Object.assign({}, user, { publicDescription: "Comités hebdo", publicExample: "Décisions puis actions", isDefault: false });
+var ctxHtml = Fiche.html(ctxUser, { previewText: "Tu es un assistant", previewLoading: false }, proCreds);
+if (ctxHtml.indexOf("Contexte") === -1) throw new Error("USER Contexte missing");
+if (ctxHtml.indexOf("Structure") === -1) throw new Error("USER Structure missing");
+if (ctxHtml.indexOf("Comités hebdo") === -1) throw new Error("USER context body missing");
+if (ctxHtml.indexOf("Contexte") > ctxHtml.indexOf("Votre prompt")) throw new Error("Contexte should be above prompt");
+var fenceHtml = Fiche.html(user, { previewText: "```\nhello fence\n```", previewLoading: false }, proCreds);
+if (fenceHtml.indexOf("```") !== -1) throw new Error("markdown fence leaked in preview");
+if (fenceHtml.indexOf("hello fence") === -1) throw new Error("stripped preview missing");
+if (typeof Fiche.previewDisplay === "function" && Fiche.previewDisplay("```markdown\nHi\n```") !== "Hi") {
+  throw new Error("previewDisplay fence strip");
+}
 if (bareHtml.indexOf("class=\"agilo-lib-btn agilo-lib-btn--primary\" data-act=\"edit\"") === -1) {
   throw new Error("USER edit is not primary");
 }
@@ -408,6 +428,13 @@ if (suggCell.indexOf("Suggérée") === -1) throw new Error("suggérée label mis
 if (suggCell.indexOf("Réunion") === -1) throw new Error("suggérée caption missing");
 var suggEmpty = Picker.cellHtml({ iconKey: "archive", labelFr: "archive", url: "" }, "", { showCaption: true, className: "agilo-lib-iconpick__cell--sugg" });
 if (suggEmpty.indexOf("&nbsp;") === -1) throw new Error("sugg without FR must reserve caption line");
+var bestCell = Picker.cellHtml({ iconKey: "users", labelFr: "Réunion", url: "" }, "", {
+  className: "agilo-lib-iconpick__cell--best",
+  ariaSuffix: "suggérée"
+});
+if (bestCell.indexOf('aria-label="Réunion, suggérée"') === -1) throw new Error("ariaSuffix missing");
+if (bestCell.indexOf("agilo-lib-iconpick__cell--best") === -1) throw new Error("best class missing");
+if (bestCell.indexOf("agilo-lib-iconpick__tag") !== -1) throw new Error("best cell should not need tag");
 var loadPick = Picker.html({ loading: true, icons: [] });
 if (loadPick.indexOf("Chargement des icônes") !== -1) throw new Error("visible loading copy");
 if (loadPick.indexOf("agilo-lib-spin") === -1) throw new Error("picker loading spin missing");
@@ -456,7 +483,20 @@ if (css.indexOf("4.2rem") === -1) throw new Error("compact preview height missin
 if (css.indexOf("max-height: min(32rem, 75vh)") === -1) throw new Error("icon popover max-height missing");
 if (css.indexOf("max-height: min(16rem, 50vh)") === -1) throw new Error("wizard picker contained height missing");
 if (css.indexOf("minmax(3.25rem") === -1) throw new Error("picker minmax 3.25rem missing");
-if (css.indexOf("minmax(3.5rem") === -1) throw new Error("sugg minmax 3.5rem missing");
+if (css.indexOf("minmax(3.5rem") !== -1) throw new Error("old sugg minmax 3.5rem still there");
+if (css.indexOf("agilo-lib-iconpick__cell--best") === -1) throw new Error("best cell css missing");
+if (css.indexOf(".agilo-lib-iconpop .agilo-lib-iconpick {\n  flex: 1;\n  min-height: 0;\n  display: flex;\n  flex-direction: column;\n  overflow: visible;") === -1) {
+  throw new Error("popover picker overflow visible missing");
+}
+if (css.indexOf(".agilo-lib-wiz-icon .agilo-lib-iconpick {\n  display: flex;\n  flex-direction: column;\n  max-height: min(16rem, 50vh);\n  overflow: visible;") === -1) {
+  throw new Error("wizard picker overflow visible missing");
+}
+if (css.indexOf(".agilo-lib-iconpop .agilo-lib-iconpick__chrome { flex-shrink: 0; padding: 0.25rem; }") === -1) {
+  throw new Error("popover chrome padding 0.25rem missing");
+}
+if (css.indexOf(".agilo-lib-wiz-icon .agilo-lib-iconpick__chrome { flex-shrink: 0; padding: 0.25rem; }") === -1) {
+  throw new Error("wizard chrome padding 0.25rem missing");
+}
 if (css.indexOf("minmax(6.5rem") !== -1) throw new Error("old sugg minmax 6.5rem still there");
 if (css.indexOf("agilo-lib-overlay--iconopen") === -1) throw new Error("iconopen overlay css missing");
 if (css.indexOf("width: min(44rem") === -1) throw new Error("fiche 44rem missing");

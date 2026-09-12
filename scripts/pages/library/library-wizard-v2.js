@@ -3,7 +3,7 @@
  * Les 4 questions (ordre Mon compte), placeholders courts, dictée,
  * récapitulatif, brouillon localStorage, attente spinner, écran de succès.
  * Rendu + liaison ; les appels API restent dans library-catalog-v2.js.
- * @version 2.2.1
+ * @version 2.2.2
  */
 (function (global) {
   "use strict";
@@ -187,9 +187,9 @@
           keys.map(function (k, i) {
             var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
             return P.cellHtml(ic, W.iconKey, {
-              className: "agilo-lib-iconpick__cell--sugg",
-              showCaption: true,
-              tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
+              className: "agilo-lib-iconpick__cell--sugg" + (i === 0 ? " agilo-lib-iconpick__cell--best" : ""),
+              showCaption: false,
+              ariaSuffix: i === 0 ? "suggérée" : ""
             });
           }).join("") +
           "</div>";
@@ -527,7 +527,7 @@
   }
 
   global.AgiloLibraryWizardV2 = {
-    VERSION: "2.2.1",
+    VERSION: "2.2.2",
     TITLE: TITLE,
     STEP_SHORT: STEP_SHORT,
     QUESTIONS: QUESTIONS,

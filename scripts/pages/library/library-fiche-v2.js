@@ -8,7 +8,7 @@
  * - Gratuit : aucun appel, fausses lignes floutées + CTA ;
  * - CSE verrouillé : CTA pack, aucun appel ;
  * - en création : message, bouton Modifier grisé.
- * @version 2.0.2
+ * @version 2.0.3
  */
 (function (global) {
   "use strict";
@@ -56,7 +56,11 @@
   }
 
   function previewDisplay(text) {
-    return String(text || "")
+    var s = String(text || "").replace(/^\uFEFF/, "");
+    s = s.replace(/^```(?:markdown|text|md)?[ \t]*\r?\n?/i, "");
+    s = s.replace(/\r?\n```[ \t]*$/i, "");
+    if (s.slice(0, 3) === "```") s = s.slice(3);
+    return s
       .replace(/\*\*([^*]*)\*\*/g, "$1")
       .replace(/__([^_]*)__/g, "$1")
       .replace(/\*\*/g, "");
@@ -201,9 +205,9 @@
       var ic = byKey[k] || { iconKey: k, labelFr: "", url: "" };
       if (P && P.cellHtml) {
         return P.cellHtml(ic, model.iconKey, {
-          className: "agilo-lib-iconpick__cell--sugg",
-          showCaption: true,
-          tag: i === 0 ? '<em class="agilo-lib-iconpick__tag">Suggérée</em>' : ""
+          className: "agilo-lib-iconpick__cell--sugg" + (i === 0 ? " agilo-lib-iconpick__cell--best" : ""),
+          showCaption: false,
+          ariaSuffix: i === 0 ? "suggérée" : ""
         });
       }
       return "";
@@ -238,20 +242,31 @@
     st = st || {};
     var user = model.type === "USER";
     var layout = model.hasHtml ? "Mise en page HTML" : "Texte structuré";
-    var example = model.publicExample
-      ? '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Exemple</span> ' + esc(model.publicExample) + "</p>"
-      : "";
     var kicker = user
       ? '<p class="agilo-lib-fiche__kicker">Votre modèle</p>'
       : '<p class="agilo-lib-fiche__kicker">' + esc(typeLabel(model)) + " · " + esc(layout) + "</p>";
+    var userAbout = "";
+    if (user && (model.publicDescription || model.publicExample)) {
+      var userBits = "";
+      if (model.publicDescription) {
+        userBits += '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-fiche__label">Contexte</span> ' +
+          esc(model.publicDescription) + "</p>";
+      }
+      if (model.publicExample) {
+        userBits += '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Structure</span> ' +
+          esc(model.publicExample) + "</p>";
+      }
+      userAbout = '<section class="agilo-lib-fiche__about agilo-lib-fiche__about--user">' + userBits + "</section>";
+    }
     var about = "";
-    if (!user || model.publicDescription || model.publicExample) {
+    if (!user) {
+      var example = model.publicExample
+        ? '<p class="agilo-lib-fiche__example"><span class="agilo-lib-fiche__label">Exemple</span> ' + esc(model.publicExample) + "</p>"
+        : "";
       var desc = model.publicDescription
         ? '<p class="agilo-lib-fiche__desc">' + esc(model.publicDescription) + "</p>"
-        : (user ? "" : '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-muted">Pas de description publique pour l’instant.</span></p>');
-      about = (desc || example)
-        ? '<section class="agilo-lib-fiche__about">' + desc + example + "</section>"
-        : "";
+        : '<p class="agilo-lib-fiche__desc"><span class="agilo-lib-muted">Pas de description publique pour l’instant.</span></p>';
+      about = '<section class="agilo-lib-fiche__about">' + desc + example + "</section>";
     }
     var badges = (Core.defaultBadgeHtml ? Core.defaultBadgeHtml(model) : (model.isDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "")) + Core.badgeHtml(model);
     return '<div class="agilo-lib-fiche' + (st.iconOpen ? " agilo-lib-fiche--iconopen" : "") + '" data-id="' + model.promptModelId + '">' +
@@ -266,6 +281,7 @@
       (badges ? '<div class="agilo-lib-card__meta">' + badges + "</div>" : "") +
       "</div></header>" +
       '<div class="agilo-lib-fiche__scroll">' +
+      userAbout +
       previewSection(model, st, creds) +
       about + "</div>" +
       footHtml(model, creds) +
@@ -379,7 +395,7 @@
   }
 
   global.AgiloLibraryFicheV2 = {
-    VERSION: "2.0.2",
+    VERSION: "2.0.3",
     PREVIEW_LINES: PREVIEW_LINES,
     html: html,
     bind: bind,
@@ -387,6 +403,7 @@
     previewMode: previewMode,
     canShowPrompt: canShowPrompt,
     typeLabel: typeLabel,
-    suggestionsHtml: suggestionsHtml
+    suggestionsHtml: suggestionsHtml,
+    previewDisplay: previewDisplay
   };
 })(typeof window !== "undefined" ? window : globalThis);

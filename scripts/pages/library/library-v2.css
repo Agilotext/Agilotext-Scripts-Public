@@ -651,22 +651,28 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
   margin: 0.5rem 0 0;
   padding-top: 0.6rem;
 }
 .agilo-lib-iconpop .agilo-lib-iconpick__title { display: none; }
-.agilo-lib-iconpop .agilo-lib-iconpick__chrome { flex-shrink: 0; }
+.agilo-lib-iconpop .agilo-lib-iconpick__chrome { flex-shrink: 0; padding: 0.25rem; }
 .agilo-lib-iconpop .agilo-lib-iconpick .agilo-lib-iconpick__grid {
   flex: 1;
   min-height: 0;
   overflow: auto;
   max-height: none;
+  padding: 0.15rem 0.1rem 0.35rem;
   grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
 }
 .agilo-lib-iconpick__sugg .agilo-lib-iconpick__title { display: flex; align-items: center; gap: 0.35rem; margin: 0 0 0.4rem; font-size: 0.8rem; }
 .agilo-lib-iconpick__sugg .agilo-lib-linkbtn { margin-left: auto; font-size: 0.75rem; }
-.agilo-lib-iconpick__grid--sugg { max-height: none; grid-template-columns: repeat(auto-fill, minmax(3.5rem, 1fr)); overflow: visible; padding: 0; }
+.agilo-lib-iconpick__grid--sugg {
+  max-height: none;
+  grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
+  overflow: visible;
+  padding: 0.15rem 0.1rem 0.35rem;
+}
 .agilo-lib--v2 .agilo-lib-iconpick__cell,
 .agilo-lib-overlay .agilo-lib-iconpick__cell {
   min-height: 2.75rem;
@@ -675,6 +681,7 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
 }
 .agilo-lib-iconpick__cell { border-radius: var(--lib-radius-sm); position: relative; }
 .agilo-lib-iconpick__cell--sugg { border-color: var(--lib-blue-20); background: var(--lib-blue-08); min-height: 2.75rem; }
+.agilo-lib-iconpick__cell--best { border-color: var(--lib-blue); }
 .agilo-lib--v2 .agilo-lib-iconpick__cell--solo,
 .agilo-lib-overlay .agilo-lib-iconpick__cell--solo {
   justify-content: center;
@@ -845,15 +852,17 @@ button.agilo-lib-card__icon--editable:focus-visible .agilo-lib-card__icon-edit,
   display: flex;
   flex-direction: column;
   max-height: min(16rem, 50vh);
-  overflow: hidden;
+  overflow: visible;
   margin-top: 0.25rem;
 }
 .agilo-lib-wiz-icon .agilo-lib-iconpick__title { display: none; }
-.agilo-lib-wiz-icon .agilo-lib-iconpick__chrome { flex-shrink: 0; padding: 0.125rem; }
+.agilo-lib-wiz-icon .agilo-lib-iconpick__chrome { flex-shrink: 0; padding: 0.25rem; }
 .agilo-lib-wiz-icon .agilo-lib-iconpick .agilo-lib-iconpick__grid {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  max-height: min(12.5rem, 40vh);
+  padding: 0.15rem 0.1rem 0.35rem;
   grid-template-columns: repeat(auto-fill, minmax(3.25rem, 1fr));
 }
 .agilo-lib-recap { display: grid; gap: 0.6rem; }

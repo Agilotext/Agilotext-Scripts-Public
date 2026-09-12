@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.3.2
+ * @version 1.3.3
  */
 (function (global) {
   "use strict";
@@ -80,6 +80,7 @@
     var src = icon.url || "";
     var fr = displayLabel(icon);
     var aria = titleOf(icon);
+    if (extra.ariaSuffix) aria = (aria ? aria + ", " : "") + extra.ariaSuffix;
     var showCaption = !!extra.showCaption;
     var img = src
       ? '<img src="' + esc(src) + '" alt="" width="18" height="18" onerror="this.onerror=null;this.hidden=true;">'
@@ -209,7 +210,7 @@
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.3.2",
+    VERSION: "1.3.3",
     SUGG_HIDE_KEY: SUGG_HIDE_KEY,
     isSuggHidden: isSuggHidden,
     setSuggHidden: setSuggHidden,
