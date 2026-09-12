@@ -191,12 +191,12 @@ Aperçu local : `docs/webflow-embeds/preview-v2.html?mock=free|pro|business`. St
 
 ### Embed page bibliothèque v2 (×3, staging only)
 
-Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/library`. Pin jsDelivr `b53928a6`.
+Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,business}/library`. Pin jsDelivr `f30b89fe`.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library.css?v=b53928a6">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-v2.css?v=b53928a6">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=b53928a6">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library.css?v=f30b89fe">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-v2.css?v=f30b89fe">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/profile/agilo-atelier-maquette-coach.css?v=f30b89fe">
 
 <div class="agilo-lib" id="agilo-prompt-library-anchor"></div>
 <div id="agilo-prompt-studio-anchor" hidden></div>
@@ -225,21 +225,21 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     }
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/editor/token-resolver.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/editor/agilo-editor-creds.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/shared/agilo-speech-dictate.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-standards-meta.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-api.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-core.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-core-v2.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-overlay.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-icon-picker.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-fiche-v2.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-wizard-v2.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-catalog.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-catalog-v2.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=b53928a6"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@b53928a6/scripts/pages/library/library-main.js?v=b53928a6"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/editor/token-resolver.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/editor/agilo-editor-creds.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/shared/agilo-speech-dictate.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-standards-meta.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-api.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-core.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-core-v2.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-overlay.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-icon-picker.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-fiche-v2.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-wizard-v2.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-catalog.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-catalog-v2.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/profile/agilo-atelier-maquette-coach.js?v=f30b89fe"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f30b89fe/scripts/pages/library/library-main.js?v=f30b89fe"></script>
 ```
 
 Rollback v2 : `uiV2: false` (recharge catalog v1, plus de CSS v2 ni Studio si tu les retires). Pas www.
@@ -260,6 +260,7 @@ Audit liens `profile?tab=prompts` dans ce repo : plus d’`openEdit` v2 vers Mon
 6. Wizard : 4 questions (une seule par écran), tag Suggérée lisible, attente spinner 32 px (pas Lottie), succès check + carte. `createPromptModelUser` n’enregistre pas `publicDescription` : l’overlay reprend l’objectif, un F5 vide la carte. Ticket Nico : `updatePromptModelUserMetadata` (ou renvoyer ces champs dans `getPromptModelsUserInfo`).
 7. `#modele=253` ouvre la fiche. Mon compte `?tab=prompts` redirige (sauf `noredirect=1`).
 8. Rollback : `uiV2: false`, hard refresh, v1 revient.
+9. Pro/Business RH (-6 à -9) : pas de cadenas sans bouton. **Ajouter à mes modèles** une fois, puis Utiliser / clic carte ouvre la copie USER. Gratuit : toujours flou. CSE sans pack : cadenas Access (mailto tant que `cse89Live` est false).
 
 Retrait v1 (catalog.js page, pas picker) : **2 semaines après cette recette**, noté dans `FEATURES_TRACKING.md`.
 

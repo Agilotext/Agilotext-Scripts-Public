@@ -134,6 +134,8 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 12 sept 2026 : suggestions = mêmes cases que la grille (`3.25rem`, 1re bordure `--best`, pas de badge sur le glyphe). Focus search entier (overflow grille seule). Fiche USER : Contexte / Structure au-dessus du prompt si l’API a les champs. Pin jsDelivr `b53928a6`.
 
+12 sept 2026 (après-midi) : Pro/Business, STANDARDS RH isolés (-6 à -9) : plus de cul-de-sac cadenas. Bouton **Ajouter à mes modèles** (`canDuplicate`), puis génération sur la copie USER. Badge Verrouillé masqué si déjà copié. Gratuit et cadenas pack CSE (`SUBSCRIPTION_ACCESS_REQUIRED`) inchangés. Pas de génération sur l’ID officiel tant que Nico n’a pas `canUse=true`. Pin jsDelivr `f30b89fe`. `cse89Live` reste false.
+
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---
