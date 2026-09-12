@@ -1,6 +1,6 @@
 /**
  * Catalogue : onglets, recherche, chips, grille / tableau, overlays fiche / wizard / versions.
- * @version 1.4.0
+ * @version 1.4.1
  */
 (function (global) {
   "use strict";
@@ -166,6 +166,8 @@
     var q = state.q.trim().toLowerCase();
     return state.models.filter(function (m) {
       if (m.type !== "STANDARD") return false;
+      if (global.AgiloLibraryApi && global.AgiloLibraryApi.isHiddenOfficial &&
+          global.AgiloLibraryApi.isHiddenOfficial(m.promptModelId)) return false;
       if (state.category !== "all" && m.categoryKey !== state.category) return false;
       return matchesQuery(m, q);
     });
@@ -1041,10 +1043,6 @@
   }
 
   function doDefault(root, model, btn, asUse) {
-    if (global.AgiloLibraryApi.canCreate && !global.AgiloLibraryApi.canCreate(state.creds)) {
-      global.AgiloLibraryCore.toast("Le plan Gratuit ne permet pas de définir un modèle par défaut.");
-      return;
-    }
     try {
       global.AgiloLibraryApi.assertGenerationId(model.promptModelId);
     } catch (err) {
@@ -1067,10 +1065,6 @@
   }
 
   function doPin(root, model, btn) {
-    if (global.AgiloLibraryApi.canCreate && !global.AgiloLibraryApi.canCreate(state.creds) && model.type === "STANDARD") {
-      global.AgiloLibraryCore.toast("Le plan Gratuit ne permet pas d’épingler un modèle officiel.");
-      return;
-    }
     if (global.AgiloLibraryCore.locked(model)) return;
     var n = counts().pinned;
     if (!model.pinned && n >= state.pinMax) {
@@ -1089,10 +1083,6 @@
   }
 
   function askDuplicate(root, model) {
-    if (global.AgiloLibraryApi.canCreate && !global.AgiloLibraryApi.canCreate(state.creds)) {
-      global.AgiloLibraryCore.toast("Le plan Gratuit ne permet pas d’ajouter un modèle à votre bibliothèque.");
-      return;
-    }
     global.AgiloLibraryCore.promptDialog({
       title: model.type === "STANDARD" ? "Ajouter à mes modèles" : "Enregistrer sous",
       text: "Donne un nom personnel. La copie t’appartient.",
@@ -1305,5 +1295,5 @@
     }
   }
 
-  global.AgiloLibraryCatalog = { mount: mount };
+  global.AgiloLibraryCatalog = { VERSION: "1.4.1", mount: mount };
 })(typeof window !== "undefined" ? window : globalThis);

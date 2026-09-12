@@ -1,6 +1,6 @@
 /**
  * Picker dashboard A : popover sections + recherche. Synchronise #default-template-select.
- * @version 2.1.0
+ * @version 2.2.0
  */
 (function (global) {
   "use strict";
@@ -24,8 +24,14 @@
     return blob.indexOf(String(q).toLowerCase()) !== -1;
   }
 
+  function hasCse() {
+    return !!(Api() && Api().hasCseAccess && Api().hasCseAccess());
+  }
+
   function visibleModels(models, canCreate) {
-    var list = models || [];
+    var list = (models || []).filter(function (m) {
+      return !Api().isHiddenOfficial || !Api().isHiddenOfficial(m.promptModelId);
+    });
     if (canCreate) return list.slice();
     return list.filter(function (m) {
       return m.canUse && Api().isGenerationSafeId(m.promptModelId);
@@ -70,15 +76,18 @@
   }
 
   function canSelect(m) {
-    if (!m || m.packCse) return false;
+    if (!m) return false;
+    if (m.packCse && !hasCse()) return false;
     var status = String(m.promptModelStatus || "READY").toUpperCase();
     if (status !== "READY" && status !== "ACTIVE") return false;
     if (acquiredId(m)) return true;
+    if (m.packCse && hasCse()) return false;
     return !!(m.canUse && Api().isGenerationSafeId(m.promptModelId));
   }
 
   function showAdd(m, canCreate) {
-    if (!canCreate || !m || m.packCse) return false;
+    if (!canCreate || !m) return false;
+    if (m.packCse && !hasCse()) return false;
     if (acquiredId(m)) return false;
     return !!(m.requiresUserCopy || Number(m.promptModelId) < -1);
   }
@@ -92,7 +101,7 @@
 
   function addKind(m, canCreate) {
     if (!m) return "none";
-    if (m.packCse) return "cse-pack";
+    if (m.packCse && !hasCse()) return "cse-pack";
     if (acquiredId(m)) return "select-copy";
     if (showAdd(m, canCreate)) return "duplicate";
     if (canSelect(m)) return "select";
@@ -173,7 +182,7 @@
       if (pack) return pack;
     }
     return {
-      href: A.ctaCsePackHref ? A.ctaCsePackHref() : "https://www.agilotext.com/offres/cse",
+      href: A.ctaCsePackHref ? A.ctaCsePackHref() : "/offres/cse",
       label: "Voir l’offre CSE"
     };
   }
@@ -195,7 +204,9 @@
     }
     if (acquiredId(m)) bits.push('<span class="agilo-lib-badge agilo-lib-badge--acquired">Dans Mes modèles</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
-    if (showAdd(m, canCreate) || m.packCse) {
+    if (m.packCse && !hasCse()) {
+      bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
+    } else if (!m.packCse && showAdd(m, canCreate)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
     }
     return bits.join("");
@@ -211,7 +222,12 @@
     return null;
   }
 
-  function mount(anchor, creds, pack) {
+  function mount(anchor, creds, pack, access) {
+    if (access && Api().applyCseUnlock) {
+      pack = Object.assign({}, pack, { models: Api().applyCseUnlock(pack.models || [], access) });
+    } else if (access && Api().setMemberAccess) {
+      Api().setMemberAccess(access);
+    }
     var canCreate = Api().canCreate(creds);
     var models = visibleModels(pack.models || [], canCreate);
     var select = typeof document !== "undefined" ? document.getElementById("default-template-select") : null;
@@ -283,7 +299,7 @@
       var C = Core();
       var active = Number(m.promptModelId) === Number(selectedId);
       var choosable = canSelect(m);
-      var locked = !!(showAdd(m, canCreate) || m.packCse);
+      var locked = !!(m.packCse && !hasCse()) || (!m.packCse && showAdd(m, canCreate));
       var cls = "agilo-lib-picker__opt" +
         (active ? " is-active" : "") +
         (choosable ? "" : " is-off") +
@@ -538,11 +554,16 @@
     }
     pickerLoading = true;
     Api().waitForCreds().then(function (creds) {
-      return Api().fetchLists(creds).then(function (pack) {
+      return Promise.all([
+        Api().fetchLists(creds),
+        Api().fetchMemberAccess(creds).catch(function () {
+          return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+        })
+      ]).then(function (pair) {
         pickerFailed = false;
         pickerMounted = true;
         pickerLoading = false;
-        mount(anchor, creds, pack);
+        mount(anchor, creds, pair[0], pair[1]);
       });
     }).catch(function (err) {
       pickerLoading = false;
@@ -571,7 +592,7 @@
   }
 
   global.AgiloLibraryPicker = {
-    VERSION: "2.1.0",
+    VERSION: "2.2.0",
     mount: mount,
     boot: boot,
     _groups: groups,

@@ -1,7 +1,7 @@
 /**
  * Rendu cartes, icônes Nucleo curatées (inline), tableau, menus.
  * iconUrl serveur inchangé. Fallback = glyphes 18 px, currentColor.
- * @version 1.3.2
+ * @version 1.3.1
  */
 (function (global) {
   "use strict";
@@ -24,7 +24,6 @@
     search: '<path d="M15.75 15.75L11.6386 11.6386" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
     plus: '<line x1="9" y1="3.25" x2="9" y2="14.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="3.25" y1="9" x2="14.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
     lock: '<path d="M5.75,8.25v-3.25c0-1.795,1.455-3.25,3.25-3.25h0c1.795,0,3.25,1.455,3.25,3.25v3.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="9" y1="11.75" x2="9" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="3.25" y="8.25" width="11.5" height="8" rx="2" ry="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
-    "lock-soft": '<rect x="4.5" y="8.25" width="9" height="6.75" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 8.25V6.1c0-1.38 1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5v2.15" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>',
     grid: '<rect x="2.25" y="2.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="10.25" y="2.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="2.25" y="10.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="10.25" y="10.75" width="5.5" height="5.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/>',
     table: '<polyline points="2.25 13.391 3.609 14.75 7.006 10.333" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="5.25" x2="16.25" y2="5.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="10.25" y1="12.75" x2="16.25" y2="12.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="2.25" y="2.75" width="4.5" height="4.5" rx="1" ry="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
     xmark: '<line x1="14" y1="4" x2="4" y2="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="4" y1="4" x2="14" y2="14" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
@@ -108,31 +107,11 @@
   }
 
   function locked(m) {
+    if (m.packCse && global.AgiloLibraryApi && global.AgiloLibraryApi.hasCseAccess &&
+        global.AgiloLibraryApi.hasCseAccess()) {
+      return false;
+    }
     return !!(m.lockReasonCode || m.lockReasonMessage) && !m.canUse;
-  }
-
-  var USER_COPY_FR = "Ajoute ce modèle à tes modèles pour l'utiliser.";
-  var USER_COPY_ASCII = "ajoute ce modele a tes modeles pour l'utiliser.";
-
-  function stripAccents(s) {
-    return String(s || "")
-      .replace(/[àáâä]/gi, "a")
-      .replace(/[èéêë]/gi, "e")
-      .replace(/[ìíîï]/gi, "i")
-      .replace(/[òóôö]/gi, "o")
-      .replace(/[ùúûü]/gi, "u")
-      .replace(/ç/gi, "c")
-      .replace(/’/g, "'");
-  }
-
-  /** Copy cadenas : l’API lot D envoie USER_COPY_REQUIRED en ASCII sans accents. */
-  function lockMessage(m, fallback) {
-    m = m || {};
-    var code = String(m.lockReasonCode || "");
-    var raw = String(m.lockReasonMessage || "").trim();
-    if (code === "USER_COPY_REQUIRED") return USER_COPY_FR;
-    if (raw && stripAccents(raw).toLowerCase() === USER_COPY_ASCII) return USER_COPY_FR;
-    return raw || fallback || "Réservé.";
   }
 
   function badgeHtml(m) {
@@ -142,7 +121,9 @@
     if (m.hasHtml) bits.push('<span class="agilo-lib-badge agilo-lib-badge--html">Mise en page</span>');
     if (m.featured && m.type === "STANDARD") bits.push('<span class="agilo-lib-badge agilo-lib-badge--featured">À la une</span>');
     if (m.packCse) bits.push('<span class="agilo-lib-badge agilo-lib-badge--pack">CSE</span>');
-    if (m.lockReasonCode || m.lockReasonMessage) {
+    var csePaid = !!(global.AgiloLibraryApi && global.AgiloLibraryApi.hasCseAccess &&
+      global.AgiloLibraryApi.hasCseAccess());
+    if ((m.lockReasonCode || m.lockReasonMessage) && !(m.packCse && csePaid)) {
       bits.push('<span class="agilo-lib-badge agilo-lib-badge--lock">Verrouillé</span>');
     }
     return bits.join("");
@@ -158,25 +139,19 @@
     return c.join(" ");
   }
 
-  function isFreePlan() {
-    var A = global.AgiloLibraryApi;
-    if (!A || !A.canCreate) return false;
-    return !A.canCreate();
-  }
-
   function menuItems(m) {
     var isLocked = locked(m);
     var items = [];
-    if (!isFreePlan() && m.canSetDefault && m.canUse && !m.isDefault && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
+    if (m.canSetDefault && m.canUse && !m.isDefault && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
       items.push({ act: "default", label: "Définir par défaut", icon: "check-circle" });
     }
-    if (m.canPin && !isLocked && !(isFreePlan() && m.type === "STANDARD")) {
+    if (m.canPin && !isLocked) {
       items.push({ act: "pin", label: m.pinned ? "Désépingler" : "Épingler", icon: "pin" });
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial && !isFreePlan()) {
+    if (m.type === "STANDARD" && m.canCopyOfficial) {
       items.push({ act: "duplicate", label: "Ajouter à mes modèles", icon: "copy" });
     }
-    if (m.type === "USER" && m.canDuplicate && !isFreePlan()) {
+    if (m.type === "USER" && m.canDuplicate) {
       items.push({ act: "duplicate", label: "Enregistrer sous", icon: "copy" });
     }
     if (m.type === "USER" && global.AgiloLibraryApi && global.AgiloLibraryApi.canSetUserIcon &&
@@ -203,11 +178,11 @@
       return '<a class="agilo-lib-btn agilo-lib-btn--cta" href="' + escapeHtml(cta.href) + '">' +
         escapeHtml(cta.label) + "</a>";
     }
-    if (!isFreePlan() && m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
+    if (m.canUse && global.AgiloLibraryApi.isGenerationSafeId(m.promptModelId)) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="use"' +
         (m.isDefault ? " disabled" : "") + ">Utiliser par défaut</button>";
     }
-    if (m.type === "STANDARD" && m.canCopyOfficial && !isFreePlan()) {
+    if (m.type === "STANDARD" && m.canCopyOfficial) {
       return '<button type="button" class="agilo-lib-btn agilo-lib-btn--primary" data-act="duplicate">Ajouter à mes modèles</button>';
     }
     return "";
@@ -224,7 +199,7 @@
     var desc = m.publicDescription || "";
     var example = m.publicExample || "";
     var lockLine = isLocked
-      ? '<p class="agilo-lib-card__lock">' + escapeHtml(lockMessage(m)) + "</p>"
+      ? '<p class="agilo-lib-card__lock">' + escapeHtml(m.lockReasonMessage || "Réservé.") + "</p>"
       : "";
     var descHtml = "";
     if (size !== "compact" && desc) {
@@ -293,13 +268,6 @@
       '<div class="agilo-lib-skel agilo-lib-skel--line"></div></article>';
   }
 
-  function spinHtml(aria, size) {
-    var lab = escapeHtml(aria || "Chargement");
-    var cls = "agilo-lib-spin" + (size === "lg" ? " agilo-lib-spin--lg" : "");
-    return '<span class="' + cls + '" role="status" aria-label="' + lab + '">' +
-      '<span class="visually-hidden">' + lab + "</span></span>";
-  }
-
   function emptyHtml(title, text, extra, iconKey) {
     var ico = iconKey
       ? '<div class="agilo-lib-empty__ico" aria-hidden="true">' + svgIcon(iconKey, 28) + "</div>"
@@ -328,36 +296,13 @@
     setTimeout(function () { el.remove(); }, 4800);
   }
 
-  var menuAnchor = null;
-  var onDocClick = null;
-  var onDocScroll = null;
-  var onWinResize = null;
-  var onDocKey = null;
-
-  function unbindMenuListeners() {
-    if (onDocClick) document.removeEventListener("click", onDocClick);
-    if (onDocScroll) document.removeEventListener("scroll", onDocScroll, true);
-    if (onWinResize) window.removeEventListener("resize", onWinResize);
-    if (onDocKey) document.removeEventListener("keydown", onDocKey, true);
-    onDocClick = onDocScroll = onWinResize = onDocKey = null;
-  }
-
   function closeMenus() {
     document.querySelectorAll(".agilo-lib-menu").forEach(function (n) { n.remove(); });
-    if (menuAnchor && menuAnchor.setAttribute && menuAnchor.isConnected) {
-      menuAnchor.setAttribute("aria-expanded", "false");
-    }
-    menuAnchor = null;
-    unbindMenuListeners();
   }
 
   function openCardMenu(anchor, items, onPick) {
-    if (menuAnchor === anchor && document.querySelector(".agilo-lib-menu")) {
-      closeMenus();
-      return;
-    }
     closeMenus();
-    if (!items || !items.length || !anchor) return;
+    if (!items || !items.length) return;
     var menu = document.createElement("div");
     menu.className = "agilo-lib agilo-lib-menu";
     menu.setAttribute("role", "menu");
@@ -367,8 +312,6 @@
         (it.danger ? ' class="is-danger"' : "") + ">" + ico + "<span>" + escapeHtml(it.label) + "</span></button>";
     }).join("");
     document.body.appendChild(menu);
-    menuAnchor = anchor;
-    if (anchor.setAttribute) anchor.setAttribute("aria-expanded", "true");
     var r = anchor.getBoundingClientRect();
     var mw = menu.offsetWidth || 208;
     var mh = menu.offsetHeight || 160;
@@ -388,27 +331,8 @@
       closeMenus();
       if (typeof onPick === "function") onPick(act);
     });
-    var first = menu.querySelector("[role=\"menuitem\"]");
-    if (first && first.focus) first.focus();
-    onDocClick = function (e) {
-      if (e.target.closest && e.target.closest(".agilo-lib-menu")) return;
-      if (e.target.closest && e.target.closest("[data-act=\"more\"]")) return;
-      closeMenus();
-    };
-    onDocScroll = function () { closeMenus(); };
-    onWinResize = function () { closeMenus(); };
-    onDocKey = function (e) {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      e.stopPropagation();
-      closeMenus();
-    };
     setTimeout(function () {
-      if (!menuAnchor) return;
-      document.addEventListener("click", onDocClick);
-      document.addEventListener("scroll", onDocScroll, true);
-      window.addEventListener("resize", onWinResize);
-      document.addEventListener("keydown", onDocKey, true);
+      document.addEventListener("click", closeMenus, { once: true });
     }, 0);
   }
 
@@ -498,6 +422,7 @@
   }
 
   global.AgiloLibraryCore = {
+    VERSION: "1.3.1",
     escapeHtml: escapeHtml,
     svgIcon: svgIcon,
     iconHtml: iconHtml,
@@ -506,12 +431,10 @@
     tableRowHtml: tableRowHtml,
     skeletonCard: skeletonCard,
     emptyHtml: emptyHtml,
-    spinHtml: spinHtml,
     toast: toast,
     sortModels: sortModels,
     sortOfficial: sortOfficial,
     locked: locked,
-    lockMessage: lockMessage,
     menuItems: menuItems,
     openCardMenu: openCardMenu,
     closeMenus: closeMenus,

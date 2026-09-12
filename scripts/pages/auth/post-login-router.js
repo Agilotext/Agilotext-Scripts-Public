@@ -1,5 +1,5 @@
 /* ===================================================== */
-/* AGILOTEXT - POST LOGIN ROUTER v8.3 (/auth/post-login) */
+/* AGILOTEXT - POST LOGIN ROUTER v8.6 (/auth/post-login) */
 /* Transcription (Free/Pro/Business) prime sur Agiloshield */
 /* v8: sièges business via joinedTeams (sans garde ownedTeams===0) */
 /* v8.1: legacy pln_anonymisation → /tools/agiloshield/premium/dashboard */
@@ -7,20 +7,21 @@
 /* v8.3: price IDs CSE89 / CSE89Y → dashboard business */
 /* v8.4: POST /auth/refresh si jeton Free encore en cache après élévation CSE/Business */
 /* v8.5: sessionStorage agiloCsePriceId one-shot → /offres/cse?pay= si pas encore pln_cse- */
+/* v8.6: prices CSE sans team prc_cse89-rr10n0l / prc_cse89y-vf20nyv */
+/* v8.7: CSE_PRICE_IDS = neufs seulement (préfixe pln_cse- inchangé) */
 /* ===================================================== */
 /* Déploiement Webflow : coller ce script sur la page /auth/post-login */
-/* Collage live : seulement après OK Florian. Fichier repo ≠ page Webflow. */
 
 (function (root) {
   "use strict";
 
-  const VERSION = "v8.5";
+  const VERSION = "v8.7";
   const API_BASE = "https://api.agilotext.com/api/v1";
   const FREE_PLAN_ID = "pln_free-njg10umr";
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
   const CSE_PRICE_IDS = new Set([
-    "prc_cse89y-jl40a31",
-    "prc_cse89-8230aqy"
+    "prc_cse89y-vf20nyv",
+    "prc_cse89-rr10n0l"
   ]);
   const CSE_PENDING_KEY = "agiloCsePriceId";
   const CSE_PENDING_AT = "agiloCsePriceAt";

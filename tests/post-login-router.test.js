@@ -1,5 +1,5 @@
 /**
- * Tests logique post-login v8.5 (CSE pending checkout)
+ * Tests logique post-login v8.7 (CSE 89 € / 890 € → dashboard business)
  * Exécution : node --test tests/post-login-router.test.js
  */
 
@@ -7,14 +7,7 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const router = require("../scripts/pages/auth/post-login-router.js");
 
-const {
-  getTeamSignals,
-  getEditionSignals,
-  resolveRoute,
-  VERSION,
-  readPendingCsePrice,
-  consumePendingCsePrice
-} = router;
+const { getTeamSignals, getEditionSignals, resolveRoute, VERSION, readPendingCsePrice, consumePendingCsePrice } = router;
 
 const supportSeat = {
   teams: {
@@ -60,8 +53,8 @@ const freePlusAnon = {
 };
 
 describe("version", () => {
-  it("exporte v8.5", () => {
-    assert.equal(VERSION, "v8.5");
+  it("exporte v8.7", () => {
+    assert.equal(VERSION, "v8.7");
   });
 });
 
@@ -141,6 +134,58 @@ describe("resolveRoute", () => {
     assert.equal(route.decisionReason, "active_cse_plan");
   });
 
+  it("pln_cse-ic00nme seul -> /app/business/dashboard", () => {
+    const cseOnly = {
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_cse-ic00nme", active: true }
+      ]
+    };
+    const signals = getEditionSignals(cseOnly);
+    assert.equal(signals.hasCse, true);
+    const route = resolveRoute(signals, true);
+    assert.equal(route.targetRoute, "/app/business/dashboard");
+    assert.equal(route.decisionReason, "active_cse_plan");
+  });
+
+  it("price CSE annuel sans team -> /app/business/dashboard", () => {
+    const cseYear = {
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_unknown-cse", payment: { priceId: "prc_cse89y-vf20nyv" }, active: true }
+      ]
+    };
+    const signals = getEditionSignals(cseYear);
+    assert.equal(signals.hasCse, true);
+    const route = resolveRoute(signals, true);
+    assert.equal(route.targetRoute, "/app/business/dashboard");
+  });
+
+  it("price CSE mensuel sans team -> /app/business/dashboard", () => {
+    const cseMonth = {
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_unknown-cse", payment: { priceId: "prc_cse89-rr10n0l" }, active: true }
+      ]
+    };
+    const signals = getEditionSignals(cseMonth);
+    assert.equal(signals.hasCse, true);
+    const route = resolveRoute(signals, true);
+    assert.equal(route.targetRoute, "/app/business/dashboard");
+  });
+
+  it("anciens price IDs team ne suffisent plus sans pln_cse-", () => {
+    const oldYear = {
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_unknown-cse", payment: { priceId: "prc_cse89y-jl40a31" }, active: true }
+      ]
+    };
+    assert.equal(getEditionSignals(oldYear).hasCse, false);
+    const oldMonth = {
+      planConnections: [
+        { status: "ACTIVE", planId: "pln_unknown-cse", payment: { priceId: "prc_cse89-8230aqy" }, active: true }
+      ]
+    };
+    assert.equal(getEditionSignals(oldMonth).hasCse, false);
+  });
+
   it("pln_pack-cse cadeau ne compte pas comme CSE payant", () => {
     const gift = {
       planConnections: [
@@ -156,42 +201,21 @@ describe("resolveRoute", () => {
   });
 });
 
+describe("pending CSE price", () => {
+  it("lit le price neuf dans sessionStorage", () => {
+    sessionStorage.setItem("agiloCsePriceId", "prc_cse89y-vf20nyv");
+    sessionStorage.setItem("agiloCsePriceAt", String(Date.now()));
+    assert.equal(readPendingCsePrice(), "prc_cse89y-vf20nyv");
+    assert.equal(consumePendingCsePrice(), "prc_cse89y-vf20nyv");
+    assert.equal(readPendingCsePrice(), "");
+  });
+});
+
 describe("join-team params", () => {
   it("decode owner depuis query string", () => {
     const p = new URLSearchParams("owner=Florian+de+BauerWebPro&team=Equipe+Test");
     const owner = decodeURIComponent(String(p.get("owner")).replace(/\+/g, " "));
     assert.equal(owner, "Florian de BauerWebPro");
     assert.equal(decodeURIComponent(String(p.get("team")).replace(/\+/g, " ")), "Equipe Test");
-  });
-});
-
-describe("pending CSE checkout", () => {
-  const mem = {};
-  function mockStorage() {
-    global.sessionStorage = {
-      getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
-      setItem: (k, v) => { mem[k] = String(v); },
-      removeItem: (k) => { delete mem[k]; }
-    };
-    Object.keys(mem).forEach((k) => delete mem[k]);
-  }
-  it("lit un price CSE récent", () => {
-    mockStorage();
-    mem.agiloCsePriceId = "prc_cse89y-jl40a31";
-    mem.agiloCsePriceAt = String(Date.now());
-    assert.equal(readPendingCsePrice(), "prc_cse89y-jl40a31");
-  });
-  it("ignore un price Business", () => {
-    mockStorage();
-    mem.agiloCsePriceId = "prc_business-1-seat-aj1780sye";
-    mem.agiloCsePriceAt = String(Date.now());
-    assert.equal(readPendingCsePrice(), "");
-  });
-  it("consume vide le storage", () => {
-    mockStorage();
-    mem.agiloCsePriceId = "prc_cse89-8230aqy";
-    mem.agiloCsePriceAt = String(Date.now());
-    assert.equal(consumePendingCsePrice(), "prc_cse89-8230aqy");
-    assert.equal(readPendingCsePrice(), "");
   });
 });

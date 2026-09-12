@@ -1,7 +1,7 @@
 /**
  * Grille d’icônes library2 (wizard + fiche USER).
  * Distinct de library-picker.js (choix de modèle dashboard).
- * @version 1.3.3
+ * @version 1.0.0
  */
 (function (global) {
   "use strict";
@@ -14,87 +14,9 @@
     return !!(global.AgiloLibraryApi && global.AgiloLibraryApi.cfg && global.AgiloLibraryApi.cfg().library2Live);
   }
 
-  function esc(s) {
-    var C = global.AgiloLibraryCore;
-    return C && C.escapeHtml ? C.escapeHtml(s) : String(s || "");
-  }
-
   function labelOf(icon) {
     if (!icon) return "";
     return String(icon.labelFr || icon.label || icon.iconKey || "");
-  }
-
-  var FR_OVERRIDES = {
-    custom: "Personnalisé"
-  };
-
-  var SUGG_HIDE_KEY = "agilo-lib-icon-sugg-hidden";
-
-  function isSuggHidden() {
-    try { return sessionStorage.getItem(SUGG_HIDE_KEY) === "1"; } catch (_) { return false; }
-  }
-
-  function setSuggHidden(hidden) {
-    try { sessionStorage.setItem(SUGG_HIDE_KEY, hidden ? "1" : "0"); } catch (_) { /* ignore */ }
-  }
-
-  function nucleoCaption(icon) {
-    var key = String((icon && icon.iconKey) || "").trim();
-    if (!key) return "";
-    return key.replace(/-/g, " ");
-  }
-
-  function displayLabel(icon) {
-    if (!icon) return "";
-    var key = String(icon.iconKey || "").trim();
-    if (FR_OVERRIDES[key]) return FR_OVERRIDES[key];
-    var fr = String(icon.labelFr || "").trim();
-    if (!fr) return "";
-    var en = String(icon.label || "").trim();
-    var nucleo = nucleoCaption(icon);
-    if (en && fr.toLowerCase() === en.toLowerCase() && fr.toLowerCase() === nucleo.toLowerCase()) {
-      return "";
-    }
-    if (fr.toLowerCase() === nucleo.toLowerCase()) return "";
-    return fr;
-  }
-
-  function titleOf(icon) {
-    var fr = displayLabel(icon);
-    if (fr) return fr;
-    return String((icon && icon.iconKey) || "");
-  }
-
-  function spinHtml(aria, size) {
-    var C = global.AgiloLibraryCore;
-    if (C && C.spinHtml) return C.spinHtml(aria, size);
-    var lab = esc(aria || "Chargement");
-    var cls = "agilo-lib-spin" + (size === "lg" ? " agilo-lib-spin--lg" : "");
-    return '<span class="' + cls + '" role="status" aria-label="' + lab + '">' +
-      '<span class="visually-hidden">' + lab + "</span></span>";
-  }
-
-  function cellHtml(icon, selectedKey, extra) {
-    extra = extra || {};
-    var on = icon.iconKey === selectedKey;
-    var src = icon.url || "";
-    var fr = displayLabel(icon);
-    var aria = titleOf(icon);
-    if (extra.ariaSuffix) aria = (aria ? aria + ", " : "") + extra.ariaSuffix;
-    var showCaption = !!extra.showCaption;
-    var img = src
-      ? '<img src="' + esc(src) + '" alt="" width="18" height="18" onerror="this.onerror=null;this.hidden=true;">'
-      : "";
-    var cap = "";
-    if (showCaption) cap = "<span>" + (fr ? esc(fr) : "&nbsp;") + "</span>";
-    var cls = "agilo-lib-iconpick__cell" +
-      (extra.className ? " " + extra.className : "") +
-      (on ? " is-on" : "") +
-      (showCaption ? "" : " agilo-lib-iconpick__cell--solo");
-    return '<button type="button" class="' + cls +
-      '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on +
-      '" aria-label="' + esc(aria) + '">' +
-      img + cap + (extra.tag || "") + "</button>";
   }
 
   function matchesQuery(icon, q) {
@@ -134,27 +56,26 @@
     return catalogInflight;
   }
 
-  function chromeHtml(q) {
-    return '<div class="agilo-lib-iconpick__chrome">' +
-      '<p class="agilo-lib-iconpick__title">Icône du modèle</p>' +
-      '<label class="visually-hidden" for="agilo-lib-icon-q">Filtrer les icônes</label>' +
-      '<input id="agilo-lib-icon-q" class="agilo-lib-iconpick__q" type="search" placeholder="Rechercher une icône" value="' +
-      esc(q) + '">' +
-      "</div>";
-  }
-
   function html(opts) {
     opts = opts || {};
+    var C = global.AgiloLibraryCore;
+    var esc = C && C.escapeHtml ? C.escapeHtml : function (s) { return String(s || ""); };
     var selected = String(opts.selectedKey || "");
     var q = String(opts.query || "");
     var icons = opts.icons || catalogCache || [];
     var loading = !!opts.loading;
     var error = opts.error || (!loading && !icons.length && catalogError ? catalogError : "");
+    var suggesting = !!opts.suggesting;
 
-    var head = '<div class="agilo-lib-iconpick">' + chromeHtml(q);
+    var head = '<div class="agilo-lib-iconpick">' +
+      '<p class="agilo-lib-iconpick__title">Icône du modèle</p>' +
+      (suggesting ? '<p class="agilo-lib-note" role="status">Suggestion en cours…</p>' : "") +
+      '<label class="visually-hidden" for="agilo-lib-icon-q">Filtrer les icônes</label>' +
+      '<input id="agilo-lib-icon-q" class="agilo-lib-iconpick__q" type="search" placeholder="Filtrer (nom ou clé)" value="' +
+      esc(q) + '">';
 
     if (loading && !icons.length) {
-      return head + '<div class="agilo-lib-iconpick__wait">' + spinHtml("Chargement") + "</div></div>";
+      return head + '<p class="agilo-lib-note">Chargement des icônes…</p></div>';
     }
     if (error && !icons.length) {
       return head + '<p class="agilo-lib-note">' + esc(error) +
@@ -163,7 +84,15 @@
 
     var filtered = icons.filter(function (icon) { return matchesQuery(icon, q.trim().toLowerCase()); });
     var cells = filtered.map(function (icon) {
-      return cellHtml(icon, selected);
+      var on = icon.iconKey === selected;
+      var src = icon.url || "";
+      var lab = labelOf(icon);
+      var img = src
+        ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
+        : "";
+      return '<button type="button" class="agilo-lib-iconpick__cell' + (on ? " is-on" : "") +
+        '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(lab) + '">' +
+        img + '<span>' + esc(lab) + "</span></button>";
     }).join("");
     if (!filtered.length) {
       cells = '<p class="agilo-lib-note">Aucune icône pour ce filtre.</p>';
@@ -197,6 +126,8 @@
   function applyFilter(host, icons, selectedKey, q) {
     var grid = host.querySelector(".agilo-lib-iconpick__grid");
     if (!grid) return;
+    var C = global.AgiloLibraryCore;
+    var esc = C && C.escapeHtml ? C.escapeHtml : function (s) { return String(s || ""); };
     var filtered = (icons || []).filter(function (icon) {
       return matchesQuery(icon, String(q || "").trim().toLowerCase());
     });
@@ -205,25 +136,26 @@
       return;
     }
     grid.innerHTML = filtered.map(function (icon) {
-      return cellHtml(icon, selectedKey);
+      var on = icon.iconKey === selectedKey;
+      var src = icon.url || "";
+      var lab = labelOf(icon);
+      var img = src
+        ? '<img src="' + esc(src) + '" alt="" width="22" height="22" onerror="this.onerror=null;this.hidden=true;">'
+        : "";
+      return '<button type="button" class="agilo-lib-iconpick__cell' + (on ? " is-on" : "") +
+        '" data-icon-key="' + esc(icon.iconKey) + '" aria-pressed="' + on + '" title="' + esc(lab) + '">' +
+        img + '<span>' + esc(lab) + "</span></button>";
     }).join("");
   }
 
   global.AgiloLibraryIconPicker = {
-    VERSION: "1.3.3",
-    SUGG_HIDE_KEY: SUGG_HIDE_KEY,
-    isSuggHidden: isSuggHidden,
-    setSuggHidden: setSuggHidden,
+    VERSION: "1.0.0",
     html: html,
     bind: bind,
     bindCells: bindCells,
     applyFilter: applyFilter,
     load: load,
     labelOf: labelOf,
-    displayLabel: displayLabel,
-    titleOf: titleOf,
-    cellHtml: cellHtml,
-    spinHtml: spinHtml,
     resetCache: resetCache,
     matchesQuery: matchesQuery
   };

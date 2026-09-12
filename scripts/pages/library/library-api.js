@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.5
+ * @version 1.5.6
  */
 (function (global) {
   "use strict";
@@ -17,6 +17,8 @@
   var AUTH_RETRY_MSG = "Session expirée, reconnexion…";
   var AUTH_RELOAD_MSG = "Session expirée. Recharge la page.";
   var refreshInflight = null;
+  var HIDDEN_OFFICIAL_IDS = { 7: true };
+  var memberAccess = { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
 
   function cfg() {
     var c = global.__AGILO_PROMPT_LIBRARY__ || {};
@@ -30,9 +32,9 @@
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
       pickerSelector: c.pickerSelector || "#agilo-prompt-picker-anchor",
       ctaMailto: c.ctaMailto || "mailto:contact@agilotext.com?subject=Pack%20CSE",
-      ctaCseLandingUrl: c.ctaCseLandingUrl || "https://www.agilotext.com/offres/cse",
-      ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse?pay=prc_cse89y-jl40a31",
-      ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse?pay=prc_cse89-8230aqy",
+      ctaCseLandingUrl: c.ctaCseLandingUrl || "/offres/cse",
+      ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse?pay=prc_cse89y-vf20nyv",
+      ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse?pay=prc_cse89-rr10n0l",
       edition: c.edition || "",
       pricingUrl: c.pricingUrl || "/tarifs"
     };
@@ -255,6 +257,47 @@
       return raw.split(",").map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
     }
     return [];
+  }
+
+  function isHiddenOfficial(id) {
+    return !!HIDDEN_OFFICIAL_IDS[Number(id)];
+  }
+
+  function filterHiddenOfficial(models) {
+    return (models || []).filter(function (m) {
+      return m && !isHiddenOfficial(m.promptModelId);
+    });
+  }
+
+  function setMemberAccess(a) {
+    memberAccess = a && typeof a === "object"
+      ? a
+      : { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+    return memberAccess;
+  }
+
+  function getMemberAccess() {
+    return memberAccess;
+  }
+
+  function hasCseAccess() {
+    return !!(memberAccess && memberAccess.hasCse);
+  }
+
+  function applyCseUnlock(models, access) {
+    var paid = !!(access && access.hasCse);
+    if (access) setMemberAccess(access);
+    return filterHiddenOfficial(models || []).map(function (m) {
+      if (!m || !m.packCse || !paid) return m;
+      var copy = Object.assign({}, m);
+      copy.lockReasonCode = "";
+      copy.lockReasonMessage = "";
+      copy.lockedReason = "";
+      copy.canDuplicate = true;
+      copy.canCopyOfficial = true;
+      copy.requiresUserCopy = true;
+      return copy;
+    });
   }
 
   function isPackCseCard(m) {
@@ -690,7 +733,7 @@
       var map = {};
       listFrom(stdData).concat(listFrom(userData)).forEach(function (raw) {
         var card = normalizeCard(raw, defaultId);
-        if (!card || !isFinite(card.promptModelId)) return;
+        if (!card || !isFinite(card.promptModelId) || isHiddenOfficial(card.promptModelId)) return;
         map[card.promptModelId] = card;
       });
       var models = Object.keys(map).map(function (k) { return map[k]; });
@@ -1063,9 +1106,11 @@
     return c.ctaCseLandingUrl;
   }
 
-  function ctaForLocked(packCse) {
+  function ctaForLocked(packCse, hasCse) {
     var c = cfg();
     if (!packCse) return null;
+    if (hasCse === undefined) hasCse = hasCseAccess();
+    if (hasCse) return null;
     if (!c.cse89Live) {
       return {
         kind: "soft",
@@ -1085,10 +1130,17 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.5",
+    VERSION: "1.5.6",
+    HIDDEN_OFFICIAL_IDS: HIDDEN_OFFICIAL_IDS,
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,
+    isHiddenOfficial: isHiddenOfficial,
+    filterHiddenOfficial: filterHiddenOfficial,
+    setMemberAccess: setMemberAccess,
+    getMemberAccess: getMemberAccess,
+    hasCseAccess: hasCseAccess,
+    applyCseUnlock: applyCseUnlock,
     cfg: cfg,
     waitForCreds: waitForCreds,
     refreshCreds: refreshCreds,

@@ -1,7 +1,6 @@
 /**
  * Page bibliothèque Webflow. Charger après token-resolver + agilo-editor-creds.
- * uiV2: true → AgiloLibraryCatalogV2 (library-catalog-v2.js), sinon catalogue v1.
- * @version 1.4.0
+ * @version 1.3.1
  */
 (function (global) {
   "use strict";
@@ -22,24 +21,10 @@
       "</span></div></div>";
   }
 
-  function catalog() {
-    var cfg = global.AgiloLibraryApi.cfg();
-    if (cfg.uiV2 && global.AgiloLibraryCatalogV2) return global.AgiloLibraryCatalogV2;
-    return global.AgiloLibraryCatalog;
-  }
-
   function skeletonHtml() {
     var C = global.AgiloLibraryCore;
     var cards = C.skeletonCard() + C.skeletonCard() + C.skeletonCard() +
       C.skeletonCard() + C.skeletonCard() + C.skeletonCard();
-    if (global.AgiloLibraryApi.cfg().uiV2) {
-      return '<div class="agilo-lib-head agilo-lib-head--v2"><h1>Modèles de documents</h1></div>' +
-        '<div class="agilo-lib-tabs" aria-hidden="true">' +
-        '<span class="agilo-lib-tab is-active">Modèles Agilotext</span>' +
-        '<span class="agilo-lib-tab">Mes modèles</span>' +
-        '<span class="agilo-lib-tab">Épinglés</span></div>' +
-        '<div class="agilo-lib-grid">' + cards + "</div>";
-    }
     return '<div class="agilo-lib-head"><div><h1>Modèles de documents</h1>' +
       "<p>Chargement de tes modèles…</p></div></div>" +
       '<div class="agilo-lib-tabs" aria-hidden="true">' +
@@ -57,13 +42,21 @@
     global.AgiloLibraryApi.waitForCreds().then(function (creds) {
       return Promise.all([
         global.AgiloLibraryApi.fetchLists(creds),
-        global.AgiloLibraryApi.fetchMemberAccess(creds)
+        global.AgiloLibraryApi.fetchMemberAccess(creds).catch(function () {
+          return { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+        })
       ]).then(function (pair) {
+        var pack = pair[0];
+        var access = pair[1];
+        if (global.AgiloLibraryApi.applyCseUnlock) {
+          pack.models = global.AgiloLibraryApi.applyCseUnlock(pack.models, access);
+        } else if (global.AgiloLibraryApi.setMemberAccess) {
+          global.AgiloLibraryApi.setMemberAccess(access);
+        }
         mounted = true;
         authFailed = false;
         loading = false;
-        if (global.AgiloLibraryApi.setActiveCreds) global.AgiloLibraryApi.setActiveCreds(creds);
-        catalog().mount(host, creds, pair[1], pair[0]);
+        global.AgiloLibraryCatalog.mount(host, creds, access, pack);
       });
     }).catch(function (err) {
       loading = false;
@@ -79,7 +72,6 @@
     if (!host) return;
     hostEl = host;
     host.classList.add("agilo-lib");
-    if (cfg.uiV2) host.classList.add("agilo-lib--v2");
 
     var mockKey = "";
     try {
