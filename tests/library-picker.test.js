@@ -1,0 +1,179 @@
+/**
+ * Picker dashboard A : hooks sans jsdom (syncNative, Free, filtre, change).
+ */
+var fs = require("fs");
+var path = require("path");
+var lib = path.join(__dirname, "../scripts/pages/library");
+
+globalThis.__AGILO_PROMPT_LIBRARY__ = {
+  library2Live: true,
+  cse89Live: false,
+  pickerSelector: "#agilo-prompt-picker-anchor"
+};
+
+eval(fs.readFileSync(path.join(lib, "library-api.js"), "utf8"));
+eval(fs.readFileSync(path.join(lib, "library-picker.js"), "utf8"));
+
+var P = globalThis.AgiloLibraryPicker;
+var Api = globalThis.AgiloLibraryApi;
+if (!P || P.VERSION !== "2.0.0") throw new Error("AgiloLibraryPicker 2.0 missing");
+if (typeof P._groups !== "function") throw new Error("_groups missing");
+if (typeof P._syncNative !== "function") throw new Error("_syncNative missing");
+
+function fakeSelect(initial) {
+  var opts = (initial || []).map(function (v) {
+    return { value: String(v), textContent: String(v) };
+  });
+  var fired = [];
+  return {
+    options: opts,
+    classList: { add: function () {} },
+    required: false,
+    value: "",
+    appendChild: function (opt) { this.options.push(opt); },
+    dispatchEvent: function (ev) { fired.push(ev && ev.type ? ev.type : ev); }
+  };
+}
+
+var isolated = {
+  promptModelId: -7,
+  type: "STANDARD",
+  cardTitle: "Compte rendu client",
+  publicDescription: "Décisions, engagements du cabinet et du client.",
+  categoryKey: "general",
+  canUse: false,
+  requiresUserCopy: true,
+  promptModelStatus: "READY"
+};
+var cse = {
+  promptModelId: 7,
+  type: "STANDARD",
+  cardTitle: "Procès-verbal CSE",
+  publicDescription: "Ordre du jour, votes et annexes.",
+  categoryKey: "cse",
+  canUse: true,
+  promptModelStatus: "READY"
+};
+var pack = {
+  promptModelId: 90,
+  type: "STANDARD",
+  cardTitle: "PV CSE (pack)",
+  publicDescription: "PV détaillé réservé au pack CSE.",
+  categoryKey: "cse",
+  packCse: true,
+  canUse: false,
+  lockReasonCode: "SUBSCRIPTION_ACCESS_REQUIRED"
+};
+var user = {
+  promptModelId: 746,
+  type: "USER",
+  cardTitle: "Entretien individuel",
+  publicDescription: "Feedback factuel.",
+  categoryKey: "rh",
+  canUse: true,
+  promptModelStatus: "READY"
+};
+var pending = {
+  promptModelId: 803,
+  type: "USER",
+  cardTitle: "En création",
+  canUse: false,
+  promptModelStatus: "PENDING"
+};
+var acquired = {
+  promptModelId: -6,
+  type: "STANDARD",
+  cardTitle: "Entretien individuel",
+  canUse: false,
+  requiresUserCopy: true,
+  acquiredPromptModelId: 746,
+  promptModelStatus: "READY"
+};
+
+var all = [user, pending, cse, isolated, pack];
+
+var g = P._groups(all, "");
+if (g.mine.length !== 2) throw new Error("Mes modèles should have 2 USER");
+if (g.off.length !== 3) throw new Error("Agilotext section missing standards");
+
+var cseHits = P._groups(all, "cse");
+if (!cseHits.off.some(function (m) { return m.promptModelId === 7; })) {
+  throw new Error("filtre cse missed official 7");
+}
+if (!cseHits.off.some(function (m) { return m.packCse; })) {
+  throw new Error("filtre cse missed pack");
+}
+if (cseHits.mine.length) throw new Error("filtre cse should not keep rh user");
+if (!P._filter(cse, "cse")) throw new Error("_filter cse");
+if (P._filter(user, "cse")) throw new Error("filtre cse leaked user rh");
+
+if (P._canSelect(isolated)) throw new Error("isolated -7 must not be selectable");
+if (P._canSelect(pending)) throw new Error("PENDING must not be selectable");
+if (P._canSelect(pack)) throw new Error("pack CSE must not be selectable");
+if (!P._canSelect(cse)) throw new Error("official 7 should be selectable");
+if (!P._canSelect(user)) throw new Error("USER ready should be selectable");
+if (!P._canSelect(acquired)) throw new Error("already copied standard should be choosable");
+if (P._chooseId(acquired) !== 746) throw new Error("chooseId must return USER copy");
+if (P._chooseId(isolated) !== -7) throw new Error("chooseId isolated stays -7 until copy");
+
+if (P._showAdd(isolated, false)) throw new Error("Free must not show Ajouter");
+if (!P._showAdd(isolated, true)) throw new Error("Pro must show Ajouter on -7");
+if (P._showAdd(acquired, true)) throw new Error("already copied must not show Ajouter");
+if (P._addKind(acquired, true) !== "select-copy") throw new Error("alreadyAcquired is select-copy");
+if (P._addKind(isolated, true) !== "duplicate") throw new Error("isolated Pro is duplicate");
+if (P._addKind(isolated, false) !== "none") throw new Error("isolated Free is none");
+if (P._addKind(pack, true) !== "mailto") throw new Error("pack is mailto");
+
+var freeList = P._visibleModels(all, false);
+if (freeList.some(function (m) { return Number(m.promptModelId) < -1; })) {
+  throw new Error("Free visible list still has isolated ids");
+}
+if (!freeList.some(function (m) { return m.promptModelId === 7; })) {
+  throw new Error("Free should keep official 7");
+}
+
+var sel = fakeSelect(["0", "1", "7"]);
+P._syncNative(sel, all, 7);
+var values = sel.options.map(function (o) { return String(o.value); });
+if (values.indexOf("-7") !== -1) throw new Error("syncNative wrote -7");
+if (values.indexOf("-6") !== -1) throw new Error("syncNative wrote -6");
+if (values.indexOf("746") === -1) throw new Error("syncNative should add USER 746");
+if (values.indexOf("0") === -1) throw new Error("syncNative stripped hardcoded 0");
+if (sel.value !== "7") throw new Error("syncNative selected 7");
+
+var unsafe = fakeSelect(["0"]);
+P._syncNative(unsafe, [isolated], -7);
+if (unsafe.options.some(function (o) { return String(o.value) === "-7"; })) {
+  throw new Error("-7 absent de syncNative failed");
+}
+if (unsafe.value === "-7") throw new Error("syncNative selected -7");
+
+var changeSel = fakeSelect(["7"]);
+var types = [];
+changeSel.dispatchEvent = function (ev) { types.push(ev && ev.type); };
+P._writeSelect(changeSel, 7);
+if (changeSel.value !== "7") throw new Error("writeSelect value");
+if (types.indexOf("change") === -1) throw new Error("change not dispatched");
+
+if (!Api.isGenerationSafeId(7)) throw new Error("7 should be safe");
+if (Api.isGenerationSafeId(-7)) throw new Error("-7 must be unsafe");
+if (Api.canCreate({ edition: "free" })) throw new Error("Free canCreate");
+if (!Api.canCreate({ edition: "ent" })) throw new Error("ent canCreate");
+if (!Api.canCreate({ edition: "pro" })) throw new Error("pro canCreate");
+
+var css = fs.readFileSync(path.join(lib, "library.css"), "utf8");
+if (css.indexOf(".agilo-lib-picker__panel") === -1) throw new Error("panel CSS missing");
+if (css.indexOf("z-index: 200") === -1) throw new Error("z-index 200 missing");
+if (css.indexOf("max-height: min(20rem, 70vh)") === -1) throw new Error("mobile max-height missing");
+if (css.indexOf(".agilo-lib-picker-on #default-template-select.agilo-lib-native-select") === -1) {
+  throw new Error("hide select rule missing");
+}
+
+var js = fs.readFileSync(path.join(lib, "library-picker.js"), "utf8");
+if (js.indexOf('edition: \'ent\'') !== -1 || js.indexOf('edition: "ent"') !== -1) {
+  throw new Error("picker hardcoded edition ent");
+}
+if (js.indexOf("agilo-lib-picker-on") === -1) throw new Error("picker-on class missing");
+if (js.indexOf("assertGenerationId") === -1) throw new Error("assertGenerationId missing");
+
+console.log("library-picker.test.js ok");
