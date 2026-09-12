@@ -132,9 +132,11 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 11 sept 2026 : slug réel `/library` (plus `/bibliotheque`). Plan Gratuit : pas de duplicate, pas de défaut, pas de pin officiel, wizard = parcourir. Picker icônes : grille compacte, overlay fiche sans clip, suggestions Masquer, légende FR seulement. Chip RH dès qu’un STANDARD `categoryKey=rh` est visible. Cadenas `USER_COPY_REQUIRED` : « Ajoute ce modèle à tes modèles pour l'utiliser. » Pin jsDelivr `1027453e`.
 
+12 sept 2026 : suggestions = mêmes cases que la grille (`3.25rem`, 1re bordure `--best`, pas de badge sur le glyphe). Focus search entier (overflow grille seule). Fiche USER : Contexte / Structure au-dessus du prompt si l’API a les champs. Pin jsDelivr `b53928a6`.
+
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
 ---
 
-**Dernière mise à jour** : 2026-09-11
+**Dernière mise à jour** : 2026-09-12
 
