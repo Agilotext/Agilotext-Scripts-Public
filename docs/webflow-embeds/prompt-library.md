@@ -130,34 +130,40 @@ Dans le panneau Symboles, chercher `App_dashboard-menu`, `nav-app`, `menu-app`, 
 
 CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/library` après le routeur v8.2.
 
-## Picker dashboard (après la page biblio)
+## Picker dashboard A (popover)
 
-Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le picker le masque visuellement et écrit `select.value`.
+Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le picker le masque **après** `fetchLists` OK (`body.agilo-lib-picker-on`). Jamais d’id &lt; -1 dans le select.
 
-1. Ajouter juste **avant** le select : `<div id="agilo-prompt-picker-anchor"></div>`
-2. Embed (même SHA), **sans** `library-main.js` :
+Pin JS : `39757492`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
+
+**Publish 1** (jsDelivr 200) : coller l’embed, **laisser** `code-model-default-*` actif.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library.css?v=18c8563a">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library.css?v=39757492">
+<style>
+  .wrapper-select, .select-container, .custom-select-wrapper { overflow: visible; }
+</style>
 <script>
   window.__AGILO_PROMPT_LIBRARY__ = window.__AGILO_PROMPT_LIBRARY__ || {
-    library2Live: false,
+    library2Live: true,
     cse89Live: false,
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/editor/token-resolver.js?v=18c8563a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/editor/agilo-editor-creds.js?v=18c8563a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library-standards-meta.js?v=18c8563a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library-api.js?v=18c8563a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library-core.js?v=18c8563a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/library/library-picker.js?v=18c8563a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/editor/token-resolver.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/editor/agilo-editor-creds.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-standards-meta.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-api.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-core.js?v=39757492"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@39757492/scripts/pages/library/library-picker.js?v=39757492"></script>
 ```
 
-3. **Désactiver** l’embed inline `code-model-default-*` (populateDefaultTemplateSelect) pour éviter un double chargement. Le picker fait le POST `setPromptModelUserDefault`.
-4. Répéter sur les 3 dashboards.
+`boot()` crée `#agilo-prompt-picker-anchor` tout seul s’il manque. Classe embed : `code-prompt-picker`. Répéter free / premium / business.
 
-Le select d’upload n’affiche que les modèles `canUse` (ID positif ou 0–100). Les cadenas restent sur la page bibliothèque.
+**Publish 2** (après recette trigger) : désactiver `code-model-default-ent` et les jumeaux `code-model-default-*`.
+
+Rollback : retirer `code-prompt-picker`, réactiver `code-model-default-*`. Publish staging seulement après **OK publish staging**. Pas www.
+
 
 ## Post-login v8.2
 
