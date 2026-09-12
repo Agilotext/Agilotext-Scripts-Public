@@ -122,7 +122,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 |-------|---------|--------|
 | `code-prompt-library` | `library-main.js` + overlay/icon-picker/core/catalog + `library.css` | Staging v1, `library2Live: true` |
 | `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true` (10 sept) |
-| `code-prompt-picker` | `scripts/pages/library/library-picker.js` 2.0 (popover A) | Pin `3e56af71`, dashboards staging |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` 2.0 (popover A) | Pin `3d328e9c`, dashboards staging |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
 | `code-profile-prompts-redirect` | `docs/webflow-embeds/profile-prompts-redirect.html` | Staging Mon compte `?tab=prompts` |
 
@@ -136,7 +136,7 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 
 12 sept 2026 (après-midi) : Pro/Business, STANDARDS RH isolés (-6 à -9) : plus de cul-de-sac cadenas. Bouton **Ajouter à mes modèles** (`canDuplicate`), puis génération sur la copie USER. Badge Verrouillé masqué si déjà copié. Gratuit et cadenas pack CSE (`SUBSCRIPTION_ACCESS_REQUIRED`) inchangés. Pas de génération sur l’ID officiel tant que Nico n’a pas `canUse=true`. Pin jsDelivr `f30b89fe`. `cse89Live` reste false.
 
-12 sept 2026 (picker dashboard A) : popover recherche + sections Mes modèles / Agilotext. Select natif conservé, masqué seulement après mount. Isolés : Ajouter puis id USER, jamais `-6…-9` dans `#default-template-select`. Gratuit : pas d’Ajouter. Pin picker `3e56af71`. Typo 400 inherit, focus 1px, `title` natif, trait `sec--off`. Collage : laisser `code-model-default-ent` le temps de la recette, puis le cacher (pas le Select, pas le picker). Pas de MCP, pas www. Biblio reste `f30b89fe`.
+12 sept 2026 (picker dashboard A) : popover recherche + sections Mes modèles / Agilotext. Mes modèles triés par dernière modif, date dans le `title` seulement. Pin picker `3d328e9c`. Aligner `@PIN` et `?v=PIN`. Pas de MCP, pas www. Biblio reste `f30b89fe`.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : mailto tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
