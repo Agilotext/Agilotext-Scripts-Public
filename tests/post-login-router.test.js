@@ -1,5 +1,5 @@
 /**
- * Tests logique post-login v8.4 (CSE 89 € → dashboard business, refresh jeton)
+ * Tests logique post-login v8.5 (CSE pending checkout)
  * Exécution : node --test tests/post-login-router.test.js
  */
 
@@ -7,7 +7,14 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const router = require("../scripts/pages/auth/post-login-router.js");
 
-const { getTeamSignals, getEditionSignals, resolveRoute, VERSION } = router;
+const {
+  getTeamSignals,
+  getEditionSignals,
+  resolveRoute,
+  VERSION,
+  readPendingCsePrice,
+  consumePendingCsePrice
+} = router;
 
 const supportSeat = {
   teams: {
@@ -53,8 +60,8 @@ const freePlusAnon = {
 };
 
 describe("version", () => {
-  it("exporte v8.4", () => {
-    assert.equal(VERSION, "v8.4");
+  it("exporte v8.5", () => {
+    assert.equal(VERSION, "v8.5");
   });
 });
 
@@ -155,5 +162,36 @@ describe("join-team params", () => {
     const owner = decodeURIComponent(String(p.get("owner")).replace(/\+/g, " "));
     assert.equal(owner, "Florian de BauerWebPro");
     assert.equal(decodeURIComponent(String(p.get("team")).replace(/\+/g, " ")), "Equipe Test");
+  });
+});
+
+describe("pending CSE checkout", () => {
+  const mem = {};
+  function mockStorage() {
+    global.sessionStorage = {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null),
+      setItem: (k, v) => { mem[k] = String(v); },
+      removeItem: (k) => { delete mem[k]; }
+    };
+    Object.keys(mem).forEach((k) => delete mem[k]);
+  }
+  it("lit un price CSE récent", () => {
+    mockStorage();
+    mem.agiloCsePriceId = "prc_cse89y-jl40a31";
+    mem.agiloCsePriceAt = String(Date.now());
+    assert.equal(readPendingCsePrice(), "prc_cse89y-jl40a31");
+  });
+  it("ignore un price Business", () => {
+    mockStorage();
+    mem.agiloCsePriceId = "prc_business-1-seat-aj1780sye";
+    mem.agiloCsePriceAt = String(Date.now());
+    assert.equal(readPendingCsePrice(), "");
+  });
+  it("consume vide le storage", () => {
+    mockStorage();
+    mem.agiloCsePriceId = "prc_cse89-8230aqy";
+    mem.agiloCsePriceAt = String(Date.now());
+    assert.equal(consumePendingCsePrice(), "prc_cse89-8230aqy");
+    assert.equal(readPendingCsePrice(), "");
   });
 });

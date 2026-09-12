@@ -73,8 +73,8 @@ Pin jsDelivr : commit `18c8563a` (library + creds + icon-picker). Staging : `lib
     library2Base: "https://api.agilotext.com/api/v1/library2",
     mountSelector: "#agilo-prompt-library-anchor",
     ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
-    ctaAnnualUrl: "/offres/cse",
-    ctaMonthlyUrl: "/offres/cse"
+    ctaAnnualUrl: "/offres/cse?pay=prc_cse89y-jl40a31",
+    ctaMonthlyUrl: "/offres/cse?pay=prc_cse89-8230aqy"
   };
 </script>
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@18c8563a/scripts/pages/editor/token-resolver.js?v=18c8563a"></script>
@@ -224,8 +224,8 @@ Coller **à la place** de l’embed v1 sur les 3 pages `/app/{free,premium,busin
     mountSelector: "#agilo-prompt-library-anchor",
     pricingUrl: "/tarifs",
     ctaMailto: "mailto:contact@agilotext.com?subject=Pack%20CSE",
-    ctaAnnualUrl: "/offres/cse",
-    ctaMonthlyUrl: "/offres/cse"
+    ctaAnnualUrl: "/offres/cse?pay=prc_cse89y-jl40a31",
+    ctaMonthlyUrl: "/offres/cse?pay=prc_cse89-8230aqy"
   };
   window.__AGILO_PROMPT_STUDIO__ = {
     enabled: true,

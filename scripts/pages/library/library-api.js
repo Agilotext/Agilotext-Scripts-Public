@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.3
+ * @version 1.5.4
  */
 (function (global) {
   "use strict";
@@ -30,8 +30,8 @@
       mountSelector: c.mountSelector || "#agilo-prompt-library-anchor",
       pickerSelector: c.pickerSelector || "#agilo-prompt-picker-anchor",
       ctaMailto: c.ctaMailto || "mailto:contact@agilotext.com?subject=Pack%20CSE",
-      ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse",
-      ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse",
+      ctaAnnualUrl: c.ctaAnnualUrl || "/offres/cse?pay=prc_cse89y-jl40a31",
+      ctaMonthlyUrl: c.ctaMonthlyUrl || "/offres/cse?pay=prc_cse89-8230aqy",
       edition: c.edition || "",
       pricingUrl: c.pricingUrl || "/tarifs"
     };
@@ -1078,7 +1078,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.3",
+    VERSION: "1.5.4",
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
     PIN_MAX: PIN_MAX,

@@ -6,6 +6,7 @@
 /* v8.2: pln_cse-* (pas pln_pack-cse) → dashboard business */
 /* v8.3: price IDs CSE89 / CSE89Y → dashboard business */
 /* v8.4: POST /auth/refresh si jeton Free encore en cache après élévation CSE/Business */
+/* v8.5: sessionStorage agiloCsePriceId one-shot → /offres/cse?pay= si pas encore pln_cse- */
 /* ===================================================== */
 /* Déploiement Webflow : coller ce script sur la page /auth/post-login */
 /* Collage live : seulement après OK Florian. Fichier repo ≠ page Webflow. */
@@ -13,7 +14,7 @@
 (function (root) {
   "use strict";
 
-  const VERSION = "v8.4";
+  const VERSION = "v8.5";
   const API_BASE = "https://api.agilotext.com/api/v1";
   const FREE_PLAN_ID = "pln_free-njg10umr";
   const AGILOSHIELD_CLASSIC_PRICE_ID = "prc_classic-mensuel-3u5vr0uq5";
@@ -21,7 +22,33 @@
     "prc_cse89y-jl40a31",
     "prc_cse89-8230aqy"
   ]);
+  const CSE_PENDING_KEY = "agiloCsePriceId";
+  const CSE_PENDING_AT = "agiloCsePriceAt";
+  const CSE_PENDING_MAX_MS = 2 * 60 * 60 * 1000;
   const ACTIVE_STATUSES = new Set(["ACTIVE", "TRIALING", "GRACE"]);
+
+  function readPendingCsePrice(now) {
+    if (typeof sessionStorage === "undefined") return "";
+    try {
+      const id = sessionStorage.getItem(CSE_PENDING_KEY) || "";
+      const at = Number(sessionStorage.getItem(CSE_PENDING_AT) || "0");
+      const ts = typeof now === "number" ? now : Date.now();
+      if (!CSE_PRICE_IDS.has(id)) return "";
+      if (!at || ts - at > CSE_PENDING_MAX_MS) return "";
+      return id;
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function consumePendingCsePrice(now) {
+    const id = readPendingCsePrice(now);
+    try {
+      sessionStorage.removeItem(CSE_PENDING_KEY);
+      sessionStorage.removeItem(CSE_PENDING_AT);
+    } catch (_) { /* ignore */ }
+    return id;
+  }
 
   function normalizeStatus(status) {
     return String(status || "").toUpperCase();
@@ -223,7 +250,9 @@
     hasPlanPrefix: hasPlanPrefix,
     hasFreePlan: hasFreePlan,
     hasCsePlan: hasCsePlan,
-    hasAgiloshieldClassic: hasAgiloshieldClassic
+    hasAgiloshieldClassic: hasAgiloshieldClassic,
+    readPendingCsePrice: readPendingCsePrice,
+    consumePendingCsePrice: consumePendingCsePrice
   };
   if (typeof module !== "undefined" && module.exports) {
     module.exports = api;
@@ -573,6 +602,19 @@
     }
     if (pendingInviteCode) {
       localStorage.removeItem("pendingInviteCode");
+    }
+
+    const pendingCse = readPendingCsePrice();
+    if (pendingCse) {
+      if (signals.hasCse) {
+        consumePendingCsePrice();
+        log("pending_cse_already_active");
+      } else {
+        consumePendingCsePrice();
+        log("pending_cse_checkout", { priceId: pendingCse });
+        window.location.replace("/offres/cse?pay=" + encodeURIComponent(pendingCse));
+        return;
+      }
     }
 
     try {
