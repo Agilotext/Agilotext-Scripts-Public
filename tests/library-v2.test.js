@@ -280,7 +280,7 @@ if (Fiche.previewMode(locked, proCreds) !== "locked") throw new Error("locked mo
 var lockedCard = C.cardHtml(locked);
 if (lockedCard.indexOf("agilo-lib-card__cta-link") === -1) throw new Error("locked CTA link missing");
 if (lockedCard.indexOf("Voir l’offre CSE") === -1) throw new Error("locked CTA label");
-if (lockedCard.indexOf("https://www.agilotext.com/offres/cse") === -1) throw new Error("locked CTA href");
+if (lockedCard.indexOf("/offres/cse") === -1) throw new Error("locked CTA href");
 if (lockedCard.indexOf("mailto:") !== -1) throw new Error("locked card still mailto");
 if (lockedCard.indexOf("agilo-lib-btn--cta") !== -1) throw new Error("fat CSE CTA on card");
 if (lockedCard.indexOf("data-act=\"default\"") !== -1) throw new Error("locked card has default quick");
@@ -755,14 +755,14 @@ var prevCse = globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live;
 globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live = false;
 var softCta = Api.ctaForLocked(true);
 if (!softCta || String(softCta.href).indexOf("mailto:") !== -1) throw new Error("soft CTA still mailto");
-if (String(softCta.href).indexOf("agilotext.com/offres/cse") === -1) throw new Error("soft CTA should be landing");
+if (String(softCta.href).indexOf("/offres/cse") === -1) throw new Error("soft CTA should be landing");
 if (softCta.label.indexOf("offre CSE") === -1) throw new Error("soft CTA label");
 globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live = true;
 var buyCta = Api.ctaForLocked(true);
 if (!buyCta || String(buyCta.href).indexOf("/offres/cse") === -1) throw new Error("buy CTA should be /offres/cse");
 globalThis.__AGILO_PROMPT_LIBRARY__.cse89Live = prevCse;
-if (Api.cfg().ctaAnnualUrl !== "/offres/cse?pay=prc_cse89y-jl40a31") throw new Error("default CTA still /cse");
-if (Api.cfg().ctaCseLandingUrl !== "https://www.agilotext.com/offres/cse") throw new Error("landing URL missing");
+if (Api.cfg().ctaAnnualUrl !== "/offres/cse?pay=prc_cse89y-vf20nyv") throw new Error("default CTA still /cse");
+if (Api.cfg().ctaCseLandingUrl !== "/offres/cse") throw new Error("landing URL missing");
 
 var meta7 = globalThis.AgiloLibraryStandards.get(7);
 if (meta7.categoryKey !== "legacy") throw new Error("id 7 should be legacy");

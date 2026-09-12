@@ -17,7 +17,7 @@ eval(fs.readFileSync(path.join(lib, "library-picker.js"), "utf8"));
 
 var P = globalThis.AgiloLibraryPicker;
 var Api = globalThis.AgiloLibraryApi;
-if (!P || P.VERSION !== "2.1.0") throw new Error("AgiloLibraryPicker 2.1 missing");
+if (!P || P.VERSION !== "2.2.0") throw new Error("AgiloLibraryPicker 2.2 missing");
 if (typeof P._groups !== "function") throw new Error("_groups missing");
 if (typeof P._syncNative !== "function") throw new Error("_syncNative missing");
 
@@ -132,7 +132,7 @@ if (hintOff.indexOf("compte rendu est désactivé") === -1) throw new Error("hin
 if (P._hintHtml(true) !== "") throw new Error("hint should be empty when summary ON");
 
 var cseCta = P._packCta();
-if (!cseCta || String(cseCta.href).indexOf("agilotext.com/offres/cse") === -1) {
+if (!cseCta || String(cseCta.href).indexOf("/offres/cse") === -1) {
   throw new Error("pack CTA should land on /offres/cse");
 }
 if (String(cseCta.href).indexOf("mailto:") !== -1) throw new Error("pack CTA still mailto");
@@ -142,8 +142,12 @@ var freeList = P._visibleModels(all, false);
 if (freeList.some(function (m) { return Number(m.promptModelId) < -1; })) {
   throw new Error("Free visible list still has isolated ids");
 }
-if (!freeList.some(function (m) { return m.promptModelId === 7; })) {
-  throw new Error("Free should keep official 7");
+if (freeList.some(function (m) { return m.promptModelId === 7; })) {
+  throw new Error("Free should hide official 7");
+}
+var proList = P._visibleModels(all, true);
+if (proList.some(function (m) { return m.promptModelId === 7; })) {
+  throw new Error("Pro should hide official 7");
 }
 
 var sel = fakeSelect(["0", "1", "7"]);
