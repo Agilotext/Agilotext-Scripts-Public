@@ -134,12 +134,12 @@ CSE n’a **pas** de 4e page. Payeur `pln_cse-*` → `/app/business/library` apr
 
 Garder `#default-template-select` dans le formulaire (upload / `doSummary`). Le picker le masque **après** `fetchLists` OK (`body.agilo-lib-picker-on`). Jamais d’id &lt; -1 dans le select.
 
-Pin JS : `75bca56a`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
+Pin JS : `3e56af71`. `library2Live: true`, `cse89Live: false`. Pas de `library-main.js`, pas de `library-v2.css`.
 
 **Publish 1** (jsDelivr 200) : coller l’embed, **laisser** `code-model-default-*` actif.
 
 ```html
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library.css?v=75bca56a">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/library/library.css?v=3e56af71">
 <style>
   .wrapper-select, .select-container, .custom-select-wrapper { overflow: visible; }
 </style>
@@ -150,19 +150,25 @@ Pin JS : `75bca56a`. `library2Live: true`, `cse89Live: false`. Pas de `library-m
     pickerSelector: "#agilo-prompt-picker-anchor"
   };
 </script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/editor/token-resolver.js?v=75bca56a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/editor/agilo-editor-creds.js?v=75bca56a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-standards-meta.js?v=75bca56a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-api.js?v=75bca56a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-core.js?v=75bca56a"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@75bca56a/scripts/pages/library/library-picker.js?v=75bca56a"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/editor/token-resolver.js?v=3e56af71"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/editor/agilo-editor-creds.js?v=3e56af71"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/library/library-standards-meta.js?v=3e56af71"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/library/library-api.js?v=3e56af71"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/library/library-core.js?v=3e56af71"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3e56af71/scripts/pages/library/library-picker.js?v=3e56af71"></script>
 ```
 
 `boot()` crée `#agilo-prompt-picker-anchor` tout seul s’il manque. Classe embed : `code-prompt-picker`. Répéter free / premium / business.
 
-**Publish 2** (après recette trigger) : désactiver `code-model-default-ent` et les jumeaux `code-model-default-*`.
+**Ne pas supprimer** `#default-template-select` / `custom-select`. **Ne pas** cacher l’embed picker (`jsdelivr` / `library-picker.js`).
 
-Rollback : retirer `code-prompt-picker`, réactiver `code-model-default-*`. Publish staging seulement après **OK publish staging**. Pas www.
+**Publish 2** (après recette trigger) : cacher l’ancien chargeur seulement.
+
+- Business : classe **`code-model-default-ent`** (script `getPromptModelsUserInfo` + `populateDefaultTemplateSelect`, `edition = 'ent'`).
+- Navigator : chercher `model-default`. Si le Code Embed contient `library-picker.js` → garder. S’il contient `getPromptModelsUserInfo` → cacher (œil).
+- Pro / Free : chercher `getPromptModelsUserInfo` (`code-model-default-pro` / `code-model-default`).
+
+Rollback : réafficher `code-model-default-ent`, retirer `code-prompt-picker`. Publish staging seulement après **OK publish staging**. Pas www.
 
 
 ## Post-login v8.2
