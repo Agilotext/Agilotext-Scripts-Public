@@ -2,7 +2,7 @@
 
 **share-v1** — page publique pour un invité **sans compte** (transcription, compte rendu, PV, etc.). Même dossier que voice-invite et join-team : **Auth**.
 
-**Ne jamais coller `@PIN`.** Scripts jsDelivr **après** commit + push. Pin actuel : `76313d4e`. Mount : `#editorRoot` (pas de carte 960 px, pas de `body.appendChild`).
+**Ne jamais coller `@PIN`.** Scripts jsDelivr **après** commit + push. Pin actuel : `101ba855`. Mount : `#editorRoot` (pas de carte 960 px, pas de `body.appendChild`). Guest : zip public `d8478fa34a…-download` (pas un jobId numérique).
 
 ---
 
@@ -70,8 +70,9 @@ https://agilotext-test.webflow.io/auth/share?mock=1&doc=transcript
 ## Embed complet (plus tard, SHA réel)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@76313d4e/scripts/shared/agilo-share-url.js?v=share-v1"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@76313d4e/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@101ba855/scripts/shared/agilo-share-url.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@101ba855/scripts/pages/share/share-zip-parse.js?v=share-v1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@101ba855/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
 ```
 
 ---
