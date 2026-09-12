@@ -47,7 +47,7 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Remplacer `SHA` par le commit après push.
+Pin staging actuel : `9af5cd97` (picker v2.2.0 + catalog-v2 unlock `hasCse`, denylist id 7). Remplacer `SHA` par ce commit.
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">

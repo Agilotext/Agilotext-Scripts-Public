@@ -121,9 +121,9 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 | Embed | Fichier | Statut |
 |-------|---------|--------|
 | `code-prompt-library` | `library-main.js` + overlay/icon-picker/core/catalog + `library.css` | Staging v1, `library2Live: true` |
-| `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true` (10 sept) |
-| `code-prompt-picker` | `scripts/pages/library/library-picker.js` 2.1 (popover + hint CR OFF + CTA `/offres/cse`) | Pin `71feb7fa`, dashboards staging ; rollback `3d328e9c` |
-| `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.2 | CSE `pln_cse-*` → `/app/business/dashboard` |
+| `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true`, pin `9af5cd97`, masque STANDARD 7, `hasCse` unlock |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` v2.2.0 | Staging dashboards, `fetchMemberAccess` + `hasCse`, pin `9af5cd97` |
+| `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.7 | CSE `pln_cse-*` + prices neufs → `/app/business/dashboard` |
 | `code-profile-prompts-redirect` | `docs/webflow-embeds/profile-prompts-redirect.html` | Staging Mon compte `?tab=prompts` |
 
 Flags : `library2Live` (API) distinct de `cse89Live` (CTA achat) et de `uiV2` (front). Pin jsDelivr, jamais `@main`.  
@@ -139,6 +139,8 @@ v2 (staging) : fiche avec aperçu prompt, Prompt Studio sur la biblio, wizard al
 12 sept 2026 (soir) : fiche v2 compacte (dates, about USER stub, bandeau lock, overlay cadenas cartes). Id 7 fallback legacy. Pack CSE `-10`/`-11` icône sparkle, glow `data-pack=cse`. Staging `cse89Live: true`, CTA `/offres/cse`. Pin jsDelivr à coller après ce commit. Pas www.
 
 12 sept 2026 (picker dashboard 2.1) : picker utilisable si « Générer le compte rendu » OFF (bandeau hint). CTA pack CSE → `https://www.agilotext.com/offres/cse` (plus mailto). Lock picker discret + titres 2 lignes. Focus search/bouton = bordure arrondie (`--lib-radius`), plus d’outline carré. Pin picker `71feb7fa`. Rollback `3d328e9c`. Biblio reste `f30b89fe`. Pas www.
+
+12 sept 2026 (CSE unlock) : picker + catalog-v2 lisent `member-access`. Si `hasCse`, STANDARD `-10`/`-11` = **Ajouter pour l’utiliser**, plus « Voir l’offre CSE ». STANDARD `7` masqué. Embeds staging `cse89Live: true`, CTA `/offres/cse`. Pin `9af5cd97`. Pas www.
 
 v1 déjà branché : `setPromptModelPinned`, `duplicatePromptModel` (`promptName`), `listPromptModelVersions`, `restorePromptModelVersion`, `createPromptModelUser`, `renamePromptModel`, `deletePromptModel`. CTA cadenas : landing `/offres/cse` tant que `cse89Live` est false. Jamais `CSERENTREE26`.
 
