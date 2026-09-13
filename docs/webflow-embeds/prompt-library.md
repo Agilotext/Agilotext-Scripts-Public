@@ -47,7 +47,7 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin staging actuel : `4c834597` (biblio v2 + picker `hasCse`). Lot copy dashboard (picker 2.3.0, noun selon modèle CSE) : brancher le SHA de `feat/library-cse-dashboard-noun` après merge. Fail-closed si `hasCse` false.
+Pin jsDelivr (pas encore posé, pas de publish www) : `77b7a632` branche `feat/library-cse-dashboard-noun`. Fail-closed si `hasCse` false. À pincher après recette Ajouter, ou tout de suite (inerte tant que Nico n’a pas livré member-access).
 
 Régression 12 sept ~16h54 : pin `9af5cd97` servait `library-main.js` 1.3.1 (rsync dashboard dans `3472556a`), donc `uiV2: true` montait encore Catalog v1. Corrigé en restaurant `71feb7fa` puis le seul patch CSE. Ne plus rsync `Downloads/…_files/`.
 
