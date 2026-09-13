@@ -1,6 +1,6 @@
 /**
  * Picker dashboard A : popover sections + recherche. Synchronise #default-template-select.
- * @version 2.2.0
+ * @version 2.3.0
  */
 (function (global) {
   "use strict";
@@ -28,6 +28,34 @@
     return !!(Api() && Api().hasCseAccess && Api().hasCseAccess());
   }
 
+  function isCseNoun(m) {
+    return !!(Api() && Api().isCseNounModel && Api().isCseNounModel(m));
+  }
+
+  function cseCopy() {
+    return (Api() && Api().dashboardCopy) ? Api().dashboardCopy.apply(Api(), arguments) : {
+      summary: "Générer le compte rendu",
+      pickerTitle: "Sélectionnez un modèle de compte rendu :",
+      hintOff: "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.",
+      maestroStem: "ODJ / brief → CR plus fiable"
+    };
+  }
+
+  function cseRank(m) {
+    if (!m) return 9;
+    var id = Number(m.promptModelId);
+    var src = Number(m.sourcePromptId);
+    if (id === -10 || src === -10) return 0;
+    if (id === -11 || src === -11) return 1;
+    return 2;
+  }
+
+  function sortCse(a, b) {
+    var d = cseRank(a) - cseRank(b);
+    if (d) return d;
+    return String((a && a.cardTitle) || "").localeCompare(String((b && b.cardTitle) || ""), "fr");
+  }
+
   function visibleModels(models, canCreate) {
     var list = (models || []).filter(function (m) {
       return !Api().isHiddenOfficial || !Api().isHiddenOfficial(m.promptModelId);
@@ -39,15 +67,24 @@
   }
 
   function groups(models, q) {
+    if (Api() && Api().linkCseCopies) Api().linkCseCopies(models);
+    var cse = [];
     var mine = [];
     var off = [];
     (models || []).forEach(function (row) {
       if (!matchQ(row, q)) return;
-      if (String(row.type || "").toUpperCase() === "USER") mine.push(row);
+      var type = String(row.type || "").toUpperCase();
+      if (hasCse() && isCseNoun(row)) {
+        if (type !== "USER" && acquiredId(row)) return;
+        cse.push(row);
+        return;
+      }
+      if (type === "USER") mine.push(row);
       else off.push(row);
     });
+    cse.sort(sortCse);
     mine.sort(sortMine);
-    return { mine: mine, off: off };
+    return { cse: cse, mine: mine, off: off };
   }
 
   function rowTime(m) {
@@ -81,7 +118,7 @@
     var status = String(m.promptModelStatus || "READY").toUpperCase();
     if (status !== "READY" && status !== "ACTIVE") return false;
     if (acquiredId(m)) return true;
-    if (m.packCse && hasCse()) return false;
+    if (m.packCse && hasCse() && String(m.type || "").toUpperCase() !== "USER") return false;
     return !!(m.canUse && Api().isGenerationSafeId(m.promptModelId));
   }
 
@@ -155,6 +192,73 @@
     select.dispatchEvent(ev);
   }
 
+  function rememberOrig(el) {
+    if (!el || el.getAttribute("data-agilo-copy-orig")) return;
+    el.setAttribute("data-agilo-copy-orig", el.textContent || "");
+  }
+
+  function findSummaryCopyEl() {
+    if (typeof document === "undefined") return null;
+    var tog = findSummaryToggle();
+    if (!tog) return null;
+    var comp = tog.closest ? tog.closest(".checkbox-component") : null;
+    if (!comp) return null;
+    return comp.querySelector(".text-size-small.text-color-grey") ||
+      comp.querySelector(".text-size-small");
+  }
+
+  function findPickerHeadingEl() {
+    if (typeof document === "undefined") return null;
+    var anchor = document.getElementById("agilo-prompt-picker-anchor");
+    if (!anchor) return null;
+    var box = anchor.closest ? (anchor.closest(".select-container") || anchor.parentNode) : anchor.parentNode;
+    if (!box || !box.querySelectorAll) return null;
+    var nodes = box.querySelectorAll(".text-size-small.text-weight-bold");
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      var t = nodes[i].textContent || "";
+      if (/modèle de (compte rendu|procès-verbal)/i.test(t)) return nodes[i];
+    }
+    return nodes[0] || null;
+  }
+
+  function findMaestroBadgeEl() {
+    if (typeof document === "undefined") return null;
+    return document.querySelector(".maestro-tier-badge");
+  }
+
+  function maestroLabel(el, stem) {
+    rememberOrig(el);
+    var orig = el.getAttribute("data-agilo-copy-orig") || "";
+    var suffix = "";
+    var mid = orig.indexOf("·");
+    if (mid !== -1) suffix = " " + orig.slice(mid).trim();
+    el.textContent = stem + suffix;
+  }
+
+  function applyDashboardCopy(model) {
+    var copy = cseCopy(model);
+    var usePv = copy.summary === "Générer le PV";
+    var sum = findSummaryCopyEl();
+    if (sum) {
+      rememberOrig(sum);
+      sum.textContent = copy.summary;
+    }
+    var head = findPickerHeadingEl();
+    if (head) {
+      rememberOrig(head);
+      head.textContent = copy.pickerTitle;
+    }
+    var badge = findMaestroBadgeEl();
+    if (badge) {
+      if (usePv) maestroLabel(badge, copy.maestroStem);
+      else {
+        rememberOrig(badge);
+        badge.textContent = badge.getAttribute("data-agilo-copy-orig") || badge.textContent;
+      }
+    }
+  }
+
   function findSummaryToggle() {
     if (typeof document === "undefined") return null;
     return document.getElementById("toggle-summary") ||
@@ -168,10 +272,10 @@
     return !!el.checked;
   }
 
-  function hintHtml(summaryEnabled) {
+  function hintHtml(summaryEnabled, model) {
     if (summaryEnabled) return "";
     return '<div class="agilo-lib-picker__hint" role="status" aria-live="polite">' +
-      "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut." +
+      cseCopy(model).hintOff +
       "</div>";
   }
 
@@ -230,6 +334,7 @@
     }
     var canCreate = Api().canCreate(creds);
     var models = visibleModels(pack.models || [], canCreate);
+    if (Api().linkCseCopies) Api().linkCseCopies(models);
     var select = typeof document !== "undefined" ? document.getElementById("default-template-select") : null;
     var selectedId = pack.defaultPromptModelId;
     if (selectedId == null && select && select.value) selectedId = select.value;
@@ -276,13 +381,14 @@
 
     function selectableFlat() {
       var g = groups(models, query);
-      return g.mine.concat(g.off).filter(canSelect);
+      return (g.cse || []).concat(g.mine).concat(g.off).filter(canSelect);
     }
 
     function renderButton() {
       var model = current();
       if (!model) {
         btn.innerHTML = "<span>Choisir un modèle</span>";
+        applyDashboardCopy(null);
         return;
       }
       var showDefault = !!model.isDefault;
@@ -293,6 +399,7 @@
         Core().escapeHtml(model.cardTitle) + "</span></span>" +
         (showDefault ? '<span class="agilo-lib-badge agilo-lib-badge--default">Par défaut</span>' : "") +
         '<span class="agilo-lib-picker__chev" aria-hidden="true">▾</span>';
+      applyDashboardCopy(model);
     }
 
     function rowHtml(m, hi) {
@@ -336,7 +443,7 @@
         hint.textContent = "";
       } else {
         hint.hidden = false;
-        hint.textContent = "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.";
+        hint.textContent = cseCopy(current()).hintOff;
       }
     }
 
@@ -357,6 +464,7 @@
         });
       }
       paintHint();
+      if (hasCse() && g.cse && g.cse.length) block("Procès-verbaux CSE", g.cse);
       if (canCreate) block("Mes modèles", g.mine);
       block("Modèles Agilotext", g.off, canCreate ? "agilo-lib-picker__sec--off" : "");
       list.innerHTML = html;
@@ -380,7 +488,7 @@
       }, 0);
     }
 
-    function applyChoice(id) {
+    function applyChoice(id, persistDefault) {
       try {
         Api().assertGenerationId(id);
       } catch (err) {
@@ -388,14 +496,17 @@
         return;
       }
       selectedId = Number(id);
-      models.forEach(function (m) {
-        m.isDefault = Number(m.promptModelId) === selectedId;
-      });
+      if (persistDefault !== false) {
+        models.forEach(function (m) {
+          m.isDefault = Number(m.promptModelId) === selectedId;
+        });
+      }
       syncNative(select, models, selectedId);
       writeSelect(select, selectedId);
       renderButton();
       close();
       btn.focus();
+      if (persistDefault === false) return;
       Api().setDefault(creds, selectedId).then(function (res) {
         if (!res.ok) Core().toast(res.message || "Défaut non enregistré.");
       });
@@ -433,18 +544,28 @@
             cardTitle: src.cardTitle,
             publicDescription: src.publicDescription || "",
             categoryKey: src.categoryKey,
+            businessType: src.businessType || (src.packCse ? "cse" : ""),
+            packCse: false,
+            packCseCopy: !!(src.packCse || isCseNoun(src)),
+            sourcePromptId: src.promptModelId,
             iconUrl: src.iconUrl,
             iconKey: src.iconKey,
             canUse: true,
             promptModelStatus: "READY",
-            isDefault: true,
+            isDefault: false,
             dtCreation: Date.now(),
             dtUpdate: Date.now()
           });
         }
-        applyChoice(newId);
+        var currentDefault = models.filter(function (m) { return m.isDefault; })[0] || current();
+        var persist = true;
+        if (Api().shouldPromoteCseDefault) {
+          persist = Api().shouldPromoteCseDefault(src, currentDefault);
+        }
+        applyChoice(newId, persist);
         Api().fetchLists(creds).then(function (fresh) {
           models = visibleModels(fresh.models || [], canCreate);
+          if (Api().linkCseCopies) Api().linkCseCopies(models);
           selectedId = safeId(models, selectedId);
           syncNative(select, models, selectedId);
           renderButton();
@@ -592,7 +713,7 @@
   }
 
   global.AgiloLibraryPicker = {
-    VERSION: "2.2.0",
+    VERSION: "2.3.0",
     mount: mount,
     boot: boot,
     _groups: groups,
@@ -607,6 +728,8 @@
     _sortMine: sortMine,
     _titleText: titleText,
     _hintHtml: hintHtml,
-    _packCta: packCta
+    _packCta: packCta,
+    _applyDashboardCopy: applyDashboardCopy,
+    _cseCopy: cseCopy
   };
 })(typeof window !== "undefined" ? window : globalThis);

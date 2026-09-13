@@ -1,7 +1,7 @@
 /**
  * Agilotext bibliothèque — client API (v1 historique ou library2).
  * Capacités lues sur le serveur. Jamais de targetUsername. Mutations POST only.
- * @version 1.5.6
+ * @version 1.6.0
  */
 (function (global) {
   "use strict";
@@ -18,7 +18,20 @@
   var AUTH_RELOAD_MSG = "Session expirée. Recharge la page.";
   var refreshInflight = null;
   var HIDDEN_OFFICIAL_IDS = { 7: true };
+  var CSE_OFFICIAL_IDS = { "-10": true, "-11": true };
   var memberAccess = { hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] };
+  var COPY_CR = {
+    summary: "Générer le compte rendu",
+    pickerTitle: "Sélectionnez un modèle de compte rendu :",
+    hintOff: "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.",
+    maestroStem: "ODJ / brief → CR plus fiable"
+  };
+  var COPY_PV = {
+    summary: "Générer le PV",
+    pickerTitle: "Sélectionnez un modèle de procès-verbal :",
+    hintOff: "Le PV est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.",
+    maestroStem: "ODJ / convocation → PV plus fiable"
+  };
 
   function cfg() {
     var c = global.__AGILO_PROMPT_LIBRARY__ || {};
@@ -307,6 +320,50 @@
     var bt = String(m.businessType || m.business_type || "").toLowerCase();
     if (bt === "cse") return true;
     return m.lockReasonCode === "SUBSCRIPTION_ACCESS_REQUIRED";
+  }
+
+  function isCseOfficialId(id) {
+    return !!CSE_OFFICIAL_IDS[String(id)];
+  }
+
+  function isCseNounModel(m) {
+    if (!m) return false;
+    if (m.packCse || m.packCseCopy) return true;
+    if (String(m.businessType || "").toLowerCase() === "cse") return true;
+    if (String(m.categoryKey || "").toLowerCase() === "cse") return true;
+    if (isCseOfficialId(m.promptModelId) || isCseOfficialId(m.sourcePromptId)) return true;
+    return false;
+  }
+
+  function linkCseCopies(models) {
+    var list = models || [];
+    var byAcquired = {};
+    list.forEach(function (m) {
+      if (!m || !(m.packCse || isCseOfficialId(m.promptModelId))) return;
+      var acq = Number(m.acquiredPromptModelId);
+      if (acq > 0) byAcquired[acq] = m;
+    });
+    list.forEach(function (m) {
+      if (!m) return;
+      var src = byAcquired[Number(m.promptModelId)];
+      if (!src) return;
+      m.packCseCopy = true;
+      m.sourcePromptId = src.promptModelId;
+    });
+    return list;
+  }
+
+  function dashboardCopy(m) {
+    if (hasCseAccess() && isCseNounModel(m)) return COPY_PV;
+    return COPY_CR;
+  }
+
+  function shouldPromoteCseDefault(src, current) {
+    if (!src || !isCseNounModel(src)) return false;
+    if (!current) return true;
+    if (String(current.type || "").toUpperCase() !== "USER") return true;
+    if (isCseNounModel(current)) return false;
+    return false;
   }
 
   function canSetUserIcon(id, type) {
@@ -1130,7 +1187,7 @@
   }
 
   global.AgiloLibraryApi = {
-    VERSION: "1.5.6",
+    VERSION: "1.6.0",
     HIDDEN_OFFICIAL_IDS: HIDDEN_OFFICIAL_IDS,
     _normalizeCard: normalizeCard,
     _acquiredUserId: acquiredUserId,
@@ -1161,6 +1218,11 @@
     setPromptModelUserIcon: setPromptModelUserIcon,
     canSetUserIcon: canSetUserIcon,
     isPackCseCard: isPackCseCard,
+    isCseOfficialId: isCseOfficialId,
+    isCseNounModel: isCseNounModel,
+    linkCseCopies: linkCseCopies,
+    dashboardCopy: dashboardCopy,
+    shouldPromoteCseDefault: shouldPromoteCseDefault,
     getStatus: getStatus,
     waitPromptReady: waitPromptReady,
     modelId: modelId,
