@@ -1,5 +1,5 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.1 – picker search + #creer)
-// Raccourcis restent à droite. Choix de modèle = select icône + nom collé à Régénérer.
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.2 – picker vide CR + défaut nommé)
+// Raccourcis restent à droite. Choix de modèle = select icône + nom collé à Régénérer / Générer.
 
 (function() {
   'use strict';
@@ -278,6 +278,41 @@
     return all.find(function (x) { return Number(x.promptModelId) === n; }) || null;
   }
 
+  function normalizePromptId(raw) {
+    if (raw == null || raw === -1 || raw === '-1') return null;
+    const n = Number(raw);
+    return isNaN(n) || n === -1 ? null : n;
+  }
+
+  function isSummaryEmpty() {
+    if (typeof window.agiloIsSummaryEmpty === 'function') {
+      try { return !!window.agiloIsSummaryEmpty(); } catch (e) {}
+    }
+    const root = document.querySelector('#editorRoot');
+    if (root && root.dataset.summaryEmpty === '1') return true;
+    const title = document.querySelector(
+      '#editorRoot .ag-alert--warn .ag-alert__title, #summaryEditor .ag-alert--warn .ag-alert__title'
+    );
+    const t = String((title && title.textContent) || '').toLowerCase();
+    return t.indexOf('pas demandé') !== -1 &&
+      (t.indexOf('compte-rendu') !== -1 || t.indexOf('compte rendu') !== -1);
+  }
+
+  function modelStateForJob(pack, jobId, jobPromptId) {
+    let id = normalizePromptId(jobPromptId);
+    const live = window.__agiloCurrentSummaryModel;
+    const sameJob = live && String(live.jobId) === String(jobId);
+    if (id == null && isSummaryEmpty() && sameJob && live.id != null) {
+      id = normalizePromptId(live.id);
+    }
+    if (id == null) id = normalizePromptId(pack && pack.defaultId);
+    return {
+      jobId: String(jobId || ''),
+      id: id,
+      name: nameForPromptId(pack, id)
+    };
+  }
+
   var ICON_META = { 0: 'document', 1: 'report', 2: 'idea', 3: 'briefcase', 4: 'education', 5: 'document', 7: 'document' };
   var ICON_PATHS = {
     document: '<path d="M2.75,14.25V3.75c0-1.105,.895-2,2-2h5.586c.265,0,.52,.105,.707,.293l3.914,3.914c.188,.188,.293,.442,.293,.707v7.586c0,1.105-.895,2-2,2H4.75c-1.105,0-2-.895-2-2Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M15.16,6.25h-3.41c-.552,0-1-.448-1-1V1.852" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
@@ -354,7 +389,7 @@
 
   function renderCurrentModelBanners(model) {
     window.__agiloCurrentSummaryModel = model || { jobId: '', id: null, name: null };
-    paintPickerButton();
+    paintPickerButtons();
   }
 
   function getToolbarRegenBtn() {
@@ -364,11 +399,9 @@
   function closePickerPanel() {
     const panel = document.getElementById('agilo-cr-model-panel');
     if (panel) panel.remove();
-    const host = document.getElementById('agilo-cr-model-picker');
-    if (host) {
-      const btn = host.querySelector('.agilo-cr-picker__btn');
-      if (btn) btn.setAttribute('aria-expanded', 'false');
-    }
+    document.querySelectorAll('.agilo-cr-picker__btn').forEach(function (btn) {
+      btn.setAttribute('aria-expanded', 'false');
+    });
     document.removeEventListener('keydown', onPickerKeydown, true);
     document.removeEventListener('mousedown', onPickerOutside, true);
   }
@@ -378,9 +411,8 @@
   }
 
   function onPickerOutside(e) {
-    const host = document.getElementById('agilo-cr-model-picker');
     const panel = document.getElementById('agilo-cr-model-panel');
-    if (host && host.contains(e.target)) return;
+    if (e.target && e.target.closest && e.target.closest('.agilo-cr-picker')) return;
     if (panel && panel.contains(e.target)) return;
     closePickerPanel();
   }
@@ -400,10 +432,7 @@
     }
   }
 
-  function paintPickerButton() {
-    const host = document.getElementById('agilo-cr-model-picker');
-    if (!host) return;
-    const btn = host.querySelector('.agilo-cr-picker__btn');
+  function paintPickerButtonEl(btn) {
     if (!btn) return;
     const pack = cachedModels || { standard: [], custom: [] };
     const live = window.__agiloCurrentSummaryModel || {};
@@ -427,10 +456,24 @@
     btn.appendChild(chev);
   }
 
-  function openPickerPanel(pack, defaultId, jobPromptId, isFree) {
+  function paintPickerButtons() {
+    document.querySelectorAll('.agilo-cr-picker__btn').forEach(paintPickerButtonEl);
+  }
+
+  function applyPendingSelection(model) {
+    const jobId = pickJobId();
+    const name = model.promptModelName || ('Modèle ' + model.promptModelId);
+    renderCurrentModelBanners({
+      jobId: String(jobId || ''),
+      id: Number(model.promptModelId),
+      name: name
+    });
     closePickerPanel();
-    const host = document.getElementById('agilo-cr-model-picker');
-    const btn = host && host.querySelector('.agilo-cr-picker__btn');
+  }
+
+  function openPickerPanel(pack, defaultId, selectedId, isFree, anchorBtn) {
+    closePickerPanel();
+    const btn = anchorBtn || document.querySelector('.agilo-cr-picker__btn');
     if (!btn) return;
     btn.setAttribute('aria-expanded', 'true');
     const panel = document.createElement('div');
@@ -465,8 +508,9 @@
           row.className = 'agilo-cr-picker__opt';
           row.setAttribute('role', 'option');
           const idNum = Number(m.promptModelId);
-          const isUsed = jobPromptId != null && idNum === Number(jobPromptId);
+          const isUsed = selectedId != null && idNum === Number(selectedId);
           const isDef = defaultId != null && idNum === Number(defaultId);
+          const emptyCr = isSummaryEmpty();
           if (isUsed) {
             row.classList.add('is-active');
             row.setAttribute('aria-current', 'true');
@@ -485,15 +529,24 @@
           body.textContent = nm;
           body.title = nm;
           row.appendChild(body);
-          if (isUsed || isDef) {
+          if (isDef) {
             const badge = document.createElement('span');
             badge.className = 'agilo-cr-picker__badge';
-            badge.textContent = isUsed ? 'Actuel' : 'Défaut';
+            badge.textContent = 'Défaut';
+            row.appendChild(badge);
+          } else if (isUsed && !emptyCr) {
+            const badge = document.createElement('span');
+            badge.className = 'agilo-cr-picker__badge';
+            badge.textContent = 'Actuel';
             row.appendChild(badge);
           }
           if (isUsed) {
             row.addEventListener('click', function (e) { e.preventDefault(); closePickerPanel(); });
-          } else if (!isFree) {
+          } else if (isFree) {
+            /* AgiloGate.decorate on .is-locked */
+          } else if (emptyCr) {
+            row.addEventListener('click', function () { applyPendingSelection(m); });
+          } else {
             row.addEventListener('click', function () {
               closePickerPanel();
               handleChipClick(m);
@@ -571,71 +624,102 @@
     }
   }
 
-  function ensurePickerHost() {
-    let host = document.getElementById('agilo-cr-model-picker');
-    const btnRegen = getToolbarRegenBtn();
-    if (!btnRegen || !btnRegen.parentElement) return host;
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'agilo-cr-model-picker';
-      host.className = 'agilo-cr-picker';
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'agilo-cr-picker__btn';
-      b.setAttribute('aria-haspopup', 'listbox');
-      b.setAttribute('aria-expanded', 'false');
-      b.setAttribute('aria-label', 'Modèle de compte-rendu');
-      host.appendChild(b);
-      btnRegen.parentElement.insertBefore(host, btnRegen);
-    } else if (host.parentElement !== btnRegen.parentElement) {
-      btnRegen.parentElement.insertBefore(host, btnRegen);
+  function makePickerHost(id) {
+    const host = document.createElement('div');
+    host.id = id;
+    host.className = 'agilo-cr-picker';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'agilo-cr-picker__btn';
+    b.setAttribute('aria-haspopup', 'listbox');
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-label', 'Modèle de compte-rendu');
+    host.appendChild(b);
+    return host;
+  }
+
+  function ensurePickerHost(parent, id, insertBefore) {
+    if (!parent) return null;
+    let host = document.getElementById(id);
+    if (!host) host = makePickerHost(id);
+    if (insertBefore) {
+      if (host.parentElement !== parent || host.nextElementSibling !== insertBefore) {
+        parent.insertBefore(host, insertBefore);
+      }
+    } else if (host.parentElement !== parent) {
+      parent.appendChild(host);
     }
     return host;
   }
 
-  function mountPicker(pack, defaultId, jobPromptId, isFree) {
-    removeChromeBanner();
-    const host = ensurePickerHost();
-    if (!host) return;
-    host.hidden = !isSummaryTabActive();
-    const btn = host.querySelector('.agilo-cr-picker__btn');
-    if (btn && !btn._agiloBound) {
-      btn._agiloBound = true;
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        if (!isSummaryTabActive()) return;
-        const open = document.getElementById('agilo-cr-model-panel');
-        if (open) { closePickerPanel(); return; }
-        var packNow = cachedModels || { standard: [], custom: [], defaultId: null };
-        var liveNow = window.__agiloCurrentSummaryModel || {};
-        var edNow = String(pickEdition() || '').toLowerCase().trim();
-        var freeNow = edNow.startsWith('free') || edNow === 'gratuit';
-        openPickerPanel(packNow, packNow.defaultId, liveNow.id, freeNow);
-      });
-    }
-    paintPickerButton();
+  function ensureToolbarPickerHost() {
+    const btnRegen = getToolbarRegenBtn();
+    if (!btnRegen || !btnRegen.parentElement) return document.getElementById('agilo-cr-model-picker');
+    return ensurePickerHost(btnRegen.parentElement, 'agilo-cr-model-picker', btnRegen);
   }
 
+  function ensureInlinePickerHost() {
+    const wrap = document.getElementById('agilo-inline-generate-cr-wrap');
+    if (!wrap) return null;
+    const genBtn = wrap.querySelector('.agilo-inline-gen-cr-btn');
+    return ensurePickerHost(wrap, 'agilo-cr-model-picker-inline', genBtn || null);
+  }
+
+  function bindPickerOpen(btn) {
+    if (!btn || btn._agiloBound) return;
+    btn._agiloBound = true;
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      if (!isSummaryTabActive()) return;
+      const open = document.getElementById('agilo-cr-model-panel');
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      if (open && expanded) { closePickerPanel(); return; }
+      if (open) closePickerPanel();
+      var packNow = cachedModels || { standard: [], custom: [], defaultId: null };
+      var liveNow = window.__agiloCurrentSummaryModel || {};
+      var edNow = String(pickEdition() || '').toLowerCase().trim();
+      var freeNow = edNow.startsWith('free') || edNow === 'gratuit';
+      openPickerPanel(packNow, packNow.defaultId, liveNow.id, freeNow, btn);
+    });
+  }
+
+  function mountPicker(pack, defaultId, jobPromptId, isFree) {
+    removeChromeBanner();
+    const toolbar = ensureToolbarPickerHost();
+    if (toolbar) {
+      toolbar.hidden = !isSummaryTabActive();
+      bindPickerOpen(toolbar.querySelector('.agilo-cr-picker__btn'));
+    }
+    const inline = ensureInlinePickerHost();
+    if (inline) {
+      inline.hidden = false;
+      bindPickerOpen(inline.querySelector('.agilo-cr-picker__btn'));
+    }
+    paintPickerButtons();
+  }
+
+  window.agiloMountCrPickers = function () {
+    const pack = cachedModels || { standard: [], custom: [], defaultId: null };
+    const ed = String(pickEdition() || '').toLowerCase().trim();
+    const isFree = ed.startsWith('free') || ed === 'gratuit';
+    const live = window.__agiloCurrentSummaryModel || {};
+    mountPicker(pack, pack.defaultId, live.id, isFree);
+  };
+
   window.agiloResolveSummaryModel = async function (jobId) {
+    const pack = cachedModels || await loadAllModels(false);
     const live = window.__agiloCurrentSummaryModel;
-    if (live && String(live.jobId) === String(jobId) && (live.id || live.name)) {
+    if (live && String(live.jobId) === String(jobId) && live.id != null) {
+      if (!live.name) live.name = nameForPromptId(pack, live.id);
+      renderCurrentModelBanners(live);
       return live;
     }
-    const pack = await loadAllModels(false);
     let id = null;
     if (jobId) {
       id = await getJobPromptIdFromAPI(jobId, false);
       if (id == null) id = getJobPromptIdLocal(jobId);
-      if (id != null) {
-        const n = Number(id);
-        id = isNaN(n) || n === -1 ? null : n;
-      }
     }
-    const model = {
-      jobId: String(jobId || ''),
-      id: id,
-      name: nameForPromptId(pack, id)
-    };
+    const model = modelStateForJob(pack, jobId, id);
     renderCurrentModelBanners(model);
     return model;
   };
@@ -989,6 +1073,9 @@
         max-width: 240px;
         vertical-align: middle;
       }
+      .agilo-inline-gen-cr-wrap .agilo-cr-picker {
+        margin-right: 0;
+      }
       .agilo-cr-picker[hidden] { display: none !important; }
       .agilo-cr-picker__btn {
         display: inline-flex;
@@ -1221,14 +1308,7 @@
     const ed = String(edition || '').toLowerCase().trim();
     const isFree = ed.startsWith('free') || ed === 'gratuit';
 
-    const currentNum = jobPromptId != null ? Number(jobPromptId) : NaN;
-    const currentId = (!isNaN(currentNum) && currentNum !== -1) ? currentNum : null;
-    const currentValid = currentId != null;
-    renderCurrentModelBanners({
-      jobId: String(jobId || ''),
-      id: currentValid ? currentId : null,
-      name: nameForPromptId(pack, currentValid ? currentId : null)
-    });
+    renderCurrentModelBanners(modelStateForJob(pack, jobId, jobPromptId));
 
     mountPicker(pack, defaultId, jobPromptId, isFree);
 
@@ -1237,7 +1317,7 @@
     isPopulated = true;
     lastPopulatedJobId = jobId || '';
 
-    if (jobId && (jobPromptId == null || jobPromptId === -1)) {
+    if (jobId && (jobPromptId == null || jobPromptId === -1) && !isSummaryEmpty()) {
       setTimeout(async function () {
         const retry = await getJobPromptIdFromAPI(jobId, true);
         if (retry != null && retry !== jobPromptId) {
@@ -1320,8 +1400,21 @@
 
     const summaryEl = querySummaryEditor();
     if (summaryEl) {
-      const obs = new MutationObserver(function () {
+      const obs = new MutationObserver(function (mutations) {
         if (isGenerating) return;
+        if (mutations && mutations.length && mutations.every(function (m) {
+          var nodes = [m.target];
+          if (m.addedNodes) for (var i = 0; i < m.addedNodes.length; i++) nodes.push(m.addedNodes[i]);
+          if (m.removedNodes) for (var i = 0; i < m.removedNodes.length; i++) nodes.push(m.removedNodes[i]);
+          return nodes.every(function (n) {
+            if (!n) return true;
+            var el = n.nodeType === 1 ? n : n.parentElement;
+            if (!el || !el.closest) return false;
+            return !!(el.closest('#agilo-inline-generate-cr-wrap') ||
+              el.closest('#agilo-cr-model-panel') ||
+              el.closest('.agilo-cr-picker'));
+          });
+        })) return;
         setTimeout(switchView, 200);
       });
       obs.observe(summaryEl, { childList: true, subtree: true });

@@ -869,19 +869,25 @@
       if (old) old.remove();
       return;
     }
-    if (old && old.previousElementSibling === anchor) return;
-    if (old) old.remove();
-    const wrap = document.createElement('div');
-    wrap.id = 'agilo-inline-generate-cr-wrap';
-    wrap.className = 'agilo-inline-gen-cr-wrap';
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'agilo-inline-gen-cr-btn';
-    b.setAttribute('data-action', 'relancer-compte-rendu');
-    b.setAttribute('aria-label', 'Générer un compte-rendu');
-    b.textContent = 'Générer un compte-rendu';
-    wrap.appendChild(b);
-    anchor.insertAdjacentElement('afterend', wrap);
+    let wrap = old;
+    if (!wrap || wrap.previousElementSibling !== anchor) {
+      if (old) old.remove();
+      wrap = document.createElement('div');
+      wrap.id = 'agilo-inline-generate-cr-wrap';
+      wrap.className = 'agilo-inline-gen-cr-wrap';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'agilo-inline-gen-cr-btn';
+      b.setAttribute('data-action', 'relancer-compte-rendu');
+      b.setAttribute('aria-label', 'Générer un compte-rendu');
+      b.textContent = 'Générer un compte-rendu';
+      wrap.appendChild(b);
+      anchor.insertAdjacentElement('afterend', wrap);
+    }
+    if (!document.getElementById('agilo-cr-model-picker-inline') &&
+        typeof window.agiloMountCrPickers === 'function') {
+      window.agiloMountCrPickers();
+    }
   }
 
   function applyRelanceButtonLabel() {
@@ -1529,7 +1535,20 @@
     const summaryEl = querySummaryEditor();
     if (summaryEl) {
       let debounceTimer;
-      const observer = new MutationObserver(() => {
+      const observer = new MutationObserver((mutations) => {
+        if (mutations && mutations.length && mutations.every(function (m) {
+          var nodes = [m.target];
+          if (m.addedNodes) for (var i = 0; i < m.addedNodes.length; i++) nodes.push(m.addedNodes[i]);
+          if (m.removedNodes) for (var i = 0; i < m.removedNodes.length; i++) nodes.push(m.removedNodes[i]);
+          return nodes.every(function (n) {
+            if (!n) return true;
+            var el = n.nodeType === 1 ? n : n.parentElement;
+            if (!el || !el.closest) return false;
+            return !!(el.closest('#agilo-inline-generate-cr-wrap') ||
+              el.closest('#agilo-cr-model-panel') ||
+              el.closest('.agilo-cr-picker'));
+          });
+        })) return;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           log('Changement DOM summaryEditor détecté');
@@ -1762,7 +1781,10 @@
       }
       .agilo-inline-gen-cr-wrap {
         display: flex;
+        gap: 8px;
+        align-items: center;
         justify-content: center;
+        flex-wrap: wrap;
         margin: 1rem 0 1.25rem;
       }
       .agilo-inline-gen-cr-btn {
@@ -1807,6 +1829,7 @@
   }
 
   window.relancerCompteRendu = relancerCompteRendu;
+  window.agiloIsSummaryEmpty = hasErrorMessageInDOM;
 
   /** Partagé avec Code-modeles-compte-rendu.js (polling statut, pas décompte 2:30). */
   window.__agiloSummaryRegenHelpers = {
