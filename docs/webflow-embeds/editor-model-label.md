@@ -12,7 +12,7 @@ Surface : HtmlEmbed `code-redo-modele-compte-rendu` uniquement pour ce SHA. Pin 
 |------|-----|
 | Live avant (rollback creds / history / modeles) | `637a1ae4637e0644bc91cc5713af9984d683d000` |
 | Relance (inchangé) | `70af415d97053914795f3260ed201de243f9082f` |
-| Picker CR (`Code-modeles-compte-rendu.js`) | `f4cb4af34bb0fa489f74397a7ce7cc4a2178d70b` |
+| Picker CR (`Code-modeles-compte-rendu.js`) | `88660345b2a7654ea75e564848e99f4cdce424be` |
 
 ## Pages
 
@@ -27,7 +27,7 @@ Site `6815bee5a9c0b57da18354fb`.
 Composants partagés (1 écriture, 3 instances : Business + Pro + Free) :
 
 - `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds + history `@637a1ae4`, relance `@70af415d`
-- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@f4cb4af3`
+- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@88660345`
 
 ## Snapshot rollback (HtmlEmbed `code`)
 
@@ -43,7 +43,7 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin live (14 sept. 2026) : `Code-modeles-compte-rendu.js` sur `@f4cb4af34bb0fa489f74397a7ce7cc4a2178d70b`. `relance-compte-rendu.js` reste `@70af415d`. Creds + `agilo-cr-history.js` restent sur `637a1ae4`.
+Pin live (14 sept. 2026) : `Code-modeles-compte-rendu.js` sur `@88660345b2a7654ea75e564848e99f4cdce424be`. `relance-compte-rendu.js` reste `@70af415d`. Creds + `agilo-cr-history.js` restent sur `637a1ae4`.
 
 ## Recette
 
@@ -52,6 +52,8 @@ Compte test, job `1000040491` : [éditeur staging](https://agilotext-test.webflo
 - Transcription / Assistant / Compte rendu : **même** largeur de colonne droite (Raccourcis).
 - Plus de liste « Modèles de compte-rendu » à droite.
 - Onglet Compte rendu : select compact collé à Régénérer (icône + nom, ex. Compte Rendu SWOT). Panneau liste plate avec icônes. Pas de dictée.
+- 7 standards, 0 perso : **pas** de champ recherche. Un perso (ou 8+) : champ, `swot` filtre SWOT, confirm **nom**.
+- **Créer un modèle** : nouvel onglet `/library#creer` (atelier), pas la grille. Tous les modèles : library sans hash.
 - Clic autre modèle : `confirm()` avec le **nom**, puis `redoSummary`.
 - Régénérer bleu : même `promptId` actuel, confirm **nom**.
 - Free : lignes `is-locked` + AgiloGate.
