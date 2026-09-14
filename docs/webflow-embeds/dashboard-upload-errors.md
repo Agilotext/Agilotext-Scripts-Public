@@ -4,6 +4,8 @@ Fix UX : bandeau `#form_error` « Audio non exploitable » à la place de l’al
 
 **Branche :** `fix/upload-audio-empty-ux` (depuis `origin/1.11`). `free_v2.js` part du blob live `@50cc2c16`. Ne pas pousser sur `1.09`.
 
+**SHA pin staging :** `1f708d82445ef0d1ea4d7f65a9006d7d0881edcb`
+
 **Version JS :** `1.10.0` (`window.__agiloUploadErrorVersion`)
 
 ## Pins live avant ce fix (rollback)
@@ -40,7 +42,7 @@ Retirer aussi la ligne `agilo-api-error-format.js` ajoutée. Re-publish **agilot
 
 ## Pin après push
 
-SHA : renseigner après `git push` (voir historique de commit).
+SHA : `1f708d82445ef0d1ea4d7f65a9006d7d0881edcb` (branch `fix/upload-audio-empty-ux`)
 
 Ordre footer (shared **avant** le v2) :
 
