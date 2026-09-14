@@ -262,6 +262,74 @@
     }
   }
 
+  function nameForPromptId(pack, promptId) {
+    if (promptId == null || promptId === -1) return null;
+    const n = Number(promptId);
+    if (isNaN(n)) return null;
+    const all = (pack.standard || []).concat(pack.custom || []);
+    const m = all.find(function (x) { return Number(x.promptModelId) === n; });
+    return m ? (m.promptModelName || ('Modèle ' + m.promptModelId)) : null;
+  }
+
+  function bannerLabel(model) {
+    if (!model || model.id == null) return 'Aucun compte-rendu demandé';
+    if (model.name) return 'Modèle de ce compte-rendu : ' + model.name;
+    return 'Modèle de ce compte-rendu';
+  }
+
+  function ensureChromeBanner() {
+    let el = document.getElementById('agilo-current-model');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'agilo-current-model';
+    el.className = 'agilo-current-model';
+    const tablist = document.querySelector('[role="tablist"]');
+    const summaryTab = document.querySelector('#tab-summary');
+    const title = document.querySelector('.ed-title');
+    if (tablist && tablist.parentNode) {
+      tablist.parentNode.insertBefore(el, tablist.nextSibling);
+    } else if (summaryTab && summaryTab.parentNode && summaryTab.parentNode.parentNode) {
+      summaryTab.parentNode.parentNode.insertBefore(el, summaryTab.parentNode.nextSibling);
+    } else if (title && title.parentNode) {
+      const after = title.nextSibling;
+      title.parentNode.insertBefore(el, after);
+    }
+    return el;
+  }
+
+  function renderCurrentModelBanners(model) {
+    window.__agiloCurrentSummaryModel = model || { jobId: '', id: null, name: null };
+    const text = bannerLabel(window.__agiloCurrentSummaryModel);
+    const chrome = ensureChromeBanner();
+    if (chrome) chrome.textContent = text;
+    const rail = document.getElementById('agilo-current-model-rail');
+    if (rail) rail.textContent = text;
+  }
+
+  window.agiloResolveSummaryModel = async function (jobId) {
+    const live = window.__agiloCurrentSummaryModel;
+    if (live && String(live.jobId) === String(jobId) && (live.id || live.name)) {
+      return live;
+    }
+    const pack = await loadAllModels(false);
+    let id = null;
+    if (jobId) {
+      id = await getJobPromptIdFromAPI(jobId, false);
+      if (id == null) id = getJobPromptIdLocal(jobId);
+      if (id != null) {
+        const n = Number(id);
+        id = isNaN(n) || n === -1 ? null : n;
+      }
+    }
+    const model = {
+      jobId: String(jobId || ''),
+      id: id,
+      name: nameForPromptId(pack, id)
+    };
+    renderCurrentModelBanners(model);
+    return model;
+  };
+
   function createAccordion(title, models, type, defaultId, jobPromptId, isOpen, isFree) {
     const section = document.createElement('div');
     section.className = 'models-section section-' + type;
@@ -299,7 +367,7 @@
 
       if (isUsedForThisJob) {
         chip.classList.add('is-used');
-        chip.disabled = true;
+        chip.setAttribute('aria-current', 'true');
       } else if (isDefaultAccount) {
         chip.classList.add('is-default-account');
       }
@@ -315,13 +383,21 @@
       textSpan.className = 'model-chip-text';
       textSpan.textContent = chipText;
       chip.appendChild(textSpan);
+      if (isUsedForThisJob || isDefaultAccount) {
+        const badge = document.createElement('span');
+        badge.className = 'model-chip-badge';
+        badge.textContent = isUsedForThisJob ? 'Actuel' : 'Défaut';
+        chip.appendChild(badge);
+      }
       chip.title = isUsedForThisJob
-        ? chipText + ' — modèle actuel pour ce job'
+        ? chipText + ' (modèle actuel pour ce job)'
         : isDefaultAccount
-          ? chipText + ' — modèle par défaut du compte'
+          ? chipText + ' (modèle par défaut du compte)'
           : chipText;
 
-      if (!isUsedForThisJob && !isFree) {
+      if (isUsedForThisJob) {
+        chip.addEventListener('click', function (e) { e.preventDefault(); });
+      } else if (!isFree) {
         chip.addEventListener('click', function () { handleChipClick(m); });
       }
 
@@ -665,13 +741,13 @@
   }
 
   function injectStyles() {
-    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-modeles-styles-v7', '#agilo-tpl-styles-v3'].forEach(function (sel) {
       const n = document.querySelector(sel);
       if (n) n.remove();
     });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles-v6';
+    style.id = 'agilo-modeles-styles-v7';
     style.textContent = `
       #cr-template-chips {
         display: flex;
@@ -759,46 +835,49 @@
       .models-section.is-open .models-section-content { display: block; }
 
       .models-chips {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
-        gap: 10px;
-        align-items: stretch;
-      }
-
-      @media (max-width: 480px) {
-        .models-chips { grid-template-columns: 1fr; gap: 8px; }
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
       }
 
       .model-chip {
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
+        gap: 8px;
         min-height: 44px;
-        max-height: 72px;
-        padding: 10px 12px;
+        padding: 8px 12px;
         border-radius: 8px;
         font-size: 13px;
         font-weight: 500;
         line-height: 1.35;
         cursor: pointer;
-        transition: box-shadow 0.15s ease, transform 0.15s ease, background 0.15s ease;
-        text-align: center;
+        transition: background 0.15s ease;
+        text-align: left;
         box-sizing: border-box;
         width: 100%;
         border: 1px solid transparent;
       }
 
       .model-chip-text {
-        display: -webkit-box;
-        -webkit-line-clamp: 3;
-        -webkit-box-orient: vertical;
+        flex: 1;
+        min-width: 0;
         overflow: hidden;
-        word-break: break-word;
-        text-align: center;
-        width: 100%;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: left;
       }
 
-      .model-chip:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+      .model-chip-badge {
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        opacity: 0.9;
+      }
+
+      .model-chip:hover { background: rgba(0,0,0,0.04); }
 
       .model-chip.chip-standard {
         border-color: rgba(23, 74, 150, 0.35);
@@ -819,16 +898,6 @@
         font-weight: 600;
       }
 
-      .model-chip.is-default-account::after {
-        content: ' (défaut)';
-        font-size: 10px;
-        font-weight: 600;
-        opacity: 0.9;
-        margin-left: 4px;
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
       .model-chip.is-used {
         cursor: default;
         opacity: 0.95;
@@ -844,13 +913,6 @@
         background: #1c661a;
         color: #fff;
         border-color: #1c661a;
-      }
-
-      .model-chip.is-used .model-chip-text::after {
-        content: ' (actuel)';
-        font-size: 10px;
-        font-weight: 600;
-        opacity: 0.95;
       }
 
       .model-chip.is-locked {
@@ -870,6 +932,23 @@
       }
 
       [data-view="templates"] { display: none; }
+
+      [data-view="templates"] .ia-actions .ag-badge,
+      [data-view="templates"] .ia-actions .ia-details {
+        display: none !important;
+      }
+
+      .agilo-current-model,
+      #agilo-current-model-rail {
+        font-size: 13px;
+        font-weight: 600;
+        color: #020202;
+        padding: 8px 0 10px;
+        line-height: 1.35;
+      }
+      #agilo-current-model-rail {
+        padding: 4px 0 8px;
+      }
 
       .summary-loading-indicator {
         display: flex;
@@ -962,6 +1041,20 @@
     const ed = String(edition || '').toLowerCase().trim();
     const isFree = ed.startsWith('free') || ed === 'gratuit';
 
+    const currentNum = jobPromptId != null ? Number(jobPromptId) : NaN;
+    const currentId = (!isNaN(currentNum) && currentNum !== -1) ? currentNum : null;
+    const currentValid = currentId != null;
+    renderCurrentModelBanners({
+      jobId: String(jobId || ''),
+      id: currentValid ? currentId : null,
+      name: nameForPromptId(pack, currentValid ? currentId : null)
+    });
+
+    const railLabel = document.createElement('div');
+    railLabel.id = 'agilo-current-model-rail';
+    railLabel.textContent = bannerLabel(window.__agiloCurrentSummaryModel);
+    container.appendChild(railLabel);
+
     if (isFree) {
       const banner = document.createElement('div');
       banner.className = 'agilo-modeles-free-banner';
@@ -970,14 +1063,22 @@
       container.appendChild(banner);
     }
 
+    const currentInStd = currentValid && standard.some(function (m) { return Number(m.promptModelId) === currentId; });
+    const currentInCustom = currentValid && custom.some(function (m) { return Number(m.promptModelId) === currentId; });
+    const openStd = currentInStd || !currentInCustom;
+    const openCustom = !!currentInCustom;
+
     if (standard.length > 0) {
-      container.appendChild(createAccordion('Modèles standards', standard, 'standard', defaultId, jobPromptId, true, isFree));
+      container.appendChild(createAccordion('Modèles standards', standard, 'standard', defaultId, jobPromptId, openStd, isFree));
     }
     if (custom.length > 0) {
-      container.appendChild(createAccordion('Mes modèles personnalisés', custom, 'custom', defaultId, jobPromptId, true, isFree));
+      container.appendChild(createAccordion('Mes modèles personnalisés', custom, 'custom', defaultId, jobPromptId, openCustom, isFree));
     }
     if (standard.length === 0 && custom.length === 0) {
-      container.innerHTML = '<div style="padding:16px;color:#525252;font-size:13px;text-align:center;">Aucun modèle disponible</div>';
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding:16px;color:#525252;font-size:13px;text-align:center;';
+      empty.textContent = 'Aucun modèle disponible';
+      container.appendChild(empty);
     }
 
     if (jobId) updateExistingRegenerationCounter(jobId, edition);
@@ -1041,6 +1142,10 @@
     window.__agiloModelesInitialized = true;
 
     injectStyles();
+    const firstJob = pickJobId();
+    if (firstJob && typeof window.agiloResolveSummaryModel === 'function') {
+      window.agiloResolveSummaryModel(firstJob).catch(function () {});
+    }
 
     let lastJobId = pickJobId();
     setInterval(function () {
@@ -1049,6 +1154,10 @@
         lastJobId = cur;
         isPopulated = false;
         cachedModels = null;
+        window.__agiloCurrentSummaryModel = { jobId: cur, id: null, name: null };
+        if (typeof window.agiloResolveSummaryModel === 'function') {
+          window.agiloResolveSummaryModel(cur).catch(function () {});
+        }
         debouncedPopulate();
       }
     }, 2000);

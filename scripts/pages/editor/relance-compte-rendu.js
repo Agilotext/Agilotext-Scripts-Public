@@ -1233,12 +1233,30 @@
     }
 
     const cachedPromptId = _getCachedPromptId(jobId);
+    let resolved = null;
+    if (typeof window.agiloResolveSummaryModel === 'function') {
+      try {
+        resolved = await window.agiloResolveSummaryModel(jobId);
+      } catch (e) {
+        log('agiloResolveSummaryModel', e);
+      }
+    }
+    if (!resolved) {
+      const live = window.__agiloCurrentSummaryModel;
+      if (live && String(live.jobId) === String(jobId)) resolved = live;
+    }
+    let promptIdToUse = null;
+    if (resolved && resolved.id != null) promptIdToUse = resolved.id;
+    else if (!resolved) promptIdToUse = cachedPromptId;
+    const modelName = (resolved && resolved.name) || '';
+    const modelNote = modelName
+      ? ('Modèle : ' + modelName)
+      : (promptIdToUse
+        ? 'Modèle de ce compte-rendu.'
+        : 'Modèle par défaut de votre compte.');
 
     var confirmMsg = '';
     if (firstGen) {
-      const modelNote = cachedPromptId
-        ? `Modèle utilisé : celui de votre dernière génération (ID ${cachedPromptId}).`
-        : 'Modèle par défaut de votre compte.';
       confirmMsg =
         'Générer le compte-rendu pour cette transcription ?\n\n' +
         modelNote +
@@ -1246,7 +1264,7 @@
     } else {
       confirmMsg =
         'Remplacer le compte-rendu actuel ?\n\n' +
-        (cachedPromptId ? `Modèle : ID ${cachedPromptId} (dernier utilisé).\n\n` : '') +
+        modelNote + '\n\n' +
         `${canRegen.remaining}/${canRegen.limit} régénération${
           canRegen.remaining > 1 ? 's' : ''
         } restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
@@ -1273,11 +1291,11 @@
       if (skipRegenCharge) {
         log('Relance incident : quota de régénération non décompté');
       }
-      const promptSuffix = cachedPromptId ? `&promptId=${encodeURIComponent(cachedPromptId)}` : '';
+      const promptSuffix = promptIdToUse ? `&promptId=${encodeURIComponent(promptIdToUse)}` : '';
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}${promptSuffix}`;
       log(
         'Appel redoSummary' +
-          (cachedPromptId ? ` (promptId=${cachedPromptId})` : ' (modèle défaut compte)') +
+          (promptIdToUse ? ` (promptId=${promptIdToUse})` : ' (modèle défaut compte)') +
           '...'
       );
       const response = await fetchRedoSummaryWithRetry(url, 3);
