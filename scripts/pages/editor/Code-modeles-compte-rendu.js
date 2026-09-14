@@ -1,4 +1,4 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.0 – picker compact)
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.1 – picker search + #creer)
 // Raccourcis restent à droite. Choix de modèle = select icône + nom collé à Régénérer.
 
 (function() {
@@ -321,6 +321,23 @@
     return /dict[ée]e/i.test(String(m.promptModelName || m.cardTitle || ''));
   }
 
+  function foldText(s) {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function modelMatchesQuery(m, q) {
+    if (!q) return true;
+    const blob = foldText((m.promptModelName || '') + ' ' + (m.cardTitle || ''));
+    return blob.indexOf(foldText(q)) !== -1;
+  }
+
+  function visibleModels(models) {
+    return (models || []).filter(function (m) { return !isDictationModel(m); });
+  }
+
   function libraryBasePath() {
     const ed = String(pickEdition() || '').toLowerCase().trim();
     if (ed.startsWith('free') || ed === 'gratuit') return '/app/free/library';
@@ -421,58 +438,110 @@
     panel.className = 'agilo-cr-picker__panel';
     panel.setAttribute('role', 'listbox');
 
-    function addSection(title, models) {
-      const visible = (models || []).filter(function (m) { return !isDictationModel(m); });
-      if (!visible.length) return;
-      const sec = document.createElement('div');
-      sec.className = 'agilo-cr-picker__sec';
-      sec.textContent = title;
-      panel.appendChild(sec);
-      visible.forEach(function (m) {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'agilo-cr-picker__opt';
-        row.setAttribute('role', 'option');
-        const idNum = Number(m.promptModelId);
-        const isUsed = jobPromptId != null && idNum === Number(jobPromptId);
-        const isDef = defaultId != null && idNum === Number(defaultId);
-        if (isUsed) {
-          row.classList.add('is-active');
-          row.setAttribute('aria-current', 'true');
-          row.setAttribute('aria-selected', 'true');
-        }
-        if (isFree && !isUsed) {
-          row.classList.add('is-locked');
-          row.setAttribute('data-plan-min', 'pro');
-          row.setAttribute('data-upgrade-reason', 'Régénération avec le modèle « ' + (m.promptModelName || '') + ' »');
-        }
-        row.insertAdjacentHTML('beforeend', iconHtml(m));
-        const body = document.createElement('span');
-        body.className = 'agilo-cr-picker__opt-label';
-        const nm = m.promptModelName || ('Modèle ' + m.promptModelId);
-        body.textContent = nm;
-        body.title = nm;
-        row.appendChild(body);
-        if (isUsed || isDef) {
-          const badge = document.createElement('span');
-          badge.className = 'agilo-cr-picker__badge';
-          badge.textContent = isUsed ? 'Actuel' : 'Défaut';
-          row.appendChild(badge);
-        }
-        if (isUsed) {
-          row.addEventListener('click', function (e) { e.preventDefault(); closePickerPanel(); });
-        } else if (!isFree) {
-          row.addEventListener('click', function () {
-            closePickerPanel();
-            handleChipClick(m);
-          });
-        }
-        panel.appendChild(row);
-      });
+    const stdAll = visibleModels(pack.standard);
+    const customAll = visibleModels(pack.custom);
+    const showSearch = (stdAll.length + customAll.length) >= 8 || customAll.length > 0;
+
+    const list = document.createElement('div');
+    list.id = 'agilo-cr-model-list';
+    list.className = 'agilo-cr-picker__list';
+
+    function paintList(query) {
+      list.innerHTML = '';
+      const q = String(query || '').trim();
+      let painted = 0;
+
+      function addSection(title, models) {
+        const visible = visibleModels(models).filter(function (m) { return modelMatchesQuery(m, q); });
+        if (!visible.length) return;
+        const sec = document.createElement('div');
+        sec.className = 'agilo-cr-picker__sec';
+        sec.textContent = title;
+        list.appendChild(sec);
+        visible.forEach(function (m) {
+          painted += 1;
+          const row = document.createElement('button');
+          row.type = 'button';
+          row.className = 'agilo-cr-picker__opt';
+          row.setAttribute('role', 'option');
+          const idNum = Number(m.promptModelId);
+          const isUsed = jobPromptId != null && idNum === Number(jobPromptId);
+          const isDef = defaultId != null && idNum === Number(defaultId);
+          if (isUsed) {
+            row.classList.add('is-active');
+            row.setAttribute('aria-current', 'true');
+            row.setAttribute('aria-selected', 'true');
+          }
+          if (isFree && !isUsed) {
+            row.classList.add('is-locked');
+            row.setAttribute('data-plan-min', 'pro');
+            row.setAttribute('data-upgrade-reason', 'Régénération avec le modèle « ' + (m.promptModelName || '') + ' »');
+          }
+          row.insertAdjacentHTML('beforeend', iconHtml(m));
+          row.dataset.promptId = String(m.promptModelId);
+          const body = document.createElement('span');
+          body.className = 'agilo-cr-picker__opt-label';
+          const nm = m.promptModelName || ('Modèle ' + m.promptModelId);
+          body.textContent = nm;
+          body.title = nm;
+          row.appendChild(body);
+          if (isUsed || isDef) {
+            const badge = document.createElement('span');
+            badge.className = 'agilo-cr-picker__badge';
+            badge.textContent = isUsed ? 'Actuel' : 'Défaut';
+            row.appendChild(badge);
+          }
+          if (isUsed) {
+            row.addEventListener('click', function (e) { e.preventDefault(); closePickerPanel(); });
+          } else if (!isFree) {
+            row.addEventListener('click', function () {
+              closePickerPanel();
+              handleChipClick(m);
+            });
+          }
+          list.appendChild(row);
+        });
+      }
+
+      addSection('Standards', pack.standard);
+      addSection('Mes modèles', pack.custom);
+      if (!painted) {
+        const empty = document.createElement('div');
+        empty.className = 'agilo-cr-picker__empty';
+        empty.textContent = 'Aucun modèle';
+        list.appendChild(empty);
+      }
+      positionPickerPanel(btn, panel);
+      if (isFree && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+        setTimeout(function () { window.AgiloGate.decorate(); }, 80);
+      }
     }
 
-    addSection('Standards', pack.standard);
-    addSection('Mes modèles', pack.custom);
+    if (showSearch) {
+      const search = document.createElement('input');
+      search.type = 'search';
+      search.className = 'agilo-cr-picker__search';
+      search.placeholder = 'Rechercher un modèle';
+      search.setAttribute('autocomplete', 'off');
+      search.setAttribute('aria-label', 'Rechercher un modèle');
+      search.addEventListener('input', function () { paintList(search.value); });
+      search.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const rows = list.querySelectorAll('.agilo-cr-picker__opt:not(.is-active)');
+        if (rows.length !== 1) return;
+        const row = rows[0];
+        if (row.classList.contains('is-locked')) {
+          const locked = findModel(pack, row.getAttribute('data-prompt-id'));
+          if (locked) handleChipClick(locked);
+          return;
+        }
+        row.click();
+      });
+      panel.appendChild(search);
+    }
+
+    panel.appendChild(list);
 
     const foot = document.createElement('div');
     foot.className = 'agilo-cr-picker__foot';
@@ -483,7 +552,7 @@
     a1.rel = 'noopener';
     a1.textContent = 'Tous les modèles';
     const a2 = document.createElement('a');
-    a2.href = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'creer';
+    a2.href = base + '#creer';
     a2.target = '_blank';
     a2.rel = 'noopener';
     a2.textContent = 'Créer un modèle';
@@ -492,11 +561,13 @@
     panel.appendChild(foot);
 
     document.body.appendChild(panel);
+    paintList('');
     positionPickerPanel(btn, panel);
     document.addEventListener('keydown', onPickerKeydown, true);
     document.addEventListener('mousedown', onPickerOutside, true);
-    if (isFree && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
-      setTimeout(function () { window.AgiloGate.decorate(); }, 80);
+    const searchEl = panel.querySelector('.agilo-cr-picker__search');
+    if (searchEl) {
+      setTimeout(function () { searchEl.focus(); }, 0);
     }
   }
 
@@ -896,13 +967,13 @@
   }
 
   function injectStyles() {
-    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-modeles-styles-v7', '#agilo-modeles-styles-v8', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-modeles-styles-v7', '#agilo-modeles-styles-v8', '#agilo-modeles-styles-v9', '#agilo-tpl-styles-v3'].forEach(function (sel) {
       const n = document.querySelector(sel);
       if (n) n.remove();
     });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles-v8';
+    style.id = 'agilo-modeles-styles-v9';
     style.textContent = `
       [data-view="templates"],
       #cr-template-chips,
@@ -977,8 +1048,33 @@
         border: 1px solid rgba(52, 58, 64, 0.18);
         border-radius: 10px;
         box-shadow: 0 8px 28px rgba(2, 2, 2, 0.16);
-        padding: 6px 0 0;
+        padding: 0;
         box-sizing: border-box;
+      }
+      .agilo-cr-picker__search {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0;
+        padding: 8px 12px;
+        border: none;
+        border-bottom: 1px solid rgba(52, 58, 64, 0.12);
+        background: #fff;
+        color: #020202;
+        font: 400 13px/1.3 system-ui, -apple-system, sans-serif;
+        outline: none;
+      }
+      .agilo-cr-picker__search:focus {
+        border-bottom-color: #174a96;
+      }
+      .agilo-cr-picker__list { padding-top: 4px; }
+      .agilo-cr-picker__empty {
+        padding: 12px 12px 10px;
+        font: 400 13px/1.3 system-ui, -apple-system, sans-serif;
+        color: #525252;
       }
       .agilo-cr-picker__sec {
         padding: 8px 12px 4px;
