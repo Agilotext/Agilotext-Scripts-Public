@@ -1,10 +1,10 @@
 // Agilotext – Historique CR (Relancer / Essayer). Horloge + Revenir.
-// Contrat GET : listSummaryVersions / restoreSummaryVersion (aligné redoSummary). Strip url.
+// Contrat POST live 637a1ae4 : listSummaryVersions / restoreSummaryVersion. Strip url.
 // 0 relance. Rien si previousVersions vide. Pas de maquette.
 (function () {
   'use strict';
 
-  const VERSION = '1.0.2';
+  const VERSION = '1.0.3';
   window.__agiloCrHistoryVersion = VERSION;
 
   const API_V1 = 'https://api.agilotext.com/api/v1';
@@ -113,39 +113,25 @@
     return Boolean(window.__agiloSummaryRegenInProgress);
   }
 
-  function fetchGetWithRetry(url, maxAttempts) {
-    var lastErr;
-    var n = maxAttempts || 3;
-    function attempt(a) {
-      return fetch(url, { method: 'GET', cache: 'no-store', credentials: 'omit' }).catch(function (err) {
-        lastErr = err;
-        if (a < n) {
-          return new Promise(function (resolve) {
-            setTimeout(function () {
-              resolve(attempt(a + 1));
-            }, 400 * a);
-          });
-        }
-        throw lastErr || new Error('fetch réseau');
-      });
-    }
-    return attempt(1);
-  }
-
-  function getApi(path, extra) {
+  function postForm(path, extra) {
     const a = creds();
     if (!a) return Promise.resolve(null);
-    const q = new URLSearchParams({
+    const body = new URLSearchParams({
       username: a.email,
       token: a.token,
       edition: a.edition,
       jobId: a.jobId
     });
     Object.keys(extra || {}).forEach(function (k) {
-      if (extra[k] !== undefined && extra[k] !== null) q.set(k, String(extra[k]));
+      if (extra[k] !== undefined && extra[k] !== null) body.set(k, String(extra[k]));
     });
-    q.set('_t', String(Date.now()));
-    return fetchGetWithRetry(API_V1 + path + '?' + q.toString(), 3).then(function (r) {
+    return fetch(API_V1 + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      cache: 'no-store',
+      credentials: 'omit'
+    }).then(function (r) {
       return r.json().catch(function () {
         return {};
       });
@@ -443,7 +429,7 @@
     if (!creds()) {
       return Promise.resolve();
     }
-    return getApi('/listSummaryVersions')
+    return postForm('/listSummaryVersions')
       .then(function (data) {
         if (!data || data.status !== 'OK') {
           return;
@@ -479,7 +465,7 @@
     if (restoreIncrementsRegenerations()) return;
     restoring = true;
     applyPending();
-    getApi('/restoreSummaryVersion', { versionId: versionId })
+    postForm('/restoreSummaryVersion', { versionId: versionId })
       .then(function (data) {
         if (!data || data.status !== 'OK') {
           toast((data && (data.userErrorMessage || data.errorMessage)) || 'Restore impossible.');
