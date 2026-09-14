@@ -23,21 +23,26 @@ Site `6815bee5a9c0b57da18354fb`.
 | Pro | `68ed41f20988e833cb4e3148` | `/app/premium/editor` |
 | Free | `68ed64995fcf3e0b0b452916` | `/app/free/editor` |
 
+Composants partagés (1 écriture, 3 instances : Business + Pro + Free) :
+
+- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e`
+- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a`
+
 ## Snapshot rollback (HtmlEmbed `code`)
 
 Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 
 ```html
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-editor-creds.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/relance-compte-rendu.js"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-cr-history.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-editor-creds.js?v=1.07"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/relance-compte-rendu.js?v=637a1ae4"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-cr-history.js?v=637a1ae4"></script>
 ```
 
 ```html
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin nouveau : remplacer **seulement** `@637a1ae4637e0644bc91cc5713af9984d683d000` par `@70af415d97053914795f3260ed201de243f9082f` sur `relance-compte-rendu.js` et `Code-modeles-compte-rendu.js`. Garder creds + `agilo-cr-history.js` sur `637a1ae4`.
+Pin live (14 sept. 2026) : `relance-compte-rendu.js` et `Code-modeles-compte-rendu.js` sur `@70af415d97053914795f3260ed201de243f9082f`. Creds + `agilo-cr-history.js` restent sur `637a1ae4`.
 
 ## Recette
 
