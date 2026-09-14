@@ -13,7 +13,8 @@ Surface : HtmlEmbeds `code-redo-modele-compte-rendu` (modeles) et `Code-Redo_sum
 | Live avant (rollback creds / history / modeles / relance www) | `637a1ae4637e0644bc91cc5713af9984d683d000` |
 | Relance staging (vide CR) | `9ed906227e6e94f32ccb49994367d9fc749c3471` |
 | Picker CR + Revenir (`Code-modeles-compte-rendu.js`) | `33aee578d4d39293b7ea8ef717336dd2846645e5` |
-| Historique CR (`agilo-cr-history.js`) | `33aee578d4d39293b7ea8ef717336dd2846645e5` |
+| Historique CR GET (`agilo-cr-history.js`) | `ff454aa015708e28e72fd0da538c69c9df30d696` |
+| Palier précédent history (POST, layout Revenir) | `33aee578d4d39293b7ea8ef717336dd2846645e5` |
 | Palier précédent modeles + relance (vide CR) | `9ed906227e6e94f32ccb49994367d9fc749c3471` |
 
 ## Pages
@@ -28,7 +29,7 @@ Site `6815bee5a9c0b57da18354fb`.
 
 Composants partagés (1 écriture, 3 instances : Business + Pro + Free) :
 
-- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds `@637a1ae4`, relance `@9ed90622`, history `@33aee578`
+- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds `@637a1ae4`, relance `@9ed90622`, history `@ff454aa0`
 - `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@33aee578`
 
 ## Snapshot rollback (HtmlEmbed `code`)
@@ -45,20 +46,18 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin staging (14 sept. 2026) : modeles + history `@33aee578d4d39293b7ea8ef717336dd2846645e5`. Relance `@9ed90622`. Creds `@637a1ae4`.
+Pin staging (14 sept. 2026, GET history) : history `@ff454aa015708e28e72fd0da538c69c9df30d696`. Modeles `@33aee578`. Relance `@9ed90622`. Creds `@637a1ae4`.
 
 ## Recette
 
-Job **avec** versions (celui où www montre déjà `Revenir · HH:mm`, pas `1000040491` si 1er CR, pas `1000040213`) :
+CORS : `listSummaryVersions` est un **GET** query-string (comme `redoSummary`). Si CORS encore : Nico, pas un 2e tour front.
 
-- Onglet Compte rendu : picker + Régénérer + **`Revenir · HH:mm` + horloge**.
-- Horloge : liste des versions, footer « Gratuit, ça ne consomme pas de relance ». Restore : quota inchangé.
+1. **www**, job où Revenir est visible (pas `1000040491` si 1er CR, **pas** `1000040213`) : Network `listSummaryVersions` (méthode, status, ACAO).
+2. **Staging, même `jobId`.** Console : plus de CORS. Horloge `Revenir · HH:mm` si `previousVersions.length > 0`. Restore : quota inchangé, footer « Gratuit, ça ne consomme pas de relance ».
+3. Job **avec** CR sans versions : [staging Business](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040491&edition=ent) : picker, **pas** de Revenir (ce n’est pas un échec CORS).
+4. Job **sans** CR (autre que `1000040213`) : select + Générer, pas de Revenir.
 
-Job **avec** CR sans versions : [staging Business](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040491&edition=ent) : picker, **pas** de Revenir.
-
-Job **sans** CR (autre que `1000040213`) : select + Générer, pas de Revenir.
-
-www : 0 occurrence de `33aee578`.
+www : 0 occurrence de `ff454aa0` et de `33aee578`.
 
 ## Rollback
 
