@@ -71,4 +71,7 @@ const sorted = helpers.previousVersionsOf({
 });
 assert(sorted[0].versionId === 'new', 'archives les plus recentes en premier');
 
-console.log('Résultat : 12 ok, 0 échec(s)');
+assert(/method:\s*'GET'/.test(src), 'fetch GET');
+assert(!/method:\s*'POST'/.test(src), 'plus de POST');
+
+console.log('Résultat : 14 ok, 0 échec(s)');
