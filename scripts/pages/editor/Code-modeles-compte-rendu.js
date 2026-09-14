@@ -1,4 +1,4 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.2 – picker vide CR + défaut nommé)
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.3 – picker vide CR + Revenir)
 // Raccourcis restent à droite. Choix de modèle = select icône + nom collé à Régénérer / Générer.
 
 (function() {
@@ -640,6 +640,9 @@
 
   function ensurePickerHost(parent, id, insertBefore) {
     if (!parent) return null;
+    if (insertBefore && insertBefore.id === 'agilo-cr-hist') {
+      insertBefore = insertBefore.nextElementSibling;
+    }
     let host = document.getElementById(id);
     if (!host) host = makePickerHost(id);
     if (insertBefore) {
@@ -655,6 +658,7 @@
   function ensureToolbarPickerHost() {
     const btnRegen = getToolbarRegenBtn();
     if (!btnRegen || !btnRegen.parentElement) return document.getElementById('agilo-cr-model-picker');
+    btnRegen.parentElement.classList.add('agilo-cr-regen-cluster');
     return ensurePickerHost(btnRegen.parentElement, 'agilo-cr-model-picker', btnRegen);
   }
 
@@ -696,6 +700,9 @@
       bindPickerOpen(inline.querySelector('.agilo-cr-picker__btn'));
     }
     paintPickerButtons();
+    if (window.__agiloCrHistoryHelpers && typeof window.__agiloCrHistoryHelpers.placeRoot === 'function') {
+      window.__agiloCrHistoryHelpers.placeRoot();
+    }
   }
 
   window.agiloMountCrPickers = function () {
@@ -1072,6 +1079,22 @@
         margin-right: 8px;
         max-width: 240px;
         vertical-align: middle;
+      }
+      .agilo-cr-regen-cluster {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px 8px;
+      }
+      .agilo-cr-regen-cluster .agilo-cr-picker {
+        margin-right: 0;
+      }
+      #agilo-cr-hist.is-on {
+        display: flex;
+        flex-basis: 100%;
+        width: 100%;
+        justify-content: flex-end;
       }
       .agilo-inline-gen-cr-wrap .agilo-cr-picker {
         margin-right: 0;

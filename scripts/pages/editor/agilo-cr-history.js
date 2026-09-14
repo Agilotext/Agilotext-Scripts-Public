@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const VERSION = '1.0.0';
+  const VERSION = '1.0.1';
   window.__agiloCrHistoryVersion = VERSION;
 
   const API_V1 = 'https://api.agilotext.com/api/v1';
@@ -165,13 +165,25 @@
     const style = document.createElement('style');
     style.id = 'agilo-cr-hist-css';
     style.textContent = `
+      .agilo-cr-regen-cluster {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4px 8px;
+      }
       .agilo-cr-hist {
         display: none;
         position: relative;
         align-items: center;
         gap: 4px;
       }
-      .agilo-cr-hist.is-on { display: inline-flex; }
+      .agilo-cr-hist.is-on {
+        display: flex;
+        flex-basis: 100%;
+        width: 100%;
+        justify-content: flex-end;
+      }
       .agilo-cr-hist__undo {
         display: inline-flex;
         align-items: center;
@@ -287,6 +299,20 @@
   let selectedId = '';
   let restoring = false;
 
+  function toolbarAnchor() {
+    return document.querySelector(ANCHOR_SEL);
+  }
+
+  function placeRootAfterAnchor() {
+    const anchor = toolbarAnchor();
+    const parent = anchor && anchor.parentElement;
+    if (!root || !parent) return;
+    parent.classList.add('agilo-cr-regen-cluster');
+    if (root.previousElementSibling === anchor && root.parentElement === parent) return;
+    if (anchor.nextSibling) parent.insertBefore(root, anchor.nextSibling);
+    else parent.appendChild(root);
+  }
+
   function ensureRoot() {
     injectStyles();
     root = document.getElementById(ROOT_ID);
@@ -295,9 +321,10 @@
       clockBtn = root.querySelector('.agilo-cr-hist__clock');
       pop = root.querySelector('.agilo-cr-hist__pop');
       listEl = root.querySelector('.agilo-cr-hist__list');
+      placeRootAfterAnchor();
       return root;
     }
-    const anchor = document.querySelector(ANCHOR_SEL);
+    const anchor = toolbarAnchor();
     const parent = anchor && anchor.parentElement;
     if (!parent) return null;
 
@@ -322,6 +349,7 @@
 
     if (anchor.nextSibling) parent.insertBefore(root, anchor.nextSibling);
     else parent.appendChild(root);
+    parent.classList.add('agilo-cr-regen-cluster');
 
     undoBtn = root.querySelector('.agilo-cr-hist__undo');
     clockBtn = root.querySelector('.agilo-cr-hist__clock');
@@ -364,7 +392,8 @@
 
   function renderList() {
     if (!root) return;
-    const show = shouldShowHistory(previous);
+    const emptyCr = typeof window.agiloIsSummaryEmpty === 'function' && window.agiloIsSummaryEmpty();
+    const show = !emptyCr && shouldShowHistory(previous);
     root.classList.toggle('is-on', show);
     if (!show) {
       setOpen(false);
@@ -398,9 +427,6 @@
 
   function fetchList() {
     if (!creds()) {
-      previous = [];
-      selectedId = '';
-      if (root) renderList();
       return Promise.resolve();
     }
     return postForm('/listSummaryVersions').then(function (data) {
@@ -414,6 +440,14 @@
       selectedId = previous[0] && previous[0].versionId ? String(previous[0].versionId) : '';
       if (ensureRoot()) renderList();
       applyPending();
+    });
+  }
+
+  function scheduleFetchRetries() {
+    [400, 1500].forEach(function (ms) {
+      setTimeout(function () {
+        if (previous.length === 0 && creds()) fetchList();
+      }, ms);
     });
   }
 
@@ -468,12 +502,11 @@
     window.addEventListener('agilo:summary-ready', onReady);
     window.addEventListener('agilo:summary-pending', onPending);
     window.addEventListener('agilo:load', function () {
-      previous = [];
-      selectedId = '';
       fetchList();
     });
     ensureRoot();
     fetchList();
+    scheduleFetchRetries();
   }
 
   window.__agiloCrHistoryHelpers = {
@@ -484,7 +517,8 @@
     restoreIncrementsRegenerations: restoreIncrementsRegenerations,
     formatVersionWhen: formatVersionWhen,
     formatVersionRow: formatVersionRow,
-    formatUndoLabel: formatUndoLabel
+    formatUndoLabel: formatUndoLabel,
+    placeRoot: placeRootAfterAnchor
   };
 
   if (document.readyState === 'loading') {
