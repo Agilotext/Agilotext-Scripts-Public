@@ -12,9 +12,9 @@ Surface : HtmlEmbeds `code-redo-modele-compte-rendu` (modeles) et `Code-Redo_sum
 |------|-----|
 | Live avant (rollback creds / history / modeles / relance www) | `637a1ae4637e0644bc91cc5713af9984d683d000` |
 | Relance staging (vide CR) | `9ed906227e6e94f32ccb49994367d9fc749c3471` |
-| Picker CR (`Code-modeles-compte-rendu.js`) | `9ed906227e6e94f32ccb49994367d9fc749c3471` |
-| Palier précédent modeles (recherche + `#creer`) | `88660345b2a7654ea75e564848e99f4cdce424be` |
-| Palier précédent relance | `70af415d97053914795f3260ed201de243f9082f` |
+| Picker CR + Revenir (`Code-modeles-compte-rendu.js`) | `33aee578d4d39293b7ea8ef717336dd2846645e5` |
+| Historique CR (`agilo-cr-history.js`) | `33aee578d4d39293b7ea8ef717336dd2846645e5` |
+| Palier précédent modeles + relance (vide CR) | `9ed906227e6e94f32ccb49994367d9fc749c3471` |
 
 ## Pages
 
@@ -28,8 +28,8 @@ Site `6815bee5a9c0b57da18354fb`.
 
 Composants partagés (1 écriture, 3 instances : Business + Pro + Free) :
 
-- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds + history `@637a1ae4`, relance `@9ed90622`
-- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@9ed90622`
+- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds `@637a1ae4`, relance `@9ed90622`, history `@33aee578`
+- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@33aee578`
 
 ## Snapshot rollback (HtmlEmbed `code`)
 
@@ -45,20 +45,20 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin staging (14 sept. 2026) : modeles + relance `@9ed906227e6e94f32ccb49994367d9fc749c3471`. Creds + `agilo-cr-history.js` restent sur `637a1ae4`.
+Pin staging (14 sept. 2026) : modeles + history `@33aee578d4d39293b7ea8ef717336dd2846645e5`. Relance `@9ed90622`. Creds `@637a1ae4`.
 
 ## Recette
 
-Job **avec** CR : [staging Business](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040491&edition=ent) (compte Florian).
+Job **avec** versions (celui où www montre déjà `Revenir · HH:mm`, pas `1000040491` si 1er CR, pas `1000040213`) :
 
-- Onglet Compte rendu : picker toolbar icône + nom. Clic autre modèle = confirm remplacer + quota.
+- Onglet Compte rendu : picker + Régénérer + **`Revenir · HH:mm` + horloge**.
+- Horloge : liste des versions, footer « Gratuit, ça ne consomme pas de relance ». Restore : quota inchangé.
 
-Job **sans** CR (autre que `1000040213`, crash langue serveur) :
+Job **avec** CR sans versions : [staging Business](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040491&edition=ent) : picker, **pas** de Revenir.
 
-- Vide : select (icône + nom du défaut) **à côté** de Générer, même nom sur le picker toolbar.
-- Ouvrir le select, choisir un autre modèle : nom mis à jour, pas de confirm, pas de loader, quota inchangé.
-- Générer : confirm `Modèle : …`, OK lance, quota toujours 4/4.
-- www : 0 occurrence de `9ed90622`.
+Job **sans** CR (autre que `1000040213`) : select + Générer, pas de Revenir.
+
+www : 0 occurrence de `33aee578`.
 
 ## Rollback
 
