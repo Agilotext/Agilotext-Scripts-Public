@@ -1,6 +1,6 @@
 /**
  * Picker dashboard A : popover sections + recherche. Synchronise #default-template-select.
- * @version 2.2.0
+ * @version 2.2.1
  */
 (function (global) {
   "use strict";
@@ -155,11 +155,102 @@
     select.dispatchEvent(ev);
   }
 
-  function findSummaryToggle() {
-    if (typeof document === "undefined") return null;
-    return document.getElementById("toggle-summary") ||
-      document.querySelector('[name="toggle-summary"]') ||
-      document.querySelector('[data-option-type="summary"]');
+  function findSummaryToggle(doc) {
+    var root = doc || (typeof document !== "undefined" ? document : null);
+    if (!root) return null;
+    return (root.getElementById && root.getElementById("toggle-summary")) ||
+      (root.querySelector && (root.querySelector('[name="toggle-summary"]') ||
+        root.querySelector('[data-option-type="summary"]'))) ||
+      null;
+  }
+
+  function currentNoun() {
+    var A = Api();
+    if (A && A.getMemberAccess) {
+      var acc = A.getMemberAccess();
+      if (acc && acc.noun) return acc.noun;
+    }
+    return hasCse() ? "PV" : "compte rendu";
+  }
+
+  function copyForNoun(noun) {
+    var pv = noun === "PV";
+    return {
+      toggle: pv ? "Générer le PV" : "Générer le compte rendu",
+      selectTitle: pv ? "Sélectionnez un modèle de PV :" : "Sélectionnez un modèle de compte rendu :",
+      hint: pv
+        ? "Le PV est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut."
+        : "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut."
+    };
+  }
+
+  function hintDisabledText() {
+    return copyForNoun(currentNoun()).hint;
+  }
+
+  function findToggleProductLabel(doc) {
+    var toggle = findSummaryToggle(doc);
+    if (!toggle || !toggle.closest) return null;
+    var wrap = toggle.closest(".checkbox-component");
+    if (!wrap || !wrap.querySelector) return null;
+    var grey = wrap.querySelector(".text-size-small.text-color-grey");
+    if (grey) return grey;
+    var nodes = wrap.querySelectorAll ? wrap.querySelectorAll(".text-size-small") : [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (/compte rendu|\bPV\b/i.test(nodes[i].textContent || "")) return nodes[i];
+    }
+    return null;
+  }
+
+  function findSelectProductTitle(doc) {
+    if (!doc || !doc.getElementById) return null;
+    var anchor = doc.getElementById("agilo-prompt-picker-anchor");
+    var container = (anchor && anchor.closest) ? anchor.closest(".select-container") : null;
+    if (!container && doc.querySelector) container = doc.querySelector(".select-container");
+    if (!container || !container.querySelector) return null;
+    var title = container.querySelector(".wrapper-info .text-size-small.text-weight-bold");
+    if (title) return title;
+    var nodes = container.querySelectorAll ? container.querySelectorAll(".text-size-small") : [];
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (/modèle de (compte rendu|PV)/i.test(nodes[i].textContent || "")) return nodes[i];
+    }
+    return null;
+  }
+
+  function applyElNoun(el, nextText, nounKey) {
+    if (!el || !el.getAttribute || !el.setAttribute) return;
+    if (!el.getAttribute("data-agilo-noun-src")) {
+      el.setAttribute("data-agilo-noun-src", el.textContent || "");
+    }
+    if (nounKey === "pv") {
+      el.textContent = nextText;
+    } else {
+      el.textContent = el.getAttribute("data-agilo-noun-src") || el.textContent;
+    }
+    el.setAttribute("data-agilo-noun", nounKey);
+  }
+
+  function applyDashboardNoun(doc) {
+    var root = doc || (typeof document !== "undefined" ? document : null);
+    if (!root) return;
+    var noun = currentNoun();
+    var nounKey = noun === "PV" ? "pv" : "cr";
+    var copy = copyForNoun(noun);
+    var toggleLabel = findToggleProductLabel(root);
+    var selectTitle = findSelectProductTitle(root);
+    if (nounKey !== "pv") {
+      if (toggleLabel && toggleLabel.getAttribute("data-agilo-noun")) {
+        applyElNoun(toggleLabel, copy.toggle, "cr");
+      }
+      if (selectTitle && selectTitle.getAttribute("data-agilo-noun")) {
+        applyElNoun(selectTitle, copy.selectTitle, "cr");
+      }
+      return;
+    }
+    applyElNoun(toggleLabel, copy.toggle, "pv");
+    applyElNoun(selectTitle, copy.selectTitle, "pv");
   }
 
   function summaryOn() {
@@ -171,7 +262,7 @@
   function hintHtml(summaryEnabled) {
     if (summaryEnabled) return "";
     return '<div class="agilo-lib-picker__hint" role="status" aria-live="polite">' +
-      "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut." +
+      hintDisabledText() +
       "</div>";
   }
 
@@ -228,6 +319,7 @@
     } else if (access && Api().setMemberAccess) {
       Api().setMemberAccess(access);
     }
+    if (typeof document !== "undefined") applyDashboardNoun(document);
     var canCreate = Api().canCreate(creds);
     var models = visibleModels(pack.models || [], canCreate);
     var select = typeof document !== "undefined" ? document.getElementById("default-template-select") : null;
@@ -336,7 +428,7 @@
         hint.textContent = "";
       } else {
         hint.hidden = false;
-        hint.textContent = "Le compte rendu est désactivé pour cet envoi. Vous pouvez quand même définir votre modèle par défaut.";
+        hint.textContent = hintDisabledText();
       }
     }
 
@@ -592,7 +684,7 @@
   }
 
   global.AgiloLibraryPicker = {
-    VERSION: "2.2.0",
+    VERSION: "2.2.1",
     mount: mount,
     boot: boot,
     _groups: groups,
@@ -607,6 +699,8 @@
     _sortMine: sortMine,
     _titleText: titleText,
     _hintHtml: hintHtml,
-    _packCta: packCta
+    _packCta: packCta,
+    _copyForNoun: copyForNoun,
+    _applyDashboardNoun: applyDashboardNoun
   };
 })(typeof window !== "undefined" ? window : globalThis);

@@ -106,8 +106,188 @@ describe("library CSE unlock", () => {
     assert.equal(Picker._canSelect(copied), true);
   });
 
-  it("picker v2.2.0 et api 1.5.6", () => {
-    assert.equal(Picker.VERSION, "2.2.0");
+  it("picker v2.2.1 et api 1.5.6", () => {
+    assert.equal(Picker.VERSION, "2.2.1");
     assert.equal(Api.VERSION, "1.5.6");
+  });
+});
+
+function matchSimple(el, simple) {
+  if (!el || !el.attrs) return false;
+  const idm = simple.match(/^#([\w-]+)$/);
+  if (idm) return el.attrs.id === idm[1];
+  const attrm = simple.match(/^\[([^=\]]+)="([^"]*)"\]$/);
+  if (attrm) return String(el.attrs[attrm[1]] || "") === attrm[2];
+  if (simple.charAt(0) === ".") {
+    const need = simple.split(".").filter(Boolean);
+    const have = String(el.attrs.class || "").split(/\s+/);
+    return need.every((c) => have.indexOf(c) !== -1);
+  }
+  return false;
+}
+
+function matchesPath(el, sel) {
+  const parts = sel.trim().split(/\s+/);
+  if (!matchSimple(el, parts[parts.length - 1])) return false;
+  let node = el.parentNode;
+  for (let i = parts.length - 2; i >= 0; i--) {
+    while (node && !matchSimple(node, parts[i])) node = node.parentNode;
+    if (!node) return false;
+    node = node.parentNode;
+  }
+  return true;
+}
+
+function FakeEl(tag, attrs, kids) {
+  this.tagName = String(tag).toUpperCase();
+  this.attrs = Object.assign({}, attrs || {});
+  this.childNodes = [];
+  this.parentNode = null;
+  this._text = "";
+  this.checked = !!this.attrs.checked;
+  if (typeof kids === "string") this._text = kids;
+  else if (Array.isArray(kids)) kids.forEach((c) => this.appendChild(c));
+}
+
+FakeEl.prototype.appendChild = function (c) {
+  c.parentNode = this;
+  this.childNodes.push(c);
+  return c;
+};
+
+Object.defineProperty(FakeEl.prototype, "textContent", {
+  get() {
+    if (this.childNodes.length) return this.childNodes.map((c) => c.textContent).join("");
+    return this._text;
+  },
+  set(v) {
+    this.childNodes = [];
+    this._text = String(v);
+  }
+});
+
+FakeEl.prototype.getAttribute = function (k) {
+  return Object.prototype.hasOwnProperty.call(this.attrs, k) ? this.attrs[k] : null;
+};
+
+FakeEl.prototype.setAttribute = function (k, v) {
+  this.attrs[k] = String(v);
+};
+
+FakeEl.prototype.closest = function (sel) {
+  let n = this;
+  while (n) {
+    if (matchSimple(n, sel)) return n;
+    n = n.parentNode;
+  }
+  return null;
+};
+
+FakeEl.prototype.querySelectorAll = function (sel) {
+  const out = [];
+  const walk = (node) => {
+    (node.childNodes || []).forEach((child) => {
+      if (matchesPath(child, sel)) out.push(child);
+      walk(child);
+    });
+  };
+  walk(this);
+  return out;
+};
+
+FakeEl.prototype.querySelector = function (sel) {
+  return this.querySelectorAll(sel)[0] || null;
+};
+
+function FakeDoc(root) {
+  this.documentElement = root;
+}
+
+FakeDoc.prototype.getElementById = function (id) {
+  return this.querySelector("#" + id);
+};
+
+FakeDoc.prototype.querySelector = function (sel) {
+  if (matchesPath(this.documentElement, sel)) return this.documentElement;
+  return this.documentElement.querySelector(sel);
+};
+
+FakeDoc.prototype.querySelectorAll = function (sel) {
+  const out = [];
+  if (matchesPath(this.documentElement, sel)) out.push(this.documentElement);
+  return out.concat(this.documentElement.querySelectorAll(sel));
+};
+
+function dashboardFixture() {
+  const toggleLabel = new FakeEl("div", { class: "text-size-small text-color-grey" }, "Générer le compte rendu");
+  const speakers = new FakeEl("div", { class: "text-size-small" }, "Jusqu’à 5 intervenants");
+  const selectTitle = new FakeEl("div", { class: "text-size-small text-weight-bold" }, "Sélectionnez un modèle de compte rendu :");
+  const anchor = new FakeEl("div", { id: "agilo-prompt-picker-anchor" });
+  const root = new FakeEl("div", {}, [
+    new FakeEl("div", { class: "checkbox-component" }, [
+      new FakeEl("label", { "data-visual-for": "toggle-summary" }, [
+        new FakeEl("input", {
+          id: "toggle-summary",
+          name: "toggle-summary",
+          "data-option-type": "summary"
+        }),
+        new FakeEl("span", { class: "checkbox-label w-form-label" }, "Off/ On")
+      ]),
+      toggleLabel
+    ]),
+    speakers,
+    new FakeEl("div", { class: "select-container" }, [
+      new FakeEl("div", { class: "wrapper-info" }, [selectTitle]),
+      anchor
+    ])
+  ]);
+  return { doc: new FakeDoc(root), toggleLabel, speakers, selectTitle };
+}
+
+describe("dashboard noun PV", () => {
+  it("copyForNoun distingue PV et compte rendu", () => {
+    const pv = Picker._copyForNoun("PV");
+    assert.equal(pv.toggle, "Générer le PV");
+    assert.equal(pv.selectTitle, "Sélectionnez un modèle de PV :");
+    assert.match(pv.hint, /Le PV est désactivé/);
+    const cr = Picker._copyForNoun("compte rendu");
+    assert.equal(cr.toggle, "Générer le compte rendu");
+    assert.match(cr.hint, /Le compte rendu est désactivé/);
+  });
+
+  it("hasCse true réécrit toggle, titre, pas l’intervenants", () => {
+    const fx = dashboardFixture();
+    Api.setMemberAccess({ hasCse: true, noun: "PV", sources: [], businessTypes: ["cse"] });
+    Picker._applyDashboardNoun(fx.doc);
+    assert.equal(fx.toggleLabel.textContent, "Générer le PV");
+    assert.equal(fx.selectTitle.textContent, "Sélectionnez un modèle de PV :");
+    assert.equal(fx.speakers.textContent, "Jusqu’à 5 intervenants");
+    assert.equal(fx.toggleLabel.getAttribute("data-agilo-noun"), "pv");
+  });
+
+  it("hasCse false laisse le HTML Webflow", () => {
+    const fx = dashboardFixture();
+    Api.setMemberAccess({ hasCse: false, noun: "compte rendu", sources: [], businessTypes: [] });
+    Picker._applyDashboardNoun(fx.doc);
+    assert.equal(fx.toggleLabel.textContent, "Générer le compte rendu");
+    assert.equal(fx.selectTitle.textContent, "Sélectionnez un modèle de compte rendu :");
+    assert.equal(fx.toggleLabel.getAttribute("data-agilo-noun"), null);
+  });
+
+  it("applyDashboardNoun deux fois ne double pas le texte", () => {
+    const fx = dashboardFixture();
+    Api.setMemberAccess({ hasCse: true, noun: "PV" });
+    Picker._applyDashboardNoun(fx.doc);
+    Picker._applyDashboardNoun(fx.doc);
+    assert.equal(fx.toggleLabel.textContent, "Générer le PV");
+    assert.equal(fx.selectTitle.textContent, "Sélectionnez un modèle de PV :");
+  });
+
+  it("hintHtml suit le noun", () => {
+    Api.setMemberAccess({ hasCse: true, noun: "PV" });
+    assert.match(Picker._hintHtml(false), /Le PV est désactivé/);
+    Api.setMemberAccess({ hasCse: false, noun: "compte rendu" });
+    assert.match(Picker._hintHtml(false), /Le compte rendu est désactivé/);
+    assert.equal(Picker._hintHtml(true), "");
   });
 });

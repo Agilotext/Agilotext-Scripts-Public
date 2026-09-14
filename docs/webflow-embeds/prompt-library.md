@@ -27,7 +27,7 @@ scripts/pages/library/library-overlay.js
 scripts/pages/library/library-icon-picker.js
 scripts/pages/library/library-catalog.js      (1.4.1)
 scripts/pages/library/library-main.js         (1.3.1)
-scripts/pages/library/library-picker.js       (2.2.0)
+scripts/pages/library/library-picker.js       (2.2.1)
 scripts/pages/auth/post-login-router.js       (v8.7, préfixe pln_cse- + prices neufs)
 ```
 
@@ -47,7 +47,7 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin staging actuel : `9af5cd97` (picker v2.2.0 + catalog-v2 unlock `hasCse`, denylist id 7). Remplacer `SHA` par ce commit.
+Pin picker live (www + staging) avant ce lot : `4c834597` (v2.2.0). Remplacer `SHA` par le commit après push (v2.2.1 libellés PV).
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
@@ -157,6 +157,7 @@ Query `?pack=pending` : bandeau « pack en cours d’activation » + recharger.
 2. Retirer le lien nav (symbole)
 3. Dépublier les 3 pages si besoin
 4. Picker : remettre l’inline `code-model-default-*`
+5. Picker v2.2.1 (libellés PV) : re-piner jsDelivr `@4c834597`
 
 Purge jsDelivr : `https://purge.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library-main.js`
 
