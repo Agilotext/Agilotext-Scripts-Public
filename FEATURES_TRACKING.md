@@ -122,7 +122,7 @@ Pas l’éditeur. Voir `docs/webflow-embeds/prompt-library.md`.
 |-------|---------|--------|
 | `code-prompt-library` | `library-main.js` + overlay/icon-picker/core/catalog + `library.css` | Staging v1, `library2Live: true` |
 | `code-prompt-library` v2 | + `library-v2.css` / `library-*-v2.js` + Studio `agilo-atelier-maquette-coach` + dictée | Staging, `uiV2: true`, pin `9af5cd97`, masque STANDARD 7, `hasCse` unlock |
-| `code-prompt-picker` | `scripts/pages/library/library-picker.js` v2.2.1 | Staging dashboards, `hasCse` + libellés PV (`applyDashboardNoun`). Rollback picker `@4c834597` |
+| `code-prompt-picker` | `scripts/pages/library/library-picker.js` v2.2.1 | Staging dashboards pin `@e97caaac`. `hasCse` + libellés PV (`applyDashboardNoun`). Rollback `@4c834597`. Pas www |
 | `code-post-login` | `scripts/pages/auth/post-login-router.js` v8.7 | CSE `pln_cse-*` + prices neufs → `/app/business/dashboard` |
 | `code-profile-prompts-redirect` | `docs/webflow-embeds/profile-prompts-redirect.html` | Staging Mon compte `?tab=prompts` |
 

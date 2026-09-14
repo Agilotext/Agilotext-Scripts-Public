@@ -47,7 +47,7 @@ Sans token : message « Reconnecte-toi ». Jamais `targetUsername`.
 
 Coller dans le body, après la nav. Ancre vide, le JS injecte les cartes.
 
-Pin picker live (www + staging) avant ce lot : `4c834597` (v2.2.0). Remplacer `SHA` par le commit après push (v2.2.1 libellés PV).
+Pin picker live (www) avant ce lot : `4c834597` (v2.2.0). Staging : picker `@e97caaac` (v2.2.1 libellés PV). Remplacer `SHA` par le commit après push.
 
 ```html
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/library/library.css?v=SHA">
