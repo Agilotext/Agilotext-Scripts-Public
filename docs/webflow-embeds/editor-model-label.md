@@ -1,6 +1,6 @@
-# Éditeur : nom du modèle CR (staging)
+# Éditeur : picker CR compact (staging)
 
-Surface : HtmlEmbed `code-redo_summary` et `code-redo-modele-compte-rendu` (pas le footer page). Pin jsDelivr `@SHA` dans le `code` de l’embed. Ne pas coller le JS.
+Surface : HtmlEmbed `code-redo-modele-compte-rendu` uniquement pour ce SHA. Pin jsDelivr `@SHA` dans le `code` de l’embed. Ne pas coller le JS.
 
 **Branche :** `fix/editor-model-label-staging` depuis le blob live `637a1ae4` (pas `origin/1.11` : relance + modeles + `agilo-cr-history.js` diffèrent).
 
@@ -10,8 +10,9 @@ Surface : HtmlEmbed `code-redo_summary` et `code-redo-modele-compte-rendu` (pas 
 
 | Rôle | SHA |
 |------|-----|
-| Live avant (rollback) | `637a1ae4637e0644bc91cc5713af9984d683d000` |
-| Nouveau (JS) | `70af415d97053914795f3260ed201de243f9082f` |
+| Live avant (rollback creds / history / modeles) | `637a1ae4637e0644bc91cc5713af9984d683d000` |
+| Relance (inchangé) | `70af415d97053914795f3260ed201de243f9082f` |
+| Picker CR (`Code-modeles-compte-rendu.js`) | à coller après push |
 
 ## Pages
 
@@ -25,8 +26,8 @@ Site `6815bee5a9c0b57da18354fb`.
 
 Composants partagés (1 écriture, 3 instances : Business + Pro + Free) :
 
-- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e`
-- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a`
+- `Code-Redo_summary` `086fb264-cc10-e6df-a42f-e8c803b7855e` : creds + history `@637a1ae4`, relance `@70af415d`
+- `Code-Redo-modele-compte-rendu` `04149a5d-6e7f-6c56-0bb7-aa8c58b5979a` : modeles `@nouveauSHA`
 
 ## Snapshot rollback (HtmlEmbed `code`)
 
@@ -34,7 +35,7 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 
 ```html
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-editor-creds.js?v=1.07"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/relance-compte-rendu.js?v=637a1ae4"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@70af415d97053914795f3260ed201de243f9082f/scripts/pages/editor/relance-compte-rendu.js?v=70af415d"></script>
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/agilo-cr-history.js?v=637a1ae4"></script>
 ```
 
@@ -42,18 +43,18 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin live (14 sept. 2026) : `relance-compte-rendu.js` et `Code-modeles-compte-rendu.js` sur `@70af415d97053914795f3260ed201de243f9082f`. Creds + `agilo-cr-history.js` restent sur `637a1ae4`.
-
 ## Recette
 
-- Bandeau `#agilo-current-model` visible sur Transcription et Compte rendu.
-- Rail : lignes (pas 3 colonnes). Un accordéon ouvert. Chip actuel non `disabled`.
-- Régénérer : `confirm()` avec le nom. Relance le même modèle.
-- Autre chip : `confirm()` nom, une régénération.
-- `promptId -1` : « Aucun compte-rendu demandé » / phrase sans ID, jamais `ID 2`.
-- Historique CR, dock, chat, Surligner : inchangés.
-- www : 0 occurrence du SHA `70af415d`.
+Compte test, job `1000040491` : [éditeur staging](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040491&edition=ent).
+
+- Transcription / Assistant / Compte rendu : **même** largeur de colonne droite (Raccourcis).
+- Plus de liste « Modèles de compte-rendu » à droite.
+- Onglet Compte rendu : select compact collé à Régénérer (icône + nom, ex. Compte Rendu SWOT). Panneau liste plate avec icônes. Pas de dictée.
+- Clic autre modèle : `confirm()` avec le **nom**, puis `redoSummary`.
+- Régénérer bleu : même `promptId` actuel, confirm **nom**.
+- Free : lignes `is-locked` + AgiloGate.
+- www : 0 occurrence du SHA picker.
 
 ## Rollback
 
-Recoller les `code` snapshot ci-dessus. Re-publish staging only.
+Recoller les `code` snapshot ci-dessus (modeles `@637a1ae4` ou relance+modeles `@70af415d` selon le palier). Re-publish staging only.

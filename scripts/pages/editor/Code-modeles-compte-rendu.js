@@ -1,6 +1,5 @@
-// Agilotext – Modèles de Compte-Rendu (VERSION 3.4.1 – repo)
-// Grille + promptId job ; après redoSummary l’API annonce désormais READY_SUMMARY_PENDING puis READY (poll via relance) ;
-// sans bouton d’annulation superflu sur le loader.
+// Agilotext – Modèles de Compte-Rendu (VERSION 3.5.0 – picker compact)
+// Raccourcis restent à droite. Choix de modèle = select icône + nom collé à Régénérer.
 
 (function() {
   'use strict';
@@ -271,39 +270,279 @@
     return m ? (m.promptModelName || ('Modèle ' + m.promptModelId)) : null;
   }
 
-  function bannerLabel(model) {
-    if (!model || model.id == null) return 'Aucun compte-rendu demandé';
-    if (model.name) return 'Modèle de ce compte-rendu : ' + model.name;
-    return 'Modèle de ce compte-rendu';
+  function findModel(pack, promptId) {
+    if (promptId == null) return null;
+    const n = Number(promptId);
+    if (isNaN(n)) return null;
+    const all = (pack.standard || []).concat(pack.custom || []);
+    return all.find(function (x) { return Number(x.promptModelId) === n; }) || null;
   }
 
-  function ensureChromeBanner() {
-    let el = document.getElementById('agilo-current-model');
-    if (el) return el;
-    el = document.createElement('div');
-    el.id = 'agilo-current-model';
-    el.className = 'agilo-current-model';
-    const tablist = document.querySelector('[role="tablist"]');
-    const summaryTab = document.querySelector('#tab-summary');
-    const title = document.querySelector('.ed-title');
-    if (tablist && tablist.parentNode) {
-      tablist.parentNode.insertBefore(el, tablist.nextSibling);
-    } else if (summaryTab && summaryTab.parentNode && summaryTab.parentNode.parentNode) {
-      summaryTab.parentNode.parentNode.insertBefore(el, summaryTab.parentNode.nextSibling);
-    } else if (title && title.parentNode) {
-      const after = title.nextSibling;
-      title.parentNode.insertBefore(el, after);
+  var ICON_META = { 0: 'document', 1: 'report', 2: 'idea', 3: 'briefcase', 4: 'education', 5: 'document', 7: 'document' };
+  var ICON_PATHS = {
+    document: '<path d="M2.75,14.25V3.75c0-1.105,.895-2,2-2h5.586c.265,0,.52,.105,.707,.293l3.914,3.914c.188,.188,.293,.442,.293,.707v7.586c0,1.105-.895,2-2,2H4.75c-1.105,0-2-.895-2-2Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M15.16,6.25h-3.41c-.552,0-1-.448-1-1V1.852" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    custom: '<path d="m12.5717,2.9253L2.9189,12.583c-.3899.39-.3903,1.0221-.0011,1.4127l1.0852,1.0892c.391.39,1.024.39,1.415,0L15.0701,5.4269c.3898-.3901.3903-1.0221.0011-1.4127l-1.0838-1.0878c-.3904-.3918-1.0247-.3923-1.4157-.0011Z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    report: '<rect x="5.75" y="1.75" width="6.5" height="9.5" rx="3.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><path d="M15.25,8c0,3.452-2.798,6.25-6.25,6.25h0c-3.452,0-6.25-2.798-6.25-6.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    briefcase: '<path d="M6.25,4.75V2.25c0-.552,.448-1,1-1h3.5c.552,0,1,.448,1,1v2.5" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="1.75" y="4.75" width="14.5" height="10.5" rx="2" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    idea: '<rect x="7.75" y="2.75" width="2.5" height="12.5" rx="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="2.25" y="7.75" width="2.5" height="7.5" rx="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><rect x="13.25" y="11.75" width="2.5" height="3.5" rx="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    education: '<path d="M9.45801 2.361L15.79 5.621C16.403 5.937 16.403 6.813 15.79 7.129L9.45801 10.389C9.17001 10.537 8.829 10.537 8.542 10.389L2.20999 7.129C1.59699 6.813 1.59699 5.937 2.20999 5.621L8.542 2.361C8.83 2.213 9.17101 2.213 9.45801 2.361Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+  };
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+
+  function resolveIconKey(m) {
+    const id = Number(m && m.promptModelId);
+    if (ICON_META[id]) return ICON_META[id];
+    const key = String((m && m.iconKey) || '').trim();
+    if (ICON_PATHS[key]) return key;
+    return Number(id) >= 100 ? 'custom' : 'document';
+  }
+
+  function iconHtml(m) {
+    const key = resolveIconKey(m);
+    const path = ICON_PATHS[key] || ICON_PATHS.document;
+    if (m && m.iconUrl) {
+      return '<span class="agilo-cr-picker__ico" aria-hidden="true"><img src="' +
+        escapeHtml(m.iconUrl) + '" alt="" width="16" height="16" onerror="this.hidden=true;this.nextElementSibling.hidden=false;"><svg class="agilo-cr-picker__svg" hidden width="16" height="16" viewBox="0 0 18 18" fill="none">' +
+        path + '</svg></span>';
     }
-    return el;
+    return '<span class="agilo-cr-picker__ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 18 18" fill="none">' + path + '</svg></span>';
+  }
+
+  function isDictationModel(m) {
+    if (!m) return false;
+    if (Number(m.promptModelId) === 6) return true;
+    const cat = String(m.categoryKey || m.category || '').toLowerCase();
+    if (cat === 'dictation' || cat === 'dictée' || cat === 'dictee') return true;
+    return /dict[ée]e/i.test(String(m.promptModelName || m.cardTitle || ''));
+  }
+
+  function libraryBasePath() {
+    const ed = String(pickEdition() || '').toLowerCase().trim();
+    if (ed.startsWith('free') || ed === 'gratuit') return '/app/free/library';
+    if (ed.startsWith('pro') || ed === 'premium') return '/app/premium/library';
+    return '/app/business/library';
+  }
+
+  function removeChromeBanner() {
+    const el = document.getElementById('agilo-current-model');
+    if (el) el.remove();
+    const rail = document.getElementById('agilo-current-model-rail');
+    if (rail) rail.remove();
   }
 
   function renderCurrentModelBanners(model) {
     window.__agiloCurrentSummaryModel = model || { jobId: '', id: null, name: null };
-    const text = bannerLabel(window.__agiloCurrentSummaryModel);
-    const chrome = ensureChromeBanner();
-    if (chrome) chrome.textContent = text;
-    const rail = document.getElementById('agilo-current-model-rail');
-    if (rail) rail.textContent = text;
+    paintPickerButton();
+  }
+
+  function getToolbarRegenBtn() {
+    return document.querySelector('[data-action="relancer-compte-rendu"]:not(.agilo-inline-gen-cr-btn)');
+  }
+
+  function closePickerPanel() {
+    const panel = document.getElementById('agilo-cr-model-panel');
+    if (panel) panel.remove();
+    const host = document.getElementById('agilo-cr-model-picker');
+    if (host) {
+      const btn = host.querySelector('.agilo-cr-picker__btn');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+    document.removeEventListener('keydown', onPickerKeydown, true);
+    document.removeEventListener('mousedown', onPickerOutside, true);
+  }
+
+  function onPickerKeydown(e) {
+    if (e.key === 'Escape') closePickerPanel();
+  }
+
+  function onPickerOutside(e) {
+    const host = document.getElementById('agilo-cr-model-picker');
+    const panel = document.getElementById('agilo-cr-model-panel');
+    if (host && host.contains(e.target)) return;
+    if (panel && panel.contains(e.target)) return;
+    closePickerPanel();
+  }
+
+  function positionPickerPanel(btn, panel) {
+    const r = btn.getBoundingClientRect();
+    const width = Math.min(280, Math.max(240, r.width));
+    let left = r.left;
+    if (left + width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - width - 8);
+    let top = r.bottom + 4;
+    panel.style.width = width + 'px';
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+    const ph = panel.getBoundingClientRect().height;
+    if (top + ph > window.innerHeight - 8) {
+      panel.style.top = Math.max(8, r.top - ph - 4) + 'px';
+    }
+  }
+
+  function paintPickerButton() {
+    const host = document.getElementById('agilo-cr-model-picker');
+    if (!host) return;
+    const btn = host.querySelector('.agilo-cr-picker__btn');
+    if (!btn) return;
+    const pack = cachedModels || { standard: [], custom: [] };
+    const live = window.__agiloCurrentSummaryModel || {};
+    const m = findModel(pack, live.id);
+    const name = (m && (m.promptModelName || m.cardTitle)) || live.name;
+    btn.innerHTML = '';
+    if (m) {
+      btn.insertAdjacentHTML('afterbegin', iconHtml(m));
+    } else {
+      btn.insertAdjacentHTML('afterbegin', iconHtml({ promptModelId: 0 }));
+    }
+    const label = document.createElement('span');
+    label.className = 'agilo-cr-picker__title';
+    label.textContent = name || 'Choisir un modèle';
+    label.title = label.textContent;
+    btn.appendChild(label);
+    const chev = document.createElement('span');
+    chev.className = 'agilo-cr-picker__chev';
+    chev.setAttribute('aria-hidden', 'true');
+    chev.textContent = '▾';
+    btn.appendChild(chev);
+  }
+
+  function openPickerPanel(pack, defaultId, jobPromptId, isFree) {
+    closePickerPanel();
+    const host = document.getElementById('agilo-cr-model-picker');
+    const btn = host && host.querySelector('.agilo-cr-picker__btn');
+    if (!btn) return;
+    btn.setAttribute('aria-expanded', 'true');
+    const panel = document.createElement('div');
+    panel.id = 'agilo-cr-model-panel';
+    panel.className = 'agilo-cr-picker__panel';
+    panel.setAttribute('role', 'listbox');
+
+    function addSection(title, models) {
+      const visible = (models || []).filter(function (m) { return !isDictationModel(m); });
+      if (!visible.length) return;
+      const sec = document.createElement('div');
+      sec.className = 'agilo-cr-picker__sec';
+      sec.textContent = title;
+      panel.appendChild(sec);
+      visible.forEach(function (m) {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'agilo-cr-picker__opt';
+        row.setAttribute('role', 'option');
+        const idNum = Number(m.promptModelId);
+        const isUsed = jobPromptId != null && idNum === Number(jobPromptId);
+        const isDef = defaultId != null && idNum === Number(defaultId);
+        if (isUsed) {
+          row.classList.add('is-active');
+          row.setAttribute('aria-current', 'true');
+          row.setAttribute('aria-selected', 'true');
+        }
+        if (isFree && !isUsed) {
+          row.classList.add('is-locked');
+          row.setAttribute('data-plan-min', 'pro');
+          row.setAttribute('data-upgrade-reason', 'Régénération avec le modèle « ' + (m.promptModelName || '') + ' »');
+        }
+        row.insertAdjacentHTML('beforeend', iconHtml(m));
+        const body = document.createElement('span');
+        body.className = 'agilo-cr-picker__opt-label';
+        const nm = m.promptModelName || ('Modèle ' + m.promptModelId);
+        body.textContent = nm;
+        body.title = nm;
+        row.appendChild(body);
+        if (isUsed || isDef) {
+          const badge = document.createElement('span');
+          badge.className = 'agilo-cr-picker__badge';
+          badge.textContent = isUsed ? 'Actuel' : 'Défaut';
+          row.appendChild(badge);
+        }
+        if (isUsed) {
+          row.addEventListener('click', function (e) { e.preventDefault(); closePickerPanel(); });
+        } else if (!isFree) {
+          row.addEventListener('click', function () {
+            closePickerPanel();
+            handleChipClick(m);
+          });
+        }
+        panel.appendChild(row);
+      });
+    }
+
+    addSection('Standards', pack.standard);
+    addSection('Mes modèles', pack.custom);
+
+    const foot = document.createElement('div');
+    foot.className = 'agilo-cr-picker__foot';
+    const base = libraryBasePath();
+    const a1 = document.createElement('a');
+    a1.href = base;
+    a1.target = '_blank';
+    a1.rel = 'noopener';
+    a1.textContent = 'Tous les modèles';
+    const a2 = document.createElement('a');
+    a2.href = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'creer';
+    a2.target = '_blank';
+    a2.rel = 'noopener';
+    a2.textContent = 'Créer un modèle';
+    foot.appendChild(a1);
+    foot.appendChild(a2);
+    panel.appendChild(foot);
+
+    document.body.appendChild(panel);
+    positionPickerPanel(btn, panel);
+    document.addEventListener('keydown', onPickerKeydown, true);
+    document.addEventListener('mousedown', onPickerOutside, true);
+    if (isFree && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
+      setTimeout(function () { window.AgiloGate.decorate(); }, 80);
+    }
+  }
+
+  function ensurePickerHost() {
+    let host = document.getElementById('agilo-cr-model-picker');
+    const btnRegen = getToolbarRegenBtn();
+    if (!btnRegen || !btnRegen.parentElement) return host;
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'agilo-cr-model-picker';
+      host.className = 'agilo-cr-picker';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'agilo-cr-picker__btn';
+      b.setAttribute('aria-haspopup', 'listbox');
+      b.setAttribute('aria-expanded', 'false');
+      b.setAttribute('aria-label', 'Modèle de compte-rendu');
+      host.appendChild(b);
+      btnRegen.parentElement.insertBefore(host, btnRegen);
+    } else if (host.parentElement !== btnRegen.parentElement) {
+      btnRegen.parentElement.insertBefore(host, btnRegen);
+    }
+    return host;
+  }
+
+  function mountPicker(pack, defaultId, jobPromptId, isFree) {
+    removeChromeBanner();
+    const host = ensurePickerHost();
+    if (!host) return;
+    host.hidden = !isSummaryTabActive();
+    const btn = host.querySelector('.agilo-cr-picker__btn');
+    if (btn && !btn._agiloBound) {
+      btn._agiloBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (!isSummaryTabActive()) return;
+        const open = document.getElementById('agilo-cr-model-panel');
+        if (open) { closePickerPanel(); return; }
+        var packNow = cachedModels || { standard: [], custom: [], defaultId: null };
+        var liveNow = window.__agiloCurrentSummaryModel || {};
+        var edNow = String(pickEdition() || '').toLowerCase().trim();
+        var freeNow = edNow.startsWith('free') || edNow === 'gratuit';
+        openPickerPanel(packNow, packNow.defaultId, liveNow.id, freeNow);
+      });
+    }
+    paintPickerButton();
   }
 
   window.agiloResolveSummaryModel = async function (jobId) {
@@ -329,90 +568,6 @@
     renderCurrentModelBanners(model);
     return model;
   };
-
-  function createAccordion(title, models, type, defaultId, jobPromptId, isOpen, isFree) {
-    const section = document.createElement('div');
-    section.className = 'models-section section-' + type;
-    if (isOpen) section.classList.add('is-open');
-
-    const header = document.createElement('button');
-    header.type = 'button';
-    header.className = 'models-section-header';
-    header.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-    header.innerHTML =
-      '<span class="models-section-title">' + title + '</span>' +
-      '<span class="models-section-count">' + models.length + '</span>' +
-      '<svg class="models-section-arrow" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">' +
-      '<path d="M7 10l5 5 5-5z"/></svg>';
-
-    const content = document.createElement('div');
-    content.className = 'models-section-content';
-    const chips = document.createElement('div');
-    chips.className = 'models-chips';
-
-    const defaultIdNum = defaultId != null ? Number(defaultId) : null;
-    const jobPromptIdNum = jobPromptId != null ? Number(jobPromptId) : null;
-
-    models.forEach(function (m) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      const colorClass = type === 'standard' ? 'chip-standard' : 'chip-custom';
-      chip.className = 'model-chip ' + colorClass;
-
-      const modelIdNum = Number(m.promptModelId);
-      const chipText = m.promptModelName || 'Modèle ' + m.promptModelId;
-
-      const isUsedForThisJob = jobPromptIdNum != null && !isNaN(jobPromptIdNum) && modelIdNum === jobPromptIdNum;
-      const isDefaultAccount = defaultIdNum != null && !isNaN(defaultIdNum) && modelIdNum === defaultIdNum;
-
-      if (isUsedForThisJob) {
-        chip.classList.add('is-used');
-        chip.setAttribute('aria-current', 'true');
-      } else if (isDefaultAccount) {
-        chip.classList.add('is-default-account');
-      }
-
-      if (isFree && !isUsedForThisJob) {
-        chip.classList.add('is-locked');
-        chip.setAttribute('data-plan-min', 'pro');
-        chip.setAttribute('data-upgrade-reason', 'Régénération avec le modèle « ' + chipText + ' »');
-      }
-
-      chip.dataset.promptId = m.promptModelId;
-      const textSpan = document.createElement('span');
-      textSpan.className = 'model-chip-text';
-      textSpan.textContent = chipText;
-      chip.appendChild(textSpan);
-      if (isUsedForThisJob || isDefaultAccount) {
-        const badge = document.createElement('span');
-        badge.className = 'model-chip-badge';
-        badge.textContent = isUsedForThisJob ? 'Actuel' : 'Défaut';
-        chip.appendChild(badge);
-      }
-      chip.title = isUsedForThisJob
-        ? chipText + ' (modèle actuel pour ce job)'
-        : isDefaultAccount
-          ? chipText + ' (modèle par défaut du compte)'
-          : chipText;
-
-      if (isUsedForThisJob) {
-        chip.addEventListener('click', function (e) { e.preventDefault(); });
-      } else if (!isFree) {
-        chip.addEventListener('click', function () { handleChipClick(m); });
-      }
-
-      chips.appendChild(chip);
-    });
-
-    content.appendChild(chips);
-    header.addEventListener('click', function () {
-      const open = section.classList.toggle('is-open');
-      header.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    section.appendChild(header);
-    section.appendChild(content);
-    return section;
-  }
 
   let isGenerating = false;
 
@@ -741,125 +896,65 @@
   }
 
   function injectStyles() {
-    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-modeles-styles-v7', '#agilo-tpl-styles-v3'].forEach(function (sel) {
+    ['#agilo-modeles-styles', '#agilo-modeles-styles-v4', '#agilo-modeles-styles-v5', '#agilo-modeles-styles-v6', '#agilo-modeles-styles-v7', '#agilo-modeles-styles-v8', '#agilo-tpl-styles-v3'].forEach(function (sel) {
       const n = document.querySelector(sel);
       if (n) n.remove();
     });
 
     const style = document.createElement('style');
-    style.id = 'agilo-modeles-styles-v7';
+    style.id = 'agilo-modeles-styles-v8';
     style.textContent = `
-      #cr-template-chips {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        min-height: 120px;
-        padding-bottom: max(5.5rem, env(safe-area-inset-bottom, 0px));
-        box-sizing: border-box;
+      [data-view="templates"],
+      #cr-template-chips,
+      #agilo-current-model,
+      #agilo-current-model-rail {
+        display: none !important;
       }
 
-      .models-section {
-        background: #fff;
-        border: 1px solid rgba(52, 58, 64, 0.15);
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .models-section-header {
-        display: flex;
+      .agilo-cr-picker {
+        display: inline-flex;
         align-items: center;
-        gap: 10px;
-        width: 100%;
-        min-height: 44px;
-        padding: 12px 14px;
-        background: #f8f9fa;
-        border: none;
-        cursor: pointer;
-        font-size: 13px;
-        font-weight: 600;
+        margin-right: 8px;
+        max-width: 240px;
+        vertical-align: middle;
+      }
+      .agilo-cr-picker[hidden] { display: none !important; }
+      .agilo-cr-picker__btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 240px;
+        min-height: 36px;
+        padding: 4px 8px 4px 6px;
+        border: 1px solid rgba(52, 58, 64, 0.18);
+        border-radius: 8px;
+        background: #fff;
         color: #020202;
-        text-align: left;
+        font: 500 13px/1.25 system-ui, -apple-system, sans-serif;
+        cursor: pointer;
         box-sizing: border-box;
       }
-
-      .models-section-header:hover { background: #eef1f4; }
-
-      .models-section-title {
-        flex: 1;
-        min-width: 0;
-        line-height: 1.35;
+      .agilo-cr-picker__btn:hover { background: #f8f9fa; }
+      .agilo-cr-picker__btn[aria-expanded="true"] {
+        border-color: #174a96;
+        box-shadow: 0 0 0 2px rgba(23, 74, 150, 0.12);
       }
-
-      .models-section-count {
-        flex-shrink: 0;
-        min-width: 22px;
-        height: 22px;
-        padding: 0 6px;
-        border-radius: 11px;
-        font-size: 11px;
-        font-weight: 600;
+      .agilo-cr-picker__ico {
+        flex: 0 0 16px;
+        width: 16px;
+        height: 16px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-      }
-
-      .models-section.section-standard .models-section-count {
-        background: rgba(23, 74, 150, 0.12);
         color: #174a96;
       }
-
-      .models-section.section-custom .models-section-count {
-        background: rgba(28, 102, 26, 0.12);
-        color: #1c661a;
-      }
-
-      .models-section-arrow {
-        flex-shrink: 0;
-        align-self: center;
+      .agilo-cr-picker__ico img,
+      .agilo-cr-picker__ico svg {
         width: 16px;
         height: 16px;
-        transition: transform 0.2s;
-        opacity: 0.55;
+        display: block;
       }
-
-      .models-section.is-open .models-section-arrow {
-        transform: rotate(180deg);
-      }
-
-      .models-section-content {
-        display: none;
-        padding: 14px 14px 16px;
-        border-top: 1px solid rgba(52, 58, 64, 0.1);
-      }
-
-      .models-section.is-open .models-section-content { display: block; }
-
-      .models-chips {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-
-      .model-chip {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        gap: 8px;
-        min-height: 44px;
-        padding: 8px 12px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 500;
-        line-height: 1.35;
-        cursor: pointer;
-        transition: background 0.15s ease;
-        text-align: left;
-        box-sizing: border-box;
-        width: 100%;
-        border: 1px solid transparent;
-      }
-
-      .model-chip-text {
+      .agilo-cr-picker__title {
         flex: 1;
         min-width: 0;
         overflow: hidden;
@@ -867,88 +962,83 @@
         white-space: nowrap;
         text-align: left;
       }
-
-      .model-chip-badge {
+      .agilo-cr-picker__chev {
+        flex: 0 0 auto;
+        font-size: 10px;
+        opacity: 0.55;
+        line-height: 1;
+      }
+      .agilo-cr-picker__panel {
+        position: fixed;
+        z-index: 2147483000;
+        max-height: min(70vh, 420px);
+        overflow: auto;
+        background: #fff;
+        border: 1px solid rgba(52, 58, 64, 0.18);
+        border-radius: 10px;
+        box-shadow: 0 8px 28px rgba(2, 2, 2, 0.16);
+        padding: 6px 0 0;
+        box-sizing: border-box;
+      }
+      .agilo-cr-picker__sec {
+        padding: 8px 12px 4px;
+        font: 600 11px/1.2 system-ui, -apple-system, sans-serif;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #525252;
+      }
+      .agilo-cr-picker__opt {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 40px;
+        padding: 6px 12px;
+        border: none;
+        background: transparent;
+        color: #020202;
+        font: 500 13px/1.3 system-ui, -apple-system, sans-serif;
+        text-align: left;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      .agilo-cr-picker__opt:hover { background: rgba(23, 74, 150, 0.06); }
+      .agilo-cr-picker__opt.is-active {
+        background: rgba(23, 74, 150, 0.1);
+        font-weight: 600;
+      }
+      .agilo-cr-picker__opt.is-locked {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+      .agilo-cr-picker__opt-label {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .agilo-cr-picker__badge {
         flex-shrink: 0;
         font-size: 10px;
         font-weight: 600;
         letter-spacing: 0.02em;
         text-transform: uppercase;
-        opacity: 0.9;
-      }
-
-      .model-chip:hover { background: rgba(0,0,0,0.04); }
-
-      .model-chip.chip-standard {
-        border-color: rgba(23, 74, 150, 0.35);
-        background: rgba(23, 74, 150, 0.08);
         color: #174a96;
       }
-      .model-chip.chip-standard:hover { background: rgba(23, 74, 150, 0.14); }
-
-      .model-chip.chip-custom {
-        border-color: rgba(28, 102, 26, 0.35);
-        background: rgba(28, 102, 26, 0.08);
-        color: #1c661a;
+      .agilo-cr-picker__foot {
+        display: flex;
+        gap: 12px;
+        padding: 8px 12px 10px;
+        margin-top: 4px;
+        border-top: 1px solid rgba(52, 58, 64, 0.12);
       }
-      .model-chip.chip-custom:hover { background: rgba(28, 102, 26, 0.14); }
-
-      .model-chip.is-default-account {
-        border-width: 2px;
-        font-weight: 600;
+      .agilo-cr-picker__foot a {
+        font: 500 12px/1.3 system-ui, -apple-system, sans-serif;
+        color: #174a96;
+        text-decoration: none;
       }
-
-      .model-chip.is-used {
-        cursor: default;
-        opacity: 0.95;
-      }
-      .model-chip.is-used:hover { transform: none; box-shadow: none; }
-
-      .model-chip.chip-standard.is-used {
-        background: #174a96;
-        color: #fff;
-        border-color: #174a96;
-      }
-      .model-chip.chip-custom.is-used {
-        background: #1c661a;
-        color: #fff;
-        border-color: #1c661a;
-      }
-
-      .model-chip.is-locked {
-        opacity: 0.55;
-        cursor: not-allowed;
-      }
-      .model-chip.is-locked:hover { transform: none; box-shadow: none; }
-
-      .agilo-modeles-free-banner {
-        padding: 12px 14px;
-        margin-bottom: 4px;
-        background: rgba(253, 126, 20, 0.08);
-        border: 1px solid rgba(253, 126, 20, 0.28);
-        border-radius: 8px;
-        font-size: 13px;
-        color: #525252;
-      }
-
-      [data-view="templates"] { display: none; }
-
-      [data-view="templates"] .ia-actions .ag-badge,
-      [data-view="templates"] .ia-actions .ia-details {
-        display: none !important;
-      }
-
-      .agilo-current-model,
-      #agilo-current-model-rail {
-        font-size: 13px;
-        font-weight: 600;
-        color: #020202;
-        padding: 8px 0 10px;
-        line-height: 1.35;
-      }
-      #agilo-current-model-rail {
-        padding: 4px 0 8px;
-      }
+      .agilo-cr-picker__foot a:hover { text-decoration: underline; }
 
       .summary-loading-indicator {
         display: flex;
@@ -1007,19 +1097,16 @@
   }
 
   async function populateContainer(forceRefresh) {
-    const container = document.querySelector('#cr-template-chips');
-    if (!container) return;
-
     const jobId = pickJobId();
-    if (!forceRefresh && isPopulated && lastPopulatedJobId === jobId && container.querySelector('.models-section')) {
+    if (!forceRefresh && isPopulated && lastPopulatedJobId === jobId && document.getElementById('agilo-cr-model-picker')) {
+      mountPicker(cachedModels || { standard: [], custom: [], defaultId: null }, (cachedModels && cachedModels.defaultId) || null, (window.__agiloCurrentSummaryModel && window.__agiloCurrentSummaryModel.id) || null, (function () {
+        const ed = String(pickEdition() || '').toLowerCase().trim();
+        return ed.startsWith('free') || ed === 'gratuit';
+      })());
       return;
     }
 
-    container.innerHTML = '<div style="padding:12px;color:#525252;font-size:13px;">Chargement…</div>';
-
     const pack = await loadAllModels(forceRefresh);
-    const standard = pack.standard;
-    const custom = pack.custom;
     const defaultId = pack.defaultId;
 
     let jobPromptId = null;
@@ -1034,9 +1121,6 @@
       }
     }
 
-    if (!document.querySelector('#cr-template-chips')) return;
-    container.innerHTML = '';
-
     const edition = pickEdition();
     const ed = String(edition || '').toLowerCase().trim();
     const isFree = ed.startsWith('free') || ed === 'gratuit';
@@ -1050,41 +1134,9 @@
       name: nameForPromptId(pack, currentValid ? currentId : null)
     });
 
-    const railLabel = document.createElement('div');
-    railLabel.id = 'agilo-current-model-rail';
-    railLabel.textContent = bannerLabel(window.__agiloCurrentSummaryModel);
-    container.appendChild(railLabel);
-
-    if (isFree) {
-      const banner = document.createElement('div');
-      banner.className = 'agilo-modeles-free-banner';
-      banner.innerHTML = '<strong style="color:#fd7e14;display:block;margin-bottom:4px;">Fonctionnalité Pro / Business</strong>' +
-        '<span>Passez en Pro pour régénérer avec les modèles ci-dessous.</span>';
-      container.appendChild(banner);
-    }
-
-    const currentInStd = currentValid && standard.some(function (m) { return Number(m.promptModelId) === currentId; });
-    const currentInCustom = currentValid && custom.some(function (m) { return Number(m.promptModelId) === currentId; });
-    const openStd = currentInStd || !currentInCustom;
-    const openCustom = !!currentInCustom;
-
-    if (standard.length > 0) {
-      container.appendChild(createAccordion('Modèles standards', standard, 'standard', defaultId, jobPromptId, openStd, isFree));
-    }
-    if (custom.length > 0) {
-      container.appendChild(createAccordion('Mes modèles personnalisés', custom, 'custom', defaultId, jobPromptId, openCustom, isFree));
-    }
-    if (standard.length === 0 && custom.length === 0) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'padding:16px;color:#525252;font-size:13px;text-align:center;';
-      empty.textContent = 'Aucun modèle disponible';
-      container.appendChild(empty);
-    }
+    mountPicker(pack, defaultId, jobPromptId, isFree);
 
     if (jobId) updateExistingRegenerationCounter(jobId, edition);
-    if (isFree && typeof window.AgiloGate !== 'undefined' && window.AgiloGate.decorate) {
-      setTimeout(function () { window.AgiloGate.decorate(); }, 120);
-    }
 
     isPopulated = true;
     lastPopulatedJobId = jobId || '';
@@ -1125,16 +1177,14 @@
   function switchView() {
     const iaView = document.querySelector('[data-view="ia"]');
     const templatesView = document.querySelector('[data-view="templates"]');
-    if (!iaView || !templatesView) return;
-
-    if (isSummaryTabActive() && hasSummaryContent()) {
-      iaView.style.display = 'none';
-      templatesView.style.display = 'block';
-      debouncedPopulate();
-    } else {
-      iaView.style.display = 'block';
-      templatesView.style.display = 'none';
-    }
+    if (iaView) iaView.style.display = 'block';
+    if (templatesView) templatesView.style.display = 'none';
+    removeChromeBanner();
+    const host = document.getElementById('agilo-cr-model-picker');
+    const onSummary = isSummaryTabActive();
+    if (host) host.hidden = !onSummary;
+    if (!onSummary) closePickerPanel();
+    if (onSummary) debouncedPopulate();
   }
 
   function init() {
