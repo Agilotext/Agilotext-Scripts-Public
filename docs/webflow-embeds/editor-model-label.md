@@ -47,15 +47,15 @@ Ordre à conserver : creds, relance, history. Modeles dans l’autre embed.
 <script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@637a1ae4637e0644bc91cc5713af9984d683d000/scripts/pages/editor/Code-modeles-compte-rendu.js?v=637a1ae4"></script>
 ```
 
-Pin staging (14 sept. 2026, A/B POST live) : history `@c81c7ddc51c7361bc5f8d3ab2f0092c0231e60c8`. Modeles `@33aee578`. Relance `@9ed90622`. Creds `@637a1ae4`.
+Pin Designer (14 sept. 2026, A/B POST live) : history `@c81c7ddc51c7361bc5f8d3ab2f0092c0231e60c8`. Modeles `@33aee578`. Relance `@9ed90622`. Creds `@637a1ae4`. HTML live `agilotext-test` encore `@ff454aa0` tant que Designer n’a pas compilé (Data API `sites_publish` 202 sans `lastPublished` ; Designer déconnecté).
 
 ## Recette
 
 A/B : history **POST** urlencoded comme live `637a1ae4`. Picker inchangé. www inchangé.
 
-1. Job live avec Revenir : [www 1000040851](https://www.agilotext.com/app/business/editor?jobId=1000040851&edition=ent&tab=summary).
-2. **Même job staging** : [staging 1000040851](https://agilotext-test.webflow.io/app/business/editor?jobId=1000040851&edition=ent&tab=summary). Si CORS `listSummaryVersions` encore : le GET n’était pas la cause.
-3. Job `1000040491` staging : picker, pas de Revenir si fetch KO ou 0 archive.
+1. Job live avec Revenir : [www 1000040851](https://www.agilotext.com/app/business/editor?jobId=1000040851&edition=ent&tab=summary) (`@637a1ae4`).
+2. **Même origin staging** Harriet Pro `1000040315` : `POST` et `GET listSummaryVersions` = `Failed to fetch`. `GET getTranscriptStatus` = 200 `status: OK`. Horloge sans `is-on`. Le GET n’était pas la cause.
+3. Job `1000040491` / `1000040851` Business staging : 403 Harriet. Recette Florian compte Business.
 
 www : 0 occurrence de `c81c7ddc`, `ff454aa0`, `33aee578`.
 
