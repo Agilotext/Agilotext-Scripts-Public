@@ -24,10 +24,10 @@ Ne pas coller `wordboost2.js` dans le dashboard.
 
 ## Embed (après le picker PV)
 
-Pin **footer custom code** (les 3 dashboards), une ligne après les scripts upload / FilePond. SHA `89afe3b1`.
+Pin **footer custom code** (les 3 dashboards), une ligne après les scripts upload / FilePond. SHA `063b28c5`. Remplacer **seulement** cette ligne, jamais tout le footer.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@89afe3b1/scripts/pages/dashboard/agilo-wb-picker.js?v=89afe3b1"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@063b28c5/scripts/pages/dashboard/agilo-wb-picker.js?v=063b28c5"></script>
 ```
 
 Le JS injecte `#agilo-wb-picker-anchor` sous le bloc PV. Staging only.
@@ -45,8 +45,8 @@ Inconvénient v1 : changer le select met à jour le défaut compte (CSE le matin
 
 | Surface | Pin jsDelivr | Où |
 |---------|--------------|-----|
-| Dashboard Business `6815bee5a9c0b57da183557c` | `89afe3b1` | Footer custom code, staging `agilotext-test` |
-| Dashboard Pro `6815bee5a9c0b57da183550e` | `89afe3b1` | Idem |
-| Dashboard Free `6815bee5a9c0b57da183550c` | `89afe3b1` | Idem |
+| Dashboard Business `6815bee5a9c0b57da183557c` | `063b28c5` | Footer custom code, staging `agilotext-test` |
+| Dashboard Pro `6815bee5a9c0b57da183550e` | `063b28c5` | Idem |
+| Dashboard Free `6815bee5a9c0b57da183550c` | `063b28c5` | Idem |
 
 Ne jamais `sites_publish` www sans OK Florian.
