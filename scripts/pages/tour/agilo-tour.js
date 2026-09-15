@@ -1,4 +1,4 @@
-/* agilo-tour.js v2.0.0
+/* agilo-tour.js v2.0.1
  * Driver.js 1.3 onboarding (agilo_tour_state_v24).
  * Premier passage : 8 étapes + stop C’est bon / Continuer.
  * Copy : 4 seaux (default, public, dirigeant, equipe) depuis le DOM Memberstack.
@@ -9,7 +9,7 @@
 
   if (window.__AGILO_TOUR_BOOTED__) return;
   window.__AGILO_TOUR_BOOTED__ = true;
-  window.__AGILO_TOUR_VERSION__ = '2.0.0';
+  window.__AGILO_TOUR_VERSION__ = '2.0.1';
 
   /* ========== CONFIG ========== */
   var STORAGE_KEY     = 'agilo_tour_state_v24';
@@ -450,6 +450,9 @@
   function buildStepsForRoute(route, absoluteIndex){
     stampStableHooks();
     var defs = BLUEPRINT.filter(function(s){ return s.route===route; });
+    if (route === '/dashboard' && (typeof absoluteIndex !== 'number' || absoluteIndex <= FIRST_STOP_INDEX)) {
+      defs = defs.filter(function(s){ return s._gIndex <= FIRST_STOP_INDEX; });
+    }
     var promises = defs.map(function(s){
       var desc = s.desc;
       if (s.key==='transcripts-table' && !hasOpenableJob()) {
@@ -521,12 +524,25 @@
     return -1;
   }
 
+  function completeFirstRun(){
+    stopChoice = 'done';
+    markCompleted();
+    var o = loadState()||{};
+    o.pending=false; o.resume=false; o.timestamp=Date.now();
+    saveState(o);
+    refreshResumeUI();
+    destroyDriver();
+  }
   function patchStopFooter(){
     var footer = document.querySelector('.driver-popover-footer');
     if (!footer) return;
     var next = footer.querySelector('.driver-popover-next-btn');
     var done = footer.querySelector('.driver-popover-done-btn');
-    if (next) next.textContent = 'Continuer';
+    if (next) {
+      next.textContent = 'Continuer';
+      next.style.display = 'inline-block';
+      next.removeAttribute('hidden');
+    }
     if (!done) {
       done = document.createElement('button');
       done.type = 'button';
@@ -536,17 +552,11 @@
     done.textContent = 'C’est bon';
     done.style.display = 'inline-block';
     done.setAttribute('data-agilo-tour-stop', 'done');
-    done.onclick = function(ev){
-      ev.preventDefault();
-      ev.stopPropagation();
-      stopChoice = 'done';
-      markCompleted();
-      var o = loadState()||{};
-      o.pending=false; o.resume=false; o.timestamp=Date.now();
-      saveState(o);
-      refreshResumeUI();
-      destroyDriver();
-    };
+    if (done.getAttribute('data-agilo-stop-bound') === '1') return;
+    done.setAttribute('data-agilo-stop-bound', '1');
+    done.addEventListener('click', function(){
+      completeFirstRun();
+    }, true);
   }
 
   function startOnThisPageOrRetry(here, absoluteIndex){
@@ -668,9 +678,13 @@
       stagePadding: remPx(STAGE_PAD_REM),
       allowClose:true, nextBtnText:'Suivant', prevBtnText:'Précédent', doneBtnText:'Terminer',
       overlayClickBehavior:'none', smoothScroll:false,
-      onHighlightStarted:function(ctx){
+      onHighlightStarted:function(element, step, options){
         try{
-          ctx && ctx.element && ctx.element.scrollIntoView({behavior:'auto', block:'center'});
+          if (options && options.state && typeof options.state.activeIndex === 'number') {
+            localIdx = options.state.activeIndex;
+          }
+          var el = element && element.nodeType ? element : (element && element.element);
+          el && el.scrollIntoView({behavior:'auto', block:'center'});
         }catch(_){}
 
         try{
@@ -683,15 +697,21 @@
           if (tab && typeof window.ensureTab === 'function'){
             window.ensureTab(tab);
             setTimeout(function(){
-              try { ctx && ctx.refresh && ctx.refresh(); } catch(_){}
               try { drv && drv.refresh && drv.refresh(); } catch(_){}
             }, 0);
           }
-          if (m.stop) setTimeout(patchStopFooter, 0);
+          if (m.stop) {
+            setTimeout(patchStopFooter, 0);
+            setTimeout(patchStopFooter, 60);
+          }
         }catch(_){}
       },
 
-      onNextClick:function(){ if(!goNextMaybeNavigate()) try{ drv.moveNext(); }catch(_){ } },
+      onNextClick:function(){
+        var m = meta[localIdx] || {};
+        if (m.stop) stopChoice = 'continue';
+        if(!goNextMaybeNavigate()) try{ drv.moveNext(); }catch(_){ }
+      },
       onPrevClick:function(){
         localIdx = Math.max(localIdx-1, 0);
         var prevGlobalIdx = meta[localIdx]?meta[localIdx].g:0;
@@ -700,7 +720,14 @@
         try{ drv.movePrevious(); }catch(_){ }
       },
       onDestroyed:function(){
-        if (stopChoice === 'done') {
+        var m = meta[localIdx] || {};
+        if (stopChoice === 'continue') {
+          if (typeof releaseGuard === 'function') releaseGuard('stop continuer');
+          refreshResumeUI();
+          return;
+        }
+        if (stopChoice === 'done' || m.stop) {
+          markCompleted();
           if (typeof releaseGuard === 'function') releaseGuard('stop cest bon');
           refreshResumeUI();
           return;
@@ -724,8 +751,8 @@
       var s2 = loadState()||{}; s2.pending=false; saveState(s2);
       refreshResumeUI();
       drv.setSteps(driverSteps);
-      drv.drive(startLocal);
       driverInstance = drv;
+      drv.drive(startLocal);
       LAUNCH_GUARD.driven = true;
       LAUNCH_GUARD.route  = here;
       log('tour démarré sur', here, 'steps=', driverSteps.length, 'startLocal=', startLocal, 'seau=', MEMBER_CTX.bucket);
@@ -845,6 +872,7 @@
       releaseGuard('API reset');
       log('Tour réinitialisé');
     },
+    completeFirstRun: completeFirstRun,
     debug: function(){
       var st=loadState();
       console.group('[AgiloTour Debug]');

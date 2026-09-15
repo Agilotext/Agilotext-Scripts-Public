@@ -1,5 +1,5 @@
 /**
- * Tour Driver.js v2.0.0 (blueprint v24, seaux, hooks).
+ * Tour Driver.js v2.0.1 (blueprint v24, seaux, hooks).
  * Exécution : node --test tests/agilo-tour-selectors.test.js
  */
 
@@ -45,9 +45,9 @@ describe("archive v23", () => {
 });
 
 describe("agilo-tour v2", () => {
-  it("expose la version 2.0.0 et le storage v24", () => {
-    assert.match(SRC, /agilo-tour\.js v2\.0\.0/);
-    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.0\.0'/);
+  it("expose la version 2.0.1 et le storage v24", () => {
+    assert.match(SRC, /agilo-tour\.js v2\.0\.1/);
+    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.0\.1'/);
     assert.match(SRC, /agilo_tour_state_v24/);
     assert.match(SRC, /agilo_tour_first_seen_v24/);
     assert.match(SRC, /agilo_tour_completed_v24/);
@@ -112,9 +112,12 @@ describe("agilo-tour v2", () => {
 
   it("blueprint court : stop C’est bon / Continuer, pas de catalogue", () => {
     assert.match(SRC, /FIRST_STOP_INDEX = 7/);
+    assert.match(SRC, /absoluteIndex <= FIRST_STOP_INDEX/);
+    assert.match(SRC, /stopChoice === 'continue'/);
     assert.match(SRC, /stop:true/);
     assert.match(SRC, /C’est bon/);
     assert.match(SRC, /Continuer/);
+    assert.match(SRC, /completeFirstRun/);
     assert.match(SRC, /skipIfNoJob:true/);
     assert.doesNotMatch(SRC, /add\('\/dashboard','credits-display'/);
     assert.doesNotMatch(SRC, /add\('\/profile','webhook'/);

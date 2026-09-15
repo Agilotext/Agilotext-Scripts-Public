@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>agilo-tour v2 recette</title>
+  <script>
+    try {
+      localStorage.setItem('agilo_tour_first_seen_v24', '1');
+      localStorage.setItem('agilo_tour_completed_v24', '1');
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <div class="wrapper-id-profil">
+    <div id="ms-first-name" data-ms-member="first-name"></div>
+    <div id="ms-persona" data-ms-member="persona"></div>
+    <div id="ms-use_case" data-ms-member="use-case"></div>
+  </div>
+  <div data-tour="dashboard-overview">Accueil</div>
+  <button data-tour="record">Enregistrer</button>
+  <div id="panel-file">Fichier</div>
+  <div data-tour="options">Options</div>
+  <div id="agilo-prompt-picker-anchor">Modèle</div>
+  <div id="agilo-wb-picker-anchor" class="agilo-wb-picker">Lexique</div>
+  <button id="submit-button" data-tour="submit">Envoyer</button>
+  <a data-tour="nav-transcripts" href="/app/premium/mes-transcripts">Mes fichiers</a>
+  <a data-tour="nav-library" href="/app/premium/library">Bibliothèque</a>
+  <a data-tour="nav-anonymize" href="/app/premium/dashboard/anonymiser">Anonymiser</a>
+  <a data-tour="nav-support" href="/app/premium/support">Support</a>
+  <button data-agilo-tour="start-reset">Démarrer le guide</button>
+  <pre id="results">pending</pre>
+  <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.min.js"></script>
+  <script src="/scripts/pages/tour/agilo-tour.js"></script>
+  <script>
+    (function () {
+      function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+      function popover() {
+        var t = document.querySelector('.driver-popover-title');
+        var d = document.querySelector('.driver-popover-description');
+        var next = document.querySelector('.driver-popover-next-btn');
+        var done = document.querySelector('[data-agilo-tour-stop="done"]') || document.querySelector('.driver-popover-done-btn');
+        return {
+          title: t ? t.textContent : null,
+          desc: d ? d.textContent : null,
+          next: next ? next.textContent : null,
+          done: done ? done.textContent : null
+        };
+      }
+      function write(obj) {
+        var text = JSON.stringify(obj, null, 2);
+        document.getElementById('results').textContent = text;
+        document.title = obj.ok ? 'RECETTE_OK' : 'RECETTE_KO';
+        try {
+          fetch('/recette-result', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text });
+        } catch (e) {}
+      }
+      async function waitPop(ms) {
+        var t0 = Date.now();
+        while (Date.now() - t0 < (ms || 4000)) {
+          if (document.querySelector('.driver-popover-title')) return true;
+          await sleep(40);
+        }
+        return false;
+      }
+      function setMember(persona, useCase, firstName, meetingTool) {
+        document.getElementById('ms-persona').textContent = persona || '';
+        document.getElementById('ms-use_case').textContent = useCase || '';
+        document.getElementById('ms-first-name').textContent = firstName || '';
+        var tool = document.getElementById('ms-meeting-tool');
+        if (tool) tool.textContent = meetingTool || '';
+      }
+      async function atIndex(index, persona, useCase, firstName, meetingTool) {
+        setMember(persona, useCase, firstName, meetingTool);
+        window.AgiloTour.reset();
+        window.AgiloTour.start(index);
+        if (!(await waitPop(5000))) return { error: 'no popover', index: index };
+        return popover();
+      }
+      function has(s, re) { return re.test(s || ''); }
+      async function main() {
+        var out = {
+          version: window.__AGILO_TOUR_VERSION__,
+          meetingToolNode: !!document.getElementById('ms-meeting-tool')
+        };
+        try {
+          out.emptyWelcome = await atIndex(0, '', '', '', '');
+          out.dirWelcome = await atIndex(0, 'Dirigeant / Fondateur', 'Rendez-vous clients', 'Thomas', 'Zoom');
+          out.dirRecord = await atIndex(1, 'Dirigeant / Fondateur', 'Rendez-vous clients', 'Thomas', 'Zoom');
+          out.dirPrompt = await atIndex(4, 'Dirigeant / Fondateur', 'Rendez-vous clients', 'Thomas', 'Zoom');
+          out.pubWelcome = await atIndex(0, '', 'Rendez-vous juridiques', 'Magalie', 'Google Meet');
+          out.pubRecord = await atIndex(1, '', 'Rendez-vous juridiques', 'Magalie', 'Google Meet');
+          out.eqWelcome = await atIndex(0, 'Salarié / Employé', 'Réunions d’équipe / projets', '', 'Microsoft Teams');
+          out.stop = await atIndex(7, '', '', '', '');
+          await sleep(150);
+          var footer = document.querySelector('.driver-popover-footer');
+          out.stopFooter = footer ? footer.innerHTML.slice(0, 500) : null;
+          var doneBtn = document.querySelector('.driver-popover-done-btn, [data-agilo-tour-stop="done"]');
+          out.doneFound = !!(doneBtn);
+          out.doneBound = doneBtn ? doneBtn.getAttribute('data-agilo-stop-bound') : null;
+          if (window.AgiloTour.completeFirstRun) window.AgiloTour.completeFirstRun();
+          else if (doneBtn) doneBtn.click();
+          await sleep(200);
+          out.completedRaw = localStorage.getItem('agilo_tour_completed_v24');
+          out.completedAfterCestBon = out.completedRaw === '1';
+          out.popoverGone = !document.querySelector('.driver-popover');
+
+          var wb = document.getElementById('agilo-wb-picker-anchor');
+          if (wb) wb.remove();
+          out.noWbAtLexique = await atIndex(5, '', '', '', '');
+          out.skippedLexique = !has(out.noWbAtLexique && out.noWbAtLexique.title, /Lexique/);
+
+          var checks = {
+            version: out.version === '2.0.1',
+            meetingToolNode: out.meetingToolNode,
+            defaultCopy: has(out.emptyWelcome && out.emptyWelcome.desc, /comptes rendus exploitables/),
+            dirigeantPrenom: has(out.dirWelcome && out.dirWelcome.desc, /Thomas/),
+            dirigeantDecisions: has(out.dirWelcome && out.dirWelcome.desc, /décisions/),
+            dirigeantComex: has(out.dirPrompt && out.dirPrompt.desc, /COMEX/),
+            dirigeantZoom: has(out.dirRecord && out.dirRecord.desc, /Zoom/),
+            publicPv: has(out.pubWelcome && out.pubWelcome.desc, /PV/),
+            publicMeet: has(out.pubRecord && out.pubRecord.desc, /Google Meet/),
+            equipeQui: has(out.eqWelcome && out.eqWelcome.desc, /qui fait quoi/),
+            stopTitle: has(out.stop && out.stop.title, /C’est bon/),
+            stopContinuer: out.stop && out.stop.next === 'Continuer',
+            stopDone: out.stop && out.stop.done === 'C’est bon',
+            cestBon: out.completedAfterCestBon && out.popoverGone,
+            skipLexique: out.skippedLexique
+          };
+          out.checks = checks;
+          out.ok = Object.keys(checks).every(function (k) { return checks[k]; });
+          write(out);
+        } catch (err) {
+          out.ok = false;
+          out.error = String(err && err.stack || err);
+          write(out);
+        }
+      }
+      setTimeout(main, 300);
+    })();
+  </script>
+</body>
+</html>
