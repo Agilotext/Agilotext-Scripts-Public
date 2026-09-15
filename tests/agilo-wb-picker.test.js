@@ -1,5 +1,5 @@
 /**
- * Picker dashboard mots à surveiller : catalogue Mon compte, pick, URL Gérer.
+ * Picker dashboard mots à surveiller : catalogue Mon compte, visibilité.
  * Exécution : node --test tests/agilo-wb-picker.test.js
  */
 
@@ -11,8 +11,9 @@ require("../scripts/pages/dashboard/agilo-wb-picker.js");
 const Picker = global.AgiloWbPicker;
 
 describe("agilo-wb-picker", () => {
-  it("expose la version 1.1.0", () => {
-    assert.equal(Picker.VERSION, "1.1.0");
+  it("expose la version 1.1.1", () => {
+    assert.equal(Picker.VERSION, "1.1.1");
+    assert.equal(Picker.STYLE_ID, "agilo-wb-picker-style-111");
   });
 
   it("déduit l’édition et le slug profil depuis le chemin", () => {
@@ -23,21 +24,6 @@ describe("agilo-wb-picker", () => {
     assert.equal(Picker.profileSlugFromPath("/app/business/"), "business");
     assert.equal(Picker.profileSlugFromPath("/app/premium/"), "premium");
     assert.equal(Picker.profileSlugFromPath("/app/free/"), "free");
-  });
-
-  it("pointe Gérer vers l’onglet mots-clés du palier", () => {
-    assert.equal(
-      Picker.profileManageUrl("/app/business/"),
-      "/app/business/profile?tab=mots-cles"
-    );
-    assert.equal(
-      Picker.profileManageUrl("/app/premium/dashboard"),
-      "/app/premium/profile?tab=mots-cles"
-    );
-    assert.equal(
-      Picker.profileManageUrl("/app/free/"),
-      "/app/free/profile?tab=mots-cles"
-    );
   });
 
   it("parse le catalogue et garde le thème par défaut", () => {
@@ -104,5 +90,22 @@ describe("agilo-wb-picker", () => {
       edition: "premium"
     });
     assert.equal(pro.edition, "pro");
+  });
+
+  it("révèle seulement un OK avec au moins un thème", () => {
+    const filled = Picker.parseCatalog({
+      status: "OK",
+      defaultBoostId: 12,
+      boostNamesDTOList: [{ boostId: 12, boostName: "test" }]
+    });
+    const empty = Picker.parseCatalog({
+      status: "OK",
+      defaultBoostId: 0,
+      boostNamesDTOList: []
+    });
+    assert.equal(Picker.shouldReveal(true, filled), true);
+    assert.equal(Picker.shouldReveal(true, empty), false);
+    assert.equal(Picker.shouldReveal(false, filled), false);
+    assert.equal(Picker.shouldReveal(false, empty), false);
   });
 });

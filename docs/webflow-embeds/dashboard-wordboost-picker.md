@@ -4,20 +4,20 @@
 **Staging seulement :** `https://agilotext-test.webflow.io`  
 **Prod www :** ne pas pin tant que Magalie n’a pas validé le visuel.
 
-Le lexique existe déjà dans Mon compte (`wordboost2.js`, `setWordBoostDefault2`). Le dashboard affiche une **ligne details** sous le picker PV : le nom du défaut reste visible, le select s’ouvre à la flèche.
+Le lexique existe déjà dans Mon compte (`wordboost2.js`, `setWordBoostDefault2`). Le dashboard affiche une **ligne muted** sous le picker PV (même gabarit de taille que « Créer un modèle », pas orange, pas gras).
 
 ## Ce que ça fait
 
 - Ancre `#agilo-wb-picker-anchor` injectée sous le bloc PV (`#agilo-prompt-picker-anchor`).
-- Summary : **Mots à surveiller** + nom `(défaut)`. Ouvert : `select.custom-select.grey` (même contrat que `#wb2-select`). Lien **Gérer** toujours visible, y compris liste vide.
-- Catalogue 1:1 `fillSelect` : toute `boostNamesDTOList`, pick défaut puis `wb2:lastThemeId` puis premier. `setWordBoostDefault2` au change.
+- Summary : `Mots à surveiller · nom (défaut) ▾`. Ouvert : `select.custom-select.grey` max 280px. **Pas** de lien Gérer.
+- Catalogue 1:1 `fillSelect`. `setWordBoostDefault2` au change. Liste vide OK : widget caché. Erreur API : toast, widget caché.
 - **Pas** de 6e interrupteur orange, **pas** de chips / CSV, **pas** sous « Joindre des documents ».
 - **Pas** de `boostId` dans le `FormData` upload tant que Nico n’a pas confirmé le champ.
 
 ## Fichier
 
 ```
-scripts/pages/dashboard/agilo-wb-picker.js   (1.1.0)
+scripts/pages/dashboard/agilo-wb-picker.js   (1.1.1)
 ```
 
 Ne pas coller `wordboost2.js` dans le dashboard.
@@ -34,10 +34,10 @@ Le JS injecte `#agilo-wb-picker-anchor` sous le bloc PV. Staging only.
 
 ## Recette Magalie CSE
 
-1. Dashboard Business staging : le thème affiché = celui marqué `(défaut)` au compte.
-2. Changer le select **avant Envoyer**, uploader un audio, vérifier l’ortho du thème choisi.
-3. Lien **Gérer** ouvre l’onglet mots-clés du profil.
-4. Le picker reste visible si le toggle CR/PV est off.
+1. Dashboard Business staging, hard refresh : ligne petite, pas gras, `nom (défaut)`, pas de Gérer.
+2. Flèche : select compact. Change = défaut compte.
+3. Compte sans thème : rien d’affiché. Erreur API : toast, pas de ligne « Aucun thème ».
+4. Le picker reste visible si le toggle CR/PV est off (s’il y a au moins un thème).
 
 Inconvénient v1 : changer le select met à jour le défaut compte (CSE le matin, lexique générique l’après-midi). Suffisant pour une semaine CSE, pas pour deux lexiques le même matin.
 

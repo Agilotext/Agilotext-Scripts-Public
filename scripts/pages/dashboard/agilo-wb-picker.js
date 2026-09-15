@@ -1,16 +1,16 @@
 /**
  * Picker dashboard « Mots à surveiller ».
- * Ligne details sous le picker PV. Catalogue = fillSelect Mon compte.
- * v1.1 : getWordBoostInfo2 + setWordBoostDefault2 au change (défaut compte).
- * Pas de boostId dans l’upload tant que Nico n’a pas le champ.
- * @version 1.1.0
+ * Ligne details muted sous le picker PV. Catalogue = fillSelect Mon compte.
+ * v1.1.1 : pas de Gérer, pas de classes Webflow, hidden si vide / erreur.
+ * @version 1.1.1
  */
 (function (global) {
   "use strict";
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.1.1";
   var API = "https://api.agilotext.com/api/v1";
   var LAST_KEY = "wb2:lastThemeId";
+  var STYLE_ID = "agilo-wb-picker-style-111";
   var booted = false;
   var loading = false;
 
@@ -81,21 +81,47 @@
     } catch (_e) { /* ignore */ }
   }
 
+  function shouldReveal(ok, catalog) {
+    return !!(ok && catalog && catalog.list && catalog.list.length);
+  }
+
+  function applyReveal(wrap, ok, catalog) {
+    if (!wrap) return;
+    wrap.hidden = !shouldReveal(ok, catalog);
+  }
+
+  function findWrap(doc) {
+    var anchor = doc && doc.getElementById("agilo-wb-picker-anchor");
+    return anchor && anchor.closest ? anchor.closest(".agilo-wb-picker") : null;
+  }
+
   function ensureStyle(doc) {
-    if (!doc || !doc.head || doc.getElementById("agilo-wb-picker-style")) return;
-    var style = doc.createElement("style");
-    style.id = "agilo-wb-picker-style";
+    if (!doc || !doc.head) return;
+    var stale = doc.getElementById("agilo-wb-picker-style");
+    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+    var style = doc.getElementById(STYLE_ID);
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = STYLE_ID;
+      doc.head.appendChild(style);
+    }
     style.textContent =
-      ".agilo-wb-picker{margin-top:8px;}" +
-      ".agilo-wb-picker .agilo-wb-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:nowrap;}" +
-      ".agilo-wb-picker .agilo-wb-details{flex:1;min-width:0;border:none;padding:0;}" +
-      ".agilo-wb-picker .agilo-wb-summary{display:flex;align-items:center;gap:10px;cursor:pointer;}" +
-      ".agilo-wb-picker .agilo-wb-current{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
-      ".agilo-wb-picker .agilo-wb-row{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;margin-top:8px;}" +
-      ".agilo-wb-picker .agilo-wb-row .custom-select{flex:1;min-width:0;}" +
-      ".agilo-wb-picker .agilo-wb-manage{white-space:nowrap;text-decoration:underline;color:inherit;flex-shrink:0;margin-top:2px;}" +
-      "@media (max-width:640px){.agilo-wb-picker .agilo-wb-head,.agilo-wb-picker .agilo-wb-row{flex-wrap:wrap;}}";
-    doc.head.appendChild(style);
+      ".agilo-wb-picker{margin-top:6px;text-align:center;}" +
+      ".agilo-wb-picker .agilo-wb-head{display:flex;justify-content:center;}" +
+      ".agilo-wb-picker .agilo-wb-details{border:none;padding:0;max-width:100%;}" +
+      ".agilo-wb-picker .agilo-wb-summary{display:inline-flex;align-items:center;justify-content:center;" +
+      "gap:6px;cursor:pointer;list-style:none;font:inherit;font-size:0.82rem;font-weight:400;" +
+      "color:#6b7280;line-height:1.3;}" +
+      ".agilo-wb-picker .agilo-wb-summary::-webkit-details-marker{display:none;}" +
+      ".agilo-wb-picker .agilo-wb-summary::marker{content:'';font-size:0;}" +
+      ".agilo-wb-picker .agilo-wb-summary:hover{color:#4b5563;}" +
+      ".agilo-wb-picker .agilo-wb-label,.agilo-wb-picker .agilo-wb-sep,.agilo-wb-picker .agilo-wb-current," +
+      ".agilo-wb-picker .agilo-wb-chev{font-size:0.82rem;font-weight:400;color:inherit;}" +
+      ".agilo-wb-picker .agilo-wb-current{min-width:0;max-width:16em;overflow:hidden;" +
+      "text-overflow:ellipsis;white-space:nowrap;}" +
+      ".agilo-wb-picker .agilo-wb-chev{font-size:0.7rem;opacity:0.7;}" +
+      ".agilo-wb-picker .agilo-wb-row{display:flex;justify-content:center;margin-top:8px;}" +
+      ".agilo-wb-picker .agilo-wb-row .custom-select{max-width:280px;width:100%;flex:none;}";
   }
 
   function findPvContainer(doc) {
@@ -116,13 +142,14 @@
       '<div class="agilo-wb-head">' +
       '<details class="agilo-wb-details">' +
       '<summary class="agilo-wb-summary">' +
-      '<span class="text-size-small text-weight-bold">Mots à surveiller</span>' +
-      '<span class="agilo-wb-current" id="agilo-wb-current">Chargement…</span>' +
+      '<span class="agilo-wb-label">Mots à surveiller</span>' +
+      '<span class="agilo-wb-sep" aria-hidden="true"> · </span>' +
+      '<span class="agilo-wb-current" id="agilo-wb-current"></span>' +
+      '<span class="agilo-wb-chev" aria-hidden="true">▾</span>' +
       "</summary>" +
       '<div class="agilo-wb-row">' +
       '<select class="custom-select grey" id="agilo-wb-select" aria-label="Mots à surveiller"></select>' +
       "</div></details>" +
-      '<a class="text-size-small agilo-wb-manage" id="agilo-wb-manage" href="#">Gérer</a>' +
       "</div>"
     );
   }
@@ -134,6 +161,7 @@
     var wrap = existing && existing.closest ? existing.closest(".agilo-wb-picker") : null;
     if (wrap) {
       wrap.innerHTML = innerHtml();
+      wrap.hidden = true;
       return doc.getElementById("agilo-wb-picker-anchor");
     }
     var after = findPvContainer(doc);
@@ -141,6 +169,7 @@
     wrap = doc.createElement("div");
     wrap.className = "agilo-wb-picker";
     wrap.setAttribute("data-agilo-wb-picker", "1");
+    wrap.hidden = true;
     wrap.innerHTML = innerHtml();
     after.parentNode.insertBefore(wrap, after.nextSibling);
     return doc.getElementById("agilo-wb-picker-anchor");
@@ -278,17 +307,16 @@
 
   function bind(doc, creds) {
     var select = doc.getElementById("agilo-wb-select");
-    var manage = doc.getElementById("agilo-wb-manage");
-    var path = (global.location && global.location.pathname) || "";
-    if (manage) manage.setAttribute("href", profileManageUrl(path));
+    var wrap = findWrap(doc);
     if (!select) return;
 
     var catalog = { defaultId: 0, list: [] };
     var busy = false;
 
-    function paint(selectedId) {
+    function paint(selectedId, ok) {
       fillSelect(select, catalog, selectedId);
       setSummary(doc, catalog, selectedId || pickCurrentId(catalog, readLastId()));
+      applyReveal(wrap, ok, catalog);
     }
 
     function load() {
@@ -299,10 +327,10 @@
       }).then(function (r) {
         if (!r || r.status !== "OK") throw new Error((r && r.errorMessage) || "Catalogue indisponible.");
         catalog = parseCatalog(r);
-        paint(pickCurrentId(catalog, readLastId()));
+        paint(pickCurrentId(catalog, readLastId()), true);
       }).catch(function (err) {
         catalog = { defaultId: 0, list: [] };
-        paint(0);
+        paint(0, false);
         toast((err && err.message) || "Impossible de charger les thèmes.");
       });
     }
@@ -313,6 +341,7 @@
       if (boostId === catalog.defaultId) {
         writeLastId(boostId);
         setSummary(doc, catalog, boostId);
+        applyReveal(wrap, true, catalog);
         return;
       }
       busy = true;
@@ -326,11 +355,11 @@
         if (!r || r.status !== "OK") throw new Error((r && r.errorMessage) || "Défaut non enregistré.");
         catalog.defaultId = boostId;
         writeLastId(boostId);
-        paint(boostId);
+        paint(boostId, true);
         toast("Thème par défaut mis à jour.");
       }).catch(function (err) {
         toast((err && err.message) || "Impossible d’enregistrer le thème.");
-        paint(pickCurrentId(catalog, readLastId()));
+        paint(pickCurrentId(catalog, readLastId()), true);
       }).then(function () {
         busy = false;
         select.disabled = !catalog.list.length;
@@ -356,6 +385,7 @@
       return bind(document, creds);
     }).catch(function (err) {
       loading = false;
+      applyReveal(findWrap(document), false, { list: [] });
       toast((err && err.message) || "Reconnecte-toi.");
     });
   }
@@ -390,12 +420,14 @@
   global.AgiloWbPicker = {
     VERSION: VERSION,
     LAST_KEY: LAST_KEY,
+    STYLE_ID: STYLE_ID,
     editionFromPath: editionFromPath,
     profileSlugFromPath: profileSlugFromPath,
     profileManageUrl: profileManageUrl,
     parseCatalog: parseCatalog,
     pickCurrentId: pickCurrentId,
     optionLabel: optionLabel,
+    shouldReveal: shouldReveal,
     normalizeCreds: normalizeCreds,
     injectBlock: injectBlock,
     boot: boot
