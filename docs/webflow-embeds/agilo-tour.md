@@ -6,30 +6,49 @@
 
 Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, classe `code-agilo-tour`). Le CSS Driver.js est **`ONBOARDING_CSS`** (`css-guide`) : ne pas le modifier.
 
-## Ce que fait v1.0.0
+## Versions
 
-- Source unique : [`scripts/pages/tour/agilo-tour.js`](../../scripts/pages/tour/agilo-tour.js)
-- Alias Agiloshield, parce que `/dashboard/anonymiser` n’a pas `data-tour="anonymize"` / `anon-historique` :
-  - `anonymize` → `[data-tour="anonymize"], #agfDropzone, .agf-dropzone`
-  - `anon-historique` → `[data-tour="anon-historique"], #agfAnonJobsWrap, .agf-anon-jobs-list`
-- Attente 8 s **uniquement** sur ces deux clés. Le reste du blueprint reste à 1,5 s. Retry global 20 s inchangé.
-- Pas de `fallbackCenter` ajouté sur le drop (évite le popover 1 px au centre).
-- Recette console : `window.__AGILO_TOUR_VERSION__ === '1.0.0'`
+| Version | SHA | Storage | Rôle |
+|---|---|---|---|
+| v1.0.0 / v23 | `7d5a786be2bc943f2d01de1fe9bc6afa114a4535` | `agilo_tour_state_v23` | Archive figée : [`archive/agilo-tour-v23-1.0.0.js`](../../scripts/pages/tour/archive/agilo-tour-v23-1.0.0.js) |
+| v2.0.0 / v24 | pin après push | `agilo_tour_state_v24` | Premier livrable, 8 étapes + stop, copy par seau |
+
+Rollback : remettre le SHA `7d5a786b` dans `ONBOARDING_SCRIPT`.
+
+## Inventaire `/auth/setup` (staging, 2026-09-15)
+
+Radios réelles (collectivité **n’est pas** une persona) :
+
+- **persona :** Dirigeant / Fondateur, Manager / Responsable d’équipe, Profession libérale / Indépendant, Professionnel(le) de santé, Salarié / Employé, Étudiant, Autre
+- **use_case :** Rendez-vous clients, Réunions d’équipe / projets, Rendez-vous juridiques, Appels de vente, Entretiens, Consultations médicales / psychologiques, Support / Service client, Autre
+- **meeting_tool :** Zoom, Google Meet, Microsoft Teams, Téléphone, Autre
+- **meeting_volume :** Moins de 5, Entre 5 et 10, Entre 10 et 30, Plus de 30 (non utilisé par le tour)
+
+Champ Memberstack `meeting-tool` : écrit par le setup (`MS_FIELDS.tool`). Absent du DOM dashboard (`#ms-persona` / `#ms-use_case` seulement). Le tour injecte `#ms-meeting-tool` dans `.wrapper-id-profil` et lit aussi `$memberstackDom.getCurrentMember()`. Pas d’Admin, pas de `sk_`.
+
+## Seaux de copy (même parcours)
+
+| Seau | Mapping |
+|---|---|
+| `default` | champs vides, `skipped`, Autre, libéral, santé, étudiant, ventes |
+| `public` | use-case juridique, ou texte CSE / collectivité / élus / institution |
+| `dirigeant` | persona Dirigeant / Fondateur |
+| `equipe` | salarié, manager, réunions d’équipe |
+
+`meeting_tool` ne change **que** la phrase Enregistrer (Zoom / Meet / Teams / téléphone / visio).
+
+## Séquence
+
+**A. 8 étapes** dashboard : welcome, record, file (`#panel-file`), options, prompt-picker, wb-picker, submit (`#submit-button`), stop (C’est bon / Continuer).
+
+**B. Suite** si le hook est là : Mes fichiers, partage (`.agilo-row-share`), éditeur, onglets, audio, Word (`#exportBtn`), save, bibliothèque, Agiloshield dropzone, support. Max 18. Skip si absent ou liste vide.
 
 ## Embed (après push)
 
-Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. Remplacer l’IIFE inline par :
-
-SHA git : `7d5a786b` (`7d5a786be2bc943f2d01de1fe9bc6afa114a4535`).
+Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. `ONBOARDING_CSS` inchangé. Publish subdomain `agilotext-test` only.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7d5a786be2bc943f2d01de1fe9bc6afa114a4535/scripts/pages/tour/agilo-tour.js?v=7d5a786b"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/tour/agilo-tour.js?v=SHA8"></script>
 ```
 
-`ONBOARDING_CSS` inchangé. Publish subdomain `agilotext-test` only.
-
-## Recette
-
-1. Login Business staging, vider `agilo_tour_state_v23` et `agilo_tour_completed_v23`.
-2. Démarrer le guide, avancer jusqu’à Agiloshield.
-3. Highlight réel de la dropzone, puis historique des jobs, puis retour dashboard.
+Recette console : `window.__AGILO_TOUR_VERSION__ === '2.0.0'`

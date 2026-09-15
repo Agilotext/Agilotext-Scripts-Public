@@ -1,21 +1,21 @@
-/* agilo-tour.js v1.0.0
- * Driver.js 1.3 onboarding (agilo_tour_state_v23).
- * Extracted from Webflow HtmlEmbed code-agilo-tour.
- * v1.0.0: alias Agiloshield (#agfDropzone / #agfAnonJobsWrap) + wait 8s on anonymize keys.
+/* agilo-tour.js v2.0.0
+ * Driver.js 1.3 onboarding (agilo_tour_state_v24).
+ * Premier passage : 8 étapes + stop C’est bon / Continuer.
+ * Copy : 4 seaux (default, public, dirigeant, equipe) depuis le DOM Memberstack.
+ * Archive v23 : scripts/pages/tour/archive/agilo-tour-v23-1.0.0.js (SHA 7d5a786b).
  */
 (function () {
   'use strict';
 
   if (window.__AGILO_TOUR_BOOTED__) return;
   window.__AGILO_TOUR_BOOTED__ = true;
-  window.__AGILO_TOUR_VERSION__ = '1.0.0';
+  window.__AGILO_TOUR_VERSION__ = '2.0.0';
 
   /* ========== CONFIG ========== */
-  var STORAGE_KEY     = 'agilo_tour_state_v23';
-  var FIRST_RUN_KEY   = 'agilo_tour_first_seen_v23';
-  var COMPLETED_KEY   = 'agilo_tour_completed_v23';
+  var STORAGE_KEY     = 'agilo_tour_state_v24';
+  var FIRST_RUN_KEY   = 'agilo_tour_first_seen_v24';
+  var COMPLETED_KEY   = 'agilo_tour_completed_v24';
 
-  // --- Anti-doublon de démarrage par route ---
   var LAUNCH_GUARD = { starting:false, driven:false, route:null };
   function guardStart(route){
     if (LAUNCH_GUARD.starting && LAUNCH_GUARD.route === route) { log('start ignoré: starting in progress on', route); return true; }
@@ -35,10 +35,18 @@
   var ANON_WAIT_MS    = 8000;
   var KEY_SELECTORS   = {
     anonymize: '[data-tour="anonymize"], #agfDropzone, .agf-dropzone',
-    'anon-historique': '[data-tour="anon-historique"], #agfAnonJobsWrap, .agf-anon-jobs-list'
+    'anon-historique': '[data-tour="anon-historique"], #agfAnonJobsWrap, .agf-anon-jobs-list',
+    file: '[data-tour="file"], [data-tour="send-mode"], #panel-file, .source-tabs, [data-tab="file"]',
+    'prompt-picker': '[data-tour="prompt-picker"], #agilo-prompt-picker-anchor, .agilo-prompt-picker',
+    'wb-picker': '[data-tour="wb-picker"], #agilo-wb-picker-anchor, .agilo-wb-picker',
+    submit: '[data-tour="submit"], #submit-button',
+    'share-job': '[data-tour="share-job"], .agilo-row-share, #shareLink',
+    'download-transcript': '[data-tour="download-transcript"], #exportBtn, [data-format="docx"]',
+    audio: '[data-tour="audio"], #audioPlayer, audio, .ed-audio'
   };
   var RESUME_GRACE_MS = 30000;
   var RETRY_TOTAL_MS  = 20000;
+  var FIRST_STOP_INDEX = 7;
 
   var ROUTES = ['/dashboard','/mes-transcripts','/profile','/dashboard/anonymiser','/support','/editor'];
   var SYN = {
@@ -82,7 +90,7 @@
   function clearCompleted(){ try{ localStorage.removeItem(COMPLETED_KEY); }catch(_){ } }
   function queryHasStart(){ return /[?&]tour=(start|1|true)\b/i.test(location.search); }
 
-  /* ========== ROUTING (préfixes /app/free|premium|business) ========== */
+  /* ========== ROUTING ========== */
   var PREFIX_RE = /^\/(?:app(?:\/(?:free|premium|business))?)\b/;
   function stripDomain(p){ return (p||'/').replace(/^https?:\/\/[^/]+/,''); }
   function normalizePath(p){
@@ -92,8 +100,6 @@
   }
   function currentRoute(){ var r = normalizePath(location.pathname); return ROUTES.indexOf(r)>=0 ? r : '/dashboard'; }
   function currentPrefix(){ var m = stripDomain(location.pathname).match(/^\/app(?:\/(?:free|premium|business))?/); return m?m[0]:''; }
-
-  // Normalise une destination de nav ('/…' obligatoire, alias '/' → '/dashboard', synonymes)
   function normalizeNavTarget(nav){
     if (!nav && nav!==0) return null;
     nav = (''+nav).trim();
@@ -102,7 +108,6 @@
     if (nav === '/') nav = '/dashboard';
     return nav;
   }
-
   function isAtRoute(route){ return normalizePath(location.pathname) === normalizePath(route); }
   function buildUrlForRoute(targetRoute){
     targetRoute = normalizeNavTarget(targetRoute) || '/dashboard';
@@ -162,6 +167,162 @@
     }
     return el;
   }
+  function hasOpenableJob(){
+    return !!(document.querySelector('.wrapper-content_item-row[data-job-id], [data-job-id], a[href*="/editor"]'));
+  }
+  function stampStableHooks(){
+    var pairs = [
+      ['prompt-picker', '#agilo-prompt-picker-anchor, .agilo-prompt-picker'],
+      ['wb-picker', '#agilo-wb-picker-anchor, .agilo-wb-picker'],
+      ['share-job', '.agilo-row-share, #shareLink'],
+      ['download-transcript', '#exportBtn, [data-tour="download-transcript"]'],
+      ['file', '#panel-file, .source-tabs']
+    ];
+    pairs.forEach(function(pair){
+      var el = document.querySelector(pair[1]);
+      if (el && !el.getAttribute('data-tour')) el.setAttribute('data-tour', pair[0]);
+    });
+  }
+
+  /* ========== Memberstack (DOM + client, pas Admin) ========== */
+  var MEMBER_CTX = { firstName:'', persona:'', useCase:'', meetingTool:'', bucket:'default' };
+
+  function nonempty(v){
+    v = String(v==null?'':v).trim();
+    if (!v || /^skipped$/i.test(v)) return '';
+    return v;
+  }
+  function readMsNode(id, attr){
+    var el = document.getElementById(id) || document.querySelector('[data-ms-member="'+attr+'"]');
+    if (!el) return '';
+    return nonempty(el.textContent || el.value || el.getAttribute('value'));
+  }
+  function ensureMeetingToolNode(){
+    if (document.querySelector('[data-ms-member="meeting-tool"]')) return;
+    var el = document.createElement('div');
+    el.id = 'ms-meeting-tool';
+    el.className = 'ms-meeting-tool';
+    el.setAttribute('data-ms-member', 'meeting-tool');
+    el.setAttribute('hidden', '');
+    el.style.display = 'none';
+    var persona = document.getElementById('ms-persona');
+    var host = document.querySelector('.wrapper-id-profil');
+    if (persona && persona.parentNode) persona.parentNode.insertBefore(el, persona.nextSibling);
+    else if (host) host.appendChild(el);
+    else document.body.appendChild(el);
+  }
+  function readDomMember(){
+    return {
+      firstName: readMsNode('ms-first-name', 'first-name'),
+      persona: readMsNode('ms-persona', 'persona'),
+      useCase: readMsNode('ms-use_case', 'use-case') || readMsNode('ms-use-case', 'use-case'),
+      meetingTool: readMsNode('ms-meeting-tool', 'meeting-tool')
+    };
+  }
+  function norm(s){
+    return String(s||'').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/[’']/g,' ')
+      .replace(/[^a-z0-9]+/g,' ')
+      .trim();
+  }
+  function resolveBucket(ctx){
+    var p = norm(ctx && ctx.persona);
+    var u = norm(ctx && ctx.useCase);
+    var blob = (p+' '+u).trim();
+    if (!blob || blob==='autre' || blob==='skipped') return 'default';
+    if (/juridique|cse|collectivit|elu|institution|conseil municipal|mairie|prefect|cssct|ssct/.test(blob)) return 'public';
+    if (/dirigeant|fondateur/.test(p)) return 'dirigeant';
+    if (/manager|responsable d equipe|salarie|employe|reunions d equipe|equipe projets/.test(blob)) return 'equipe';
+    return 'default';
+  }
+  function toolPhrase(tool){
+    var t = norm(tool);
+    if (/zoom/.test(t)) return 'Zoom';
+    if (/meet|google/.test(t)) return 'Google Meet';
+    if (/teams|microsoft/.test(t)) return 'Microsoft Teams';
+    if (/telephone/.test(t)) return 'téléphone';
+    return 'visio';
+  }
+  function greet(ctx){
+    var n = nonempty(ctx && ctx.firstName);
+    return n ? ('Bienvenue '+n+'. ') : '';
+  }
+  function recordLine(ctx, extra){
+    var tool = toolPhrase(ctx && ctx.meetingTool);
+    var visio = (tool === 'visio' || tool === 'téléphone')
+      ? (tool === 'téléphone' ? 'au téléphone' : 'en visio')
+      : ('sur '+tool);
+    return 'Enregistrez une réunion physique (micro) ou '+visio+'. '+(extra||'')+'L’audio est aussi enregistré dans Téléchargements.';
+  }
+
+  var COPY = {
+    default: {
+      welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext transforme vos réunions en comptes rendus exploitables. Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier fichier.'; } },
+      record: { title:'Enregistrer une réunion', desc:function(c){ return recordLine(c,''); } },
+      file: { title:'Déposer un fichier', desc:'Déposez un fichier audio ou vidéo. YouTube et la dictée sont dans les onglets à côté, si vous en avez besoin.' },
+      options: { title:'Format du livrable', desc:'Choisissez transcription intégrale ou compte rendu, et l’option intervenants.' },
+      'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi. C’est lui qui structure le livrable.' },
+      'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms et sigles. Sur l’offre Free, le choix peut être verrouillé.' },
+      submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le résultat arrive par e-mail et dans Mes fichiers.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon clôt le guide.' },
+      'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez un fichier pour relire, exporter ou partager.' },
+      transcriptsEmpty: { title:'Mes fichiers', desc:'Après votre premier envoi, vos fichiers apparaissent ici.' },
+      'share-job': { title:'Partager un lien', desc:'Partagez un lien de lecture, sans envoyer le fichier en pièce jointe.' },
+      'editor-open': { title:'Ouvrir l’éditeur', desc:'Ouvrez le document dans l’éditeur pour relire et exporter.' },
+      'ed-tabs': { title:'Trois onglets', desc:'Transcription, compte rendu, conversation : trois onglets sur le même fichier.' },
+      audio: { title:'Réécouter', desc:'Réécoutez un passage. Un clic sur un timecode cale la lecture.' },
+      'download-transcript': { title:'Exporter en Word', desc:'Exportez en Word pour le dossier ou l’envoi interne.' },
+      save: { title:'Enregistrer', desc:'Enregistrez vos corrections. La version reste dans Mes fichiers.' },
+      'nav-library': { title:'Bibliothèque', desc:'La bibliothèque range vos modèles et lexiques, pour les réutiliser.' },
+      anonymize: { title:'Données personnelles', desc:'Pour un document déjà écrit, Agiloshield masque les données personnelles avant partage.' },
+      'nav-support': { title:'Support', desc:'Le support est ici si un envoi bloque. Merci d’avoir suivi le guide.' }
+    },
+    public: {
+      welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext prépare vos PV et comptes rendus pour le dossier (élus, sigles, Word). Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier audio.'; } },
+      record: { title:'Enregistrer la séance', desc:function(c){ return recordLine(c,'Utile pour un PV. '); } },
+      file: { title:'Déposer l’audio de séance', desc:'Déposez l’audio de séance. YouTube et la dictée sont dans les onglets à côté, si vous en avez besoin.' },
+      options: { title:'PV ou transcription', desc:'Choisissez transcription ou PV / compte rendu, et l’option intervenants.' },
+      'prompt-picker': { title:'Modèle de PV', desc:'Choisissez le modèle de PV avant l’envoi, pour un dossier Word exploitable.' },
+      'wb-picker': { title:'Lexique (élus, sigles)', desc:'Le lexique corrige noms d’élus et sigles. Sur l’offre Free, le choix peut être verrouillé.' },
+      submit: { title:'Envoyer pour le dossier', desc:'Envoyez le fichier. Le PV arrive par e-mail et dans Mes fichiers, prêt pour Word.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier audio de séance. Continuer montre Mes fichiers (partage, Word). C’est bon clôt le guide.' },
+      'transcripts-table': { title:'Mes fichiers', desc:'Retrouvez le PV, ouvrez-le, exportez-le en Word ou partagez-le.' },
+      'download-transcript': { title:'Word pour le dossier', desc:'Exportez en Word pour le dossier de séance.' }
+    },
+    dirigeant: {
+      welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext transforme vos réunions en décisions et actions à partager. Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier fichier.'; } },
+      record: { title:'Enregistrer une réunion', desc:function(c){ return recordLine(c,'Pour ressortir décisions et actions. '); } },
+      file: { title:'Déposer un fichier', desc:'Déposez l’audio de la réunion. YouTube et la dictée sont dans les onglets à côté, si vous en avez besoin.' },
+      options: { title:'Format du compte rendu', desc:'Choisissez transcription ou compte rendu (décisions, actions), et l’option intervenants.' },
+      'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi, pour un compte rendu prêt à partager au COMEX.' },
+      'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms propres et acronymes métier. Sur l’offre Free, le choix peut être verrouillé.' },
+      submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le compte rendu arrive par e-mail et dans Mes fichiers, prêt à partager.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’export. C’est bon clôt le guide.' },
+      'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez le compte rendu, partagez-le ou exportez-le pour le COMEX.' },
+      'download-transcript': { title:'Exporter en Word', desc:'Exportez en Word pour le partage au COMEX.' }
+    },
+    equipe: {
+      welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext transforme vos réunions d’équipe en comptes rendus clairs, avec le qui fait quoi. Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier fichier.'; } },
+      record: { title:'Enregistrer la réunion', desc:function(c){ return recordLine(c,'Pour un compte rendu d’équipe. '); } },
+      file: { title:'Déposer un fichier', desc:'Déposez l’audio de la réunion d’équipe. YouTube et la dictée sont dans les onglets à côté, si vous en avez besoin.' },
+      options: { title:'Format du compte rendu', desc:'Choisissez transcription ou compte rendu, et l’option intervenants pour le qui parle.' },
+      'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi, pour un compte rendu d’équipe lisible.' },
+      'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms d’équipe et sigles internes. Sur l’offre Free, le choix peut être verrouillé.' },
+      submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le compte rendu arrive par e-mail et dans Mes fichiers.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon clôt le guide.' },
+      'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez le compte rendu d’équipe pour relire, partager ou exporter.' }
+    }
+  };
+
+  function copyFor(key){
+    var bucket = (MEMBER_CTX && MEMBER_CTX.bucket) || 'default';
+    var pack = COPY[bucket] || COPY.default;
+    var row = pack[key] || COPY.default[key];
+    if (!row) return { title:key, desc:'' };
+    var desc = (typeof row.desc === 'function') ? row.desc(MEMBER_CTX) : row.desc;
+    return { title: row.title || COPY.default[key].title, desc: desc };
+  }
 
   /* ========== Bouton Reprendre ========== */
   function refreshResumeUI(){
@@ -177,171 +338,137 @@
   }
 
   /* ========== BLUEPRINT ========== */
-  var BLUEPRINT=(function(){
-    var b=[]; function add(route, key, title, desc, side, align, navigateTo, fallbackCenter){
-      b.push({route:route, key:key||null, title:title, desc:desc, side:side||'top', align:align||'center', navigateTo:(navigateTo?navigateTo:null), fallbackCenter:!!fallbackCenter});
+  var BLUEPRINT = [];
+  var GLOBAL_TOTAL = 0;
+
+  function makeBlueprint(){
+    var b=[];
+    function add(route, key, copyKey, side, align, navigateTo, extra){
+      extra = extra || {};
+      var c = copyFor(copyKey);
+      b.push({
+        route:route,
+        key:key||null,
+        copyKey:copyKey,
+        title:c.title,
+        desc:c.desc,
+        side:side||'top',
+        align:align||'center',
+        navigateTo: navigateTo || null,
+        fallbackCenter: !!extra.fallbackCenter,
+        stop: !!extra.stop,
+        skipIfNoJob: !!extra.skipIfNoJob
+      });
     }
-// DASHBOARD
-add('/dashboard','dashboard-overview','Bienvenue sur Agilotext',
-  `Transformez vos réunions en livrables clairs. Cliquez sur <b>« Suivant »</b> pour un tour rapide.`, 'center','center');
 
-add('/dashboard','nav-dashboard','Tableau de bord — votre espace de travail',
-  `Ici vous pouvez <b>enregistrer</b> vos réunions ou <b>importer</b> des fichiers audio/vidéo pour traitement.`, 'center','center',null,true);
+    add('/dashboard','dashboard-overview','welcome','center','center');
+    add('/dashboard','record','record','bottom','center');
+    add('/dashboard','file','file','top','center');
+    add('/dashboard','options','options','left','center');
+    add('/dashboard','prompt-picker','prompt-picker','left','center');
+    add('/dashboard','wb-picker','wb-picker','left','center');
+    add('/dashboard','submit','submit','top','center');
+    add('/dashboard','nav-transcripts','stop','right','center','/mes-transcripts', { stop:true });
 
-add('/dashboard','credits-display','Crédits disponibles',
-  `Suivez votre <b>consommation</b> et vos <b>crédits</b> dans cet encart. Informations indicatives ; le détail dépend de votre offre.`, 'bottom','center');
+    add('/mes-transcripts','transcripts-table','transcripts-table','top','center');
+    add('/mes-transcripts','share-job','share-job','top','center', null, { skipIfNoJob:true });
+    add('/mes-transcripts','editor-open','editor-open','center','center','/editor', { skipIfNoJob:true });
 
-add('/dashboard','record','Enregistrer une réunion',
-  `Cliquez sur <b>« Enregistrer »</b> pour capturer l’audio.<br><br>
-   • <b>Réunion physique</b> : micro de votre ordinateur (démarrage immédiat).<br>
-   • <b>Réunion en ligne</b> : capturez Teams, Zoom, Meet… (fenêtre/onglet/écran).<br><br>
-   <em>À savoir :</em> par sécurité, l’audio est aussi <b>enregistré localement</b> dans votre dossier <b>Téléchargements</b> à la fin.
-   Le fichier s’appelle généralement <code>agilotext_audio_[date].webm</code>.`, 'bottom','center');
+    add('/editor','ed-tabs','ed-tabs','bottom','center');
+    add('/editor','audio','audio','top','center');
+    add('/editor','download-transcript','download-transcript','bottom','center');
+    add('/editor','save','save','bottom','center','/dashboard');
 
-add('/dashboard','send-mode','Choisir le mode d’envoi',
-  `<b>Envoi unique</b> pour 1 fichier, ou <b>envoi multiple</b> pour traiter plusieurs fichiers en une fois. Formats courants acceptés (MP3, MP4, WAV, M4A, WebM, AAC…).`, 'top','center');
-
-add('/dashboard','options','Format & options',
-  `Personnalisez le résultat :
-   <ul style="margin:.25rem 0 0 1rem">
-     <li><b>Transcription</b> (texte intégral) ou <b>Compte rendu</b> (synthèse structurée)</li>
-     <li><b>Reconnaissance des intervenants</b> (selon offre)</li>
-     <li><b>Modèle</b> de mise en forme</li>
-   </ul>`, 'left','center');
-
-add('/dashboard','submit','Lancer le traitement',
-  `Cliquez sur <b>« Envoyer mon fichier »</b>. Vous serez notifié dès que le document est prêt.`, 'top','center');
-
-// NAV → /mes-transcripts
-add('/dashboard','nav-transcripts','Accéder à « Mes transcriptions »',
-  `Consultez tous vos documents et retrouvez vos résultats.`, 'right','center','/mes-transcripts');
-
-/* MES TRANSCRIPTS */
-add('/mes-transcripts',null,'Mes transcriptions',
-  `Cette page rassemble toutes vos transcriptions et comptes rendus.`, 'center','center',null,true);
-
-add('/mes-transcripts','new-transcript','Créer un nouveau document',
-  `Cliquez ici pour revenir au <b>Tableau de bord</b> et démarrer un nouvel envoi ou un enregistrement.`, 'bottom','center');
-
-add('/mes-transcripts','transcripts-table','Liste de vos documents',
-  `Pour chaque élément : <b>télécharger</b> (Word, PDF, TXT), <b>ouvrir</b>, <b>éditer</b> ou <b>partager</b> via lien sécurisé.`, 'top','center');
-
-add('/mes-transcripts','upload-audio','Récupérer l’audio original',
-  `Cliquez sur le <b>titre de l’audio</b> pour télécharger le fichier. Pratique pour réécouter un passage.<br>
-   <em>Rappel :</em> l’enregistrement est également sauvegardé automatiquement dans votre dossier <b>Téléchargements</b> à la fin.`, 'left','center');
-
-// NAV → /editor (depuis « Mes transcriptions »)
-add('/mes-transcripts', 'editor-open', 'Découvrez la page Éditeur',
-  `Ouvrez un transcript pour le corriger, l’exporter et poser vos questions à l’IA.`,
-  'center','center','/editor', true);
-
-/* 2) BLUEPRINT : steps pour /editor (micro-textes courts) */
-add('/editor', null, 'Éditeur — aperçu',
-  `Ici vous corrigez, exportez et questionnez vos transcripts. Cliquez sur <b>« Suivant »</b>.`,
-  'center','center', null, true);
-
-add('/editor', 'ed-tabs', '3 panneaux',
-  `<b>Transcription</b> (texte), <b>Compte rendu</b> (synthèse), <b>Conversation</b> (questions IA).`,
-  'bottom','center');
-
-add('/editor', 'find-replace', 'Rechercher / Remplacer',
-  `Recherchez (Ctrl/Cmd+F), puis <b>Remplacer</b> ou <b>Tout remplacer</b>.`,
-  'bottom','center');
-
-add('/editor', 'save', 'Sauvegarder',
-  `Enregistrez votre version. Vous la retrouvez ensuite dans la colonne de gauche.`,
-  'bottom','center');
-
-add('/editor', 'rail-list', 'Retrouver vos documents',
-  `Votre historique est ici : cliquez pour rouvrir. Tri & recherche en haut.`,
-  'right','center');
-
-add('/editor', 'download-transcript', 'Télécharger',
-  `Exportez la <b>transcription</b> (.txt, .docx, .pdf…).`,
-  'bottom','center');
-
-add('/editor', 'audio', 'Écouter & suivre',
-  `Lisez l’audio ; un clic sur un <b>timecode</b> cale la lecture. Avec la <b>reco. intervenants</b>, le surlignage suit automatiquement.`,
-  'top','center');
-
-add('/editor', 'ia-questions', 'Questions IA',
-  `Posez vos questions liées à votre cas d’usage. Des exemples sont proposés ; testez !`,
-  'left','center');
-
-// NOUVEAU — met en avant le bouton "Analyses IA"
-add('/editor', 'ia-analyses', 'Analyses IA — testez en 1 clic',
-  `Obtenez en un clic un rapport : <b>émotions</b>, <b>axes CAB/stratégie</b>, <b>KPI</b> avec timecodes.
-  Cliquez pour lancer un exemple sur ce transcript.`,
-  'left','center');
- 
-// NAV → /profile (on atterrit directement sur l’onglet prompts)
-add('/editor','nav-account','Aller à « Mon compte »',
-  `Paramétrez modèles, intégrations et préférences.`, 'right','center','/profile?tab=prompts');
-   
-
-/* PROFILE */
-add('/profile',null,'Mon compte',
-  `Personnalisez Agilotext selon vos besoins.`, 'center','center',null,true);
-
-add('/profile','create-template','Modèles de compte rendu',
-  `Créez des modèles adaptés à vos usages (réunions, comités, formations, entretiens) pour gagner du temps.`, 'top','center');
-
-add('/profile','word-boost-quick','Vocabulaires',
-  `Ajoutez vos <b>mots/expressions</b> (noms, sigles, marques) pour améliorer la reconnaissance et l’orthographe.<br>
-   <b>Import en masse :</b> collez une liste — une entrée par ligne ou séparées par <i>virgules</i>/<i>points-virgules</i>.<br>
-   Nommez le thème puis cliquez sur <b>« Ajouter les termes »</b> (prise en compte sous peu).`,
-  'top','center');
-
-add('/profile','webhook','Intégrations & automatisations',
-  `Connectez vos outils (Make, Zapier, n8n) pour envoyer automatiquement les résultats vers vos systèmes (messageries, Drive, etc.).`, 'top','center');
-
-add('/profile','general-info','Informations générales',
-  `Gérez votre profil, vos préférences et les paramètres d’abonnement.`, 'top','center');
-
-// NAV → /dashboard/anonymiser
-add('/profile','nav-anonymize','Agiloshield — anonymisation documentaire',
-  `Accédez à l’outil <b>Agiloshield</b> (BETA) : anonymisation avancée pour vos documents et extraits de texte, avec suivi d’historique.`, 'right','center','/dashboard/anonymiser');
-
-/* ANONYMISER (Agiloshield — voir CNOEC_Agiloshield_Docs / Code Anon) */
-add('/dashboard/anonymiser',null,'Agiloshield — vue d’ensemble',
-  `Ici vous traitez des <b>fichiers</b> ou du <b>texte collé</b> dans un seul parcours.<br><br>
-   <b>Fichiers</b> : déposez ou sélectionnez plusieurs documents (PDF, Word, Excel, PowerPoint, CSV, TXT, JSON, FEC, images selon offre…). Limite de taille / quota affichée dans l’interface.<br>
-   <b>Texte</b> : onglet dédié — collez un e-mail, une note, du Markdown, etc. Le traitement peut partir automatiquement après saisie.<br><br>
-   À droite : mode d’anonymisation, <b>types de données</b> à détecter, listes d’inclusion/exclusion. <em>Version BETA</em> : certaines options évoluent encore.`, 'center','center',null,true);
-
-add('/dashboard/anonymiser','anonymize','Déposer des fichiers ou coller du texte',
-  `Utilisez l’onglet <b>Traitement de fichier</b> pour glisser-déposer ou cliquer et choisir vos fichiers, puis <b>Anonymiser les fichiers</b>.<br><br>
-   Utilisez <b>Traitement de texte</b> pour coller directement du contenu — le résultat apparaît en vis-à-vis.<br><br>
-   L’onglet <b>Restauration</b> est prévu pour les flux de pseudonymisation avancés (activation progressive).`, 'top','center',null);
-
-add('/dashboard/anonymiser','anon-historique','Historique des documents',
-  `Retrouvez ici les traitements récents, téléchargez les résultats et gérez vos lots.<br><br>
-   Ensuite, retour au <b>tableau de bord</b> pour la suite du guide.`, 'bottom','center','/dashboard',true);
-
-// FIN → Support (sur le Dashboard)
-add('/dashboard','nav-support','Support',
-  `Besoin d’aide ? Contactez-nous. Merci d’avoir suivi le guide.`, 'right','center');
-
-add('/dashboard','nav-support','Fin du guide',
-  `Merci d’avoir suivi le guide.`, 'center','center',null,true);
+    add('/dashboard','nav-library','nav-library','right','center');
+    add('/dashboard/anonymiser','anonymize','anonymize','top','center','/dashboard');
+    add('/dashboard','nav-support','nav-support','right','center');
 
     for (var i=0;i<b.length;i++) b[i]._gIndex=i;
     return b;
-  })();
+  }
 
-  var GLOBAL_TOTAL = BLUEPRINT.length;
+  function rebuildBlueprint(){
+    BLUEPRINT = makeBlueprint();
+    GLOBAL_TOTAL = BLUEPRINT.length;
+  }
+  rebuildBlueprint();
+
   function mapAbsoluteIndex(gIndex){ var s=BLUEPRINT[gIndex]; return s?{route:s.route, gIndex:gIndex}:null; }
+
+  function applyMember(ctx){
+    MEMBER_CTX = {
+      firstName: nonempty(ctx && ctx.firstName),
+      persona: nonempty(ctx && ctx.persona),
+      useCase: nonempty(ctx && ctx.useCase),
+      meetingTool: nonempty(ctx && ctx.meetingTool),
+      bucket: 'default'
+    };
+    MEMBER_CTX.bucket = resolveBucket(MEMBER_CTX);
+    rebuildBlueprint();
+    log('seau', MEMBER_CTX.bucket, 'persona=', MEMBER_CTX.persona, 'use-case=', MEMBER_CTX.useCase, 'tool=', MEMBER_CTX.meetingTool);
+  }
+
+  function withMemberContext(cb){
+    ensureMeetingToolNode();
+    stampStableHooks();
+    var ctx = readDomMember();
+    var ms = window.$memberstackDom;
+    if (!ms || typeof ms.getCurrentMember !== 'function') { applyMember(ctx); return cb(MEMBER_CTX); }
+    var settled = false;
+    function done(next){
+      if (settled) return;
+      settled = true;
+      applyMember(next || ctx);
+      cb(MEMBER_CTX);
+    }
+    var timer = setTimeout(function(){ done(ctx); }, 1200);
+    try {
+      ms.getCurrentMember().then(function(res){
+        clearTimeout(timer);
+        var m = (res && res.data) || res || {};
+        var cf = m.customFields || {};
+        var auth = m.auth || {};
+        done({
+          firstName: nonempty(ctx.firstName) || nonempty(auth.firstName) || nonempty(cf['first-name']),
+          persona: nonempty(ctx.persona) || nonempty(cf.persona),
+          useCase: nonempty(ctx.useCase) || nonempty(cf['use-case']) || nonempty(cf.use_case),
+          meetingTool: nonempty(ctx.meetingTool) || nonempty(cf['meeting-tool']) || nonempty(cf.meeting_tool)
+        });
+      }).catch(function(){ clearTimeout(timer); done(ctx); });
+    } catch (_) {
+      clearTimeout(timer);
+      done(ctx);
+    }
+  }
+
+  function stepTitle(s){
+    var total = (s._gIndex <= FIRST_STOP_INDEX) ? (FIRST_STOP_INDEX+1) : GLOBAL_TOTAL;
+    return 'Étape '+(s._gIndex+1)+'/'+total+' · '+s.title;
+  }
 
   /* ========== BUILD STEPS ========== */
   function buildStepsForRoute(route, absoluteIndex){
+    stampStableHooks();
     var defs = BLUEPRINT.filter(function(s){ return s.route===route; });
     var promises = defs.map(function(s){
+      var desc = s.desc;
+      if (s.key==='transcripts-table' && !hasOpenableJob()) {
+        desc = copyFor('transcriptsEmpty').desc;
+      }
       var step = {
         element:null,
-        popover:{ title:'Étape '+(s._gIndex+1)+'/'+GLOBAL_TOTAL+' — '+s.title, description:s.desc, side:s.side, align:s.align },
-        __gIndex:s._gIndex, __nav:s.navigateTo||null, __center:!!s.fallbackCenter,
+        popover:{ title:stepTitle(s), description:desc, side:s.side, align:s.align },
+        __gIndex:s._gIndex, __nav:s.navigateTo||null, __center:!!s.fallbackCenter, __stop:!!s.stop,
         padding: s.fallbackCenter ? remPx(CENTER_PAD_REM) : undefined
       };
+      if (s.key==='nav-library') {
+        var canAnon = !/\/app\/free\b/.test(location.pathname) && !!document.querySelector('[data-tour="nav-anonymize"]');
+        step.__nav = canAnon ? '/dashboard/anonymiser' : null;
+      }
+      if (s.skipIfNoJob && !hasOpenableJob()) {
+        step.__skip=true;
+        return Promise.resolve(step);
+      }
       if (s.key){
         var sel = (KEY_SELECTORS[s.key] || ('[data-tour="'+s.key+'"]'));
         var waitMs = (s.key==='anonymize' || s.key==='anon-historique') ? ANON_WAIT_MS : WAIT_MAX_MS;
@@ -349,7 +476,10 @@ add('/dashboard','nav-support','Fin du guide',
           if (!el){
             if (s.fallbackCenter || s.navigateTo){ step.element=ensureCenterAnchor(); step.__center=true; }
             else { step.__skip=true; }
-          } else { step.element=el; }
+          } else {
+            step.element=el;
+            if (!el.getAttribute('data-tour') && s.key) el.setAttribute('data-tour', s.key);
+          }
           return step;
         });
       } else if (s.fallbackCenter){
@@ -369,16 +499,9 @@ add('/dashboard','nav-support','Fin du guide',
   }
 
   /* ========== DRIVER ========== */
-    // Mapping simple "étape → onglet"
-    var STEP_TAB = {
-      'create-template': 'prompts',
-      'word-boost-quick': 'mots-cles',
-      'webhook': 'integrations',
-      'general-info': 'profile'
-    };
-
-
+  var STEP_TAB = {};
   var driverInstance=null;
+  var stopChoice=null;
   function destroyDriver(){ if(!driverInstance) return; try{ driverInstance.destroy && driverInstance.destroy(); }catch(_){ } driverInstance=null; }
 
   function computeResumeIndexAfterNav(idx){
@@ -389,23 +512,62 @@ add('/dashboard','nav-support','Fin du guide',
       if (s.fallbackCenter===true){ idx++; continue; }
       return idx;
     }
-    return idx; // peut renvoyer length en fin de plan
+    return idx;
   }
 
-  // Trouve le 1er index “actionnable” d'une route (puis sinon le 1er tout court)
   function firstIndexForRoute(route){
     for (var i=0;i<GLOBAL_TOTAL;i++){ if (BLUEPRINT[i].route===route && !BLUEPRINT[i].fallbackCenter) return i; }
     for (var j=0;j<GLOBAL_TOTAL;j++){ if (BLUEPRINT[j].route===route) return j; }
     return -1;
   }
 
-  /* ========== CORE : start avec retry mais SANS double-boot ========== */
+  function patchStopFooter(){
+    var footer = document.querySelector('.driver-popover-footer');
+    if (!footer) return;
+    var next = footer.querySelector('.driver-popover-next-btn');
+    var done = footer.querySelector('.driver-popover-done-btn');
+    if (next) next.textContent = 'Continuer';
+    if (!done) {
+      done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'driver-popover-btn driver-popover-done-btn';
+      footer.appendChild(done);
+    }
+    done.textContent = 'C’est bon';
+    done.style.display = 'inline-block';
+    done.setAttribute('data-agilo-tour-stop', 'done');
+    done.onclick = function(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+      stopChoice = 'done';
+      markCompleted();
+      var o = loadState()||{};
+      o.pending=false; o.resume=false; o.timestamp=Date.now();
+      saveState(o);
+      refreshResumeUI();
+      destroyDriver();
+    };
+  }
+
   function startOnThisPageOrRetry(here, absoluteIndex){
     var startTs = Date.now();
     var observer = null;
     var launched = false;
 
     function cleanup(){ if(observer){ try{observer.disconnect();}catch(_){ } observer=null; } }
+
+    function jumpToNextRoute(){
+      var nextIdx = (typeof absoluteIndex==='number') ? absoluteIndex : 0;
+      while (nextIdx < BLUEPRINT.length && BLUEPRINT[nextIdx].route === here) nextIdx++;
+      if (nextIdx < BLUEPRINT.length){
+        var tgt = BLUEPRINT[nextIdx].route;
+        saveState({ route: tgt, stepGlobalIndex: nextIdx, resume:true, pending:true, timestamp:Date.now() });
+        refreshResumeUI();
+        location.assign(buildUrlForRoute(tgt));
+        return true;
+      }
+      return false;
+    }
 
     function tryStart(){
       if (launched) return;
@@ -418,7 +580,10 @@ add('/dashboard','nav-support','Fin du guide',
           var st = loadState()||{};
           st.pending = true; st.resume = true; st.route = here; st.timestamp = Date.now();
           saveState(st); refreshResumeUI();
-          if (Date.now() - startTs >= RETRY_TOTAL_MS){ return; }
+          if (Date.now() - startTs >= RETRY_TOTAL_MS){
+            if (!jumpToNextRoute()) markCompleted();
+            return;
+          }
           return;
         }
 
@@ -459,17 +624,17 @@ add('/dashboard','nav-support','Fin du guide',
   }
 
  function bootDriver(driverSteps, startLocal, here, buildResult){
-  var meta = (buildResult ? buildResult.steps : []).map(function(s){ return {g:s.__gIndex, nav:s.__nav}; });
-  if (!meta || !meta.length) meta = [{g:(loadState()&&loadState().stepGlobalIndex)||0, nav:null}];
+  var meta = (buildResult ? buildResult.steps : []).map(function(s){ return {g:s.__gIndex, nav:s.__nav, stop:!!s.__stop}; });
+  if (!meta || !meta.length) meta = [{g:(loadState()&&loadState().stepGlobalIndex)||0, nav:null, stop:false}];
 
   var localIdx = startLocal;
+  stopChoice = null;
 
-  // ⚠️ Patch 1 — utilise la nav explicite (peut contenir ?tab=... ou #...)
   function navigateForNavStep(origin){
     var m = meta[localIdx] || {};
     if (!m.nav) return false;
+    if (origin === 'done' && m.stop) return false;
 
-    // calcule le prochain index global (où reprendre après la nav)
     var nextGlobal = computeResumeIndexAfterNav((meta[localIdx]?meta[localIdx].g:0)+1);
 
     var hasExplicit = typeof m.nav === 'string' && m.nav.trim().length > 0;
@@ -488,10 +653,7 @@ add('/dashboard','nav-support','Fin du guide',
   }
 
   function goNextMaybeNavigate(){
-    // si cette étape possède une nav → on navigue
     if (navigateForNavStep('step')) return true;
-
-    // sinon, progression locale classique
     var nextGlobalIdx = Math.min((meta[localIdx]?meta[localIdx].g:0)+1, GLOBAL_TOTAL-1);
     saveState({ route: here, stepGlobalIndex: nextGlobalIdx, resume:true, pending:false, timestamp:Date.now() });
     refreshResumeUI();
@@ -508,11 +670,9 @@ add('/dashboard','nav-support','Fin du guide',
       overlayClickBehavior:'none', smoothScroll:false,
       onHighlightStarted:function(ctx){
         try{
-          // scroll au centre (comme avant)
           ctx && ctx.element && ctx.element.scrollIntoView({behavior:'auto', block:'center'});
         }catch(_){}
 
-        // → ouvre l’onglet lié à l’étape AVANT de mesurer la popover
         try{
           var m   = meta[localIdx] || {};
           var g   = (typeof m.g === 'number') ? m.g : null;
@@ -522,13 +682,12 @@ add('/dashboard','nav-support','Fin du guide',
 
           if (tab && typeof window.ensureTab === 'function'){
             window.ensureTab(tab);
-
-            // on laisse le DOM se peindre puis on recalcule la cible
             setTimeout(function(){
               try { ctx && ctx.refresh && ctx.refresh(); } catch(_){}
               try { drv && drv.refresh && drv.refresh(); } catch(_){}
             }, 0);
           }
+          if (m.stop) setTimeout(patchStopFooter, 0);
         }catch(_){}
       },
 
@@ -541,7 +700,11 @@ add('/dashboard','nav-support','Fin du guide',
         try{ drv.movePrevious(); }catch(_){ }
       },
       onDestroyed:function(){
-        // ⬅️ si la dernière étape a une nav, on navigue aussi quand l’utilisateur clique « Terminer »
+        if (stopChoice === 'done') {
+          if (typeof releaseGuard === 'function') releaseGuard('stop cest bon');
+          refreshResumeUI();
+          return;
+        }
         if (navigateForNavStep('done')) return;
 
         var curGlobal = meta[localIdx]?meta[localIdx].g:0;
@@ -565,7 +728,7 @@ add('/dashboard','nav-support','Fin du guide',
       driverInstance = drv;
       LAUNCH_GUARD.driven = true;
       LAUNCH_GUARD.route  = here;
-      log('tour démarré sur', here, 'steps=', driverSteps.length, 'startLocal=', startLocal);
+      log('tour démarré sur', here, 'steps=', driverSteps.length, 'startLocal=', startLocal, 'seau=', MEMBER_CTX.bucket);
     }catch(err){
       console.error('[AgiloTour] Erreur Driver:', err);
       if (typeof releaseGuard === 'function') releaseGuard('driver boot failed');
@@ -599,7 +762,6 @@ add('/dashboard','nav-support','Fin du guide',
     document.addEventListener('click', function(e){
       var t=e.target; if(!t || !t.closest) return;
 
-      // Reprendre
       var resumeBtn = t.closest('[data-agilo-tour="start"][data-agilo-tour-visibility="resume-only"]');
       if (resumeBtn){
         e.preventDefault(); e.stopPropagation();
@@ -608,27 +770,27 @@ add('/dashboard','nav-support','Fin du guide',
         return;
       }
 
-      // Démarrer/Recommencer → force /dashboard
       var resetBtn = t.closest('[data-agilo-tour="start-reset"]');
       if (resetBtn){
         e.preventDefault(); e.stopPropagation();
         releaseGuard('user click reset');
         clearCompleted();
-        var firstDashIdx = (function(){ for (var i=0;i<BLUEPRINT.length;i++){ if (BLUEPRINT[i].route==='/dashboard' && !BLUEPRINT[i].fallbackCenter) return i; } return 0; })();
-        var targetRoute = '/dashboard';
-        saveState({ route: targetRoute, stepGlobalIndex: firstDashIdx, resume:true, pending:true, timestamp:Date.now() });
-        refreshResumeUI();
-        if (!isAtRoute(targetRoute)){
-          var url = buildUrlForRoute(targetRoute);
-          log('NAV (reset) →', url);
-          location.assign(url);
-          return;
-        }
-        ensureDriverV13(function(){ startAt(firstDashIdx); });
+        withMemberContext(function(){
+          var firstDashIdx = (function(){ for (var i=0;i<BLUEPRINT.length;i++){ if (BLUEPRINT[i].route==='/dashboard' && !BLUEPRINT[i].fallbackCenter) return i; } return 0; })();
+          var targetRoute = '/dashboard';
+          saveState({ route: targetRoute, stepGlobalIndex: firstDashIdx, resume:true, pending:true, timestamp:Date.now() });
+          refreshResumeUI();
+          if (!isAtRoute(targetRoute)){
+            var url = buildUrlForRoute(targetRoute);
+            log('NAV (reset) →', url);
+            location.assign(url);
+            return;
+          }
+          ensureDriverV13(function(){ startAt(firstDashIdx); });
+        });
         return;
       }
 
-      // Start générique = reprise
       var startBtn = t.closest('[data-agilo-tour="start"]:not([data-agilo-tour-visibility]), .js-agilo-tour-start');
       if (startBtn){
         e.preventDefault(); e.stopPropagation();
@@ -643,39 +805,40 @@ add('/dashboard','nav-support','Fin du guide',
   window.AgiloTour = {
     start: function(stepIndexOrResume){
       releaseGuard('API start');
-
-      if (stepIndexOrResume==='resume' || stepIndexOrResume===true){
-        var st = loadState(); var idx = (st && typeof st.stepGlobalIndex==='number') ? st.stepGlobalIndex : 0;
-        var tgt = (BLUEPRINT[idx] ? BLUEPRINT[idx].route : '/dashboard');
-        if (!isAtRoute(tgt)){
-          saveState({ route: tgt, stepGlobalIndex: idx, resume:true, pending:true, timestamp:Date.now() });
+      withMemberContext(function(){
+        if (stepIndexOrResume==='resume' || stepIndexOrResume===true){
+          var st = loadState(); var idx = (st && typeof st.stepGlobalIndex==='number') ? st.stepGlobalIndex : 0;
+          var tgt = (BLUEPRINT[idx] ? BLUEPRINT[idx].route : '/dashboard');
+          if (!isAtRoute(tgt)){
+            saveState({ route: tgt, stepGlobalIndex: idx, resume:true, pending:true, timestamp:Date.now() });
+            refreshResumeUI();
+            var url = buildUrlForRoute(tgt);
+            log('NAV (resume) →', url);
+            location.assign(url);
+            return;
+          }
+          saveState({ route: tgt, stepGlobalIndex: idx, resume:true, pending:false, timestamp:Date.now() });
           refreshResumeUI();
-          var url = buildUrlForRoute(tgt);
-          log('NAV (resume) →', url);
-          location.assign(url);
+          ensureDriverV13(function(){ startAt(idx); });
           return;
         }
-        saveState({ route: tgt, stepGlobalIndex: idx, resume:true, pending:false, timestamp:Date.now() });
-        refreshResumeUI();
-        ensureDriverV13(function(){ startAt(idx); });
-        return;
-      }
 
-      if (typeof stepIndexOrResume==='number'){
-        var idx2 = Math.max(0, stepIndexOrResume|0);
-        var tgt2 = (BLUEPRINT[idx2] ? BLUEPRINT[idx2].route : '/dashboard');
-        if (!isAtRoute(tgt2)){
-          saveState({ route: tgt2, stepGlobalIndex: idx2, resume:true, pending:true, timestamp:Date.now() });
+        if (typeof stepIndexOrResume==='number'){
+          var idx2 = Math.max(0, stepIndexOrResume|0);
+          var tgt2 = (BLUEPRINT[idx2] ? BLUEPRINT[idx2].route : '/dashboard');
+          if (!isAtRoute(tgt2)){
+            saveState({ route: tgt2, stepGlobalIndex: idx2, resume:true, pending:true, timestamp:Date.now() });
+            refreshResumeUI();
+            var url2 = buildUrlForRoute(tgt2);
+            log('NAV (start idx) →', url2);
+            location.assign(url2);
+            return;
+          }
+          saveState({ route: tgt2, stepGlobalIndex: idx2, resume:true, pending:false, timestamp:Date.now() });
           refreshResumeUI();
-          var url2 = buildUrlForRoute(tgt2);
-          log('NAV (start idx) →', url2);
-          location.assign(url2);
-          return;
+          ensureDriverV13(function(){ startAt(idx2); });
         }
-        saveState({ route: tgt2, stepGlobalIndex: idx2, resume:true, pending:false, timestamp:Date.now() });
-        refreshResumeUI();
-        ensureDriverV13(function(){ startAt(idx2); });
-      }
+      });
     },
     reset: function(){
       destroyDriver(); clearState(); clearCompleted(); refreshResumeUI();
@@ -685,7 +848,9 @@ add('/dashboard','nav-support','Fin du guide',
     debug: function(){
       var st=loadState();
       console.group('[AgiloTour Debug]');
+      console.log('version:', window.__AGILO_TOUR_VERSION__);
       console.log('state:', st);
+      console.log('member:', MEMBER_CTX);
       console.log('pathname:', location.pathname, '→ normalized:', normalizePath(location.pathname));
       console.log('prefix courant:', currentPrefix());
       console.log('route courante:', currentRoute());
@@ -694,51 +859,54 @@ add('/dashboard','nav-support','Fin du guide',
     }
   };
 
-  /* ========== Après CGU : lancer le guide première visite (appelé par Script_CGV) ========== */
   window.agiloStartDeferredFirstVisitTour = function () {
     if (hasSeenOnce() || isCompleted() || currentRoute() !== '/dashboard') return;
     markSeenOnce();
     log('Première visite → démarrage auto (après CGU)');
-    ensureDriverV13(function () { startAt(0); });
+    withMemberContext(function(){ ensureDriverV13(function () { startAt(0); }); });
   };
 
   /* ========== BOOT ========== */
   function boot(){
     preloadDriver();
     attachTriggers();
+    ensureMeetingToolNode();
+    stampStableHooks();
     refreshResumeUI();
 
-    var st = loadState();
-    if (st && st.pending===true && (Date.now() - (st.timestamp||0) >= RESUME_GRACE_MS)){
-      st.pending=false; saveState(st); log('pending expiré');
-    }
-
-    var shouldAuto = st && st.resume===true && st.route===currentRoute() && st.pending===true && (Date.now() - (st.timestamp||0) < RESUME_GRACE_MS);
-    if (shouldAuto){
-      log('auto-reprise (boot)', st, 'prefix=', currentPrefix());
-      ensureDriverV13(function(){ startAt(typeof st.stepGlobalIndex==='number' ? st.stepGlobalIndex : 0); });
-      return;
-    }
-
-    if (queryHasStart()){
-      markSeenOnce(); clearCompleted(); log('Démarrage forcé via URL');
-      ensureDriverV13(function(){ startAt(0); });
-      return;
-    }
-
-    if (!hasSeenOnce() && !isCompleted() && currentRoute() === '/dashboard') {
-      if (document.querySelector('.cgv-onboarding-wrapper')) {
-        log('Première visite : tour différé (modale CGU sur la page)');
-        window.__agiloPendingFirstTour = true;
-      } else {
-        markSeenOnce();
-        log('Première visite → démarrage auto');
-        ensureDriverV13(function () { startAt(0); });
+    withMemberContext(function(){
+      var st = loadState();
+      if (st && st.pending===true && (Date.now() - (st.timestamp||0) >= RESUME_GRACE_MS)){
+        st.pending=false; saveState(st); log('pending expiré');
       }
-      return;
-    }
 
-    log('Prêt. route=', currentRoute(), 'prefix=', currentPrefix());
+      var shouldAuto = st && st.resume===true && st.route===currentRoute() && st.pending===true && (Date.now() - (st.timestamp||0) < RESUME_GRACE_MS);
+      if (shouldAuto){
+        log('auto-reprise (boot)', st, 'prefix=', currentPrefix());
+        ensureDriverV13(function(){ startAt(typeof st.stepGlobalIndex==='number' ? st.stepGlobalIndex : 0); });
+        return;
+      }
+
+      if (queryHasStart()){
+        markSeenOnce(); clearCompleted(); log('Démarrage forcé via URL');
+        ensureDriverV13(function(){ startAt(0); });
+        return;
+      }
+
+      if (!hasSeenOnce() && !isCompleted() && currentRoute() === '/dashboard') {
+        if (document.querySelector('.cgv-onboarding-wrapper')) {
+          log('Première visite : tour différé (modale CGU sur la page)');
+          window.__agiloPendingFirstTour = true;
+        } else {
+          markSeenOnce();
+          log('Première visite → démarrage auto');
+          ensureDriverV13(function () { startAt(0); });
+        }
+        return;
+      }
+
+      log('Prêt. route=', currentRoute(), 'prefix=', currentPrefix(), 'seau=', MEMBER_CTX.bucket);
+    });
   }
 
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
