@@ -20,8 +20,10 @@ Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, cl
 
 Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. Remplacer l’IIFE inline par :
 
+SHA git : `7d5a786b` (`7d5a786be2bc943f2d01de1fe9bc6afa114a4535`).
+
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/tour/agilo-tour.js?v=SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@7d5a786be2bc943f2d01de1fe9bc6afa114a4535/scripts/pages/tour/agilo-tour.js?v=7d5a786b"></script>
 ```
 
 `ONBOARDING_CSS` inchangé. Publish subdomain `agilotext-test` only.
