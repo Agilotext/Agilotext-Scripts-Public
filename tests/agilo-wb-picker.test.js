@@ -1,5 +1,5 @@
 /**
- * Picker dashboard mots à surveiller : catalogue, READY, URL Gérer.
+ * Picker dashboard mots à surveiller : catalogue Mon compte, pick, URL Gérer.
  * Exécution : node --test tests/agilo-wb-picker.test.js
  */
 
@@ -11,8 +11,8 @@ require("../scripts/pages/dashboard/agilo-wb-picker.js");
 const Picker = global.AgiloWbPicker;
 
 describe("agilo-wb-picker", () => {
-  it("expose la version 1.0.0", () => {
-    assert.equal(Picker.VERSION, "1.0.0");
+  it("expose la version 1.1.0", () => {
+    assert.equal(Picker.VERSION, "1.1.0");
   });
 
   it("déduit l’édition et le slug profil depuis le chemin", () => {
@@ -56,19 +56,53 @@ describe("agilo-wb-picker", () => {
     assert.equal(Picker.optionLabel(cat.list[1], 12), "Générique");
   });
 
-  it("filtre les thèmes non READY si un statut est fourni", () => {
+  it("garde tous les thèmes, même non READY", () => {
     const cat = Picker.parseCatalog({
-      defaultBoostId: 1,
+      defaultBoostId: 2,
       boostNamesDTOList: [
         { boostId: 1, boostName: "Prêt", wordboostStatus: "READY" },
         { boostId: 2, boostName: "En cours", wordboostStatus: "PENDING" },
         { boostId: 3, boostName: "Erreur", status: "ERROR" }
       ]
     });
-    assert.equal(cat.list.length, 1);
-    assert.equal(cat.list[0].id, 1);
-    assert.equal(Picker.isSelectableTheme({ wordboostStatus: "" }), true);
-    assert.equal(Picker.isSelectableTheme({ wordboostStatus: "READY" }), true);
-    assert.equal(Picker.isSelectableTheme({ wordboostStatus: "PENDING" }), false);
+    assert.equal(cat.list.length, 3);
+    assert.equal(cat.defaultId, 2);
+  });
+
+  it("pick : défaut, puis lastKey, puis premier", () => {
+    const cat = Picker.parseCatalog({
+      defaultBoostId: 12,
+      boostNamesDTOList: [
+        { boostId: 8, boostName: "Générique" },
+        { boostId: 12, boostName: "CSE" },
+        { boostId: 3, boostName: "Autre" }
+      ]
+    });
+    assert.equal(Picker.pickCurrentId(cat, 3), 12);
+    const noDef = Picker.parseCatalog({
+      defaultBoostId: 99,
+      boostNamesDTOList: [
+        { boostId: 8, boostName: "Générique" },
+        { boostId: 3, boostName: "Autre" }
+      ]
+    });
+    assert.equal(Picker.pickCurrentId(noDef, 3), 3);
+    assert.equal(Picker.pickCurrentId(noDef, 0), 8);
+  });
+
+  it("normalise une edition bizarre vers le chemin", () => {
+    const creds = Picker.normalizeCreds({
+      email: "a@b.c",
+      token: "t",
+      edition: "team"
+    });
+    assert.equal(creds.edition, "ent");
+    assert.equal(creds.username, "a@b.c");
+    const pro = Picker.normalizeCreds({
+      email: "a@b.c",
+      token: "t",
+      edition: "premium"
+    });
+    assert.equal(pro.edition, "pro");
   });
 });

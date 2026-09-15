@@ -1,15 +1,16 @@
 /**
  * Picker dashboard « Mots à surveiller ».
- * Jumeau visuel du picker PV : injecté sous #agilo-prompt-picker-anchor.
- * v1 : getWordBoostInfo2 + setWordBoostDefault2 au change (défaut compte).
+ * Ligne details sous le picker PV. Catalogue = fillSelect Mon compte.
+ * v1.1 : getWordBoostInfo2 + setWordBoostDefault2 au change (défaut compte).
  * Pas de boostId dans l’upload tant que Nico n’a pas le champ.
- * @version 1.0.0
+ * @version 1.1.0
  */
 (function (global) {
   "use strict";
 
-  var VERSION = "1.0.0";
+  var VERSION = "1.1.0";
   var API = "https://api.agilotext.com/api/v1";
+  var LAST_KEY = "wb2:lastThemeId";
   var booted = false;
   var loading = false;
 
@@ -35,27 +36,15 @@
     return "/app/" + profileSlugFromPath(pathname) + "/profile?tab=mots-cles";
   }
 
-  function themeStatus(item) {
-    if (!item) return "";
-    return String(item.wordboostStatus || item.status || item.boostStatus || "").toUpperCase();
-  }
-
-  function isSelectableTheme(item) {
-    var st = themeStatus(item);
-    if (!st) return true;
-    return st === "READY";
-  }
-
   function parseCatalog(payload) {
     var r = payload || {};
     var list = (r.boostNamesDTOList || []).map(function (x) {
       return {
         id: +x.boostId || 0,
-        name: String(x.boostName || "Sans nom"),
-        wordboostStatus: x.wordboostStatus || x.status || x.boostStatus || ""
+        name: String(x.boostName || "Sans nom")
       };
     }).filter(function (x) {
-      return x.id > 0 && isSelectableTheme(x);
+      return x.id > 0;
     });
     return {
       defaultId: +r.defaultBoostId || 0,
@@ -69,16 +58,43 @@
     return name;
   }
 
+  function pickCurrentId(catalog, lastId) {
+    var list = (catalog && catalog.list) || [];
+    var def = catalog && catalog.defaultId;
+    if (list.some(function (x) { return x.id === def; })) return def;
+    var last = +lastId || 0;
+    if (list.some(function (x) { return x.id === last; })) return last;
+    return list[0] ? list[0].id : 0;
+  }
+
+  function readLastId() {
+    try {
+      return +(global.localStorage && global.localStorage.getItem(LAST_KEY) || 0);
+    } catch (_e) {
+      return 0;
+    }
+  }
+
+  function writeLastId(id) {
+    try {
+      if (global.localStorage) global.localStorage.setItem(LAST_KEY, String(id));
+    } catch (_e) { /* ignore */ }
+  }
+
   function ensureStyle(doc) {
     if (!doc || !doc.head || doc.getElementById("agilo-wb-picker-style")) return;
     var style = doc.createElement("style");
     style.id = "agilo-wb-picker-style";
     style.textContent =
-      ".agilo-wb-picker .agilo-wb-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}" +
-      ".agilo-wb-picker .agilo-wb-pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;" +
-      "background:#e8eef6;color:#174a96;font-size:12px;line-height:1.4;white-space:nowrap;}" +
-      ".agilo-wb-picker .agilo-wb-pill[hidden]{display:none!important;}" +
-      ".agilo-wb-picker .agilo-wb-manage{white-space:nowrap;text-decoration:underline;color:inherit;}";
+      ".agilo-wb-picker{margin-top:8px;}" +
+      ".agilo-wb-picker .agilo-wb-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:nowrap;}" +
+      ".agilo-wb-picker .agilo-wb-details{flex:1;min-width:0;border:none;padding:0;}" +
+      ".agilo-wb-picker .agilo-wb-summary{display:flex;align-items:center;gap:10px;cursor:pointer;}" +
+      ".agilo-wb-picker .agilo-wb-current{font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
+      ".agilo-wb-picker .agilo-wb-row{display:flex;align-items:center;gap:12px;flex-wrap:nowrap;margin-top:8px;}" +
+      ".agilo-wb-picker .agilo-wb-row .custom-select{flex:1;min-width:0;}" +
+      ".agilo-wb-picker .agilo-wb-manage{white-space:nowrap;text-decoration:underline;color:inherit;flex-shrink:0;margin-top:2px;}" +
+      "@media (max-width:640px){.agilo-wb-picker .agilo-wb-head,.agilo-wb-picker .agilo-wb-row{flex-wrap:wrap;}}";
     doc.head.appendChild(style);
   }
 
@@ -94,29 +110,38 @@
     return node.parentNode || null;
   }
 
+  function innerHtml() {
+    return (
+      '<div id="agilo-wb-picker-anchor"></div>' +
+      '<div class="agilo-wb-head">' +
+      '<details class="agilo-wb-details">' +
+      '<summary class="agilo-wb-summary">' +
+      '<span class="text-size-small text-weight-bold">Mots à surveiller</span>' +
+      '<span class="agilo-wb-current" id="agilo-wb-current">Chargement…</span>' +
+      "</summary>" +
+      '<div class="agilo-wb-row">' +
+      '<select class="custom-select grey" id="agilo-wb-select" aria-label="Mots à surveiller"></select>' +
+      "</div></details>" +
+      '<a class="text-size-small agilo-wb-manage" id="agilo-wb-manage" href="#">Gérer</a>' +
+      "</div>"
+    );
+  }
+
   function injectBlock(doc) {
     if (!doc || !doc.createElement) return null;
+    ensureStyle(doc);
     var existing = doc.getElementById("agilo-wb-picker-anchor");
-    if (existing) return existing;
+    var wrap = existing && existing.closest ? existing.closest(".agilo-wb-picker") : null;
+    if (wrap) {
+      wrap.innerHTML = innerHtml();
+      return doc.getElementById("agilo-wb-picker-anchor");
+    }
     var after = findPvContainer(doc);
     if (!after || !after.parentNode) return null;
-    ensureStyle(doc);
-    var wrap = doc.createElement("div");
-    wrap.className = "select-container agilo-wb-picker";
+    wrap = doc.createElement("div");
+    wrap.className = "agilo-wb-picker";
     wrap.setAttribute("data-agilo-wb-picker", "1");
-    wrap.innerHTML =
-      '<div id="agilo-wb-picker-anchor"></div>' +
-      '<div class="custom-select-wrapper flex">' +
-      '<div class="wrapper-info">' +
-      '<div class="text-size-small text-weight-bold">Mots à surveiller</div>' +
-      "</div>" +
-      '<div class="wrapper-select agilo-wb-row">' +
-      '<select class="custom-select grey" id="agilo-wb-select" aria-label="Mots à surveiller">' +
-      '<option value="">Chargement…</option>' +
-      "</select>" +
-      '<span class="agilo-wb-pill" id="agilo-wb-pill" hidden>Par défaut</span>' +
-      '<a class="text-size-small agilo-wb-manage" id="agilo-wb-manage" href="#">Gérer</a>' +
-      "</div></div>";
+    wrap.innerHTML = innerHtml();
     after.parentNode.insertBefore(wrap, after.nextSibling);
     return doc.getElementById("agilo-wb-picker-anchor");
   }
@@ -167,6 +192,7 @@
   }
 
   function pickEdition() {
+    var path = (global.location && global.location.pathname) || "";
     if (typeof document !== "undefined") {
       var named = document.querySelector('[name="edition"]');
       var raw = named && named.value ? String(named.value).toLowerCase() : "";
@@ -178,13 +204,25 @@
       var w = String(global.window.edition).toLowerCase();
       if (w === "free" || w === "pro" || w === "ent") return w;
     }
-    var path = (global.location && global.location.pathname) || "";
     return editionFromPath(path);
   }
 
+  function normalizeCreds(creds) {
+    var email = String((creds && (creds.email || creds.username)) || pickEmail()).trim();
+    var token = String((creds && creds.token) || global.globalToken || "").trim();
+    var ed = String((creds && creds.edition) || "").toLowerCase();
+    if (ed === "premium") ed = "pro";
+    if (ed === "business" || ed === "enterprise") ed = "ent";
+    if (ed !== "free" && ed !== "pro" && ed !== "ent") ed = pickEdition();
+    return { email: email, username: email, token: token, edition: ed };
+  }
+
   function waitForCreds() {
+    var done = function (creds) {
+      return normalizeCreds(creds);
+    };
     if (global.AgiloLibraryApi && typeof global.AgiloLibraryApi.waitForCreds === "function") {
-      return global.AgiloLibraryApi.waitForCreds();
+      return global.AgiloLibraryApi.waitForCreds().then(done);
     }
     return new Promise(function (resolve, reject) {
       var tries = 0;
@@ -192,7 +230,7 @@
         var email = pickEmail();
         var token = String(global.globalToken || "").trim();
         if (email && token) {
-          resolve({ email: email, username: email, token: token, edition: pickEdition() });
+          resolve(done({ email: email, token: token, edition: pickEdition() }));
           return;
         }
         tries += 1;
@@ -206,23 +244,17 @@
     });
   }
 
-  function fillSelect(select, catalog) {
+  function fillSelect(select, catalog, currentId) {
     if (!select) return;
     select.innerHTML = "";
     if (!catalog.list.length) {
-      var empty = document.createElement("option");
-      empty.value = "";
-      empty.textContent = "Aucun thème";
-      empty.disabled = true;
-      empty.selected = true;
-      select.appendChild(empty);
+      select.hidden = true;
       select.disabled = true;
       return;
     }
+    select.hidden = false;
     select.disabled = false;
-    var pick = catalog.list.some(function (x) { return x.id === catalog.defaultId; })
-      ? catalog.defaultId
-      : catalog.list[0].id;
+    var pick = currentId || pickCurrentId(catalog, 0);
     catalog.list.forEach(function (item) {
       var opt = document.createElement("option");
       opt.value = String(item.id);
@@ -230,13 +262,18 @@
       if (item.id === pick) opt.selected = true;
       select.appendChild(opt);
     });
+    if (!select.value && catalog.list[0]) select.value = String(catalog.list[0].id);
   }
 
-  function updatePill(doc, catalog, selectedId) {
-    var pill = doc.getElementById("agilo-wb-pill");
-    if (!pill) return;
-    if (selectedId && selectedId === catalog.defaultId) pill.removeAttribute("hidden");
-    else pill.setAttribute("hidden", "");
+  function setSummary(doc, catalog, selectedId) {
+    var current = doc.getElementById("agilo-wb-current");
+    if (!current) return;
+    if (!catalog.list.length) {
+      current.textContent = "Aucun thème";
+      return;
+    }
+    var item = catalog.list.filter(function (x) { return x.id === selectedId; })[0] || catalog.list[0];
+    current.textContent = optionLabel(item, catalog.defaultId);
   }
 
   function bind(doc, creds) {
@@ -249,6 +286,11 @@
     var catalog = { defaultId: 0, list: [] };
     var busy = false;
 
+    function paint(selectedId) {
+      fillSelect(select, catalog, selectedId);
+      setSummary(doc, catalog, selectedId || pickCurrentId(catalog, readLastId()));
+    }
+
     function load() {
       return post("getWordBoostInfo2", {
         username: creds.email || creds.username,
@@ -257,10 +299,10 @@
       }).then(function (r) {
         if (!r || r.status !== "OK") throw new Error((r && r.errorMessage) || "Catalogue indisponible.");
         catalog = parseCatalog(r);
-        fillSelect(select, catalog);
-        updatePill(doc, catalog, +select.value || 0);
+        paint(pickCurrentId(catalog, readLastId()));
       }).catch(function (err) {
-        fillSelect(select, { defaultId: 0, list: [] });
+        catalog = { defaultId: 0, list: [] };
+        paint(0);
         toast((err && err.message) || "Impossible de charger les thèmes.");
       });
     }
@@ -269,7 +311,8 @@
       var boostId = +select.value || 0;
       if (!boostId || busy) return;
       if (boostId === catalog.defaultId) {
-        updatePill(doc, catalog, boostId);
+        writeLastId(boostId);
+        setSummary(doc, catalog, boostId);
         return;
       }
       busy = true;
@@ -282,13 +325,12 @@
       }).then(function (r) {
         if (!r || r.status !== "OK") throw new Error((r && r.errorMessage) || "Défaut non enregistré.");
         catalog.defaultId = boostId;
-        fillSelect(select, catalog);
-        updatePill(doc, catalog, boostId);
+        writeLastId(boostId);
+        paint(boostId);
         toast("Thème par défaut mis à jour.");
       }).catch(function (err) {
         toast((err && err.message) || "Impossible d’enregistrer le thème.");
-        fillSelect(select, catalog);
-        updatePill(doc, catalog, catalog.defaultId);
+        paint(pickCurrentId(catalog, readLastId()));
       }).then(function () {
         busy = false;
         select.disabled = !catalog.list.length;
@@ -347,12 +389,14 @@
 
   global.AgiloWbPicker = {
     VERSION: VERSION,
+    LAST_KEY: LAST_KEY,
     editionFromPath: editionFromPath,
     profileSlugFromPath: profileSlugFromPath,
     profileManageUrl: profileManageUrl,
     parseCatalog: parseCatalog,
-    isSelectableTheme: isSelectableTheme,
+    pickCurrentId: pickCurrentId,
     optionLabel: optionLabel,
+    normalizeCreds: normalizeCreds,
     injectBlock: injectBlock,
     boot: boot
   };

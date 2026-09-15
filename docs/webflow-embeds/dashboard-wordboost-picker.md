@@ -4,20 +4,20 @@
 **Staging seulement :** `https://agilotext-test.webflow.io`  
 **Prod www :** ne pas pin tant que Magalie n’a pas validé le visuel.
 
-Le lexique existe déjà dans Mon compte (`wordboost2.js`, `setWordBoostDefault2`). Le dashboard ne le montrait pas au drop. Ce widget ajoute un 2e picker, jumeau visuel du picker PV, **toujours visible** (le lexique s’applique même sans CR).
+Le lexique existe déjà dans Mon compte (`wordboost2.js`, `setWordBoostDefault2`). Le dashboard affiche une **ligne details** sous le picker PV : le nom du défaut reste visible, le select s’ouvre à la flèche.
 
 ## Ce que ça fait
 
 - Ancre `#agilo-wb-picker-anchor` injectée sous le bloc PV (`#agilo-prompt-picker-anchor`).
-- Libellé **Mots à surveiller**, select des thèmes, pastille **Par défaut**, lien **Gérer** vers `/app/{free|premium|business}/profile?tab=mots-cles`.
-- Charge `getWordBoostInfo2`, enregistre `setWordBoostDefault2` au change (même contrat que le bouton Définir défaut du compte).
-- **Pas** de 6e interrupteur orange, **pas** de chips / CSV sur le tableau de bord.
-- **Pas** de `boostId` dans le `FormData` upload tant que Nico n’a pas confirmé le champ. L’upload continue d’appliquer le défaut compte.
+- Summary : **Mots à surveiller** + nom `(défaut)`. Ouvert : `select.custom-select.grey` (même contrat que `#wb2-select`). Lien **Gérer** toujours visible, y compris liste vide.
+- Catalogue 1:1 `fillSelect` : toute `boostNamesDTOList`, pick défaut puis `wb2:lastThemeId` puis premier. `setWordBoostDefault2` au change.
+- **Pas** de 6e interrupteur orange, **pas** de chips / CSV, **pas** sous « Joindre des documents ».
+- **Pas** de `boostId` dans le `FormData` upload tant que Nico n’a pas confirmé le champ.
 
 ## Fichier
 
 ```
-scripts/pages/dashboard/agilo-wb-picker.js   (1.0.0)
+scripts/pages/dashboard/agilo-wb-picker.js   (1.1.0)
 ```
 
 Ne pas coller `wordboost2.js` dans le dashboard.
