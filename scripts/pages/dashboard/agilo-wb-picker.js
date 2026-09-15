@@ -1,16 +1,16 @@
 /**
  * Picker dashboard « Mots à surveiller ».
- * Ligne details muted sous le picker PV. Catalogue = fillSelect Mon compte.
- * v1.1.1 : pas de Gérer, pas de classes Webflow, hidden si vide / erreur.
- * @version 1.1.1
+ * Pro/Business : ligne details muted. Free : ligne verrouillée + AgiloGate.
+ * @version 1.2.0
  */
 (function (global) {
   "use strict";
 
-  var VERSION = "1.1.1";
+  var VERSION = "1.2.0";
   var API = "https://api.agilotext.com/api/v1";
   var LAST_KEY = "wb2:lastThemeId";
-  var STYLE_ID = "agilo-wb-picker-style-111";
+  var STYLE_ID = "agilo-wb-picker-style-120";
+  var LOCK_ALERT = "Les mots à surveiller sont réservés aux offres Pro et Business.";
   var booted = false;
   var loading = false;
 
@@ -81,6 +81,20 @@
     } catch (_e) { /* ignore */ }
   }
 
+  function shouldLock(edition) {
+    return String(edition || "").toLowerCase() === "free";
+  }
+
+  function showUpgrade() {
+    if (global.AgiloGate && typeof global.AgiloGate.showUpgrade === "function") {
+      global.AgiloGate.showUpgrade("pro", "Mots à surveiller");
+      return;
+    }
+    if (typeof global.alert === "function") {
+      global.alert(LOCK_ALERT);
+    }
+  }
+
   function shouldReveal(ok, catalog) {
     return !!(ok && catalog && catalog.list && catalog.list.length);
   }
@@ -97,8 +111,12 @@
 
   function ensureStyle(doc) {
     if (!doc || !doc.head) return;
-    var stale = doc.getElementById("agilo-wb-picker-style");
-    if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+    var staleIds = ["agilo-wb-picker-style", "agilo-wb-picker-style-111"];
+    var i;
+    for (i = 0; i < staleIds.length; i += 1) {
+      var stale = doc.getElementById(staleIds[i]);
+      if (stale && stale.parentNode) stale.parentNode.removeChild(stale);
+    }
     var style = doc.getElementById(STYLE_ID);
     if (!style) {
       style = doc.createElement("style");
@@ -121,7 +139,11 @@
       "text-overflow:ellipsis;white-space:nowrap;}" +
       ".agilo-wb-picker .agilo-wb-chev{font-size:0.7rem;opacity:0.7;}" +
       ".agilo-wb-picker .agilo-wb-row{display:flex;justify-content:center;margin-top:8px;}" +
-      ".agilo-wb-picker .agilo-wb-row .custom-select{max-width:280px;width:100%;flex:none;}";
+      ".agilo-wb-picker .agilo-wb-row .custom-select{max-width:280px;width:100%;flex:none;}" +
+      ".agilo-wb-picker .agilo-wb-lock{display:inline-flex;align-items:center;justify-content:center;" +
+      "gap:6px;margin:0;padding:0;border:0;background:none;cursor:pointer;font:inherit;" +
+      "font-size:0.82rem;font-weight:400;color:#6b7280;line-height:1.3;}" +
+      ".agilo-wb-picker .agilo-wb-lock:hover{color:#4b5563;}";
   }
 
   function findPvContainer(doc) {
@@ -134,6 +156,18 @@
       if (box) return box;
     }
     return node.parentNode || null;
+  }
+
+  function innerHtmlLocked() {
+    return (
+      '<div id="agilo-wb-picker-anchor"></div>' +
+      '<div class="agilo-wb-head">' +
+      '<button type="button" class="agilo-wb-lock" id="agilo-wb-lock">' +
+      '<span class="agilo-wb-label">Mots à surveiller</span>' +
+      '<span class="agilo-wb-sep" aria-hidden="true"> · </span>' +
+      '<span class="agilo-wb-current">réservé Pro et Business</span>' +
+      "</button></div>"
+    );
   }
 
   function innerHtml() {
@@ -154,14 +188,15 @@
     );
   }
 
-  function injectBlock(doc) {
+  function injectBlock(doc, locked) {
     if (!doc || !doc.createElement) return null;
     ensureStyle(doc);
+    var html = locked ? innerHtmlLocked() : innerHtml();
     var existing = doc.getElementById("agilo-wb-picker-anchor");
     var wrap = existing && existing.closest ? existing.closest(".agilo-wb-picker") : null;
     if (wrap) {
-      wrap.innerHTML = innerHtml();
-      wrap.hidden = true;
+      wrap.innerHTML = html;
+      wrap.hidden = !locked;
       return doc.getElementById("agilo-wb-picker-anchor");
     }
     var after = findPvContainer(doc);
@@ -169,8 +204,8 @@
     wrap = doc.createElement("div");
     wrap.className = "agilo-wb-picker";
     wrap.setAttribute("data-agilo-wb-picker", "1");
-    wrap.hidden = true;
-    wrap.innerHTML = innerHtml();
+    wrap.hidden = !locked;
+    wrap.innerHTML = html;
     after.parentNode.insertBefore(wrap, after.nextSibling);
     return doc.getElementById("agilo-wb-picker-anchor");
   }
@@ -305,6 +340,15 @@
     current.textContent = optionLabel(item, catalog.defaultId);
   }
 
+  function bindLock(doc) {
+    var btn = doc.getElementById("agilo-wb-lock");
+    if (!btn) return;
+    btn.addEventListener("click", function (e) {
+      if (e) e.preventDefault();
+      showUpgrade();
+    });
+  }
+
   function bind(doc, creds) {
     var select = doc.getElementById("agilo-wb-select");
     var wrap = findWrap(doc);
@@ -374,9 +418,16 @@
     if (booted || loading) return;
     if (!findPvContainer(document)) return;
     loading = true;
-    var anchor = injectBlock(document);
+    var locked = shouldLock(pickEdition());
+    var anchor = injectBlock(document, locked);
     if (!anchor) {
       loading = false;
+      return;
+    }
+    if (locked) {
+      booted = true;
+      loading = false;
+      bindLock(document);
       return;
     }
     waitForCreds().then(function (creds) {
@@ -428,6 +479,10 @@
     pickCurrentId: pickCurrentId,
     optionLabel: optionLabel,
     shouldReveal: shouldReveal,
+    shouldLock: shouldLock,
+    innerHtmlLocked: innerHtmlLocked,
+    showUpgrade: showUpgrade,
+    LOCK_ALERT: LOCK_ALERT,
     normalizeCreds: normalizeCreds,
     injectBlock: injectBlock,
     boot: boot

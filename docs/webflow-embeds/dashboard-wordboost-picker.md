@@ -9,15 +9,16 @@ Le lexique existe déjà dans Mon compte (`wordboost2.js`, `setWordBoostDefault2
 ## Ce que ça fait
 
 - Ancre `#agilo-wb-picker-anchor` injectée sous le bloc PV (`#agilo-prompt-picker-anchor`).
-- Summary : `Mots à surveiller · nom (défaut) ▾`. Ouvert : `select.custom-select.grey` max 280px. **Pas** de lien Gérer.
-- Catalogue 1:1 `fillSelect`. `setWordBoostDefault2` au change. Liste vide OK : widget caché. Erreur API : toast, widget caché.
+- Summary Pro/Business : `Mots à surveiller · nom (défaut) ▾`. Ouvert : select max 280px. **Pas** de lien Gérer.
+- Free : même ligne, texte `réservé Pro et Business`. Clic = `AgiloGate.showUpgrade('pro', 'Mots à surveiller')` (alert fallback). Pas de select, pas d’appel API.
+- Catalogue 1:1 `fillSelect` (Pro/Business). `setWordBoostDefault2` au change. Liste vide OK : widget caché. Erreur API : toast, widget caché.
 - **Pas** de 6e interrupteur orange, **pas** de chips / CSV, **pas** sous « Joindre des documents ».
 - **Pas** de `boostId` dans le `FormData` upload tant que Nico n’a pas confirmé le champ.
 
 ## Fichier
 
 ```
-scripts/pages/dashboard/agilo-wb-picker.js   (1.1.1)
+scripts/pages/dashboard/agilo-wb-picker.js   (1.2.0)
 ```
 
 Ne pas coller `wordboost2.js` dans le dashboard.
@@ -34,10 +35,9 @@ Le JS injecte `#agilo-wb-picker-anchor` sous le bloc PV. Staging only.
 
 ## Recette Magalie CSE
 
-1. Dashboard Business staging, hard refresh : ligne petite, pas gras, `nom (défaut)`, pas de Gérer.
-2. Flèche : select compact. Change = défaut compte.
-3. Compte sans thème : rien d’affiché. Erreur API : toast, pas de ligne « Aucun thème ».
-4. Le picker reste visible si le toggle CR/PV est off (s’il y a au moins un thème).
+1. Dashboard Business / Pro staging, hard refresh : ligne petite, select, change = défaut.
+2. Dashboard Free staging : ligne `réservé Pro et Business`, clic = popup upgrade, pas de select.
+3. Compte Pro/Business sans thème : rien d’affiché. Erreur API : toast.
 
 Inconvénient v1 : changer le select met à jour le défaut compte (CSE le matin, lexique générique l’après-midi). Suffisant pour une semaine CSE, pas pour deux lexiques le même matin.
 

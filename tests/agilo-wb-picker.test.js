@@ -11,9 +11,9 @@ require("../scripts/pages/dashboard/agilo-wb-picker.js");
 const Picker = global.AgiloWbPicker;
 
 describe("agilo-wb-picker", () => {
-  it("expose la version 1.1.1", () => {
-    assert.equal(Picker.VERSION, "1.1.1");
-    assert.equal(Picker.STYLE_ID, "agilo-wb-picker-style-111");
+  it("expose la version 1.2.0", () => {
+    assert.equal(Picker.VERSION, "1.2.0");
+    assert.equal(Picker.STYLE_ID, "agilo-wb-picker-style-120");
   });
 
   it("déduit l’édition et le slug profil depuis le chemin", () => {
@@ -107,5 +107,15 @@ describe("agilo-wb-picker", () => {
     assert.equal(Picker.shouldReveal(true, empty), false);
     assert.equal(Picker.shouldReveal(false, filled), false);
     assert.equal(Picker.shouldReveal(false, empty), false);
+  });
+
+  it("verrouille Free et laisse Pro/Business ouverts", () => {
+    assert.equal(Picker.shouldLock("free"), true);
+    assert.equal(Picker.shouldLock("pro"), false);
+    assert.equal(Picker.shouldLock("ent"), false);
+    const html = Picker.innerHtmlLocked();
+    assert.equal(html.indexOf("agilo-wb-select") === -1, true);
+    assert.equal(html.indexOf('id="agilo-wb-lock"') !== -1, true);
+    assert.equal(html.indexOf("réservé Pro et Business") !== -1, true);
   });
 });
