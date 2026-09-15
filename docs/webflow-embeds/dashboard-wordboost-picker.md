@@ -24,13 +24,13 @@ Ne pas coller `wordboost2.js` dans le dashboard.
 
 ## Embed (après le picker PV)
 
-Même HtmlEmbed que `library-picker.js`, **une ligne de plus** après le SHA du picker PV. Remplacer `SHA` par le commit après push.
+Pin **footer custom code** (les 3 dashboards), une ligne après les scripts upload / FilePond. SHA `89afe3b1`.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/pages/dashboard/agilo-wb-picker.js?v=SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@89afe3b1/scripts/pages/dashboard/agilo-wb-picker.js?v=89afe3b1"></script>
 ```
 
-Répéter sur les 3 dashboards (Business / Pro / Free). Staging only.
+Le JS injecte `#agilo-wb-picker-anchor` sous le bloc PV. Staging only.
 
 ## Recette Magalie CSE
 
@@ -45,6 +45,8 @@ Inconvénient v1 : changer le select met à jour le défaut compte (CSE le matin
 
 | Surface | Pin jsDelivr | Où |
 |---------|--------------|-----|
-| Dashboard Business / Pro / Free | `SHA` (après push) | HtmlEmbed picker PV, staging `agilotext-test` |
+| Dashboard Business `6815bee5a9c0b57da183557c` | `89afe3b1` | Footer custom code, staging `agilotext-test` |
+| Dashboard Pro `6815bee5a9c0b57da183550e` | `89afe3b1` | Idem |
+| Dashboard Free `6815bee5a9c0b57da183550c` | `89afe3b1` | Idem |
 
 Ne jamais `sites_publish` www sans OK Florian.
