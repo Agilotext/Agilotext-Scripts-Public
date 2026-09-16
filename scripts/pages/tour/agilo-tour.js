@@ -1,6 +1,7 @@
-/* agilo-tour.js v2.0.1
- * Driver.js 1.3 onboarding (agilo_tour_state_v24).
+/* agilo-tour.js v2.1.0
+ * Driver.js 1.3 onboarding (agilo_tour_state_v25).
  * Premier passage : 8 étapes + stop C’est bon / Continuer.
+ * Suite : éditeur (cibles visibles), bibliothèque, Support, Agiloshield optionnel.
  * Copy : 4 seaux (default, public, dirigeant, equipe) depuis le DOM Memberstack.
  * Archive v23 : scripts/pages/tour/archive/agilo-tour-v23-1.0.0.js (SHA 7d5a786b).
  */
@@ -9,12 +10,12 @@
 
   if (window.__AGILO_TOUR_BOOTED__) return;
   window.__AGILO_TOUR_BOOTED__ = true;
-  window.__AGILO_TOUR_VERSION__ = '2.0.1';
+  window.__AGILO_TOUR_VERSION__ = '2.1.0';
 
   /* ========== CONFIG ========== */
-  var STORAGE_KEY     = 'agilo_tour_state_v24';
-  var FIRST_RUN_KEY   = 'agilo_tour_first_seen_v24';
-  var COMPLETED_KEY   = 'agilo_tour_completed_v24';
+  var STORAGE_KEY     = 'agilo_tour_state_v25';
+  var FIRST_RUN_KEY   = 'agilo_tour_first_seen_v25';
+  var COMPLETED_KEY   = 'agilo_tour_completed_v25';
 
   var LAUNCH_GUARD = { starting:false, driven:false, route:null };
   function guardStart(route){
@@ -41,19 +42,24 @@
     'wb-picker': '[data-tour="wb-picker"], #agilo-wb-picker-anchor, .agilo-wb-picker',
     submit: '[data-tour="submit"], #submit-button',
     'share-job': '[data-tour="share-job"], .agilo-row-share, #shareLink',
-    'download-transcript': '[data-tour="download-transcript"], #exportBtn, [data-format="docx"]',
-    audio: '[data-tour="audio"], #audioPlayer, audio, .ed-audio'
+    'download-transcript': '[data-tour="download-transcript"], .ed-actions',
+    audio: '[data-tour="audio"], #agilo-audio-wrap, #ag-editor-audio-row, #agilo-play',
+    save: '[data-tour="save"], button[data-action="save-transcript"], button.button.save',
+    'ed-tabs': '[data-tour="ed-tabs"], nav.ed-tabs, .ed-tabs',
+    'lib-tabs': '[data-tour="lib-tabs"], .agilo-lib-tabs, .agilo-lib-tab[data-tab]',
+    'lib-create': '[data-tour="lib-create"], [data-open-wizard]'
   };
   var RESUME_GRACE_MS = 30000;
   var RETRY_TOTAL_MS  = 20000;
   var FIRST_STOP_INDEX = 7;
 
-  var ROUTES = ['/dashboard','/mes-transcripts','/profile','/dashboard/anonymiser','/support','/editor'];
+  var ROUTES = ['/dashboard','/mes-transcripts','/profile','/dashboard/anonymiser','/support','/editor','/library'];
   var SYN = {
     '/mes-transcripts-business': '/mes-transcripts',
     '/mon-compte': '/profile',
     '/anonymiser': '/dashboard/anonymiser',
-    '/editor': '/editor'
+    '/editor': '/editor',
+    '/bibliotheque': '/library'
   };
 
   /* ========== UI ========== */
@@ -148,14 +154,53 @@
   }
 
   /* ========== DOM utils ========== */
+  function isHighlightable(el){
+    if (!el || el.nodeType !== 1) return false;
+    try {
+      var st = window.getComputedStyle(el);
+      if (!st) return false;
+      if (st.display === 'none' || st.visibility === 'hidden') return false;
+      if (parseFloat(st.opacity) === 0) return false;
+      var r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) return false;
+      return true;
+    } catch (_) { return false; }
+  }
+  function firstHighlightable(sel){
+    var nodes = document.querySelectorAll(sel);
+    for (var i=0;i<nodes.length;i++){
+      if (isHighlightable(nodes[i])) return nodes[i];
+    }
+    return null;
+  }
   function waitFor(sel, maxMs){
-    var t0=Date.now(), el=document.querySelector(sel); if (el) return Promise.resolve(el);
+    var t0 = Date.now();
+    var el = firstHighlightable(sel);
+    if (el) return Promise.resolve(el);
     return new Promise(function(res){ (function loop(){
-      var el=document.querySelector(sel);
-      if (el) return res(el);
-      if (Date.now()-t0 >= (+maxMs||WAIT_MAX_MS)) return res(null);
+      var found = firstHighlightable(sel);
+      if (found) return res(found);
+      if (Date.now() - t0 >= (+maxMs || WAIT_MAX_MS)) return res(null);
       setTimeout(loop, POLL_MS);
-    })();});
+    })(); });
+  }
+  function ensureTranscriptTab(){
+    return new Promise(function(resolve){
+      if (typeof window.ensureTab === 'function') {
+        try { window.ensureTab('transcript'); } catch (_) {}
+      } else {
+        var tab = document.querySelector('#tab-transcript');
+        if (tab && tab.getAttribute('aria-selected') !== 'true') {
+          try { tab.click(); } catch (_) {}
+        }
+      }
+      requestAnimationFrame(function(){
+        requestAnimationFrame(function(){ setTimeout(resolve, 100); });
+      });
+    });
+  }
+  function canShowAgiloshield(){
+    return !/\/app\/free\b/.test(location.pathname) && !!document.querySelector('[data-tour="nav-anonymize"]');
   }
   function ensureCenterAnchor(){
     var id='agilo-tour-center-anchor', el=document.getElementById(id);
@@ -175,8 +220,12 @@
       ['prompt-picker', '#agilo-prompt-picker-anchor, .agilo-prompt-picker'],
       ['wb-picker', '#agilo-wb-picker-anchor, .agilo-wb-picker'],
       ['share-job', '.agilo-row-share, #shareLink'],
-      ['download-transcript', '#exportBtn, [data-tour="download-transcript"]'],
-      ['file', '#panel-file, .source-tabs']
+      ['download-transcript', '.ed-actions'],
+      ['file', '#panel-file, .source-tabs'],
+      ['audio', '#agilo-audio-wrap, #ag-editor-audio-row'],
+      ['save', 'button[data-action="save-transcript"]'],
+      ['lib-tabs', '.agilo-lib-tabs'],
+      ['lib-create', '[data-open-wizard]']
     ];
     pairs.forEach(function(pair){
       var el = document.querySelector(pair[1]);
@@ -265,18 +314,19 @@
       'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi. C’est lui qui structure le livrable.' },
       'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms et sigles. Sur l’offre Free, le choix peut être verrouillé.' },
       submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le résultat arrive par e-mail et dans Mes fichiers.' },
-      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon clôt le guide.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon ferme le guide.' },
       'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez un fichier pour relire, exporter ou partager.' },
       transcriptsEmpty: { title:'Mes fichiers', desc:'Après votre premier envoi, vos fichiers apparaissent ici.' },
       'share-job': { title:'Partager un lien', desc:'Partagez un lien de lecture, sans envoyer le fichier en pièce jointe.' },
       'editor-open': { title:'Ouvrir l’éditeur', desc:'Ouvrez le document dans l’éditeur pour relire et exporter.' },
       'ed-tabs': { title:'Trois onglets', desc:'Transcription, compte rendu, conversation : trois onglets sur le même fichier.' },
       audio: { title:'Réécouter', desc:'Réécoutez un passage. Un clic sur un timecode cale la lecture.' },
-      'download-transcript': { title:'Exporter en Word', desc:'Exportez en Word pour le dossier ou l’envoi interne.' },
+      'download-transcript': { title:'Télécharger', desc:'Téléchargez la transcription ou le compte rendu. Word est dans ces menus.' },
       save: { title:'Enregistrer', desc:'Enregistrez vos corrections. La version reste dans Mes fichiers.' },
-      'nav-library': { title:'Bibliothèque', desc:'La bibliothèque range vos modèles et lexiques, pour les réutiliser.' },
+      'lib-tabs': { title:'Bibliothèque', desc:'Ici vous trouvez les modèles Agilotext, vos copies, et les épinglés.' },
+      'lib-create': { title:'Créer un modèle', desc:'Créez un modèle en quelques questions, pour le réutiliser à l’envoi.' },
       anonymize: { title:'Données personnelles', desc:'Pour un document déjà écrit, Agiloshield masque les données personnelles avant partage.' },
-      'nav-support': { title:'Support', desc:'Le support est ici si un envoi bloque. Merci d’avoir suivi le guide.' }
+      'nav-support': { title:'Support', desc:'Le support est ici si un envoi bloque. Terminer ferme le guide. Continuer montre Agiloshield.' }
     },
     public: {
       welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext prépare vos PV et comptes rendus pour le dossier (élus, sigles, Word). Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier audio.'; } },
@@ -286,9 +336,9 @@
       'prompt-picker': { title:'Modèle de PV', desc:'Choisissez le modèle de PV avant l’envoi, pour un dossier Word exploitable.' },
       'wb-picker': { title:'Lexique (élus, sigles)', desc:'Le lexique corrige noms d’élus et sigles. Sur l’offre Free, le choix peut être verrouillé.' },
       submit: { title:'Envoyer pour le dossier', desc:'Envoyez le fichier. Le PV arrive par e-mail et dans Mes fichiers, prêt pour Word.' },
-      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier audio de séance. Continuer montre Mes fichiers (partage, Word). C’est bon clôt le guide.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier audio de séance. Continuer montre Mes fichiers (partage, Word). C’est bon ferme le guide.' },
       'transcripts-table': { title:'Mes fichiers', desc:'Retrouvez le PV, ouvrez-le, exportez-le en Word ou partagez-le.' },
-      'download-transcript': { title:'Word pour le dossier', desc:'Exportez en Word pour le dossier de séance.' }
+      'download-transcript': { title:'Télécharger', desc:'Téléchargez la transcription ou le PV. Word est dans ces menus.' }
     },
     dirigeant: {
       welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext transforme vos réunions en décisions et actions à partager. Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier fichier.'; } },
@@ -298,9 +348,9 @@
       'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi, pour un compte rendu prêt à partager au COMEX.' },
       'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms propres et acronymes métier. Sur l’offre Free, le choix peut être verrouillé.' },
       submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le compte rendu arrive par e-mail et dans Mes fichiers, prêt à partager.' },
-      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’export. C’est bon clôt le guide.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’export. C’est bon ferme le guide.' },
       'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez le compte rendu, partagez-le ou exportez-le pour le COMEX.' },
-      'download-transcript': { title:'Exporter en Word', desc:'Exportez en Word pour le partage au COMEX.' }
+      'download-transcript': { title:'Télécharger', desc:'Téléchargez le compte rendu. Word est dans ces menus, prêt à partager au COMEX.' }
     },
     equipe: {
       welcome: { title:'Bienvenue sur Agilotext', desc:function(c){ return greet(c)+'Agilotext transforme vos réunions d’équipe en comptes rendus clairs, avec le qui fait quoi. Traitement en France et dans l’UE. Cliquez sur Suivant pour envoyer un premier fichier.'; } },
@@ -310,7 +360,7 @@
       'prompt-picker': { title:'Choisir un modèle', desc:'Choisissez le modèle avant l’envoi, pour un compte rendu d’équipe lisible.' },
       'wb-picker': { title:'Lexique', desc:'Le lexique corrige noms d’équipe et sigles internes. Sur l’offre Free, le choix peut être verrouillé.' },
       submit: { title:'Envoyer le fichier', desc:'Envoyez le fichier. Le compte rendu arrive par e-mail et dans Mes fichiers.' },
-      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon clôt le guide.' },
+      stop: { title:'C’est bon ?', desc:'Vous pouvez envoyer un premier fichier. Continuer montre Mes fichiers et l’éditeur. C’est bon ferme le guide.' },
       'transcripts-table': { title:'Mes fichiers', desc:'Ouvrez le compte rendu d’équipe pour relire, partager ou exporter.' }
     }
   };
@@ -377,11 +427,13 @@
     add('/editor','ed-tabs','ed-tabs','bottom','center');
     add('/editor','audio','audio','top','center');
     add('/editor','download-transcript','download-transcript','bottom','center');
-    add('/editor','save','save','bottom','center','/dashboard');
+    add('/editor','save','save','bottom','center','/library');
 
-    add('/dashboard','nav-library','nav-library','right','center');
-    add('/dashboard/anonymiser','anonymize','anonymize','top','center','/dashboard');
-    add('/dashboard','nav-support','nav-support','right','center');
+    add('/library','lib-tabs','lib-tabs','top','center');
+    add('/library','lib-create','lib-create','bottom','center','/dashboard');
+
+    add('/dashboard','nav-support','nav-support','right','center', null, { stop:true });
+    add('/dashboard/anonymiser','anonymize','anonymize','top','center');
 
     for (var i=0;i<b.length;i++) b[i]._gIndex=i;
     return b;
@@ -450,8 +502,12 @@
   function buildStepsForRoute(route, absoluteIndex){
     stampStableHooks();
     var defs = BLUEPRINT.filter(function(s){ return s.route===route; });
-    if (route === '/dashboard' && (typeof absoluteIndex !== 'number' || absoluteIndex <= FIRST_STOP_INDEX)) {
-      defs = defs.filter(function(s){ return s._gIndex <= FIRST_STOP_INDEX; });
+    if (route === '/dashboard') {
+      if (typeof absoluteIndex !== 'number' || absoluteIndex <= FIRST_STOP_INDEX) {
+        defs = defs.filter(function(s){ return s._gIndex <= FIRST_STOP_INDEX; });
+      } else {
+        defs = defs.filter(function(s){ return s._gIndex > FIRST_STOP_INDEX; });
+      }
     }
     var promises = defs.map(function(s){
       var desc = s.desc;
@@ -464,9 +520,8 @@
         __gIndex:s._gIndex, __nav:s.navigateTo||null, __center:!!s.fallbackCenter, __stop:!!s.stop,
         padding: s.fallbackCenter ? remPx(CENTER_PAD_REM) : undefined
       };
-      if (s.key==='nav-library') {
-        var canAnon = !/\/app\/free\b/.test(location.pathname) && !!document.querySelector('[data-tour="nav-anonymize"]');
-        step.__nav = canAnon ? '/dashboard/anonymiser' : null;
+      if (s.key==='nav-support' && canShowAgiloshield()) {
+        step.__nav = '/dashboard/anonymiser';
       }
       if (s.skipIfNoJob && !hasOpenableJob()) {
         step.__skip=true;
@@ -475,15 +530,19 @@
       if (s.key){
         var sel = (KEY_SELECTORS[s.key] || ('[data-tour="'+s.key+'"]'));
         var waitMs = (s.key==='anonymize' || s.key==='anon-historique') ? ANON_WAIT_MS : WAIT_MAX_MS;
-        return waitFor(sel, waitMs).then(function(el){
-          if (!el){
-            if (s.fallbackCenter || s.navigateTo){ step.element=ensureCenterAnchor(); step.__center=true; }
-            else { step.__skip=true; }
-          } else {
-            step.element=el;
-            if (!el.getAttribute('data-tour') && s.key) el.setAttribute('data-tour', s.key);
-          }
-          return step;
+        var needsTab = (s.key==='audio' || s.key==='download-transcript' || s.key==='save');
+        var prep = needsTab ? ensureTranscriptTab() : Promise.resolve();
+        return prep.then(function(){
+          return waitFor(sel, waitMs).then(function(el){
+            if (!el){
+              if (s.fallbackCenter){ step.element=ensureCenterAnchor(); step.__center=true; }
+              else { step.__skip=true; }
+            } else {
+              step.element=el;
+              if (!el.getAttribute('data-tour') && s.key) el.setAttribute('data-tour', s.key);
+            }
+            return step;
+          });
         });
       } else if (s.fallbackCenter){
         step.element=ensureCenterAnchor(); step.__center=true; return Promise.resolve(step);
@@ -492,7 +551,12 @@
       }
     });
     return Promise.all(promises).then(function(arr){
+      var skippedNav = null;
+      arr.forEach(function(x){ if (x.__skip && x.__nav) skippedNav = x.__nav; });
       var steps = arr.filter(function(x){return !x.__skip;});
+      if (skippedNav && steps.length && !steps[steps.length-1].__nav) {
+        steps[steps.length-1].__nav = skippedNav;
+      }
       var startLocal=0;
       if (typeof absoluteIndex==='number'){
         for (var i=0;i<steps.length;i++){ if (steps[i].__gIndex>=absoluteIndex){ startLocal=i; break; } }
@@ -502,7 +566,7 @@
   }
 
   /* ========== DRIVER ========== */
-  var STEP_TAB = {};
+  var STEP_TAB = { audio:'transcript', 'download-transcript':'transcript', save:'transcript' };
   var driverInstance=null;
   var stopChoice=null;
   function destroyDriver(){ if(!driverInstance) return; try{ driverInstance.destroy && driverInstance.destroy(); }catch(_){ } driverInstance=null; }
@@ -533,15 +597,20 @@
     refreshResumeUI();
     destroyDriver();
   }
-  function patchStopFooter(){
+  function patchStopFooter(showContinue, doneLabel){
     var footer = document.querySelector('.driver-popover-footer');
     if (!footer) return;
     var next = footer.querySelector('.driver-popover-next-btn');
     var done = footer.querySelector('.driver-popover-done-btn');
     if (next) {
       next.textContent = 'Continuer';
-      next.style.display = 'inline-block';
-      next.removeAttribute('hidden');
+      if (showContinue !== false) {
+        next.style.display = 'inline-block';
+        next.removeAttribute('hidden');
+      } else {
+        next.style.display = 'none';
+        next.setAttribute('hidden', '');
+      }
     }
     if (!done) {
       done = document.createElement('button');
@@ -549,7 +618,7 @@
       done.className = 'driver-popover-btn driver-popover-done-btn';
       footer.appendChild(done);
     }
-    done.textContent = 'C’est bon';
+    done.textContent = doneLabel || 'C’est bon';
     done.style.display = 'inline-block';
     done.setAttribute('data-agilo-tour-stop', 'done');
     if (done.getAttribute('data-agilo-stop-bound') === '1') return;
@@ -701,8 +770,11 @@
             }, 0);
           }
           if (m.stop) {
-            setTimeout(patchStopFooter, 0);
-            setTimeout(patchStopFooter, 60);
+            var isFirstStop = (typeof m.g === 'number' && m.g === FIRST_STOP_INDEX);
+            var showContinue = isFirstStop || canShowAgiloshield();
+            var doneLabel = isFirstStop ? 'C’est bon' : 'Terminer';
+            setTimeout(function(){ patchStopFooter(showContinue, doneLabel); }, 0);
+            setTimeout(function(){ patchStopFooter(showContinue, doneLabel); }, 60);
           }
         }catch(_){}
       },
