@@ -14,7 +14,7 @@ Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, cl
 | v2.0.0 / v24 | `8ce2423bc0074fdfc4d9df9190e22ca9f8247a58` | `agilo_tour_state_v24` | Premier livrable, 8 étapes + stop, copy par seau |
 | v2.0.1 / v24 | `8f0449eeadbff0c98b4f58dc606cdb76585413de` | `agilo_tour_state_v24` | Stop C’est bon = dernière étape Driver du 1er passage |
 | v2.1.0 / v25 | `8fd5c4c5007ed2fd96e1aeed6a21667a3838a63c` | `agilo_tour_state_v25` | Cibles visibles éditeur, 2 étapes library, Support = 2e stop, Agiloshield optionnel |
-| v2.1.1 / v25 | (SHA après push) | `agilo_tour_state_v25` | Wait jobs Mes fichiers, Éditer via `data-editor-url`, Suivant pas Terminer |
+| v2.1.1 / v25 | `f5a92e253b7932fc441430bd7db2d5f60c7464e8` | `agilo_tour_state_v25` | Wait jobs Mes fichiers, Éditer via `data-editor-url`, Suivant pas Terminer |
 
 Rollback v2.1.1 : SHA `8fd5c4c5`. Archive v23 : `7d5a786b`.
 
@@ -51,7 +51,7 @@ Champ Memberstack `meeting-tool` : écrit par le setup (`MS_FIELDS.tool`). Absen
 Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. `ONBOARDING_CSS` inchangé. Publish subdomain `agilotext-test` only.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8fd5c4c5007ed2fd96e1aeed6a21667a3838a63c/scripts/pages/tour/agilo-tour.js?v=8fd5c4c5"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f5a92e253b7932fc441430bd7db2d5f60c7464e8/scripts/pages/tour/agilo-tour.js?v=f5a92e25"></script>
 ```
 
 Recette console : `window.__AGILO_TOUR_VERSION__ === '2.1.1'`
