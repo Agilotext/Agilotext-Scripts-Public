@@ -1,5 +1,5 @@
 /**
- * Tour Driver.js v2.1.1 (blueprint v25, wait jobs Mes fichiers, data-editor-url).
+ * Tour Driver.js v2.1.2 (blueprint v25, Terminer = primaire, progress FR).
  * Exécution : node --test tests/agilo-tour-selectors.test.js
  */
 
@@ -71,9 +71,9 @@ describe("archive v23", () => {
 });
 
 describe("agilo-tour v2.1", () => {
-  it("expose la version 2.1.1 et le storage v25", () => {
-    assert.match(SRC, /agilo-tour\.js v2\.1\.1/);
-    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.1\.1'/);
+  it("expose la version 2.1.2 et le storage v25", () => {
+    assert.match(SRC, /agilo-tour\.js v2\.1\.2/);
+    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.1\.2'/);
     assert.match(SRC, /agilo_tour_state_v25/);
     assert.match(SRC, /agilo_tour_first_seen_v25/);
     assert.match(SRC, /agilo_tour_completed_v25/);
@@ -196,6 +196,15 @@ describe("agilo-tour v2.1", () => {
     assert.match(SRC, /step\.__nav = '\/dashboard\/anonymiser'/);
     assert.match(SRC, /function patchStopFooter\(showContinue, doneLabel\)/);
     assert.match(SRC, /var showContinue = isFirstStop \|\| canShowAgiloshield\(\)/);
+    assert.match(SRC, /driver-popover-next-btn driver-popover-done-btn/);
+    assert.match(SRC, /progressText:'\{\{current\}\} \/ \{\{total\}\}'/);
+    assert.match(SRC, /title:'Réécouter'/);
+    assert.match(SRC, /title:'Bibliothèque'/);
+    assert.match(SRC, /title:'C’est bon \?'/);
+    assert.match(SRC, /Étape '/);
+    assert.match(SRC, /déjà écrit/);
+    assert.match(SRC, /épinglés/);
+    assert.doesNotMatch(SRC, /progressText:.* of /);
   });
 
   it("attend les jobs Mes fichiers une fois, sans /editor nu", () => {

@@ -1,4 +1,4 @@
-/* agilo-tour.js v2.1.1
+/* agilo-tour.js v2.1.2
  * Driver.js 1.3 onboarding (agilo_tour_state_v25).
  * Premier passage : 8 étapes + stop C’est bon / Continuer.
  * Suite : Mes fichiers (wait jobs + Éditer data-editor-url), éditeur, bibliothèque, Support, Agiloshield optionnel.
@@ -10,7 +10,7 @@
 
   if (window.__AGILO_TOUR_BOOTED__) return;
   window.__AGILO_TOUR_BOOTED__ = true;
-  window.__AGILO_TOUR_VERSION__ = '2.1.1';
+  window.__AGILO_TOUR_VERSION__ = '2.1.2';
 
   /* ========== CONFIG ========== */
   var STORAGE_KEY     = 'agilo_tour_state_v25';
@@ -80,6 +80,21 @@
       .driver-popover-title{font-size:1.05rem;font-weight:600}
       .driver-popover-description{line-height:1.5}
       .driver-popover-footer button{font-size:.875rem;padding:.5rem .9rem}
+      .driver-popover .driver-popover-done-btn{
+        background:var(--agilo-primary,#0056b3);
+        border:.0625rem solid var(--agilo-primary,#0056b3);
+        color:#fff;
+        font-weight:600;
+        line-height:1;
+        padding:var(--agilo-pad-y,.5rem) var(--agilo-pad-x,1rem);
+        border-radius:var(--agilo-radius,.5rem);
+        text-shadow:none;
+      }
+      .driver-popover .driver-popover-done-btn:hover:not(:disabled){
+        background:var(--agilo-primary-hover,#004494);
+        border-color:var(--agilo-primary-hover,#004494);
+        color:#fff;
+      }
       [data-agilo-tour-visibility="resume-only"]{transition:opacity .3s,visibility .3s}
       [data-agilo-tour-visibility="resume-only"][aria-hidden="true"]{display:none!important}
       [data-agilo-tour-visibility="resume-only"][aria-hidden="false"]{display:inline-flex!important}
@@ -650,9 +665,12 @@
   function patchStopFooter(showContinue, doneLabel){
     var footer = document.querySelector('.driver-popover-footer');
     if (!footer) return;
+    var nav = footer.querySelector('.driver-popover-navigation-btns') || footer;
     var next = footer.querySelector('.driver-popover-next-btn');
-    var done = footer.querySelector('.driver-popover-done-btn');
+    var done = footer.querySelector('[data-agilo-tour-stop="done"]');
+    if (next && next.getAttribute('data-agilo-tour-stop') === 'done') next = null;
     if (next) {
+      next.classList.remove('driver-popover-done-btn');
       next.textContent = 'Continuer';
       if (showContinue !== false) {
         next.style.display = 'inline-block';
@@ -665,12 +683,15 @@
     if (!done) {
       done = document.createElement('button');
       done.type = 'button';
-      done.className = 'driver-popover-btn driver-popover-done-btn';
-      footer.appendChild(done);
+      done.setAttribute('data-agilo-tour-stop', 'done');
+      nav.appendChild(done);
+    } else if (done.parentNode !== nav) {
+      nav.appendChild(done);
     }
+    done.className = 'driver-popover-next-btn driver-popover-done-btn';
     done.textContent = doneLabel || 'C’est bon';
     done.style.display = 'inline-block';
-    done.setAttribute('data-agilo-tour-stop', 'done');
+    done.removeAttribute('hidden');
     if (done.getAttribute('data-agilo-stop-bound') === '1') return;
     done.setAttribute('data-agilo-stop-bound', '1');
     done.addEventListener('click', function(){
@@ -813,6 +834,7 @@
       showProgress:true, animate:true,
       stagePadding: remPx(STAGE_PAD_REM),
       allowClose:true, nextBtnText:'Suivant', prevBtnText:'Précédent', doneBtnText:'Terminer',
+      progressText:'{{current}} / {{total}}',
       overlayClickBehavior:'none', smoothScroll:false,
       onHighlightStarted:function(element, step, options){
         try{
