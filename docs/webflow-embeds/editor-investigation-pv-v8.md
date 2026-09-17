@@ -9,10 +9,10 @@ v8 : clone du nœud Webflow DOCX **sans** `download_wrapper-link_summary_docx` (
 
 Prod pinne souvent **chaque** script. Remplacer le `src` **exact** de `Code-ed-header.js`. Le header charge le helper en sibling `@SHA` si `editor-main` ne l’a pas déjà fait.
 
-**Pin staging :** voir SHA ci-dessous après push. www reste `@3fad75c2` jusqu’à `OK publish`.
+**Pin staging 17/09 :** `@5682eb68` (agilotext-test). www reste `@3fad75c2` jusqu’à `OK publish`.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/editor/Code-ed-header.js?v=PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5682eb68/scripts/pages/editor/Code-ed-header.js?v=5682eb68"></script>
 ```
 
 Allowlist : promptid **705–720** seulement. Pas 787 / 704 / pack CSE.

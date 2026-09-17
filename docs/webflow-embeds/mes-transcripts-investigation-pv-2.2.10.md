@@ -11,13 +11,13 @@ v2.2.10 : même clone que l’éditeur (retirer `summary_*`, garder icône, CSS 
 
 ## Embed
 
-**Pin staging :** SHA après push. www reste `@3fad75c2` jusqu’à `OK publish`.
+**Pin staging 17/09 :** `@5682eb68` (agilotext-test). www reste `@3fad75c2` jusqu’à `OK publish`.
 
 ```html
-<!-- Agilotext Mes transcripts logic-v2 2.2.10-investigation-pv @PIN_SHA -->
+<!-- Agilotext Mes transcripts logic-v2 2.2.10-investigation-pv @5682eb68 -->
 <!-- ROLLBACK: remettre @3fad75c2 / ?v=fc-3fad75c2 -->
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3fad75c2/scripts/shared/retention-messages.js?v=3fad75c2"></script>
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@PIN_SHA/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-PIN_SHA"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@5682eb68/scripts/pages/dashboard/Code-mes-transcripts-logic-v2.js?v=fc-5682eb68"></script>
 ```
 
 Le v2 injecte `format-investigation-pv.js` depuis le même commit.  
