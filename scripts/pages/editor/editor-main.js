@@ -19,7 +19,8 @@
       return 'main';
     }
   })();
-  const CDN_BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${__CDN_BRANCH}/scripts/pages/editor`;
+  const REPO_BASE = `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${__CDN_BRANCH}`;
+  const CDN_BASE = `${REPO_BASE}/scripts/pages/editor`;
   if (window.AGILO_DEBUG) {
     console.log('[agilo:loader] Branche CDN jsDelivr :', __CDN_BRANCH, '→', CDN_BASE);
   }
@@ -43,6 +44,7 @@
     'Code-changement-audio.js',
     'Code-editor-auth-sync.js',
     'Code-chat.js',
+    { url: `${REPO_BASE}/scripts/pages/shared/format-investigation-pv.js` },
     'Code-ed-header.js',
     'Code-job-id.js',
     'Code-questions-ia.js',
@@ -83,17 +85,22 @@
     }
 
     const scriptName = scripts[currentIndex];
-    const scriptUrl = `${CDN_BASE}/${scriptName}`;
+    const scriptUrl = typeof scriptName === 'object' && scriptName.url
+      ? scriptName.url
+      : `${CDN_BASE}/${scriptName}`;
+    const scriptLabel = typeof scriptName === 'object' && scriptName.url
+      ? scriptName.url
+      : scriptName;
 
     if (window.AGILO_DEBUG) {
-      console.log(`[agilo:loader] Chargement: ${scriptName} (${currentIndex + 1}/${scripts.length})`);
+      console.log(`[agilo:loader] Chargement: ${scriptLabel} (${currentIndex + 1}/${scripts.length})`);
     }
 
     loadScript(scriptUrl, () => {
       currentIndex++;
       loadNext();
     }, () => {
-      console.error(`[agilo:loader] ❌ Échec: ${scriptName}`);
+      console.error(`[agilo:loader] ❌ Échec: ${scriptLabel}`);
       currentIndex++;
       loadNext(); // Continuer même en cas d'erreur
     });

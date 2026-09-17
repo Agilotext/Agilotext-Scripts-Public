@@ -1,5 +1,7 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.7-demo-row
+   AGILOTEXT — Mes transcripts logic v2.2.9-investigation-pv
+   v2.2.9-investigation-pv — lien PV d’enquête (Word) sidecar formatInvestigationPv (705–720).
+   v2.2.8-stt-on-error — READY_SUMMARY_ON_ERROR : Télécharger transcription encore OK.
    v2.2.7-demo-row — ligne exemple : plus de badge, une hauteur, clics bloqués.
    v2.2.6-empty-demo — liste vide Free n’est plus une erreur ; 1 ligne exemple hors cache.
    v2.2.5-summary-probe — GET receiveSummary html sur la page visible avant le menu formats.
@@ -24,7 +26,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.7-demo-row';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.9-investigation-pv';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -34,11 +36,11 @@
   const JOBS_MAP_TOTAL_KEYS = ['total', 'totalCount', 'totalJobs', 'jobsCount', 'nbJobs'];
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre (30 jours en Business).';
   const AUTH_AUDIO_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
   const AUDIO_GENERIC_MESSAGE = 'Impossible de récupérer cet audio pour le moment.';
   const AUDIO_AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
-  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription ou ce compte rendu n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre.';
+  const TEXT_ASSET_EXPIRED_MESSAGE = 'Cette transcription n’est plus sur le serveur. Ce n’est pas le comportement prévu de l’offre Business. Contactez le support avec le numéro du job.';
   const SUMMARY_MISSING_MESSAGE = 'Le compte-rendu n’est plus disponible.';
   const SUMMARY_MISSING_HINT_RE = /(error_summary_transcript_file_not_exists|summary_transcript_file_not_exists|file_not_exists)/i;
   const SUMMARY_PROBE_POOL = 4;
@@ -841,9 +843,16 @@
   ]);
 
   function isTranscriptTextDownloadAllowed(status) {
+    if (window.AgiloTranscriptDownloadAllow &&
+        typeof window.AgiloTranscriptDownloadAllow.isTranscriptTextDownloadAllowed === 'function') {
+      return window.AgiloTranscriptDownloadAllow.isTranscriptTextDownloadAllowed(status);
+    }
     const st = String(status || '').toUpperCase();
-    if (!st || st.includes('ERROR')) return false;
-    return TRANSCRIPT_TEXT_DOWNLOAD_STATUSES.has(st);
+    if (!st) return false;
+    if (TRANSCRIPT_TEXT_DOWNLOAD_STATUSES.has(st)) return true;
+    if (st === 'READY_SUMMARY_ON_ERROR' || st === 'ERROR_SUMMARY_ON_ERROR') return true;
+    if (st.includes('ERROR')) return false;
+    return false;
   }
 
   async function renameOnServer({ jobId, userEmail, token, edition, jobTitle, originalFilename }) {
@@ -967,12 +976,14 @@
   function isExpiredJob(job) {
     if (!job || isDurationTooLongError(job)) return false;
     const ex = jobJavaException(job);
+    if (ex.includes('error_transcript_file_not_exists')) return true;
     if (ex.includes('error_summary_transcript_file_not_exists')) {
       if (isNoSummaryRequested(job)) return false;
       return true;
     }
     const st = String(job?.transcriptStatus || '').toUpperCase();
-    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS';
+    return st === 'ERROR_SUMMARY_TRANSCRIPT_FILE_NOT_EXISTS'
+      || st === 'ERROR_TRANSCRIPT_FILE_NOT_EXISTS';
   }
 
   function isNoSummaryCase(job) {
@@ -1399,6 +1410,153 @@
     return availability;
   }
 
+  function loadFormatInvestigationPvHelper() {
+    if (window.AgiloFormatInvestigationPv) {
+      return Promise.resolve(window.AgiloFormatInvestigationPv);
+    }
+    if (window.__agiloInvPvHelperPromise) return window.__agiloInvPvHelperPromise;
+    window.__agiloInvPvHelperPromise = new Promise((resolve) => {
+      let src = '';
+      const tags = document.getElementsByTagName('script');
+      for (let i = 0; i < tags.length; i++) {
+        const s = tags[i].src || '';
+        if (s.indexOf('Code-mes-transcripts-logic-v2.js') !== -1) {
+          src = s.replace(
+            /scripts\/pages\/dashboard\/Code-mes-transcripts-logic-v2\.js/,
+            'scripts/pages/shared/format-investigation-pv.js'
+          );
+          break;
+        }
+      }
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => resolve(window.AgiloFormatInvestigationPv || null);
+      el.onerror = () => resolve(null);
+      document.head.appendChild(el);
+    });
+    return window.__agiloInvPvHelperPromise;
+  }
+
+  function promptIdFromJob(job) {
+    if (!job) return '';
+    return job.promptid != null ? job.promptid : job.promptId;
+  }
+
+  function investigationLinkLabelEl(a) {
+    if (!a) return null;
+    return Array.from(a.querySelectorAll('div')).find((d) =>
+      !d.classList.contains('icon-1x1-medium') && !d.classList.contains('w-embed')
+    ) || null;
+  }
+
+  function ensureInvestigationPvLinkInRow(row) {
+    const api = window.AgiloFormatInvestigationPv;
+    const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
+    let a = row.querySelector('a.' + cls);
+    if (a) return a;
+    const summaryDocx = row.querySelector('a.download_wrapper-link_summary_docx');
+    const host = (summaryDocx && summaryDocx.closest('.download_link-options'))
+      || row.querySelector('.download_link-options')
+      || row.querySelector('.report-links');
+    if (!host) return null;
+    if (summaryDocx) {
+      a = summaryDocx.cloneNode(true);
+      a.className = cls;
+      a.removeAttribute('download');
+      a.removeAttribute('data-w-id');
+      a.setAttribute('href', '#');
+      a.removeAttribute('target');
+      const label = investigationLinkLabelEl(a);
+      if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    } else {
+      a = document.createElement('a');
+      a.href = '#';
+      a.className = cls;
+      a.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+      a.style.cssText = 'font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;';
+    }
+    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    host.appendChild(a);
+    return a;
+  }
+
+  function setInvestigationLinkBusy(a, busy) {
+    const api = window.AgiloFormatInvestigationPv;
+    const idle = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    const busyLabel = (api && api.LABEL_BUSY) || 'Préparation du Word';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = busy ? busyLabel : idle;
+    else if (a && !a.querySelector('div')) a.textContent = busy ? busyLabel : idle;
+    if (!a) return;
+    a.setAttribute('aria-busy', busy ? 'true' : 'false');
+    a.style.pointerEvents = busy ? 'none' : '';
+    a.style.cursor = busy ? 'progress' : '';
+  }
+
+  function bindInvestigationPvClick(a, creds) {
+    if (!a || a.__agiloInvPvBound) return;
+    a.__agiloInvPvBound = true;
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      const api = window.AgiloFormatInvestigationPv;
+      if (!api) {
+        window.alert('Téléchargement indisponible. Rechargez la page.');
+        return;
+      }
+      const job = a.__agiloInvJob || {};
+      const jobKey = String(job.jobid || job.jobId || '');
+      if (api.isBusy(jobKey)) return;
+      setInvestigationLinkBusy(a, true);
+      try {
+        const r = await api.downloadInvestigationPv({
+          username: creds.userEmail,
+          token: creds.token,
+          edition: creds.edition,
+          jobId: jobKey,
+          templateId: String(promptIdFromJob(job) || '')
+        });
+        if (!r.ok && !r.busy) window.alert(r.errorMessage || 'Impossible de préparer le Word.');
+      } finally {
+        setInvestigationLinkBusy(a, false);
+      }
+    });
+  }
+
+  function bindInvestigationPvRow(row, job, creds) {
+    const api = window.AgiloFormatInvestigationPv;
+    const show = !!(api && api.shouldShowInvestigationPvLink(promptIdFromJob(job), job && job.transcriptStatus));
+    let a = row.querySelector('a.download_wrapper-link_investigation_docx');
+    if (!show) {
+      if (a) a.style.display = 'none';
+      return false;
+    }
+    a = ensureInvestigationPvLinkInRow(row);
+    if (!a) return false;
+    a.style.removeProperty('display');
+    a.__agiloInvJob = job;
+    bindInvestigationPvClick(a, creds);
+
+    const summaryCell = a.closest('.custom-element.options') || a.closest('.custom-element');
+    if (summaryCell) {
+      summaryCell.classList.remove('agilo-download-locked');
+      const chip = summaryCell.querySelector('.agilo-summary-state');
+      if (chip) chip.remove();
+      const toggle = summaryCell.querySelector('.download-link');
+      if (toggle) {
+        toggle.style.display = '';
+        toggle.textContent = 'Télécharger';
+        toggle.setAttribute('title', (api && api.LINK_TITLE) || 'PV d’enquête (Word)');
+      }
+    }
+    return true;
+  }
+
   function buildJobRow({ job, userEmail, token, edition, template, container }) {
     let row;
     let clone;
@@ -1604,7 +1762,8 @@
 
     const summaryAvailability = setSummaryCellState(row, job);
     hasAnySummaryLink = !!summaryAvailability.downloadable;
-    const hasAnyDownloadable = hasAnyTranscriptLink || hasAnySummaryLink;
+    const hasWrapLink = bindInvestigationPvRow(row, job, { userEmail, token, edition });
+    const hasAnyDownloadable = hasAnyTranscriptLink || hasAnySummaryLink || hasWrapLink;
     lockDownloadStack(row, !hasAnyDownloadable);
 
     const optsBox = row.querySelector('.custom-element.options');
@@ -1687,6 +1846,7 @@
   }
 
   async function mainScriptExecution(token, forcedPage) {
+    await loadFormatInvestigationPvHelper();
     const emailInput = document.querySelector('[name="memberEmail"]');
     const userEmail = (
       emailInput?.value ||

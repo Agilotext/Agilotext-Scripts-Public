@@ -3,8 +3,8 @@
 // ⚠️ Ne pas dupliquer ce fichier en embed inline Webflow si déjà chargé via CDN.
 
 (function () {
-  if (window.__agiloEditorHeader_v5) return;
-  window.__agiloEditorHeader_v5 = true;
+  if (window.__agiloEditorHeader_v7) return;
+  window.__agiloEditorHeader_v7 = true;
 
   const AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
   const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
@@ -244,6 +244,8 @@
       folderId: j.folderId != null ? Number(j.folderId) : 0,
       folderName: (j.folderName != null ? String(j.folderName) : '').trim(),
       transcriptStatus: j.transcriptStatus || j.status || '',
+      promptid: j.promptid != null ? j.promptid : j.promptId,
+      promptId: j.promptid != null ? j.promptid : j.promptId,
       userErrorMessage: (j.userErrorMessage != null ? String(j.userErrorMessage) : '').trim(),
       javaException: j.javaException || '',
       javaStackTrace: j.javaStackTrace || j.exceptionStackTrace || ''
@@ -580,6 +582,146 @@
     }, { passive: false });
   }
 
+  function promptIdFromJob(job) {
+    if (!job) return '';
+    return job.promptid != null ? job.promptid : job.promptId;
+  }
+
+  function loadFormatInvestigationPvHelper() {
+    if (window.AgiloFormatInvestigationPv) {
+      return Promise.resolve(window.AgiloFormatInvestigationPv);
+    }
+    return new Promise((resolve) => {
+      let src = '';
+      const tags = document.getElementsByTagName('script');
+      for (let i = 0; i < tags.length; i++) {
+        const s = tags[i].src || '';
+        if (s.indexOf('Code-ed-header.js') !== -1) {
+          src = s.replace(
+            /scripts\/pages\/editor\/Code-ed-header\.js/,
+            'scripts/pages/shared/format-investigation-pv.js'
+          );
+          break;
+        }
+      }
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => resolve(window.AgiloFormatInvestigationPv || null);
+      el.onerror = () => resolve(null);
+      document.head.appendChild(el);
+    });
+  }
+
+  function investigationLinkLabelEl(a) {
+    if (!a) return null;
+    return Array.from(a.querySelectorAll('div')).find((d) =>
+      !d.classList.contains('icon-1x1-medium') && !d.classList.contains('w-embed')
+    ) || null;
+  }
+
+  function ensureInvestigationPvLink() {
+    const api = window.AgiloFormatInvestigationPv;
+    const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
+    let a = document.querySelector('a.' + cls);
+    if (a) return a;
+    const panels = $$('.download_link-options');
+    let host = null;
+    let template = null;
+    panels.forEach((p) => {
+      const sum = p.querySelector('a.download_wrapper-link_summary_docx');
+      if (sum) {
+        host = p;
+        template = sum;
+      }
+    });
+    if (!host) host = document.querySelector('.download_link-options');
+    if (!host) return null;
+    if (template) {
+      a = template.cloneNode(true);
+      a.className = cls;
+      a.removeAttribute('download');
+      a.removeAttribute('data-w-id');
+      a.setAttribute('href', '#');
+      a.removeAttribute('target');
+      const label = investigationLinkLabelEl(a);
+      if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    } else {
+      a = document.createElement('a');
+      a.href = '#';
+      a.className = cls;
+      a.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    }
+    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    host.appendChild(a);
+    return a;
+  }
+
+  function setInvestigationLinkBusy(a, busy) {
+    const api = window.AgiloFormatInvestigationPv;
+    const idle = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    const busyLabel = (api && api.LABEL_BUSY) || 'Préparation du Word';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = busy ? busyLabel : idle;
+    else if (a && !a.querySelector('div')) a.textContent = busy ? busyLabel : idle;
+    if (!a) return;
+    a.setAttribute('aria-busy', busy ? 'true' : 'false');
+    a.style.pointerEvents = busy ? 'none' : '';
+    a.style.cursor = busy ? 'progress' : '';
+  }
+
+  function bindInvestigationPvClick(a) {
+    if (!a || a.__agiloInvPvBound) return;
+    a.__agiloInvPvBound = true;
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const api = window.AgiloFormatInvestigationPv;
+      if (!api) {
+        toast('Téléchargement indisponible. Rechargez la page.', 3200);
+        return;
+      }
+      const jobKey = String(a.__agiloInvJobId || '');
+      const job = a.__agiloInvJob || {};
+      if (api.isBusy(jobKey)) return;
+      setInvestigationLinkBusy(a, true);
+      try {
+        if (typeof window.agiloSaveNow === 'function') {
+          try { await window.agiloSaveNow(); } catch (_) { /* disque déjà là */ }
+        }
+        const r = await api.downloadInvestigationPv({
+          username: AUTH.email,
+          token: AUTH.token,
+          edition: AUTH.edition,
+          jobId: jobKey,
+          templateId: String(promptIdFromJob(job) || '')
+        });
+        if (!r.ok && !r.busy) toast(r.errorMessage || 'Impossible de préparer le Word.', 4200);
+      } finally {
+        setInvestigationLinkBusy(a, false);
+      }
+    });
+  }
+
+  function updateInvestigationPvLink(jobId, job) {
+    const api = window.AgiloFormatInvestigationPv;
+    const show = !!(api && api.shouldShowInvestigationPvLink(promptIdFromJob(job), job && job.transcriptStatus));
+    let a = document.querySelector('a.download_wrapper-link_investigation_docx');
+    if (!show) {
+      if (a) a.style.display = 'none';
+      return;
+    }
+    a = ensureInvestigationPvLink();
+    if (!a) return;
+    a.style.removeProperty('display');
+    a.__agiloInvJobId = jobId;
+    a.__agiloInvJob = job || {};
+    bindInvestigationPvClick(a);
+  }
+
   function updateDownloadLinks(jobId, job) {
     if (!jobId || !AUTH.email || !AUTH.token) return;
 
@@ -671,6 +813,8 @@
         setDownloadLink(a, '#', 'Résumé indisponible.');
       });
     });
+
+    updateInvestigationPvLink(jobId, job);
   }
 
   function setupRename() {
@@ -852,6 +996,7 @@
     });
 
     AUTH = await ensureAuth();
+    await loadFormatInvestigationPvHelper();
     const jobId = getJobId();
     if (!jobId) { console.warn('[Header] Aucun jobId'); return; }
 
