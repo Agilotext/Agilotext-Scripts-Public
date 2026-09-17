@@ -2,7 +2,7 @@
 
 **Branche :** `feat/agilo-tour-anonymiser`  
 **Staging seulement :** `https://agilotext-test.webflow.io`  
-**Prod www :** ne pas pin sans OK Florian.
+**Prod www :** OK Florian 2026-09-17 (v2.1.2).
 
 Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, classe `code-agilo-tour`). Le CSS Driver.js est **`ONBOARDING_CSS`** (`css-guide`) : ne pas le modifier.
 
@@ -15,8 +15,9 @@ Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, cl
 | v2.0.1 / v24 | `8f0449eeadbff0c98b4f58dc606cdb76585413de` | `agilo_tour_state_v24` | Stop C’est bon = dernière étape Driver du 1er passage |
 | v2.1.0 / v25 | `8fd5c4c5007ed2fd96e1aeed6a21667a3838a63c` | `agilo_tour_state_v25` | Cibles visibles éditeur, 2 étapes library, Support = 2e stop, Agiloshield optionnel |
 | v2.1.1 / v25 | `f5a92e253b7932fc441430bd7db2d5f60c7464e8` | `agilo_tour_state_v25` | Wait jobs Mes fichiers, Éditer via `data-editor-url`, Suivant pas Terminer |
+| v2.1.2 / v25 | `9cc2b0a63332215a3061826134f832a9ef4fd56d` | `agilo_tour_state_v25` | Terminer = même primaire que Suivant, progress `n / n` |
 
-Rollback v2.1.1 : SHA `8fd5c4c5`. Archive v23 : `7d5a786b`.
+Rollback v2.1.2 : SHA `f5a92e25`. Archive v23 : `7d5a786b`.
 
 ## Inventaire `/auth/setup` (staging, 2026-09-15)
 
@@ -48,12 +49,12 @@ Champ Memberstack `meeting-tool` : écrit par le setup (`MS_FIELDS.tool`). Absen
 
 ## Embed (après push)
 
-Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. `ONBOARDING_CSS` inchangé. Publish subdomain `agilotext-test` only.
+Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. `ONBOARDING_CSS` inchangé.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@f5a92e253b7932fc441430bd7db2d5f60c7464e8/scripts/pages/tour/agilo-tour.js?v=f5a92e25"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@9cc2b0a63332215a3061826134f832a9ef4fd56d/scripts/pages/tour/agilo-tour.js?v=9cc2b0a6"></script>
 ```
 
-Recette console : `window.__AGILO_TOUR_VERSION__ === '2.1.1'`
+Recette console : `window.__AGILO_TOUR_VERSION__ === '2.1.2'`
 
 Sans le navigateur Cursor : `python3 tests/agilo-tour-v2-recette-server.py` puis Chrome headless sur `http://127.0.0.1:8765/app/premium/dashboard`. Résultat dans `/tmp/agilo-tour-v2-recette.json`.
