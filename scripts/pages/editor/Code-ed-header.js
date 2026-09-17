@@ -3,7 +3,8 @@
 // ⚠️ Ne pas dupliquer ce fichier en embed inline Webflow si déjà chargé via CDN.
 
 (function () {
-  if (window.__agiloEditorHeader_v9) return;
+  if (window.__agiloEditorHeader_v10) return;
+  window.__agiloEditorHeader_v10 = true;
   window.__agiloEditorHeader_v9 = true;
   window.__agiloEditorHeader_v8 = true;
   window.__agiloEditorHeader_v7 = true;
@@ -511,7 +512,7 @@
     link.removeAttribute('rel');
     link.removeAttribute('aria-disabled');
     link.title = msg;
-    link.style.cursor = 'progress';
+    link.style.cursor = 'pointer';
     link.style.pointerEvents = 'auto';
   }
 
@@ -531,6 +532,12 @@
 
   const _assetOkCache = new Map();
 
+  function cancelResponseBody(r) {
+    try {
+      if (r && r.body && typeof r.body.cancel === 'function') r.body.cancel();
+    } catch (_) { /* stream déjà lu */ }
+  }
+
   async function verifyAssetOnce(jobId, url, key) {
     if (_assetOkCache.has(key)) return _assetOkCache.get(key);
     let ok = false;
@@ -545,10 +552,12 @@
 
       const cd = r.headers.get('content-disposition') || '';
       const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const binaryOk = /attachment|filename=/i.test(cd)
+        || /(application\/pdf|msword|officedocument|rtf|octet-stream)/.test(ct);
 
-      if (r.ok && (/attachment|filename=/i.test(cd) ||
-          /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
+      if (r.ok && binaryOk) {
         ok = true;
+        cancelResponseBody(r);
       } else {
         const text = await r.text().catch(() => '');
 
@@ -578,9 +587,7 @@
       if (a.getAttribute('href') && !a.hasAttribute('aria-disabled') && !a.classList.contains('is-verifying')) return;
 
       e.preventDefault(); e.stopPropagation();
-      a.style.cursor = 'progress';
       const assetOk = await verifyAssetOnce(jobId, url, key);
-      a.style.cursor = '';
 
       if (assetOk) {
         setDownloadLink(a, url);
