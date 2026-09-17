@@ -347,8 +347,8 @@ async function ensureSeekableFor(url, { resumeTime=0, autoplay=false } = {}){
 
     // sauts
     const jump = s => { const d = getSafeDuration() || 0; audio.currentTime = Math.max(0, Math.min(d, (audio.currentTime||0) + s)); };
-    const backClick = ()=> jump(-15);
-    const fwdClick = ()=> jump(+30);
+    const backClick = ()=> jump(-10);
+    const fwdClick = ()=> jump(+10);
     backBtn?.addEventListener?.('click', backClick);
     fwdBtn ?.addEventListener?.('click', fwdClick);
     addCleanup(() => {
@@ -454,7 +454,7 @@ async function ensureSeekableFor(url, { resumeTime=0, autoplay=false } = {}){
         const tag = (e.target?.tagName || '').toUpperCase();
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target?.isContentEditable)) return;
         const dur = getSafeDuration(); if (!dur) return;
-        const step = e.shiftKey ? 15 : 5;
+        const step = e.shiftKey ? 10 : 5;
 
         switch ((e.key||'').toLowerCase()) {
           case ' ': e.preventDefault(); if (!seekLocked) (audio.paused ? audio.play() : audio.pause()); break;
@@ -524,6 +524,16 @@ async function ensureSeekableFor(url, { resumeTime=0, autoplay=false } = {}){
     buff      = document.getElementById('agilo-buffered');
     thumb     = document.getElementById('agilo-thumb');
     hoverTip  = document.getElementById('agilo-hover');
+    if (backBtn) {
+      backBtn.textContent = '10s';
+      backBtn.setAttribute('aria-label', 'Reculer de 10 secondes');
+      backBtn.title = 'Reculer de 10 s (Shift+← = -10s, ← = -5s)';
+    }
+    if (fwdBtn) {
+      fwdBtn.textContent = '10s';
+      fwdBtn.setAttribute('aria-label', 'Avancer de 10 secondes');
+      fwdBtn.title = 'Avancer de 10 s (Shift+→ = +10s, → = +5s)';
+    }
   }
 
   async function start(){

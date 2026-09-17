@@ -380,12 +380,12 @@
     bar.setAttribute('role', 'region');
     bar.setAttribute('aria-label', 'Lecture audio');
     bar.innerHTML = [
-      '<button type="button" class="agilo-audio-sticky__btn" data-act="back" aria-label="Reculer de 15 secondes">',
-      '<span class="agilo-audio-sticky__txt">15s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">‹‹</span>',
+      '<button type="button" class="agilo-audio-sticky__btn" data-act="back" aria-label="Reculer de 10 secondes">',
+      '<span class="agilo-audio-sticky__txt">10s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">‹‹</span>',
       '</button>',
       '<button type="button" class="agilo-audio-sticky__btn is-primary" data-act="play" aria-pressed="false" aria-controls="agilo-audio">Lire</button>',
-      '<button type="button" class="agilo-audio-sticky__btn" data-act="fwd" aria-label="Avancer de 30 secondes">',
-      '<span class="agilo-audio-sticky__txt">30s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">››</span>',
+      '<button type="button" class="agilo-audio-sticky__btn" data-act="fwd" aria-label="Avancer de 10 secondes">',
+      '<span class="agilo-audio-sticky__txt">10s</span><span class="agilo-audio-sticky__ico" aria-hidden="true">››</span>',
       '</button>',
       '<button type="button" class="agilo-audio-sticky__btn" data-act="speed" aria-label="Vitesse de lecture">1x</button>',
       '<div class="agilo-audio-sticky__track" data-act="track" role="slider" aria-label="Position de lecture" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">',

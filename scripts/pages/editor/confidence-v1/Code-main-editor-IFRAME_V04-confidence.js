@@ -102,6 +102,107 @@
     }
   }
 
+  function trimSplitNewlines(left, right) {
+    const leftClean = String(left ?? '').replace(/\n+$/, '');
+    const rightClean = String(right ?? '').replace(/^\n+/, '');
+    return { left: leftClean, right: rightClean };
+  }
+  function shouldScrollFollow(armed, outOfView) {
+    return !!armed && !!outOfView;
+  }
+  function createFollowController(opts) {
+    let armed = true;
+    let programmatic = false;
+    const onChange = opts && typeof opts.onChange === 'function' ? opts.onChange : null;
+    function setArmed(next) {
+      const v = !!next;
+      if (armed === v) return;
+      armed = v;
+      if (onChange) onChange(armed);
+    }
+    return {
+      get armed() { return armed; },
+      get programmatic() { return programmatic; },
+      arm() { setArmed(true); },
+      disarm() { if (!programmatic) setArmed(false); },
+      beginProgrammatic() { programmatic = true; },
+      endProgrammatic() { programmatic = false; },
+      shouldScroll(outOfView) { return shouldScrollFollow(armed, outOfView); }
+    };
+  }
+  window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
+    trimSplitNewlines, shouldScrollFollow, createFollowController
+  };
+
+  function ensureFollowChip() {
+    const pane = document.getElementById('pane-transcript');
+    if (!pane) return null;
+    let btn = document.getElementById('agilo-transcript-follow');
+    if (btn) return btn;
+    if (!document.getElementById('agilo-transcript-follow-css')) {
+      const s = document.createElement('style');
+      s.id = 'agilo-transcript-follow-css';
+      s.textContent = '#agilo-transcript-follow{display:none;margin:8px 12px;padding:6px 12px;font:600 13px/1.2 system-ui,sans-serif;border:1px solid #174a96;background:#fff;color:#174a96;border-radius:6px;cursor:pointer}#agilo-transcript-follow.is-visible{display:inline-flex;align-items:center}#agilo-transcript-follow:hover{background:#174a96;color:#fff}';
+      document.head.appendChild(s);
+    }
+    btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'agilo-transcript-follow';
+    btn.textContent = 'Suivre';
+    btn.title = 'Suivre la lecture';
+    btn.setAttribute('aria-label', 'Suivre la lecture');
+    btn.addEventListener('click', () => { try { window.AgiloTranscriptFollow?.arm(); } catch { } });
+    const dock = pane.querySelector('#ag-editor-chrome-dock');
+    if (dock && dock.nextSibling) pane.insertBefore(btn, dock.nextSibling);
+    else pane.insertBefore(btn, pane.firstChild);
+    return btn;
+  }
+  function updateFollowChip(armed) {
+    const btn = ensureFollowChip();
+    if (!btn) return;
+    btn.classList.toggle('is-visible', !armed);
+  }
+  function bindFollowPause(sc) {
+    const follow = window.AgiloTranscriptFollow;
+    if (!follow || !sc || sc.__followPauseBound) return;
+    sc.__followPauseBound = true;
+    const pause = () => follow.disarm();
+    sc.addEventListener('wheel', pause, { passive: true });
+    sc.addEventListener('touchmove', pause, { passive: true });
+  }
+  function applySplitTrimNearCaret() {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const n = sel.anchorNode;
+    const el = n && (n.nodeType === 1 ? n : n.parentElement);
+    const seg = el && el.closest && el.closest('.ag-seg');
+    if (!seg) return;
+    const prev = (seg.previousElementSibling && seg.previousElementSibling.classList.contains('ag-seg'))
+      ? seg.previousElementSibling : null;
+    const nextBox = seg.querySelector('.ag-seg__text');
+    const prevBox = prev && prev.querySelector('.ag-seg__text');
+    if (!nextBox) return;
+    const cleaned = trimSplitNewlines(prevBox ? prevBox.textContent : '', nextBox.textContent || '');
+    if (prevBox && prevBox.textContent !== cleaned.left) prevBox.textContent = cleaned.left;
+    if (nextBox.textContent !== cleaned.right) nextBox.textContent = cleaned.right;
+    try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
+  }
+  function bindSplitTrim() {
+    if (document.__agiloSplitTrimBound) return;
+    document.__agiloSplitTrimBound = true;
+    document.addEventListener('click', (e) => {
+      if (e.target.closest && e.target.closest('.ag-ux-plus')) {
+        try { window.AgiloTranscriptFollow?.disarm(); } catch { }
+        setTimeout(applySplitTrimNearCaret, 0);
+      }
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+      if (e.key !== '=' && e.key !== '+' && e.code !== 'Equal' && e.code !== 'NumpadAdd') return;
+      setTimeout(applySplitTrimNearCaret, 0);
+    }, true);
+  }
+
   function pickTranscriptEl() {
     return byId('transcriptEditor') || byId('ag-transcript') || document.querySelector('[data-editor="transcript"]') || null;
   }
@@ -890,6 +991,7 @@
       /** receiveSummary KO utilise error_message = error_summary_on_error (distinct du transcript_status READY_SUMMARY_ON_ERROR). */
       ERROR_SUMMARY_ON_ERROR: "La génération du compte-rendu a échoué.",
       ERROR_TRANSCRIPT_NOT_READY: "Le transcript n'est pas encore prêt.",
+      ERROR_TRANSCRIPT_FILE_NOT_EXISTS: "Cette transcription n’est plus sur le serveur. Ce n’est pas le comportement prévu de l’offre Business. Contactez le support avec le numéro du job.",
       ON_ERROR: "Le serveur a signalé une erreur.",
       ERROR_INVALID_TOKEN: "Session expirée ou invalide. Veuillez vous reconnecter.",
       NETWORK_ERROR: "Problème réseau lors de la récupération des données. Veuillez réessayer.",
@@ -1231,6 +1333,10 @@
   let _selectedSegs = new Set();
   let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
+  const _transcriptFollow = createFollowController({
+    onChange(armed) { updateFollowChip(armed); }
+  });
+  window.AgiloTranscriptFollow = _transcriptFollow;
 
   function syncDomToModel() {
     const root = editors.transcript;
@@ -1590,6 +1696,7 @@
         const audio = byId('agilo-audio');
         if (!audio) { toast('Lecteur audio introuvable.'); return; }
         try { audio.currentTime = t; if (audio.paused) audio.play().catch(() => { }); } catch { }
+        try { _transcriptFollow.arm(); } catch { }
       });
 
       root.addEventListener('click', (e) => {
@@ -1633,6 +1740,7 @@
 
       root.addEventListener('input', (e) => {
         const node = e.target.closest('.ag-seg__text'); if (!node) return;
+        try { _transcriptFollow.disarm(); } catch { }
         const segEl = node.closest('.ag-seg');
         const idx = Array.prototype.indexOf.call(root.children, segEl);
         if (idx > -1 && window._segments[idx]) {
@@ -1640,6 +1748,11 @@
           if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
             window.AgiloConfidence.markSegmentModified(idx);
           }
+        }
+      });
+      root.addEventListener('focusin', (e) => {
+        if (e.target.closest && e.target.closest('.ag-seg__text')) {
+          try { _transcriptFollow.disarm(); } catch { }
         }
       });
 
@@ -2028,6 +2141,11 @@
     const audio = byId('agilo-audio'); if (!audio) return;
     if (root.__syncBound) return;
 
+    bindSplitTrim();
+    bindFollowPause(document.getElementById('pane-transcript'));
+    bindFollowPause(root);
+    updateFollowChip(_transcriptFollow.armed);
+
     audio.addEventListener('timeupdate', () => {
       if (__mode !== 'structured' || !window._segments.length) return;
       const t = audio.currentTime || 0;
@@ -2040,11 +2158,13 @@
         const el = root.children[k];
         if (el) {
           el.classList.add('is-active');
-          // ⚡️ SAFE SCROLL: Utiliser le helper qui gère le conteneur
           const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
           const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
-          if (agiloIsOutOfView(el, container, { top: 100, bottom: 120 })) {
+          bindFollowPause(container);
+          if (_transcriptFollow.shouldScroll(agiloIsOutOfView(el, container, { top: 100, bottom: 120 }))) {
+            _transcriptFollow.beginProgrammatic();
             agiloScrollIntoView(el, { allowWindow: false });
+            requestAnimationFrame(() => { _transcriptFollow.endProgrammatic(); });
           }
         }
       }
@@ -3017,5 +3137,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.6';
+  window.__agiloEditorConfidenceVersion = '1.09.7-follow';
 });

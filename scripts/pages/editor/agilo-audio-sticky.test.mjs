@@ -83,7 +83,10 @@ assert(!/setProperty\([^)]*--ag-editor-chrome-top/.test(src), 'ne pose plus --ag
 assert(src.includes("setAttribute('inert'"), 'inert sur le wrap original quand proxy actif');
 assert(src.includes('.ag-editor-audio-row{display:none'), 'ligne fermée invisible');
 assert(src.includes('.ag-editor-audio-row.is-open{display:block'), 'ligne ouverte visible');
-assert(src.includes('agilo-audio-sticky__ico'), 'icônes mobile 15s/30s');
+assert(src.includes('agilo-audio-sticky__ico'), 'icônes mobile');
+assert(src.includes('>10s</span>'), 'libellés 10s');
+assert(!src.includes('>15s</span>'), 'plus de libellé 15s');
+assert(!src.includes('>30s</span>'), 'plus de libellé 30s');
 assert(src.includes('prefers-reduced-motion'), 'reduced-motion');
 assert(src.includes("setWrapInert(true)"), 'inert posé à l ouverture seulement');
 assert(src.includes("setWrapInert(false)"), 'inert retiré à la fermeture');
