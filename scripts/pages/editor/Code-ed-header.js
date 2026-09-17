@@ -3,7 +3,8 @@
 // ⚠️ Ne pas dupliquer ce fichier en embed inline Webflow si déjà chargé via CDN.
 
 (function () {
-  if (window.__agiloEditorHeader_v7) return;
+  if (window.__agiloEditorHeader_v8) return;
+  window.__agiloEditorHeader_v8 = true;
   window.__agiloEditorHeader_v7 = true;
 
   const AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
@@ -151,6 +152,9 @@
     .agilo-btn--primary{border-color:#174a96;background:#174a96;color:#fff}
     .agilo-toast{position:fixed;left:20px;bottom:20px;z-index:999999;background:#111;color:#fff;padding:9px 14px;border-radius:6px;box-shadow:0 6px 16px rgba(0,0,0,.22);opacity:0;transition:opacity .25s;max-width:92vw}
     .is-disabled{opacity:.6; cursor:not-allowed;}
+    .download_link-options a.download_wrapper-link_investigation_docx{display:flex;flex-direction:row;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;text-decoration:none}
+    .custom-element.options.is-open{position:relative;z-index:100}
+    .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
   `;
     const st = document.createElement('style'); st.id = 'agilo-dialog-theme'; st.textContent = css; document.head.appendChild(st);
   }
@@ -419,7 +423,12 @@
       if (panel) {
         panel.style.display = 'flex';
         panel.style.flexDirection = 'column';
+        panel.style.overflow = 'visible';
+        panel.style.height = 'auto';
+        panel.style.zIndex = '100';
       }
+      box.style.zIndex = '100';
+      box.style.position = box.style.position || 'relative';
 
       const first = box.querySelector('.download_link-options a[href]');
       if (first) first.focus({ preventScroll: true });
@@ -445,7 +454,7 @@
   }
 
   function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
-    if (!link) return;
+    if (!link || isInvestigationPvAnchor(link)) return;
 
     if (link.__clickHandler) {
       link.removeEventListener('click', link.__clickHandler);
@@ -623,16 +632,54 @@
     ) || null;
   }
 
+  function isInvestigationPvAnchor(el) {
+    return !!(el && el.classList && el.classList.contains('download_wrapper-link_investigation_docx'));
+  }
+
+  function copyInvestigationLayoutFrom(template) {
+    if (!template) return;
+    let st = document.getElementById('agilo-inv-pv-layout');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'agilo-inv-pv-layout';
+      document.head.appendChild(st);
+    }
+    const cs = window.getComputedStyle(template);
+    const pad = cs.padding && cs.padding !== '0px' ? cs.padding : '';
+    const gap = cs.gap && cs.gap !== 'normal' ? cs.gap : '0px';
+    st.textContent = `
+      .download_link-options a.download_wrapper-link_investigation_docx{
+        display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+        width:100%;box-sizing:border-box;text-decoration:none;
+        ${pad ? `padding:${pad};` : ''}gap:${gap};
+      }
+      .custom-element.options.is-open{position:relative;z-index:100}
+      .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
+    `;
+  }
+
   function ensureInvestigationPvLink() {
     const api = window.AgiloFormatInvestigationPv;
     const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
     let a = document.querySelector('a.' + cls);
-    if (a) return a;
+    if (a) {
+      a.classList.remove('download_wrapper-link_summary_docx');
+      const hasIcon = a.querySelector('.icon-1x1-medium, svg, .w-embed');
+      if (hasIcon) {
+        const label = investigationLinkLabelEl(a);
+        if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+        const template = document.querySelector('a.download_wrapper-link_summary_docx:not(.download_wrapper-link_investigation_docx)');
+        if (template) copyInvestigationLayoutFrom(template);
+        return a;
+      }
+      a.remove();
+      a = null;
+    }
     const panels = $$('.download_link-options');
     let host = null;
     let template = null;
     panels.forEach((p) => {
-      const sum = p.querySelector('a.download_wrapper-link_summary_docx');
+      const sum = p.querySelector('a.download_wrapper-link_summary_docx:not(.download_wrapper-link_investigation_docx)');
       if (sum) {
         host = p;
         template = sum;
@@ -641,8 +688,10 @@
     if (!host) host = document.querySelector('.download_link-options');
     if (!host) return null;
     if (template) {
+      copyInvestigationLayoutFrom(template);
       a = template.cloneNode(true);
-      a.className = cls;
+      a.classList.remove('download_wrapper-link_summary_docx');
+      a.classList.add(cls);
       a.removeAttribute('download');
       a.removeAttribute('data-w-id');
       a.setAttribute('href', '#');
@@ -653,7 +702,9 @@
       a = document.createElement('a');
       a.href = '#';
       a.className = cls;
-      a.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+      const label = document.createElement('div');
+      label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+      a.appendChild(label);
     }
     a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
     host.appendChild(a);
@@ -661,13 +712,12 @@
   }
 
   function setInvestigationLinkBusy(a, busy) {
+    if (!a) return;
     const api = window.AgiloFormatInvestigationPv;
     const idle = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
     const busyLabel = (api && api.LABEL_BUSY) || 'Préparation du Word';
     const label = investigationLinkLabelEl(a);
     if (label) label.textContent = busy ? busyLabel : idle;
-    else if (a && !a.querySelector('div')) a.textContent = busy ? busyLabel : idle;
-    if (!a) return;
     a.setAttribute('aria-busy', busy ? 'true' : 'false');
     a.style.pointerEvents = busy ? 'none' : '';
     a.style.cursor = busy ? 'progress' : '';
@@ -765,6 +815,7 @@
     sum.forEach(({ c, f }) => {
       const links = document.querySelectorAll(`.download_link-options a.download_wrapper-link_summary_${c}`);
       links.forEach((a) => {
+        if (isInvestigationPvAnchor(a)) return;
         if (a.closest('.wrapper-message-pro')) return;
 
         if (!isProPlus && (c === 'doc' || c === 'pdf')) {

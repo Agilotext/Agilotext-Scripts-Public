@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.9-investigation-pv
+   AGILOTEXT — Mes transcripts logic v2.2.10-investigation-pv
+   v2.2.10-investigation-pv — clone DOCX Webflow sans classe summary_* ; z-index menu 100.
    v2.2.9-investigation-pv — lien PV d’enquête (Word) sidecar formatInvestigationPv (705–720).
    v2.2.8-stt-on-error — READY_SUMMARY_ON_ERROR : Télécharger transcription encore OK.
    v2.2.7-demo-row — ligne exemple : plus de badge, une hauteur, clics bloqués.
@@ -26,7 +27,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.9-investigation-pv';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.10-investigation-pv';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -437,9 +438,32 @@
     triggerBlobDownload(check.blob, anchorEl.getAttribute('download') || 'summary');
   }
 
-  function isSummaryOptionsCell(el) {
-    return !!(el && el.querySelector && el.querySelector('[class*="download_wrapper-link_summary_"]'));
+  function isInvestigationPvAnchor(el) {
+    return !!(el && el.classList && el.classList.contains('download_wrapper-link_investigation_docx'));
   }
+
+  function querySummaryFormatLinks(root) {
+    if (!root || !root.querySelectorAll) return [];
+    return Array.from(root.querySelectorAll('[class*="download_wrapper-link_summary_"]'))
+      .filter((el) => !isInvestigationPvAnchor(el));
+  }
+
+  function isSummaryOptionsCell(el) {
+    return querySummaryFormatLinks(el).length > 0;
+  }
+
+  function injectInvestigationPvTheme() {
+    if (document.getElementById('agilo-inv-pv-layout-mes')) return;
+    const st = document.createElement('style');
+    st.id = 'agilo-inv-pv-layout-mes';
+    st.textContent = `
+      .download_link-options a.download_wrapper-link_investigation_docx{display:flex;flex-direction:row;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;text-decoration:none}
+      .custom-element.options.is-open{position:relative;z-index:100}
+      .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
+    `;
+    document.head.appendChild(st);
+  }
+  injectInvestigationPvTheme();
 
   function closeOtherDownloadPanels(keepPanel) {
     const root = document.getElementById('jobs-container');
@@ -459,6 +483,11 @@
     closeOtherDownloadPanels(panel);
     if (!panel) return;
     panel.style.display = 'block';
+    panel.style.overflow = 'visible';
+    panel.style.height = 'auto';
+    panel.style.zIndex = '100';
+    optionsEl.style.position = optionsEl.style.position || 'relative';
+    optionsEl.style.zIndex = '100';
     optionsEl.classList.add('is-open');
     const toggle = optionsEl.querySelector('.download-link');
     if (toggle) toggle.setAttribute('aria-expanded', 'true');
@@ -1333,7 +1362,7 @@
 
   function setSummaryCellState(row, job) {
     const availability = getSummaryAvailability(job);
-    const summaryLinks = Array.from(row.querySelectorAll('[class*="download_wrapper-link_summary_"]'));
+    const summaryLinks = querySummaryFormatLinks(row);
     if (!summaryLinks.length) {
       console.warn('[Agilo][MesTranscripts] summary cell missing', {
         jobId: job?.jobid,
@@ -1453,19 +1482,51 @@
     ) || null;
   }
 
+  function copyInvestigationLayoutFrom(template) {
+    if (!template) return;
+    injectInvestigationPvTheme();
+    const st = document.getElementById('agilo-inv-pv-layout-mes');
+    if (!st) return;
+    const cs = window.getComputedStyle(template);
+    const pad = cs.padding && cs.padding !== '0px' ? cs.padding : '';
+    const gap = cs.gap && cs.gap !== 'normal' ? cs.gap : '0px';
+    st.textContent = `
+      .download_link-options a.download_wrapper-link_investigation_docx{
+        display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+        width:100%;box-sizing:border-box;text-decoration:none;
+        ${pad ? `padding:${pad};` : ''}gap:${gap};
+      }
+      .custom-element.options.is-open{position:relative;z-index:100}
+      .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
+    `;
+  }
+
   function ensureInvestigationPvLinkInRow(row) {
     const api = window.AgiloFormatInvestigationPv;
     const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
     let a = row.querySelector('a.' + cls);
-    if (a) return a;
-    const summaryDocx = row.querySelector('a.download_wrapper-link_summary_docx');
+    if (a) {
+      a.classList.remove('download_wrapper-link_summary_docx');
+      const hasIcon = a.querySelector('.icon-1x1-medium, svg, .w-embed');
+      if (hasIcon) {
+        const label = investigationLinkLabelEl(a);
+        if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+        return a;
+      }
+      a.remove();
+      a = null;
+    }
+    const summaryDocx = Array.from(row.querySelectorAll('a.download_wrapper-link_summary_docx'))
+      .find((el) => !isInvestigationPvAnchor(el));
     const host = (summaryDocx && summaryDocx.closest('.download_link-options'))
       || row.querySelector('.download_link-options')
       || row.querySelector('.report-links');
     if (!host) return null;
     if (summaryDocx) {
+      copyInvestigationLayoutFrom(summaryDocx);
       a = summaryDocx.cloneNode(true);
-      a.className = cls;
+      a.classList.remove('download_wrapper-link_summary_docx');
+      a.classList.add(cls);
       a.removeAttribute('download');
       a.removeAttribute('data-w-id');
       a.setAttribute('href', '#');
@@ -1476,8 +1537,9 @@
       a = document.createElement('a');
       a.href = '#';
       a.className = cls;
-      a.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
-      a.style.cssText = 'font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;';
+      const label = document.createElement('div');
+      label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+      a.appendChild(label);
     }
     a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
     host.appendChild(a);
@@ -1485,13 +1547,12 @@
   }
 
   function setInvestigationLinkBusy(a, busy) {
+    if (!a) return;
     const api = window.AgiloFormatInvestigationPv;
     const idle = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
     const busyLabel = (api && api.LABEL_BUSY) || 'Préparation du Word';
     const label = investigationLinkLabelEl(a);
     if (label) label.textContent = busy ? busyLabel : idle;
-    else if (a && !a.querySelector('div')) a.textContent = busy ? busyLabel : idle;
-    if (!a) return;
     a.setAttribute('aria-busy', busy ? 'true' : 'false');
     a.style.pointerEvents = busy ? 'none' : '';
     a.style.cursor = busy ? 'progress' : '';
@@ -1741,7 +1802,8 @@
       { slot: 'pdf', apiFormat: 'pdf' }
     ];
     summaryFormats.forEach(({ slot, apiFormat }) => {
-      const aS = clone.querySelector(`.download_wrapper-link_summary_${slot}`);
+      const aS = Array.from(clone.querySelectorAll(`.download_wrapper-link_summary_${slot}`))
+        .find((el) => !isInvestigationPvAnchor(el));
       if (aS && isFree && isRestrictedFreeFormat(slot)) {
         lockFormatForFree(aS, 'Réservé aux offres Pro et Business');
         aS.style.removeProperty('display');
