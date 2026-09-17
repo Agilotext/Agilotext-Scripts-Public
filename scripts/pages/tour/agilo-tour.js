@@ -1,7 +1,7 @@
-/* agilo-tour.js v2.1.0
+/* agilo-tour.js v2.1.1
  * Driver.js 1.3 onboarding (agilo_tour_state_v25).
  * Premier passage : 8 étapes + stop C’est bon / Continuer.
- * Suite : éditeur (cibles visibles), bibliothèque, Support, Agiloshield optionnel.
+ * Suite : Mes fichiers (wait jobs + Éditer data-editor-url), éditeur, bibliothèque, Support, Agiloshield optionnel.
  * Copy : 4 seaux (default, public, dirigeant, equipe) depuis le DOM Memberstack.
  * Archive v23 : scripts/pages/tour/archive/agilo-tour-v23-1.0.0.js (SHA 7d5a786b).
  */
@@ -10,14 +10,14 @@
 
   if (window.__AGILO_TOUR_BOOTED__) return;
   window.__AGILO_TOUR_BOOTED__ = true;
-  window.__AGILO_TOUR_VERSION__ = '2.1.0';
+  window.__AGILO_TOUR_VERSION__ = '2.1.1';
 
   /* ========== CONFIG ========== */
   var STORAGE_KEY     = 'agilo_tour_state_v25';
   var FIRST_RUN_KEY   = 'agilo_tour_first_seen_v25';
   var COMPLETED_KEY   = 'agilo_tour_completed_v25';
 
-  var LAUNCH_GUARD = { starting:false, driven:false, route:null };
+  var LAUNCH_GUARD = { starting:false, driven:false, route:null, building:false };
   function guardStart(route){
     if (LAUNCH_GUARD.starting && LAUNCH_GUARD.route === route) { log('start ignoré: starting in progress on', route); return true; }
     if (LAUNCH_GUARD.driven   && LAUNCH_GUARD.route === route) { log('start ignoré: already driven on', route); return true; }
@@ -27,6 +27,7 @@
     LAUNCH_GUARD.starting = false;
     LAUNCH_GUARD.driven   = false;
     LAUNCH_GUARD.route    = null;
+    LAUNCH_GUARD.building = false;
     log('guard reset', reason ? '('+reason+')' : '');
   }
 
@@ -34,6 +35,7 @@
   var POLL_MS         = 100;
   var WAIT_MAX_MS     = 1500;
   var ANON_WAIT_MS    = 8000;
+  var JOBS_WAIT_MS    = 8000;
   var KEY_SELECTORS   = {
     anonymize: '[data-tour="anonymize"], #agfDropzone, .agf-dropzone',
     'anon-historique': '[data-tour="anon-historique"], #agfAnonJobsWrap, .agf-anon-jobs-list',
@@ -47,7 +49,8 @@
     save: '[data-tour="save"], button[data-action="save-transcript"], button.button.save',
     'ed-tabs': '[data-tour="ed-tabs"], nav.ed-tabs, .ed-tabs',
     'lib-tabs': '[data-tour="lib-tabs"], .agilo-lib-tabs, .agilo-lib-tab[data-tab]',
-    'lib-create': '[data-tour="lib-create"], [data-open-wizard]'
+    'lib-create': '[data-tour="lib-create"], [data-open-wizard]',
+    'editor-open': '[data-tour="editor-open"], button.button-open'
   };
   var RESUME_GRACE_MS = 30000;
   var RETRY_TOTAL_MS  = 20000;
@@ -213,7 +216,40 @@
     return el;
   }
   function hasOpenableJob(){
-    return !!(document.querySelector('.wrapper-content_item-row[data-job-id], [data-job-id], a[href*="/editor"]'));
+    var rows = document.querySelectorAll('.wrapper-content_item-row[data-job-id]');
+    for (var i=0;i<rows.length;i++){
+      var id = rows[i].getAttribute('data-job-id');
+      if (id && String(id).trim()) return true;
+    }
+    return false;
+  }
+  function waitForJobs(maxMs){
+    if (hasOpenableJob()) return Promise.resolve(true);
+    var t0 = Date.now();
+    return new Promise(function(res){ (function loop(){
+      if (hasOpenableJob()) return res(true);
+      if (Date.now() - t0 >= (+maxMs || JOBS_WAIT_MS)) return res(false);
+      setTimeout(loop, POLL_MS);
+    })(); });
+  }
+  function editorUrlFrom(el){
+    if (!el) return '';
+    var url = el.getAttribute('data-editor-url') || el.getAttribute('href') || '';
+    return /jobId=/.test(url) ? url : '';
+  }
+  function resolveNavTarget(nav){
+    if (!nav && nav!==0) return null;
+    nav = String(nav).trim();
+    if (!nav) return null;
+    if (/^https?:/.test(nav) || nav.indexOf('/app/') === 0) {
+      return { url: nav, route: normalizePath(nav) };
+    }
+    var q = nav.indexOf('?');
+    if (q >= 0) {
+      var path = nav.slice(0, q);
+      return { url: buildUrlForRoute(path) + nav.slice(q), route: normalizePath(path) };
+    }
+    return { url: buildUrlForRoute(nav), route: normalizePath(nav) };
   }
   function stampStableHooks(){
     var pairs = [
@@ -225,7 +261,8 @@
       ['audio', '#agilo-audio-wrap, #ag-editor-audio-row'],
       ['save', 'button[data-action="save-transcript"]'],
       ['lib-tabs', '.agilo-lib-tabs'],
-      ['lib-create', '[data-open-wizard]']
+      ['lib-create', '[data-open-wizard]'],
+      ['editor-open', 'button.button-open']
     ];
     pairs.forEach(function(pair){
       var el = document.querySelector(pair[1]);
@@ -422,7 +459,7 @@
 
     add('/mes-transcripts','transcripts-table','transcripts-table','top','center');
     add('/mes-transcripts','share-job','share-job','top','center', null, { skipIfNoJob:true });
-    add('/mes-transcripts','editor-open','editor-open','center','center','/editor', { skipIfNoJob:true });
+    add('/mes-transcripts','editor-open','editor-open','center','center', null, { skipIfNoJob:true });
 
     add('/editor','ed-tabs','ed-tabs','bottom','center');
     add('/editor','audio','audio','top','center');
@@ -509,6 +546,8 @@
         defs = defs.filter(function(s){ return s._gIndex > FIRST_STOP_INDEX; });
       }
     }
+    var prepRoute = (route === '/mes-transcripts') ? waitForJobs(JOBS_WAIT_MS) : Promise.resolve(true);
+    return prepRoute.then(function(){
     var promises = defs.map(function(s){
       var desc = s.desc;
       if (s.key==='transcripts-table' && !hasOpenableJob()) {
@@ -523,13 +562,16 @@
       if (s.key==='nav-support' && canShowAgiloshield()) {
         step.__nav = '/dashboard/anonymiser';
       }
+      if (s.key==='transcripts-table' && !hasOpenableJob()) {
+        step.__nav = '/library';
+      }
       if (s.skipIfNoJob && !hasOpenableJob()) {
         step.__skip=true;
         return Promise.resolve(step);
       }
       if (s.key){
         var sel = (KEY_SELECTORS[s.key] || ('[data-tour="'+s.key+'"]'));
-        var waitMs = (s.key==='anonymize' || s.key==='anon-historique') ? ANON_WAIT_MS : WAIT_MAX_MS;
+        var waitMs = (s.key==='anonymize' || s.key==='anon-historique' || s.key==='editor-open') ? ANON_WAIT_MS : WAIT_MAX_MS;
         var needsTab = (s.key==='audio' || s.key==='download-transcript' || s.key==='save');
         var prep = needsTab ? ensureTranscriptTab() : Promise.resolve();
         return prep.then(function(){
@@ -540,6 +582,10 @@
             } else {
               step.element=el;
               if (!el.getAttribute('data-tour') && s.key) el.setAttribute('data-tour', s.key);
+              if (s.key==='editor-open') {
+                var editorUrl = editorUrlFrom(el);
+                if (editorUrl) step.__nav = editorUrl;
+              }
             }
             return step;
           });
@@ -551,17 +597,21 @@
       }
     });
     return Promise.all(promises).then(function(arr){
-      var skippedNav = null;
-      arr.forEach(function(x){ if (x.__skip && x.__nav) skippedNav = x.__nav; });
       var steps = arr.filter(function(x){return !x.__skip;});
-      if (skippedNav && steps.length && !steps[steps.length-1].__nav) {
-        steps[steps.length-1].__nav = skippedNav;
+      if (route === '/mes-transcripts' && steps.length && !steps[steps.length-1].__nav) {
+        if (hasOpenableJob()) {
+          var btn = firstHighlightable('[data-tour="editor-open"], button.button-open');
+          steps[steps.length-1].__nav = editorUrlFrom(btn) || '/library';
+        } else {
+          steps[steps.length-1].__nav = '/library';
+        }
       }
       var startLocal=0;
       if (typeof absoluteIndex==='number'){
         for (var i=0;i<steps.length;i++){ if (steps[i].__gIndex>=absoluteIndex){ startLocal=i; break; } }
       }
       return {steps:steps, startLocal:startLocal};
+    });
     });
   }
 
@@ -627,6 +677,21 @@
       completeFirstRun();
     }, true);
   }
+  function patchNavFooter(){
+    var footer = document.querySelector('.driver-popover-footer');
+    if (!footer) return;
+    var next = footer.querySelector('.driver-popover-next-btn');
+    var done = footer.querySelector('.driver-popover-done-btn');
+    if (next) {
+      next.textContent = 'Suivant';
+      next.style.display = 'inline-block';
+      next.removeAttribute('hidden');
+    }
+    if (done) {
+      done.style.display = 'none';
+      done.setAttribute('hidden', '');
+    }
+  }
 
   function startOnThisPageOrRetry(here, absoluteIndex){
     var startTs = Date.now();
@@ -650,9 +715,12 @@
 
     function tryStart(){
       if (launched) return;
+      if (LAUNCH_GUARD.building) return;
       if (LAUNCH_GUARD.driven && LAUNCH_GUARD.route === here) return;
 
+      LAUNCH_GUARD.building = true;
       buildStepsForRoute(here, absoluteIndex).then(function(result){
+        LAUNCH_GUARD.building = false;
         var pageSteps=result.steps, startLocal=result.startLocal;
 
         if (!pageSteps.length){
@@ -685,7 +753,7 @@
           pageSteps.map(function(s){return {element:s.element,popover:s.popover,padding:s.padding};}),
           startLocal, here, result
         );
-      }).catch(function(){});
+      }).catch(function(){ LAUNCH_GUARD.building = false; });
     }
 
     observer = new MutationObserver(function(){ tryStart(); });
@@ -715,11 +783,10 @@
     if (origin === 'done' && m.stop) return false;
 
     var nextGlobal = computeResumeIndexAfterNav((meta[localIdx]?meta[localIdx].g:0)+1);
-
-    var hasExplicit = typeof m.nav === 'string' && m.nav.trim().length > 0;
-    var targetRoute = hasExplicit ? normalizePath(m.nav) :
-                       (BLUEPRINT[nextGlobal] ? BLUEPRINT[nextGlobal].route : '/dashboard');
-    var targetUrl   = hasExplicit ? buildUrlForRoute(m.nav) : buildUrlForRoute(targetRoute);
+    var resolved = resolveNavTarget(m.nav);
+    if (!resolved) return false;
+    var targetRoute = resolved.route || (BLUEPRINT[nextGlobal] ? BLUEPRINT[nextGlobal].route : '/dashboard');
+    var targetUrl = resolved.url;
 
     saveState({ route: targetRoute, stepGlobalIndex: nextGlobal, resume:true, pending:true, timestamp:Date.now() });
     refreshResumeUI();
@@ -775,6 +842,9 @@
             var doneLabel = isFirstStop ? 'C’est bon' : 'Terminer';
             setTimeout(function(){ patchStopFooter(showContinue, doneLabel); }, 0);
             setTimeout(function(){ patchStopFooter(showContinue, doneLabel); }, 60);
+          } else if (m.nav && localIdx === meta.length - 1) {
+            setTimeout(patchNavFooter, 0);
+            setTimeout(patchNavFooter, 60);
           }
         }catch(_){}
       },

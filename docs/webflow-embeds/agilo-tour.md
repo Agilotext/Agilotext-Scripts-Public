@@ -14,8 +14,9 @@ Le guide vit dans le composant Webflow **`ONBOARDING_SCRIPT`** (19 instances, cl
 | v2.0.0 / v24 | `8ce2423bc0074fdfc4d9df9190e22ca9f8247a58` | `agilo_tour_state_v24` | Premier livrable, 8 étapes + stop, copy par seau |
 | v2.0.1 / v24 | `8f0449eeadbff0c98b4f58dc606cdb76585413de` | `agilo_tour_state_v24` | Stop C’est bon = dernière étape Driver du 1er passage |
 | v2.1.0 / v25 | `8fd5c4c5007ed2fd96e1aeed6a21667a3838a63c` | `agilo_tour_state_v25` | Cibles visibles éditeur, 2 étapes library, Support = 2e stop, Agiloshield optionnel |
+| v2.1.1 / v25 | (SHA après push) | `agilo_tour_state_v25` | Wait jobs Mes fichiers, Éditer via `data-editor-url`, Suivant pas Terminer |
 
-Rollback v2.1 : SHA `8f0449ee`. Archive v23 : `7d5a786b`.
+Rollback v2.1.1 : SHA `8fd5c4c5`. Archive v23 : `7d5a786b`.
 
 ## Inventaire `/auth/setup` (staging, 2026-09-15)
 
@@ -43,7 +44,7 @@ Champ Memberstack `meeting-tool` : écrit par le setup (`MS_FIELDS.tool`). Absen
 
 **A. 8 étapes** dashboard : welcome, record, file (`#panel-file`), options, prompt-picker, wb-picker, submit (`#submit-button`), stop (C’est bon / Continuer).
 
-**B. Suite** si le hook est là : Mes fichiers, partage (`.agilo-row-share`), éditeur (onglets, `#agilo-audio-wrap`, `.ed-actions`, save sur onglet Transcription), `/library` (onglets + créer), Support (2e stop). Agiloshield (`#agfDropzone`) seulement si Continuer, hors Free. Max 19. Skip si absent ou non highlightable.
+**B. Suite** si le hook est là : Mes fichiers (wait jobs, **Éditer** `.button-open` + `data-editor-url`), éditeur (onglets, `#agilo-audio-wrap`, `.ed-actions`, save sur onglet Transcription), `/library` (onglets + créer), Support (2e stop). Agiloshield (`#agfDropzone`) seulement si Continuer, hors Free. Max 19. Skip si absent ou non highlightable.
 
 ## Embed (après push)
 
@@ -53,6 +54,6 @@ Pin **HtmlEmbed du composant `ONBOARDING_SCRIPT`**, pas un 2e script. `ONBOARDIN
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@8fd5c4c5007ed2fd96e1aeed6a21667a3838a63c/scripts/pages/tour/agilo-tour.js?v=8fd5c4c5"></script>
 ```
 
-Recette console : `window.__AGILO_TOUR_VERSION__ === '2.1.0'`
+Recette console : `window.__AGILO_TOUR_VERSION__ === '2.1.1'`
 
 Sans le navigateur Cursor : `python3 tests/agilo-tour-v2-recette-server.py` puis Chrome headless sur `http://127.0.0.1:8765/app/premium/dashboard`. Résultat dans `/tmp/agilo-tour-v2-recette.json`.

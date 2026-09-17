@@ -1,5 +1,5 @@
 /**
- * Tour Driver.js v2.1.0 (blueprint v25, cibles visibles, library, Support).
+ * Tour Driver.js v2.1.1 (blueprint v25, wait jobs Mes fichiers, data-editor-url).
  * Exécution : node --test tests/agilo-tour-selectors.test.js
  */
 
@@ -71,9 +71,9 @@ describe("archive v23", () => {
 });
 
 describe("agilo-tour v2.1", () => {
-  it("expose la version 2.1.0 et le storage v25", () => {
-    assert.match(SRC, /agilo-tour\.js v2\.1\.0/);
-    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.1\.0'/);
+  it("expose la version 2.1.1 et le storage v25", () => {
+    assert.match(SRC, /agilo-tour\.js v2\.1\.1/);
+    assert.match(SRC, /__AGILO_TOUR_VERSION__ = '2\.1\.1'/);
     assert.match(SRC, /agilo_tour_state_v25/);
     assert.match(SRC, /agilo_tour_first_seen_v25/);
     assert.match(SRC, /agilo_tour_completed_v25/);
@@ -122,6 +122,7 @@ describe("agilo-tour v2.1", () => {
     assert.match(SRC, /save:\s*'\[data-tour="save"\], button\[data-action="save-transcript"\]/);
     assert.match(SRC, /file:\s*'\[data-tour="file"\].*#panel-file/);
     assert.match(SRC, /submit:\s*'\[data-tour="submit"\], #submit-button'/);
+    assert.match(SRC, /'editor-open':\s*'\[data-tour="editor-open"\], button\.button-open'/);
     assert.doesNotMatch(SRC, /#exportBtn/);
     assert.doesNotMatch(SRC, /#audioPlayer/);
     assert.doesNotMatch(SRC, /audio, \.ed-audio/);
@@ -195,6 +196,49 @@ describe("agilo-tour v2.1", () => {
     assert.match(SRC, /step\.__nav = '\/dashboard\/anonymiser'/);
     assert.match(SRC, /function patchStopFooter\(showContinue, doneLabel\)/);
     assert.match(SRC, /var showContinue = isFirstStop \|\| canShowAgiloshield\(\)/);
+  });
+
+  it("attend les jobs Mes fichiers une fois, sans /editor nu", () => {
+    assert.match(SRC, /function waitForJobs/);
+    assert.match(SRC, /var JOBS_WAIT_MS\s+=\s+8000;/);
+    assert.match(SRC, /LAUNCH_GUARD\.building/);
+    assert.match(SRC, /function editorUrlFrom/);
+    assert.match(SRC, /data-editor-url/);
+    assert.match(SRC, /function resolveNavTarget/);
+    assert.match(SRC, /function patchNavFooter/);
+    assert.match(SRC, /route === '\/mes-transcripts'\) \? waitForJobs/);
+    assert.match(SRC, /:not\(\[data-job-id=""\]\)|:not\(\[data-job-id="\\"\]\)|\.wrapper-content_item-row\[data-job-id\]/);
+    assert.doesNotMatch(SRC, /add\('\/mes-transcripts','editor-open','editor-open','center','center','\/editor'/);
+    assert.doesNotMatch(SRC, /a\[href\*="\/editor"\]/);
+    assert.match(SRC, /if \(id && String\(id\)\.trim\(\)\) return true/);
+  });
+});
+
+describe("hasOpenableJob", () => {
+  it("refuse data-job-id vide et accepte un row avec id", () => {
+    const fnMatch = SRC.match(
+      /function hasOpenableJob\(\)\{\n    var rows = document\.querySelectorAll\('\.wrapper-content_item-row\[data-job-id\]'\);[\s\S]*?return false;\n  \}/
+    );
+    assert.ok(fnMatch, "hasOpenableJob introuvable");
+    function run(nodes) {
+      const fn = new Function(
+        "document",
+        `${fnMatch[0]}\nreturn hasOpenableJob;`
+      )({ querySelectorAll: () => nodes });
+      return fn();
+    }
+    assert.equal(
+      run([{ getAttribute: () => "" }]),
+      false
+    );
+    assert.equal(
+      run([{ getAttribute: () => "   " }]),
+      false
+    );
+    assert.equal(
+      run([{ getAttribute: () => "1000040316" }]),
+      true
+    );
   });
 });
 
