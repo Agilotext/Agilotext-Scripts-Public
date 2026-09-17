@@ -1,5 +1,6 @@
 /* =============================================================================
-   AGILOTEXT — Mes transcripts logic v2.2.10-investigation-pv
+   AGILOTEXT — Mes transcripts logic v2.2.11-investigation-pv
+   v2.2.11-investigation-pv — sanitize clone PV (cursor pointer idle, pas de verifying copié).
    v2.2.10-investigation-pv — clone DOCX Webflow sans classe summary_* ; z-index menu 100.
    v2.2.9-investigation-pv — lien PV d’enquête (Word) sidecar formatInvestigationPv (705–720).
    v2.2.8-stt-on-error — READY_SUMMARY_ON_ERROR : Télécharger transcription encore OK.
@@ -27,7 +28,7 @@
 
   if (window.__AGILO_LOGIC_ACTIVE) return;
   window.__AGILO_LOGIC_ACTIVE = true;
-  window.__agiloMesTranscriptsLogicVersion = '2.2.10-investigation-pv';
+  window.__agiloMesTranscriptsLogicVersion = '2.2.11-investigation-pv';
 
   const PAGE_SIZE = 25;
   const FETCH_LIMIT_TOTAL = 2000;
@@ -440,6 +441,25 @@
 
   function isInvestigationPvAnchor(el) {
     return !!(el && el.classList && el.classList.contains('download_wrapper-link_investigation_docx'));
+  }
+
+  function sanitizeInvestigationAnchor(a) {
+    if (!a) return a;
+    const api = window.AgiloFormatInvestigationPv;
+    a.classList.remove('download_wrapper-link_summary_docx', 'is-verifying', 'is-disabled');
+    a.removeAttribute('aria-disabled');
+    a.removeAttribute('download');
+    a.removeAttribute('data-w-id');
+    a.removeAttribute('target');
+    a.setAttribute('href', '#');
+    a.style.removeProperty('cursor');
+    a.style.removeProperty('pointer-events');
+    a.style.cursor = 'pointer';
+    a.style.pointerEvents = '';
+    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    return a;
   }
 
   function querySummaryFormatLinks(root) {
@@ -1506,13 +1526,8 @@
     const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
     let a = row.querySelector('a.' + cls);
     if (a) {
-      a.classList.remove('download_wrapper-link_summary_docx');
       const hasIcon = a.querySelector('.icon-1x1-medium, svg, .w-embed');
-      if (hasIcon) {
-        const label = investigationLinkLabelEl(a);
-        if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
-        return a;
-      }
+      if (hasIcon) return sanitizeInvestigationAnchor(a);
       a.remove();
       a = null;
     }
@@ -1525,14 +1540,7 @@
     if (summaryDocx) {
       copyInvestigationLayoutFrom(summaryDocx);
       a = summaryDocx.cloneNode(true);
-      a.classList.remove('download_wrapper-link_summary_docx');
       a.classList.add(cls);
-      a.removeAttribute('download');
-      a.removeAttribute('data-w-id');
-      a.setAttribute('href', '#');
-      a.removeAttribute('target');
-      const label = investigationLinkLabelEl(a);
-      if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
     } else {
       a = document.createElement('a');
       a.href = '#';
@@ -1541,7 +1549,7 @@
       label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
       a.appendChild(label);
     }
-    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    sanitizeInvestigationAnchor(a);
     host.appendChild(a);
     return a;
   }
@@ -1555,7 +1563,7 @@
     if (label) label.textContent = busy ? busyLabel : idle;
     a.setAttribute('aria-busy', busy ? 'true' : 'false');
     a.style.pointerEvents = busy ? 'none' : '';
-    a.style.cursor = busy ? 'progress' : '';
+    a.style.cursor = busy ? 'progress' : 'pointer';
   }
 
   function bindInvestigationPvClick(a, creds) {

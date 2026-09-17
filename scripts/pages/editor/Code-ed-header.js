@@ -3,7 +3,8 @@
 // ⚠️ Ne pas dupliquer ce fichier en embed inline Webflow si déjà chargé via CDN.
 
 (function () {
-  if (window.__agiloEditorHeader_v8) return;
+  if (window.__agiloEditorHeader_v9) return;
+  window.__agiloEditorHeader_v9 = true;
   window.__agiloEditorHeader_v8 = true;
   window.__agiloEditorHeader_v7 = true;
 
@@ -502,7 +503,7 @@
   }
 
   function setLinkVerifying(link, msg = 'Vérification…') {
-    if (!link) return;
+    if (!link || isInvestigationPvAnchor(link)) return;
     link.classList.add('is-verifying');
     link.removeAttribute('download');
     link.setAttribute('href', '#');
@@ -570,7 +571,7 @@
   }
 
   function guardClick(a, url, jobId, key, failMsg = 'Résumé indisponible.') {
-    if (!a || a.__guarded) return;
+    if (!a || isInvestigationPvAnchor(a) || a.__guarded) return;
     a.__guarded = true;
 
     a.addEventListener('click', async (e) => {
@@ -636,6 +637,25 @@
     return !!(el && el.classList && el.classList.contains('download_wrapper-link_investigation_docx'));
   }
 
+  function sanitizeInvestigationAnchor(a) {
+    if (!a) return a;
+    const api = window.AgiloFormatInvestigationPv;
+    a.classList.remove('download_wrapper-link_summary_docx', 'is-verifying', 'is-disabled');
+    a.removeAttribute('aria-disabled');
+    a.removeAttribute('download');
+    a.removeAttribute('data-w-id');
+    a.removeAttribute('target');
+    a.setAttribute('href', '#');
+    a.style.removeProperty('cursor');
+    a.style.removeProperty('pointer-events');
+    a.style.cursor = 'pointer';
+    a.style.pointerEvents = '';
+    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    return a;
+  }
+
   function copyInvestigationLayoutFrom(template) {
     if (!template) return;
     let st = document.getElementById('agilo-inv-pv-layout');
@@ -663,14 +683,11 @@
     const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
     let a = document.querySelector('a.' + cls);
     if (a) {
-      a.classList.remove('download_wrapper-link_summary_docx');
       const hasIcon = a.querySelector('.icon-1x1-medium, svg, .w-embed');
       if (hasIcon) {
-        const label = investigationLinkLabelEl(a);
-        if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
         const template = document.querySelector('a.download_wrapper-link_summary_docx:not(.download_wrapper-link_investigation_docx)');
         if (template) copyInvestigationLayoutFrom(template);
-        return a;
+        return sanitizeInvestigationAnchor(a);
       }
       a.remove();
       a = null;
@@ -690,14 +707,7 @@
     if (template) {
       copyInvestigationLayoutFrom(template);
       a = template.cloneNode(true);
-      a.classList.remove('download_wrapper-link_summary_docx');
       a.classList.add(cls);
-      a.removeAttribute('download');
-      a.removeAttribute('data-w-id');
-      a.setAttribute('href', '#');
-      a.removeAttribute('target');
-      const label = investigationLinkLabelEl(a);
-      if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
     } else {
       a = document.createElement('a');
       a.href = '#';
@@ -706,7 +716,7 @@
       label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
       a.appendChild(label);
     }
-    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    sanitizeInvestigationAnchor(a);
     host.appendChild(a);
     return a;
   }
@@ -720,7 +730,7 @@
     if (label) label.textContent = busy ? busyLabel : idle;
     a.setAttribute('aria-busy', busy ? 'true' : 'false');
     a.style.pointerEvents = busy ? 'none' : '';
-    a.style.cursor = busy ? 'progress' : '';
+    a.style.cursor = busy ? 'progress' : 'pointer';
   }
 
   function bindInvestigationPvClick(a) {
@@ -809,6 +819,8 @@
       });
     });
 
+    updateInvestigationPvLink(jobId, job);
+
     const sum = [
       { c: 'html', f: 'html' }, { c: 'rtf', f: 'rtf' }, { c: 'docx', f: 'docx' }, { c: 'doc', f: 'doc' }, { c: 'pdf', f: 'pdf' }, { c: 'txt', f: 'html' }
     ];
@@ -864,8 +876,6 @@
         setDownloadLink(a, '#', 'Résumé indisponible.');
       });
     });
-
-    updateInvestigationPvLink(jobId, job);
   }
 
   function setupRename() {
