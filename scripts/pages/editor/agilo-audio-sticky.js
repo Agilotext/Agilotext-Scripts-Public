@@ -20,6 +20,23 @@
   var LEGACY_PIN_ID = 'ag-editor-pin-host';
   var IO_ROOT_MARGIN = '40px 0px 0px 0px';
   var IO_SHOW_RATIO = 0.12;
+  var FOLLOW_BTN_ID = 'agilo-transcript-follow';
+  var FOLLOW_HINT_ID = 'agilo-transcript-follow-hint';
+  var FOLLOW_HINT_TEXT = 'L\'écran descend avec l\'audio. Si vous scrollez ou vous corrigez le texte, ça s\'arrête. Cliquez sur Suivre pour reprendre.';
+
+  function resolveFollowHost(opts) {
+    opts = opts || {};
+    if (opts.rowOpen && opts.stickyBar) {
+      return { mode: 'sticky', host: opts.stickyBar, before: opts.trackEl || null, after: opts.speedEl || null };
+    }
+    if (opts.speedEl && opts.speedEl.parentNode) {
+      return { mode: 'wrap', host: opts.speedEl.parentNode, before: opts.speedEl.nextSibling || opts.speedEl.nextElementSibling || null, after: opts.speedEl };
+    }
+    if (opts.dock) {
+      return { mode: 'dock', host: opts.dock, before: opts.rowEl || null, after: null };
+    }
+    return { mode: 'none', host: null, before: null, after: null };
+  }
 
   function computeAudioRowState(opts) {
     opts = opts || {};
@@ -152,8 +169,11 @@
     resolveConfidenceChromeBottom: resolveConfidenceChromeBottom,
     computeChromeDockFloatingBox: computeChromeDockFloatingBox,
     getChromeDockState: getChromeDockState,
+    resolveFollowHost: resolveFollowHost,
     DOCK_ID: DOCK_ID,
     ROW_ID: ROW_ID,
+    FOLLOW_BTN_ID: FOLLOW_BTN_ID,
+    FOLLOW_HINT_ID: FOLLOW_HINT_ID,
     IO_ROOT_MARGIN: IO_ROOT_MARGIN,
     IO_SHOW_RATIO: IO_SHOW_RATIO
   };
@@ -204,10 +224,21 @@
       'border-radius:6px;border:1px solid rgba(52,58,64,.18);background:#fff;color:#174a96;',
       'cursor:pointer;font:600 12px/1 inherit}',
       '.agilo-audio-sticky__btn:hover{background:rgba(23,74,150,.06)}',
-      '.agilo-audio-sticky__btn.is-primary{background:#174a96;border-color:#174a96;color:#fff}',
+      '.agilo-audio-sticky__btn.is-primary,.agilo-audio-sticky__btn.is-on{background:#174a96;border-color:#174a96;color:#fff}',
       '.agilo-audio-sticky__btn:focus-visible{outline:2px solid rgba(23,74,150,.55);outline-offset:2px}',
       '.agilo-audio-sticky__ico{display:none}',
-      '.agilo-audio-sticky__track{flex:1 1 120px;position:relative;height:.42rem;min-width:72px;',
+      '#agilo-transcript-follow{position:relative;flex:0 0 auto;display:inline-flex;align-items:center;',
+      'width:auto;max-width:none}',
+      '.agilo-audio-sticky__follow-label{display:inline}',
+      '.agilo-audio-sticky__follow-hint{display:none;position:absolute;left:0;top:calc(100% + 6px);',
+      'z-index:24;width:max-content;max-width:16rem;padding:8px 10px;border-radius:6px;',
+      'background:#174a96;color:#fff;font:500 12px/1.35 system-ui,sans-serif;',
+      'box-shadow:0 8px 20px rgba(15,23,42,.18);pointer-events:none;white-space:normal;text-align:left}',
+      '#agilo-transcript-follow:hover .agilo-audio-sticky__follow-hint,',
+      '#agilo-transcript-follow:focus-visible .agilo-audio-sticky__follow-hint{display:block}',
+      '#agilo-audio-wrap #agilo-transcript-follow{align-self:center;margin:0 0 0 8px;vertical-align:middle}',
+      '#ag-editor-chrome-dock>#agilo-transcript-follow{margin:4px 10px 8px;align-self:flex-start}',
+      '.agilo-audio-sticky__track{flex:1 1 80px;position:relative;height:.42rem;min-width:0;',
       'border-radius:999px;background:rgba(2,2,2,.10);cursor:pointer}',
       '.agilo-audio-sticky__progress{position:absolute;inset:0 auto 0 0;height:100%;width:0%;',
       'border-radius:inherit;background:#174a96;pointer-events:none}',
@@ -219,6 +250,7 @@
       '.agilo-audio-sticky__ico{display:inline}',
       '.agilo-audio-sticky__btn[data-act="back"],.agilo-audio-sticky__btn[data-act="fwd"]{',
       'min-width:2rem;padding:0 .35rem}',
+      '.agilo-audio-sticky__follow-label{display:inline}',
       '.agilo-audio-sticky__time{min-width:4.5rem;font-size:10px}',
       '}',
       '@media (prefers-reduced-motion:reduce){',
@@ -321,6 +353,111 @@
     });
   }
 
+  function toggleFollow() {
+    var follow = window.AgiloTranscriptFollow;
+    if (!follow) return;
+    if (follow.armed) follow.disarm();
+    else follow.arm();
+  }
+
+  function syncFollow(armed) {
+    var btn = ensureFollowBtn();
+    if (!btn) return;
+    if (typeof armed !== 'boolean') {
+      armed = window.AgiloTranscriptFollow ? !!window.AgiloTranscriptFollow.armed : true;
+    }
+    btn.classList.toggle('is-on', armed);
+    btn.setAttribute('aria-pressed', String(armed));
+  }
+
+  function ensureFollowBtn() {
+    var btn = document.getElementById(FOLLOW_BTN_ID);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = FOLLOW_BTN_ID;
+      btn.className = 'agilo-audio-sticky__btn is-on';
+      btn.setAttribute('data-act', 'follow');
+      btn.setAttribute('aria-label', 'Suivre la lecture : l\'écran suit l\'audio');
+      btn.setAttribute('aria-pressed', 'true');
+      btn.setAttribute('aria-describedby', FOLLOW_HINT_ID);
+      var label = document.createElement('span');
+      label.className = 'agilo-audio-sticky__follow-label';
+      label.textContent = 'Suivre';
+      var hint = document.createElement('span');
+      hint.id = FOLLOW_HINT_ID;
+      hint.className = 'agilo-audio-sticky__follow-hint';
+      hint.setAttribute('role', 'tooltip');
+      hint.textContent = FOLLOW_HINT_TEXT;
+      btn.appendChild(label);
+      btn.appendChild(hint);
+    }
+    if (!btn.__agiloFollowBound) {
+      btn.__agiloFollowBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFollow();
+      });
+    }
+    return btn;
+  }
+
+  function placeFollowControl() {
+    injectCss();
+    var btn = ensureFollowBtn();
+    if (!btn) return btn;
+    var rowOpen = !!(row && row.classList && row.classList.contains('is-open') && bar && bar.isConnected);
+    var speedInBar = bar && typeof bar.querySelector === 'function' ? bar.querySelector('[data-act="speed"]') : null;
+    var trackInBar = bar && typeof bar.querySelector === 'function' ? bar.querySelector('.agilo-audio-sticky__track') : null;
+    var speedLive = document.getElementById('agilo-speed');
+    var hostDock = dock && dock.isConnected ? dock : document.getElementById(DOCK_ID);
+    var placed = resolveFollowHost({
+      rowOpen: rowOpen,
+      stickyBar: bar,
+      trackEl: trackInBar,
+      speedEl: rowOpen ? speedInBar : speedLive,
+      dock: hostDock,
+      rowEl: row
+    });
+    if (!placed.host) return btn;
+    if (placed.mode === 'wrap' && placed.after && typeof placed.after.insertAdjacentElement === 'function') {
+      if (btn.previousElementSibling !== placed.after) {
+        placed.after.insertAdjacentElement('afterend', btn);
+      }
+      syncFollow();
+      return btn;
+    }
+    var before = placed.before;
+    if (before && before.parentNode !== placed.host) before = null;
+    if (btn.parentNode !== placed.host || (before && btn.nextElementSibling !== before && btn !== before)) {
+      if (before) placed.host.insertBefore(btn, before);
+      else placed.host.appendChild(btn);
+    }
+    syncFollow();
+    return btn;
+  }
+
+  function bindFollowState() {
+    if (window.__agiloFollowStateBound) return;
+    window.__agiloFollowStateBound = true;
+    document.addEventListener('agilo:transcript-follow', function (e) {
+      var armed = e && e.detail && typeof e.detail.armed === 'boolean'
+        ? e.detail.armed
+        : undefined;
+      syncFollow(armed);
+    });
+    var tries = 0;
+    function poll() {
+      placeFollowControl();
+      syncFollow();
+      if (window.AgiloTranscriptFollow || tries > 20) return;
+      tries += 1;
+      window.setTimeout(poll, 100);
+    }
+    poll();
+  }
+
   function ensureChromeDock() {
     injectCss();
     removeLegacyHosts();
@@ -395,6 +532,7 @@
     ].join('');
     host.appendChild(bar);
     bindBar(bar);
+    placeFollowControl();
     return bar;
   }
 
@@ -407,6 +545,7 @@
       else if (act === 'back') proxyClick('agilo-skip-back');
       else if (act === 'fwd') proxyClick('agilo-skip-fwd');
       else if (act === 'speed') proxyClick('agilo-speed');
+      else if (act === 'follow') return;
     });
 
     var track = el.querySelector('[data-act="track"]');
@@ -467,6 +606,7 @@
     host.setAttribute('aria-hidden', 'true');
     host.setAttribute('inert', '');
     setWrapInert(false);
+    placeFollowControl();
   }
 
   function openRow() {
@@ -476,6 +616,7 @@
     host.removeAttribute('aria-hidden');
     host.removeAttribute('inert');
     if (bar) bar.classList.toggle('is-disabled', isLocked(getWrap()));
+    placeFollowControl();
     setWrapInert(true);
     syncFromAudio();
   }
@@ -521,6 +662,7 @@
       else openRow();
     }
     updateFloat();
+    placeFollowControl();
   }
 
   function schedule() {
@@ -597,6 +739,7 @@
     observeWrap();
     bindAudioEvents();
     bindFloatListeners();
+    bindFollowState();
     if ((!getWrap() || !document.getElementById('pane-transcript')) && typeof MutationObserver === 'function') {
       var bootMo = new MutationObserver(function () {
         if (document.getElementById('pane-transcript')) observePane();

@@ -134,33 +134,20 @@
     trimSplitNewlines, shouldScrollFollow, createFollowController
   };
 
-  function ensureFollowChip() {
-    const pane = document.getElementById('pane-transcript');
-    if (!pane) return null;
-    let btn = document.getElementById('agilo-transcript-follow');
-    if (btn) return btn;
-    if (!document.getElementById('agilo-transcript-follow-css')) {
-      const s = document.createElement('style');
-      s.id = 'agilo-transcript-follow-css';
-      s.textContent = '#agilo-transcript-follow{display:none;margin:8px 12px;padding:6px 12px;font:600 13px/1.2 system-ui,sans-serif;border:1px solid #174a96;background:#fff;color:#174a96;border-radius:6px;cursor:pointer}#agilo-transcript-follow.is-visible{display:inline-flex;align-items:center}#agilo-transcript-follow:hover{background:#174a96;color:#fff}';
-      document.head.appendChild(s);
-    }
-    btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'agilo-transcript-follow';
-    btn.textContent = 'Suivre';
-    btn.title = 'Suivre la lecture';
-    btn.setAttribute('aria-label', 'Suivre la lecture');
-    btn.addEventListener('click', () => { try { window.AgiloTranscriptFollow?.arm(); } catch { } });
-    const dock = pane.querySelector('#ag-editor-chrome-dock');
-    if (dock && dock.nextSibling) pane.insertBefore(btn, dock.nextSibling);
-    else pane.insertBefore(btn, pane.firstChild);
-    return btn;
+  function dispatchTranscriptFollow(armed) {
+    try {
+      document.dispatchEvent(new CustomEvent('agilo:transcript-follow', { detail: { armed: !!armed } }));
+    } catch { /* ignore */ }
   }
-  function updateFollowChip(armed) {
-    const btn = ensureFollowChip();
-    if (!btn) return;
-    btn.classList.toggle('is-visible', !armed);
+  function removePaneFollowLeftover() {
+    const css = document.getElementById('agilo-transcript-follow-css');
+    if (css) css.remove();
+    const leftover = document.getElementById('agilo-transcript-follow');
+    if (!leftover) return;
+    if (leftover.closest('#agilo-audio-sticky')) return;
+    if (leftover.closest('#agilo-audio-wrap')) return;
+    if (leftover.closest('#ag-editor-chrome-dock')) return;
+    if (leftover.closest('#pane-transcript')) leftover.remove();
   }
   function bindFollowPause(sc) {
     const follow = window.AgiloTranscriptFollow;
@@ -1334,7 +1321,7 @@
   let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
   const _transcriptFollow = createFollowController({
-    onChange(armed) { updateFollowChip(armed); }
+    onChange(armed) { dispatchTranscriptFollow(armed); }
   });
   window.AgiloTranscriptFollow = _transcriptFollow;
 
@@ -2144,7 +2131,8 @@
     bindSplitTrim();
     bindFollowPause(document.getElementById('pane-transcript'));
     bindFollowPause(root);
-    updateFollowChip(_transcriptFollow.armed);
+    removePaneFollowLeftover();
+    dispatchTranscriptFollow(_transcriptFollow.armed);
 
     audio.addEventListener('timeupdate', () => {
       if (__mode !== 'structured' || !window._segments.length) return;
@@ -3137,5 +3125,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.7-follow';
+  window.__agiloEditorConfidenceVersion = '1.09.8-follow';
 });

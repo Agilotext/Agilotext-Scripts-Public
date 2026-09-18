@@ -242,4 +242,55 @@ assert(probe.isFloating === true, 'sonde: is-floating');
 assert(probe.chromeBottom === 110, 'sonde: chromeBottom onglets');
 assert(probe.sentinelTop === 12, 'sonde: sentinelTop');
 
+assert(typeof AS.resolveFollowHost === 'function', 'resolveFollowHost exposé');
+assert(AS.FOLLOW_BTN_ID === 'agilo-transcript-follow', 'FOLLOW_BTN_ID');
+assert(AS.FOLLOW_HINT_ID === 'agilo-transcript-follow-hint', 'FOLLOW_HINT_ID');
+assert(src.includes("setAttribute('data-act', 'follow')"), 'data-act follow');
+assert(!src.includes('follow-help'), 'pas de follow-help');
+assert(src.includes('.agilo-audio-sticky__btn.is-on'), 'CSS is-on');
+assert(src.includes('agilo-audio-sticky__follow-hint'), 'hint CSS');
+assert(src.includes('function placeFollowControl'), 'placeFollowControl');
+assert(src.includes("addEventListener('agilo:transcript-follow'"), 'écoute agilo:transcript-follow');
+assert(src.includes("act === 'follow') return"), 'bindBar ignore follow (toggle sur le bouton)');
+assert(src.includes('agilo-audio-sticky__follow-label'), 'libellé Suivre hors __txt');
+assert(src.includes('min-width:0'), 'piste min-width 0');
+assert(!src.includes('#agilo-transcript-follow{display:none'), 'pas de chip pane display:none');
+
+const stickyBar = { id: 'agilo-audio-sticky' };
+const trackEl = { id: 'track' };
+const speedEl = { parentNode: { id: 'wrap-controls' }, nextSibling: null, nextElementSibling: null };
+const dockHost = { id: 'ag-editor-chrome-dock' };
+const stickyHost = AS.resolveFollowHost({
+  rowOpen: true,
+  stickyBar,
+  trackEl,
+  speedEl: { parentNode: stickyBar }
+});
+assert(stickyHost.mode === 'sticky', 'hôte sticky si row ouverte');
+assert(stickyHost.host === stickyBar, 'host = barre compacte');
+assert(stickyHost.before === trackEl, 'insert avant la piste');
+
+const wrapHost = AS.resolveFollowHost({
+  rowOpen: false,
+  stickyBar,
+  speedEl,
+  dock: dockHost
+});
+assert(wrapHost.mode === 'wrap', 'hôte wrap si row fermée et agilo-speed');
+assert(wrapHost.host === speedEl.parentNode, 'host = parent de agilo-speed');
+assert(wrapHost.after === speedEl, 'insert après agilo-speed');
+
+const dockFallback = AS.resolveFollowHost({
+  rowOpen: false,
+  stickyBar,
+  speedEl: null,
+  dock: dockHost,
+  rowEl: { id: 'ag-editor-audio-row' }
+});
+assert(dockFallback.mode === 'dock', 'repli dock sans wrap speed');
+assert(dockFallback.host === dockHost, 'host = dock');
+
+const noneHost = AS.resolveFollowHost({ rowOpen: false });
+assert(noneHost.mode === 'none', 'aucun hôte sans bar/speed/dock');
+
 console.log('agilo-audio-sticky.test.mjs OK');
