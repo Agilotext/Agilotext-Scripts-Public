@@ -71,6 +71,8 @@ assert(src.includes('z-index:25'), 'z-index 25 sous les menus');
 assert(!src.includes('transform:translateZ(0)'), 'dock sans translateZ');
 assert(src.includes('blur(20px)'), 'dock flou Mac 20px');
 assert(src.includes('-webkit-backdrop-filter:blur(20px)'), 'dock webkit backdrop');
+assert(src.includes('border-radius:8px;overflow:hidden}'), 'dock clip border-radius');
+assert(!src.includes(':has(.ag-confidence-panel.is-disabled)'), 'pas de gris dock :has disabled');
 assert(src.includes('background:#fff'), 'audio compact reste blanc');
 assert(!src.includes('html.ag-editor-shell-lock'), 'pas de lock html actif');
 assert(!src.includes('ag-editor-shell-fit .ed-body'), 'pas de fit 100dvh');

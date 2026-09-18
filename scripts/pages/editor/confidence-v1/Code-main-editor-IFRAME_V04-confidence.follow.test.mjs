@@ -1,5 +1,5 @@
 /**
- * Pin follow 1.09.8 : plus de chip pane, event agilo:transcript-follow.
+ * Pin follow 1.09.9 : scroll forcé au réarmement Suivre + seek.
  * Exécution : node scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -13,7 +13,13 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.8-follow'"), 'version 1.09.8-follow');
+assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.9-follow'"), 'version 1.09.9-follow');
+assert(!src.includes("'1.09.8-follow'"), 'plus de 1.09.8-follow');
+assert(src.includes('function scrollToActivePlaybackSegment'), 'scrollToActivePlaybackSegment');
+assert(src.includes('scrollToActivePlaybackSegment({ force: true })'), 'scroll forcé arm/seek');
+assert(src.includes('scrollToActivePlaybackSegment({ force: false })'), 'timeupdate scroll conditionnel');
+assert(src.includes('function resolveActiveSegmentIndex'), 'resolveActiveSegmentIndex dans fork');
+assert(src.includes('if (armed) scrollToActivePlaybackSegment'), 'onChange réarme → scroll');
 assert(!src.includes("'1.09.7-follow'"), 'plus de 1.09.7-follow');
 assert(!src.includes('function ensureFollowChip'), 'ensureFollowChip retiré');
 assert(!src.includes('function updateFollowChip'), 'updateFollowChip retiré');

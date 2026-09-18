@@ -87,7 +87,8 @@
 }
 
 .ag-editor-chrome-dock .ag-confidence-panel.is-disabled {
-  background: transparent;
+  background: rgba(241, 245, 249, 0.78);
+  border-radius: 8px;
 }
 
 .ag-confidence-panel-sentinel {

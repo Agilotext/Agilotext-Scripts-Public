@@ -110,6 +110,14 @@
   function shouldScrollFollow(armed, outOfView) {
     return !!armed && !!outOfView;
   }
+  function resolveActiveSegmentIndex(currentTime, segments, activeSeg) {
+    if (!Array.isArray(segments) || !segments.length) return -1;
+    const t = Number(currentTime) || 0;
+    const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
+    let k = activeSeg;
+    if (k < 0 || !inSeg(segments[k])) k = segments.findIndex(inSeg);
+    return k;
+  }
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -131,7 +139,7 @@
     };
   }
   window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
-    trimSplitNewlines, shouldScrollFollow, createFollowController
+    trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex, createFollowController
   };
 
   function dispatchTranscriptFollow(armed) {
@@ -1320,8 +1328,38 @@
   let _selectedSegs = new Set();
   let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
+
+  function scrollToActivePlaybackSegment({ force = false } = {}) {
+    const follow = _transcriptFollow;
+    if (!follow || !follow.armed) return;
+    if (__mode !== 'structured') return;
+    const root = editors.transcript;
+    const audio = byId('agilo-audio');
+    if (!root || !audio || !Array.isArray(window._segments) || !window._segments.length) return;
+    const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
+    if (k < 0) return;
+    const el = root.children[k];
+    if (!el) return;
+    if (k !== _activeSeg) {
+      if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+      _activeSeg = k;
+    }
+    el.classList.add('is-active');
+    const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
+    const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
+    bindFollowPause(container);
+    const outOfView = agiloIsOutOfView(el, container, { top: 100, bottom: 120 });
+    if (!force && !follow.shouldScroll(outOfView)) return;
+    follow.beginProgrammatic();
+    agiloScrollIntoView(el, { allowWindow: false });
+    requestAnimationFrame(() => { follow.endProgrammatic(); });
+  }
+
   const _transcriptFollow = createFollowController({
-    onChange(armed) { dispatchTranscriptFollow(armed); }
+    onChange(armed) {
+      dispatchTranscriptFollow(armed);
+      if (armed) scrollToActivePlaybackSegment({ force: true });
+    }
   });
   window.AgiloTranscriptFollow = _transcriptFollow;
 
@@ -1684,6 +1722,7 @@
         if (!audio) { toast('Lecteur audio introuvable.'); return; }
         try { audio.currentTime = t; if (audio.paused) audio.play().catch(() => { }); } catch { }
         try { _transcriptFollow.arm(); } catch { }
+        try { scrollToActivePlaybackSegment({ force: true }); } catch { }
       });
 
       root.addEventListener('click', (e) => {
@@ -2136,24 +2175,14 @@
 
     audio.addEventListener('timeupdate', () => {
       if (__mode !== 'structured' || !window._segments.length) return;
-      const t = audio.currentTime || 0;
-      let k = _activeSeg;
-      const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
-      if (k < 0 || !inSeg(window._segments[k])) k = window._segments.findIndex(inSeg);
+      const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
       if (k !== _activeSeg) {
         if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
         _activeSeg = k;
         const el = root.children[k];
         if (el) {
           el.classList.add('is-active');
-          const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
-          const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
-          bindFollowPause(container);
-          if (_transcriptFollow.shouldScroll(agiloIsOutOfView(el, container, { top: 100, bottom: 120 }))) {
-            _transcriptFollow.beginProgrammatic();
-            agiloScrollIntoView(el, { allowWindow: false });
-            requestAnimationFrame(() => { _transcriptFollow.endProgrammatic(); });
-          }
+          scrollToActivePlaybackSegment({ force: false });
         }
       }
     });
@@ -3125,5 +3154,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.8-follow';
+  window.__agiloEditorConfidenceVersion = '1.09.9-follow';
 });

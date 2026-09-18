@@ -461,6 +461,9 @@ async function run() {
   assert(!cssSrc.includes('ag-confidence-chip'), 'CSS sans chip toolbar');
   assert(cssSrc.includes('scroll-margin-block: 96px'), 'scroll-margin 96px');
   assert(!cssSrc.includes('--ag-editor-audio-dock-height'), 'scroll-margin sans dock audio');
+  assert(cssSrc.includes('.ag-editor-chrome-dock .ag-confidence-panel.is-disabled'), 'CSS gris panel disabled dans dock');
+  assert(!/\.ag-editor-chrome-dock \.ag-confidence-panel\.is-disabled\s*\{[^}]*background:\s*transparent/.test(cssSrc),
+    'dock disabled: pas transparent');
 
   AC.clear();
   assert(AC.getDebugState().panel === false, 'clear: pas de panneau sans données');

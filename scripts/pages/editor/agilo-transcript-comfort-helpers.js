@@ -15,6 +15,15 @@
     return !!armed && !!outOfView;
   }
 
+  function resolveActiveSegmentIndex(currentTime, segments, activeSeg) {
+    if (!Array.isArray(segments) || !segments.length) return -1;
+    const t = Number(currentTime) || 0;
+    const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
+    let k = activeSeg;
+    if (k < 0 || !inSeg(segments[k])) k = segments.findIndex(inSeg);
+    return k;
+  }
+
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -44,6 +53,7 @@
   root.AgiloTranscriptComfort = {
     trimSplitNewlines,
     shouldScrollFollow,
+    resolveActiveSegmentIndex,
     createFollowController
   };
 })(typeof window !== 'undefined' ? window : globalThis);

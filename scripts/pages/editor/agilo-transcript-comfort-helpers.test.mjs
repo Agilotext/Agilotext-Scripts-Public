@@ -23,6 +23,18 @@ const C = sandbox.AgiloTranscriptComfort;
 assert(C && typeof C.trimSplitNewlines === 'function', 'trimSplitNewlines exposé');
 assert(typeof C.shouldScrollFollow === 'function', 'shouldScrollFollow exposé');
 assert(typeof C.createFollowController === 'function', 'createFollowController exposé');
+assert(typeof C.resolveActiveSegmentIndex === 'function', 'resolveActiveSegmentIndex exposé');
+
+const segs = [
+  { start: 0, end: 10 },
+  { start: 10, end: 20 },
+  { start: 20, end: 30 }
+];
+assert(C.resolveActiveSegmentIndex(5, segs, -1) === 0, 'index au début seg 0');
+assert(C.resolveActiveSegmentIndex(15, segs, 0) === 1, 'recalc si active invalide');
+assert(C.resolveActiveSegmentIndex(15, segs, 1) === 1, 'garde active si valide');
+assert(C.resolveActiveSegmentIndex(99, segs, 1) === -1, 'hors plage → -1');
+assert(C.resolveActiveSegmentIndex(5, [], 0) === -1, 'segments vides → -1');
 
 const t1 = C.trimSplitNewlines('bonjour\n\n', '\n\n\nle texte');
 assert(t1.left === 'bonjour', 'trim trailing newlines left');
