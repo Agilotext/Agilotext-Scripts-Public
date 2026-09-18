@@ -51,6 +51,45 @@ assert(C.speakerRosterStorageKey('1000040705') === 'agilo:speaker-roster:1000040
 assert(C.speakerRosterStorageKey('') === '', 'pas de jobId → pas de clé');
 assert(C.speakerRosterStorageKey(null) === '', 'null → pas de clé');
 
+assert(typeof C.computePopoverPlace === 'function', 'computePopoverPlace exposé');
+assert(typeof C.anchorVisibleInPane === 'function', 'anchorVisibleInPane exposé');
+{
+  const below = C.computePopoverPlace({
+    anchor: { top: 100, left: 40, bottom: 120 },
+    size: { width: 260, height: 80 },
+    viewport: { width: 800, height: 600 },
+    pad: 8
+  });
+  assert(below.top === 128 && below.left === 40, 'place sous l’ancre');
+  const flip = C.computePopoverPlace({
+    anchor: { top: 520, left: 40, bottom: 540 },
+    size: { width: 260, height: 200 },
+    viewport: { width: 800, height: 600 },
+    pad: 8
+  });
+  assert(flip.top === 312, 'flip au-dessus si plus de place en bas');
+  const clampL = C.computePopoverPlace({
+    anchor: { top: 40, left: -20, bottom: 60 },
+    size: { width: 260, height: 80 },
+    viewport: { width: 800, height: 600 },
+    pad: 8
+  });
+  assert(clampL.left === 8, 'clamp gauche');
+  const sticky = C.computePopoverPlace({
+    anchor: { top: 10, left: 40, bottom: 28 },
+    size: { width: 260, height: 80 },
+    viewport: { width: 800, height: 600 },
+    pad: 8,
+    stickyBottom: 48
+  });
+  assert(sticky.top === 56, 'stickyBottom pousse top');
+}
+const pane = { left: 0, top: 80, right: 400, bottom: 500 };
+assert(C.anchorVisibleInPane({ left: 10, top: 90, right: 40, bottom: 110 }, pane) === true, '1 px dans le pane → visible');
+assert(C.anchorVisibleInPane({ left: 10, top: 40, right: 40, bottom: 70 }, pane) === false, 'ratio 0 → hidden');
+assert(C.anchorVisibleInPane({ left: 10, top: 499, right: 40, bottom: 510 }, pane) === true, '1 px encore visible');
+assert(C.anchorVisibleInPane({ left: 10, top: 500, right: 40, bottom: 520 }, pane) === false, 'bord touché = hors');
+
 const t1 = C.trimSplitNewlines('bonjour\n\n', '\n\n\nle texte');
 assert(t1.left === 'bonjour', 'trim trailing newlines left');
 assert(t1.right === 'le texte', 'trim leading newlines right');

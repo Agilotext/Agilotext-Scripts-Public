@@ -137,6 +137,38 @@
     if (!id) return '';
     return 'agilo:speaker-roster:' + id;
   }
+  function computePopoverPlace({ anchor, size, viewport, pad, stickyBottom } = {}) {
+    const a = anchor || {};
+    const w = Number(size && size.width) || 0;
+    const h = Number(size && size.height) || 0;
+    const vw = Number(viewport && viewport.width) || 0;
+    const vh = Number(viewport && viewport.height) || 0;
+    const p = Number.isFinite(Number(pad)) ? Number(pad) : 8;
+    const minTop = Math.max(0, Number(stickyBottom) || 0) + p;
+    let left = Number(a.left) || 0;
+    left = Math.max(p, Math.min(left, vw - w - p));
+    let top = (Number(a.bottom) || 0) + p;
+    if (top + h > vh - p) top = (Number(a.top) || 0) - h - p;
+    top = Math.max(minTop, Math.min(top, vh - h - p));
+    return { top, left };
+  }
+  function anchorVisibleInPane(anchor, pane) {
+    const a = anchor || {};
+    const view = pane || {};
+    const ar = {
+      left: Number(a.left) || 0,
+      top: Number(a.top) || 0,
+      right: Number.isFinite(Number(a.right)) ? Number(a.right) : (Number(a.left) || 0),
+      bottom: Number.isFinite(Number(a.bottom)) ? Number(a.bottom) : (Number(a.top) || 0)
+    };
+    const pr = {
+      left: Number(view.left) || 0,
+      top: Number(view.top) || 0,
+      right: Number.isFinite(Number(view.right)) ? Number(view.right) : Infinity,
+      bottom: Number.isFinite(Number(view.bottom)) ? Number(view.bottom) : Infinity
+    };
+    return !(ar.right <= pr.left || ar.left >= pr.right || ar.bottom <= pr.top || ar.top >= pr.bottom);
+  }
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -160,6 +192,7 @@
   window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
     trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex,
     foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, speakerRosterStorageKey,
+    computePopoverPlace, anchorVisibleInPane,
     createFollowController
   };
 
@@ -2128,10 +2161,104 @@
     });
     return unique.length;
   }
+  function stickyBottomY() {
+    const sticky = byId('agilo-audio-sticky');
+    const wrap = byId('agilo-audio-wrap');
+    const el = sticky || wrap;
+    if (!el || !el.getBoundingClientRect) return 0;
+    const r = el.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= innerHeight) return 0;
+    return Math.max(0, r.bottom);
+  }
+  function paneRectForAnchor() {
+    const pane = byId('pane-transcript') || editors.transcript;
+    if (pane && pane.getBoundingClientRect) return pane.getBoundingClientRect();
+    return { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  }
+  function ag_bindAnchoredPopover(panel, anchor, { onClose } = {}) {
+    const off = [];
+    let raf = 0;
+    let unbound = false;
+    const on = (t, ev, fn, opt) => {
+      if (!t) return;
+      t.addEventListener(ev, fn, opt || false);
+      off.push(() => t.removeEventListener(ev, fn, opt || false));
+    };
+    function unbind() {
+      if (unbound) return;
+      unbound = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      off.forEach((fn) => fn());
+    }
+    function placeNow() {
+      if (!panel.isConnected || unbound) return;
+      const aEl = (anchor && anchor.isConnected) ? anchor : null;
+      const r = aEl
+        ? aEl.getBoundingClientRect()
+        : { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2, right: innerWidth / 2 };
+      if (aEl && !anchorVisibleInPane(r, paneRectForAnchor())) {
+        unbind();
+        if (typeof onClose === 'function') onClose();
+        return;
+      }
+      const pos = computePopoverPlace({
+        anchor: r,
+        size: { width: panel.offsetWidth, height: panel.offsetHeight },
+        viewport: { width: innerWidth, height: innerHeight },
+        pad: 8,
+        stickyBottom: stickyBottomY()
+      });
+      panel.style.top = pos.top + 'px';
+      panel.style.left = pos.left + 'px';
+    }
+    function place() {
+      if (raf || unbound) return;
+      raf = requestAnimationFrame(() => { raf = 0; placeNow(); });
+    }
+    const scrollOpt = { capture: true, passive: true };
+    on(window, 'scroll', place, scrollOpt);
+    on(window, 'resize', place);
+    const pane = byId('pane-transcript');
+    const root = editors.transcript || byId('transcriptEditor');
+    if (pane) on(pane, 'scroll', place, scrollOpt);
+    if (root && root !== pane) on(root, 'scroll', place, scrollOpt);
+    const stopWheel = (e) => { e.stopPropagation(); };
+    on(panel, 'wheel', stopWheel);
+    on(panel, 'touchmove', stopWheel, { passive: true });
+    on(document, 'click', (e) => {
+      if (unbound) return;
+      if (panel.contains(e.target)) return;
+      unbind();
+      if (typeof onClose === 'function') onClose();
+    }, true);
+    on(document, 'keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      unbind();
+      if (typeof onClose === 'function') onClose();
+    });
+    try { _transcriptFollow.disarm(); } catch { }
+    panel.style.visibility = 'hidden';
+    if (!panel.parentNode) document.body.appendChild(panel);
+    placeNow();
+    panel.style.visibility = '';
+    return { place: placeNow, unbind };
+  }
   function ag_showRenameMenu(anchor, { oldName, counts, onSelect, forEmpty = false }) {
     document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach(n => n.remove());
-    const menu = document.createElement('div'); menu.className = 'ag-rename-menu'; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-modal', 'true');
+    const menu = document.createElement('div');
+    menu.className = 'ag-rename-menu';
+    menu.setAttribute('role', 'dialog');
+    menu.setAttribute('aria-label', 'Appliquer le renommage');
     const hd = document.createElement('div'); hd.className = 'ag-rename-menu__hd'; hd.textContent = 'Appliquer le renommage à…';
+    let closed = false;
+    let bound = null;
+    function close() {
+      if (closed) return;
+      closed = true;
+      bound?.unbind();
+      menu.remove();
+    }
     const mk = (label, scope, suffix = '') => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'ag-rename-menu__row';
       b.innerHTML = `${label}${suffix ? ` <span class="ag-rename-menu__muted">${suffix}</span>` : ''}`;
@@ -2143,22 +2270,9 @@
     if (!forEmpty && counts.total > 1) rows.push(mk(`Toutes les occurrences de "${oldName}"`, 'all', `${counts.total} seg.`));
     if (forEmpty && counts.empty > 1) rows.push(mk('Tous les segments sans nom', 'empty', `${counts.empty} seg.`));
     if (rows.length === 1) rows.push(mk(forEmpty ? 'Tous les segments sans nom' : 'Toutes les occurrences', forEmpty ? 'empty' : 'all'));
-    const backdrop = document.createElement('div'); backdrop.className = 'ag-rename-backdrop';
-    const off = []; const on = (t, ev, fn, opt) => { t.addEventListener(ev, fn, opt || false); off.push(() => t.removeEventListener(ev, fn, opt || false)); };
-    function close() { off.forEach(fn => fn()); menu.remove(); backdrop.remove(); }
-    on(backdrop, 'click', close); on(document, 'keydown', e => { if (e.key === 'Escape') close(); });
-    menu.style.visibility = 'hidden'; menu.appendChild(hd); rows.forEach(r => menu.appendChild(r));
-    document.body.appendChild(backdrop); document.body.appendChild(menu);
-    function place() {
-      const r = (anchor?.getBoundingClientRect?.() || { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2 });
-      const mw = menu.offsetWidth, mh = menu.offsetHeight;
-      let top = r.bottom + 8, left = r.left;
-      left = Math.max(8, Math.min(left, innerWidth - mw - 8));
-      if (top + mh > innerHeight - 8) top = r.top - mh - 8;
-      top = Math.max(8, Math.min(top, innerHeight - mh - 8));
-      menu.style.top = top + 'px'; menu.style.left = left + 'px';
-    }
-    place(); menu.style.visibility = ''; try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
+    menu.appendChild(hd); rows.forEach(r => menu.appendChild(r));
+    bound = ag_bindAnchoredPopover(menu, anchor, { onClose: close });
+    try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
   }
 
   let _speakerRosterSession = [];
@@ -2236,12 +2350,9 @@
     let query = '';
     let active = 0;
 
-    const backdrop = document.createElement('div');
-    backdrop.className = 'ag-speaker-picker-backdrop';
     const panel = document.createElement('div');
     panel.className = 'ag-speaker-picker';
     panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-label', 'Choisir un interlocuteur');
 
     const searchWrap = document.createElement('div');
@@ -2272,10 +2383,12 @@
     newWrap.appendChild(newBtn);
     newWrap.appendChild(newField);
 
-    const off = [];
-    const on = (t, ev, fn, opt) => { t.addEventListener(ev, fn, opt || false); off.push(() => t.removeEventListener(ev, fn, opt || false)); };
+    let closed = false;
+    let bound = null;
     function close(cancel) {
-      off.forEach((fn) => fn());
+      if (closed) return;
+      closed = true;
+      bound?.unbind();
       ag_closeSpeakerPicker();
       if (cancel && typeof onCancel === 'function') onCancel();
     }
@@ -2301,6 +2414,7 @@
         empty.className = 'ag-speaker-picker__empty';
         empty.textContent = 'Aucun interlocuteur';
         list.appendChild(empty);
+        if (bound) bound.place();
         return;
       }
       const good = rows.filter((n) => !isJunkSpeakerLabel(n));
@@ -2325,7 +2439,6 @@
           const lab = document.createElement('span');
           lab.className = 'ag-speaker-picker__name';
           lab.textContent = name;
-          lab.style.color = color;
           const count = document.createElement('span');
           count.className = 'ag-speaker-picker__count';
           count.textContent = String(ag_countOccurrencesByName(name));
@@ -2344,12 +2457,14 @@
       }
       section('Interlocuteurs', good, 0);
       section('À corriger', junk, good.length);
+      if (bound) bound.place();
     }
 
     newBtn.addEventListener('click', () => {
       newBtn.hidden = true;
       newField.hidden = false;
-      try { newField.focus(); } catch { }
+      try { newField.focus({ preventScroll: true }); } catch { }
+      if (bound) bound.place();
     });
     newField.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
@@ -2366,8 +2481,8 @@
       active = 0;
       renderList();
     });
-    on(document, 'keydown', (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+    panel.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return;
       if (document.activeElement === newField) return;
       const rows = visibleRows();
       if (e.key === 'ArrowDown') {
@@ -2383,27 +2498,12 @@
         if (rows[active]) pick(rows[active]);
       }
     });
-    on(backdrop, 'click', () => close(true));
 
-    panel.style.visibility = 'hidden';
     panel.appendChild(searchWrap);
     panel.appendChild(list);
     panel.appendChild(newWrap);
-    document.body.appendChild(backdrop);
-    document.body.appendChild(panel);
     renderList();
-    function place() {
-      const r = (anchor?.getBoundingClientRect?.() || { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2 });
-      const mw = panel.offsetWidth, mh = panel.offsetHeight;
-      let top = r.bottom + 8, left = r.left;
-      left = Math.max(8, Math.min(left, innerWidth - mw - 8));
-      if (top + mh > innerHeight - 8) top = r.top - mh - 8;
-      top = Math.max(8, Math.min(top, innerHeight - mh - 8));
-      panel.style.top = top + 'px';
-      panel.style.left = left + 'px';
-    }
-    place();
-    panel.style.visibility = '';
+    bound = ag_bindAnchoredPopover(panel, anchor, { onClose() { close(true); } });
     try { input.focus({ preventScroll: true }); } catch { }
   }
 
@@ -3362,32 +3462,26 @@
       /* =====================================================================
          MENU DE PORTÉE — Renommage locuteur (version FIXED + responsive)
          ===================================================================== */
-      .ag-rename-backdrop{
-        position:fixed;
-        inset:0;
-        z-index:99998;
-        background:transparent;
-      }
-
       .ag-rename-menu{
         position:fixed;
         z-index:99999;
         min-width:240px;
         max-width:min(92vw, 420px);
-        max-height:calc(100vh - 16px);
+        max-height:min(320px, 50vh);
         overflow:auto;
-        background:var(--agilo-surface, #fff);
-        color:var(--agilo-text, #111);
-        border:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        border-radius:var(--agilo-radius, .5rem);
+        overscroll-behavior:contain;
+        background:var(--agilo-surface, var(--color--white, #fff));
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
         box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
       }
 
       .ag-rename-menu__hd{
         padding:10px 12px;
         font-weight:600;
-        border-bottom:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        background:var(--agilo-surface-2, #f8f9fa);
+        border-bottom:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
       }
 
       .ag-rename-menu__row{
@@ -3404,14 +3498,12 @@
 
       .ag-rename-menu__row:hover,
       .ag-rename-menu__row:focus-visible{
-        background: color-mix(in srgb,
-                    var(--agilo-surface-2, #f8f9fa) 86%,
-                    var(--agilo-primary, #174a96) 14%);
+        background: color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent);
         outline:none;
       }
 
       .ag-rename-menu__muted{
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
         font-size:12px;
         margin-left:.4rem;
       }
@@ -3433,25 +3525,20 @@
         display:block;
       }
 
-      .ag-speaker-picker-backdrop{
-        position:fixed;
-        inset:0;
-        z-index:99998;
-        background:transparent;
-      }
       .ag-speaker-picker{
         position:fixed;
         z-index:99999;
         min-width:260px;
         max-width:min(92vw, 360px);
-        max-height:min(70vh, 420px);
+        max-height:min(320px, 50vh);
         display:flex;
         flex-direction:column;
         overflow:hidden;
-        background:var(--agilo-surface, #fff);
-        color:var(--agilo-text, #111);
-        border:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        border-radius:var(--agilo-radius, .5rem);
+        overscroll-behavior:contain;
+        background:var(--agilo-surface, var(--color--white, #fff));
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
         box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
         font:500 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto;
       }
@@ -3459,17 +3546,18 @@
         display:flex;
         align-items:center;
         gap:8px;
-        padding:8px 10px;
-        border-bottom:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        background:var(--agilo-surface-2, #f8f9fa);
-        position:sticky;
-        top:0;
+        margin:8px 10px 0;
+        padding:6px 8px;
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
+        background:var(--agilo-surface, var(--color--white, #fff));
+        flex:0 0 auto;
       }
       .ag-speaker-picker__ico{
         width:18px;
         height:18px;
         flex:0 0 18px;
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
       }
       .ag-speaker-picker__input,
       .ag-speaker-picker__new-input{
@@ -3484,6 +3572,7 @@
       .ag-speaker-picker__list{
         overflow:auto;
         flex:1;
+        overscroll-behavior:contain;
       }
       .ag-speaker-picker__hd{
         padding:8px 12px 4px;
@@ -3491,7 +3580,7 @@
         font-weight:600;
         letter-spacing:.04em;
         text-transform:uppercase;
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
       }
       .ag-speaker-picker__row{
         display:flex;
@@ -3509,9 +3598,7 @@
       .ag-speaker-picker__row:hover,
       .ag-speaker-picker__row.is-active,
       .ag-speaker-picker__row:focus-visible{
-        background: color-mix(in srgb,
-                    var(--agilo-surface-2, #f8f9fa) 86%,
-                    var(--agilo-primary, #174a96) 14%);
+        background: color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent);
         outline:none;
       }
       .ag-speaker-picker__dot{
@@ -3527,16 +3614,17 @@
         text-overflow:ellipsis;
         white-space:nowrap;
         font-weight:600;
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
       }
       .ag-speaker-picker__count{
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
         font-size:12px;
       }
       .ag-speaker-picker__check{
         display:inline-flex;
         width:14px;
         height:14px;
-        color:var(--agilo-primary, #174a96);
+        color:var(--agilo-primary, var(--color--blue, #174a96));
       }
       .ag-speaker-picker__check svg{
         width:14px;
@@ -3544,10 +3632,10 @@
       }
       .ag-speaker-picker__empty{
         padding:16px 12px;
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
       }
       .ag-speaker-picker__new{
-        border-top:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        border-top:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
         padding:6px 8px;
       }
       .ag-speaker-picker__new-btn{
@@ -3560,7 +3648,7 @@
         cursor:pointer;
         padding:6px 4px;
         font:inherit;
-        color:var(--agilo-primary, #174a96);
+        color:var(--agilo-primary, var(--color--blue, #174a96));
       }
     `;
     document.head.appendChild(style);
@@ -3616,5 +3704,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.10-roster';
+  window.__agiloEditorConfidenceVersion = '1.09.11-anchor';
 });

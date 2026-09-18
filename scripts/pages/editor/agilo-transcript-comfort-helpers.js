@@ -50,6 +50,40 @@
     return 'agilo:speaker-roster:' + id;
   }
 
+  function computePopoverPlace({ anchor, size, viewport, pad, stickyBottom } = {}) {
+    const a = anchor || {};
+    const w = Number(size && size.width) || 0;
+    const h = Number(size && size.height) || 0;
+    const vw = Number(viewport && viewport.width) || 0;
+    const vh = Number(viewport && viewport.height) || 0;
+    const p = Number.isFinite(Number(pad)) ? Number(pad) : 8;
+    const minTop = Math.max(0, Number(stickyBottom) || 0) + p;
+    let left = Number(a.left) || 0;
+    left = Math.max(p, Math.min(left, vw - w - p));
+    let top = (Number(a.bottom) || 0) + p;
+    if (top + h > vh - p) top = (Number(a.top) || 0) - h - p;
+    top = Math.max(minTop, Math.min(top, vh - h - p));
+    return { top, left };
+  }
+
+  function anchorVisibleInPane(anchor, pane) {
+    const a = anchor || {};
+    const view = pane || {};
+    const ar = {
+      left: Number(a.left) || 0,
+      top: Number(a.top) || 0,
+      right: Number.isFinite(Number(a.right)) ? Number(a.right) : (Number(a.left) || 0),
+      bottom: Number.isFinite(Number(a.bottom)) ? Number(a.bottom) : (Number(a.top) || 0)
+    };
+    const pr = {
+      left: Number(view.left) || 0,
+      top: Number(view.top) || 0,
+      right: Number.isFinite(Number(view.right)) ? Number(view.right) : Infinity,
+      bottom: Number.isFinite(Number(view.bottom)) ? Number(view.bottom) : Infinity
+    };
+    return !(ar.right <= pr.left || ar.left >= pr.right || ar.bottom <= pr.top || ar.top >= pr.bottom);
+  }
+
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -84,6 +118,8 @@
     isJunkSpeakerLabel,
     filterSpeakerRoster,
     speakerRosterStorageKey,
+    computePopoverPlace,
+    anchorVisibleInPane,
     createFollowController
   };
 })(typeof window !== 'undefined' ? window : globalThis);

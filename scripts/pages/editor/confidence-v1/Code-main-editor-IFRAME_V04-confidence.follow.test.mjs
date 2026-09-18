@@ -1,5 +1,5 @@
 /**
- * Pin follow 1.09.10-roster : Suivre + picker locuteurs (pas de prompt synchrone).
+ * Pin 1.09.11-anchor : picker collé au crayon, pas de voile, Suivre gelé.
  * Exécution : node scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -13,10 +13,19 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.10-roster'"), 'version 1.09.10-roster');
+assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.11-anchor'"), 'version 1.09.11-anchor');
+assert(!src.includes("'1.09.10-roster'"), 'plus de 1.09.10-roster');
 assert(!src.includes("'1.09.9-follow'"), 'plus de 1.09.9-follow');
 assert(!src.includes("'1.09.8-follow'"), 'plus de 1.09.8-follow');
 assert(src.includes('function ag_showSpeakerPicker'), 'ag_showSpeakerPicker');
+assert(src.includes('function ag_bindAnchoredPopover'), 'ag_bindAnchoredPopover');
+assert(src.includes('function computePopoverPlace'), 'computePopoverPlace dans le fork');
+assert(src.includes('overscroll-behavior:contain'), 'overscroll liste');
+assert(src.includes('_transcriptFollow.disarm()'), 'disarm Suivre à l’ouverture');
+assert(src.includes('--0-5_radius'), 'token radius Webflow');
+assert(!src.includes('.ag-speaker-picker-backdrop{'), 'pas de CSS voile picker');
+assert(!src.includes('.ag-rename-backdrop{'), 'pas de CSS voile portée');
+assert(!src.includes('aria-modal'), 'aria-modal retiré');
 assert(src.includes('agilo_speaker_picker'), 'flag recette picker');
 assert(src.includes("prompt('Renommer le locuteur"), 'prompt fallback présent');
 {
