@@ -16,7 +16,7 @@ Pas de loader `editor-main-confidence.js`. Embeds SHA directs :
 - `agilo-audio-sticky.js` était `@9ea21053`
 - header PV v10 reste `@7b09ce51` (ne pas recoller)
 
-`?agilo_cdn_branch=` ne change **rien** sur cette page (pas de loader). Recette = recoller **fork + sticky** ci-dessous, **publish staging only**.
+`?agilo_cdn_branch=` ne change **rien** sur cette page (pas de loader). Staging recollé **18/09** (fork + sticky `@628ba702`, V3.4 reste `@f95d42ee`). **WAIT `OK publish www`.**
 
 ## Src à recoller (Designer, page `/app/business/editor`)
 
