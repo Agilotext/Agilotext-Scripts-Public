@@ -44,6 +44,13 @@
     return list.filter((n) => foldSpeakerSearch(n).includes(q));
   }
 
+  function shouldCreateSpeakerFromQuery(query, names) {
+    const q = foldSpeakerSearch(String(query ?? '').trim());
+    if (!q) return false;
+    const list = Array.isArray(names) ? names : [];
+    return !list.some((n) => foldSpeakerSearch(n) === q);
+  }
+
   function speakerRosterStorageKey(jobId) {
     const id = String(jobId ?? '').trim();
     if (!id) return '';
@@ -117,6 +124,7 @@
     foldSpeakerSearch,
     isJunkSpeakerLabel,
     filterSpeakerRoster,
+    shouldCreateSpeakerFromQuery,
     speakerRosterStorageKey,
     computePopoverPlace,
     anchorVisibleInPane,

@@ -1,5 +1,5 @@
 /**
- * Pin 1.09.11-anchor : picker collé au crayon, pas de voile, Suivre gelé.
+ * Pin 1.09.12-combobox : Entrée crée le nom, pas d’anneau bleu, ancre crayon inchangée.
  * Exécution : node scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -13,8 +13,20 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.11-anchor'"), 'version 1.09.11-anchor');
+assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.12-combobox'"), 'version 1.09.12-combobox');
+assert(!src.includes("'1.09.11-anchor'"), 'plus de 1.09.11-anchor');
 assert(!src.includes("'1.09.10-roster'"), 'plus de 1.09.10-roster');
+assert(!src.includes('Nouveau nom'), 'pas de bouton Nouveau nom');
+assert(!src.includes('Prénom NOM'), 'pas de champ Prénom NOM');
+assert(!src.includes("input.type = 'search'"), 'pas de type=search (anneau Safari)');
+assert(src.includes("input.type = 'text'"), 'champ type=text');
+assert(src.includes('function shouldCreateSpeakerFromQuery'), 'shouldCreateSpeakerFromQuery dans le fork');
+assert(src.includes('function tryCreateFromQuery'), 'Entrée crée via tryCreateFromQuery');
+assert(src.includes('normalizeName(query)'), 'Entrée sans hit → normalizeName(query)');
+assert(src.includes("nucleoIcon('userPlus'"), 'ligne Ajouter = user-plus Nucleo');
+assert(src.includes('Tapez un nom, Entrée pour l'), 'hint vide Apple');
+assert(src.includes('--color--blanc_gris'), 'hover blanc_gris pas wash bleu');
+assert(!src.includes("color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent)"), 'pas de wash bleu 12% picker/menu');
 assert(!src.includes("'1.09.9-follow'"), 'plus de 1.09.9-follow');
 assert(!src.includes("'1.09.8-follow'"), 'plus de 1.09.8-follow');
 assert(src.includes('function ag_showSpeakerPicker'), 'ag_showSpeakerPicker');

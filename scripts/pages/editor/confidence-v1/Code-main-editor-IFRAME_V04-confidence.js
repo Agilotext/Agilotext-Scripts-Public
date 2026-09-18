@@ -132,6 +132,12 @@
     if (!q) return list.slice();
     return list.filter((n) => foldSpeakerSearch(n).includes(q));
   }
+  function shouldCreateSpeakerFromQuery(query, names) {
+    const q = foldSpeakerSearch(String(query ?? '').trim());
+    if (!q) return false;
+    const list = Array.isArray(names) ? names : [];
+    return !list.some((n) => foldSpeakerSearch(n) === q);
+  }
   function speakerRosterStorageKey(jobId) {
     const id = String(jobId ?? '').trim();
     if (!id) return '';
@@ -191,7 +197,7 @@
   }
   window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
     trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex,
-    foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, speakerRosterStorageKey,
+    foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, shouldCreateSpeakerFromQuery, speakerRosterStorageKey,
     computePopoverPlace, anchorVisibleInPane,
     createFollowController
   };
@@ -1450,6 +1456,7 @@
     search: '<path d="M15.75 15.75L11.6386 11.6386" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
     meeting: '<path d="M5.75 8.25049C6.8546 8.25049 7.75 7.35549 7.75 6.25049C7.75 5.14549 6.8546 4.25049 5.75 4.25049C4.6454 4.25049 3.75 5.14549 3.75 6.25049C3.75 7.35549 4.6454 8.25049 5.75 8.25049Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.60903 15.1225C10.132 14.9475 10.439 14.3785 10.245 13.8635C9.56003 12.0455 7.80903 10.7515 5.75103 10.7515C3.69303 10.7515 1.94203 12.0455 1.25703 13.8635C1.06303 14.3795 1.37003 14.9485 1.89303 15.1225C2.85503 15.4435 4.17403 15.7505 5.75203 15.7505C7.33003 15.7505 8.64803 15.4435 9.60903 15.1225Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
     plus: '<line x1="9" y1="3.25" x2="9" y2="14.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="3.25" y1="9" x2="14.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    userPlus: '<path d="M9 7.2505C10.5188 7.2505 11.75 6.0195 11.75 4.5005C11.75 2.9815 10.5188 1.7505 9 1.7505C7.4812 1.7505 6.25 2.9815 6.25 4.5005C6.25 6.0195 7.4812 7.2505 9 7.2505Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M17.25 14.7505H12.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M14.75 12.2505V17.2505" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M12.2164 10.677C11.2752 10.102 10.1839 9.7505 8.99999 9.7505C6.44899 9.7505 4.26099 11.2805 3.29099 13.4705C2.92599 14.2955 3.37799 15.2444 4.23799 15.5154C5.46299 15.9014 7.08389 16.2495 8.99999 16.2495C9.22329 16.2495 9.43029 16.2319 9.64399 16.2214" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
     check: '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>'
   };
   function nucleoIcon(name, className) {
@@ -2359,29 +2366,17 @@
     searchWrap.className = 'ag-speaker-picker__search';
     searchWrap.innerHTML = nucleoIcon('search', 'ag-speaker-picker__ico');
     const input = document.createElement('input');
-    input.type = 'search';
+    input.type = 'text';
     input.className = 'ag-speaker-picker__input';
-    input.setAttribute('placeholder', 'Rechercher un nom…');
+    input.setAttribute('placeholder', 'Rechercher un nom');
     input.setAttribute('autocomplete', 'off');
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('spellcheck', 'false');
     searchWrap.appendChild(input);
 
     const list = document.createElement('div');
     list.className = 'ag-speaker-picker__list';
     list.setAttribute('role', 'listbox');
-
-    const newWrap = document.createElement('div');
-    newWrap.className = 'ag-speaker-picker__new';
-    const newBtn = document.createElement('button');
-    newBtn.type = 'button';
-    newBtn.className = 'ag-speaker-picker__new-btn';
-    newBtn.innerHTML = nucleoIcon('plus', 'ag-speaker-picker__ico') + '<span>Nouveau nom…</span>';
-    const newField = document.createElement('input');
-    newField.type = 'text';
-    newField.className = 'ag-speaker-picker__new-input';
-    newField.setAttribute('placeholder', 'Prénom NOM');
-    newField.hidden = true;
-    newWrap.appendChild(newBtn);
-    newWrap.appendChild(newField);
 
     let closed = false;
     let bound = null;
@@ -2397,6 +2392,14 @@
       close(false);
       if (typeof onPick === 'function') onPick(value);
     }
+    function tryCreateFromQuery() {
+      if (!shouldCreateSpeakerFromQuery(query, allNames)) return false;
+      const n = normalizeName(query);
+      if (!n) return false;
+      pushStoredRoster(getJobIdForRoster(), n);
+      pick(n);
+      return true;
+    }
 
     function visibleRows() {
       const filtered = filterSpeakerRoster(allNames, query);
@@ -2410,10 +2413,26 @@
       if (active >= rows.length) active = Math.max(0, rows.length - 1);
       list.textContent = '';
       if (!rows.length) {
-        const empty = document.createElement('div');
-        empty.className = 'ag-speaker-picker__empty';
-        empty.textContent = 'Aucun interlocuteur';
-        list.appendChild(empty);
+        if (shouldCreateSpeakerFromQuery(query, allNames)) {
+          const label = String(query || '').trim();
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ag-speaker-picker__row is-active';
+          b.setAttribute('role', 'option');
+          b.setAttribute('aria-label', 'Ajouter ' + label);
+          b.innerHTML = nucleoIcon('userPlus', 'ag-speaker-picker__ico');
+          const lab = document.createElement('span');
+          lab.className = 'ag-speaker-picker__name';
+          lab.textContent = 'Ajouter « ' + label + ' »';
+          b.appendChild(lab);
+          b.addEventListener('click', () => { tryCreateFromQuery(); });
+          list.appendChild(b);
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'ag-speaker-picker__empty';
+          empty.textContent = 'Tapez un nom, Entrée pour l\'ajouter';
+          list.appendChild(empty);
+        }
         if (bound) bound.place();
         return;
       }
@@ -2460,22 +2479,6 @@
       if (bound) bound.place();
     }
 
-    newBtn.addEventListener('click', () => {
-      newBtn.hidden = true;
-      newField.hidden = false;
-      try { newField.focus({ preventScroll: true }); } catch { }
-      if (bound) bound.place();
-    });
-    newField.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        const n = normalizeName(newField.value);
-        if (!n) return;
-        pushStoredRoster(getJobIdForRoster(), n);
-        pick(n);
-      }
-    });
-
     input.addEventListener('input', () => {
       query = input.value;
       active = 0;
@@ -2483,25 +2486,26 @@
     });
     panel.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') return;
-      if (document.activeElement === newField) return;
       const rows = visibleRows();
       if (e.key === 'ArrowDown') {
         e.preventDefault();
+        if (!rows.length) return;
         active = Math.min(rows.length - 1, active + 1);
         renderList();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
+        if (!rows.length) return;
         active = Math.max(0, active - 1);
         renderList();
-      } else if (e.key === 'Enter' && document.activeElement !== newField) {
+      } else if (e.key === 'Enter') {
         e.preventDefault();
         if (rows[active]) pick(rows[active]);
+        else tryCreateFromQuery();
       }
     });
 
     panel.appendChild(searchWrap);
     panel.appendChild(list);
-    panel.appendChild(newWrap);
     renderList();
     bound = ag_bindAnchoredPopover(panel, anchor, { onClose() { close(true); } });
     try { input.focus({ preventScroll: true }); } catch { }
@@ -3498,8 +3502,9 @@
 
       .ag-rename-menu__row:hover,
       .ag-rename-menu__row:focus-visible{
-        background: color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent);
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
         outline:none;
+        box-shadow:none;
       }
 
       .ag-rename-menu__muted{
@@ -3553,21 +3558,41 @@
         background:var(--agilo-surface, var(--color--white, #fff));
         flex:0 0 auto;
       }
+      .ag-speaker-picker__search:focus-within{
+        border-color:var(--agilo-border, var(--color--noir_25, #343a4040));
+        outline:none;
+        box-shadow:none;
+      }
       .ag-speaker-picker__ico{
         width:18px;
         height:18px;
         flex:0 0 18px;
         color:var(--agilo-dim, var(--color--gris, #525252));
       }
-      .ag-speaker-picker__input,
-      .ag-speaker-picker__new-input{
+      .ag-speaker-picker__input{
         flex:1;
         min-width:0;
         border:0;
+        border-radius:0;
         background:transparent;
         outline:none;
+        box-shadow:none;
+        -webkit-appearance:none;
+        appearance:none;
         font:inherit;
         color:inherit;
+      }
+      .ag-speaker-picker__input:focus,
+      .ag-speaker-picker__input:focus-visible{
+        outline:none;
+        box-shadow:none;
+        -webkit-appearance:none;
+        appearance:none;
+      }
+      .ag-speaker-picker *:focus,
+      .ag-speaker-picker *:focus-visible{
+        outline:none;
+        box-shadow:none;
       }
       .ag-speaker-picker__list{
         overflow:auto;
@@ -3598,8 +3623,10 @@
       .ag-speaker-picker__row:hover,
       .ag-speaker-picker__row.is-active,
       .ag-speaker-picker__row:focus-visible{
-        background: color-mix(in srgb, var(--color--blue, #174a96) 12%, transparent);
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
         outline:none;
+        box-shadow:none;
+        border-radius:0;
       }
       .ag-speaker-picker__dot{
         width:8px;
@@ -3633,22 +3660,7 @@
       .ag-speaker-picker__empty{
         padding:16px 12px;
         color:var(--agilo-dim, var(--color--gris, #525252));
-      }
-      .ag-speaker-picker__new{
-        border-top:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
-        padding:6px 8px;
-      }
-      .ag-speaker-picker__new-btn{
-        display:flex;
-        align-items:center;
-        gap:8px;
-        width:100%;
-        border:0;
-        background:transparent;
-        cursor:pointer;
-        padding:6px 4px;
-        font:inherit;
-        color:var(--agilo-primary, var(--color--blue, #174a96));
+        font-size:13px;
       }
     `;
     document.head.appendChild(style);
@@ -3704,5 +3716,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.11-anchor';
+  window.__agiloEditorConfidenceVersion = '1.09.12-combobox';
 });
