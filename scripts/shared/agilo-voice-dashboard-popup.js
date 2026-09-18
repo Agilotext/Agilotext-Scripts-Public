@@ -7,7 +7,8 @@
  *
  * Garde tour Driver.js : ne pas afficher tant que .driver-overlay / .driver-popover
  * est visible. Reprendre le tour cache la popup sans marquer dismissedAt.
- * Logique : agilo-voice-popup-tour-guard.js (tests). Copie runtime ci-dessous (un pin).
+ * Logique : agilo-voice-popup-tour-guard.js + agilo-voice-popup-urls.js (tests).
+ * Copie runtime ci-dessous (un pin). CTA Pro/Business : /profile#agilo-voice-settings, jamais /voice.
  *
  * Mode test :
  *   ?agilo_voice_popup_test=1
@@ -156,6 +157,25 @@
   }
 
   var TARIFS_URL = 'https://www.agilotext.com/tarifs';
+  var PROFILE_HASH = 'agilo-voice-settings';
+
+  function inferEditionFromPathname(pathname) {
+    var p = String(pathname || '');
+    if (!p) p = '/';
+    p = p.replace(/\/+$/, '') || '/';
+    var m = p.match(/^\/app\/([^/]+)\/(dashboard|voice|profile)$/);
+    if (!m) return 'free';
+    var seg = String(m[1] || '').toLowerCase();
+    if (seg === 'business' || seg === 'ent' || seg === 'enterprise') return 'business';
+    if (seg === 'premium' || seg === 'pro') return 'premium';
+    return 'free';
+  }
+
+  function profileUrlFromPath(pathname) {
+    var edition = inferEditionFromPathname(pathname);
+    if (edition === 'free') return null;
+    return '/app/' + edition + '/profile#' + PROFILE_HASH;
+  }
 
   function isCgvModalVisible() {
     var wrapper = document.querySelector('.cgv-onboarding-wrapper');
@@ -277,26 +297,13 @@
       description: cfg.description,
       meta: cfg.meta,
       primaryCta: cfg.primaryCta,
-      primaryUrl: voiceUrl()
+      primaryUrl: profileUrlFromPath(normalizedPathname()),
+      openInNewTab: false
     };
   }
 
   function inferEditionFromPath() {
-    var p = normalizedPathname();
-    var m = p.match(/^\/app\/([^/]+)\/(dashboard|voice|profile)$/);
-    if (!m) return 'free';
-    var seg = String(m[1] || '').toLowerCase();
-    if (seg === 'business' || seg === 'ent' || seg === 'enterprise') return 'business';
-    if (seg === 'premium' || seg === 'pro') return 'premium';
-    return 'free';
-  }
-
-  function voiceUrl() {
-    return '/app/' + inferEditionFromPath() + '/voice';
-  }
-
-  function profileUrl() {
-    return voiceUrl();
+    return inferEditionFromPathname(normalizedPathname());
   }
 
   function readTs(key) {
@@ -460,14 +467,16 @@
   }
 
   function onDismiss() {
+    tourHold.offerExhausted = true;
     writeTs(cfg.storageDismissedKey);
-    removePopup();
+    removePopupImmediate();
   }
 
   function onClickCta() {
-    removePopup();
     var content = getPopupContent();
-    var url = content.primaryUrl || voiceUrl();
+    var url = content.primaryUrl;
+    if (!url) return;
+    removePopupImmediate();
     if (content.openInNewTab) {
       window.open(url, '_blank', 'noopener,noreferrer');
       return;
@@ -520,6 +529,10 @@
       if (!isCgvFlowComplete()) return;
       if (snapshotTourHold()) return;
       var ok = await shouldShow();
+      if (tourHold.offerExhausted || isDismissedRecently()) {
+        tourHold.offerExhausted = true;
+        return;
+      }
       if (!ok) {
         tourHold.offerExhausted = true;
         return;
@@ -531,7 +544,7 @@
       if (!root) return;
       document.body.appendChild(root);
       requestAnimationFrame(function () {
-        if (isCgvModalVisible() || snapshotTourHold()) {
+        if (tourHold.offerExhausted || isDismissedRecently() || isCgvModalVisible() || snapshotTourHold()) {
           hidePopupForTour();
           return;
         }
