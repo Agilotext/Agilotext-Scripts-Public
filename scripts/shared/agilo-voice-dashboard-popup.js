@@ -3,7 +3,11 @@
  * Popup dashboard pour inciter à configurer l'empreinte vocale.
  *
  * Intégration Webflow (pages dashboard, après code-cgv) :
- * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.09/scripts/shared/agilo-voice-dashboard-popup.js?v=1.09-voice11"></script>
+ * <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA/scripts/shared/agilo-voice-dashboard-popup.js"></script>
+ *
+ * Garde tour Driver.js : ne pas afficher tant que .driver-overlay / .driver-popover
+ * est visible. Reprendre le tour cache la popup sans marquer dismissedAt.
+ * Logique : agilo-voice-popup-tour-guard.js (tests). Copie runtime ci-dessous (un pin).
  *
  * Mode test :
  *   ?agilo_voice_popup_test=1
@@ -31,6 +35,96 @@
   };
 
   var cfg = Object.assign({}, DEFAULTS, window.AGILO_VOICE_DASHBOARD_CONFIG || {});
+
+  var TOUR_GRACE_MS = 2500;
+  var TOUR_DEBOUNCE_MS = 400;
+  var TOUR_FIRST_SEEN_KEY = 'agilo_tour_first_seen_v25';
+  var tourHold = {
+    startedAt: 0,
+    seenOverlayThisVisit: false,
+    clearAt: 0,
+    observer: null,
+    pollId: null,
+    showingLock: false,
+    offerExhausted: false
+  };
+
+  function isTourVisibleEl(el, doc) {
+    if (!el) return false;
+    var view = doc && doc.defaultView;
+    if (view && typeof view.getComputedStyle === 'function') {
+      try {
+        var cs = view.getComputedStyle(el);
+        if (cs) {
+          if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+          if (parseFloat(cs.opacity) === 0) return false;
+        }
+      } catch (e) { /* ignore */ }
+    } else if (el.style) {
+      if (el.style.display === 'none' || el.style.visibility === 'hidden') return false;
+    }
+    return true;
+  }
+
+  function isTourBlocking(doc) {
+    doc = doc || document;
+    if (!doc || typeof doc.querySelector !== 'function') return false;
+    var overlay = doc.querySelector('.driver-overlay');
+    var popover = doc.querySelector('.driver-popover');
+    return isTourVisibleEl(overlay, doc) || isTourVisibleEl(popover, doc);
+  }
+
+  function shouldHoldVoicePopup(opts) {
+    opts = opts || {};
+    var blocking = !!opts.blocking;
+    var pendingFirstTour = !!opts.pendingFirstTour;
+    var firstSeen = !!opts.firstSeen;
+    var seenOverlayThisVisit = !!opts.seenOverlayThisVisit;
+    var waitedMs = Number(opts.waitedMs) || 0;
+    var idleMs = Number(opts.idleMs) || 0;
+    var graceMs = opts.graceMs != null ? Number(opts.graceMs) : TOUR_GRACE_MS;
+    var debounceMs = opts.debounceMs != null ? Number(opts.debounceMs) : TOUR_DEBOUNCE_MS;
+
+    if (blocking) return true;
+
+    var awaitingFirstTour = pendingFirstTour || !firstSeen;
+    if (awaitingFirstTour && waitedMs < graceMs) return true;
+
+    if (seenOverlayThisVisit && idleMs < debounceMs) return true;
+
+    return false;
+  }
+
+  function readTourFirstSeen() {
+    try {
+      return !!localStorage.getItem(TOUR_FIRST_SEEN_KEY);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function snapshotTourHold() {
+    var blocking = isTourBlocking(document);
+    var now = Date.now();
+    if (blocking) {
+      tourHold.seenOverlayThisVisit = true;
+      tourHold.clearAt = 0;
+    } else if (!tourHold.clearAt) {
+      tourHold.clearAt = now;
+    }
+    var waitedMs = tourHold.startedAt ? now - tourHold.startedAt : 0;
+    var idleMs = blocking ? 0 : (tourHold.clearAt ? now - tourHold.clearAt : 0);
+    return shouldHoldVoicePopup({
+      blocking: blocking,
+      pendingFirstTour: !!window.__agiloPendingFirstTour,
+      firstSeen: readTourFirstSeen(),
+      seenOverlayThisVisit: tourHold.seenOverlayThisVisit,
+      waitedMs: waitedMs,
+      idleMs: idleMs,
+      graceMs: TOUR_GRACE_MS,
+      debounceMs: TOUR_DEBOUNCE_MS
+    });
+  }
 
   var MIC_ICON =
     '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="22" height="22">' +
@@ -345,6 +439,13 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  function removePopupImmediate() {
+    var popup = document.getElementById(cfg.popupId);
+    if (!popup) return;
+    popup.classList.remove('agilo-voice-popup--visible');
+    if (popup.parentNode) popup.parentNode.removeChild(popup);
+  }
+
   function removePopup() {
     var popup = document.getElementById(cfg.popupId);
     if (!popup) return;
@@ -352,6 +453,10 @@
     setTimeout(function () {
       if (popup.parentNode) popup.parentNode.removeChild(popup);
     }, 450);
+  }
+
+  function hidePopupForTour() {
+    removePopupImmediate();
   }
 
   function onDismiss() {
@@ -409,26 +514,76 @@
   }
 
   async function showPopup() {
-    if (!isCgvFlowComplete()) return;
-    var ok = await shouldShow();
-    if (!ok) return;
-    if (isCgvModalVisible()) return;
-    var root = buildPopup();
-    if (!root) return;
-    document.body.appendChild(root);
-    requestAnimationFrame(function () {
-      if (isCgvModalVisible()) {
-        removePopup();
+    if (tourHold.showingLock) return;
+    tourHold.showingLock = true;
+    try {
+      if (!isCgvFlowComplete()) return;
+      if (snapshotTourHold()) return;
+      var ok = await shouldShow();
+      if (!ok) {
+        tourHold.offerExhausted = true;
         return;
       }
-      root.classList.add('agilo-voice-popup--visible');
+      if (isCgvModalVisible()) return;
+      if (snapshotTourHold()) return;
+      if (document.getElementById(cfg.popupId)) return;
+      var root = buildPopup();
+      if (!root) return;
+      document.body.appendChild(root);
+      requestAnimationFrame(function () {
+        if (isCgvModalVisible() || snapshotTourHold()) {
+          hidePopupForTour();
+          return;
+        }
+        root.classList.add('agilo-voice-popup--visible');
+      });
+    } finally {
+      tourHold.showingLock = false;
+    }
+  }
+
+  function onTourDomChange() {
+    var hold = snapshotTourHold();
+    var popup = document.getElementById(cfg.popupId);
+    if (hold) {
+      if (popup) hidePopupForTour();
+      return;
+    }
+    if (popup || tourHold.offerExhausted) return;
+    showPopup().catch(function (e) {
+      console.warn('[agilo-voice-popup] show failed', e);
     });
+  }
+
+  function startTourGuard() {
+    if (tourHold.observer || tourHold.pollId || !document.body) return;
+    tourHold.startedAt = Date.now();
+    tourHold.clearAt = Date.now();
+    if (typeof MutationObserver !== 'undefined') {
+      tourHold.observer = new MutationObserver(onTourDomChange);
+      tourHold.observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden']
+      });
+    }
+    tourHold.pollId = setInterval(onTourDomChange, 250);
+    window.AgiloVoicePopupGuard = {
+      GRACE_MS: TOUR_GRACE_MS,
+      DEBOUNCE_MS: TOUR_DEBOUNCE_MS,
+      FIRST_SEEN_KEY: TOUR_FIRST_SEEN_KEY,
+      isTourBlocking: function () { return isTourBlocking(document); },
+      hold: function () { return snapshotTourHold(); },
+      shouldHoldVoicePopup: shouldHoldVoicePopup
+    };
   }
 
   function boot() {
     if (!document.body) return;
     waitUntilCgvDismissed(600000).then(function (cgvOk) {
       if (!cgvOk || !isCgvFlowComplete()) return;
+      startTourGuard();
       var delay = getTestMode() ? cfg.showDelayTestMs : cfg.showDelayMs;
       setTimeout(function () {
         showPopup().catch(function (e) {
