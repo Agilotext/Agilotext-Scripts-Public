@@ -1,5 +1,5 @@
 /**
- * Pin follow 1.09.9 : scroll forcé au réarmement Suivre + seek.
+ * Pin follow 1.09.10-roster : Suivre + picker locuteurs (pas de prompt synchrone).
  * Exécution : node scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -13,8 +13,21 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.9-follow'"), 'version 1.09.9-follow');
+assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.10-roster'"), 'version 1.09.10-roster');
+assert(!src.includes("'1.09.9-follow'"), 'plus de 1.09.9-follow');
 assert(!src.includes("'1.09.8-follow'"), 'plus de 1.09.8-follow');
+assert(src.includes('function ag_showSpeakerPicker'), 'ag_showSpeakerPicker');
+assert(src.includes('agilo_speaker_picker'), 'flag recette picker');
+assert(src.includes("prompt('Renommer le locuteur"), 'prompt fallback présent');
+{
+  const promptHits = src.split("prompt('Renommer le locuteur").length - 1;
+  assert(promptHits === 2, 'prompt seulement flag off + catch');
+}
+assert(!src.includes("addEventListener('dblclick'"), 'plus de dblclick locuteur');
+assert(src.includes("e.target.closest('.speaker')"), 'clic simple locuteur');
+assert(src.includes('function isSpeakerPickerEnabled'), 'flag picker');
+assert(src.includes('function foldSpeakerSearch'), 'fold dans le fork');
+assert(src.includes('.ag-speaker-picker{'), 'CSS picker à côté du menu portée');
 assert(src.includes('function scrollToActivePlaybackSegment'), 'scrollToActivePlaybackSegment');
 assert(src.includes('scrollToActivePlaybackSegment({ force: true })'), 'scroll forcé arm/seek');
 assert(src.includes('scrollToActivePlaybackSegment({ force: false })'), 'timeupdate scroll conditionnel');

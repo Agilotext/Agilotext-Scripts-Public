@@ -118,6 +118,25 @@
     if (k < 0 || !inSeg(segments[k])) k = segments.findIndex(inSeg);
     return k;
   }
+  function foldSpeakerSearch(s) {
+    return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function isJunkSpeakerLabel(s) {
+    const t = String(s ?? '').trim();
+    if (!t) return true;
+    return /^(speaker|locuteur|spk)[\s._-]*\d+$/i.test(t);
+  }
+  function filterSpeakerRoster(names, query) {
+    const list = Array.isArray(names) ? names : [];
+    const q = foldSpeakerSearch(query);
+    if (!q) return list.slice();
+    return list.filter((n) => foldSpeakerSearch(n).includes(q));
+  }
+  function speakerRosterStorageKey(jobId) {
+    const id = String(jobId ?? '').trim();
+    if (!id) return '';
+    return 'agilo:speaker-roster:' + id;
+  }
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -139,7 +158,9 @@
     };
   }
   window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
-    trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex, createFollowController
+    trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex,
+    foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, speakerRosterStorageKey,
+    createFollowController
   };
 
   function dispatchTranscriptFollow(armed) {
@@ -185,16 +206,25 @@
   function bindSplitTrim() {
     if (document.__agiloSplitTrimBound) return;
     document.__agiloSplitTrimBound = true;
+    const afterPlus = () => {
+      applySplitTrimNearCaret();
+      setTimeout(() => {
+        applySplitTrimNearCaret();
+        openPickerOnCaretSeg();
+      }, 32);
+    };
     document.addEventListener('click', (e) => {
       if (e.target.closest && e.target.closest('.ag-ux-plus')) {
         try { window.AgiloTranscriptFollow?.disarm(); } catch { }
         setTimeout(applySplitTrimNearCaret, 0);
+        setTimeout(afterPlus, 0);
       }
     }, true);
     document.addEventListener('keydown', (e) => {
       if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
       if (e.key !== '=' && e.key !== '+' && e.code !== 'Equal' && e.code !== 'NumpadAdd') return;
       setTimeout(applySplitTrimNearCaret, 0);
+      setTimeout(afterPlus, 0);
     }, true);
   }
 
@@ -1382,12 +1412,25 @@
   }
   window.syncDomToModel = syncDomToModel;
 
+  const NUCLEO_PATHS = {
+    pencil: '<path d="M13.953 7.57799L15.062 6.46898C15.648 5.88298 15.648 4.93298 15.062 4.34798L13.653 2.93898C13.067 2.35298 12.117 2.35298 11.532 2.93898L10.423 4.04799L13.953 7.57799Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8.6544 5.81461L4.147 10.322C3.897 10.572 3.718 10.884 3.627 11.226L2.5 15.499L6.773 14.372C7.115 14.282 7.427 14.102 7.677 13.852L12.1844 9.3446" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M10.4044 7.56461L6.26501 11.704" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    search: '<path d="M15.75 15.75L11.6386 11.6386" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    meeting: '<path d="M5.75 8.25049C6.8546 8.25049 7.75 7.35549 7.75 6.25049C7.75 5.14549 6.8546 4.25049 5.75 4.25049C4.6454 4.25049 3.75 5.14549 3.75 6.25049C3.75 7.35549 4.6454 8.25049 5.75 8.25049Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.60903 15.1225C10.132 14.9475 10.439 14.3785 10.245 13.8635C9.56003 12.0455 7.80903 10.7515 5.75103 10.7515C3.69303 10.7515 1.94203 12.0455 1.25703 13.8635C1.06303 14.3795 1.37003 14.9485 1.89303 15.1225C2.85503 15.4435 4.17403 15.7505 5.75203 15.7505C7.33003 15.7505 8.64803 15.4435 9.60903 15.1225Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    plus: '<line x1="9" y1="3.25" x2="9" y2="14.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="3.25" y1="9" x2="14.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    check: '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>'
+  };
+  function nucleoIcon(name, className) {
+    const paths = NUCLEO_PATHS[name] || '';
+    const cls = className ? ` class="${className}"` : '';
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none"${cls} aria-hidden="true">${paths}</svg>`;
+  }
+
   function buildRenameBtn() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.setAttribute('aria-label', 'Renommer');
     btn.className = 'rename-btn absolute';
-    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small-5"><path d="M0 0h24v24H0z" fill="none"></path><path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path></svg>';
+    btn.innerHTML = nucleoIcon('pencil', 'icon-1x1-small-5');
     return btn;
   }
 
@@ -1728,14 +1771,27 @@
       root.addEventListener('click', (e) => {
         if (__mode !== 'structured') return;
         const btn = e.target.closest('.rename-btn');
-        if (!btn) return;
+        if (btn) {
+          e.preventDefault(); e.stopPropagation();
+          try { window.getSelection()?.removeAllRanges(); } catch { }
+          try { document.activeElement?.blur?.(); } catch { }
+          const segEl = btn.closest('.ag-seg');
+          if (!segEl) return;
+          doRenameFor(segEl, {
+            triggerEl: btn,
+            renameAllEmpty: !!(e.shiftKey || e.altKey),
+            keyState: { shift: e.shiftKey, alt: e.altKey }
+          });
+          return;
+        }
+        const sp = e.target.closest('.speaker');
+        if (!sp || e.target.closest('.rename-btn')) return;
         e.preventDefault(); e.stopPropagation();
         try { window.getSelection()?.removeAllRanges(); } catch { }
-        try { document.activeElement?.blur?.(); } catch { }
-        const segEl = btn.closest('.ag-seg');
+        const segEl = sp.closest('.ag-seg');
         if (!segEl) return;
         doRenameFor(segEl, {
-          triggerEl: btn,
+          triggerEl: sp,
           renameAllEmpty: !!(e.shiftKey || e.altKey),
           keyState: { shift: e.shiftKey, alt: e.altKey }
         });
@@ -1754,14 +1810,6 @@
           return;
         }
         deleteSegEl(segEl);
-      });
-
-      root.addEventListener('dblclick', (e) => {
-        if (__mode !== 'structured') return;
-        const sp = e.target.closest('.speaker'); if (!sp) return;
-        e.preventDefault(); e.stopPropagation();
-        try { window.getSelection()?.removeAllRanges(); } catch { }
-        doRenameFor(sp.closest('.ag-seg'), { triggerEl: sp });
       });
 
       root.addEventListener('input', (e) => {
@@ -2112,6 +2160,253 @@
     }
     place(); menu.style.visibility = ''; try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
   }
+
+  let _speakerRosterSession = [];
+
+  function isSpeakerPickerEnabled() {
+    try {
+      if (window.AGILOTEXT_SPEAKER_PICKER === false) return false;
+      const q = new URLSearchParams(location.search).get('agilo_speaker_picker');
+      if (q === '0' || q === 'false' || q === 'off') return false;
+    } catch { /* ignore */ }
+    return true;
+  }
+  function getJobIdForRoster() {
+    try {
+      const fromDs = (byId('editorRoot')?.dataset?.jobId
+        || document.querySelector('[data-job-id]')?.getAttribute('data-job-id')
+        || '').trim();
+      const fromQ = (new URLSearchParams(location.search).get('jobId') || '').trim();
+      return fromDs || fromQ;
+    } catch { return ''; }
+  }
+  function loadStoredRoster(jobId) {
+    const key = speakerRosterStorageKey(jobId);
+    if (!key) return _speakerRosterSession.slice();
+    try {
+      const raw = localStorage.getItem(key);
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : [];
+    } catch { return []; }
+  }
+  function pushStoredRoster(jobId, name) {
+    const n = String(name || '').trim();
+    if (!n) return;
+    const key = speakerRosterStorageKey(jobId);
+    if (!key) {
+      if (_speakerRosterSession.indexOf(n) < 0) _speakerRosterSession.push(n);
+      return;
+    }
+    const cur = loadStoredRoster(jobId);
+    if (cur.indexOf(n) < 0) {
+      cur.push(n);
+      try { localStorage.setItem(key, JSON.stringify(cur)); } catch { /* ignore */ }
+    }
+  }
+  function collectRosterNames() {
+    const seen = Object.create(null);
+    const out = [];
+    function add(n) {
+      const t = String(n || '').trim();
+      if (!t || seen[t]) return;
+      seen[t] = 1;
+      out.push(t);
+    }
+    (window._segments || []).forEach((s) => add(s && s.speaker));
+    loadStoredRoster(getJobIdForRoster()).forEach(add);
+    return out;
+  }
+  function ag_closeSpeakerPicker() {
+    document.querySelectorAll('.ag-speaker-picker, .ag-speaker-picker-backdrop').forEach((n) => n.remove());
+  }
+  function openPickerOnCaretSeg() {
+    if (__mode !== 'structured' || !isSpeakerPickerEnabled()) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const n = sel.anchorNode;
+    const el = n && (n.nodeType === 1 ? n : n.parentElement);
+    const seg = el && el.closest && el.closest('.ag-seg');
+    if (!seg) return;
+    doRenameFor(seg, { triggerEl: seg.querySelector('.speaker') || seg });
+  }
+  function ag_showSpeakerPicker(anchor, { currentName, names, onPick, onCancel } = {}) {
+    ag_closeSpeakerPicker();
+    document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach((n) => n.remove());
+    const allNames = Array.isArray(names) ? names.slice() : [];
+    let query = '';
+    let active = 0;
+
+    const backdrop = document.createElement('div');
+    backdrop.className = 'ag-speaker-picker-backdrop';
+    const panel = document.createElement('div');
+    panel.className = 'ag-speaker-picker';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', 'Choisir un interlocuteur');
+
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'ag-speaker-picker__search';
+    searchWrap.innerHTML = nucleoIcon('search', 'ag-speaker-picker__ico');
+    const input = document.createElement('input');
+    input.type = 'search';
+    input.className = 'ag-speaker-picker__input';
+    input.setAttribute('placeholder', 'Rechercher un nom…');
+    input.setAttribute('autocomplete', 'off');
+    searchWrap.appendChild(input);
+
+    const list = document.createElement('div');
+    list.className = 'ag-speaker-picker__list';
+    list.setAttribute('role', 'listbox');
+
+    const newWrap = document.createElement('div');
+    newWrap.className = 'ag-speaker-picker__new';
+    const newBtn = document.createElement('button');
+    newBtn.type = 'button';
+    newBtn.className = 'ag-speaker-picker__new-btn';
+    newBtn.innerHTML = nucleoIcon('plus', 'ag-speaker-picker__ico') + '<span>Nouveau nom…</span>';
+    const newField = document.createElement('input');
+    newField.type = 'text';
+    newField.className = 'ag-speaker-picker__new-input';
+    newField.setAttribute('placeholder', 'Prénom NOM');
+    newField.hidden = true;
+    newWrap.appendChild(newBtn);
+    newWrap.appendChild(newField);
+
+    const off = [];
+    const on = (t, ev, fn, opt) => { t.addEventListener(ev, fn, opt || false); off.push(() => t.removeEventListener(ev, fn, opt || false)); };
+    function close(cancel) {
+      off.forEach((fn) => fn());
+      ag_closeSpeakerPicker();
+      if (cancel && typeof onCancel === 'function') onCancel();
+    }
+    function pick(raw) {
+      const value = String(raw || '');
+      close(false);
+      if (typeof onPick === 'function') onPick(value);
+    }
+
+    function visibleRows() {
+      const filtered = filterSpeakerRoster(allNames, query);
+      const good = filtered.filter((n) => !isJunkSpeakerLabel(n));
+      const junk = filtered.filter((n) => isJunkSpeakerLabel(n));
+      return good.concat(junk);
+    }
+
+    function renderList() {
+      const rows = visibleRows();
+      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      list.textContent = '';
+      if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'ag-speaker-picker__empty';
+        empty.textContent = 'Aucun interlocuteur';
+        list.appendChild(empty);
+        return;
+      }
+      const good = rows.filter((n) => !isJunkSpeakerLabel(n));
+      const junk = rows.filter((n) => isJunkSpeakerLabel(n));
+      function section(title, items, offset) {
+        if (!items.length) return;
+        const hd = document.createElement('div');
+        hd.className = 'ag-speaker-picker__hd';
+        hd.textContent = title;
+        list.appendChild(hd);
+        items.forEach((name, i) => {
+          const idx = offset + i;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ag-speaker-picker__row' + (idx === active ? ' is-active' : '');
+          b.setAttribute('role', 'option');
+          if (name === currentName) b.setAttribute('aria-selected', 'true');
+          const color = getSpeakerColor(name);
+          const dot = document.createElement('span');
+          dot.className = 'ag-speaker-picker__dot';
+          dot.style.background = color;
+          const lab = document.createElement('span');
+          lab.className = 'ag-speaker-picker__name';
+          lab.textContent = name;
+          lab.style.color = color;
+          const count = document.createElement('span');
+          count.className = 'ag-speaker-picker__count';
+          count.textContent = String(ag_countOccurrencesByName(name));
+          b.appendChild(dot);
+          b.appendChild(lab);
+          if (name === currentName) {
+            const mark = document.createElement('span');
+            mark.className = 'ag-speaker-picker__check';
+            mark.innerHTML = nucleoIcon('check');
+            b.appendChild(mark);
+          }
+          b.appendChild(count);
+          b.addEventListener('click', () => pick(name));
+          list.appendChild(b);
+        });
+      }
+      section('Interlocuteurs', good, 0);
+      section('À corriger', junk, good.length);
+    }
+
+    newBtn.addEventListener('click', () => {
+      newBtn.hidden = true;
+      newField.hidden = false;
+      try { newField.focus(); } catch { }
+    });
+    newField.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const n = normalizeName(newField.value);
+        if (!n) return;
+        pushStoredRoster(getJobIdForRoster(), n);
+        pick(n);
+      }
+    });
+
+    input.addEventListener('input', () => {
+      query = input.value;
+      active = 0;
+      renderList();
+    });
+    on(document, 'keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); close(true); return; }
+      if (document.activeElement === newField) return;
+      const rows = visibleRows();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        active = Math.min(rows.length - 1, active + 1);
+        renderList();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = Math.max(0, active - 1);
+        renderList();
+      } else if (e.key === 'Enter' && document.activeElement !== newField) {
+        e.preventDefault();
+        if (rows[active]) pick(rows[active]);
+      }
+    });
+    on(backdrop, 'click', () => close(true));
+
+    panel.style.visibility = 'hidden';
+    panel.appendChild(searchWrap);
+    panel.appendChild(list);
+    panel.appendChild(newWrap);
+    document.body.appendChild(backdrop);
+    document.body.appendChild(panel);
+    renderList();
+    function place() {
+      const r = (anchor?.getBoundingClientRect?.() || { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2 });
+      const mw = panel.offsetWidth, mh = panel.offsetHeight;
+      let top = r.bottom + 8, left = r.left;
+      left = Math.max(8, Math.min(left, innerWidth - mw - 8));
+      if (top + mh > innerHeight - 8) top = r.top - mh - 8;
+      top = Math.max(8, Math.min(top, innerHeight - mh - 8));
+      panel.style.top = top + 'px';
+      panel.style.left = left + 'px';
+    }
+    place();
+    panel.style.visibility = '';
+    try { input.focus({ preventScroll: true }); } catch { }
+  }
+
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
     const root = editors.transcript; if (!root) return;
     try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
@@ -2119,44 +2414,64 @@
 
     const oldName = String(segEl.dataset.speaker || '').trim();
     const proposed = oldName || 'Intervenant';
-    const rawName = (prompt('Renommer le locuteur :', proposed) || '');
-    const newName = normalizeName(rawName);
-    if (!newName || newName === oldName) return;
+    const anchor = triggerEl || segEl;
 
-    const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
-    const counts = {
-      total: oldName ? ag_countOccurrencesByName(oldName) : 0,
-      contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
-      empty: emptyCount
-    };
+    function afterNameChosen(rawName) {
+      ag_closeSpeakerPicker();
+      const newName = normalizeName(rawName);
+      if (!newName || newName === oldName) return;
+      pushStoredRoster(getJobIdForRoster(), newName);
 
-    const shift = !!keyState.shift;
-    const alt = !!keyState.alt;
+      const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
+      const counts = {
+        total: oldName ? ag_countOccurrencesByName(oldName) : 0,
+        contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
+        empty: emptyCount
+      };
 
-    if (oldName) {
-      if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
-      if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
-    } else if (renameAllEmpty) {
-      const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
-      toast(`Segments sans nom → "${newName}" (${n} seg.)`);
-      return;
+      const shift = !!keyState.shift;
+      const alt = !!keyState.alt;
+
+      if (oldName) {
+        if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
+        if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
+      } else if (renameAllEmpty) {
+        const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
+        toast(`Segments sans nom → "${newName}" (${n} seg.)`);
+        return;
+      }
+
+      const forEmpty = !oldName;
+      ag_showRenameMenu(anchor, {
+        oldName, counts, forEmpty,
+        onSelect(scope) {
+          const n = ag_applyRenameScope({ scope, oldName, newName, idx });
+          toast(
+            scope === 'one' ? 'Locuteur mis à jour' :
+              scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
+                scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
+                  `Segments sans nom → "${newName}" (${n} seg.)`
+          );
+        }
+      });
     }
 
-    const anchor = triggerEl || segEl;
-    const forEmpty = !oldName;
-
-    ag_showRenameMenu(anchor, {
-      oldName, counts, forEmpty,
-      onSelect(scope) {
-        const n = ag_applyRenameScope({ scope, oldName, newName, idx });
-        toast(
-          scope === 'one' ? 'Locuteur mis à jour' :
-            scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
-              scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
-                `Segments sans nom → "${newName}" (${n} seg.)`
-        );
-      }
-    });
+    if (!isSpeakerPickerEnabled()) {
+      const rawName = (prompt('Renommer le locuteur :', proposed) || '');
+      afterNameChosen(rawName);
+      return;
+    }
+    try {
+      ag_showSpeakerPicker(anchor, {
+        currentName: oldName,
+        names: collectRosterNames(),
+        onPick: afterNameChosen,
+        onCancel() { }
+      });
+    } catch {
+      const rawName = (prompt('Renommer le locuteur :', proposed) || '');
+      afterNameChosen(rawName);
+    }
   }
 
 
@@ -3100,6 +3415,153 @@
         font-size:12px;
         margin-left:.4rem;
       }
+
+      #pane-transcript .ag-seg__head .speaker{
+        cursor:pointer;
+      }
+      #pane-transcript .ag-seg__head .rename-btn{
+        opacity:.55;
+      }
+      #pane-transcript .ag-seg__head .rename-btn:hover,
+      #pane-transcript .ag-seg__head .rename-btn:focus-visible{
+        opacity:1;
+        box-shadow:0 0 0 2px color-mix(in srgb, var(--agilo-primary, #174a96) 65%, transparent);
+      }
+      #pane-transcript .ag-seg__head .rename-btn svg{
+        width:1em;
+        height:1em;
+        display:block;
+      }
+
+      .ag-speaker-picker-backdrop{
+        position:fixed;
+        inset:0;
+        z-index:99998;
+        background:transparent;
+      }
+      .ag-speaker-picker{
+        position:fixed;
+        z-index:99999;
+        min-width:260px;
+        max-width:min(92vw, 360px);
+        max-height:min(70vh, 420px);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+        background:var(--agilo-surface, #fff);
+        color:var(--agilo-text, #111);
+        border:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        border-radius:var(--agilo-radius, .5rem);
+        box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
+        font:500 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto;
+      }
+      .ag-speaker-picker__search{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        padding:8px 10px;
+        border-bottom:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        background:var(--agilo-surface-2, #f8f9fa);
+        position:sticky;
+        top:0;
+      }
+      .ag-speaker-picker__ico{
+        width:18px;
+        height:18px;
+        flex:0 0 18px;
+        color:var(--agilo-dim, #525252);
+      }
+      .ag-speaker-picker__input,
+      .ag-speaker-picker__new-input{
+        flex:1;
+        min-width:0;
+        border:0;
+        background:transparent;
+        outline:none;
+        font:inherit;
+        color:inherit;
+      }
+      .ag-speaker-picker__list{
+        overflow:auto;
+        flex:1;
+      }
+      .ag-speaker-picker__hd{
+        padding:8px 12px 4px;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:.04em;
+        text-transform:uppercase;
+        color:var(--agilo-dim, #525252);
+      }
+      .ag-speaker-picker__row{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        width:100%;
+        text-align:left;
+        padding:8px 12px;
+        background:transparent;
+        border:0;
+        cursor:pointer;
+        color:inherit;
+        font:inherit;
+      }
+      .ag-speaker-picker__row:hover,
+      .ag-speaker-picker__row.is-active,
+      .ag-speaker-picker__row:focus-visible{
+        background: color-mix(in srgb,
+                    var(--agilo-surface-2, #f8f9fa) 86%,
+                    var(--agilo-primary, #174a96) 14%);
+        outline:none;
+      }
+      .ag-speaker-picker__dot{
+        width:8px;
+        height:8px;
+        border-radius:50%;
+        flex:0 0 8px;
+      }
+      .ag-speaker-picker__name{
+        flex:1;
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+        font-weight:600;
+      }
+      .ag-speaker-picker__count{
+        color:var(--agilo-dim, #525252);
+        font-size:12px;
+      }
+      .ag-speaker-picker__check{
+        display:inline-flex;
+        width:14px;
+        height:14px;
+        color:var(--agilo-primary, #174a96);
+      }
+      .ag-speaker-picker__check svg{
+        width:14px;
+        height:14px;
+      }
+      .ag-speaker-picker__empty{
+        padding:16px 12px;
+        color:var(--agilo-dim, #525252);
+      }
+      .ag-speaker-picker__new{
+        border-top:1px solid var(--agilo-border, rgba(0,0,0,.12));
+        padding:6px 8px;
+      }
+      .ag-speaker-picker__new-btn{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        width:100%;
+        border:0;
+        background:transparent;
+        cursor:pointer;
+        padding:6px 4px;
+        font:inherit;
+        color:var(--agilo-primary, #174a96);
+      }
     `;
     document.head.appendChild(style);
   })();
@@ -3154,5 +3616,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.9-follow';
+  window.__agiloEditorConfidenceVersion = '1.09.10-roster';
 });

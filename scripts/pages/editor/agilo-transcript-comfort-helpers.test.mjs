@@ -36,6 +36,21 @@ assert(C.resolveActiveSegmentIndex(15, segs, 1) === 1, 'garde active si valide')
 assert(C.resolveActiveSegmentIndex(99, segs, 1) === -1, 'hors plage → -1');
 assert(C.resolveActiveSegmentIndex(5, [], 0) === -1, 'segments vides → -1');
 
+assert(C.foldSpeakerSearch('MÉNISSIER') === C.foldSpeakerSearch('menissier'), 'fold accents');
+assert(C.foldSpeakerSearch('meni') === 'meni', 'fold lower');
+assert(C.isJunkSpeakerLabel('Speaker_3') === true, 'junk Speaker_3');
+assert(C.isJunkSpeakerLabel('Locuteur 2') === true, 'junk Locuteur 2');
+assert(C.isJunkSpeakerLabel('spk-1') === true, 'junk spk-1');
+assert(C.isJunkSpeakerLabel('Sandra MÉNISSIER') === false, 'vrai nom pas junk');
+assert(C.isJunkSpeakerLabel('') === true, 'vide = junk');
+const roster = ['Sandra MÉNISSIER', 'Florian BAUER', 'Speaker_3'];
+const hit = C.filterSpeakerRoster(roster, 'meni');
+assert(hit.length === 1 && hit[0] === 'Sandra MÉNISSIER', 'filtre conserve la casse');
+assert(C.filterSpeakerRoster(roster, '').length === 3, 'query vide = tout');
+assert(C.speakerRosterStorageKey('1000040705') === 'agilo:speaker-roster:1000040705', 'clé job');
+assert(C.speakerRosterStorageKey('') === '', 'pas de jobId → pas de clé');
+assert(C.speakerRosterStorageKey(null) === '', 'null → pas de clé');
+
 const t1 = C.trimSplitNewlines('bonjour\n\n', '\n\n\nle texte');
 assert(t1.left === 'bonjour', 'trim trailing newlines left');
 assert(t1.right === 'le texte', 'trim leading newlines right');

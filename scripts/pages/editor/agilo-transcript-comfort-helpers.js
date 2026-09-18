@@ -24,6 +24,32 @@
     return k;
   }
 
+  function foldSpeakerSearch(s) {
+    return String(s ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  function isJunkSpeakerLabel(s) {
+    const t = String(s ?? '').trim();
+    if (!t) return true;
+    return /^(speaker|locuteur|spk)[\s._-]*\d+$/i.test(t);
+  }
+
+  function filterSpeakerRoster(names, query) {
+    const list = Array.isArray(names) ? names : [];
+    const q = foldSpeakerSearch(query);
+    if (!q) return list.slice();
+    return list.filter((n) => foldSpeakerSearch(n).includes(q));
+  }
+
+  function speakerRosterStorageKey(jobId) {
+    const id = String(jobId ?? '').trim();
+    if (!id) return '';
+    return 'agilo:speaker-roster:' + id;
+  }
+
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -54,6 +80,10 @@
     trimSplitNewlines,
     shouldScrollFollow,
     resolveActiveSegmentIndex,
+    foldSpeakerSearch,
+    isJunkSpeakerLabel,
+    filterSpeakerRoster,
+    speakerRosterStorageKey,
     createFollowController
   };
 })(typeof window !== 'undefined' ? window : globalThis);
