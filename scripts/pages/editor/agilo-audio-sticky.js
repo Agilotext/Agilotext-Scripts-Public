@@ -202,7 +202,7 @@
       '.ag-editor-chrome-dock{position:sticky;top:8px;z-index:20;box-sizing:border-box;',
       'width:100%;max-width:100%;background:rgba(255,255,255,.72);',
       'backdrop-filter:blur(20px) saturate(180%);',
-      '-webkit-backdrop-filter:blur(20px) saturate(180%);border-radius:8px;overflow:hidden}',
+      '-webkit-backdrop-filter:blur(20px) saturate(180%);border-radius:8px;overflow:visible}',
       '.ag-editor-chrome-dock.is-floating{position:fixed;',
       'top:var(--ag-confidence-floating-top,8px);',
       'left:var(--ag-confidence-floating-left,16px);',

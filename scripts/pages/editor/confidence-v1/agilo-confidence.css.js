@@ -65,6 +65,7 @@
   background: transparent;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  overflow: hidden;
 }
 
 .ag-editor-chrome-dock-sentinel {
