@@ -175,6 +175,38 @@
     };
     return !(ar.right <= pr.left || ar.left >= pr.right || ar.bottom <= pr.top || ar.top >= pr.bottom);
   }
+  function clampOffset(n, max) {
+    const m = Math.max(0, Number(max) || 0);
+    const v = Number(n);
+    if (!Number.isFinite(v)) return 0;
+    return Math.max(0, Math.min(Math.floor(v), m));
+  }
+  function sliceTextAt(text, offset) {
+    const s = String(text ?? '');
+    const off = clampOffset(offset, s.length);
+    return { left: s.slice(0, off), right: s.slice(off) };
+  }
+  function computeMidStart(start, end) {
+    const hasS = start != null && start !== '' && Number.isFinite(Number(start));
+    const hasE = end != null && end !== '' && Number.isFinite(Number(end));
+    if (!hasS && !hasE) return null;
+    const s = hasS ? Number(start) : 0;
+    const e = hasE ? Number(end) : (hasS ? Number(start) + 1 : 1);
+    return Math.round((s + e) / 2);
+  }
+  function hasSpeakerLabels(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    const speakers = list.map((seg) => String((seg && seg.speaker) || '').trim());
+    const unique = [];
+    const seen = Object.create(null);
+    speakers.forEach((name) => {
+      if (seen[name]) return;
+      seen[name] = 1;
+      unique.push(name);
+    });
+    if (unique.length === 1 && (unique[0] === '' || unique[0] === 'Speaker_A')) return false;
+    return unique.length > 1 || (unique.length === 1 && unique[0] !== '' && unique[0] !== 'Speaker_A');
+  }
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -199,6 +231,7 @@
     trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex,
     foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, shouldCreateSpeakerFromQuery, speakerRosterStorageKey,
     computePopoverPlace, anchorVisibleInPane,
+    clampOffset, sliceTextAt, computeMidStart, hasSpeakerLabels,
     createFollowController
   };
 
@@ -245,25 +278,14 @@
   function bindSplitTrim() {
     if (document.__agiloSplitTrimBound) return;
     document.__agiloSplitTrimBound = true;
-    const afterPlus = () => {
-      applySplitTrimNearCaret();
-      setTimeout(() => {
-        applySplitTrimNearCaret();
-        openPickerOnCaretSeg();
-      }, 32);
-    };
     document.addEventListener('click', (e) => {
-      if (e.target.closest && e.target.closest('.ag-ux-plus')) {
-        try { window.AgiloTranscriptFollow?.disarm(); } catch { }
-        setTimeout(applySplitTrimNearCaret, 0);
-        setTimeout(afterPlus, 0);
-      }
+      if (!e.target.closest || !e.target.closest('.ag-ux-plus')) return;
+      if (e.target.closest('.ag-speaker-picker')) return;
+      startPlusSpeakerFlow(e);
     }, true);
     document.addEventListener('keydown', (e) => {
-      if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
-      if (e.key !== '=' && e.key !== '+' && e.code !== 'Equal' && e.code !== 'NumpadAdd') return;
-      setTimeout(applySplitTrimNearCaret, 0);
-      setTimeout(afterPlus, 0);
+      if (!isPlusSpeakerShortcut(e)) return;
+      startPlusSpeakerFlow(e);
     }, true);
   }
 
@@ -2227,8 +2249,26 @@
     on(window, 'resize', place);
     const pane = byId('pane-transcript');
     const root = editors.transcript || byId('transcriptEditor');
-    if (pane) on(pane, 'scroll', place, scrollOpt);
-    if (root && root !== pane) on(root, 'scroll', place, scrollOpt);
+    if (pane) {
+      if (anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost')) {
+        on(pane, 'scroll', () => {
+          unbind();
+          if (typeof onClose === 'function') onClose();
+        }, scrollOpt);
+      } else {
+        on(pane, 'scroll', place, scrollOpt);
+      }
+    }
+    if (root && root !== pane) {
+      if (anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost')) {
+        on(root, 'scroll', () => {
+          unbind();
+          if (typeof onClose === 'function') onClose();
+        }, scrollOpt);
+      } else {
+        on(root, 'scroll', place, scrollOpt);
+      }
+    }
     const stopWheel = (e) => { e.stopPropagation(); };
     on(panel, 'wheel', stopWheel);
     on(panel, 'touchmove', stopWheel, { passive: true });
@@ -2340,19 +2380,223 @@
   function ag_closeSpeakerPicker() {
     document.querySelectorAll('.ag-speaker-picker, .ag-speaker-picker-backdrop').forEach((n) => n.remove());
   }
-  function openPickerOnCaretSeg() {
-    if (__mode !== 'structured' || !isSpeakerPickerEnabled()) return;
+  function isPlusSpeakerShortcut(e) {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return false;
+    return e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd';
+  }
+  function hasSpeakerLabelsLive() {
+    if (Array.isArray(window._segments) && window._segments.length > 0) {
+      return hasSpeakerLabels(window._segments);
+    }
+    const root = editors.transcript;
+    if (!root) return true;
+    const segs = Array.from(root.querySelectorAll(':scope > .ag-seg'));
+    if (!segs.length) return true;
+    return hasSpeakerLabels(segs.map((seg) => ({
+      speaker: seg.dataset.speaker || seg.querySelector('.speaker')?.textContent || ''
+    })));
+  }
+  function parseSegTime(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function offsetInBox(box, node, off) {
+    if (!box || !node) return 0;
+    try {
+      if (!(box === node || box.contains(node))) return 0;
+      const r = document.createRange();
+      r.setStart(box, 0);
+      r.setEnd(node, off);
+      return r.toString().length;
+    } catch {
+      return 0;
+    }
+  }
+  function snapshotPlusCaret() {
+    const root = editors.transcript;
+    if (!root) return null;
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const n = sel.anchorNode;
-    const el = n && (n.nodeType === 1 ? n : n.parentElement);
-    const seg = el && el.closest && el.closest('.ag-seg');
-    if (!seg) return;
-    doRenameFor(seg, { triggerEl: seg.querySelector('.speaker') || seg });
+    if (!sel || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    if (!el || !root.contains(el)) return null;
+    const seg = el.closest && el.closest('.ag-seg');
+    if (!seg || !root.contains(seg)) return null;
+    const box = seg.querySelector('.ag-seg__text');
+    if (!box) return null;
+    const full = (typeof window.visibleTextFromBox === 'function')
+      ? window.visibleTextFromBox(box)
+      : String(box.textContent || '');
+    const off = offsetInBox(box, range.startContainer, range.startOffset);
+    const parts = sliceTextAt(full, off);
+    return {
+      root,
+      seg,
+      left: parts.left,
+      right: parts.right,
+      start: parseSegTime(seg.dataset.start),
+      end: parseSegTime(seg.dataset.end),
+      oldSpeaker: String(seg.dataset.speaker || '').trim()
+    };
+  }
+  function removePlusGhost() {
+    document.querySelectorAll('[data-agilo-plus-ghost]').forEach((n) => n.remove());
+  }
+  function createPlusGhost(e, seg) {
+    removePlusGhost();
+    let rect = null;
+    const plus = (e && e.target && e.target.closest) ? e.target.closest('.ag-ux-plus') : null;
+    if (plus && plus.getBoundingClientRect) {
+      const r = plus.getBoundingClientRect();
+      if (r.width || r.height || r.left || r.top) rect = r;
+    }
+    if (!rect && seg) {
+      const a = seg.querySelector('.rename-btn') || seg.querySelector('.speaker') || seg;
+      if (a && a.getBoundingClientRect) rect = a.getBoundingClientRect();
+    }
+    if (!rect) rect = { left: 24, top: 120 };
+    const ghost = document.createElement('div');
+    ghost.setAttribute('data-agilo-plus-ghost', '1');
+    ghost.style.cssText = 'position:fixed;width:1px;height:1px;pointer-events:none;z-index:0;';
+    ghost.style.left = Math.round(rect.left) + 'px';
+    ghost.style.top = Math.round(rect.top) + 'px';
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+  function setSegTimeButton(segEl, start) {
+    const btn = segEl && segEl.querySelector && segEl.querySelector('button.time');
+    if (!btn) return;
+    const hasStart = Number.isFinite(start);
+    const tText = hasStart ? fmtHMS(start) : '00:00';
+    btn.textContent = tText;
+    btn.dataset.action = 'seek';
+    btn.dataset.t = hasStart ? String(start) : '0';
+    btn.title = hasStart ? ('Aller à ' + tText) : 'Aller au début (00:00)';
+  }
+  function placeCaretAtStart(box) {
+    if (!box) return;
+    try { box.focus({ preventScroll: true }); } catch { }
+    try {
+      const r = document.createRange();
+      r.selectNodeContents(box);
+      r.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch { }
+  }
+  function agiloSplitAtCaretCreateSpeaker(snapshot) {
+    if (!snapshot || !snapshot.seg || !snapshot.seg.isConnected) {
+      try { toast('Le paragraphe a changé, réessayez.'); } catch { }
+      return null;
+    }
+    const root = snapshot.root || editors.transcript;
+    const seg = snapshot.seg;
+    if (!root || !root.contains(seg)) {
+      try { toast('Le paragraphe a changé, réessayez.'); } catch { }
+      return null;
+    }
+    const box = seg.querySelector('.ag-seg__text');
+    if (!box) return null;
+    const clone = seg.cloneNode(true);
+    clone.classList.remove('is-active', 'is-selected');
+    clone.dataset.id = 's' + Date.now();
+    const mid = computeMidStart(snapshot.start, snapshot.end);
+    box.textContent = snapshot.left;
+    const nb = clone.querySelector('.ag-seg__text');
+    if (nb) nb.textContent = snapshot.right;
+    clone.dataset.speaker = '';
+    const sp = clone.querySelector('.speaker');
+    if (sp) {
+      sp.textContent = '';
+      sp.classList.remove('is-placeholder');
+      setSpeakerStyle(sp, '');
+    }
+    if (mid != null) {
+      seg.dataset.end = String(mid);
+      clone.dataset.start = String(mid);
+      setSegTimeButton(clone, mid);
+    }
+    if (snapshot.end != null) clone.dataset.end = String(snapshot.end);
+    seg.after(clone);
+    try {
+      if (Array.isArray(window._segments)) {
+        const idx = Array.prototype.indexOf.call(root.children, seg);
+        const old = window._segments[idx] || {};
+        const leftObj = Object.assign({}, old, {
+          end: (mid != null ? mid : old.end),
+          text: snapshot.left
+        });
+        const rightObj = {
+          id: clone.dataset.id,
+          start: (mid != null ? mid : (old.start != null ? old.start : null)),
+          end: old.end != null ? old.end : null,
+          speaker: '',
+          text: snapshot.right
+        };
+        window._segments.splice(idx, 1, leftObj, rightObj);
+      }
+    } catch { }
+    try { clearSegSelection(); } catch { }
+    placeCaretAtStart(nb);
+    try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
+    applySplitTrimNearCaret();
+    try {
+      const leftIdx = Array.prototype.indexOf.call(root.children, seg);
+      if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
+        if (leftIdx >= 0) window.AgiloConfidence.markSegmentModified(leftIdx);
+        window.AgiloConfidence.markSegmentModified(leftIdx + 1);
+      }
+    } catch { }
+    return clone;
+  }
+  function agiloApplyPlusSpeakerName(clone, newName) {
+    const root = editors.transcript;
+    if (!root || !clone) return;
+    const idx = Array.prototype.indexOf.call(root.children, clone);
+    if (idx < 0) return;
+    pushStoredRoster(getJobIdForRoster(), newName);
+    ag_applyRenameScope({ scope: 'one', oldName: '', newName, idx });
+    toast('Locuteur mis à jour');
+  }
+  function startPlusSpeakerFlow(e) {
+    if (!isSpeakerPickerEnabled() || !hasSpeakerLabelsLive()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (__mode !== 'structured') {
+      try { toast('Disponible en mode segmenté.'); } catch { }
+      return;
+    }
+    const snapshot = snapshotPlusCaret();
+    if (!snapshot) {
+      try { toast('Disponible en mode segmenté.'); } catch { }
+      return;
+    }
+    try { window.AgiloTranscriptFollow?.disarm(); } catch { }
+    const ghost = createPlusGhost(e, snapshot.seg);
+    ag_showSpeakerPicker(ghost, {
+      currentName: '',
+      names: collectRosterNames(),
+      onPick(raw) {
+        removePlusGhost();
+        const newName = normalizeName(raw);
+        if (!newName) return;
+        const clone = agiloSplitAtCaretCreateSpeaker(snapshot);
+        if (!clone) return;
+        agiloApplyPlusSpeakerName(clone, newName);
+      },
+      onCancel() {
+        removePlusGhost();
+      }
+    });
   }
   function ag_showSpeakerPicker(anchor, { currentName, names, onPick, onCancel } = {}) {
     ag_closeSpeakerPicker();
     document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach((n) => n.remove());
+    if (!(anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost'))) {
+      removePlusGhost();
+    }
     const allNames = Array.isArray(names) ? names.slice() : [];
     let query = '';
     let active = 0;
@@ -3716,5 +3960,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.12-combobox';
+  window.__agiloEditorConfidenceVersion = '1.09.13-plus-picker';
 });

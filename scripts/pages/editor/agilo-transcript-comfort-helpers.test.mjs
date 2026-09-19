@@ -55,6 +55,33 @@ assert(C.shouldCreateSpeakerFromQuery('Florian', ['Florian BAUER']) === true, 'p
 assert(C.shouldCreateSpeakerFromQuery('meni', ['Sandra MÉNISSIER']) === true, 'hit partiel, helper true (UI n’offre pas Ajouter s’il y a des lignes)');
 assert(C.shouldCreateSpeakerFromQuery('', roster) === false, 'vide → pas créer');
 assert(C.shouldCreateSpeakerFromQuery('   ', roster) === false, 'blancs → pas créer');
+assert(typeof C.clampOffset === 'function', 'clampOffset exposé');
+assert(typeof C.sliceTextAt === 'function', 'sliceTextAt exposé');
+assert(typeof C.computeMidStart === 'function', 'computeMidStart exposé');
+assert(typeof C.hasSpeakerLabels === 'function', 'hasSpeakerLabels exposé');
+{
+  const mid = C.sliceTextAt('abc', 1);
+  assert(mid.left === 'a' && mid.right === 'bc', 'sliceTextAt milieu');
+  const start = C.sliceTextAt('abc', 0);
+  assert(start.left === '' && start.right === 'abc', 'sliceTextAt offset 0');
+  const end = C.sliceTextAt('abc', 3);
+  assert(end.left === 'abc' && end.right === '', 'sliceTextAt fin');
+  const over = C.sliceTextAt('abc', 99);
+  assert(over.left === 'abc' && over.right === '', 'sliceTextAt hors bornes haut');
+  const neg = C.sliceTextAt('abc', -4);
+  assert(neg.left === '' && neg.right === 'abc', 'sliceTextAt hors bornes bas');
+  assert(C.clampOffset(1.8, 3) === 1, 'clampOffset floor');
+  assert(C.clampOffset('x', 3) === 0, 'clampOffset non numérique');
+}
+assert(C.computeMidStart(0, 10) === 5, 'computeMidStart 0-10');
+assert(C.computeMidStart(null, null) === null, 'computeMidStart sans times');
+assert(C.computeMidStart(undefined, undefined) === null, 'computeMidStart undefined');
+assert(C.hasSpeakerLabels([{ speaker: '' }]) === false, 'un locuteur vide → false');
+assert(C.hasSpeakerLabels([{ speaker: 'Speaker_A' }]) === false, 'Speaker_A seul → false');
+assert(C.hasSpeakerLabels([{ speaker: 'DURAND' }, { speaker: 'MARTIN' }]) === true, 'deux noms → true');
+assert(C.hasSpeakerLabels([{ speaker: 'DURAND' }]) === true, 'un vrai nom → true');
+assert(C.hasSpeakerLabels([]) === false, 'liste vide → false');
+
 assert(C.speakerRosterStorageKey('1000040705') === 'agilo:speaker-roster:1000040705', 'clé job');
 assert(C.speakerRosterStorageKey('') === '', 'pas de jobId → pas de clé');
 assert(C.speakerRosterStorageKey(null) === '', 'null → pas de clé');

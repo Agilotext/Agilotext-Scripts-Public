@@ -1,5 +1,5 @@
 /**
- * Pin 1.09.12-combobox : Entrée crée le nom, pas d’anneau bleu, ancre crayon inchangée.
+ * Pin 1.09.13-plus-picker : liste locuteurs sur le +, ghost ancre, scope one.
  * Exécution : node scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -13,7 +13,8 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
-assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.12-combobox'"), 'version 1.09.12-combobox');
+assert(src.includes("window.__agiloEditorConfidenceVersion = '1.09.13-plus-picker'"), 'version 1.09.13-plus-picker');
+assert(!src.includes("'1.09.12-combobox'"), 'plus de 1.09.12-combobox');
 assert(!src.includes("'1.09.11-anchor'"), 'plus de 1.09.11-anchor');
 assert(!src.includes("'1.09.10-roster'"), 'plus de 1.09.10-roster');
 assert(!src.includes('Nouveau nom'), 'pas de bouton Nouveau nom');
@@ -44,6 +45,25 @@ assert(src.includes("prompt('Renommer le locuteur"), 'prompt fallback présent')
   const promptHits = src.split("prompt('Renommer le locuteur").length - 1;
   assert(promptHits === 2, 'prompt seulement flag off + catch');
 }
+assert(!src.includes('Nom du nouveau locuteur'), 'pas de prompt Intervenant dans le fork');
+assert(!src.includes('function afterPlus'), 'afterPlus retiré');
+assert(!src.includes('function openPickerOnCaretSeg'), 'openPickerOnCaretSeg retiré');
+assert(!src.includes('openPickerOnCaretSeg()'), 'plus d’appel openPickerOnCaretSeg');
+assert(src.includes('e.stopPropagation()'), 'stopPropagation intercept +');
+assert(src.includes('.ag-ux-plus'), 'clic .ag-ux-plus');
+assert(src.includes('data-agilo-plus-ghost'), 'ancre ghost plus');
+assert(src.includes('ag_showSpeakerPicker(ghost'), 'picker + ancré sur ghost, pas sur .ag-ux-plus');
+assert(!src.includes('ag_showSpeakerPicker(plus'), 'pas d’ancre plusBtn');
+assert(!src.includes('ag_showSpeakerPicker(e.target'), 'pas d’ancre e.target plus');
+assert(src.includes('cloneNode(true)'), 'split par cloneNode');
+assert(src.includes("clone.classList.remove('is-active', 'is-selected')"), 'clone sans is-active');
+assert(src.includes('function agiloApplyPlusSpeakerName'), 'apply plus dédié');
+assert(src.includes("ag_applyRenameScope({ scope: 'one', oldName: '', newName, idx })"), 'plus = scope one, pas de 2e menu');
+assert(src.includes('function agiloSplitAtCaretCreateSpeaker'), 'split fork');
+assert(src.includes('function startPlusSpeakerFlow'), 'startPlusSpeakerFlow');
+assert(src.includes('function hasSpeakerLabels'), 'hasSpeakerLabels dans le fork');
+assert(src.includes('function sliceTextAt'), 'sliceTextAt dans le fork');
+assert(src.includes('function computeMidStart'), 'computeMidStart dans le fork');
 assert(!src.includes("addEventListener('dblclick'"), 'plus de dblclick locuteur');
 assert(src.includes("e.target.closest('.speaker')"), 'clic simple locuteur');
 assert(src.includes('function isSpeakerPickerEnabled'), 'flag picker');

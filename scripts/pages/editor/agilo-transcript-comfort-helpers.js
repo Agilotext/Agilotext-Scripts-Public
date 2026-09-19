@@ -91,6 +91,42 @@
     return !(ar.right <= pr.left || ar.left >= pr.right || ar.bottom <= pr.top || ar.top >= pr.bottom);
   }
 
+  function clampOffset(n, max) {
+    const m = Math.max(0, Number(max) || 0);
+    const v = Number(n);
+    if (!Number.isFinite(v)) return 0;
+    return Math.max(0, Math.min(Math.floor(v), m));
+  }
+
+  function sliceTextAt(text, offset) {
+    const s = String(text ?? '');
+    const off = clampOffset(offset, s.length);
+    return { left: s.slice(0, off), right: s.slice(off) };
+  }
+
+  function computeMidStart(start, end) {
+    const hasS = start != null && start !== '' && Number.isFinite(Number(start));
+    const hasE = end != null && end !== '' && Number.isFinite(Number(end));
+    if (!hasS && !hasE) return null;
+    const s = hasS ? Number(start) : 0;
+    const e = hasE ? Number(end) : (hasS ? Number(start) + 1 : 1);
+    return Math.round((s + e) / 2);
+  }
+
+  function hasSpeakerLabels(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    const speakers = list.map((seg) => String((seg && seg.speaker) || '').trim());
+    const unique = [];
+    const seen = Object.create(null);
+    speakers.forEach((name) => {
+      if (seen[name]) return;
+      seen[name] = 1;
+      unique.push(name);
+    });
+    if (unique.length === 1 && (unique[0] === '' || unique[0] === 'Speaker_A')) return false;
+    return unique.length > 1 || (unique.length === 1 && unique[0] !== '' && unique[0] !== 'Speaker_A');
+  }
+
   function createFollowController(opts) {
     let armed = true;
     let programmatic = false;
@@ -128,6 +164,10 @@
     speakerRosterStorageKey,
     computePopoverPlace,
     anchorVisibleInPane,
+    clampOffset,
+    sliceTextAt,
+    computeMidStart,
+    hasSpeakerLabels,
     createFollowController
   };
 })(typeof window !== 'undefined' ? window : globalThis);
