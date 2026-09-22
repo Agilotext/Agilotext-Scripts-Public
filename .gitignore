@@ -9,7 +9,12 @@
 !scripts/README.md
 !docs/styled-transcript-pdf/*.md
 !docs/integration-titres-dossiers-1.05/**/*.md
-!docs/CERVEAU_AGILOTEXT/**/*.md
+!CNOEC_Agiloshield_Docs/anonymisation/*.md
+
+# Doc interne — ne jamais publier sur GitHub public
+docs/CERVEAU_AGILOTEXT/
+Agilotext-Reunions-Hebdo/
+!CNOEC_Agiloshield_Docs/anonymisation/select_rect_preview/**/*.md
 
 # Scripts d'aide (pas besoin dans le repo)
 setup-github-repo.sh
@@ -20,6 +25,8 @@ upload-to-github.js
 *.html
 !README.html
 !CNOEC_Agiloshield_Docs/anonymisation/*.html
+!CNOEC_Agiloshield_Docs/anonymisation/select_rect_preview/
+!CNOEC_Agiloshield_Docs/anonymisation/select_rect_preview/**
 !CNOEC_Agiloshield_Docs/Front_END/*.html
 !docs/integration-titres-dossiers-1.05/webflow-exports/*.html
 !scripts/pages/dashboard/Code-sidebar-folders-embed.html

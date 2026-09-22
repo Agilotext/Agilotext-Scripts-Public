@@ -3,7 +3,7 @@
 **Date :** 10 septembre 2026  
 **Client déclencheur :** EHPAD Jonquières, 3 sièges Business isolés (pas de team Memberstack).  
 **Appel :** Karine, 10/09/2026 : mettre le CR dans **l’historique** de la collègue, pas seulement un export Word.  
-**Backlog :** [`../../CERVEAU_AGILOTEXT/02_BACKEND/BACKLOG_PARTAGE_JOB_JCQ_2026-09-10.md`](../../CERVEAU_AGILOTEXT/02_BACKEND/BACKLOG_PARTAGE_JOB_JCQ_2026-09-10.md)
+**Backlog :** note interne Florian (JCQ partage job, sept. 2026), hors dépôt public.
 
 **Ce n’est pas** `getSharedUrl` (lien public). **Ce n’est pas** l’orga P3.
 
