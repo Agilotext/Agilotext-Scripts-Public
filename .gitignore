@@ -9,11 +9,11 @@
 !scripts/README.md
 !docs/styled-transcript-pdf/*.md
 !docs/integration-titres-dossiers-1.05/**/*.md
-!CNOEC_Agiloshield_Docs/anonymisation/*.md
 
 # Doc interne — ne jamais publier sur GitHub public
 docs/CERVEAU_AGILOTEXT/
 Agilotext-Reunions-Hebdo/
+CNOEC_Agiloshield_Docs/anonymisation/*.md
 !CNOEC_Agiloshield_Docs/anonymisation/select_rect_preview/**/*.md
 
 # Scripts d'aide (pas besoin dans le repo)
@@ -37,6 +37,12 @@ upload-to-github.js
 !docs/webflow-embeds/**/*.html
 !docs/webflow-embeds/**/*.css
 !docs/webflow-embeds/**/*.md
+docs/webflow-embeds/**/GUIDE_NICOLAS*.md
+docs/webflow-embeds/**/EMAIL_NICOLAS*.md
+docs/webflow-embeds/share/A_SAVOIR.md
+docs/webflow-embeds/share/SCHEMA_ORGANIZATION.md
+docs/webflow-embeds/share/WEBFLOW_SHARE_PAGE.md
+!docs/webflow-embeds/share/README_PUBLIC.md
 
 # Fichiers JavaScript de test/développement
 *_TEST*.js
