@@ -205,19 +205,28 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /nucleoSvg\("document"\)/);
     assert.match(usages, /nucleoSvg\("sparkle"\)/);
     assert.match(usages, /insertBefore\(chrome, ta\)/);
-    assert.match(usages, /agilo-carnet-generate/);
+    const chromeFn = usages.slice(
+      usages.indexOf("function injectCarnetChrome"),
+      usages.indexOf("function injectGenerate")
+    );
+    assert.doesNotMatch(chromeFn, /agilo-carnet-generate/);
+    assert.match(usages, /generate\.hidden = !isCarnet/);
+    assert.match(usages, /chrome\.hidden = !isCarnet/);
     assert.match(usages, /dictee-secondary-actions/);
     assert.match(usages, /toggle-format-transcript/);
     assert.match(usages, /toggle-translate/);
     assert.match(usages, /agilo-prompt-picker-anchor/);
     assert.match(usages, /Créer un modèle/);
-    assert.match(usages, /agilo-wb-picker/);
+    assert.match(usages, /agilo-wb-picker-anchor/);
+    assert.match(usages, /data-agilo-wb-picker/);
+    assert.match(usages, /classList.contains\("options-wrapper"\)/);
     assert.match(usages, /max-width:640px/);
     assert.match(usages, /PLACEHOLDER_CARNET/);
     assert.match(usages, /cursor:default/);
     assert.match(usages, /is-carnet #agilo-copy-btn/);
     assert.doesNotMatch(usages, /<button[^>]*agilo-carnet-generate/);
     assert.match(picker, /agilo-carnet-picker__label">Modèles/);
+    assert.match(picker, /Personnalisés/);
     assert.match(picker, /iconKey:/);
     assert.match(picker, /setDisabled/);
     assert.doesNotMatch(picker, /Ajouter pour l.utiliser/);
@@ -250,5 +259,154 @@ describe("Dictee Carnet v2", function () {
     assert.equal(n.iconKey, "meeting");
     const user = P.normalizeModel({ id: 200, name: "Perso" }, "USER");
     assert.equal(user.iconKey, "custom");
+  });
+
+  it("hide wrappers seulement dictee+carnet, pas Fichier", function () {
+    function el(id, className) {
+      const n = {
+        id: id || "",
+        className: className || "",
+        textContent: "",
+        parentElement: null,
+        hidden: false,
+        dataset: {},
+        style: {
+          props: {},
+          setProperty: function (k, v) { this.props[k] = v; },
+          removeProperty: function (k) { delete this.props[k]; }
+        },
+        classList: {
+          contains: function (c) {
+            return (" " + n.className + " ").indexOf(" " + c + " ") >= 0;
+          },
+          toggle: function () {}
+        },
+        closest: function (sel) {
+          var cur = n;
+          while (cur) {
+            if (sel.charAt(0) === "#" && cur.id === sel.slice(1)) return cur;
+            if (sel.charAt(0) === "." && cur.classList.contains(sel.slice(1))) return cur;
+            if (sel === "label") return null;
+            cur = cur.parentElement;
+          }
+          return null;
+        },
+        querySelector: function () { return null; },
+        querySelectorAll: function () { return []; },
+        setAttribute: function () {},
+        getAttribute: function () { return null; }
+      };
+      return n;
+    }
+    function wrapCheckbox(input) {
+      var wrap = el("", "checkbox-component");
+      input.parentElement = wrap;
+      return wrap;
+    }
+    var format = el("toggle-format-transcript");
+    var formatWrap = wrapCheckbox(format);
+    var trans = el("toggle-translate");
+    var transWrap = wrapCheckbox(trans);
+    var speakers = el("toggle-speakers");
+    wrapCheckbox(speakers);
+    var summary = el("toggle-summary");
+    wrapCheckbox(summary);
+    var transSel = el("translate-select");
+    var selectContainer = el("", "select-container");
+    var pvAnchor = el("agilo-prompt-picker-anchor");
+    pvAnchor.parentElement = selectContainer;
+    var createA = el("", "");
+    createA.textContent = "Créer un modèle";
+    var wrapperSelect = el("", "wrapper-select");
+    var createParent = {
+      querySelectorAll: function (s) { return s === "a" ? [createA] : []; },
+      querySelector: function () { return null; }
+    };
+    wrapperSelect.parentElement = createParent;
+    var wb = el("", "agilo-wb-picker");
+    var wbAnchor = el("agilo-wb-picker-anchor");
+    wbAnchor.closest = function (sel) {
+      return sel === ".agilo-wb-picker" ? wb : el.prototype && null;
+    };
+    var dicteeTab = el("", "source-tab active");
+    dicteeTab.getAttribute = function (name) {
+      return name === "data-tab" ? "dictee" : null;
+    };
+    var panelDictee = el("panel-dictee", "active");
+    var byId = {
+      "toggle-format-transcript": format,
+      "toggle-translate": trans,
+      "toggle-speakers": speakers,
+      "toggle-summary": summary,
+      "translate-select": transSel,
+      "speakers-select": null,
+      "agilo-prompt-picker-anchor": pvAnchor,
+      "agilo-wb-picker-anchor": wbAnchor,
+      "agilo-wb-picker": null,
+      "panel-dictee": panelDictee,
+      "agilo-dictee-usage": null,
+      "agilo-carnet-help": null,
+      "agilo-carnet-chrome": { hidden: false },
+      "agilo-carnet-generate": { hidden: false },
+      "live-streaming-panel": null,
+      "agilo-copy-btn-text": null
+    };
+    var sandbox = {
+      window: {},
+      CustomEvent: function (name, opts) { this.type = name; this.detail = opts && opts.detail; },
+      document: {
+        getElementById: function (id) { return byId[id] || null; },
+        querySelector: function (sel) {
+          if (sel === '.source-tab[data-tab="dictee"]') return dicteeTab;
+          if (sel === ".options-wrapper") {
+            return { querySelectorAll: function () { return []; } };
+          }
+          if (sel === "[data-agilo-streaming-root]") return null;
+          if (sel === "[data-agilo-streaming-text]") {
+            return { dataset: {}, getAttribute: function () { return ""; }, setAttribute: function () {}, value: "" };
+          }
+          if (sel === "#panel-dictee .dictee-preview-label") return null;
+          if (sel === "#panel-dictee .dictee-note") return null;
+          return null;
+        },
+        querySelectorAll: function (sel) {
+          if (sel === ".wrapper-select") return [wrapperSelect];
+          if (sel === "[data-agilo-wb], [data-agilo-wb-picker], .agilo-wb-picker") return [wb];
+          return [];
+        },
+        createElement: function () {
+          return { style: {}, setAttribute: function () {}, appendChild: function () {}, textContent: "" };
+        },
+        head: { appendChild: function () {} },
+        addEventListener: function () {},
+        dispatchEvent: function () {}
+      },
+      localStorage: {
+        getItem: function () { return null; },
+        setItem: function () {}
+      },
+      console: console
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    loadScript("scripts/pages/dashboard/dictee-usages.js", sandbox);
+    const U = sandbox.AgiloDicteeUsages;
+    U.setUsage("carnet", false);
+    assert.equal(formatWrap.style.props.display, "none");
+    assert.equal(transWrap.style.props.display, "none");
+    assert.equal(selectContainer.style.props.display, "none");
+    assert.equal(createA.style.props.display, "none");
+    assert.equal(wb.style.props.display, "none");
+    U.setUsage("reunion", false);
+    assert.equal(formatWrap.style.props.display, undefined);
+    assert.equal(transWrap.style.props.display, undefined);
+    assert.equal(selectContainer.style.props.display, undefined);
+    assert.equal(createA.style.props.display, undefined);
+    assert.equal(wb.style.props.display, undefined);
+    U.setUsage("carnet", false);
+    dicteeTab.className = "source-tab";
+    panelDictee.className = "";
+    U.hideGlobalOptionsIfNeeded();
+    assert.equal(formatWrap.style.props.display, undefined);
   });
 });

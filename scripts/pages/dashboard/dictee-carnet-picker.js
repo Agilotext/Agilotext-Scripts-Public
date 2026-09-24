@@ -1,6 +1,6 @@
 /**
  * Picker modèles du Carnet (dashboard).
- * Perso + Standards, recherche, dernier id sinon 817, jamais CSE 1 auto.
+ * Personnalisés + Standards, recherche, dernier id sinon 817, jamais CSE 1 auto.
  * Icônes Nucleo bouton + liste. Pas le wizard / cadenas.
  * V1 : l’id est persisté (Générer = Bientôt).
  */
@@ -255,7 +255,7 @@
           .join("");
       }
       if (g.recents.length) html += '<div class="agilo-carnet-picker__group">Récents</div>' + itemsHtml(g.recents);
-      if (g.user.length) html += '<div class="agilo-carnet-picker__group">Perso</div>' + itemsHtml(g.user);
+      if (g.user.length) html += '<div class="agilo-carnet-picker__group">Personnalisés</div>' + itemsHtml(g.user);
       if (g.standard.length) html += '<div class="agilo-carnet-picker__group">Standards</div>' + itemsHtml(g.standard);
       listEl.innerHTML = html;
       emptyEl.hidden = shown.length > 0;

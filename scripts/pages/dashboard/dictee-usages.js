@@ -129,6 +129,8 @@
 
   function setWrapDisplay(el, hide) {
     if (!el) return;
+    if (el.id === "panel-dictee") return;
+    if (el.classList && el.classList.contains("options-wrapper")) return;
     if (hide) el.style.setProperty("display", "none", "important");
     else el.style.removeProperty("display");
   }
@@ -157,7 +159,7 @@
       if (!sel) return;
       if (sel.closest(".checkbox-component")) return;
       setWrapDisplay(sel, hide);
-      var selWrap = sel.closest(".select-wrapper") || sel.parentElement;
+      var selWrap = sel.closest(".select-wrapper");
       if (selWrap && selWrap !== sel) setWrapDisplay(selWrap, hide);
     });
 
@@ -165,33 +167,35 @@
     if (anchor) {
       var box = anchor.closest(".select-container") || anchor.closest(".wrapper-select") || anchor;
       setWrapDisplay(box, hide);
-      var info = box && box.parentElement && box.parentElement.querySelector
-        ? box.parentElement.querySelector(".wrapper-info")
-        : null;
-      if (info) setWrapDisplay(info, hide);
-      var flex = box && box.closest && box.closest(".custom-select-wrapper");
-      if (flex) setWrapDisplay(flex, hide);
+      if (box && box.parentElement && typeof box.parentElement.querySelector === "function") {
+        var info = box.parentElement.querySelector(".wrapper-info");
+        if (info) setWrapDisplay(info, hide);
+      }
     }
 
-    document.querySelectorAll(".link-create-template, [data-open-wizard]").forEach(function (el) {
-      setWrapDisplay(el, hide);
-    });
-    var createRoots = [];
     var ow = document.querySelector(".options-wrapper");
-    if (ow) createRoots.push(ow);
-    var panel = document.getElementById("panel-dictee");
-    if (panel) createRoots.push(panel);
-    createRoots.forEach(function (root) {
-      root.querySelectorAll("a, button").forEach(function (el) {
-        if (!el || el.id === "agilo-carnet-mes-fichiers") return;
-        var t = String(el.textContent || "").replace(/\s+/g, " ").trim();
-        if (t === "Créer un modèle" || t === "+ Créer un modèle") setWrapDisplay(el, hide);
+    if (ow) {
+      ow.querySelectorAll(".link-create-template, [data-open-wizard]").forEach(function (el) {
+        setWrapDisplay(el, hide);
+      });
+    }
+    document.querySelectorAll(".wrapper-select").forEach(function (wrap) {
+      var parent = wrap.parentElement;
+      if (!parent || typeof parent.querySelectorAll !== "function") return;
+      parent.querySelectorAll("a").forEach(function (a) {
+        if (!a || a.id === "agilo-carnet-mes-fichiers") return;
+        var t = String(a.textContent || "").replace(/\s+/g, " ").trim();
+        if (t === "Créer un modèle" || t === "+ Créer un modèle") setWrapDisplay(a, hide);
       });
     });
 
-    var wb = document.getElementById("agilo-wb-picker");
-    if (wb) setWrapDisplay(wb, hide);
-    document.querySelectorAll("[data-agilo-wb], .agilo-wb-picker").forEach(function (el) {
+    var wbAnchor =
+      document.getElementById("agilo-wb-picker-anchor") || document.getElementById("agilo-wb-picker");
+    if (wbAnchor) {
+      var wbWrap = (wbAnchor.closest && wbAnchor.closest(".agilo-wb-picker")) || wbAnchor;
+      setWrapDisplay(wbWrap, hide);
+    }
+    document.querySelectorAll("[data-agilo-wb], [data-agilo-wb-picker], .agilo-wb-picker").forEach(function (el) {
       setWrapDisplay(el, hide);
     });
   }
