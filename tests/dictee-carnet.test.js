@@ -197,4 +197,58 @@ describe("Dictee Carnet v2", function () {
     assert.match(startSrc, /_checkLimits/);
     assert.match(startSrc, /isCarnet/);
   });
+
+  it("UI Carnet version A: icones Nucleo, hide, ordre DOM", function () {
+    const usages = read("scripts/pages/dashboard/dictee-usages.js");
+    const picker = read("scripts/pages/dashboard/dictee-carnet-picker.js");
+    assert.match(usages, /nucleoSvg\("meeting"\)/);
+    assert.match(usages, /nucleoSvg\("document"\)/);
+    assert.match(usages, /nucleoSvg\("sparkle"\)/);
+    assert.match(usages, /insertBefore\(chrome, ta\)/);
+    assert.match(usages, /agilo-carnet-generate/);
+    assert.match(usages, /dictee-secondary-actions/);
+    assert.match(usages, /toggle-format-transcript/);
+    assert.match(usages, /toggle-translate/);
+    assert.match(usages, /agilo-prompt-picker-anchor/);
+    assert.match(usages, /Créer un modèle/);
+    assert.match(usages, /agilo-wb-picker/);
+    assert.match(usages, /max-width:640px/);
+    assert.match(usages, /PLACEHOLDER_CARNET/);
+    assert.match(usages, /cursor:default/);
+    assert.match(usages, /is-carnet #agilo-copy-btn/);
+    assert.doesNotMatch(usages, /<button[^>]*agilo-carnet-generate/);
+    assert.match(picker, /agilo-carnet-picker__label">Modèles/);
+    assert.match(picker, /iconKey:/);
+    assert.match(picker, /setDisabled/);
+    assert.doesNotMatch(picker, /Ajouter pour l.utiliser/);
+    assert.doesNotMatch(picker, /data-open-wizard/);
+  });
+
+  it("picker conserve iconKey et jamais CSE 1 auto", function () {
+    const sandbox = {
+      window: {},
+      document: {
+        getElementById: function () { return null; },
+        querySelector: function () { return null; },
+        createElement: function () {
+          return { style: {}, setAttribute: function () {}, appendChild: function () {} };
+        },
+        head: { appendChild: function () {} },
+        addEventListener: function () {}
+      },
+      console: console
+    };
+    sandbox.window = sandbox;
+    sandbox.globalThis = sandbox;
+    loadScript("scripts/pages/dashboard/dictee-carnet-picker.js", sandbox);
+    const P = sandbox.AgiloDicteeCarnetPicker;
+    const n = P.normalizeModel(
+      { promptModelId: 817, promptModelName: "Carnet", iconKey: "meeting" },
+      "STANDARD"
+    );
+    assert.equal(n.id, "817");
+    assert.equal(n.iconKey, "meeting");
+    const user = P.normalizeModel({ id: 200, name: "Perso" }, "USER");
+    assert.equal(user.iconKey, "custom");
+  });
 });
