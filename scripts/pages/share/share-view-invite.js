@@ -641,7 +641,7 @@
     var css = [
       'html.agilo-share-page .nav_component,html.agilo-share-page footer.footer{display:none!important}',
       'html.agilo-share-page .main-wrapper{min-height:100vh}',
-      'html.agilo-share-page .dashboard.mes-transcript,html.agilo-share-page.agilo-a11y-app .dashboard.mes-transcript{min-height:100vh;align-items:stretch;flex-direction:column!important;width:100%;max-width:none}',
+      'html.agilo-share-page .dashboard.mes-transcript,html.agilo-share-page.agilo-a11y-app .dashboard.mes-transcript{min-height:100vh;align-items:stretch;flex-direction:column!important;width:100%;max-width:none;overflow-x:hidden}',
       'html.agilo-share-page .dashboard-left,html.agilo-share-page.agilo-a11y-app .dashboard-left{height:auto!important;min-height:0!important;max-height:none!important;width:100%!important;max-width:none!important;flex:0 0 auto!important;position:relative!important}',
       'html.agilo-share-page .dashboard-left .dashboard-menu.menu-app,html.agilo-share-page.agilo-a11y-app .dashboard-left .dashboard-menu.menu-app{width:100%!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;flex-direction:row!important;align-items:center!important;justify-content:space-between!important;padding:.75rem 1.25rem!important;gap:.75rem!important;box-sizing:border-box!important}',
       'html.agilo-share-page .dashboard-menu.menu-app a.dashboard-link,html.agilo-share-page.agilo-a11y-app .dashboard-menu.menu-app a.dashboard-link{width:auto!important;max-width:none!important}',
