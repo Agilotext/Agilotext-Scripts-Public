@@ -1,17 +1,10 @@
 /* ================================================================
    AGILOTEXT — Vue lecture seule d’un partage (transcription, CR, PV, etc.)
-   Page : /auth/share?token=d8478fa34a…
-   Prod    : https://www.agilotext.com/auth/share?token=…
-   Staging : https://agilotext-test.webflow.io/auth/share?token=…
-   Embed Webflow :
-     <div id="editorRoot" class="editorroot"></div>
-     <script src="…/scripts/shared/agilo-share-url.js"></script>
-     <script src="…/scripts/pages/share/share-zip-parse.js"></script>
-     <script src="…/scripts/pages/share/share-view-invite.js?v=share-v1"></script>
-   Guest : GET /api/d8478fa34a…-download (zip public, sans compte), puis lecture locale.
-   API JSON : GET /api/v1/getSharedJobView?shareToken=…  (Nico, pas encore en prod)
-   Mock  : ?mock=1
-   Job ID (aperçu propriétaire connecté) : ?jobId=1000040476
+   Guest 11.0.5 : /auth/share#token=  (43 chars) → GET /api/v1/guestRead/document Bearer
+   Historique  : /auth/share?token=d8478fa34a…  (zip servlet, fallback)
+   Prod    : https://www.agilotext.com/auth/share
+   Staging : https://agilotext-test.webflow.io/auth/share
+   Mock    : ?mock=1
    ================================================================ */
 (function () {
   'use strict';
@@ -27,6 +20,7 @@
   var LOGO_SRC = 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b2_Logo_svg%20(1).svg';
   var ROOT_ID = 'editorRoot';
   var FALLBACK_ROOT_ID = 'agilo-share-view';
+  var blobUrls = [];
 
   /** Type document par défaut si l’API n’envoie pas sharedDocumentType (cr | pv | note | transcript). */
   var SHARE_DOCUMENT_TYPE_DEFAULT = 'cr';
@@ -250,6 +244,125 @@
     return '';
   }
 
+  function parseGuestToken() {
+    var helpers = shareHelpers();
+    if (helpers && helpers.parseGuestTokenFromLocation) {
+      return helpers.parseGuestTokenFromLocation(window.location) || '';
+    }
+    var hash = String(window.location.hash || '');
+    var hm = hash.match(/^#token=([^&]+)/i);
+    if (hm) {
+      try {
+        var h = decodeURIComponent(hm[1]);
+        if (/^[A-Za-z0-9_-]{43}$/.test(h)) return h;
+      } catch (_) { /* ignore */ }
+    }
+    var q = String(qs('token') || qs('shareToken') || '');
+    if (/^[A-Za-z0-9_-]{43}$/.test(q)) return q;
+    return '';
+  }
+
+  function revokeBlobs() {
+    var i;
+    for (i = 0; i < blobUrls.length; i++) {
+      try { URL.revokeObjectURL(blobUrls[i]); } catch (_) { /* ignore */ }
+    }
+    blobUrls = [];
+  }
+
+  function rememberBlobUrl(url) {
+    if (url) blobUrls.push(url);
+    return url;
+  }
+
+  function guestErrorCode(code) {
+    var c = String(code || '');
+    if (/error_guest_read_invalid_token|error_guest_read_not_found/i.test(c)) return 'error_share_not_found';
+    if (/error_guest_read_not_ready/i.test(c)) return 'error_share_not_ready';
+    if (/error_guest_read_forbidden|error_guest_read_origin_forbidden/i.test(c)) return 'error_guest_forbidden';
+    if (/error_guest_read_bad_request/i.test(c)) return 'error_share_not_found';
+    return '';
+  }
+
+  async function fetchGuestBlob(kind, guestToken) {
+    var path = kind === 'audio' ? '/guestRead/audio' : '/guestRead/zip';
+    var r;
+    try {
+      r = await fetch(API_BASE + path, {
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + guestToken },
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+    } catch (_) {
+      return null;
+    }
+    if (!r.ok) return null;
+    var blob;
+    try { blob = await r.blob(); } catch (_) { return null; }
+    if (!blob || !blob.size) return null;
+    var url = rememberBlobUrl(URL.createObjectURL(blob));
+    var name = '';
+    var cd = r.headers.get('Content-Disposition') || '';
+    var nm = cd.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+    if (nm) {
+      try { name = decodeURIComponent(nm[1].replace(/"/g, '').trim()); }
+      catch (_) { name = nm[1]; }
+    }
+    return { url: url, blob: blob, filename: name };
+  }
+
+  async function fetchGuestDocument(guestToken) {
+    var r;
+    try {
+      r = await fetch(API_BASE + '/guestRead/document', {
+        method: 'GET',
+        headers: { Accept: 'application/json', Authorization: 'Bearer ' + guestToken },
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+    } catch (_) {
+      return { error: 'network' };
+    }
+    var j = {};
+    try { j = await r.json(); } catch (_) { j = {}; }
+    var code = String(j.errorMessage || j.error || j.exceptionName || '');
+    var mapped = guestErrorCode(code);
+    if (mapped) return { error: mapped, raw: j };
+    if (!r.ok || String(j.status || '').toUpperCase() === 'KO') {
+      if (r.status === 403) return { error: 'error_guest_forbidden', raw: j };
+      if (r.status === 404) return { error: 'error_share_not_found', raw: j };
+      return { error: 'network', raw: j };
+    }
+    var job = {
+      status: 'OK',
+      jobTitle: j.jobTitle || j.title || '',
+      filename: j.filename || '',
+      sharedByName: j.sharedByName || j.sharedBy || '',
+      expiresAt: j.expiresAt || '',
+      audioUrl: '',
+      audioAvailable: j.audioAvailable === true,
+      zipAvailable: j.zipAvailable !== false,
+      transcriptHtml: j.transcriptHtml || '',
+      summaryHtml: j.summaryHtml || '',
+      segments: mapNicoSegments(j),
+      sharedDocumentType: j.sharedDocumentType || '',
+      summaryTabLabel: j.summaryTabLabel || '',
+      pageKicker: j.pageKicker || '',
+      guestToken: guestToken
+    };
+    if (job.audioAvailable) {
+      var audio = await fetchGuestBlob('audio', guestToken);
+      if (audio && audio.url) {
+        job.audioUrl = audio.url;
+        job.audioAvailable = true;
+      } else {
+        job.audioAvailable = false;
+      }
+    }
+    return { job: job };
+  }
+
   function downloadUrlFor(token) {
     var helpers = shareHelpers();
     if (helpers && helpers.toApiDownloadUrl && token) return helpers.toApiDownloadUrl(token);
@@ -365,9 +478,16 @@
   }
 
   function capture(event, props) {
+    var clean = {};
+    var k;
+    for (k in (props || {})) {
+      if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+      if (/token/i.test(k)) continue;
+      clean[k] = props[k];
+    }
     try {
       if (window.posthog && typeof window.posthog.capture === 'function') {
-        window.posthog.capture(event, props || {});
+        window.posthog.capture(event, clean);
       }
     } catch (_) { /* ignore */ }
   }
@@ -381,9 +501,12 @@
       'html.agilo-share-page .dashboard-left,html.agilo-share-page .dashboard-menu.menu-app{height:auto!important;min-height:0!important;max-height:none!important}',
       'html.agilo-share-page .dashboard-menu.menu-app{justify-content:flex-start!important;padding:16px 18px 20px!important;gap:12px!important}',
       'html.agilo-share-page .dashboard-menu .nav_logo.app-center{max-height:28px}',
-      'html.agilo-share-page .dashboard-right{padding:20px 24px 40px}',
-      'html.agilo-share-page #editorRoot{max-width:860px}',
-      '#editorRoot .agilo-share-doc{max-width:100%}',
+      'html.agilo-share-page .section_hero.app,html.agilo-share-page .section_hero.app .padding-global,html.agilo-share-page .container-large{max-width:none!important;width:100%!important}',
+      'html.agilo-share-page .dashboard.mes-transcript{width:100%;max-width:none}',
+      'html.agilo-share-page .dashboard-content{max-width:none!important;width:100%}',
+      'html.agilo-share-page .dashboard-right{flex:1 1 auto;width:100%;max-width:none!important;padding:20px 24px 40px}',
+      'html.agilo-share-page #editorRoot{max-width:none!important;width:100%;flex:1}',
+      '#editorRoot .agilo-share-doc{max-width:none;width:100%}',
       '#editorRoot .ed-header{display:flex;flex-direction:column;gap:8px;padding:0 0 12px;border-bottom:0}',
       '#editorRoot .ed-header .ed-wrap{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:10px 16px}',
       '#editorRoot .ed-title-wrap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-width:0}',
@@ -439,7 +562,11 @@
       },
       missing_token: {
         title: 'Lien incomplet',
-        text: 'Le lien public commence par d8478fa34a, ce n’est pas le numéro du fichier dans l’éditeur. Dans l’éditeur, cliquez Partager un lien, puis ouvrez cette URL.'
+        text: 'Ouvrez le lien Partager (il se termine par #token=…). Ce n’est pas le numéro du fichier dans l’éditeur.'
+      },
+      error_guest_forbidden: {
+        title: 'Lien non autorisé',
+        text: 'Ce partage n’est pas lisible depuis cette page. Ouvrez le lien original, ou demandez un nouveau partage.'
       },
       need_login: {
         title: 'Ce n’est pas le lien public',
@@ -655,7 +782,8 @@
 
   function renderJob(root, job, token) {
     var vm = resolveShareViewModel(job);
-    var downloadUrl = downloadUrlFor(token);
+    var guestToken = job.guestToken || '';
+    var downloadUrl = guestToken ? '' : downloadUrlFor(token);
     var audioOk = job.audioAvailable !== false && !!job.audioUrl;
     var transcript = buildTranscriptHtml(job);
     var summary = buildSummaryHtml(job);
@@ -671,7 +799,10 @@
       actions += '<button type="button" class="agilo-share-act" data-act="copy-summary">' +
         escapeHtml(vm.copySummaryLabel) + '</button>';
     }
-    if (downloadUrl) {
+    if (guestToken && job.zipAvailable !== false) {
+      actions += '<button type="button" class="agilo-share-act" data-act="download-guest">' +
+        escapeHtml(COPY.download) + '</button>';
+    } else if (downloadUrl) {
       actions += '<a class="agilo-share-act" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
         escapeHtml(COPY.download) + '</a>';
     }
@@ -757,7 +888,29 @@
         capture('share_copy', { kind: 'summary', docType: vm.docType });
       });
     }
-    capture('share_view_opened', { mock: qs('mock') === '1', audio: audioOk, docType: vm.docType });
+    var guestDl = root.querySelector('[data-act="download-guest"]');
+    if (guestDl && guestToken) {
+      guestDl.addEventListener('click', async function () {
+        guestDl.disabled = true;
+        setStatus(statusEl, 'info', 'Préparation du téléchargement…');
+        var pack = await fetchGuestBlob('zip', guestToken);
+        if (!pack || !pack.url) {
+          setStatus(statusEl, 'error', 'Téléchargement indisponible.');
+          guestDl.disabled = false;
+          return;
+        }
+        var a = document.createElement('a');
+        a.href = pack.url;
+        a.download = pack.filename || 'agilotext-partage.zip';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setStatus(statusEl, 'info', 'Téléchargement lancé.');
+        guestDl.disabled = false;
+        capture('share_download', { kind: 'guest_zip' });
+      });
+    }
+    capture('share_view_opened', { mock: qs('mock') === '1', audio: audioOk, docType: vm.docType, guest: !!guestToken });
   }
 
   function normalizeJob(j) {
@@ -805,16 +958,14 @@
     return { job: job };
   }
 
-  async function init() {
-    injectStyles();
-    var mount = ensureChrome();
-    if (!mount) return;
-
+  async function loadShare(mount) {
+    revokeBlobs();
+    var guestToken = parseGuestToken();
     var token = parseToken();
-    var jobId = parseJobId();
+    var jobId = guestToken ? '' : parseJobId();
     var useMock = qs('mock') === '1';
 
-    if (!token && !jobId && !useMock) {
+    if (!guestToken && !token && !jobId && !useMock) {
       renderError(mount, 'missing_token');
       return;
     }
@@ -829,6 +980,16 @@
     }
 
     try {
+      if (guestToken) {
+        var guest = await fetchGuestDocument(guestToken);
+        if (guest.job) {
+          renderJob(mount, guest.job, '');
+          return;
+        }
+        renderError(mount, guest.error || 'error_share_not_found');
+        return;
+      }
+
       if (token) {
         var fromZip = await fetchJobFromShareZip(token);
         if (fromZip.job) {
@@ -836,20 +997,10 @@
           return;
         }
         if (fromZip.error && fromZip.error !== 'zip_cors') {
-          var jsonView = await fetchJob(token);
-          if (jsonView.job) {
-            renderJob(mount, jsonView.job, token);
-            return;
-          }
           renderError(mount, fromZip.error, { downloadUrl: downloadUrlFor(token) });
           return;
         }
         if (fromZip.error === 'zip_cors') {
-          var pending = await fetchJob(token);
-          if (pending.job) {
-            renderJob(mount, pending.job, token);
-            return;
-          }
           renderError(mount, 'zip_cors', { downloadUrl: downloadUrlFor(token) });
           return;
         }
@@ -861,36 +1012,31 @@
           renderError(mount, 'need_login');
           return;
         }
-        var sharedToken = await createSharedToken(jobId, auth);
-        if (sharedToken) {
-          try {
-            history.replaceState({}, '', (location.pathname || '/auth/share') + '?token=' + encodeURIComponent(sharedToken));
-          } catch (_) { /* ignore */ }
-          var sharedZip = await fetchJobFromShareZip(sharedToken);
-          if (sharedZip.job) {
-            renderJob(mount, sharedZip.job, sharedToken);
-            return;
-          }
-        }
         var byId = await fetchJobById(jobId, auth);
         if (byId.job) {
-          renderJob(mount, byId.job, sharedToken || '');
+          renderJob(mount, byId.job, '');
           return;
         }
         var who = maskEmail(auth.email);
         renderError(mount, byId.error || 'error_job_not_found', {
-          note: who ? ('Connecté en tant que ' + who + '.') : '',
-          downloadUrl: sharedToken ? downloadUrlFor(sharedToken) : ''
+          note: who ? ('Connecté en tant que ' + who + '.') : ''
         });
         return;
       }
 
       renderError(mount, token ? 'network' : 'missing_token');
     } catch (_) {
-      renderError(mount, jobId ? 'need_login' : (token ? 'zip_cors' : 'network'), {
-        downloadUrl: downloadUrlFor(token)
-      });
+      renderError(mount, jobId ? 'need_login' : (guestToken || token ? 'network' : 'missing_token'));
     }
+  }
+
+  async function init() {
+    injectStyles();
+    var mount = ensureChrome();
+    if (!mount) return;
+    window.addEventListener('pagehide', revokeBlobs);
+    window.addEventListener('hashchange', function () { loadShare(mount); });
+    await loadShare(mount);
   }
 
   if (document.readyState === 'loading') {
