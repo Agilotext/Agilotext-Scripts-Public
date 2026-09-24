@@ -649,6 +649,8 @@
       'html.agilo-share-page .dashboard-menu .nav_logo.app-center,html.agilo-share-page .dashboard-menu .nav_logo{max-height:1.75rem}',
       'html.agilo-share-page .section_hero.app,html.agilo-share-page .section_hero.app .padding-global,html.agilo-share-page .container-large{max-width:none!important;width:100%!important}',
       'html.agilo-share-page .dashboard-content{max-width:none!important;width:100%}',
+      'html.agilo-share-page #editorRoot .dashboard-content.agilo-share-doc,#editorRoot .agilo-share-doc{display:flex!important;flex-direction:column!important;align-items:stretch!important;width:100%!important;max-width:none!important}',
+      '#editorRoot #agilo-share-header,#editorRoot #agilo-audio-host,#editorRoot #agilo-share-body{width:100%!important;max-width:none!important;align-self:stretch!important}',
       'html.agilo-share-page .dashboard-right{flex:1 1 auto;width:100%!important;max-width:none!important;padding:1.25rem 1.5rem 2.5rem;text-align:left!important}',
       'html.agilo-share-page #editorRoot{max-width:none!important;width:100%;flex:1;text-align:left!important}',
       '#editorRoot .agilo-share-doc{max-width:none;width:100%}',
