@@ -1,13 +1,13 @@
 /**
  * Free - loader Webflow pour la dictée vocale (Réunion / Carnet).
- * SHA du commit piné en dur. Pas de AGILO_SCRIPTS_BASE, pas de fallback main.
+ * SHA du commit piné en dur. Les URLs transcribe, usages, picker, mount et worklet partent de ce PIN.
  * Limites Free : 1 utilisation/jour, 30 minutes max (Réunion et Carnet).
  */
 (function () {
   "use strict";
 
   var BUILD = "20260924a";
-  var PIN = "PIN_AFTER_PUSH";
+  var PIN = "8080dcc847bf0a7aad524dfaf5371da1d23b50e0";
   var CDN = "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@" + PIN;
 
   function bust(path) {

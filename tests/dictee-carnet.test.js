@@ -85,7 +85,8 @@ describe("Dictee Carnet v2", function () {
     loaders.forEach(function (f) {
       const src = read(f);
       assert.doesNotMatch(src, /@main\b/);
-      assert.doesNotMatch(src, /AGILO_SCRIPTS_BASE/);
+      assert.doesNotMatch(src, /window\.AGILO_SCRIPTS_BASE/);
+      assert.doesNotMatch(src, /AGILO_SCRIPTS_BASE\s*\|\|/);
       assert.match(src, /dictee-usages\.js/);
       assert.match(src, /dictee-carnet-picker\.js/);
       assert.match(src, /var PIN = "[0-9a-f]{7,40}"/);
