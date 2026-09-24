@@ -169,22 +169,88 @@
     window.addEventListener('touchmove', onUserScroll, { passive: true });
   }
 
+  function audioDurationReady(audio) {
+    return !!(audio && Number.isFinite(audio.duration) && audio.duration > 0);
+  }
+
+  function waitForDuration(audio) {
+    if (audioDurationReady(audio)) return Promise.resolve(audio.duration);
+    if (!audio || typeof audio.addEventListener !== 'function') return Promise.resolve(0);
+    return new Promise(function (resolve) {
+      var settled = false;
+      function done() {
+        if (settled) return;
+        settled = true;
+        try {
+          audio.removeEventListener('loadedmetadata', done);
+          audio.removeEventListener('durationchange', done);
+        } catch (_) { /* ignore */ }
+        resolve(Number(audio.duration) || 0);
+      }
+      audio.addEventListener('loadedmetadata', done);
+      audio.addEventListener('durationchange', done);
+      setTimeout(done, 2000);
+    });
+  }
+
+  function setExpectedDuration(segs, audio) {
+    var last = 0;
+    if (Array.isArray(segs) && segs.length) {
+      last = Number(segs[segs.length - 1].end) || 0;
+    }
+    var dur = audio && Number.isFinite(audio.duration) ? audio.duration : 0;
+    var expected = Math.max(last, dur);
+    if (expected > 0) {
+      try { window.__agiloExpectedDuration = expected; } catch (_) { /* ignore */ }
+    }
+    return expected;
+  }
+
+  function applySeek(audio, sec) {
+    var t = Number(sec);
+    if (!audio || !Number.isFinite(t) || t < 0) return false;
+    try { audio.currentTime = t; } catch (_) { /* ignore */ }
+    follow.arm();
+    if (audio.paused) {
+      try {
+        var p = audio.play();
+        if (p && typeof p.catch === 'function') p.catch(function () { /* autoplay blocked */ });
+      } catch (_) { /* ignore */ }
+    }
+    scrollToActive({ force: true });
+    return true;
+  }
+
+  function seekTo(audio, sec) {
+    if (audioDurationReady(audio)) {
+      applySeek(audio, sec);
+      return Promise.resolve(true);
+    }
+    return waitForDuration(audio).then(function () {
+      applySeek(audio, sec);
+      return true;
+    });
+  }
+
+  function closestSeekBtn(node) {
+    var el = node;
+    if (el && el.nodeType === 3) el = el.parentElement;
+    if (!el || typeof el.closest !== 'function') return null;
+    return el.closest('button.time[data-action="seek"]');
+  }
+
   function bindSeekOnce() {
     if (seekBound) return;
     seekBound = true;
     document.addEventListener('click', function (ev) {
-      var t = ev.target;
-      if (!t || !t.closest) return;
-      var btn = t.closest('.time[data-action="seek"]');
+      var btn = closestSeekBtn(ev.target);
       if (!btn) return;
       var audio = document.getElementById('agilo-audio');
       if (!audio) return;
       var sec = Number(btn.getAttribute('data-t'));
       if (!Number.isFinite(sec)) return;
       ev.preventDefault();
-      try { audio.currentTime = sec; } catch (_) { /* ignore */ }
-      follow.arm();
-      scrollToActive({ force: true });
+      seekTo(audio, sec);
     });
   }
 
@@ -201,6 +267,7 @@
       var segs = withSegmentEnds(root._segments || [], audio.duration);
       root._segments = segs;
       window._segments = segs;
+      setExpectedDuration(segs, audio);
     });
   }
 
@@ -215,6 +282,7 @@
     root._segments = segs;
     window._segments = segs;
     activeSeg = -1;
+    setExpectedDuration(segs, audio);
     applySpeakerColors(opts.root || document.getElementById('transcriptEditor'));
     bindPauseOnce();
     bindSeekOnce();
@@ -234,6 +302,8 @@
     withSegmentEnds: withSegmentEnds,
     createFollowController: createFollowController,
     applySpeakerColors: applySpeakerColors,
+    seekTo: seekTo,
+    setExpectedDuration: setExpectedDuration,
     bind: bind
   };
 })(typeof window !== 'undefined' ? window : globalThis);

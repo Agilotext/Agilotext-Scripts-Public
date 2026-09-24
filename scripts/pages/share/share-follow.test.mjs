@@ -1,5 +1,5 @@
 /**
- * Tests — Suivre l’audio (ends interpolés, index, couleurs)
+ * Tests — Suivre l’audio (ends interpolés, index, couleurs, seek)
  * Exécution : node scripts/pages/share/share-follow.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -29,6 +29,9 @@ sandbox.window.window = sandbox.window;
 sandbox.window.document = sandbox.document;
 sandbox.window.CustomEvent = sandbox.CustomEvent;
 sandbox.window.requestAnimationFrame = sandbox.requestAnimationFrame;
+sandbox.window.Promise = Promise;
+sandbox.Promise = Promise;
+sandbox.setTimeout = setTimeout;
 sandbox.globalThis = sandbox.window;
 vm.runInNewContext(src, sandbox);
 
@@ -66,5 +69,20 @@ assert(c1 === c1b, 'couleur stable pour un nom');
 assert(c1 !== c2, 'deux locuteurs, deux couleurs');
 assert(F.SPK_COLORS.length === 20, 'palette 20');
 assert(c1 === '#174a96' || F.SPK_COLORS.indexOf(c1) >= 0, 'couleur dans la palette');
+
+assert(typeof F.seekTo === 'function', 'seekTo exposé');
+const audio = {
+  duration: 40,
+  paused: true,
+  currentTime: 0,
+  play: function () { this.paused = false; return Promise.resolve(); }
+};
+await F.seekTo(audio, 14);
+assert(audio.currentTime === 14, 'seekTo pose currentTime à 14');
+assert(audio.paused === false, 'seekTo lance la lecture');
+assert(F.resolveActiveSegmentIndex(audio.currentTime, segs, -1) === 1, 'après seek 14 → seg 1');
+
+F.setExpectedDuration(segs, audio);
+assert(sandbox.window.__agiloExpectedDuration === 40, 'durée attendue = max(end, duration)');
 
 console.log('share-follow.test.mjs OK');

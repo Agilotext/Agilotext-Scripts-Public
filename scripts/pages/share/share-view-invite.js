@@ -657,14 +657,23 @@
       '#editorRoot .ed-title{font-size:1.35rem;line-height:1.25;font-weight:700;margin:0}',
       '#editorRoot .agilo-share-chip{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96);font-size:.72rem;font-weight:700;letter-spacing:.02em;text-transform:uppercase}',
       '#editorRoot .agilo-share-meta{margin:0;color:var(--color--gris,#525252);font-size:.82rem;line-height:1.4}',
-      '#editorRoot .agilo-share-actions{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}',
-      '#editorRoot .agilo-share-act{appearance:none;border:0;background:none;padding:0;font:inherit;font-size:.86rem;font-weight:600;color:var(--color--blue,#174a96);cursor:pointer;text-decoration:none}',
-      '#editorRoot .agilo-share-act:hover{text-decoration:underline}',
+      '#editorRoot .agilo-share-actions{display:flex;align-items:center;gap:2px;margin-left:auto;padding:0 0 8px}',
+      '#editorRoot .agilo-share-act{appearance:none;border:0;background:none;padding:0;font:inherit;color:var(--color--blue,#174a96);cursor:pointer;text-decoration:none}',
+      '#editorRoot .agilo-share-act--icon{position:relative;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;flex:0 0 auto}',
+      '#editorRoot .agilo-share-act--icon:hover{background:rgba(23,74,150,.08);text-decoration:none}',
+      '#editorRoot .agilo-share-act--icon .icon-1x1-small{width:18px;height:18px;display:block}',
+      '#editorRoot .agilo-share-act--icon.is-copied{color:var(--color--green,#1c661a)}',
+      '#editorRoot .agilo-share-act__icon--check{display:none;position:absolute;inset:0;align-items:center;justify-content:center}',
+      '#editorRoot .agilo-share-act--icon.is-copied .agilo-share-act__icon--main{opacity:0}',
+      '#editorRoot .agilo-share-act--icon.is-copied .agilo-share-act__icon--check{display:flex}',
+      '#editorRoot .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}',
       '#editorRoot #agilo-audio-host{margin:0 0 14px}',
       '#editorRoot #agilo-download{display:none!important}',
       '#editorRoot #summaryEditor{outline:none}',
       '#editorRoot #transcriptEditor .ag-seg__text{white-space:pre-wrap}',
-      '#editorRoot nav.ed-tabs{display:flex;justify-content:flex-start!important;gap:4px;margin:4px 0 14px;padding:0;border-bottom:1px solid rgba(52,58,64,.14);text-align:left}',
+      '#editorRoot #transcriptEditor,#editorRoot #summaryEditor{max-width:40rem;margin-left:0}',
+      '#editorRoot nav.ed-tabs{display:flex;justify-content:space-between!important;align-items:flex-end;gap:12px;margin:4px 0 14px;padding:0;border-bottom:1px solid rgba(52,58,64,.14);text-align:left;width:100%}',
+      '#editorRoot .agilo-share-tabs{display:flex;gap:4px;min-width:0}',
       '#editorRoot .agilo-share-meta,#editorRoot .agilo-share-banner{text-align:left}',
       '#editorRoot .ed-tab{appearance:none;border:0;background:none;padding:10px 12px 12px;font:inherit;font-weight:600;color:#525252;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}',
       '#editorRoot .ed-tab.is-active{color:var(--color--blue,#174a96);border-bottom-color:var(--color--blue,#174a96)}',
@@ -680,7 +689,7 @@
       '#editorRoot #pane-transcript .ag-seg__head{margin:0 0 4px}',
       '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.75rem;font-weight:700;letter-spacing:.02em;color:var(--color--blue,#174a96)}',
       '#editorRoot .agilo-share-error{text-align:center;padding:48px 12px}',
-      '@media (max-width:991px){html.agilo-share-page .dashboard-menu.menu-app{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;padding:10px 16px!important}html.agilo-share-page .dashboard-menu .full-width{display:flex;flex-direction:row;gap:8px;width:auto!important}html.agilo-share-page .dashboard-right{padding:12px 16px 32px}#editorRoot .ed-title{font-size:1.2rem}}'
+      '@media (max-width:991px){html.agilo-share-page .dashboard-menu.menu-app{flex-direction:row!important;align-items:center!important;justify-content:space-between!important;padding:10px 16px!important}html.agilo-share-page .dashboard-menu .full-width{display:flex;flex-direction:row;gap:8px;width:auto!important}html.agilo-share-page .dashboard-right{padding:12px 16px 32px}#editorRoot .ed-title{font-size:1.2rem}#editorRoot #transcriptEditor,#editorRoot #summaryEditor{max-width:100%}}'
     ].join('');
     var st = document.createElement('style');
     st.id = 'agilo-share-view-styles';
@@ -942,6 +951,34 @@
     return '<p>' + escapeHtml(COPY.summaryEmpty) + '</p>';
   }
 
+  function nucleoSvg(kind) {
+    var copyPaths =
+      '<rect x="6.25" y="1.75" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>' +
+      '<path d="M11.75 11.75V14.25C11.75 15.3546 10.8546 16.25 9.75 16.25H3.75C2.64543 16.25 1.75 15.3546 1.75 14.25V8.25C1.75 7.14543 2.64543 6.25 3.75 6.25H6.25" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>';
+    var downloadPaths =
+      '<path d="M9 2.75V11.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>' +
+      '<path d="M5.75 8L9 11.25L12.25 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>' +
+      '<path d="M3.25 15.25H14.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>';
+    var checkPaths =
+      '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    var inner = copyPaths;
+    if (kind === 'download') inner = downloadPaths;
+    if (kind === 'check') inner = checkPaths;
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" class="icon-1x1-small" aria-hidden="true">' + inner + '</svg>';
+  }
+
+  function iconAction(tag, act, label, icon, href) {
+    var open = tag === 'a'
+      ? '<a class="agilo-share-act agilo-share-act--icon" data-act="' + act + '" href="' + escapeHtml(href || '#') + '" aria-label="' + escapeHtml(label) + '" title="' + escapeHtml(label) + '">'
+      : '<button type="button" class="agilo-share-act agilo-share-act--icon" data-act="' + act + '" aria-label="' + escapeHtml(label) + '" title="' + escapeHtml(label) + '">';
+    var close = tag === 'a' ? '</a>' : '</button>';
+    return open +
+      '<span class="agilo-share-act__icon agilo-share-act__icon--main">' + nucleoSvg(icon) + '</span>' +
+      (icon === 'copy' ? '<span class="agilo-share-act__icon agilo-share-act__icon--check">' + nucleoSvg('check') + '</span>' : '') +
+      '<span class="visually-hidden">' + escapeHtml(label) + '</span>' +
+      close;
+  }
+
   function renderJob(root, job, token) {
     var vm = resolveShareViewModel(job);
     var guestToken = job.guestToken || '';
@@ -954,33 +991,30 @@
 
     try { document.title = vm.title + ' | Agilotext'; } catch (_) { /* ignore */ }
 
+    var copyLabel = vm.defaultTab === 'summary' && vm.showSummary ? vm.copySummaryLabel : COPY.copyTranscript;
     var actions = '';
-    if (vm.showTranscript) {
-      actions += '<button type="button" class="agilo-share-act" data-act="copy-transcript">' +
-        escapeHtml(COPY.copyTranscript) + '</button>';
-    }
-    if (vm.showSummary) {
-      actions += '<button type="button" class="agilo-share-act" data-act="copy-summary">' +
-        escapeHtml(vm.copySummaryLabel) + '</button>';
+    if (vm.showTranscript || vm.showSummary) {
+      actions += iconAction('button', 'copy-active', copyLabel, 'copy');
     }
     if (guestToken && job.zipAvailable !== false) {
-      actions += '<button type="button" class="agilo-share-act" data-act="download-guest">' +
-        escapeHtml(COPY.download) + '</button>';
+      actions += iconAction('button', 'download-guest', COPY.download, 'download');
     } else if (downloadUrl) {
-      actions += '<a class="agilo-share-act" data-act="download" href="' + escapeHtml(downloadUrl) + '">' +
-        escapeHtml(COPY.download) + '</a>';
+      actions += iconAction('a', 'download', COPY.download, 'download', downloadUrl);
     }
 
-    var tabs = '';
+    var tabBtns = '';
     if (vm.useTabs) {
-      tabs =
-        '<nav class="ed-tabs" role="tablist">' +
+      tabBtns =
         '<button type="button" class="ed-tab' + (vm.defaultTab === 'transcript' ? ' is-active' : '') +
         '" data-tab="transcript" role="tab">' + escapeHtml(COPY.transcriptTab) + '</button>' +
         '<button type="button" class="ed-tab' + (vm.defaultTab === 'summary' ? ' is-active' : '') +
-        '" data-tab="summary" role="tab">' + escapeHtml(vm.summaryTabLabel) + '</button>' +
-        '</nav>';
+        '" data-tab="summary" role="tab">' + escapeHtml(vm.summaryTabLabel) + '</button>';
     }
+    var tabs =
+      '<nav class="ed-tabs" role="tablist">' +
+      '<div class="agilo-share-tabs">' + tabBtns + '</div>' +
+      '<div class="agilo-share-actions">' + actions + '</div>' +
+      '</nav>';
 
     var panels = '';
     if (vm.showTranscript) {
@@ -999,7 +1033,7 @@
         '<header class="ed-header"><div class="ed-wrap">' +
         '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span>' +
         '<span class="agilo-share-chip">' + escapeHtml(COPY.lectureSeule) + '</span></div>' +
-        '<div class="agilo-share-actions">' + actions + '</div></div>' +
+        '</div>' +
         '<p class="agilo-share-meta">' + escapeHtml(vm.metaBy) +
         (job.expiresAt ? ' · Lien à durée limitée' : '') + '</p></header>';
     }
@@ -1019,6 +1053,31 @@
     }
 
     var statusEl = $('#agilo-share-status', root);
+    var copyBtn = root.querySelector('[data-act="copy-active"]');
+
+    function activeCopy() {
+      var tab = root.querySelector('.ed-tab.is-active');
+      var which = tab ? tab.getAttribute('data-tab') : vm.defaultTab;
+      if (which === 'summary' && vm.showSummary) {
+        return { label: vm.copySummaryLabel, html: summary, kind: 'summary', spoken: vm.summaryTabLabel };
+      }
+      return { label: COPY.copyTranscript, html: transcript, kind: 'transcript', spoken: COPY.transcriptTab };
+    }
+
+    function syncCopyLabel() {
+      if (!copyBtn) return;
+      var t = activeCopy();
+      copyBtn.setAttribute('aria-label', t.label);
+      copyBtn.title = t.label;
+      var vh = copyBtn.querySelector('.visually-hidden');
+      if (vh) vh.textContent = t.label;
+    }
+
+    function markCopied(btn) {
+      if (!btn) return;
+      btn.classList.add('is-copied');
+      setTimeout(function () { btn.classList.remove('is-copied'); }, 1200);
+    }
 
     if (vm.useTabs) {
       root.querySelectorAll('.ed-tab').forEach(function (btn) {
@@ -1029,14 +1088,18 @@
           var s = $('#pane-summary', root);
           if (t) t.classList.toggle('is-active', tab === 'transcript');
           if (s) s.classList.toggle('is-active', tab === 'summary');
+          syncCopyLabel();
           if (tab === 'transcript') pingSticky();
         });
       });
     }
 
-    function copyText(label, html) {
+    function copyText(label, html, spoken) {
       var plain = htmlToPlain(html);
-      var done = function () { setStatus(statusEl, 'info', label + ' copié.'); };
+      var done = function () {
+        setStatus(statusEl, 'info', (spoken || label) + ' copié.');
+        markCopied(copyBtn);
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(plain).then(done).catch(function () { setStatus(statusEl, 'error', 'Copie impossible.'); });
       } else {
@@ -1044,18 +1107,11 @@
       }
     }
 
-    var copyTranscriptBtn = root.querySelector('[data-act="copy-transcript"]');
-    if (copyTranscriptBtn) {
-      copyTranscriptBtn.addEventListener('click', function () {
-        copyText(COPY.transcriptTab, transcript);
-        capture('share_copy', { kind: 'transcript', docType: vm.docType });
-      });
-    }
-    var copySummaryBtn = root.querySelector('[data-act="copy-summary"]');
-    if (copySummaryBtn) {
-      copySummaryBtn.addEventListener('click', function () {
-        copyText(vm.summaryTabLabel, summary);
-        capture('share_copy', { kind: 'summary', docType: vm.docType });
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        var t = activeCopy();
+        copyText(t.label, t.html, t.spoken);
+        capture('share_copy', { kind: t.kind, docType: vm.docType });
       });
     }
     var guestDl = root.querySelector('[data-act="download-guest"]');
