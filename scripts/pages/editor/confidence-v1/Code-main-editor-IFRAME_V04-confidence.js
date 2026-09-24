@@ -2897,12 +2897,16 @@
     const proposed = oldName || 'Intervenant';
     const anchor = triggerEl || segEl;
 
-    function finishRename(scope, newName) {
+    function finishRename(scope, newName, opts) {
       const n = ag_applyRenameScope({ scope, oldName, newName, idx });
       forgetRosterNameIfUnused(oldName);
-      const spell = scope === 'all' || scope === 'one';
-      if (spell && oldName) {
-        toast(`« ${oldName} » → « ${newName} » (${n}). Cliquez Sauvegarder.`);
+      const scopeOneOrAll = scope === 'all' || scope === 'one';
+      if (scopeOneOrAll && oldName) {
+        let msg = `« ${oldName} » → « ${newName} » (${n}). Cliquez Sauvegarder.`;
+        if (opts && opts.spellCorrection) {
+          msg += ' Régénérez le compte rendu pour le mettre à jour ; l’orthographe dite à l’oral peut rester dans le texte.';
+        }
+        toast(msg);
         return;
       }
       toast(
@@ -2915,38 +2919,38 @@
 
     function afterNameChosen(rawName, presetScope) {
       ag_closeSpeakerPicker();
-      const newName = normalizeName(rawName);
-      if (!newName || newName === oldName) return;
+    const newName = normalizeName(rawName);
+    if (!newName || newName === oldName) return;
       pushStoredRoster(getJobIdForRoster(), newName);
 
       if (presetScope === 'all' || presetScope === 'one') {
         const total = oldName ? ag_countOccurrencesByName(oldName) : 0;
         const scope = (presetScope === 'all' && total > 1) ? 'all' : 'one';
-        finishRename(scope, newName);
+        finishRename(scope, newName, { spellCorrection: true });
         return;
       }
 
-      const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
-      const counts = {
-        total: oldName ? ag_countOccurrencesByName(oldName) : 0,
-        contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
-        empty: emptyCount
-      };
+    const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
+    const counts = {
+      total: oldName ? ag_countOccurrencesByName(oldName) : 0,
+      contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
+      empty: emptyCount
+    };
 
-      const shift = !!keyState.shift;
-      const alt = !!keyState.alt;
+    const shift = !!keyState.shift;
+    const alt = !!keyState.alt;
 
-      if (oldName) {
+    if (oldName) {
         if (shift) { finishRename('all', newName); return; }
         if (alt) { finishRename('contiguous', newName); return; }
-      } else if (renameAllEmpty) {
+    } else if (renameAllEmpty) {
         finishRename('empty', newName);
-        return;
-      }
+      return;
+    }
 
-      const forEmpty = !oldName;
-      ag_showRenameMenu(anchor, {
-        oldName, counts, forEmpty,
+    const forEmpty = !oldName;
+    ag_showRenameMenu(anchor, {
+      oldName, counts, forEmpty,
         onSelect(scope) { finishRename(scope, newName); }
       });
     }
