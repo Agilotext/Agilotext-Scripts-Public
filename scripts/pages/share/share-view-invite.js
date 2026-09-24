@@ -673,6 +673,7 @@
       '#editorRoot #agilo-audio-host{margin:0 0 .875rem}',
       '#editorRoot #agilo-download{display:none!important}',
       '#editorRoot #summaryEditor{outline:none}',
+      '#editorRoot #summaryEditor .ag-summary-iframe{width:100%;border:0;min-height:max(600px,100svh);background:#fff;display:block}',
       '#editorRoot #transcriptEditor .ag-seg__text{white-space:pre-wrap;overflow-wrap:anywhere}',
       '#editorRoot #transcriptEditor,#editorRoot #summaryEditor{width:100%;max-width:none;margin-left:0}',
       '#editorRoot nav.ed-tabs{display:flex;justify-content:space-between!important;align-items:flex-end;gap:.75rem;margin:.25rem 0 .875rem;padding:0;border-bottom:1px solid rgba(52,58,64,.14);text-align:left;width:100%}',
@@ -955,6 +956,91 @@
     return '<p>' + escapeHtml(COPY.summaryEmpty) + '</p>';
   }
 
+  function summaryNeedsIframe(html) {
+    var h = String(html || '');
+    if (!h) return false;
+    return /<!DOCTYPE/i.test(h) ||
+      /<head[\s>]/i.test(h) ||
+      /<body[\s>]/i.test(h) ||
+      /<style[\s>]/i.test(h) ||
+      /\*\s*\{/.test(h) ||
+      /body\s*\{/.test(h);
+  }
+
+  /** Même isolation que l’éditeur (injectSummaryContent) sans édition ni mail blocks. */
+  function injectShareSummaryContent(el, html) {
+    if (!el || !html) return;
+    var raw = String(html);
+    el.setAttribute('data-raw-html', raw);
+
+    if (summaryNeedsIframe(raw)) {
+      el.setAttribute('data-is-iframe', 'true');
+      el.innerHTML = '';
+      var iframe = document.createElement('iframe');
+      iframe.className = 'ag-summary-iframe';
+      iframe.setAttribute('sandbox', 'allow-same-origin');
+      iframe.setAttribute('title', 'Compte rendu');
+      el.appendChild(iframe);
+
+      iframe.onload = function () {
+        try {
+          var idoc = this.contentDocument || this.contentWindow.document;
+          idoc.open();
+          idoc.write(raw);
+          idoc.close();
+
+          var ifr = this;
+          var resolveSummarySvhFloorPx = function () {
+            try {
+              var probe = document.createElement('div');
+              probe.style.cssText =
+                'position:fixed;left:-10000px;top:0;width:1px;height:100svh;visibility:hidden;pointer-events:none;';
+              document.documentElement.appendChild(probe);
+              var hPx = Math.round(probe.getBoundingClientRect().height);
+              probe.remove();
+              if (hPx > 200) return hPx;
+            } catch (e) { /* ignore */ }
+            return Math.round(typeof window !== 'undefined' && window.innerHeight ? window.innerHeight : 880);
+          };
+          var summarySvhFloorPx = resolveSummarySvhFloorPx();
+          var scheduleSummaryIframeFit = function () {
+            try {
+              var body = idoc.body;
+              if (!body) return;
+              var rootEl = idoc.documentElement;
+              var measured = Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                rootEl ? rootEl.scrollHeight : 0,
+                rootEl ? rootEl.offsetHeight : 0
+              );
+              var nextH = Math.max(measured + 24, summarySvhFloorPx);
+              ifr.style.height = nextH + 'px';
+              ifr.style.minHeight = summarySvhFloorPx + 'px';
+            } catch (e) { /* ignore */ }
+          };
+          [0, 120, 450, 1400].forEach(function (ms) {
+            setTimeout(scheduleSummaryIframeFit, ms);
+          });
+        } catch (e) {
+          try {
+            this.srcdoc = raw;
+          } catch (e2) {
+            el.setAttribute('data-is-iframe', 'false');
+            el.innerHTML = raw;
+          }
+        }
+      };
+
+      if (iframe.contentDocument) {
+        iframe.onload();
+      }
+    } else {
+      el.setAttribute('data-is-iframe', 'false');
+      el.innerHTML = raw;
+    }
+  }
+
   function nucleoSvg(kind) {
     var copyPaths =
       '<rect x="6.25" y="1.75" width="10" height="10" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/>' +
@@ -1029,7 +1115,7 @@
     if (vm.showSummary) {
       panels += '<div class="edtr-pane' + (vm.defaultTab === 'summary' ? ' is-active' : '') +
         '" id="pane-summary" role="tabpanel">' +
-        '<div id="summaryEditor" class="ag-summary-readonly">' + summary + '</div></div>';
+        '<div id="summaryEditor" class="ag-summary-readonly"></div></div>';
     }
 
     if (shell.header) {
@@ -1056,6 +1142,11 @@
         panels;
     }
 
+    if (vm.showSummary) {
+      var summaryMount = $('#summaryEditor', root);
+      if (summaryMount) injectShareSummaryContent(summaryMount, summary);
+    }
+
     var statusEl = $('#agilo-share-status', root);
     var copyBtn = root.querySelector('[data-act="copy-active"]');
 
@@ -1063,7 +1154,9 @@
       var tab = root.querySelector('.ed-tab.is-active');
       var which = tab ? tab.getAttribute('data-tab') : vm.defaultTab;
       if (which === 'summary' && vm.showSummary) {
-        return { label: vm.copySummaryLabel, html: summary, kind: 'summary', spoken: vm.summaryTabLabel };
+        var sumEl = $('#summaryEditor', root);
+        var sumHtml = (sumEl && sumEl.getAttribute('data-raw-html')) || summary;
+        return { label: vm.copySummaryLabel, html: sumHtml, kind: 'summary', spoken: vm.summaryTabLabel };
       }
       return { label: COPY.copyTranscript, html: transcript, kind: 'transcript', spoken: COPY.transcriptTab };
     }
