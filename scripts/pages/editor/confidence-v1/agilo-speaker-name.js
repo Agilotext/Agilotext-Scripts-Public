@@ -18,6 +18,10 @@
     return !isJunkSpeakerLabel(s);
   }
 
+  function displayLabel(s) {
+    return String(s == null ? '' : s).trim();
+  }
+
   function splitPersonName(label) {
     var parts = String(label || '').trim().split(/\s+/).filter(Boolean);
     if (!parts.length) return { prenom: '', nom: '' };
@@ -41,6 +45,7 @@
 
   root.AgiloSpeakerName = {
     isPersonNameLabel: isPersonNameLabel,
+    displayLabel: displayLabel,
     splitPersonName: splitPersonName,
     joinPersonName: joinPersonName
   };

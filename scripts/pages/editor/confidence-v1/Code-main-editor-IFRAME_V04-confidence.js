@@ -2644,32 +2644,22 @@
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Choisir un interlocuteur');
 
-    const person = isPersonNameLabel(currentName) ? splitPersonName(currentName) : null;
+    const person = isPersonNameLabel(currentName);
     const spellCount = person ? ag_countOccurrencesByName(currentName) : 0;
     let applyAllBox = null;
-    let nomInput = null;
+    let nameInput = null;
     const spell = person ? document.createElement('div') : null;
     if (spell) {
       spell.className = 'ag-speaker-picker__spell';
       const title = document.createElement('div');
       title.className = 'ag-speaker-picker__spell-title';
       title.textContent = 'Corriger « ' + currentName + ' »';
-      const fields = document.createElement('div');
-      fields.className = 'ag-speaker-picker__spell-fields';
-      const prenomInput = document.createElement('input');
-      prenomInput.type = 'text';
-      prenomInput.className = 'ag-speaker-picker__spell-input';
-      prenomInput.value = person.prenom;
-      prenomInput.setAttribute('aria-label', 'Prénom');
-      prenomInput.placeholder = 'Prénom';
-      nomInput = document.createElement('input');
-      nomInput.type = 'text';
-      nomInput.className = 'ag-speaker-picker__spell-input';
-      nomInput.value = person.nom;
-      nomInput.setAttribute('aria-label', 'Nom');
-      nomInput.placeholder = 'Nom';
-      fields.appendChild(prenomInput);
-      fields.appendChild(nomInput);
+      nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'ag-speaker-picker__spell-input';
+      nameInput.value = currentName;
+      nameInput.setAttribute('aria-label', 'Nom');
+      nameInput.placeholder = 'Nom';
       const row = document.createElement('label');
       row.className = 'ag-speaker-picker__spell-all';
       applyAllBox = document.createElement('input');
@@ -2687,17 +2677,17 @@
       go.textContent = 'Valider';
       function validateSpell(ev) {
         if (ev) { ev.preventDefault(); ev.stopPropagation(); }
-        const joined = joinPersonName(prenomInput.value, nomInput.value);
+        const joined = String(nameInput.value || '').trim();
         if (!joined || joined === currentName) { close(true); return; }
         const scope = (applyAllBox && applyAllBox.checked && spellCount > 1) ? 'all' : 'one';
         close(false);
         if (typeof onPick === 'function') onPick(joined, scope);
       }
       go.addEventListener('click', validateSpell);
-      prenomInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
-      nomInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
+      nameInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
+      nameInput.addEventListener('focus', () => { try { nameInput.select(); } catch { } });
       spell.appendChild(title);
-      spell.appendChild(fields);
+      spell.appendChild(nameInput);
       spell.appendChild(row);
       spell.appendChild(go);
     }
@@ -2888,7 +2878,14 @@
     panel.appendChild(list);
     renderList();
     bound = ag_bindAnchoredPopover(panel, anchor, { onClose() { close(true); } });
-    try { (nomInput || input).focus({ preventScroll: true }); } catch { }
+    try {
+      if (nameInput) {
+        nameInput.focus({ preventScroll: true });
+        nameInput.select();
+      } else {
+        input.focus({ preventScroll: true });
+      }
+    } catch { }
   }
 
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
@@ -3953,12 +3950,8 @@
         font-size:13px;
         font-weight:700;
       }
-      .ag-speaker-picker__spell-fields{
-        display:flex;
-        gap:6px;
-      }
       .ag-speaker-picker__spell-input{
-        flex:1;
+        width:100%;
         min-width:0;
         padding:6px 8px;
         border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));

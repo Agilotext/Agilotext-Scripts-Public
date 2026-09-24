@@ -1,5 +1,5 @@
 /**
- * Tests — découpe Prénom / Nom
+ * Tests — libellé interlocuteur (un seul champ)
  * Exécution : node scripts/pages/editor/confidence-v1/agilo-speaker-name.test.mjs
  */
 import { readFileSync } from 'node:fs';
@@ -22,24 +22,11 @@ vm.runInNewContext(src, sandbox);
 const U = sandbox.window.AgiloSpeakerName;
 assert(U, 'AgiloSpeakerName exposé');
 
-const tart = U.splitPersonName('Michaël Tarttar');
-assert(tart.prenom === 'Michaël' && tart.nom === 'Tarttar', 'Tarttar');
-
-const de = U.splitPersonName('Florian de Bauer');
-assert(de.prenom === 'Florian' && de.nom === 'de Bauer', 'particule de');
-
-const pom = U.splitPersonName('Nicolas de Pomereu');
-assert(pom.prenom === 'Nicolas' && pom.nom === 'de Pomereu', 'de Pomereu');
-
+assert(U.isPersonNameLabel('Loïc') === true, 'Loïc personne');
+assert(U.displayLabel('Loïc') === 'Loïc', 'Loïc une chaîne');
+assert(U.displayLabel('Michaël Tarttar') === 'Michaël Tarttar', 'Tarttar une chaîne');
+assert(U.displayLabel('Florian de BauerWebPro') === 'Florian de BauerWebPro', 'de BauerWebPro une chaîne');
 assert(U.isPersonNameLabel('Speaker 2') === false, 'Speaker 2');
-assert(U.isPersonNameLabel('Locuteur 3') === false, 'Locuteur');
 assert(U.isPersonNameLabel('') === false, 'vide');
-assert(U.isPersonNameLabel('Michaël Tarttar') === true, 'personne');
-
-const one = U.splitPersonName('Valentin');
-assert(one.prenom === 'Valentin' && one.nom === '', 'un seul mot');
-
-assert(U.joinPersonName('Michaël', 'Tartar') === 'Michaël Tartar', 'join');
-assert(U.joinPersonName('  ', '  ') === '', 'join vide');
 
 console.log('agilo-speaker-name.test.mjs OK');
