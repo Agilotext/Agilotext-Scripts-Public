@@ -60,7 +60,7 @@
     sharedByName: 'Florian',
     expiresAt: '',
     audioUrl: '',
-    audioAvailable: false,
+    audioAvailable: true,
     sharedDocumentType: 'cr',
     transcriptHtml: '',
     summaryHtml:
@@ -477,6 +477,150 @@
     return (div.textContent || div.innerText || '').replace(/\s+\n/g, '\n').trim();
   }
 
+  function fmtHMS(s) {
+    s = Math.max(0, Math.floor(Number(s) || 0));
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var sec = s % 60;
+    var MM = String(m).padStart(2, '0');
+    var SS = String(sec).padStart(2, '0');
+    if (h) return String(h).padStart(2, '0') + ':' + MM + ':' + SS;
+    return MM + ':' + SS;
+  }
+
+  function silentWavUrl(seconds) {
+    var sr = 8000;
+    var n = Math.max(1, Math.floor(sr * (Number(seconds) || 1)));
+    var dataSize = n * 2;
+    var buf = new ArrayBuffer(44 + dataSize);
+    var view = new DataView(buf);
+    function wstr(offset, str) {
+      var i;
+      for (i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    }
+    wstr(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    wstr(8, 'WAVE');
+    wstr(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sr, true);
+    view.setUint32(28, sr * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    wstr(36, 'data');
+    view.setUint32(40, dataSize, true);
+    return rememberBlobUrl(URL.createObjectURL(new Blob([buf], { type: 'audio/wav' })));
+  }
+
+  function guardGuestPlayerToken() {
+    if (!window.globalToken) window.globalToken = 'guest-share';
+  }
+
+  function stripOwnerJobId(el) {
+    if (!el) return;
+    try {
+      if (el.dataset) delete el.dataset.jobId;
+      el.removeAttribute('data-job-id');
+    } catch (_) { /* ignore */ }
+  }
+
+  function playerMarkup() {
+    return (
+      '<div id="agilo-audio-wrap" class="agilo-player" data-tour="audio">' +
+      '<audio id="agilo-audio" preload="metadata"></audio>' +
+      '<div class="agilo-bar">' +
+      '<button id="agilo-skip-back" class="agilo-btn" type="button" title="Reculer de 10 s (Shift+← = -10s, ← = -5s)" aria-label="Reculer de 10 secondes">10s</button>' +
+      '<button id="agilo-play" class="agilo-btn is-primary" type="button" aria-pressed="false" aria-controls="agilo-audio" data-state="paused">▶︎ Lire</button>' +
+      '<button id="agilo-skip-fwd" class="agilo-btn" type="button" title="Avancer de 10 s (Shift+→ = +10s, → = +5s)" aria-label="Avancer de 10 secondes">10s</button>' +
+      '<button id="agilo-speed" class="agilo-btn agilo-speed" type="button" title="Vitesse (clic = cycle 1x→2x ; S = raccourci)">1x</button>' +
+      '<a id="agilo-download" class="agilo-btn" aria-label="Télécharger l\'audio" style="display:none;text-decoration:none"></a>' +
+      '<div id="agilo-time" class="agilo-time visually-hidden" aria-live="polite">0:00 / 0:00</div>' +
+      '<div class="agilo-spacer"></div>' +
+      '<div class="agilo-vol" title="Volume (M = mute)">' +
+      '<span class="icon-small --grey" aria-hidden="true">' +
+      '<svg viewBox="0 0 24 24" width="1em" height="1em" focusable="false"><path d="M3 9v6h4l5 4V5L7 9H3zM16.5 12a3.5 3.5 0 0 0-2.5-3.346v6.692A3.5 3.5 0 0 0 16.5 12zm0-6.5v2.05a7 7 0 0 1 0 8.9V18.5a9.5 9.5 0 0 0 0-13z"></path></svg>' +
+      '</span>' +
+      '<input id="agilo-volume" type="range" min="0" max="1" step="0.01" value="1" aria-label="Volume">' +
+      '</div></div>' +
+      '<div class="agilo-timeline">' +
+      '<div class="agilo-track" id="agilo-track" aria-label="Position de lecture">' +
+      '<div class="agilo-buffered" id="agilo-buffered"></div>' +
+      '<div class="agilo-progress" id="agilo-progress"></div>' +
+      '<div class="agilo-thumb" id="agilo-thumb" aria-hidden="true"></div>' +
+      '<div class="agilo-hover" id="agilo-hover" aria-hidden="true">0:00</div>' +
+      '</div>' +
+      '<div class="agilo-times" aria-hidden="true">' +
+      '<div id="ag-current" class="ag-time ag-time--left">0:00</div>' +
+      '<div id="ag-remaining" class="ag-time ag-time--right">0:00</div>' +
+      '</div></div></div>'
+    );
+  }
+
+  function ensureShareShell(root) {
+    var doc = root.querySelector('.agilo-share-doc');
+    if (!doc) {
+      root.innerHTML =
+        '<div class="dashboard-content agilo-share-doc" lang="fr">' +
+        '<div id="agilo-share-header"></div>' +
+        '<div id="agilo-audio-host" class="wrapper-audio-api" hidden></div>' +
+        '<div id="agilo-share-body"></div>' +
+        '</div>';
+      doc = root.querySelector('.agilo-share-doc');
+    }
+    return {
+      doc: doc,
+      header: document.getElementById('agilo-share-header'),
+      host: document.getElementById('agilo-audio-host'),
+      body: document.getElementById('agilo-share-body')
+    };
+  }
+
+  function mountPlayer(host, audioUrl) {
+    if (!host) return null;
+    guardGuestPlayerToken();
+    var wrap = document.getElementById('agilo-audio-wrap');
+    var audio = document.getElementById('agilo-audio');
+    if (!wrap || !audio || wrap.parentNode !== host) {
+      host.innerHTML = playerMarkup();
+      wrap = document.getElementById('agilo-audio-wrap');
+      audio = document.getElementById('agilo-audio');
+    }
+    stripOwnerJobId(wrap);
+    var dl = document.getElementById('agilo-download');
+    if (dl) {
+      dl.style.display = 'none';
+      dl.removeAttribute('href');
+    }
+    if (audio && audioUrl && audio.getAttribute('src') !== audioUrl) {
+      audio.src = audioUrl;
+    }
+    host.removeAttribute('hidden');
+    host.style.display = '';
+    return audio;
+  }
+
+  function hidePlayer(host) {
+    if (!host) return;
+    host.setAttribute('hidden', '');
+  }
+
+  function syncFollow(job) {
+    var F = window.AgiloShareFollow;
+    if (!F || typeof F.bind !== 'function') return;
+    F.bind({
+      segments: Array.isArray(job.segments) ? job.segments : [],
+      root: document.getElementById('transcriptEditor')
+    });
+  }
+
+  function pingSticky() {
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:load', { detail: {} }));
+    } catch (_) { /* ignore */ }
+  }
+
   function capture(event, props) {
     var clean = {};
     var k;
@@ -516,8 +660,10 @@
       '#editorRoot .agilo-share-actions{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}',
       '#editorRoot .agilo-share-act{appearance:none;border:0;background:none;padding:0;font:inherit;font-size:.86rem;font-weight:600;color:var(--color--blue,#174a96);cursor:pointer;text-decoration:none}',
       '#editorRoot .agilo-share-act:hover{text-decoration:underline}',
-      '#editorRoot .agilo-player, #editorRoot .wrapper-audio-api{margin:0 0 14px;padding:10px 12px;border:1px solid rgba(52,58,64,.16);border-radius:var(--0-5_radius,.5rem);background:#fff}',
-      '#editorRoot .wrapper-audio-api audio,#editorRoot .agilo-player audio{width:100%;height:40px}',
+      '#editorRoot #agilo-audio-host{margin:0 0 14px}',
+      '#editorRoot #agilo-download{display:none!important}',
+      '#editorRoot #summaryEditor{outline:none}',
+      '#editorRoot #transcriptEditor .ag-seg__text{white-space:pre-wrap}',
       '#editorRoot nav.ed-tabs{display:flex;justify-content:flex-start!important;gap:4px;margin:4px 0 14px;padding:0;border-bottom:1px solid rgba(52,58,64,.14);text-align:left}',
       '#editorRoot .agilo-share-meta,#editorRoot .agilo-share-banner{text-align:left}',
       '#editorRoot .ed-tab{appearance:none;border:0;background:none;padding:10px 12px 12px;font:inherit;font-weight:600;color:#525252;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}',
@@ -607,12 +753,17 @@
       label = 'Télécharger le zip (transcript + compte rendu)';
     }
     var note = extra.note ? '<p>' + escapeHtml(extra.note) + '</p>' : '';
-    root.innerHTML =
-      '<div class="dashboard-content agilo-share-error" lang="fr">' +
-      '<h2 class="h1-small">' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
-      note +
-      '<p style="margin-top:18px"><a class="button-secondary" href="' + escapeHtml(href) + '">' + escapeHtml(label) + '</a></p>' +
-      '</div>';
+    var shell = ensureShareShell(root);
+    hidePlayer(shell.host);
+    if (shell.header) shell.header.innerHTML = '';
+    if (shell.body) {
+      shell.body.innerHTML =
+        '<div class="agilo-share-error" lang="fr">' +
+        '<h2 class="h1-small">' + escapeHtml(copy.title) + '</h2><p>' + escapeHtml(copy.text) + '</p>' +
+        note +
+        '<p style="margin-top:18px"><a class="button-secondary" href="' + escapeHtml(href) + '">' + escapeHtml(label) + '</a></p>' +
+        '</div>';
+    }
     capture('share_view_error', { code: code });
   }
 
@@ -743,9 +894,11 @@
     }
 
     var useTabs = showTranscript && showSummary;
+    var audioOk = job.audioAvailable !== false && !!job.audioUrl;
     var defaultTab = 'summary';
     if (!showSummary && showTranscript) defaultTab = 'transcript';
     if (docType === 'transcript' && showTranscript) defaultTab = 'transcript';
+    if (audioOk && showTranscript) defaultTab = 'transcript';
     var pageKicker = job.pageKicker || COPY.pageKicker;
     var title = job.jobTitle || job.filename || COPY.defaultTitle;
     var copySummaryLabel = COPY.copySummaryPrefix + ' ' + summaryTabLabel.toLowerCase();
@@ -768,10 +921,19 @@
     if (job.transcriptHtml) return String(job.transcriptHtml);
     var segs = Array.isArray(job.segments) ? job.segments : [];
     if (!segs.length) return '<p>' + escapeHtml(COPY.transcriptEmpty) + '</p>';
-    return segs.map(function (seg) {
-      return '<div class="ag-seg"><div class="ag-seg__head"><span class="speaker">' +
-        escapeHtml(seg.speaker || 'Intervenant') + '</span></div><div>' +
-        escapeHtml(seg.text || '') + '</div></div>';
+    return segs.map(function (seg, i) {
+      var start = Number(seg.start);
+      if (!Number.isFinite(start) || start < 0) start = 0;
+      var tText = fmtHMS(start);
+      return '<article class="ag-seg" data-id="s' + i + '" data-start="' + start + '" data-speaker="' +
+        escapeHtml(seg.speaker || '') + '">' +
+        '<header class="ag-seg__head">' +
+        '<button type="button" class="time" data-action="seek" data-t="' + start + '" title="Aller à ' + tText + '">' +
+        tText + '</button>' +
+        '<span class="speaker">' + escapeHtml(seg.speaker || 'Intervenant') + '</span>' +
+        '</header>' +
+        '<div class="ag-seg__text">' + escapeHtml(seg.text || '') + '</div>' +
+        '</article>';
     }).join('');
   }
 
@@ -787,6 +949,8 @@
     var audioOk = job.audioAvailable !== false && !!job.audioUrl;
     var transcript = buildTranscriptHtml(job);
     var summary = buildSummaryHtml(job);
+    var shell = ensureShareShell(root);
+    stripOwnerJobId(root);
 
     try { document.title = vm.title + ' | Agilotext'; } catch (_) { /* ignore */ }
 
@@ -821,33 +985,38 @@
     var panels = '';
     if (vm.showTranscript) {
       panels += '<div class="edtr-pane' + (vm.defaultTab === 'transcript' ? ' is-active' : '') +
-        '" id="pane-transcript" role="tabpanel">' + transcript + '</div>';
+        '" id="pane-transcript" role="tabpanel">' +
+        '<div id="transcriptEditor">' + transcript + '</div></div>';
     }
     if (vm.showSummary) {
       panels += '<div class="edtr-pane' + (vm.defaultTab === 'summary' ? ' is-active' : '') +
-        '" id="pane-summary" role="tabpanel">' + summary + '</div>';
+        '" id="pane-summary" role="tabpanel">' +
+        '<div id="summaryEditor" class="ag-summary-readonly">' + summary + '</div></div>';
     }
 
-    var audioBlock = '';
+    if (shell.header) {
+      shell.header.innerHTML =
+        '<header class="ed-header"><div class="ed-wrap">' +
+        '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span>' +
+        '<span class="agilo-share-chip">' + escapeHtml(COPY.lectureSeule) + '</span></div>' +
+        '<div class="agilo-share-actions">' + actions + '</div></div>' +
+        '<p class="agilo-share-meta">' + escapeHtml(vm.metaBy) +
+        (job.expiresAt ? ' · Lien à durée limitée' : '') + '</p></header>';
+    }
+
     if (audioOk) {
-      audioBlock = '<div id="agilo-audio-wrap" class="agilo-player wrapper-audio-api">' +
-        '<audio controls preload="metadata" src="' + escapeHtml(job.audioUrl) + '"></audio></div>';
+      mountPlayer(shell.host, job.audioUrl);
+    } else {
+      hidePlayer(shell.host);
     }
 
-    root.innerHTML =
-      '<div class="dashboard-content agilo-share-doc">' +
-      '<header class="ed-header"><div class="ed-wrap">' +
-      '<div class="ed-title-wrap"><span class="ed-title">' + escapeHtml(vm.title) + '</span>' +
-      '<span class="agilo-share-chip">' + escapeHtml(COPY.lectureSeule) + '</span></div>' +
-      '<div class="agilo-share-actions">' + actions + '</div></div>' +
-      '<p class="agilo-share-meta">' + escapeHtml(vm.metaBy) +
-      (job.expiresAt ? ' · Lien à durée limitée' : '') + '</p></header>' +
-      audioBlock +
-      tabs +
-      '<p class="agilo-share-banner">' + escapeHtml(COPY.banner) + '</p>' +
-      '<div class="agilo-share-status" id="agilo-share-status"></div>' +
-      panels +
-      '</div>';
+    if (shell.body) {
+      shell.body.innerHTML =
+        tabs +
+        '<p class="agilo-share-banner">' + escapeHtml(COPY.banner) + '</p>' +
+        '<div class="agilo-share-status" id="agilo-share-status"></div>' +
+        panels;
+    }
 
     var statusEl = $('#agilo-share-status', root);
 
@@ -860,6 +1029,7 @@
           var s = $('#pane-summary', root);
           if (t) t.classList.toggle('is-active', tab === 'transcript');
           if (s) s.classList.toggle('is-active', tab === 'summary');
+          if (tab === 'transcript') pingSticky();
         });
       });
     }
@@ -910,6 +1080,9 @@
         capture('share_download', { kind: 'guest_zip' });
       });
     }
+
+    syncFollow(job);
+    pingSticky();
     capture('share_view_opened', { mock: qs('mock') === '1', audio: audioOk, docType: vm.docType, guest: !!guestToken });
   }
 
@@ -959,7 +1132,15 @@
   }
 
   async function loadShare(mount) {
-    revokeBlobs();
+    var previousBlobs = blobUrls.slice();
+    blobUrls = [];
+    function dropOldBlobs() {
+      var i;
+      for (i = 0; i < previousBlobs.length; i++) {
+        if (blobUrls.indexOf(previousBlobs[i]) >= 0) continue;
+        try { URL.revokeObjectURL(previousBlobs[i]); } catch (_) { /* ignore */ }
+      }
+    }
     var guestToken = parseGuestToken();
     var token = parseToken();
     var jobId = guestToken ? '' : parseJobId();
@@ -967,6 +1148,7 @@
 
     if (!guestToken && !token && !jobId && !useMock) {
       renderError(mount, 'missing_token');
+      dropOldBlobs();
       return;
     }
 
@@ -975,7 +1157,10 @@
       var mockDoc = normalizeDocType(qs('doc'));
       if (mockDoc) mockJob.sharedDocumentType = mockDoc;
       if (qs('kicker')) mockJob.pageKicker = qs('kicker');
+      mockJob.audioUrl = silentWavUrl(40);
+      mockJob.audioAvailable = true;
       renderJob(mount, mockJob, token || 'd8478fa34amock');
+      dropOldBlobs();
       return;
     }
 
@@ -984,9 +1169,11 @@
         var guest = await fetchGuestDocument(guestToken);
         if (guest.job) {
           renderJob(mount, guest.job, '');
+          dropOldBlobs();
           return;
         }
         renderError(mount, guest.error || 'error_share_not_found');
+        dropOldBlobs();
         return;
       }
 
@@ -994,14 +1181,17 @@
         var fromZip = await fetchJobFromShareZip(token);
         if (fromZip.job) {
           renderJob(mount, fromZip.job, token);
+          dropOldBlobs();
           return;
         }
         if (fromZip.error && fromZip.error !== 'zip_cors') {
           renderError(mount, fromZip.error, { downloadUrl: downloadUrlFor(token) });
+          dropOldBlobs();
           return;
         }
         if (fromZip.error === 'zip_cors') {
           renderError(mount, 'zip_cors', { downloadUrl: downloadUrlFor(token) });
+          dropOldBlobs();
           return;
         }
       }
@@ -1010,17 +1200,20 @@
         var auth = await resolveAuth();
         if (!auth.email || !auth.token) {
           renderError(mount, 'need_login');
+          dropOldBlobs();
           return;
         }
         var byId = await fetchJobById(jobId, auth);
         if (byId.job) {
           renderJob(mount, byId.job, '');
+          dropOldBlobs();
           return;
         }
         var who = maskEmail(auth.email);
         renderError(mount, byId.error || 'error_job_not_found', {
           note: who ? ('Connecté en tant que ' + who + '.') : ''
         });
+        dropOldBlobs();
         return;
       }
 
@@ -1028,12 +1221,15 @@
     } catch (_) {
       renderError(mount, jobId ? 'need_login' : (guestToken || token ? 'network' : 'missing_token'));
     }
+    dropOldBlobs();
   }
 
   async function init() {
     injectStyles();
     var mount = ensureChrome();
     if (!mount) return;
+    stripOwnerJobId(mount);
+    guardGuestPlayerToken();
     window.addEventListener('pagehide', revokeBlobs);
     window.addEventListener('hashchange', function () { loadShare(mount); });
     await loadShare(mount);
