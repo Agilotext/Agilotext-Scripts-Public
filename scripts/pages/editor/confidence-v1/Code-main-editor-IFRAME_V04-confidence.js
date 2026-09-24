@@ -126,6 +126,29 @@
     if (!t) return true;
     return /^(speaker|locuteur|spk)[\s._-]*\d+$/i.test(t);
   }
+  var SPEAKER_NAME_PARTICLES = { de: 1, du: 1, des: 1, van: 1, von: 1, di: 1, le: 1 };
+  function isPersonNameLabel(s) {
+    return !isJunkSpeakerLabel(s);
+  }
+  function splitPersonName(label) {
+    const parts = String(label || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return { prenom: '', nom: '' };
+    if (parts.length === 1) return { prenom: parts[0], nom: '' };
+    let nomStart = parts.length - 1;
+    if (parts.length >= 3 && SPEAKER_NAME_PARTICLES[String(parts[parts.length - 2]).toLowerCase()]) {
+      nomStart = parts.length - 2;
+    }
+    return {
+      prenom: parts.slice(0, nomStart).join(' '),
+      nom: parts.slice(nomStart).join(' ')
+    };
+  }
+  function joinPersonName(prenom, nom) {
+    const a = String(prenom || '').trim();
+    const b = String(nom || '').trim();
+    if (a && b) return a + ' ' + b;
+    return a || b;
+  }
   function filterSpeakerRoster(names, query) {
     const list = Array.isArray(names) ? names : [];
     const q = foldSpeakerSearch(query);
@@ -2364,6 +2387,21 @@
       try { localStorage.setItem(key, JSON.stringify(cur)); } catch { /* ignore */ }
     }
   }
+  function dropStoredRoster(jobId, name) {
+    const n = String(name || '').trim();
+    if (!n) return;
+    _speakerRosterSession = _speakerRosterSession.filter((s) => s !== n);
+    const key = speakerRosterStorageKey(jobId);
+    if (!key) return;
+    const cur = loadStoredRoster(jobId).filter((s) => s !== n);
+    try { localStorage.setItem(key, JSON.stringify(cur)); } catch { /* ignore */ }
+  }
+  function forgetRosterNameIfUnused(name) {
+    const n = String(name || '').trim();
+    if (!n) return;
+    if (ag_countOccurrencesByName(n) > 0) return;
+    dropStoredRoster(getJobIdForRoster(), n);
+  }
   function collectRosterNames() {
     const seen = Object.create(null);
     const out = [];
@@ -2606,6 +2644,64 @@
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-label', 'Choisir un interlocuteur');
 
+    const person = isPersonNameLabel(currentName) ? splitPersonName(currentName) : null;
+    const spellCount = person ? ag_countOccurrencesByName(currentName) : 0;
+    let applyAllBox = null;
+    let nomInput = null;
+    const spell = person ? document.createElement('div') : null;
+    if (spell) {
+      spell.className = 'ag-speaker-picker__spell';
+      const title = document.createElement('div');
+      title.className = 'ag-speaker-picker__spell-title';
+      title.textContent = 'Corriger « ' + currentName + ' »';
+      const fields = document.createElement('div');
+      fields.className = 'ag-speaker-picker__spell-fields';
+      const prenomInput = document.createElement('input');
+      prenomInput.type = 'text';
+      prenomInput.className = 'ag-speaker-picker__spell-input';
+      prenomInput.value = person.prenom;
+      prenomInput.setAttribute('aria-label', 'Prénom');
+      prenomInput.placeholder = 'Prénom';
+      nomInput = document.createElement('input');
+      nomInput.type = 'text';
+      nomInput.className = 'ag-speaker-picker__spell-input';
+      nomInput.value = person.nom;
+      nomInput.setAttribute('aria-label', 'Nom');
+      nomInput.placeholder = 'Nom';
+      fields.appendChild(prenomInput);
+      fields.appendChild(nomInput);
+      const row = document.createElement('label');
+      row.className = 'ag-speaker-picker__spell-all';
+      applyAllBox = document.createElement('input');
+      applyAllBox.type = 'checkbox';
+      applyAllBox.checked = true;
+      const cap = document.createElement('span');
+      cap.textContent = spellCount > 1
+        ? 'Toutes les prises de parole (' + spellCount + ')'
+        : 'Ce segment';
+      row.appendChild(applyAllBox);
+      row.appendChild(cap);
+      const go = document.createElement('button');
+      go.type = 'button';
+      go.className = 'ag-speaker-picker__spell-go';
+      go.textContent = 'Valider';
+      function validateSpell(ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        const joined = joinPersonName(prenomInput.value, nomInput.value);
+        if (!joined || joined === currentName) { close(true); return; }
+        const scope = (applyAllBox && applyAllBox.checked && spellCount > 1) ? 'all' : 'one';
+        close(false);
+        if (typeof onPick === 'function') onPick(joined, scope);
+      }
+      go.addEventListener('click', validateSpell);
+      prenomInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
+      nomInput.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') validateSpell(ev); });
+      spell.appendChild(title);
+      spell.appendChild(fields);
+      spell.appendChild(row);
+      spell.appendChild(go);
+    }
+
     const searchWrap = document.createElement('div');
     searchWrap.className = 'ag-speaker-picker__search';
     searchWrap.innerHTML = nucleoIcon('search', 'ag-speaker-picker__ico');
@@ -2645,6 +2741,25 @@
       return true;
     }
 
+    function correctionLabel() {
+      const q = String(query || '').trim();
+      if (!q) return '';
+      const folded = foldSpeakerSearch(q);
+      if (allNames.some((n) => foldSpeakerSearch(n) === folded)) return '';
+      if (!filterSpeakerRoster(allNames, q).length) return '';
+      return q;
+    }
+    function spellScope() {
+      if (applyAllBox && applyAllBox.checked && spellCount > 1) return 'all';
+      return 'one';
+    }
+    function applyCorrection(raw) {
+      const n = normalizeName(raw);
+      if (!n) return;
+      close(false);
+      if (typeof onPick === 'function') onPick(n, spellScope());
+    }
+
     function visibleRows() {
       const filtered = filterSpeakerRoster(allNames, query);
       const good = filtered.filter((n) => !isJunkSpeakerLabel(n));
@@ -2654,9 +2769,23 @@
 
     function renderList() {
       const rows = visibleRows();
-      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      const corr = correctionLabel();
+      const total = rows.length + (corr ? 1 : 0);
+      if (active >= total) active = Math.max(0, total - 1);
       list.textContent = '';
-      if (!rows.length) {
+      if (corr) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'ag-speaker-picker__row is-correct' + (active === 0 ? ' is-active' : '');
+        b.setAttribute('role', 'option');
+        const lab = document.createElement('span');
+        lab.className = 'ag-speaker-picker__name';
+        lab.textContent = 'Corriger en « ' + corr + ' »';
+        b.appendChild(lab);
+        b.addEventListener('click', () => applyCorrection(corr));
+        list.appendChild(b);
+      }
+      if (!rows.length && !corr) {
         if (shouldCreateSpeakerFromQuery(query, allNames)) {
           const label = String(query || '').trim();
           const b = document.createElement('button');
@@ -2682,6 +2811,7 @@
       }
       const good = rows.filter((n) => !isJunkSpeakerLabel(n));
       const junk = rows.filter((n) => isJunkSpeakerLabel(n));
+      const off = corr ? 1 : 0;
       function section(title, items, offset) {
         if (!items.length) return;
         const hd = document.createElement('div');
@@ -2718,8 +2848,8 @@
           list.appendChild(b);
         });
       }
-      section('Interlocuteurs', good, 0);
-      section('À corriger', junk, good.length);
+      section('Interlocuteurs', good, off);
+      section('À corriger', junk, off + good.length);
       if (bound) bound.place();
     }
 
@@ -2730,29 +2860,35 @@
     });
     panel.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') return;
+      if (e.target && e.target.classList && e.target.classList.contains('ag-speaker-picker__spell-input')) return;
       const rows = visibleRows();
+      const corr = correctionLabel();
+      const total = rows.length + (corr ? 1 : 0);
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        if (!rows.length) return;
-        active = Math.min(rows.length - 1, active + 1);
+        if (!total) return;
+        active = Math.min(total - 1, active + 1);
         renderList();
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        if (!rows.length) return;
+        if (!total) return;
         active = Math.max(0, active - 1);
         renderList();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        if (rows[active]) pick(rows[active]);
+        if (corr && active === 0) { applyCorrection(corr); return; }
+        const nameIdx = corr ? active - 1 : active;
+        if (rows[nameIdx]) pick(rows[nameIdx]);
         else tryCreateFromQuery();
       }
     });
 
+    if (spell) panel.appendChild(spell);
     panel.appendChild(searchWrap);
     panel.appendChild(list);
     renderList();
     bound = ag_bindAnchoredPopover(panel, anchor, { onClose() { close(true); } });
-    try { input.focus({ preventScroll: true }); } catch { }
+    try { (nomInput || input).focus({ preventScroll: true }); } catch { }
   }
 
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
@@ -2764,11 +2900,34 @@
     const proposed = oldName || 'Intervenant';
     const anchor = triggerEl || segEl;
 
-    function afterNameChosen(rawName) {
+    function finishRename(scope, newName) {
+      const n = ag_applyRenameScope({ scope, oldName, newName, idx });
+      forgetRosterNameIfUnused(oldName);
+      const spell = scope === 'all' || scope === 'one';
+      if (spell && oldName) {
+        toast(`« ${oldName} » → « ${newName} » (${n}). Cliquez Sauvegarder.`);
+        return;
+      }
+      toast(
+        scope === 'one' ? 'Locuteur mis à jour. Cliquez Sauvegarder.' :
+          scope === 'contiguous' ? `Groupe renommé (${n} seg.). Cliquez Sauvegarder.` :
+            scope === 'all' ? `Toutes les occurrences → « ${newName} » (${n}). Cliquez Sauvegarder.` :
+              `Segments sans nom → « ${newName} » (${n}). Cliquez Sauvegarder.`
+      );
+    }
+
+    function afterNameChosen(rawName, presetScope) {
       ag_closeSpeakerPicker();
       const newName = normalizeName(rawName);
       if (!newName || newName === oldName) return;
       pushStoredRoster(getJobIdForRoster(), newName);
+
+      if (presetScope === 'all' || presetScope === 'one') {
+        const total = oldName ? ag_countOccurrencesByName(oldName) : 0;
+        const scope = (presetScope === 'all' && total > 1) ? 'all' : 'one';
+        finishRename(scope, newName);
+        return;
+      }
 
       const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
       const counts = {
@@ -2781,26 +2940,17 @@
       const alt = !!keyState.alt;
 
       if (oldName) {
-        if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
-        if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
+        if (shift) { finishRename('all', newName); return; }
+        if (alt) { finishRename('contiguous', newName); return; }
       } else if (renameAllEmpty) {
-        const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
-        toast(`Segments sans nom → "${newName}" (${n} seg.)`);
+        finishRename('empty', newName);
         return;
       }
 
       const forEmpty = !oldName;
       ag_showRenameMenu(anchor, {
         oldName, counts, forEmpty,
-        onSelect(scope) {
-          const n = ag_applyRenameScope({ scope, oldName, newName, idx });
-          toast(
-            scope === 'one' ? 'Locuteur mis à jour' :
-              scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
-                scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
-                  `Segments sans nom → "${newName}" (${n} seg.)`
-          );
-        }
+        onSelect(scope) { finishRename(scope, newName); }
       });
     }
 
@@ -3779,7 +3929,7 @@
         z-index:99999;
         min-width:260px;
         max-width:min(92vw, 360px);
-        max-height:min(320px, 50vh);
+        max-height:min(520px, 70vh);
         display:flex;
         flex-direction:column;
         overflow:hidden;
@@ -3790,6 +3940,53 @@
         border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
         box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
         font:500 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto;
+      }
+      .ag-speaker-picker__spell{
+        display:flex;
+        flex-direction:column;
+        gap:8px;
+        padding:10px 10px 8px;
+        border-bottom:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        flex:0 0 auto;
+      }
+      .ag-speaker-picker__spell-title{
+        font-size:13px;
+        font-weight:700;
+      }
+      .ag-speaker-picker__spell-fields{
+        display:flex;
+        gap:6px;
+      }
+      .ag-speaker-picker__spell-input{
+        flex:1;
+        min-width:0;
+        padding:6px 8px;
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
+        font:inherit;
+        color:inherit;
+        background:var(--agilo-surface, var(--color--white, #fff));
+      }
+      .ag-speaker-picker__spell-all{
+        display:flex;
+        align-items:center;
+        gap:6px;
+        font-size:12px;
+        font-weight:600;
+      }
+      .ag-speaker-picker__spell-go{
+        align-self:flex-start;
+        border:0;
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
+        background:#174A96;
+        color:#fff;
+        font:inherit;
+        font-weight:700;
+        padding:6px 12px;
+        cursor:pointer;
+      }
+      .ag-speaker-picker__row.is-correct .ag-speaker-picker__name{
+        font-weight:700;
       }
       .ag-speaker-picker__search{
         display:flex;
