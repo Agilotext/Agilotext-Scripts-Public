@@ -321,15 +321,64 @@ function mountAgiloLiveVoice() {
   if (!root || !window.AgiloLiveVoice) return;
 
   // URL du worklet — doit être HTTPS, même origine ou CORS OK
-  var WORKLET_URL =
-    window.AGILO_PCM_WORKLET_URL ||
-    "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/shared/pcm-audio-worklet.js";
+  var WORKLET_URL = window.AGILO_PCM_WORKLET_URL;
+  if (!WORKLET_URL) {
+    console.error("[Agilotext] AGILO_PCM_WORKLET_URL manquant (loader streaming).");
+    return;
+  }
+
+  if (window.AgiloDicteeUsages && typeof window.AgiloDicteeUsages.mount === "function") {
+    window.AgiloDicteeUsages.mount();
+  }
+  var pickerHost = document.getElementById("agilo-carnet-picker-host");
+  if (pickerHost && window.AgiloDicteeCarnetPicker && typeof window.AgiloDicteeCarnetPicker.mount === "function") {
+    window.AgiloDicteeCarnetPicker.mount(pickerHost);
+  }
 
   var liveCtrl = window.AgiloLiveVoice.mount({
     root: root,
     language: "fr",
     workletUrl: WORKLET_URL,
     limits: window.__AGILO_DICTEE_LIMITS || null,
+
+    getUsage: function () {
+      return (window.AgiloDicteeUsages && window.AgiloDicteeUsages.getUsage()) || "reunion";
+    },
+
+    postCarnetSegment: async function ({ blob, email }) {
+      var tokenOk = await ensureValidToken(email, true);
+      if (!tokenOk || !globalToken) {
+        return { ok: false, errorCode: "invalid_token", httpStatus: 401 };
+      }
+      var fd = new FormData();
+      fd.append("username", email);
+      fd.append("token", globalToken);
+      fd.append("edition", edition);
+      fd.append("audio", new File([blob], "segment.wav", { type: "audio/wav" }));
+      var res;
+      try {
+        res = await fetch("https://api.agilotext.com/api/v1/dictationApiAssemblyAi", {
+          method: "POST",
+          body: fd
+        });
+      } catch (e) {
+        return { ok: false, errorCode: "network", httpStatus: 0 };
+      }
+      var data = {};
+      try { data = await res.json(); } catch (e) { data = {}; }
+      var code = (data && data.errorMessage) || "";
+      var paste = data && typeof data.textToPaste === "string" ? data.textToPaste.trim() : "";
+      if (res.ok && data && data.status === "OK" && paste) {
+        return { ok: true, textToPaste: paste, httpStatus: res.status };
+      }
+      return {
+        ok: false,
+        errorCode: code || "provider_invalid_response",
+        errorMessage: code,
+        httpStatus: res.status,
+        textToPaste: paste
+      };
+    },
 
     getAgiloAuth: async function (email) {
       var tokenOk = await ensureValidToken(email, true);
@@ -347,6 +396,38 @@ function mountAgiloLiveVoice() {
     uploadBlob: async function ({ blob, email, options }) {
       await ensureValidToken(email, true);
 
+      var trial = window.AgiloFreeSpeakerTrial;
+      var intent = (edition === "free" && trial && typeof trial.readIntent === "function")
+        ? trial.readIntent("dictation")
+        : {
+            speakers: !!(options && options.speakers),
+            armed: edition !== "free",
+            formatChecked: !!(options && options.formatTranscript),
+            speakersExpected: options && options.speakersExpected,
+            source: "dictation"
+          };
+      var speakersWanted = edition === "free"
+        ? !!(intent && intent.speakers && intent.armed)
+        : !!(options && options.speakers);
+      var reservation = null;
+      var speakersAllowed = false;
+
+      if (edition === "free") {
+        if (speakersWanted) {
+          if (!trial || typeof trial.reserve !== "function") {
+            speakersAllowed = false;
+          } else {
+            reservation = await trial.reserve({ source: "dictation" });
+            speakersAllowed = !!(reservation && reservation.ok);
+          }
+        }
+      } else {
+        speakersAllowed = speakersWanted;
+      }
+
+      var formatOn = speakersAllowed
+        ? false
+        : !!(intent && intent.formatChecked != null ? intent.formatChecked : options && options.formatTranscript);
       var fd = new FormData();
 
       fd.append(
@@ -361,11 +442,8 @@ function mountAgiloLiveVoice() {
       fd.append("username", email);
       fd.append("token", globalToken);
       fd.append("edition", edition);
-      fd.append("timestampTranscript", options.speakers ? "true" : "false");
-      fd.append(
-        "formatTranscript",
-        options.speakers ? "false" : (options.formatTranscript ? "true" : "false")
-      );
+      fd.append("timestampTranscript", speakersAllowed ? "true" : "false");
+      fd.append("formatTranscript", formatOn ? "true" : "false");
       fd.append("doSummary", options.doSummary ? "true" : "false");
       fd.append("mailTranscription", "true");
 
@@ -373,15 +451,52 @@ function mountAgiloLiveVoice() {
         fd.append("deviceId", window.DEVICE_ID);
       }
 
-      if (options.speakers) {
-        fd.append("speakersExpected", String(options.speakersExpected || 0));
+      if (speakersAllowed) {
+        fd.append("speakersExpected", String((intent && intent.speakersExpected) || (options && options.speakersExpected) || 0));
       }
 
       if (options.translateTo) {
         fd.append("translateTo", options.translateTo);
       }
 
-      return sendWithRetry(fd, 3, false);
+      try {
+        var data = await sendWithRetry(fd, 3, false);
+        if (reservation && reservation.ok && trial) {
+          var jobId = data && data.jobIdList && data.jobIdList[0];
+          if (data && data.status === "OK" && jobId) {
+            trial.commit(jobId, { requestId: reservation.requestId, source: "dictation" });
+          } else if (trial.isCertainRejection(null, data)) {
+            trial.release({ requestId: reservation.requestId });
+          } else {
+            trial.markUncertain({ requestId: reservation.requestId });
+          }
+        }
+        if (!data || data.status !== "OK") {
+          document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
+            detail: {
+              errorMessage: (data && data.errorMessage) || "",
+              speakersUsed: speakersAllowed,
+              source: "dictation",
+              trialRequestId: reservation && reservation.requestId
+            }
+          }));
+        }
+        return data;
+      } catch (err) {
+        if (reservation && reservation.ok && trial) {
+          if (trial.isCertainRejection(err, null)) trial.release({ requestId: reservation.requestId });
+          else trial.markUncertain({ requestId: reservation.requestId });
+        }
+        document.dispatchEvent(new CustomEvent("agilo-upload-failed", {
+          detail: {
+            errorMessage: (err && (err.message || err.type)) || "",
+            speakersUsed: speakersAllowed,
+            source: "dictation",
+            trialRequestId: reservation && reservation.requestId
+          }
+        }));
+        throw err;
+      }
     },
 
     onLocalAudioReady: function ({ blob, filename }) {
@@ -421,6 +536,17 @@ function mountAgiloLiveVoice() {
     onUploadAccepted: function ({ jobId, email }) {
       localStorage.setItem("currentJobId", jobId);
       document.dispatchEvent(new CustomEvent("newJobIdAvailable"));
+      var trialState = window.AgiloFreeSpeakerTrial && window.AgiloFreeSpeakerTrial.getState
+        ? window.AgiloFreeSpeakerTrial.getState()
+        : null;
+      document.dispatchEvent(new CustomEvent("agilo-upload-confirmed", {
+        detail: {
+          jobId: jobId,
+          speakersUsed: !!(trialState && trialState.status === "used" && trialState.source === "dictation"),
+          source: "dictation",
+          trialRequestId: trialState && trialState.requestId
+        }
+      }));
 
       var fl = document.getElementById("form_loading");
       if (fl) fl.style.display = "none";
@@ -448,6 +574,10 @@ function mountAgiloLiveVoice() {
     },
 
     onError: function (rawOrPresetKey) {
+      if (rawOrPresetKey === "speaker_trial_blocked" ||
+          (rawOrPresetKey && rawOrPresetKey.message === "speaker_trial_blocked")) {
+        return;
+      }
       if (rawOrPresetKey && AGILO_PRESET_ERROR_KEYS[rawOrPresetKey]) {
         showError(rawOrPresetKey);
         return;
@@ -460,6 +590,23 @@ function mountAgiloLiveVoice() {
   /** Débogage console : __agiloLiveVoiceInstance.state.status, .render(), etc. */
   window.__agiloLiveVoiceInstance = liveCtrl;
   window.__agiloLiveVoiceMounted = true;
+
+  (function loadCarnetPickerWhenReady() {
+    var n = 0;
+    function tick() {
+      if (!window.AgiloDicteeCarnetPicker) return;
+      var email = window.AgiloDicteeUsages && AgiloDicteeUsages.getEmail();
+      if (email && typeof window.ensureValidToken === "function") {
+        ensureValidToken(email, true).then(function (ok) {
+          if (ok) AgiloDicteeCarnetPicker.loadModels();
+        });
+        return;
+      }
+      n += 1;
+      if (n < 40) setTimeout(tick, 250);
+    }
+    tick();
+  })();
 }
 
 window.mountAgiloLiveVoice = mountAgiloLiveVoice;
