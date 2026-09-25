@@ -20,6 +20,24 @@ Le frontend n'ajoute ces identifiants aux requêtes que si `window.AGILO_SOLO_DO
 
 ## Livraison
 
-Les trois loaders Webflow (`Ent`, `Pro`, `Free`) chargent les deux nouveaux scripts avant `mount-streaming.js`. Après le commit fonctionnel, remplacer leur `PIN` par le SHA de ce commit, puis pousser le commit de pin sur la branche dédiée. Le script embarqué dans Webflow doit ensuite pointer vers ce dernier SHA, après validation API et recette comptes Pro/ENT. Ne pas utiliser `@main` pour ce parcours et ne pas publier le site à cette étape.
+Les trois loaders Webflow (`Ent`, `Pro`, `Free`) chargent les deux nouveaux scripts avant `mount-streaming.js`. Après le commit fonctionnel, remplacer leur `PIN` par le SHA de ce commit, puis pousser le commit de pin sur la branche dédiée. Le script embarqué dans Webflow doit ensuite pointer vers ce dernier SHA. Ne pas utiliser `@main`. Ne pas publier www avant le contrat Nico.
 
-Recette : Free verrouillé ; Pro/ENT dictent deux sessions, rechargent, corrigent, choisissent un modèle, génèrent une seule fois ; échec réseau puis reprise avec le même `requestId` ; document du bon `jobId` ; option d'ouverture décochée par défaut ; Réunion, Fichier, YouTube et sauvegarde d'urgence inchangés. Vérifier la mise en page sur ordinateur et mobile.
+## Pin staging 25 sept 2026 (solo onglet débloqué)
+
+Branche : `feat/dashboard-dictee-solo-document`.
+
+- Loader footer (Webflow) : `12158b07fa512b8cc67f0eb09f98953c386d3659` (`?v=12158b07`)
+- PIN interne des loaders (payload jsDelivr) : `f9b583be5733074115df0ca3cc229213b3ae7eb9` (`BUILD=20260925solo3`)
+- Pages : `/app/business/dashboard`, `/app/premium/dashboard`, `/app/free/dashboard`
+- Publish : `agilotext-test.webflow.io` only. www inchangé (pas ce lot).
+- Aucun `AGILO_SOLO_DOCUMENT_CONTRACT_READY` ni `AGILO_SOLO_DOCUMENT_PREVIEW` dans Webflow.
+
+`soloTabAllowed()` : Pro / ENT / Business peuvent ouvrir Dictée solo et dicter (multipart minimal, comme l’extension). Free reste grisé (tarifs). **Générer** reste sous `AgiloDicteeSoloDocument.available()` (contrat Nico + drapeau). Timer et « Démarrer la dictée » sont empilés en colonne.
+
+Rollback staging précédent : footers `@9055ae2bb31064f25292ccb8a894de59f1a39075?v=9055ae2b`. Rollback Carnet initial : `@5746840b4049edb68babe1545ff8ca43e8ef99c7?v=5746840b`. Republish subdomain only.
+
+Si les phrases ne partent pas en solo : vérifier Network sur `dictationApiAssemblyAi` (`account_not_allowed` = gate serveur, distinct du garde onglet).
+
+Activation génération = autre chantier (contrat Nico + drapeau). Pas ce pin.
+
+Recette après contrat : Free verrouillé ; Pro/ENT dictent deux sessions, rechargent, corrigent, choisissent un modèle, génèrent une seule fois ; échec réseau puis reprise avec le même `requestId` ; document du bon `jobId` ; option d'ouverture décochée par défaut ; Réunion, Fichier, YouTube et sauvegarde d'urgence inchangés. Vérifier la mise en page sur ordinateur et mobile.
