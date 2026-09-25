@@ -23,6 +23,15 @@ Complète [`PARENT_BRANCH.md`](PARENT_BRANCH.md) pour les pins collés. Scrape :
 |-------|--------|
 | Designer | `Code-save_transcript` |
 | component_id | `5ed25ce2-6141-f7db-8265-faf90d325f5d` |
+| Instances | Business + Pro. **Free n’a pas** cette instance (constat 25/09). |
+
+## Composant iframe (partagé)
+
+| Champ | Valeur |
+|-------|--------|
+| Designer | `Code-main-editor` |
+| component_id | `131e8c6f-a905-9aca-58f0-d1c51800340d` |
+| Instances | Business + Pro + Free |
 
 ### Snapshot rollback 25/09 (erreur V2, à ne plus recoller)
 
@@ -54,10 +63,10 @@ Iframe confidence (P0/P1, même SHA) :
 
 ## Pins relevés 25/09 (Business)
 
-| Script | www | staging après Lot A |
+| Script | www | staging après Lot B (25/09) |
 |--------|-----|---------------------|
-| Save | `CORRIGE-V2` @ `1.02` | `CORRIGE-V2` @ `1.02` |
-| Iframe confidence | `3274e9f` | `f787d5bf` (hold www) |
+| Save | `CORRIGE-V2` @ `1.02` | `CORRIGE-V2` + history @ `3c301705` (pas le gros V2) |
+| Iframe confidence | `3274e9f` | `3c301705` (P0 async + CSS SHA, hold www) |
 | creds / cr-history | `637a1ae4` | `637a1ae4` |
 | Relance | `9ed90622` | `9ed90622` |
 | Modeles CR | `33aee578` | `33aee578` |
@@ -66,4 +75,4 @@ Iframe confidence (P0/P1, même SHA) :
 | confidence css/js | `aa75276d` / `9ea21053` | idem |
 | sticky | `aa75276d` | idem |
 
-Écart volontaire : iframe staging plus récente (`f787d5bf`, toast locuteurs). Ne pas rattraper www dans le même publish que le save.
+Écart volontaire : iframe + save staging @ `3c301705`. www reste `CORRIGE` @ `1.02` + iframe `3274e9f`. **WAIT `OK publish www`.**

@@ -15,9 +15,9 @@ Save Webflow : **`Code-save_transcript-CORRIGE-V2.js` uniquement**. Jamais le gr
 
 Voir [EDITOR_PIN_MATRIX.md](EDITOR_PIN_MATRIX.md). Creds restent dans `Code-Redo_summary`.
 
-## Recette
+## Recette (toi, session Bauer)
 
-Job **jetable**. 2 sauvegardes manuelles. Revenir · HH:mm. Locuteurs + phrases présentes. CR éventuellement stale.
+Job **jetable**, pas `1000040008`. 2 sauvegardes manuelles. Console : `save-manual-simple-v1.1-history`. Bouton Sauvegarde… → Sauvegardé ✓. Revenir · HH:mm. Restore. Locuteurs + phrases présentes. CR éventuellement stale.
 
 ## Rollback staging
 
