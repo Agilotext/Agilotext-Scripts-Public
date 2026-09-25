@@ -111,11 +111,24 @@
 
   function mapNicoSegments(j) {
     var arr = (j && Array.isArray(j.segments)) ? j.segments : [];
+    var M = window.AgiloShareSegments;
+    if (M && typeof M.mapGuestSegments === 'function') {
+      return M.mapGuestSegments(arr);
+    }
+    /* Fallback si share-segments.js non chargé (même règle éditeur). */
     return arr.map(function (r, i) {
-      var startMs = r.milli_start != null ? r.milli_start : r.start;
+      var hasMilli = r.milli_start != null || r.milliStart != null;
+      var raw = hasMilli
+        ? (r.milli_start != null ? r.milli_start : r.milliStart)
+        : r.start;
+      var n = Number(raw);
+      if (!Number.isFinite(n) || n < 0) n = 0;
+      var startSec = hasMilli
+        ? Math.floor(n / 1000)
+        : Math.floor(n > 1e6 ? n / 1000 : n);
       return {
         speaker: String(r.speaker || '').trim() || ('Intervenant ' + (i + 1)),
-        start: Math.max(0, Math.floor((+startMs || 0) / (String(startMs).length > 6 ? 1000 : 1))),
+        start: Math.max(0, startSec),
         text: String(r.text || '').replace(/\\n/g, '\n')
       };
     }).filter(function (s) { return String(s.text || '').trim(); });
@@ -691,7 +704,8 @@
       '#editorRoot .edtr-pane h2:first-child,#editorRoot .edtr-pane h3:first-child{margin-top:0}',
       '#editorRoot #pane-transcript .ag-seg{margin:0 0 1rem}',
       '#editorRoot #pane-transcript .ag-seg__head{margin:0 0 .25rem}',
-      '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.75rem;font-weight:700;letter-spacing:.02em;color:var(--color--blue,#174a96)}',
+      '#editorRoot #pane-transcript .ag-seg__head .time{font-size:.875rem}',
+      '#editorRoot #pane-transcript .ag-seg__head .speaker{font-size:.95rem;font-weight:700;letter-spacing:.02em;color:var(--color--blue,#174a96)}',
       '#editorRoot .agilo-share-error{text-align:center;padding:3rem .75rem}',
       '@media (max-width:991px){html.agilo-share-page .dashboard-right{padding:1rem 1.25rem 2rem}#editorRoot .ed-title{font-size:1.2rem}}',
       '@media (max-width:479px){html.agilo-share-page .dashboard-left .dashboard-menu.menu-app,html.agilo-share-page.agilo-a11y-app .dashboard-left .dashboard-menu.menu-app{padding:.625rem .75rem!important}html.agilo-share-page .dashboard-right{padding:.75rem .75rem calc(1.5rem + env(safe-area-inset-bottom, 0))}#editorRoot .ed-title{font-size:1.1rem}#editorRoot .agilo-share-act--icon{width:2.75rem;height:2.75rem}}'
