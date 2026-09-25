@@ -50,7 +50,8 @@ Tous les scripts sont hébergés sur GitHub et chargés via jsDelivr CDN :
 | `code-ed-header` | `Code-ed-header.js` | ✅ Actif | Actions header (renommer, exporter, webhook, supprimer) |
 | `code-questions-ia` | `Code-questions-ia.js` | ✅ Actif | Chips de questions IA pré-définies |
 | `code-copy-paste-text` | `Code-copy-paste-text.js` | ✅ Actif | Amélioration copy/paste avec undo/redo |
-| `code-save_transcript` | `Code-save_transcript.js` | ✅ Actif | Auto-save et sauvegarde manuelle avec détection de conflits |
+| `code-save_transcript` | `Code-save_transcript-CORRIGE-V2.js` | ✅ Actif | Save **manuel** (bouton + Ctrl+S). Jamais remplacer par `Code-save_transcript-V2.js` |
+| `code-save_transcript` (2e script) | `agilo-transcript-history.js` | ✅ Actif | UI Revenir · HH:mm après le save CORRIGE. Pin même SHA, après CORRIGE |
 
 ---
 
@@ -114,5 +115,5 @@ Pour activer le mode debug, ajoutez `?debug=1` à l'URL de la page éditeur.
 
 ---
 
-**Dernière mise à jour** : $(date +"%Y-%m-%d")
+**Dernière mise à jour** : 2026-09-25 (CORRIGE-V2 + history, pin matrice)
 
