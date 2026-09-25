@@ -50,12 +50,13 @@
     return v === "carnet" ? "carnet" : DEFAULT_USAGE;
   }
 
-  function soloAllowed() {
+  function soloTabAllowed() {
     var tier = String(global.edition || "").toLowerCase();
-    var paid = tier === "pro" || tier === "ent" || tier === "business";
-    var preview = global.AGILO_SOLO_DOCUMENT_PREVIEW === true &&
-      readMemberEmail() === "bauerwebpro@gmail.com";
-    return paid && (global.AGILO_SOLO_DOCUMENT_CONTRACT_READY === true || preview);
+    return tier === "pro" || tier === "ent" || tier === "business";
+  }
+
+  function soloAllowed() {
+    return soloTabAllowed();
   }
 
   function readMemberEmail() {
@@ -227,9 +228,9 @@
       ".agilo-carnet-chrome{margin:0 0 .75rem;}" +
       ".agilo-carnet-help{margin:0 0 .65rem;font-size:.82rem;line-height:1.45;color:#404040;}" +
       ".agilo-carnet-error{min-height:1.1rem;margin:.45rem 0 0;font-size:.8rem;line-height:1.35;color:#b42318;}" +
-      ".agilo-dictee-toolbar{display:flex;align-items:center;justify-content:center;gap:1.25rem;flex-wrap:wrap;margin:.55rem 0 1rem;}" +
+      ".agilo-dictee-toolbar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.55rem;margin:.55rem 0 1rem;}" +
       ".agilo-dictee-toolbar .dictee-timer,.agilo-dictee-toolbar .dictee-actions{margin:0;}" +
-      "@media(max-width:640px){.agilo-dictee-toolbar{flex-direction:column;gap:.55rem;}}" +
+      ".agilo-dictee-toolbar .dictee-actions{width:min(100%,32rem);}" +
       ".agilo-solo-lock{font-size:.8rem;color:#525252;margin:.45rem 0 .8rem;}" +
       ".agilo-solo-lock a{color:var(--agilo-primary,#174a96);text-decoration:underline;}" +
       "#live-streaming-panel.is-carnet #agilo-copy-btn,[data-agilo-streaming-root].is-carnet #agilo-copy-btn{background:#fff !important;color:var(--agilo-primary,#174a96) !important;border:1.5px solid var(--agilo-primary,#174a96) !important;}";
@@ -259,7 +260,7 @@
     if (!root) return;
     var btns = root.querySelectorAll("[data-agilo-usage]");
     for (var i = 0; i < btns.length; i++) {
-      btns[i].disabled = !!disabled || (btns[i].getAttribute("data-agilo-usage") === "carnet" && !soloAllowed());
+      btns[i].disabled = !!disabled || (btns[i].getAttribute("data-agilo-usage") === "carnet" && !soloTabAllowed());
     }
     if (global.AgiloDicteeCarnetPicker && typeof AgiloDicteeCarnetPicker.setDisabled === "function") {
       AgiloDicteeCarnetPicker.setDisabled(!!disabled);
@@ -339,7 +340,7 @@
 
   function setUsage(next, persist) {
     var usage = normalizeUsage(next);
-    if (usage === "carnet" && !soloAllowed()) return;
+    if (usage === "carnet" && !soloTabAllowed()) return;
     if (state.recording && usage !== state.usage) return;
     persistDraftFromTextarea();
     state.usage = usage;
@@ -387,7 +388,7 @@
       if (!btn || btn.disabled) return;
       setUsage(btn.getAttribute("data-agilo-usage"), true);
     });
-    if (!soloAllowed()) {
+    if (!soloTabAllowed()) {
       var solo = wrap.querySelector('[data-agilo-usage="carnet"]');
       if (solo) {
         solo.disabled = true;
@@ -395,16 +396,11 @@
       }
       var lock = document.createElement("p");
       lock.className = "agilo-solo-lock";
-      var paidTier = /^(pro|ent|business)$/.test(String(global.edition || "").toLowerCase());
-      lock.textContent = paidTier
-        ? "Dictée solo sera disponible après l’activation de l’API."
-        : "Dictée solo et génération de documents : offres Pro et Business/ENT. ";
-      if (!paidTier) {
-        var link = document.createElement("a");
-        link.href = "/tarifs";
-        link.textContent = "Voir les tarifs";
-        lock.appendChild(link);
-      }
+      lock.textContent = "Dictée solo et génération de documents : offres Pro et Business/ENT. ";
+      var link = document.createElement("a");
+      link.href = "/tarifs";
+      link.textContent = "Voir les tarifs";
+      lock.appendChild(link);
       wrap.insertAdjacentElement("afterend", lock);
     }
   }
@@ -491,7 +487,7 @@
     if (ta) ta.value = "";
     state.email = email;
     state.userChosen = false;
-    state.usage = email && soloAllowed() ? readStoredUsage(email) : DEFAULT_USAGE;
+    state.usage = email && soloTabAllowed() ? readStoredUsage(email) : DEFAULT_USAGE;
     applyUsageUi();
     document.dispatchEvent(new CustomEvent("agilo-dictee-usage-change", { detail: { usage: state.usage } }));
     document.dispatchEvent(new CustomEvent("agilo-dictee-account-ready", { detail: { email: email } }));
@@ -513,7 +509,7 @@
     waitForEmail(function (email) {
       state.email = email;
       if (email) {
-        state.usage = soloAllowed()
+        state.usage = soloTabAllowed()
           ? (state.userChosen ? state.usage : readStoredUsage(email))
           : DEFAULT_USAGE;
         applyUsageUi();
@@ -551,6 +547,7 @@
     getEmail: function () {
       return readMemberEmail();
     },
+    soloTabAllowed: soloTabAllowed,
     soloAllowed: soloAllowed,
     mesTranscriptsHref: mesTranscriptsHref,
     nucleoSvg: nucleoSvg,

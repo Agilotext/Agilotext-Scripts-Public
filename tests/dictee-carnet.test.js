@@ -210,6 +210,7 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /insertBefore\(chrome, ta\)/);
     assert.match(usages, /Dictée solo/);
     assert.match(usages, /injectToolbar/);
+    assert.match(usages, /agilo-dictee-toolbar\{display:flex;flex-direction:column/);
     assert.match(document, /Générer le document/);
     assert.doesNotMatch(document, /Bientôt/);
     assert.match(usages, /generate\.hidden = !isCarnet/);
