@@ -424,7 +424,7 @@
       const link = idoc.createElement('link');
       link.rel = 'stylesheet';
       link.setAttribute('data-agilo-email-block-css', '1');
-      link.href = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@main/scripts/pages/editor/agilo-iframe-email-block.css?v=3';
+      link.href = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@e689423c29b83ec2c261b729e58b1b49bcb98e75/scripts/pages/editor/agilo-iframe-email-block.css?v=e689423c';
       idoc.head.appendChild(link);
     } catch (e) {
       if (window.AGILO_DEBUG) console.warn('[agilo] email block css', e);
@@ -3606,14 +3606,40 @@
           attachAudioSync();
         }
 
+        {
+          const loadedDto = {
+            job_meta: {
+              jobId: /^\d+$/.test(String(id)) ? parseInt(String(id), 10) : 0,
+              milli_duration: (window._segments || []).reduce((max, s) => {
+                const end = Number.isFinite(s.end) ? s.end : (Number(s.start) || 0);
+                return Math.max(max, Math.round(end * 1000));
+              }, 0),
+              speakerLabels: (window._segments || []).some((s) => String(s.speaker || '').trim() && s.speaker !== 'Speaker_A')
+            },
+            segments: (window._segments || []).map((s, i) => ({
+              id: String(s.id || `s${i}`),
+              milli_start: Math.max(0, Math.round((Number(s.start) || 0) * 1000)),
+              milli_end: Math.max(0, Math.round((Number.isFinite(s.end) ? s.end : (Number(s.start) || 0)) * 1000)),
+              speaker: String(s.speaker || ''),
+              text: String(s.text || '')
+            }))
+          };
+          window.__agiloLastLoadedTranscript = { jobId: String(id), transcript: loadedDto };
+          window.dispatchEvent(new CustomEvent('agilo:transcript-loaded', {
+            detail: { jobId: String(id), transcript: loadedDto }
+          }));
+        }
+
         if (window.AgiloConfidence && __mode === 'structured' && editors.transcript && window._segments?.length) {
-          try {
-            const mainForConf = {
-              segments: window._segments.map((s, i) => ({
-                id: String(s.id || `s${i}`),
-                text: String(s.text || '')
-              }))
-            };
+          const loadSeq = seq;
+          const mainForConf = {
+            segments: window._segments.map((s, i) => ({
+              id: String(s.id || `s${i}`),
+              text: String(s.text || '')
+            }))
+          };
+          Promise.resolve().then(async () => {
+            if (isStale(loadSeq)) return;
             await window.AgiloConfidence.applyAfterTranscriptLoad({
               apiBaseUrl: API_BASE,
               credentials: {
@@ -3626,11 +3652,12 @@
               transcriptRoot: editors.transcript,
               signal: __activeFetchCtl.signal
             });
-          } catch (confErr) {
+            if (isStale(loadSeq)) return;
+          }).catch((confErr) => {
             if (confErr?.name !== 'AbortError' && window.AGILO_DEBUG) {
               console.warn('[agilo:confidence] apply failed', confErr);
             }
-          }
+          });
         }
 
         if (window._segments?.length) {

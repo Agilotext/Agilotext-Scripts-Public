@@ -12,7 +12,7 @@
   const API_BASE = 'https://api.agilotext.com/api/v1';
   const ENDPOINT = API_BASE + '/updateTranscriptFile';
   const TOKEN_GET = API_BASE + '/getToken';
-  const VERSION   = 'save-manual-simple-v1';
+  const VERSION   = 'save-manual-simple-v1.1-history';
 
   const MIN_CONTENT_LENGTH = 10;  // min caractères pour considérer qu'il y a un transcript
   const MIN_SEGMENTS_COUNT = 1;   // min segments
@@ -325,7 +325,74 @@
     if (!res.ok || !j || j.status !== 'OK'){
       throw new Error(j && j.errorMessage ? j.errorMessage : 'Erreur HTTP '+res.status);
     }
-    return { res, j };
+    return { res, j, dto: tsJson };
+  }
+
+  function validateBackupDto(dto, jobId) {
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto) ||
+        String(dto.job_meta && dto.job_meta.jobId) !== String(jobId) ||
+        !Array.isArray(dto.segments) || dto.segments.length === 0) {
+      throw new Error('Sauvegarde de transcription invalide');
+    }
+    for (const segment of dto.segments) {
+      if (!segment || typeof segment.id !== 'string' ||
+          !Number.isSafeInteger(segment.milli_start) || segment.milli_start < 0 ||
+          !Number.isSafeInteger(segment.milli_end) || segment.milli_end < segment.milli_start ||
+          typeof segment.speaker !== 'string' || typeof segment.text !== 'string') {
+        throw new Error('Segment de sauvegarde invalide');
+      }
+    }
+    if (!dto.segments.some((segment) => String(segment.text || '').trim())) {
+      throw new Error('Sauvegarde de transcription vide');
+    }
+    return dto;
+  }
+
+  async function postTranscriptDto(creds, dto) {
+    const body = new URLSearchParams();
+    body.append('username', creds.email);
+    body.append('token', creds.token);
+    body.append('jobId', String(creds.jobId));
+    body.append('edition', creds.edition);
+    body.append('transcriptContent', JSON.stringify(dto));
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: body.toString(),
+      credentials: 'omit',
+      cache: 'no-store'
+    });
+    const raw = await res.text();
+    let j = null;
+    try { j = JSON.parse(raw); } catch (e) {}
+    if (!res.ok || !j || j.status !== 'OK') {
+      throw new Error(j && j.errorMessage ? j.errorMessage : 'Erreur HTTP ' + res.status);
+    }
+    return { res, j, dto, ok: true };
+  }
+
+  function setSaveInProgress(value) {
+    isSaving = Boolean(value);
+    window.__agiloSaveInProgress = isSaving;
+    window.dispatchEvent(new CustomEvent('agilo:transcript-save-busy', {
+      detail: { jobId: String(pickJobId()), busy: isSaving }
+    }));
+  }
+
+  function notifySaved(jobId, source, transcript) {
+    window.dispatchEvent(new CustomEvent('agilo:transcript-saved', {
+      detail: { jobId: String(jobId), source, transcript }
+    }));
+  }
+
+  function payloadFromSegments(creds, segments) {
+    const tsJson = buildTranscriptStatusJson(segments, creds.jobId);
+    return {
+      creds,
+      segments,
+      transcript_status: tsJson,
+      pick: { segmentsMs: tsJson.segments, text: tsJson.segments.map((s) => s.text).join('\n') }
+    };
   }
 
   // ========= Sauvegarde manuelle uniquement =========
@@ -336,12 +403,16 @@
     return tab ? tab.id || '' : '';
   }
 
-  async function doSave(btn){
+  async function doSave(btn, options){
+    options = options || {};
+    if (window.__agiloTranscriptHistoryRestoring && !options.history) {
+      return { ok:false, reason:'restore_in_progress' };
+    }
     if (isSaving) {
       log('save déjà en cours, ignoré');
       return { ok:false, reason:'already_saving' };
     }
-    isSaving = true;
+    setSaveInProgress(true);
 
     const originalText = btn ? (btn.textContent || '').trim() : '';
     if (btn && !btn.__idleText) btn.__idleText = originalText || 'Sauvegarder';
@@ -398,8 +469,9 @@
       }
 
       // 5) Envoi
-      const { res, j } = await postTranscript(creds, segments);
+      const { res, j, dto } = await postTranscript(creds, segments);
       console.log('[agilo:save] ✅ sauvegarde OK', res.status, j);
+      notifySaved(creds.jobId, options.history ? 'history-presave' : (btn ? 'manual' : 'requested'), dto);
 
       if (btn) {
         btn.textContent = 'Sauvegardé ✓';
@@ -407,8 +479,8 @@
           btn.textContent = btn.__idleText;
         }, 2000);
       }
-      if (window.toast) window.toast('Modification sauvegardée.');
-      return { ok:true, status:res.status, data:j };
+      if (btn && window.toast) window.toast('Modification sauvegardée.');
+      return { ok:true, status:res.status, data:j, dto };
 
     }catch(e){
       console.error('[agilo:save] ❌ erreur sauvegarde', e);
@@ -418,7 +490,7 @@
       else alert(msg);
       return { ok:false, error:e && e.message ? e.message : String(e) };
     } finally{
-      isSaving = false;
+      setSaveInProgress(false);
     }
   }
 
@@ -458,9 +530,27 @@
     window.agiloGetPayload = async function(){
       const creds    = await ensureCreds();
       const segments = buildSegments();
-      const tsJson   = buildTranscriptStatusJson(segments, creds.jobId);
-      return { creds, segments, transcript_status: tsJson };
+      return payloadFromSegments(creds, segments);
     };
+
+    window.agiloSaveCurrentForHistory = function(){
+      return doSave(null, { history: true });
+    };
+
+    window.agiloPostTranscriptFromBackupJson = async function(dto){
+      const creds = await ensureCreds();
+      const valid = validateBackupDto(dto, creds.jobId);
+      const result = await postTranscriptDto(creds, valid);
+      notifySaved(creds.jobId, 'history-restore', valid);
+      return { ok: true, status: result.res.status, data: result.j, dto: valid };
+    };
+
+    window.agiloFinishTranscriptRestore = async function(jobId){
+      try { localStorage.removeItem('agilo:draft:' + String(jobId || pickJobId())); } catch (e) {}
+      return true;
+    };
+
+    window.__agiloSaveHelpers = { validateBackupDto, payloadFromSegments };
 
     window.agiloGetState = function(){
       const edition = pickEdition();

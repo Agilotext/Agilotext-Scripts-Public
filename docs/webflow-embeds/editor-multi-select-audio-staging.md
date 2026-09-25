@@ -1,6 +1,7 @@
 # Éditeur Business — sélection multiple et lecture pendant la saisie
 
-Branche de travail : `codex/editor-multi-select-audio`, créée depuis `origin/1.11`.
+Branche de pin : `fix/editor-multi-select-lotb` (Codex `365f0e43` + hunks Lot B + Revenir par onglet).  
+Ne pas piner `365f0e43` seul (pas de `agilo:transcript-loaded`, confidence encore `await`).
 
 ## Fichiers à épingler sur staging
 
