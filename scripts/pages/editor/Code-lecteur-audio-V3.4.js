@@ -8,7 +8,7 @@
 
 (function () {
   if (window.__agiloAudioLite) return;
-  window.__agiloAudioLite = '3.4-duration-fix';
+  window.__agiloAudioLite = '3.4-text-play-pause';
 
   // ---------- Refs DOM ----------
   let wrap, audio, playBtn, backBtn, fwdBtn, speedBtn, dlBtn;
@@ -22,7 +22,7 @@
   const DEBUG = qs.get('debugAudio') === '1' || window.AGILO_DEBUG;
   const log = (...a) => { if (DEBUG) console.log('[agilo:audio]', ...a); };
   const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
-    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre. La transcription et le compte rendu restent accessibles s’ils sont encore conservés par votre offre.';
+    || 'Cet audio n’est plus disponible : il a été supprimé selon la durée de conservation de votre offre (30 jours en Business).';
   const AUDIO_AUTH_MESSAGE = 'Votre accès audio a expiré ou n’est plus valide. Rechargez la page puis réessayez.';
   const AUDIO_GENERIC_MESSAGE = 'Impossible de charger cet audio pour le moment.';
   const AUTH_HINT_RE = /(invalid token|expired token|token invalide|jeton invalide|unauthorized|forbidden|authentication|authentification|missing token|error_invalid_token|error_token)/i;
@@ -619,8 +619,8 @@
     });
 
     const jump = s => { const d = getSafeDuration() || 0; audio.currentTime = Math.max(0, Math.min(d, (audio.currentTime || 0) + s)); };
-    const backClick = () => jump(-15);
-    const fwdClick = () => jump(+30);
+    const backClick = () => jump(-10);
+    const fwdClick = () => jump(+10);
     backBtn?.addEventListener?.('click', backClick);
     fwdBtn?.addEventListener?.('click', fwdClick);
     addCleanup(() => {
@@ -722,10 +722,22 @@
     // ---------- Raccourcis clavier ----------
     if (!document.__agiloAudioKeysBound) {
       const keyHandler = (e) => {
+        const isTranscriptText = !!e.target?.closest?.('#pane-transcript .ag-seg__text');
+        const playFromText = isTranscriptText && e.key === 'Enter'
+          && (e.ctrlKey !== e.metaKey) && !e.altKey && !e.shiftKey;
+        if (playFromText && !e.isComposing) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!e.repeat && audio && getSafeDuration() > 0 && !seekLocked) {
+            if (audio.paused) audio.play().catch(() => {});
+            else audio.pause();
+          }
+          return;
+        }
         const tag = (e.target?.tagName || '').toUpperCase();
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target?.isContentEditable)) return;
         const dur = getSafeDuration(); if (!dur) return;
-        const step = e.shiftKey ? 15 : 5;
+        const step = e.shiftKey ? 10 : 5;
 
         switch ((e.key || '').toLowerCase()) {
           case ' ': e.preventDefault(); if (!seekLocked) (audio.paused ? audio.play() : audio.pause()); break;
@@ -809,6 +821,16 @@
     buff = document.getElementById('agilo-buffered');
     thumb = document.getElementById('agilo-thumb');
     hoverTip = document.getElementById('agilo-hover');
+    if (backBtn) {
+      backBtn.textContent = '10s';
+      backBtn.setAttribute('aria-label', 'Reculer de 10 secondes');
+      backBtn.title = 'Reculer de 10 s (Shift+← = -10s, ← = -5s)';
+    }
+    if (fwdBtn) {
+      fwdBtn.textContent = '10s';
+      fwdBtn.setAttribute('aria-label', 'Avancer de 10 secondes');
+      fwdBtn.title = 'Avancer de 10 s (Shift+→ = +10s, → = +5s)';
+    }
   }
 
   async function start() {
