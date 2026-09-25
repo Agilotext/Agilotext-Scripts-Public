@@ -37,13 +37,19 @@ Complète [`PARENT_BRANCH.md`](PARENT_BRANCH.md) pour les pins collés. Scrape :
 <script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@1.02/scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js"></script>
 ```
 
-### Lot B+ (CORRIGE + history, SHA après push de cette branche)
+### Lot B+ (CORRIGE + history, 25/09)
 
-Remplacer `SHA40` / `SHA8` par le commit poussé :
+Commit `3c301705babd0dccfd905e3bbc741aa10012baae` (`fix/transcript-history-corrige`).
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA40/scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js?v=SHA8"></script>
-<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@SHA40/scripts/pages/editor/agilo-transcript-history.js?v=SHA8"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3c301705babd0dccfd905e3bbc741aa10012baae/scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js?v=3c301705"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3c301705babd0dccfd905e3bbc741aa10012baae/scripts/pages/editor/agilo-transcript-history.js?v=3c301705"></script>
+```
+
+Iframe confidence (P0/P1, même SHA) :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@3c301705babd0dccfd905e3bbc741aa10012baae/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js?v=3c301705"></script>
 ```
 
 ## Pins relevés 25/09 (Business)
