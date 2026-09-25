@@ -17,6 +17,15 @@ Contrôles du 25/09/2026 : le MCP Webflow local expose `pages_get_content` et `s
 
 ## Constat Webflow à renseigner avant toute écriture
 
+Commit des scripts candidats : `6526e346091e42a35b0969f8c4fbacc6ff879a91`. Les quatre URLs jsDelivr suivantes ont répondu HTTP 200 le 25/09/2026 ; elles ne prouvent pas encore quels embeds sont chargés par chaque page :
+
+- `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6526e346091e42a35b0969f8c4fbacc6ff879a91/scripts/pages/editor/agilo-transcript-history.js`
+- `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6526e346091e42a35b0969f8c4fbacc6ff879a91/scripts/pages/editor/Code-save_transcript-V2.js`
+- `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6526e346091e42a35b0969f8c4fbacc6ff879a91/scripts/pages/editor/Code-main-editor-IFRAME_V04.js`
+- `https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@6526e346091e42a35b0969f8c4fbacc6ff879a91/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js`
+
+La variante `confidence-v1` part du fork déjà épinglé dans un déploiement antérieur (`2302ac75cbc7f8bc13f709fb16ec1417c616047b`) et y ajoute uniquement le rechargement forcé et l'événement de chargement. Ce fork a été réintroduit sur la branche issue de `origin/1.11` pour éviter un recul de ses fonctions actuelles si cette variante est réellement utilisée.
+
 Site Agilotext `6815bee5a9c0b57da18354fb` ; pages Business `68e0f3b838626e418962aeff`, Pro `68ed41f20988e833cb4e3148`, Free `68ed64995fcf3e0b0b452916`.
 
 | Page | Embed save réel | Script save et pin | Script éditeur et pin | Credentials et ordre | Snapshot rollback |
