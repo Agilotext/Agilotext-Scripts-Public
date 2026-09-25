@@ -43,4 +43,13 @@ Scrape : `scripts/dev/compare-editor-pins.sh` (branche `fix/transcript-history-c
 
 ### Lot C (multi-select + Revenir par onglet)
 
-Branche `fix/editor-multi-select-lotb`. SHA à coller après push (voir fin de fichier).
+Commit `57101fff4aff111afcc98cae856fd9f6998fbbd9` (`fix/editor-multi-select-lotb`).
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/Code-editor-css.js?v=57101fff"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/Code-lecteur-audio-V3.4.js?v=57101fff"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/confidence-v1/Code-main-editor-IFRAME_V04-confidence.js?v=57101fff"></script>
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js?v=57101fff"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/agilo-transcript-history.js?v=57101fff"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@57101fff4aff111afcc98cae856fd9f6998fbbd9/scripts/pages/editor/agilo-cr-history.js?v=57101fff"></script>
+```
