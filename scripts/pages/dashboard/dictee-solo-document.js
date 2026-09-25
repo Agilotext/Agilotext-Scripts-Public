@@ -5,7 +5,8 @@
   var state = {
     email: "", draftId: "", recording: false, saving: false, sending: false,
     audioCount: 0, storageError: "", segmentFailed: false, reviewConfirmed: false,
-    submission: null, apiError: "", serverBlocked: false, ready: false, mounted: false
+    submission: null, apiError: "", serverBlocked: false, cleanupWarning: false,
+    ready: false, mounted: false
   };
   var root = null;
   var channel = null;
@@ -95,6 +96,8 @@
       (state.segmentFailed && !state.reviewConfirmed) || !available();
     label.textContent = state.sending ? "Envoi en cours…" : "Générer le document";
     if (state.sending) setStatus("Envoi en cours…", false);
+    else if (done && (state.cleanupWarning || state.audioCount > 0))
+      setStatus("Reçu pour traitement. L’audio local est conservé ; vérifiez Mes fichiers avant d’effacer ce brouillon.", true);
     else if (done) setStatus("Reçu pour traitement. Le document sera disponible dans l’éditeur.", false);
     else if (pending) setStatus("Réponse incertaine. Vérifiez Mes fichiers avant de reprendre cet envoi.", true);
     else if (state.storageError) setStatus("Audio local indisponible. Le texte reste copiable ; la génération ne peut pas démarrer.", true);
@@ -130,6 +133,7 @@
       state.segmentFailed = false;
       state.reviewConfirmed = false;
       state.serverBlocked = false;
+      state.cleanupWarning = false;
       state.ready = false;
       try { state.draftId = api().getDraftId(email); }
       catch (e) { state.storageError = e.message || "storage_error"; update(); return; }
@@ -152,6 +156,7 @@
       if (expectedEmail !== state.email || expectedDraft !== state.draftId) return;
       state.audioCount = pair[0].length;
       state.submission = pair[1];
+      state.cleanupWarning = !!(pair[1] && pair[1].status === "accepted" && pair[0].length);
       state.storageError = "";
       state.ready = true;
     } catch (e) {
@@ -219,14 +224,18 @@
       var wav = await api().buildWav(snapshot.email, snapshot.draftId, snapshot.audioSessionIds);
       var jobId = await postFrozen(snapshot, wav);
       var accepted = Object.assign({}, snapshot, { status: "accepted", jobId: jobId });
+      var journalPersisted = true;
       try { await api().saveSubmission(snapshot.email, snapshot.draftId, accepted); }
-      catch (e) { console.warn("[Agilotext] document journal", e); }
+      catch (e) { journalPersisted = false; console.warn("[Agilotext] document journal", e); }
       if (snapshot.email === state.email && snapshot.draftId === state.draftId) state.submission = accepted;
       state.apiError = "";
-      try {
-        await api().clearAudio(snapshot.email, snapshot.draftId, snapshot.audioSessionIds);
-        if (snapshot.email === state.email && snapshot.draftId === state.draftId) state.audioCount = 0;
-      } catch (e) { console.warn("[Agilotext] audio cleanup", e); }
+      state.cleanupWarning = !journalPersisted;
+      if (journalPersisted) {
+        try {
+          await api().clearAudio(snapshot.email, snapshot.draftId, snapshot.audioSessionIds);
+          if (snapshot.email === state.email && snapshot.draftId === state.draftId) state.audioCount = 0;
+        } catch (e) { state.cleanupWarning = true; console.warn("[Agilotext] audio cleanup", e); }
+      }
       try { global.localStorage.removeItem(reviewKey(snapshot.email, snapshot.draftId)); } catch (e) {}
       notifyOtherTabs();
       document.dispatchEvent(new CustomEvent("agilo-solo-document-accepted", { detail: { jobId: jobId } }));
@@ -281,6 +290,7 @@
       await api().reserveSubmission(email, draftId, snapshot);
       state.submission = snapshot;
       state.apiError = "";
+      state.cleanupWarning = false;
       state.saving = false;
       notifyOtherTabs();
       update();
@@ -319,6 +329,7 @@
       state.reviewConfirmed = false;
       state.storageError = "";
       state.apiError = "";
+      state.cleanupWarning = false;
       root.querySelector(".agilo-solo-document__review input").checked = false;
       notifyOtherTabs();
       update();
