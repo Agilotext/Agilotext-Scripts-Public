@@ -334,6 +334,7 @@ function mountAgiloLiveVoice() {
   if (pickerHost && window.AgiloDicteeCarnetPicker && typeof window.AgiloDicteeCarnetPicker.mount === "function") {
     window.AgiloDicteeCarnetPicker.mount(pickerHost);
   }
+  if (window.AgiloDicteeSoloDocument) window.AgiloDicteeSoloDocument.mount();
 
   var liveCtrl = window.AgiloLiveVoice.mount({
     root: root,
@@ -345,7 +346,11 @@ function mountAgiloLiveVoice() {
       return (window.AgiloDicteeUsages && window.AgiloDicteeUsages.getUsage()) || "reunion";
     },
 
-    postCarnetSegment: async function ({ blob, email }) {
+    canStartCarnet: function () {
+      return !window.AgiloDicteeSoloDocument || window.AgiloDicteeSoloDocument.canStart();
+    },
+
+    postCarnetSegment: async function ({ blob, email, sessionId, segmentId }) {
       var tokenOk = await ensureValidToken(email, true);
       if (!tokenOk || !globalToken) {
         return { ok: false, errorCode: "invalid_token", httpStatus: 401 };
@@ -354,6 +359,10 @@ function mountAgiloLiveVoice() {
       fd.append("username", email);
       fd.append("token", globalToken);
       fd.append("edition", edition);
+      if (window.AgiloDicteeSoloDocument && window.AgiloDicteeSoloDocument.contractReady()) {
+        fd.append("sessionId", sessionId);
+        fd.append("segmentId", segmentId);
+      }
       fd.append("audio", new File([blob], "segment.wav", { type: "audio/wav" }));
       var res;
       try {
@@ -378,6 +387,11 @@ function mountAgiloLiveVoice() {
         httpStatus: res.status,
         textToPaste: paste
       };
+    },
+
+    onCarnetAudioReady: function (options) {
+      if (!window.AgiloDicteeSoloDocument) return Promise.reject(new Error("storage_unavailable"));
+      return window.AgiloDicteeSoloDocument.saveStoppedAudio(options);
     },
 
     getAgiloAuth: async function (email) {
@@ -607,6 +621,14 @@ function mountAgiloLiveVoice() {
     }
     tick();
   })();
+
+  document.addEventListener("agilo-dictee-account-ready", function (event) {
+    var email = event.detail && event.detail.email;
+    if (!email || !window.AgiloDicteeCarnetPicker) return;
+    ensureValidToken(email, true).then(function (ok) {
+      if (ok && window.AgiloDicteeUsages.getEmail() === email) AgiloDicteeCarnetPicker.loadModels();
+    });
+  });
 }
 
 window.mountAgiloLiveVoice = mountAgiloLiveVoice;

@@ -1,5 +1,5 @@
 /**
- * Dictée dashboard : usages Réunion / Carnet.
+ * Dictée dashboard : usages Réunion / Dictée solo (clé interne carnet).
  * Persist localStorage agilotext:dicteeUsage:{email} après hydratation Memberstack.
  * Masque options globaux seulement si onglet Dictée + Carnet (wrapper aussi utilisé par Fichier).
  */
@@ -31,6 +31,7 @@
     usage: DEFAULT_USAGE,
     email: "",
     recording: false,
+    userChosen: false,
     mounted: false
   };
 
@@ -47,6 +48,14 @@
 
   function normalizeUsage(v) {
     return v === "carnet" ? "carnet" : DEFAULT_USAGE;
+  }
+
+  function soloAllowed() {
+    var tier = String(global.edition || "").toLowerCase();
+    var paid = tier === "pro" || tier === "ent" || tier === "business";
+    var preview = global.AGILO_SOLO_DOCUMENT_PREVIEW === true &&
+      readMemberEmail() === "bauerwebpro@gmail.com";
+    return paid && (global.AGILO_SOLO_DOCUMENT_CONTRACT_READY === true || preview);
   }
 
   function readMemberEmail() {
@@ -210,20 +219,19 @@
       ".agilo-dictee-usage__btn{appearance:none;text-align:left;cursor:pointer;border:1.5px solid #d4d4d4;background:#fff;border-radius:12px;padding:.7rem .85rem;font-family:inherit;color:#171717;transition:border-color .15s,box-shadow .15s,background .15s;}" +
       ".agilo-dictee-usage__btn[aria-selected='true']{border-color:var(--agilo-primary,#174a96);box-shadow:0 0 0 1px var(--agilo-primary,#174a96);background:#f4f7fb;}" +
       ".agilo-dictee-usage__btn:disabled{opacity:.55;cursor:not-allowed;}" +
+      ".agilo-dictee-usage__btn:focus-visible{outline:3px solid var(--agilo-primary,#174a96);outline-offset:3px;}" +
       ".agilo-dictee-usage__head{display:flex;align-items:center;gap:.45rem;}" +
       ".agilo-dictee-usage__ico,.agilo-dictee-usage__head svg{flex:0 0 18px;color:var(--agilo-primary,#174a96);}" +
       ".agilo-dictee-usage__title{display:block;font-size:.92rem;font-weight:700;line-height:1.2;}" +
       ".agilo-dictee-usage__sub{display:block;margin-top:.28rem;font-size:.75rem;line-height:1.35;color:#525252;font-weight:400;}" +
       ".agilo-carnet-chrome{margin:0 0 .75rem;}" +
       ".agilo-carnet-help{margin:0 0 .65rem;font-size:.82rem;line-height:1.45;color:#404040;}" +
-      ".agilo-carnet-generate{display:none;flex-wrap:wrap;align-items:center;gap:.4rem .65rem;margin:.75rem 0 0;color:#525252;font-size:.82rem;line-height:1.4;cursor:default;user-select:none;}" +
-      "#live-streaming-panel.is-carnet .agilo-carnet-generate:not([hidden]),[data-agilo-streaming-root].is-carnet .agilo-carnet-generate:not([hidden]){display:flex;}" +
-      ".agilo-carnet-generate[hidden]{display:none !important;}" +
-      ".agilo-carnet-generate__ico{display:inline-flex;color:var(--agilo-primary,#174a96);}" +
-      ".agilo-carnet-generate__label{font-weight:600;color:#404040;}" +
-      ".agilo-chip-bientot{display:inline-flex;align-items:center;padding:.15rem .5rem;border-radius:999px;background:#eef2ff;color:var(--agilo-primary,#174a96);font-size:.72rem;font-weight:700;letter-spacing:.02em;}" +
-      ".agilo-carnet-generate a{font-size:.82rem;color:var(--agilo-primary,#174a96);}" +
       ".agilo-carnet-error{min-height:1.1rem;margin:.45rem 0 0;font-size:.8rem;line-height:1.35;color:#b42318;}" +
+      ".agilo-dictee-toolbar{display:flex;align-items:center;justify-content:center;gap:1.25rem;flex-wrap:wrap;margin:.55rem 0 1rem;}" +
+      ".agilo-dictee-toolbar .dictee-timer,.agilo-dictee-toolbar .dictee-actions{margin:0;}" +
+      "@media(max-width:640px){.agilo-dictee-toolbar{flex-direction:column;gap:.55rem;}}" +
+      ".agilo-solo-lock{font-size:.8rem;color:#525252;margin:.45rem 0 .8rem;}" +
+      ".agilo-solo-lock a{color:var(--agilo-primary,#174a96);text-decoration:underline;}" +
       "#live-streaming-panel.is-carnet #agilo-copy-btn,[data-agilo-streaming-root].is-carnet #agilo-copy-btn{background:#fff !important;color:var(--agilo-primary,#174a96) !important;border:1.5px solid var(--agilo-primary,#174a96) !important;}";
     document.head.appendChild(style);
   }
@@ -250,7 +258,9 @@
     var root = document.getElementById("agilo-dictee-usage");
     if (!root) return;
     var btns = root.querySelectorAll("[data-agilo-usage]");
-    for (var i = 0; i < btns.length; i++) btns[i].disabled = !!disabled;
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].disabled = !!disabled || (btns[i].getAttribute("data-agilo-usage") === "carnet" && !soloAllowed());
+    }
     if (global.AgiloDicteeCarnetPicker && typeof AgiloDicteeCarnetPicker.setDisabled === "function") {
       AgiloDicteeCarnetPicker.setDisabled(!!disabled);
     }
@@ -258,7 +268,7 @@
 
   function applyCopyLabel() {
     var el = document.getElementById("agilo-copy-btn-text");
-    if (el) el.textContent = state.usage === "carnet" ? "Copier le carnet" : "Copier le texte";
+    if (el) el.textContent = "Copier le texte";
   }
 
   function applyPlaceholder() {
@@ -282,7 +292,7 @@
     var note = document.querySelector("#panel-dictee .dictee-note");
     var help = document.getElementById("agilo-carnet-help");
     var chrome = document.getElementById("agilo-carnet-chrome");
-    var generate = document.getElementById("agilo-carnet-generate");
+    var generate = document.getElementById("agilo-solo-document");
     var isCarnet = state.usage === "carnet";
     if (preview) setWrapDisplay(preview, isCarnet);
     if (help) setWrapDisplay(help, !isCarnet);
@@ -329,10 +339,15 @@
 
   function setUsage(next, persist) {
     var usage = normalizeUsage(next);
+    if (usage === "carnet" && !soloAllowed()) return;
     if (state.recording && usage !== state.usage) return;
     persistDraftFromTextarea();
     state.usage = usage;
-    if (persist) writeStoredUsage(state.email, usage);
+    if (persist) {
+      state.userChosen = true;
+      state.email = readMemberEmail() || state.email;
+      writeStoredUsage(state.email, usage);
+    }
     applyUsageUi();
     if (global.document) {
       document.dispatchEvent(
@@ -359,8 +374,8 @@
       '<button type="button" class="agilo-dictee-usage__btn" role="tab" data-agilo-usage="carnet" aria-selected="false">' +
       '<span class="agilo-dictee-usage__head">' +
       nucleoSvg("document") +
-      '<span class="agilo-dictee-usage__title">Carnet</span></span>' +
-      '<span class="agilo-dictee-usage__sub">À chaque pause, une phrase déjà ponctuée. Idéal dicté seul.</span>' +
+      '<span class="agilo-dictee-usage__title">Dictée solo</span></span>' +
+      '<span class="agilo-dictee-usage__sub">Une phrase ponctuée à chaque pause. À relire avant le document.</span>' +
       "</button>";
     if (timer && timer.parentNode) {
       timer.parentNode.insertBefore(wrap, timer);
@@ -372,6 +387,39 @@
       if (!btn || btn.disabled) return;
       setUsage(btn.getAttribute("data-agilo-usage"), true);
     });
+    if (!soloAllowed()) {
+      var solo = wrap.querySelector('[data-agilo-usage="carnet"]');
+      if (solo) {
+        solo.disabled = true;
+        solo.setAttribute("aria-disabled", "true");
+      }
+      var lock = document.createElement("p");
+      lock.className = "agilo-solo-lock";
+      var paidTier = /^(pro|ent|business)$/.test(String(global.edition || "").toLowerCase());
+      lock.textContent = paidTier
+        ? "Dictée solo sera disponible après l’activation de l’API."
+        : "Dictée solo et génération de documents : offres Pro et Business/ENT. ";
+      if (!paidTier) {
+        var link = document.createElement("a");
+        link.href = "/tarifs";
+        link.textContent = "Voir les tarifs";
+        lock.appendChild(link);
+      }
+      wrap.insertAdjacentElement("afterend", lock);
+    }
+  }
+
+  function injectToolbar(panel) {
+    if (document.getElementById("agilo-dictee-toolbar")) return;
+    var timer = panel.querySelector("#agilo-streaming-timer");
+    var actions = panel.querySelector(".dictee-actions");
+    if (!timer || !actions || !timer.parentNode) return;
+    var row = document.createElement("div");
+    row.id = "agilo-dictee-toolbar";
+    row.className = "agilo-dictee-toolbar";
+    timer.parentNode.insertBefore(row, timer);
+    row.appendChild(timer);
+    row.appendChild(actions);
   }
 
   function injectCarnetChrome(panel) {
@@ -382,40 +430,13 @@
     chrome.className = "agilo-carnet-chrome";
     chrome.hidden = true;
     chrome.innerHTML =
-      '<p id="agilo-carnet-help" class="agilo-carnet-help">À chaque pause, une phrase déjà ponctuée. Relisez les noms et les chiffres. Le carnet reste si vous relancez.</p>' +
+      '<p id="agilo-carnet-help" class="agilo-carnet-help">À chaque pause, une phrase ponctuée s’ajoute. Corrigez le texte avant de générer le document ; celui-ci sera traité après l’envoi.</p>' +
       '<div id="agilo-carnet-picker-host"></div>' +
       '<p id="agilo-carnet-error" class="agilo-carnet-error" role="status" aria-live="polite"></p>';
     if (ta && ta.parentNode) {
       ta.parentNode.insertBefore(chrome, ta);
     } else {
       panel.appendChild(chrome);
-    }
-  }
-
-  function injectGenerate(panel) {
-    if (document.getElementById("agilo-carnet-generate")) return;
-    var gen = document.createElement("div");
-    gen.id = "agilo-carnet-generate";
-    gen.className = "agilo-carnet-generate";
-    gen.hidden = true;
-    gen.innerHTML =
-      '<span class="agilo-carnet-generate__ico" aria-hidden="true">' +
-      nucleoSvg("sparkle") +
-      "</span>" +
-      '<span class="agilo-carnet-generate__label">Générer le document</span>' +
-      '<span class="agilo-chip-bientot">Bientôt</span>' +
-      '<a id="agilo-carnet-mes-fichiers" href="' +
-      mesTranscriptsHref() +
-      '">Mes fichiers</a>';
-    var copyWrap =
-      panel.querySelector(".dictee-secondary-actions") ||
-      (document.getElementById("agilo-copy-btn") &&
-        document.getElementById("agilo-copy-btn").parentElement);
-    if (copyWrap && copyWrap.parentNode) {
-      if (copyWrap.nextSibling) copyWrap.parentNode.insertBefore(gen, copyWrap.nextSibling);
-      else copyWrap.parentNode.appendChild(gen);
-    } else {
-      panel.appendChild(gen);
     }
   }
 
@@ -462,27 +483,46 @@
     tick();
   }
 
+  function refreshAccount() {
+    var email = readMemberEmail();
+    if (email === state.email || state.recording) return;
+    persistDraftFromTextarea();
+    var ta = document.querySelector("[data-agilo-streaming-text]");
+    if (ta) ta.value = "";
+    state.email = email;
+    state.userChosen = false;
+    state.usage = email && soloAllowed() ? readStoredUsage(email) : DEFAULT_USAGE;
+    applyUsageUi();
+    document.dispatchEvent(new CustomEvent("agilo-dictee-usage-change", { detail: { usage: state.usage } }));
+    document.dispatchEvent(new CustomEvent("agilo-dictee-account-ready", { detail: { email: email } }));
+  }
+
   function mount() {
     if (state.mounted) return;
     var panel = document.getElementById("panel-dictee");
     if (!panel) return;
     ensureCss();
     injectSwitch(panel);
+    injectToolbar(panel);
     injectCarnetChrome(panel);
-    injectGenerate(panel);
     bindTextareaDraft(panel);
     bindSourceTabs();
+    global.addEventListener("focus", refreshAccount);
     state.mounted = true;
     applyUsageUi();
     waitForEmail(function (email) {
       state.email = email;
       if (email) {
-        state.usage = readStoredUsage(email);
+        state.usage = soloAllowed()
+          ? (state.userChosen ? state.usage : readStoredUsage(email))
+          : DEFAULT_USAGE;
         applyUsageUi();
       } else {
         state.usage = DEFAULT_USAGE;
         applyUsageUi();
       }
+      document.dispatchEvent(new CustomEvent("agilo-dictee-usage-change", { detail: { usage: state.usage } }));
+      document.dispatchEvent(new CustomEvent("agilo-dictee-account-ready", { detail: { email: state.email } }));
     });
   }
 
@@ -498,6 +538,7 @@
     PLACEHOLDER_CARNET: PLACEHOLDER_CARNET,
     normalizeUsage: normalizeUsage,
     readMemberEmail: readMemberEmail,
+    refreshAccount: refreshAccount,
     usageKey: usageKey,
     draftKey: draftKey,
     promptKey: promptKey,
@@ -508,8 +549,11 @@
       return state.usage;
     },
     getEmail: function () {
-      return state.email || readMemberEmail();
+      return readMemberEmail();
     },
+    soloAllowed: soloAllowed,
+    mesTranscriptsHref: mesTranscriptsHref,
+    nucleoSvg: nucleoSvg,
     setUsage: setUsage,
     readDraft: readDraft,
     writeDraft: writeDraft,
@@ -525,6 +569,7 @@
         status === "uploading";
       state.recording = rec;
       setSwitchDisabled(rec);
+      document.dispatchEvent(new CustomEvent("agilo-dictee-voice-status", { detail: { status: status } }));
     },
     applyUsageUi: applyUsageUi,
     mount: mount

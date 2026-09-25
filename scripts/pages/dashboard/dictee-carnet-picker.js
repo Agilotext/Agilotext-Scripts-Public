@@ -2,7 +2,7 @@
  * Picker modèles du Carnet (dashboard).
  * Personnalisés + Standards, recherche, dernier id sinon 817, jamais CSE 1 auto.
  * Icônes Nucleo bouton + liste. Pas le wizard / cadenas.
- * V1 : l’id est persisté (Générer = Bientôt).
+ * Le modèle choisi est persisté par compte et sert au document Dictée solo.
  */
 (function (global) {
   "use strict";
@@ -284,6 +284,9 @@
       renderButton();
       if (open) renderList();
       if (persist) persistSelected();
+      document.dispatchEvent(new CustomEvent("agilo-carnet-picker-change", {
+        detail: { promptId: selected ? selected.id : "" }
+      }));
     }
 
     function onDocDown(e) {
@@ -395,12 +398,14 @@
 
   function loadModels() {
     if (!ctl) return Promise.resolve();
+    var requestedEmail = global.AgiloDicteeUsages && AgiloDicteeUsages.getEmail();
     ctl.setStatus("Chargement des modèles…");
     return Promise.all([
       postUrlEncoded("/getPromptModelsUserInfo"),
       postUrlEncoded("/getPromptModelsStandardInfo")
     ])
       .then(function (pair) {
+        if (requestedEmail !== (global.AgiloDicteeUsages && AgiloDicteeUsages.getEmail())) return;
         var user = extractPromptList(pair[0]).map(function (m) {
           var n = normalizeModel(m, "USER");
           return n;

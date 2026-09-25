@@ -317,7 +317,10 @@
       maxSpeakers: 0,
       lastLiveSpeaker: "",
       turns: [],
-      carnetBlocked: false
+      carnetBlocked: false,
+      soloSessionId: "",
+      soloDraftId: "",
+      soloStartedAt: 0
     };
     this._carnet = null;
 
@@ -502,7 +505,7 @@
             self.refreshDomRefs();
             var carnet = self.getUsage() === "carnet";
             if (self.els.copyText) {
-              self.els.copyText.textContent = carnet ? "Copier le carnet" : "Copier le texte";
+              self.els.copyText.textContent = "Copier le texte";
             }
             if (self.els.copyBtn) self.els.copyBtn.classList.remove("copied");
           }, 2000);
@@ -930,6 +933,15 @@
     var self = this;
     var isCarnet = this.getUsage() === "carnet";
 
+    if (isCarnet && this.config.canStartCarnet && !this.config.canStartCarnet()) {
+      if (window.AgiloDicteeUsages) {
+        window.AgiloDicteeUsages.setCarnetError(
+          "Terminez l’envoi précédent ou démarrez une nouvelle dictée solo."
+        );
+      }
+      return;
+    }
+
     if (!this._checkLimits()) return;
 
     this.state.email = this.getEmail();
@@ -942,6 +954,16 @@
     }
 
     if (isCarnet) {
+      if (window.AgiloSoloAudio) {
+        try {
+          this.state.soloSessionId = window.AgiloSoloAudio.newId();
+          this.state.soloDraftId = window.AgiloSoloAudio.getDraftId(this.state.email);
+          this.state.soloStartedAt = Date.now();
+        } catch (e) {
+          this.state.soloSessionId = "";
+          this.state.soloDraftId = "";
+        }
+      }
       this.refreshDomRefs();
       var existing = (this.els.text && this.els.text.value) || "";
       if (!existing && window.AgiloDicteeUsages) {
@@ -1085,16 +1107,32 @@
 
     if (isCarnet) {
       this.stopTimer();
-      this.setStatus("idle", "Carnet prêt");
+      this.setStatus("uploading", "Finalisation de la dictée…");
       var flush = this._carnetRequestStop ? this._carnetRequestStop() : Promise.resolve();
       return flush
         .catch(function () {})
+        .then(function () {
+          if (!self.state.pcmChunks.length || !self.config.onCarnetAudioReady) return;
+          var blob = pcm16ChunksToWavBlob(self.state.pcmChunks, self.state.sampleRate);
+          return self.config.onCarnetAudioReady({
+            blob: blob, email: self.state.email,
+            draftId: self.state.soloDraftId,
+            sessionId: self.state.soloSessionId,
+            startedAt: self.state.soloStartedAt
+          }).then(function () { self.state.pcmChunks = []; });
+        })
+        .catch(function (err) {
+          console.warn("[AgiloLive] stockage audio Dictée solo", err);
+          if (window.AgiloDicteeUsages) {
+            window.AgiloDicteeUsages.setCarnetError("Audio local non conservé. Le texte reste copiable.");
+          }
+        })
         .then(function () {
           return self.teardownAudio();
         })
         .then(function () {
           self.resetTimer();
-          self.setStatus("idle", "Carnet prêt");
+          self.setStatus("idle", "Dictée solo prête");
           if (self.els.levelFill) self.els.levelFill.style.width = "0%";
           if (window.AgiloDicteeUsages) {
             window.AgiloDicteeUsages.persistDraftFromTextarea();
@@ -1177,6 +1215,7 @@
       segmentStartedAt: Date.now(),
       pauseTimer: null,
       postChain: Promise.resolve(),
+      nextSegment: 0,
       disposed: false
     };
   };
@@ -1229,6 +1268,8 @@
     if (c === "invalid_token" || httpStatus === 401) {
       return "Session expirée. Rechargez la page puis réessayez.";
     }
+    if (c === "subscription_required") return "Dictée solo est réservée aux offres Pro et Business/ENT.";
+    if (c === "quota_minutes_exceeded") return "Quota mensuel de dictée atteint.";
     if (c === "audio_too_long" || c === "invalid_audio" || c === "unsupported_audio_format") {
       return "Segment illisible ou trop long. Réessayez plus court.";
     }
@@ -1241,17 +1282,19 @@
   AgiloLiveVoiceController.prototype._carnetEnqueuePost = function (chunks, voiced) {
     var self = this;
     if (!this._carnet) return Promise.resolve();
+    var segmentId = this.state.soloSessionId + ":" + (++this._carnet.nextSegment);
     this._carnet.postChain = this._carnet.postChain
       .then(function () {
-        return self._carnetSendSegment(chunks, voiced);
+        return self._carnetSendSegment(chunks, voiced, segmentId);
       })
       .catch(function (e) {
         console.warn("[AgiloLive] carnet POST", e);
+        document.dispatchEvent(new CustomEvent("agilo-carnet-segment-failed"));
       });
     return this._carnet.postChain;
   };
 
-  AgiloLiveVoiceController.prototype._carnetSendSegment = function (chunks, voiced) {
+  AgiloLiveVoiceController.prototype._carnetSendSegment = function (chunks, voiced, segmentId) {
     var self = this;
     if (!chunks || !chunks.length) return Promise.resolve();
     if (this.state.carnetBlocked) return Promise.resolve();
@@ -1263,10 +1306,11 @@
     if (typeof this.config.postCarnetSegment !== "function") {
       return Promise.resolve();
     }
-    this.setStatus("recording", "Envoi de la phrase…");
+    if (this.state.status === "recording") this.setStatus("recording", "Envoi de la phrase…");
     var blob = pcm16ChunksToWavBlob(chunks, this.state.sampleRate);
     return this.config
-      .postCarnetSegment({ blob: blob, email: this.state.email })
+      .postCarnetSegment({ blob: blob, email: this.state.email,
+        sessionId: this.state.soloSessionId, segmentId: segmentId })
       .then(function (result) {
         result = result || {};
         if (result.ok && result.textToPaste) {
@@ -1283,6 +1327,9 @@
             self._carnetMapError(code, result.httpStatus)
           );
         }
+        document.dispatchEvent(new CustomEvent("agilo-carnet-segment-failed", {
+          detail: { segmentId: segmentId, errorCode: code }
+        }));
         if (self.state.status === "recording") self.setStatus("recording", "En écoute...");
       });
   };

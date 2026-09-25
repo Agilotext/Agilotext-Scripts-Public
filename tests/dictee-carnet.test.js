@@ -45,7 +45,7 @@ describe("Dictee Carnet v2", function () {
     assert.match(stopSrc, /uploadBlob/);
   });
 
-  it("jamais createTranscriptFromText", function () {
+  it("createTranscriptFromText uniquement dans le module de document", function () {
     const files = [
       "scripts/shared/agilo-live-transcribe.js",
       "scripts/pages/dashboard/mount-streaming.js",
@@ -55,6 +55,8 @@ describe("Dictee Carnet v2", function () {
     files.forEach(function (f) {
       assert.doesNotMatch(read(f), /createTranscriptFromText/);
     });
+    assert.match(read("scripts/pages/dashboard/dictee-solo-document.js"), /createTranscriptFromText/);
+    assert.doesNotMatch(read("scripts/pages/dashboard/dictee-solo-document.js"), /sendMultipleAudio|agilo-upload-confirmed/);
   });
 
   it("POST dictationApiAssemblyAi dans mount", function () {
@@ -198,21 +200,21 @@ describe("Dictee Carnet v2", function () {
     assert.match(startSrc, /isCarnet/);
   });
 
-  it("UI Carnet version A: icones Nucleo, hide, ordre DOM", function () {
+  it("UI Dictée solo: icones Nucleo, actions, ordre DOM", function () {
     const usages = read("scripts/pages/dashboard/dictee-usages.js");
     const picker = read("scripts/pages/dashboard/dictee-carnet-picker.js");
+    const document = read("scripts/pages/dashboard/dictee-solo-document.js");
     assert.match(usages, /nucleoSvg\("meeting"\)/);
     assert.match(usages, /nucleoSvg\("document"\)/);
-    assert.match(usages, /nucleoSvg\("sparkle"\)/);
+    assert.match(document, /nucleoSvg\("sparkle"\)/);
     assert.match(usages, /insertBefore\(chrome, ta\)/);
-    const chromeFn = usages.slice(
-      usages.indexOf("function injectCarnetChrome"),
-      usages.indexOf("function injectGenerate")
-    );
-    assert.doesNotMatch(chromeFn, /agilo-carnet-generate/);
+    assert.match(usages, /Dictée solo/);
+    assert.match(usages, /injectToolbar/);
+    assert.match(document, /Générer le document/);
+    assert.doesNotMatch(document, /Bientôt/);
     assert.match(usages, /generate\.hidden = !isCarnet/);
     assert.match(usages, /chrome\.hidden = !isCarnet/);
-    assert.match(usages, /dictee-secondary-actions/);
+    assert.match(document, /dictee-secondary-actions/);
     assert.match(usages, /toggle-format-transcript/);
     assert.match(usages, /toggle-translate/);
     assert.match(usages, /agilo-prompt-picker-anchor/);
@@ -222,9 +224,9 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /classList.contains\("options-wrapper"\)/);
     assert.match(usages, /max-width:640px/);
     assert.match(usages, /PLACEHOLDER_CARNET/);
-    assert.match(usages, /cursor:default/);
+    assert.match(document, /agilo-solo-document__button/);
     assert.match(usages, /is-carnet #agilo-copy-btn/);
-    assert.doesNotMatch(usages, /<button[^>]*agilo-carnet-generate/);
+    assert.doesNotMatch(usages, /agilo-chip-bientot/);
     assert.match(picker, /agilo-carnet-picker__label">Modèles/);
     assert.match(picker, /Personnalisés/);
     assert.match(picker, /iconKey:/);
@@ -353,6 +355,8 @@ describe("Dictee Carnet v2", function () {
     };
     var sandbox = {
       window: {},
+      edition: "ent",
+      AGILO_SOLO_DOCUMENT_CONTRACT_READY: true,
       CustomEvent: function (name, opts) { this.type = name; this.detail = opts && opts.detail; },
       document: {
         getElementById: function (id) { return byId[id] || null; },

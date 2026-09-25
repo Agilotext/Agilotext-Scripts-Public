@@ -17,6 +17,8 @@
   var liveTranscribeUrl = bust("/scripts/shared/agilo-live-transcribe.js");
   var usagesUrl = bust("/scripts/pages/dashboard/dictee-usages.js");
   var pickerUrl = bust("/scripts/pages/dashboard/dictee-carnet-picker.js");
+  var soloAudioUrl = bust("/scripts/pages/dashboard/dictee-solo-audio.js");
+  var soloDocumentUrl = bust("/scripts/pages/dashboard/dictee-solo-document.js");
   var mountUrl = bust("/scripts/pages/dashboard/mount-streaming.js");
   var workletUrl = bust("/scripts/shared/pcm-audio-worklet.js");
 
@@ -45,6 +47,8 @@
     loadScriptOnce(liveTranscribeUrl)
       .then(function () { return loadScriptOnce(usagesUrl); })
       .then(function () { return loadScriptOnce(pickerUrl); })
+      .then(function () { return loadScriptOnce(soloAudioUrl); })
+      .then(function () { return loadScriptOnce(soloDocumentUrl); })
       .then(function () { return loadScriptOnce(mountUrl); })
       .then(function () {
         if (typeof window.AgiloLiveVoice === "undefined") {
