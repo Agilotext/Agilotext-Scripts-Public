@@ -213,9 +213,18 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /agilo-dictee-toolbar\{display:flex;flex-direction:column/);
     assert.match(document, /Générer le document/);
     assert.doesNotMatch(document, /Bientôt/);
+    assert.doesNotMatch(document, /Nouvelle dictée solo/);
+    assert.doesNotMatch(document, /attente de validation de l.API/);
+    assert.doesNotMatch(document, /mesTranscriptsHref|class="agilo-solo-document__files"/);
     assert.match(usages, /generate\.hidden = !isCarnet/);
     assert.match(usages, /chrome\.hidden = !isCarnet/);
-    assert.match(document, /dictee-secondary-actions/);
+    assert.match(usages, /agilo-solo-ta-copy/);
+    assert.match(usages, /agilo-carnet-picker-host/);
+    assert.match(usages, /data-agilo-solo-ta-wrap/);
+    assert.match(usages, /white-space:pre-wrap/);
+    assert.match(usages, /is-carnet \.dictee-secondary-actions\{display:none/);
+    assert.match(usages, /insertLineBreakAtCaret/);
+    assert.match(usages, /keydown/);
     assert.match(usages, /toggle-format-transcript/);
     assert.match(usages, /toggle-translate/);
     assert.match(usages, /agilo-prompt-picker-anchor/);
@@ -226,7 +235,7 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /max-width:640px/);
     assert.match(usages, /PLACEHOLDER_CARNET/);
     assert.match(document, /agilo-solo-document__button/);
-    assert.match(usages, /is-carnet #agilo-copy-btn/);
+    assert.match(document, /soloTabAllowed/);
     assert.doesNotMatch(usages, /agilo-chip-bientot/);
     assert.match(picker, /agilo-carnet-picker__label">Modèles/);
     assert.match(picker, /Personnalisés/);
@@ -234,6 +243,9 @@ describe("Dictee Carnet v2", function () {
     assert.match(picker, /setDisabled/);
     assert.doesNotMatch(picker, /Ajouter pour l.utiliser/);
     assert.doesNotMatch(picker, /data-open-wizard/);
+    const live = read("scripts/shared/agilo-live-transcribe.js");
+    assert.match(live, /_carnetAppendText/);
+    assert.match(live, /"\\n\\n"/);
   });
 
   it("picker conserve iconKey et jamais CSE 1 auto", function () {

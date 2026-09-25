@@ -1244,16 +1244,17 @@
     this.refreshDomRefs();
     var ta = this.els.text;
     var cur = ta ? ta.value : this.state.committedText || "";
-    var next = cur;
-    if (next && !/\s$/.test(next) && !/^[,.;:!?…]/.test(paste)) next += " ";
-    next += paste;
+    // Comme AgilotextExtension/agilotext-notebook.js appendPhrase
+    var next = cur ? cur + "\n\n" + paste : paste;
     this.state.committedText = next;
     if (ta) {
       ta.value = next;
+      ta.selectionStart = ta.selectionEnd = next.length;
       if (ta.scrollHeight > ta.clientHeight) {
         ta.style.height = "auto";
         ta.style.height = Math.min(ta.scrollHeight + 4, window.innerHeight * 0.5) + "px";
       }
+      ta.scrollTop = ta.scrollHeight;
     }
     if (window.AgiloDicteeUsages) {
       window.AgiloDicteeUsages.writeDraft(this.state.email, next);

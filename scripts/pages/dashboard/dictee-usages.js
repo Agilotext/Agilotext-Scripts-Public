@@ -227,13 +227,21 @@
       ".agilo-dictee-usage__sub{display:block;margin-top:.28rem;font-size:.75rem;line-height:1.35;color:#525252;font-weight:400;}" +
       ".agilo-carnet-chrome{margin:0 0 .75rem;}" +
       ".agilo-carnet-help{margin:0 0 .65rem;font-size:.82rem;line-height:1.45;color:#404040;}" +
-      ".agilo-carnet-error{min-height:1.1rem;margin:.45rem 0 0;font-size:.8rem;line-height:1.35;color:#b42318;}" +
+      ".agilo-carnet-after{margin:.35rem 0 .75rem;}" +
+      ".agilo-carnet-error{min-height:1.1rem;margin:.25rem 0 .45rem;font-size:.8rem;line-height:1.35;color:#b42318;}" +
+      ".agilo-solo-ta-wrap{position:relative;}" +
+      ".is-carnet [data-agilo-streaming-text],#live-streaming-panel.is-carnet [data-agilo-streaming-text]," +
+      "[data-agilo-streaming-root].is-carnet [data-agilo-streaming-text]{white-space:pre-wrap;}" +
+      ".agilo-solo-ta-copy{position:absolute;top:.45rem;right:.45rem;z-index:2;appearance:none;border:1.5px solid #d4d4d4;background:#fff;border-radius:8px;padding:.28rem .55rem;font-family:inherit;font-size:.75rem;font-weight:600;color:var(--agilo-primary,#174a96);cursor:pointer;line-height:1.2;}" +
+      ".agilo-solo-ta-copy:hover{border-color:var(--agilo-primary,#174a96);background:#f4f7fb;}" +
+      ".agilo-solo-ta-copy:focus-visible{outline:3px solid var(--agilo-primary,#174a96);outline-offset:2px;}" +
+      ".agilo-solo-ta-copy.is-done{border-color:#16a34a;color:#15803d;}" +
+      ".is-carnet .dictee-secondary-actions{display:none!important;}" +
       ".agilo-dictee-toolbar{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.55rem;margin:.55rem 0 1rem;}" +
       ".agilo-dictee-toolbar .dictee-timer,.agilo-dictee-toolbar .dictee-actions{margin:0;}" +
       ".agilo-dictee-toolbar .dictee-actions{width:min(100%,32rem);}" +
       ".agilo-solo-lock{font-size:.8rem;color:#525252;margin:.45rem 0 .8rem;}" +
-      ".agilo-solo-lock a{color:var(--agilo-primary,#174a96);text-decoration:underline;}" +
-      "#live-streaming-panel.is-carnet #agilo-copy-btn,[data-agilo-streaming-root].is-carnet #agilo-copy-btn{background:#fff !important;color:var(--agilo-primary,#174a96) !important;border:1.5px solid var(--agilo-primary,#174a96) !important;}";
+      ".agilo-solo-lock a{color:var(--agilo-primary,#174a96);text-decoration:underline;}";
     document.head.appendChild(style);
   }
 
@@ -293,11 +301,13 @@
     var note = document.querySelector("#panel-dictee .dictee-note");
     var help = document.getElementById("agilo-carnet-help");
     var chrome = document.getElementById("agilo-carnet-chrome");
+    var after = document.getElementById("agilo-carnet-after");
     var generate = document.getElementById("agilo-solo-document");
     var isCarnet = state.usage === "carnet";
     if (preview) setWrapDisplay(preview, isCarnet);
     if (help) setWrapDisplay(help, !isCarnet);
     if (chrome) chrome.hidden = !isCarnet;
+    if (after) after.hidden = !isCarnet;
     if (generate) generate.hidden = !isCarnet;
     if (note) {
       if (isCarnet) setWrapDisplay(note, true);
@@ -421,19 +431,76 @@
   function injectCarnetChrome(panel) {
     if (document.getElementById("agilo-carnet-chrome")) return;
     var ta = panel.querySelector("[data-agilo-streaming-text]");
+    if (!ta || !ta.parentNode) return;
+
     var chrome = document.createElement("div");
     chrome.id = "agilo-carnet-chrome";
     chrome.className = "agilo-carnet-chrome";
     chrome.hidden = true;
     chrome.innerHTML =
-      '<p id="agilo-carnet-help" class="agilo-carnet-help">À chaque pause, une phrase ponctuée s’ajoute. Corrigez le texte avant de générer le document ; celui-ci sera traité après l’envoi.</p>' +
-      '<div id="agilo-carnet-picker-host"></div>' +
-      '<p id="agilo-carnet-error" class="agilo-carnet-error" role="status" aria-live="polite"></p>';
-    if (ta && ta.parentNode) {
-      ta.parentNode.insertBefore(chrome, ta);
-    } else {
-      panel.appendChild(chrome);
-    }
+      '<p id="agilo-carnet-help" class="agilo-carnet-help">À chaque pause, une phrase ponctuée s’ajoute. Corrigez le texte avant de générer le document ; celui-ci sera traité après l’envoi.</p>';
+    ta.parentNode.insertBefore(chrome, ta);
+
+    var wrap = document.createElement("div");
+    wrap.className = "agilo-solo-ta-wrap";
+    wrap.setAttribute("data-agilo-solo-ta-wrap", "1");
+    ta.parentNode.insertBefore(wrap, ta);
+    wrap.appendChild(ta);
+
+    var copyBtn = document.createElement("button");
+    copyBtn.type = "button";
+    copyBtn.className = "agilo-solo-ta-copy";
+    copyBtn.id = "agilo-solo-ta-copy";
+    copyBtn.setAttribute("aria-label", "Copier le texte");
+    copyBtn.textContent = "Copier";
+    wrap.appendChild(copyBtn);
+    var copyTimer = null;
+    copyBtn.addEventListener("click", function () {
+      var text = ta.value || "";
+      function done() {
+        copyBtn.textContent = "Copié";
+        copyBtn.classList.add("is-done");
+        if (copyTimer) clearTimeout(copyTimer);
+        copyTimer = setTimeout(function () {
+          copyBtn.textContent = "Copier";
+          copyBtn.classList.remove("is-done");
+        }, 1600);
+      }
+      if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () {
+          try {
+            ta.focus();
+            ta.select();
+            document.execCommand("copy");
+            done();
+          } catch (e) {}
+        });
+      } else {
+        try {
+          ta.focus();
+          ta.select();
+          document.execCommand("copy");
+          done();
+        } catch (e) {}
+      }
+    });
+
+    var after = document.createElement("div");
+    after.id = "agilo-carnet-after";
+    after.className = "agilo-carnet-after";
+    after.hidden = true;
+    after.innerHTML =
+      '<p id="agilo-carnet-error" class="agilo-carnet-error" role="status" aria-live="polite"></p>' +
+      '<div id="agilo-carnet-picker-host"></div>';
+    wrap.parentNode.insertBefore(after, wrap.nextSibling);
+  }
+
+  function insertLineBreakAtCaret(ta) {
+    var start = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+    var end = ta.selectionEnd != null ? ta.selectionEnd : start;
+    ta.value = ta.value.slice(0, start) + "\n" + ta.value.slice(end);
+    ta.selectionStart = ta.selectionEnd = start + 1;
+    ta.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function bindTextareaDraft(panel) {
@@ -441,6 +508,7 @@
     if (!ta || ta.dataset.agiloCarnetDraftBound) return;
     ta.dataset.agiloCarnetDraftBound = "1";
     var t = null;
+    var enterBreakHandledThisTick = false;
     ta.addEventListener("input", function () {
       if (state.usage !== "carnet") return;
       if (t) clearTimeout(t);
@@ -448,6 +516,35 @@
         writeDraft(state.email, ta.value);
       }, 400);
     });
+    ta.addEventListener(
+      "keydown",
+      function (e) {
+        if (e.key !== "Enter") return;
+        if (e.isComposing) return;
+        if (state.usage !== "carnet") return;
+        e.preventDefault();
+        e.stopPropagation();
+        enterBreakHandledThisTick = true;
+        insertLineBreakAtCaret(ta);
+        Promise.resolve().then(function () {
+          enterBreakHandledThisTick = false;
+        });
+      },
+      true
+    );
+    ta.addEventListener(
+      "beforeinput",
+      function (e) {
+        if (e.inputType !== "insertLineBreak" && e.inputType !== "insertParagraph") return;
+        if (e.isComposing) return;
+        if (state.usage !== "carnet") return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (enterBreakHandledThisTick) return;
+        insertLineBreakAtCaret(ta);
+      },
+      true
+    );
   }
 
   function bindSourceTabs() {

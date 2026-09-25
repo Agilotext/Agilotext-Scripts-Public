@@ -23,7 +23,11 @@
   function previewReady() {
     return global.AGILO_SOLO_DOCUMENT_PREVIEW === true && state.email === "bauerwebpro@gmail.com";
   }
-  function available() { return contractReady() || previewReady(); }
+  function available() {
+    var U = usages();
+    var paid = U && typeof U.soloTabAllowed === "function" && U.soloTabAllowed();
+    return paid || contractReady() || previewReady();
+  }
   function textEl() { return document.querySelector("[data-agilo-streaming-text]"); }
   function editorUrl(jobId, edition) {
     var tier = String(edition || global.edition || "").toLowerCase() === "pro" ? "premium" : "business";
@@ -39,7 +43,6 @@
       ".agilo-solo-document{display:none;order:6;margin:1rem auto .3rem;width:min(100%,32rem);font-family:inherit;text-align:left;}" +
       ".is-carnet .agilo-solo-document:not([hidden]){display:block;}" +
       ".agilo-solo-document[hidden]{display:none!important;}" +
-      ".is-carnet .dictee-secondary-actions{order:7;}" +
       ".agilo-solo-document__button{display:inline-flex;align-items:center;justify-content:center;gap:.55rem;width:100%;min-height:48px;border:1.5px solid var(--agilo-primary,#174a96);border-radius:10px;background:var(--agilo-primary,#174a96);color:#fff;font-family:inherit;font-size:.92rem;font-weight:600;line-height:1.3;cursor:pointer;padding:.7rem 1rem;}" +
       ".agilo-solo-document__button:hover:not(:disabled){filter:brightness(.91);}" +
       ".agilo-solo-document__button:disabled{opacity:.55;cursor:not-allowed;}" +
@@ -78,7 +81,6 @@
     var review = root.querySelector(".agilo-solo-document__review");
     var editorLink = root.querySelector(".agilo-solo-document__editor");
     var retry = root.querySelector(".agilo-solo-document__retry");
-    var reset = root.querySelector(".agilo-solo-document__reset");
     var pending = state.submission &&
       (state.submission.status === "uncertain" || state.submission.status === "pending");
     var done = state.submission && state.submission.status === "accepted";
@@ -89,7 +91,6 @@
     editorLink.hidden = !done;
     if (done) editorLink.href = editorUrl(state.submission.jobId, state.submission.edition);
     retry.hidden = !pending || !contractReady();
-    reset.disabled = state.sending || state.saving || state.recording || pending;
     btn.disabled = state.recording || state.saving || state.sending || pending || done ||
       !state.ready || !state.email || state.serverBlocked || !!state.storageError ||
       !state.audioCount || !hasText || !selected ||
@@ -101,7 +102,6 @@
     else if (done) setStatus("Reçu pour traitement. Le document sera disponible dans l’éditeur.", false);
     else if (pending) setStatus("Réponse incertaine. Vérifiez Mes fichiers avant de reprendre cet envoi.", true);
     else if (state.storageError) setStatus("Audio local indisponible. Le texte reste copiable ; la génération ne peut pas démarrer.", true);
-    else if (!available()) setStatus("Génération en attente de validation de l’API.", false);
     else if (state.saving) setStatus("Finalisation de la dictée…", false);
     else if (state.apiError) setStatus(state.apiError, true);
     else if (state.segmentFailed && !state.reviewConfirmed) setStatus("Une phrase n’a pas été transcrite. Corrigez le texte, puis confirmez sa relecture.", true);
@@ -357,18 +357,18 @@
       '<label class="agilo-solo-document__check agilo-solo-document__open"><input type="checkbox">Ouvrir l’éditeur Agilotext après l’envoi</label>' +
       '<label class="agilo-solo-document__check agilo-solo-document__review" hidden><input type="checkbox">J’ai corrigé les passages manquants dans le texte</label>' +
       '<p class="agilo-solo-document__status" role="status" aria-live="polite"></p>' +
-      '<div class="agilo-solo-document__links"><a class="agilo-solo-document__editor" hidden>Ouvrir ce document</a>' +
-      '<a href="' + usages().mesTranscriptsHref() + '">Mes fichiers</a>' +
-      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button>' +
-      '<button type="button" class="agilo-solo-document__reset">Nouvelle dictée solo</button></div>';
-    var copy = panel.querySelector(".dictee-secondary-actions");
-    if (copy && copy.parentNode) copy.parentNode.insertBefore(root, copy);
+      '<div class="agilo-solo-document__links">' +
+      '<a class="agilo-solo-document__editor" hidden>Ouvrir ce document</a>' +
+      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button></div>';
+    var after = document.getElementById("agilo-carnet-after");
+    var secondary = panel.querySelector(".dictee-secondary-actions");
+    if (after && after.parentNode) after.parentNode.insertBefore(root, after.nextSibling);
+    else if (secondary && secondary.parentNode) secondary.parentNode.insertBefore(root, secondary);
     else ta.parentNode.insertBefore(root, ta.nextSibling);
     root.querySelector(".agilo-solo-document__button").addEventListener("click", create);
     root.querySelector(".agilo-solo-document__retry").addEventListener("click", function () {
       if (state.submission && state.submission.status === "uncertain" && !state.sending) send(state.submission);
     });
-    root.querySelector(".agilo-solo-document__reset").addEventListener("click", reset);
     root.querySelector(".agilo-solo-document__review input").addEventListener("change", function (e) {
       state.reviewConfirmed = e.target.checked;
       saveReview(state.reviewConfirmed ? "reviewed" : "failed");
