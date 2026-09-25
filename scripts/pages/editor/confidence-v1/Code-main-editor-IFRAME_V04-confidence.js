@@ -102,6 +102,193 @@
     }
   }
 
+  function trimSplitNewlines(left, right) {
+    const leftClean = String(left ?? '').replace(/\n+$/, '');
+    const rightClean = String(right ?? '').replace(/^\n+/, '');
+    return { left: leftClean, right: rightClean };
+  }
+  function shouldScrollFollow(armed, outOfView) {
+    return !!armed && !!outOfView;
+  }
+  function resolveActiveSegmentIndex(currentTime, segments, activeSeg) {
+    if (!Array.isArray(segments) || !segments.length) return -1;
+    const t = Number(currentTime) || 0;
+    const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
+    let k = activeSeg;
+    if (k < 0 || !inSeg(segments[k])) k = segments.findIndex(inSeg);
+    return k;
+  }
+  function foldSpeakerSearch(s) {
+    return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+  function isJunkSpeakerLabel(s) {
+    const t = String(s ?? '').trim();
+    if (!t) return true;
+    return /^(speaker|locuteur|spk)[\s._-]*\d+$/i.test(t);
+  }
+  function filterSpeakerRoster(names, query) {
+    const list = Array.isArray(names) ? names : [];
+    const q = foldSpeakerSearch(query);
+    if (!q) return list.slice();
+    return list.filter((n) => foldSpeakerSearch(n).includes(q));
+  }
+  function shouldCreateSpeakerFromQuery(query, names) {
+    const q = foldSpeakerSearch(String(query ?? '').trim());
+    if (!q) return false;
+    const list = Array.isArray(names) ? names : [];
+    return !list.some((n) => foldSpeakerSearch(n) === q);
+  }
+  function speakerRosterStorageKey(jobId) {
+    const id = String(jobId ?? '').trim();
+    if (!id) return '';
+    return 'agilo:speaker-roster:' + id;
+  }
+  function computePopoverPlace({ anchor, size, viewport, pad, stickyBottom } = {}) {
+    const a = anchor || {};
+    const w = Number(size && size.width) || 0;
+    const h = Number(size && size.height) || 0;
+    const vw = Number(viewport && viewport.width) || 0;
+    const vh = Number(viewport && viewport.height) || 0;
+    const p = Number.isFinite(Number(pad)) ? Number(pad) : 8;
+    const minTop = Math.max(0, Number(stickyBottom) || 0) + p;
+    let left = Number(a.left) || 0;
+    left = Math.max(p, Math.min(left, vw - w - p));
+    let top = (Number(a.bottom) || 0) + p;
+    if (top + h > vh - p) top = (Number(a.top) || 0) - h - p;
+    top = Math.max(minTop, Math.min(top, vh - h - p));
+    return { top, left };
+  }
+  function anchorVisibleInPane(anchor, pane) {
+    const a = anchor || {};
+    const view = pane || {};
+    const ar = {
+      left: Number(a.left) || 0,
+      top: Number(a.top) || 0,
+      right: Number.isFinite(Number(a.right)) ? Number(a.right) : (Number(a.left) || 0),
+      bottom: Number.isFinite(Number(a.bottom)) ? Number(a.bottom) : (Number(a.top) || 0)
+    };
+    const pr = {
+      left: Number(view.left) || 0,
+      top: Number(view.top) || 0,
+      right: Number.isFinite(Number(view.right)) ? Number(view.right) : Infinity,
+      bottom: Number.isFinite(Number(view.bottom)) ? Number(view.bottom) : Infinity
+    };
+    return !(ar.right <= pr.left || ar.left >= pr.right || ar.bottom <= pr.top || ar.top >= pr.bottom);
+  }
+  function clampOffset(n, max) {
+    const m = Math.max(0, Number(max) || 0);
+    const v = Number(n);
+    if (!Number.isFinite(v)) return 0;
+    return Math.max(0, Math.min(Math.floor(v), m));
+  }
+  function sliceTextAt(text, offset) {
+    const s = String(text ?? '');
+    const off = clampOffset(offset, s.length);
+    return { left: s.slice(0, off), right: s.slice(off) };
+  }
+  function computeMidStart(start, end) {
+    const hasS = start != null && start !== '' && Number.isFinite(Number(start));
+    const hasE = end != null && end !== '' && Number.isFinite(Number(end));
+    if (!hasS && !hasE) return null;
+    const s = hasS ? Number(start) : 0;
+    const e = hasE ? Number(end) : (hasS ? Number(start) + 1 : 1);
+    return Math.round((s + e) / 2);
+  }
+  function hasSpeakerLabels(segments) {
+    const list = Array.isArray(segments) ? segments : [];
+    const speakers = list.map((seg) => String((seg && seg.speaker) || '').trim());
+    const unique = [];
+    const seen = Object.create(null);
+    speakers.forEach((name) => {
+      if (seen[name]) return;
+      seen[name] = 1;
+      unique.push(name);
+    });
+    if (unique.length === 1 && (unique[0] === '' || unique[0] === 'Speaker_A')) return false;
+    return unique.length > 1 || (unique.length === 1 && unique[0] !== '' && unique[0] !== 'Speaker_A');
+  }
+  function createFollowController(opts) {
+    let armed = true;
+    let programmatic = false;
+    const onChange = opts && typeof opts.onChange === 'function' ? opts.onChange : null;
+    function setArmed(next) {
+      const v = !!next;
+      if (armed === v) return;
+      armed = v;
+      if (onChange) onChange(armed);
+    }
+    return {
+      get armed() { return armed; },
+      get programmatic() { return programmatic; },
+      arm() { setArmed(true); },
+      disarm() { if (!programmatic) setArmed(false); },
+      beginProgrammatic() { programmatic = true; },
+      endProgrammatic() { programmatic = false; },
+      shouldScroll(outOfView) { return shouldScrollFollow(armed, outOfView); }
+    };
+  }
+  window.AgiloTranscriptComfort = window.AgiloTranscriptComfort || {
+    trimSplitNewlines, shouldScrollFollow, resolveActiveSegmentIndex,
+    foldSpeakerSearch, isJunkSpeakerLabel, filterSpeakerRoster, shouldCreateSpeakerFromQuery, speakerRosterStorageKey,
+    computePopoverPlace, anchorVisibleInPane,
+    clampOffset, sliceTextAt, computeMidStart, hasSpeakerLabels,
+    createFollowController
+  };
+
+  function dispatchTranscriptFollow(armed) {
+    try {
+      document.dispatchEvent(new CustomEvent('agilo:transcript-follow', { detail: { armed: !!armed } }));
+    } catch { /* ignore */ }
+  }
+  function removePaneFollowLeftover() {
+    const css = document.getElementById('agilo-transcript-follow-css');
+    if (css) css.remove();
+    const leftover = document.getElementById('agilo-transcript-follow');
+    if (!leftover) return;
+    if (leftover.closest('#agilo-audio-sticky')) return;
+    if (leftover.closest('#agilo-audio-wrap')) return;
+    if (leftover.closest('#ag-editor-chrome-dock')) return;
+    if (leftover.closest('#pane-transcript')) leftover.remove();
+  }
+  function bindFollowPause(sc) {
+    const follow = window.AgiloTranscriptFollow;
+    if (!follow || !sc || sc.__followPauseBound) return;
+    sc.__followPauseBound = true;
+    const pause = () => follow.disarm();
+    sc.addEventListener('wheel', pause, { passive: true });
+    sc.addEventListener('touchmove', pause, { passive: true });
+  }
+  function applySplitTrimNearCaret() {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const n = sel.anchorNode;
+    const el = n && (n.nodeType === 1 ? n : n.parentElement);
+    const seg = el && el.closest && el.closest('.ag-seg');
+    if (!seg) return;
+    const prev = (seg.previousElementSibling && seg.previousElementSibling.classList.contains('ag-seg'))
+      ? seg.previousElementSibling : null;
+    const nextBox = seg.querySelector('.ag-seg__text');
+    const prevBox = prev && prev.querySelector('.ag-seg__text');
+    if (!nextBox) return;
+    const cleaned = trimSplitNewlines(prevBox ? prevBox.textContent : '', nextBox.textContent || '');
+    if (prevBox && prevBox.textContent !== cleaned.left) prevBox.textContent = cleaned.left;
+    if (nextBox.textContent !== cleaned.right) nextBox.textContent = cleaned.right;
+    try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
+  }
+  function bindSplitTrim() {
+    if (document.__agiloSplitTrimBound) return;
+    document.__agiloSplitTrimBound = true;
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest || !e.target.closest('.ag-ux-plus')) return;
+      if (e.target.closest('.ag-speaker-picker')) return;
+      startPlusSpeakerFlow(e);
+    }, true);
+    document.addEventListener('keydown', (e) => {
+      if (!isPlusSpeakerShortcut(e)) return;
+      startPlusSpeakerFlow(e);
+    }, true);
+  }
+
   function pickTranscriptEl() {
     return byId('transcriptEditor') || byId('ag-transcript') || document.querySelector('[data-editor="transcript"]') || null;
   }
@@ -890,6 +1077,7 @@
       /** receiveSummary KO utilise error_message = error_summary_on_error (distinct du transcript_status READY_SUMMARY_ON_ERROR). */
       ERROR_SUMMARY_ON_ERROR: "La génération du compte-rendu a échoué.",
       ERROR_TRANSCRIPT_NOT_READY: "Le transcript n'est pas encore prêt.",
+      ERROR_TRANSCRIPT_FILE_NOT_EXISTS: "Cette transcription n’est plus sur le serveur. Ce n’est pas le comportement prévu de l’offre Business. Contactez le support avec le numéro du job.",
       ON_ERROR: "Le serveur a signalé une erreur.",
       ERROR_INVALID_TOKEN: "Session expirée ou invalide. Veuillez vous reconnecter.",
       NETWORK_ERROR: "Problème réseau lors de la récupération des données. Veuillez réessayer.",
@@ -1232,6 +1420,40 @@
   let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null;
   let __mode = 'plain';
 
+  function scrollToActivePlaybackSegment({ force = false } = {}) {
+    const follow = _transcriptFollow;
+    if (!follow || !follow.armed) return;
+    if (__mode !== 'structured') return;
+    const root = editors.transcript;
+    const audio = byId('agilo-audio');
+    if (!root || !audio || !Array.isArray(window._segments) || !window._segments.length) return;
+    const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
+    if (k < 0) return;
+    const el = root.children[k];
+    if (!el) return;
+    if (k !== _activeSeg) {
+      if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+      _activeSeg = k;
+    }
+    el.classList.add('is-active');
+    const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
+    const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
+    bindFollowPause(container);
+    const outOfView = agiloIsOutOfView(el, container, { top: 100, bottom: 120 });
+    if (!force && !follow.shouldScroll(outOfView)) return;
+    follow.beginProgrammatic();
+    agiloScrollIntoView(el, { allowWindow: false });
+    requestAnimationFrame(() => { follow.endProgrammatic(); });
+  }
+
+  const _transcriptFollow = createFollowController({
+    onChange(armed) {
+      dispatchTranscriptFollow(armed);
+      if (armed) scrollToActivePlaybackSegment({ force: true });
+    }
+  });
+  window.AgiloTranscriptFollow = _transcriptFollow;
+
   function syncDomToModel() {
     const root = editors.transcript;
     if (!root || !Array.isArray(window._segments) || !window._segments.length) return;
@@ -1251,12 +1473,26 @@
   }
   window.syncDomToModel = syncDomToModel;
 
+  const NUCLEO_PATHS = {
+    pencil: '<path d="M13.953 7.57799L15.062 6.46898C15.648 5.88298 15.648 4.93298 15.062 4.34798L13.653 2.93898C13.067 2.35298 12.117 2.35298 11.532 2.93898L10.423 4.04799L13.953 7.57799Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M8.6544 5.81461L4.147 10.322C3.897 10.572 3.718 10.884 3.627 11.226L2.5 15.499L6.773 14.372C7.115 14.282 7.427 14.102 7.677 13.852L12.1844 9.3446" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M10.4044 7.56461L6.26501 11.704" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    search: '<path d="M15.75 15.75L11.6386 11.6386" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M7.75 13.25C10.7875 13.25 13.25 10.7875 13.25 7.75C13.25 4.7125 10.7875 2.25 7.75 2.25C4.7125 2.25 2.25 4.7125 2.25 7.75C2.25 10.7875 4.7125 13.25 7.75 13.25Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    meeting: '<path d="M5.75 8.25049C6.8546 8.25049 7.75 7.35549 7.75 6.25049C7.75 5.14549 6.8546 4.25049 5.75 4.25049C4.6454 4.25049 3.75 5.14549 3.75 6.25049C3.75 7.35549 4.6454 8.25049 5.75 8.25049Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M9.60903 15.1225C10.132 14.9475 10.439 14.3785 10.245 13.8635C9.56003 12.0455 7.80903 10.7515 5.75103 10.7515C3.69303 10.7515 1.94203 12.0455 1.25703 13.8635C1.06303 14.3795 1.37003 14.9485 1.89303 15.1225C2.85503 15.4435 4.17403 15.7505 5.75203 15.7505C7.33003 15.7505 8.64803 15.4435 9.60903 15.1225Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    plus: '<line x1="9" y1="3.25" x2="9" y2="14.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/><line x1="3.25" y1="9" x2="14.75" y2="9" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>',
+    userPlus: '<path d="M9 7.2505C10.5188 7.2505 11.75 6.0195 11.75 4.5005C11.75 2.9815 10.5188 1.7505 9 1.7505C7.4812 1.7505 6.25 2.9815 6.25 4.5005C6.25 6.0195 7.4812 7.2505 9 7.2505Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M17.25 14.7505H12.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M14.75 12.2505V17.2505" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M12.2164 10.677C11.2752 10.102 10.1839 9.7505 8.99999 9.7505C6.44899 9.7505 4.26099 11.2805 3.29099 13.4705C2.92599 14.2955 3.37799 15.2444 4.23799 15.5154C5.46299 15.9014 7.08389 16.2495 8.99999 16.2495C9.22329 16.2495 9.43029 16.2319 9.64399 16.2214" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>',
+    check: '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/>'
+  };
+  function nucleoIcon(name, className) {
+    const paths = NUCLEO_PATHS[name] || '';
+    const cls = className ? ` class="${className}"` : '';
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none"${cls} aria-hidden="true">${paths}</svg>`;
+  }
+
   function buildRenameBtn() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.setAttribute('aria-label', 'Renommer');
     btn.className = 'rename-btn absolute';
-    btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="icon-1x1-small-5"><path d="M0 0h24v24H0z" fill="none"></path><path d="M18.41 5.8L17.2 4.59c-.78-.78-2.05-.78-2.83 0l-2.68 2.68L3 15.96V20h4.04l8.74-8.74 2.63-2.63c.79-.78.79-2.05 0-2.83zM6.21 18H5v-1.21l8.66-8.66 1.21 1.21L6.21 18zM11 20l4-4h6v4H11z" fill="currentColor"></path></svg>';
+    btn.innerHTML = nucleoIcon('pencil', 'icon-1x1-small-5');
     return btn;
   }
 
@@ -1590,19 +1826,34 @@
         const audio = byId('agilo-audio');
         if (!audio) { toast('Lecteur audio introuvable.'); return; }
         try { audio.currentTime = t; if (audio.paused) audio.play().catch(() => { }); } catch { }
+        try { _transcriptFollow.arm(); } catch { }
+        try { scrollToActivePlaybackSegment({ force: true }); } catch { }
       });
 
       root.addEventListener('click', (e) => {
         if (__mode !== 'structured') return;
         const btn = e.target.closest('.rename-btn');
-        if (!btn) return;
+        if (btn) {
+          e.preventDefault(); e.stopPropagation();
+          try { window.getSelection()?.removeAllRanges(); } catch { }
+          try { document.activeElement?.blur?.(); } catch { }
+          const segEl = btn.closest('.ag-seg');
+          if (!segEl) return;
+          doRenameFor(segEl, {
+            triggerEl: btn,
+            renameAllEmpty: !!(e.shiftKey || e.altKey),
+            keyState: { shift: e.shiftKey, alt: e.altKey }
+          });
+          return;
+        }
+        const sp = e.target.closest('.speaker');
+        if (!sp || e.target.closest('.rename-btn')) return;
         e.preventDefault(); e.stopPropagation();
         try { window.getSelection()?.removeAllRanges(); } catch { }
-        try { document.activeElement?.blur?.(); } catch { }
-        const segEl = btn.closest('.ag-seg');
+        const segEl = sp.closest('.ag-seg');
         if (!segEl) return;
         doRenameFor(segEl, {
-          triggerEl: btn,
+          triggerEl: sp,
           renameAllEmpty: !!(e.shiftKey || e.altKey),
           keyState: { shift: e.shiftKey, alt: e.altKey }
         });
@@ -1623,16 +1874,9 @@
         deleteSegEl(segEl);
       });
 
-      root.addEventListener('dblclick', (e) => {
-        if (__mode !== 'structured') return;
-        const sp = e.target.closest('.speaker'); if (!sp) return;
-        e.preventDefault(); e.stopPropagation();
-        try { window.getSelection()?.removeAllRanges(); } catch { }
-        doRenameFor(sp.closest('.ag-seg'), { triggerEl: sp });
-      });
-
       root.addEventListener('input', (e) => {
         const node = e.target.closest('.ag-seg__text'); if (!node) return;
+        try { _transcriptFollow.disarm(); } catch { }
         const segEl = node.closest('.ag-seg');
         const idx = Array.prototype.indexOf.call(root.children, segEl);
         if (idx > -1 && window._segments[idx]) {
@@ -1640,6 +1884,11 @@
           if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
             window.AgiloConfidence.markSegmentModified(idx);
           }
+        }
+      });
+      root.addEventListener('focusin', (e) => {
+        if (e.target.closest && e.target.closest('.ag-seg__text')) {
+          try { _transcriptFollow.disarm(); } catch { }
         }
       });
 
@@ -1941,10 +2190,122 @@
     });
     return unique.length;
   }
+  function stickyBottomY() {
+    const sticky = byId('agilo-audio-sticky');
+    const wrap = byId('agilo-audio-wrap');
+    const el = sticky || wrap;
+    if (!el || !el.getBoundingClientRect) return 0;
+    const r = el.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= innerHeight) return 0;
+    return Math.max(0, r.bottom);
+  }
+  function paneRectForAnchor() {
+    const pane = byId('pane-transcript') || editors.transcript;
+    if (pane && pane.getBoundingClientRect) return pane.getBoundingClientRect();
+    return { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
+  }
+  function ag_bindAnchoredPopover(panel, anchor, { onClose } = {}) {
+    const off = [];
+    let raf = 0;
+    let unbound = false;
+    const on = (t, ev, fn, opt) => {
+      if (!t) return;
+      t.addEventListener(ev, fn, opt || false);
+      off.push(() => t.removeEventListener(ev, fn, opt || false));
+    };
+    function unbind() {
+      if (unbound) return;
+      unbound = true;
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      off.forEach((fn) => fn());
+    }
+    function placeNow() {
+      if (!panel.isConnected || unbound) return;
+      const aEl = (anchor && anchor.isConnected) ? anchor : null;
+      const r = aEl
+        ? aEl.getBoundingClientRect()
+        : { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2, right: innerWidth / 2 };
+      if (aEl && !anchorVisibleInPane(r, paneRectForAnchor())) {
+        unbind();
+        if (typeof onClose === 'function') onClose();
+        return;
+      }
+      const pos = computePopoverPlace({
+        anchor: r,
+        size: { width: panel.offsetWidth, height: panel.offsetHeight },
+        viewport: { width: innerWidth, height: innerHeight },
+        pad: 8,
+        stickyBottom: stickyBottomY()
+      });
+      panel.style.top = pos.top + 'px';
+      panel.style.left = pos.left + 'px';
+    }
+    function place() {
+      if (raf || unbound) return;
+      raf = requestAnimationFrame(() => { raf = 0; placeNow(); });
+    }
+    const scrollOpt = { capture: true, passive: true };
+    on(window, 'scroll', place, scrollOpt);
+    on(window, 'resize', place);
+    const pane = byId('pane-transcript');
+    const root = editors.transcript || byId('transcriptEditor');
+    if (pane) {
+      if (anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost')) {
+        on(pane, 'scroll', () => {
+          unbind();
+          if (typeof onClose === 'function') onClose();
+        }, scrollOpt);
+      } else {
+        on(pane, 'scroll', place, scrollOpt);
+      }
+    }
+    if (root && root !== pane) {
+      if (anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost')) {
+        on(root, 'scroll', () => {
+          unbind();
+          if (typeof onClose === 'function') onClose();
+        }, scrollOpt);
+      } else {
+        on(root, 'scroll', place, scrollOpt);
+      }
+    }
+    const stopWheel = (e) => { e.stopPropagation(); };
+    on(panel, 'wheel', stopWheel);
+    on(panel, 'touchmove', stopWheel, { passive: true });
+    on(document, 'click', (e) => {
+      if (unbound) return;
+      if (panel.contains(e.target)) return;
+      unbind();
+      if (typeof onClose === 'function') onClose();
+    }, true);
+    on(document, 'keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      unbind();
+      if (typeof onClose === 'function') onClose();
+    });
+    try { _transcriptFollow.disarm(); } catch { }
+    panel.style.visibility = 'hidden';
+    if (!panel.parentNode) document.body.appendChild(panel);
+    placeNow();
+    panel.style.visibility = '';
+    return { place: placeNow, unbind };
+  }
   function ag_showRenameMenu(anchor, { oldName, counts, onSelect, forEmpty = false }) {
     document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach(n => n.remove());
-    const menu = document.createElement('div'); menu.className = 'ag-rename-menu'; menu.setAttribute('role', 'dialog'); menu.setAttribute('aria-modal', 'true');
+    const menu = document.createElement('div');
+    menu.className = 'ag-rename-menu';
+    menu.setAttribute('role', 'dialog');
+    menu.setAttribute('aria-label', 'Appliquer le renommage');
     const hd = document.createElement('div'); hd.className = 'ag-rename-menu__hd'; hd.textContent = 'Appliquer le renommage à…';
+    let closed = false;
+    let bound = null;
+    function close() {
+      if (closed) return;
+      closed = true;
+      bound?.unbind();
+      menu.remove();
+    }
     const mk = (label, scope, suffix = '') => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'ag-rename-menu__row';
       b.innerHTML = `${label}${suffix ? ` <span class="ag-rename-menu__muted">${suffix}</span>` : ''}`;
@@ -1956,23 +2317,444 @@
     if (!forEmpty && counts.total > 1) rows.push(mk(`Toutes les occurrences de "${oldName}"`, 'all', `${counts.total} seg.`));
     if (forEmpty && counts.empty > 1) rows.push(mk('Tous les segments sans nom', 'empty', `${counts.empty} seg.`));
     if (rows.length === 1) rows.push(mk(forEmpty ? 'Tous les segments sans nom' : 'Toutes les occurrences', forEmpty ? 'empty' : 'all'));
-    const backdrop = document.createElement('div'); backdrop.className = 'ag-rename-backdrop';
-    const off = []; const on = (t, ev, fn, opt) => { t.addEventListener(ev, fn, opt || false); off.push(() => t.removeEventListener(ev, fn, opt || false)); };
-    function close() { off.forEach(fn => fn()); menu.remove(); backdrop.remove(); }
-    on(backdrop, 'click', close); on(document, 'keydown', e => { if (e.key === 'Escape') close(); });
-    menu.style.visibility = 'hidden'; menu.appendChild(hd); rows.forEach(r => menu.appendChild(r));
-    document.body.appendChild(backdrop); document.body.appendChild(menu);
-    function place() {
-      const r = (anchor?.getBoundingClientRect?.() || { top: innerHeight / 2, left: innerWidth / 2, bottom: innerHeight / 2 });
-      const mw = menu.offsetWidth, mh = menu.offsetHeight;
-      let top = r.bottom + 8, left = r.left;
-      left = Math.max(8, Math.min(left, innerWidth - mw - 8));
-      if (top + mh > innerHeight - 8) top = r.top - mh - 8;
-      top = Math.max(8, Math.min(top, innerHeight - mh - 8));
-      menu.style.top = top + 'px'; menu.style.left = left + 'px';
-    }
-    place(); menu.style.visibility = ''; try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
+    menu.appendChild(hd); rows.forEach(r => menu.appendChild(r));
+    bound = ag_bindAnchoredPopover(menu, anchor, { onClose: close });
+    try { menu.querySelector('.ag-rename-menu__row')?.focus({ preventScroll: true }); } catch { }
   }
+
+  let _speakerRosterSession = [];
+
+  function isSpeakerPickerEnabled() {
+    try {
+      if (window.AGILOTEXT_SPEAKER_PICKER === false) return false;
+      const q = new URLSearchParams(location.search).get('agilo_speaker_picker');
+      if (q === '0' || q === 'false' || q === 'off') return false;
+    } catch { /* ignore */ }
+    return true;
+  }
+  function getJobIdForRoster() {
+    try {
+      const fromDs = (byId('editorRoot')?.dataset?.jobId
+        || document.querySelector('[data-job-id]')?.getAttribute('data-job-id')
+        || '').trim();
+      const fromQ = (new URLSearchParams(location.search).get('jobId') || '').trim();
+      return fromDs || fromQ;
+    } catch { return ''; }
+  }
+  function loadStoredRoster(jobId) {
+    const key = speakerRosterStorageKey(jobId);
+    if (!key) return _speakerRosterSession.slice();
+    try {
+      const raw = localStorage.getItem(key);
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr.map((s) => String(s || '').trim()).filter(Boolean) : [];
+    } catch { return []; }
+  }
+  function pushStoredRoster(jobId, name) {
+    const n = String(name || '').trim();
+    if (!n) return;
+    const key = speakerRosterStorageKey(jobId);
+    if (!key) {
+      if (_speakerRosterSession.indexOf(n) < 0) _speakerRosterSession.push(n);
+      return;
+    }
+    const cur = loadStoredRoster(jobId);
+    if (cur.indexOf(n) < 0) {
+      cur.push(n);
+      try { localStorage.setItem(key, JSON.stringify(cur)); } catch { /* ignore */ }
+    }
+  }
+  function collectRosterNames() {
+    const seen = Object.create(null);
+    const out = [];
+    function add(n) {
+      const t = String(n || '').trim();
+      if (!t || seen[t]) return;
+      seen[t] = 1;
+      out.push(t);
+    }
+    (window._segments || []).forEach((s) => add(s && s.speaker));
+    loadStoredRoster(getJobIdForRoster()).forEach(add);
+    return out;
+  }
+  function ag_closeSpeakerPicker() {
+    document.querySelectorAll('.ag-speaker-picker, .ag-speaker-picker-backdrop').forEach((n) => n.remove());
+  }
+  function isPlusSpeakerShortcut(e) {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return false;
+    return e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd';
+  }
+  function hasSpeakerLabelsLive() {
+    if (Array.isArray(window._segments) && window._segments.length > 0) {
+      return hasSpeakerLabels(window._segments);
+    }
+    const root = editors.transcript;
+    if (!root) return true;
+    const segs = Array.from(root.querySelectorAll(':scope > .ag-seg'));
+    if (!segs.length) return true;
+    return hasSpeakerLabels(segs.map((seg) => ({
+      speaker: seg.dataset.speaker || seg.querySelector('.speaker')?.textContent || ''
+    })));
+  }
+  function parseSegTime(v) {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  function offsetInBox(box, node, off) {
+    if (!box || !node) return 0;
+    try {
+      if (!(box === node || box.contains(node))) return 0;
+      const r = document.createRange();
+      r.setStart(box, 0);
+      r.setEnd(node, off);
+      return r.toString().length;
+    } catch {
+      return 0;
+    }
+  }
+  function snapshotPlusCaret() {
+    const root = editors.transcript;
+    if (!root) return null;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    if (!el || !root.contains(el)) return null;
+    const seg = el.closest && el.closest('.ag-seg');
+    if (!seg || !root.contains(seg)) return null;
+    const box = seg.querySelector('.ag-seg__text');
+    if (!box) return null;
+    const full = (typeof window.visibleTextFromBox === 'function')
+      ? window.visibleTextFromBox(box)
+      : String(box.textContent || '');
+    const off = offsetInBox(box, range.startContainer, range.startOffset);
+    const parts = sliceTextAt(full, off);
+    return {
+      root,
+      seg,
+      left: parts.left,
+      right: parts.right,
+      start: parseSegTime(seg.dataset.start),
+      end: parseSegTime(seg.dataset.end),
+      oldSpeaker: String(seg.dataset.speaker || '').trim()
+    };
+  }
+  function removePlusGhost() {
+    document.querySelectorAll('[data-agilo-plus-ghost]').forEach((n) => n.remove());
+  }
+  function createPlusGhost(e, seg) {
+    removePlusGhost();
+    let rect = null;
+    const plus = (e && e.target && e.target.closest) ? e.target.closest('.ag-ux-plus') : null;
+    if (plus && plus.getBoundingClientRect) {
+      const r = plus.getBoundingClientRect();
+      if (r.width || r.height || r.left || r.top) rect = r;
+    }
+    if (!rect && seg) {
+      const a = seg.querySelector('.rename-btn') || seg.querySelector('.speaker') || seg;
+      if (a && a.getBoundingClientRect) rect = a.getBoundingClientRect();
+    }
+    if (!rect) rect = { left: 24, top: 120 };
+    const ghost = document.createElement('div');
+    ghost.setAttribute('data-agilo-plus-ghost', '1');
+    ghost.style.cssText = 'position:fixed;width:1px;height:1px;pointer-events:none;z-index:0;';
+    ghost.style.left = Math.round(rect.left) + 'px';
+    ghost.style.top = Math.round(rect.top) + 'px';
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+  function setSegTimeButton(segEl, start) {
+    const btn = segEl && segEl.querySelector && segEl.querySelector('button.time');
+    if (!btn) return;
+    const hasStart = Number.isFinite(start);
+    const tText = hasStart ? fmtHMS(start) : '00:00';
+    btn.textContent = tText;
+    btn.dataset.action = 'seek';
+    btn.dataset.t = hasStart ? String(start) : '0';
+    btn.title = hasStart ? ('Aller à ' + tText) : 'Aller au début (00:00)';
+  }
+  function placeCaretAtStart(box) {
+    if (!box) return;
+    try { box.focus({ preventScroll: true }); } catch { }
+    try {
+      const r = document.createRange();
+      r.selectNodeContents(box);
+      r.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } catch { }
+  }
+  function agiloSplitAtCaretCreateSpeaker(snapshot) {
+    if (!snapshot || !snapshot.seg || !snapshot.seg.isConnected) {
+      try { toast('Le paragraphe a changé, réessayez.'); } catch { }
+      return null;
+    }
+    const root = snapshot.root || editors.transcript;
+    const seg = snapshot.seg;
+    if (!root || !root.contains(seg)) {
+      try { toast('Le paragraphe a changé, réessayez.'); } catch { }
+      return null;
+    }
+    const box = seg.querySelector('.ag-seg__text');
+    if (!box) return null;
+    const clone = seg.cloneNode(true);
+    clone.classList.remove('is-active', 'is-selected');
+    clone.dataset.id = 's' + Date.now();
+    const mid = computeMidStart(snapshot.start, snapshot.end);
+    box.textContent = snapshot.left;
+    const nb = clone.querySelector('.ag-seg__text');
+    if (nb) nb.textContent = snapshot.right;
+    clone.dataset.speaker = '';
+    const sp = clone.querySelector('.speaker');
+    if (sp) {
+      sp.textContent = '';
+      sp.classList.remove('is-placeholder');
+      setSpeakerStyle(sp, '');
+    }
+    if (mid != null) {
+      seg.dataset.end = String(mid);
+      clone.dataset.start = String(mid);
+      setSegTimeButton(clone, mid);
+    }
+    if (snapshot.end != null) clone.dataset.end = String(snapshot.end);
+    seg.after(clone);
+    try {
+      if (Array.isArray(window._segments)) {
+        const idx = Array.prototype.indexOf.call(root.children, seg);
+        const old = window._segments[idx] || {};
+        const leftObj = Object.assign({}, old, {
+          end: (mid != null ? mid : old.end),
+          text: snapshot.left
+        });
+        const rightObj = {
+          id: clone.dataset.id,
+          start: (mid != null ? mid : (old.start != null ? old.start : null)),
+          end: old.end != null ? old.end : null,
+          speaker: '',
+          text: snapshot.right
+        };
+        window._segments.splice(idx, 1, leftObj, rightObj);
+      }
+    } catch { }
+    try { clearSegSelection(); } catch { }
+    placeCaretAtStart(nb);
+    try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
+    applySplitTrimNearCaret();
+    try {
+      const leftIdx = Array.prototype.indexOf.call(root.children, seg);
+      if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
+        if (leftIdx >= 0) window.AgiloConfidence.markSegmentModified(leftIdx);
+        window.AgiloConfidence.markSegmentModified(leftIdx + 1);
+      }
+    } catch { }
+    return clone;
+  }
+  function agiloApplyPlusSpeakerName(clone, newName) {
+    const root = editors.transcript;
+    if (!root || !clone) return;
+    const idx = Array.prototype.indexOf.call(root.children, clone);
+    if (idx < 0) return;
+    pushStoredRoster(getJobIdForRoster(), newName);
+    ag_applyRenameScope({ scope: 'one', oldName: '', newName, idx });
+    toast('Locuteur mis à jour');
+  }
+  function startPlusSpeakerFlow(e) {
+    if (!isSpeakerPickerEnabled() || !hasSpeakerLabelsLive()) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (__mode !== 'structured') {
+      try { toast('Disponible en mode segmenté.'); } catch { }
+      return;
+    }
+    const snapshot = snapshotPlusCaret();
+    if (!snapshot) {
+      try { toast('Disponible en mode segmenté.'); } catch { }
+      return;
+    }
+    try { window.AgiloTranscriptFollow?.disarm(); } catch { }
+    const ghost = createPlusGhost(e, snapshot.seg);
+    ag_showSpeakerPicker(ghost, {
+      currentName: '',
+      names: collectRosterNames(),
+      onPick(raw) {
+        removePlusGhost();
+        const newName = normalizeName(raw);
+        if (!newName) return;
+        const clone = agiloSplitAtCaretCreateSpeaker(snapshot);
+        if (!clone) return;
+        agiloApplyPlusSpeakerName(clone, newName);
+      },
+      onCancel() {
+        removePlusGhost();
+      }
+    });
+  }
+  function ag_showSpeakerPicker(anchor, { currentName, names, onPick, onCancel } = {}) {
+    ag_closeSpeakerPicker();
+    document.querySelectorAll('.ag-rename-menu, .ag-rename-backdrop').forEach((n) => n.remove());
+    if (!(anchor && anchor.getAttribute && anchor.getAttribute('data-agilo-plus-ghost'))) {
+      removePlusGhost();
+    }
+    const allNames = Array.isArray(names) ? names.slice() : [];
+    let query = '';
+    let active = 0;
+
+    const panel = document.createElement('div');
+    panel.className = 'ag-speaker-picker';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-label', 'Choisir un interlocuteur');
+
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'ag-speaker-picker__search';
+    searchWrap.innerHTML = nucleoIcon('search', 'ag-speaker-picker__ico');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'ag-speaker-picker__input';
+    input.setAttribute('placeholder', 'Rechercher un nom');
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('spellcheck', 'false');
+    searchWrap.appendChild(input);
+
+    const list = document.createElement('div');
+    list.className = 'ag-speaker-picker__list';
+    list.setAttribute('role', 'listbox');
+
+    let closed = false;
+    let bound = null;
+    function close(cancel) {
+      if (closed) return;
+      closed = true;
+      bound?.unbind();
+      ag_closeSpeakerPicker();
+      if (cancel && typeof onCancel === 'function') onCancel();
+    }
+    function pick(raw) {
+      const value = String(raw || '');
+      close(false);
+      if (typeof onPick === 'function') onPick(value);
+    }
+    function tryCreateFromQuery() {
+      if (!shouldCreateSpeakerFromQuery(query, allNames)) return false;
+      const n = normalizeName(query);
+      if (!n) return false;
+      pushStoredRoster(getJobIdForRoster(), n);
+      pick(n);
+      return true;
+    }
+
+    function visibleRows() {
+      const filtered = filterSpeakerRoster(allNames, query);
+      const good = filtered.filter((n) => !isJunkSpeakerLabel(n));
+      const junk = filtered.filter((n) => isJunkSpeakerLabel(n));
+      return good.concat(junk);
+    }
+
+    function renderList() {
+      const rows = visibleRows();
+      if (active >= rows.length) active = Math.max(0, rows.length - 1);
+      list.textContent = '';
+      if (!rows.length) {
+        if (shouldCreateSpeakerFromQuery(query, allNames)) {
+          const label = String(query || '').trim();
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ag-speaker-picker__row is-active';
+          b.setAttribute('role', 'option');
+          b.setAttribute('aria-label', 'Ajouter ' + label);
+          b.innerHTML = nucleoIcon('userPlus', 'ag-speaker-picker__ico');
+          const lab = document.createElement('span');
+          lab.className = 'ag-speaker-picker__name';
+          lab.textContent = 'Ajouter « ' + label + ' »';
+          b.appendChild(lab);
+          b.addEventListener('click', () => { tryCreateFromQuery(); });
+          list.appendChild(b);
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'ag-speaker-picker__empty';
+          empty.textContent = 'Tapez un nom, Entrée pour l\'ajouter';
+          list.appendChild(empty);
+        }
+        if (bound) bound.place();
+        return;
+      }
+      const good = rows.filter((n) => !isJunkSpeakerLabel(n));
+      const junk = rows.filter((n) => isJunkSpeakerLabel(n));
+      function section(title, items, offset) {
+        if (!items.length) return;
+        const hd = document.createElement('div');
+        hd.className = 'ag-speaker-picker__hd';
+        hd.textContent = title;
+        list.appendChild(hd);
+        items.forEach((name, i) => {
+          const idx = offset + i;
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'ag-speaker-picker__row' + (idx === active ? ' is-active' : '');
+          b.setAttribute('role', 'option');
+          if (name === currentName) b.setAttribute('aria-selected', 'true');
+          const color = getSpeakerColor(name);
+          const dot = document.createElement('span');
+          dot.className = 'ag-speaker-picker__dot';
+          dot.style.background = color;
+          const lab = document.createElement('span');
+          lab.className = 'ag-speaker-picker__name';
+          lab.textContent = name;
+          const count = document.createElement('span');
+          count.className = 'ag-speaker-picker__count';
+          count.textContent = String(ag_countOccurrencesByName(name));
+          b.appendChild(dot);
+          b.appendChild(lab);
+          if (name === currentName) {
+            const mark = document.createElement('span');
+            mark.className = 'ag-speaker-picker__check';
+            mark.innerHTML = nucleoIcon('check');
+            b.appendChild(mark);
+          }
+          b.appendChild(count);
+          b.addEventListener('click', () => pick(name));
+          list.appendChild(b);
+        });
+      }
+      section('Interlocuteurs', good, 0);
+      section('À corriger', junk, good.length);
+      if (bound) bound.place();
+    }
+
+    input.addEventListener('input', () => {
+      query = input.value;
+      active = 0;
+      renderList();
+    });
+    panel.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') return;
+      const rows = visibleRows();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!rows.length) return;
+        active = Math.min(rows.length - 1, active + 1);
+        renderList();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!rows.length) return;
+        active = Math.max(0, active - 1);
+        renderList();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (rows[active]) pick(rows[active]);
+        else tryCreateFromQuery();
+      }
+    });
+
+    panel.appendChild(searchWrap);
+    panel.appendChild(list);
+    renderList();
+    bound = ag_bindAnchoredPopover(panel, anchor, { onClose() { close(true); } });
+    try { input.focus({ preventScroll: true }); } catch { }
+  }
+
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
     const root = editors.transcript; if (!root) return;
     try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
@@ -1980,44 +2762,64 @@
 
     const oldName = String(segEl.dataset.speaker || '').trim();
     const proposed = oldName || 'Intervenant';
-    const rawName = (prompt('Renommer le locuteur :', proposed) || '');
-    const newName = normalizeName(rawName);
-    if (!newName || newName === oldName) return;
+    const anchor = triggerEl || segEl;
 
-    const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
-    const counts = {
-      total: oldName ? ag_countOccurrencesByName(oldName) : 0,
-      contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
-      empty: emptyCount
-    };
+    function afterNameChosen(rawName) {
+      ag_closeSpeakerPicker();
+      const newName = normalizeName(rawName);
+      if (!newName || newName === oldName) return;
+      pushStoredRoster(getJobIdForRoster(), newName);
 
-    const shift = !!keyState.shift;
-    const alt = !!keyState.alt;
+      const emptyCount = window._segments.reduce((n, s) => n + (+(!String(s.speaker || '').trim())), 0);
+      const counts = {
+        total: oldName ? ag_countOccurrencesByName(oldName) : 0,
+        contig: oldName ? ag_contiguousRangeFrom(idx, oldName).count : 0,
+        empty: emptyCount
+      };
 
-    if (oldName) {
-      if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
-      if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
-    } else if (renameAllEmpty) {
-      const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
-      toast(`Segments sans nom → "${newName}" (${n} seg.)`);
-      return;
+      const shift = !!keyState.shift;
+      const alt = !!keyState.alt;
+
+      if (oldName) {
+        if (shift) { const n = ag_applyRenameScope({ scope: 'all', oldName, newName, idx }); toast(`Renommé "${oldName}" → "${newName}" (${n} seg.)`); return; }
+        if (alt) { const n = ag_applyRenameScope({ scope: 'contiguous', oldName, newName, idx }); toast(`Groupe renommé (${n} seg.)`); return; }
+      } else if (renameAllEmpty) {
+        const n = ag_applyRenameScope({ scope: 'empty', oldName: '', newName, idx });
+        toast(`Segments sans nom → "${newName}" (${n} seg.)`);
+        return;
+      }
+
+      const forEmpty = !oldName;
+      ag_showRenameMenu(anchor, {
+        oldName, counts, forEmpty,
+        onSelect(scope) {
+          const n = ag_applyRenameScope({ scope, oldName, newName, idx });
+          toast(
+            scope === 'one' ? 'Locuteur mis à jour' :
+              scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
+                scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
+                  `Segments sans nom → "${newName}" (${n} seg.)`
+          );
+        }
+      });
     }
 
-    const anchor = triggerEl || segEl;
-    const forEmpty = !oldName;
-
-    ag_showRenameMenu(anchor, {
-      oldName, counts, forEmpty,
-      onSelect(scope) {
-        const n = ag_applyRenameScope({ scope, oldName, newName, idx });
-        toast(
-          scope === 'one' ? 'Locuteur mis à jour' :
-            scope === 'contiguous' ? `Groupe renommé (${n} seg.)` :
-              scope === 'all' ? `Toutes les occurrences → "${newName}" (${n} seg.)` :
-                `Segments sans nom → "${newName}" (${n} seg.)`
-        );
-      }
-    });
+    if (!isSpeakerPickerEnabled()) {
+      const rawName = (prompt('Renommer le locuteur :', proposed) || '');
+      afterNameChosen(rawName);
+      return;
+    }
+    try {
+      ag_showSpeakerPicker(anchor, {
+        currentName: oldName,
+        names: collectRosterNames(),
+        onPick: afterNameChosen,
+        onCancel() { }
+      });
+    } catch {
+      const rawName = (prompt('Renommer le locuteur :', proposed) || '');
+      afterNameChosen(rawName);
+    }
   }
 
 
@@ -2028,24 +2830,22 @@
     const audio = byId('agilo-audio'); if (!audio) return;
     if (root.__syncBound) return;
 
+    bindSplitTrim();
+    bindFollowPause(document.getElementById('pane-transcript'));
+    bindFollowPause(root);
+    removePaneFollowLeftover();
+    dispatchTranscriptFollow(_transcriptFollow.armed);
+
     audio.addEventListener('timeupdate', () => {
       if (__mode !== 'structured' || !window._segments.length) return;
-      const t = audio.currentTime || 0;
-      let k = _activeSeg;
-      const inSeg = (s) => Number.isFinite(s.start) && Number.isFinite(s.end) && t >= s.start && t < s.end;
-      if (k < 0 || !inSeg(window._segments[k])) k = window._segments.findIndex(inSeg);
+      const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
       if (k !== _activeSeg) {
         if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
         _activeSeg = k;
         const el = root.children[k];
         if (el) {
           el.classList.add('is-active');
-          // ⚡️ SAFE SCROLL: Utiliser le helper qui gère le conteneur
-          const pane = el.closest('.edtr-pane, .ag-panel, #pane-transcript, #pane-summary, #pane-chat');
-          const container = agiloFindScrollContainer(el) || agiloFindScrollContainer(pane) || pane;
-          if (agiloIsOutOfView(el, container, { top: 100, bottom: 120 })) {
-            agiloScrollIntoView(el, { allowWindow: false });
-          }
+          scrollToActivePlaybackSegment({ force: false });
         }
       }
     });
@@ -2535,6 +3335,12 @@
         }
 
         if ((toolbar.srch?.value || '').trim()) highlight();
+        if (json && Array.isArray(json.segments) && !isStale(seq)) {
+          window.__agiloLastLoadedTranscript = { jobId: id, transcript: json };
+          window.dispatchEvent(new CustomEvent('agilo:transcript-loaded', {
+            detail: { jobId: id, transcript: json }
+          }));
+        }
       } else {
         const val = (tRes.status === 'fulfilled' ? tRes.value : null);
         if (val?.code === 'CANCELLED') return;
@@ -2776,7 +3582,7 @@
       editors.transcript?.getAttribute('aria-busy') !== 'true' &&
       editorRoot?.dataset.jobId === id;
 
-    if (uiReadySameJob) {
+    if (uiReadySameJob && !e?.detail?.force) {
       // ⚠️ AMÉLIORATION : S'assurer que aria-busy est bien retiré même si on skip
       editors.transcript?.removeAttribute('aria-busy');
       editors.summary?.removeAttribute('aria-busy');
@@ -2910,32 +3716,26 @@
       /* =====================================================================
          MENU DE PORTÉE — Renommage locuteur (version FIXED + responsive)
          ===================================================================== */
-      .ag-rename-backdrop{
-        position:fixed;
-        inset:0;
-        z-index:99998;
-        background:transparent;
-      }
-
       .ag-rename-menu{
         position:fixed;
         z-index:99999;
         min-width:240px;
         max-width:min(92vw, 420px);
-        max-height:calc(100vh - 16px);
+        max-height:min(320px, 50vh);
         overflow:auto;
-        background:var(--agilo-surface, #fff);
-        color:var(--agilo-text, #111);
-        border:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        border-radius:var(--agilo-radius, .5rem);
+        overscroll-behavior:contain;
+        background:var(--agilo-surface, var(--color--white, #fff));
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
         box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
       }
 
       .ag-rename-menu__hd{
         padding:10px 12px;
         font-weight:600;
-        border-bottom:1px solid var(--agilo-border, rgba(0,0,0,.12));
-        background:var(--agilo-surface-2, #f8f9fa);
+        border-bottom:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
       }
 
       .ag-rename-menu__row{
@@ -2952,16 +3752,165 @@
 
       .ag-rename-menu__row:hover,
       .ag-rename-menu__row:focus-visible{
-        background: color-mix(in srgb,
-                    var(--agilo-surface-2, #f8f9fa) 86%,
-                    var(--agilo-primary, #174a96) 14%);
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
         outline:none;
+        box-shadow:none;
       }
 
       .ag-rename-menu__muted{
-        color:var(--agilo-dim, #525252);
+        color:var(--agilo-dim, var(--color--gris, #525252));
         font-size:12px;
         margin-left:.4rem;
+      }
+
+      #pane-transcript .ag-seg__head .speaker{
+        cursor:pointer;
+      }
+      #pane-transcript .ag-seg__head .rename-btn{
+        opacity:.55;
+      }
+      #pane-transcript .ag-seg__head .rename-btn:hover,
+      #pane-transcript .ag-seg__head .rename-btn:focus-visible{
+        opacity:1;
+        box-shadow:0 0 0 2px color-mix(in srgb, var(--agilo-primary, #174a96) 65%, transparent);
+      }
+      #pane-transcript .ag-seg__head .rename-btn svg{
+        width:1em;
+        height:1em;
+        display:block;
+      }
+
+      .ag-speaker-picker{
+        position:fixed;
+        z-index:99999;
+        min-width:260px;
+        max-width:min(92vw, 360px);
+        max-height:min(320px, 50vh);
+        display:flex;
+        flex-direction:column;
+        overflow:hidden;
+        overscroll-behavior:contain;
+        background:var(--agilo-surface, var(--color--white, #fff));
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
+        box-shadow:var(--agilo-shadow, 0 8px 24px rgba(0,0,0,.14));
+        font:500 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto;
+      }
+      .ag-speaker-picker__search{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        margin:8px 10px 0;
+        padding:6px 8px;
+        border:1px solid var(--agilo-border, var(--color--noir_25, #343a4040));
+        border-radius:var(--agilo-radius, var(--0-5_radius, .5rem));
+        background:var(--agilo-surface, var(--color--white, #fff));
+        flex:0 0 auto;
+      }
+      .ag-speaker-picker__search:focus-within{
+        border-color:var(--agilo-border, var(--color--noir_25, #343a4040));
+        outline:none;
+        box-shadow:none;
+      }
+      .ag-speaker-picker__ico{
+        width:18px;
+        height:18px;
+        flex:0 0 18px;
+        color:var(--agilo-dim, var(--color--gris, #525252));
+      }
+      .ag-speaker-picker__input{
+        flex:1;
+        min-width:0;
+        border:0;
+        border-radius:0;
+        background:transparent;
+        outline:none;
+        box-shadow:none;
+        -webkit-appearance:none;
+        appearance:none;
+        font:inherit;
+        color:inherit;
+      }
+      .ag-speaker-picker__input:focus,
+      .ag-speaker-picker__input:focus-visible{
+        outline:none;
+        box-shadow:none;
+        -webkit-appearance:none;
+        appearance:none;
+      }
+      .ag-speaker-picker *:focus,
+      .ag-speaker-picker *:focus-visible{
+        outline:none;
+        box-shadow:none;
+      }
+      .ag-speaker-picker__list{
+        overflow:auto;
+        flex:1;
+        overscroll-behavior:contain;
+      }
+      .ag-speaker-picker__hd{
+        padding:8px 12px 4px;
+        font-size:11px;
+        font-weight:600;
+        letter-spacing:.04em;
+        text-transform:uppercase;
+        color:var(--agilo-dim, var(--color--gris, #525252));
+      }
+      .ag-speaker-picker__row{
+        display:flex;
+        align-items:center;
+        gap:8px;
+        width:100%;
+        text-align:left;
+        padding:8px 12px;
+        background:transparent;
+        border:0;
+        cursor:pointer;
+        color:inherit;
+        font:inherit;
+      }
+      .ag-speaker-picker__row:hover,
+      .ag-speaker-picker__row.is-active,
+      .ag-speaker-picker__row:focus-visible{
+        background:var(--agilo-surface-2, var(--color--blanc_gris, #f8f9fa));
+        outline:none;
+        box-shadow:none;
+        border-radius:0;
+      }
+      .ag-speaker-picker__dot{
+        width:8px;
+        height:8px;
+        border-radius:50%;
+        flex:0 0 8px;
+      }
+      .ag-speaker-picker__name{
+        flex:1;
+        min-width:0;
+        overflow:hidden;
+        text-overflow:ellipsis;
+        white-space:nowrap;
+        font-weight:600;
+        color:var(--agilo-text, var(--color--gris_foncé, #020202));
+      }
+      .ag-speaker-picker__count{
+        color:var(--agilo-dim, var(--color--gris, #525252));
+        font-size:12px;
+      }
+      .ag-speaker-picker__check{
+        display:inline-flex;
+        width:14px;
+        height:14px;
+        color:var(--agilo-primary, var(--color--blue, #174a96));
+      }
+      .ag-speaker-picker__check svg{
+        width:14px;
+        height:14px;
+      }
+      .ag-speaker-picker__empty{
+        padding:16px 12px;
+        color:var(--agilo-dim, var(--color--gris, #525252));
+        font-size:13px;
       }
     `;
     document.head.appendChild(style);
@@ -3017,5 +3966,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.6';
+  window.__agiloEditorConfidenceVersion = '1.09.13-plus-picker';
 });

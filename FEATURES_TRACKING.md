@@ -51,6 +51,7 @@ Tous les scripts sont hébergés sur GitHub et chargés via jsDelivr CDN :
 | `code-questions-ia` | `Code-questions-ia.js` | ✅ Actif | Chips de questions IA pré-définies |
 | `code-copy-paste-text` | `Code-copy-paste-text.js` | ✅ Actif | Amélioration copy/paste avec undo/redo |
 | `code-save_transcript` | `Code-save_transcript.js` | ✅ Actif | Auto-save et sauvegarde manuelle avec détection de conflits |
+| `code-save_transcript` (historique) | `Code-save_transcript-V2.js` + `agilo-transcript-history.js` | 🚧 En cours | Retour aux sauvegardes rotatives de transcription ; recette et publication staging en attente |
 
 ---
 

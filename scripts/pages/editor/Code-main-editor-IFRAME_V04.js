@@ -2435,6 +2435,12 @@
         }
 
         if ((toolbar.srch?.value || '').trim()) highlight();
+        if (json && Array.isArray(json.segments) && !isStale(seq)) {
+          window.__agiloLastLoadedTranscript = { jobId: id, transcript: json };
+          window.dispatchEvent(new CustomEvent('agilo:transcript-loaded', {
+            detail: { jobId: id, transcript: json }
+          }));
+        }
       } else {
         const val = (tRes.status === 'fulfilled' ? tRes.value : null);
         if (val?.code === 'CANCELLED') return;
@@ -2676,7 +2682,7 @@
       editors.transcript?.getAttribute('aria-busy') !== 'true' &&
       editorRoot?.dataset.jobId === id;
 
-    if (uiReadySameJob) {
+    if (uiReadySameJob && !e?.detail?.force) {
       // ⚠️ AMÉLIORATION : S'assurer que aria-busy est bien retiré même si on skip
       editors.transcript?.removeAttribute('aria-busy');
       editors.summary?.removeAttribute('aria-busy');

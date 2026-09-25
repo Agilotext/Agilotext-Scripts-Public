@@ -669,7 +669,7 @@
     try{
       const srv = await fetchServerJson(creds);
       const ok = eqSegmentsMs(localSegmentsMs, srv.segments||[]);
-      if (!ok) console.warn('[agilo:save] round-trip JSON mismatch', {local:localSegmentsMs, remote:srv.segments});
+      if (!ok) console.warn('[agilo:save] round-trip JSON mismatch');
       return ok;
     }catch(e){
       console.warn('[agilo:save] round-trip JSON failed →', e);
@@ -692,7 +692,22 @@
   /* ===== ENVOI ===== */
   let isSaving=false;
   let saveDebounceTimer = null; // ✅ NOUVEAU : Timer pour debounce
+  let pendingSaveResolve = null;
   let lastSavedContent = ''; // ✅ NOUVEAU : Mémoriser le dernier contenu sauvegardé
+
+  function setSaveInProgress(value) {
+    isSaving = Boolean(value);
+    window.__agiloSaveInProgress = isSaving;
+    window.dispatchEvent(new CustomEvent('agilo:transcript-save-busy', {
+      detail: { jobId: String(pickJobId()), busy: isSaving }
+    }));
+  }
+
+  function notifySaved(jobId, source, transcript) {
+    window.dispatchEvent(new CustomEvent('agilo:transcript-saved', {
+      detail: { jobId: String(jobId), source, transcript }
+    }));
+  }
 
   // helper : ajoute les 4 paramètres dans l'URL (QS)
   function endpointWithQS(params){
@@ -742,8 +757,31 @@
       }))
     };
     
-    console.log('✅ JSON transcript_status:', JSON.stringify(transcriptStatusJson, null, 2));
-    
+    const result = await postTranscriptDto(params, transcriptStatusJson);
+    return { ...result, dto: transcriptStatusJson };
+  }
+
+  function validateBackupDto(dto, jobId) {
+    if (!dto || typeof dto !== 'object' || Array.isArray(dto) ||
+        String(dto.job_meta?.jobId) !== String(jobId) ||
+        !Array.isArray(dto.segments) || dto.segments.length === 0) {
+      throw new Error('Sauvegarde de transcription invalide');
+    }
+    for (const segment of dto.segments) {
+      if (!segment || typeof segment.id !== 'string' ||
+          !Number.isSafeInteger(segment.milli_start) || segment.milli_start < 0 ||
+          !Number.isSafeInteger(segment.milli_end) || segment.milli_end < segment.milli_start ||
+          typeof segment.speaker !== 'string' || typeof segment.text !== 'string') {
+        throw new Error('Segment de sauvegarde invalide');
+      }
+    }
+    if (!dto.segments.some((segment) => segment.text.trim())) {
+      throw new Error('Sauvegarde de transcription vide');
+    }
+    return dto;
+  }
+
+  function postTranscriptDto(params, dto) {
     const body = new URLSearchParams();
     body.append('username', params.username);
     body.append('token', params.token);
@@ -751,19 +789,16 @@
     body.append('edition', params.edition);
     
     // ✅ CORRECTION : transcriptContent = JSON complet (pas le texte brut)
-    body.append('transcriptContent', JSON.stringify(transcriptStatusJson));
-    
-    const url = `${ENDPOINT}?username=${encodeURIComponent(params.username)}&token=${encodeURIComponent(params.token)}&jobId=${encodeURIComponent(params.jobId)}&edition=${encodeURIComponent(params.edition)}`;
+    body.append('transcriptContent', JSON.stringify(dto));
     
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('POST', url);
+      xhr.open('POST', ENDPOINT);
       xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded; charset=UTF-8');
       
       xhr.onload = () => {
         try {
           const response = JSON.parse(xhr.responseText);
-          console.log('📥 Réponse API:', xhr.status, response);
           resolve({ res: { status: xhr.status, ok: xhr.status === 200 }, raw: xhr.responseText, j: response });
         } catch (e) {
           console.error('❌ Erreur parsing réponse:', e);
@@ -781,19 +816,36 @@
   }
 
   // ✅ CORRECTION DÉFINITIVE : doSave avec debounce, vérification de contenu ET vérification que le transcript est chargé
-  async function doSave(btn){
+  async function doSave(btn, options={}){
+    if (window.__agiloTranscriptHistoryRestoring && !options.history) {
+      return {ok:false, reason:'restore_in_progress'};
+    }
     // ✅ NOUVEAU : Debounce pour éviter les sauvegardes multiples
     if (saveDebounceTimer) {
       clearTimeout(saveDebounceTimer);
+      pendingSaveResolve?.({ok:false, reason:'superseded'});
+      pendingSaveResolve = null;
+      window.__agiloSavePending = false;
     }
     
     return new Promise((resolve) => {
+      pendingSaveResolve = resolve;
+      window.__agiloSavePending = true;
+      window.dispatchEvent(new CustomEvent('agilo:transcript-save-busy', {detail:{jobId:String(pickJobId()), busy:true}}));
       saveDebounceTimer = setTimeout(async () => {
+        saveDebounceTimer = null;
+        pendingSaveResolve = null;
+        window.__agiloSavePending = false;
+        if (window.__agiloTranscriptHistoryRestoring && !options.history) {
+          resolve({ok:false,reason:'restore_in_progress'});
+          window.dispatchEvent(new CustomEvent('agilo:transcript-save-busy', {detail:{jobId:String(pickJobId()), busy:false}}));
+          return;
+        }
         if (isSaving) {
           resolve({ok:false,reason:'already_saving'});
           return;
         }
-        isSaving=true;
+        setSaveInProgress(true);
 
         if (btn && !btn.__idleText){ 
           btn.__idleText=(btn.textContent||'Sauvegarder').trim(); 
@@ -815,7 +867,6 @@
             updateStatusIndicator('error');
             showToast(errorMessage, 'error');
             
-            isSaving = false;
             resolve({ok:false, reason: 'wrong_tab', error: errorMessage});
             return;
           }
@@ -847,12 +898,11 @@
             updateStatusIndicator('error');
             showToast(errorMessage, 'error');
             
-            isSaving = false;
             resolve({ok:false, reason: reason, error: errorMessage});
             return;
           }
           
-          console.log('[agilo:save:security] ✅ Transcript vérifié et prêt:', transcriptCheck.content);
+          console.log('[agilo:save:security] ✅ Transcript vérifié et prêt');
 
           const creds=await ensureCreds();
           const { email, token, edition, jobId } = creds;
@@ -876,9 +926,8 @@
 
           // ✅ NOUVEAU : Vérifier si le contenu a réellement changé (sauf si sauvegarde manuelle)
           const currentContent = pick.text.trim();
-          if (!btn && currentContent === lastSavedContent) {
+          if (!btn && !options.force && currentContent === lastSavedContent) {
             console.log('⏭️ Pas de modification, sauvegarde ignorée');
-            isSaving = false;
             resolve({ok:false,reason:'no_changes'});
             return;
           }
@@ -886,12 +935,13 @@
           console.log('🔄 Sauvegarde avec JSON complet...');
           if (btn) updateStatusIndicator('saving');
           
-          const {res, raw, j} = await postCorrectAPI({username:email,token,jobId,edition}, pick, {});
+          const {res, j, dto} = await postCorrectAPI({username:email,token,jobId,edition}, pick, {});
 
           if (res.ok && j?.status==='OK'){
             console.log('✅ Sauvegarde réussie !');
             lastSavedContent = currentContent; // ✅ Mémoriser le contenu sauvegardé
             lastSaveTime = new Date();
+            notifySaved(jobId, options.history ? 'history-presave' : (btn ? 'manual' : 'requested'), dto);
             
             if (btn){ 
               btn.textContent='Sauvegardé ✓'; 
@@ -918,9 +968,9 @@
           }
           resolve({ok:false, error: e.message});
         } finally{
-          isSaving=false;
+          setSaveInProgress(false);
         }
-      }, btn ? 0 : SAVE_DEBOUNCE_MS); // ✅ Pas de debounce pour sauvegarde manuelle
+      }, btn || options.history ? 0 : SAVE_DEBOUNCE_MS); // ✅ Pas de debounce pour sauvegarde manuelle
     });
   }
 
@@ -1003,6 +1053,8 @@
     if (autoSaveTimer) return;
     
     autoSaveTimer = setInterval(async () => {
+      if (isSaving || window.__agiloTranscriptHistoryRestoring) return;
+      let acquired = false;
       try {
         // ✅ NOUVEAU : Vérifier que le transcript est chargé avant auto-save
         const transcriptCheck = await verifyTranscriptReady();
@@ -1022,11 +1074,14 @@
           console.log('⏭️ Pas de modification, auto-save ignoré');
           return;
         }
+        if (isSaving || window.__agiloTranscriptHistoryRestoring) return;
+        setSaveInProgress(true);
+        acquired = true;
         
         console.log('🔄 Auto-save périodique...');
         updateStatusIndicator('saving');
         
-        const {res, j} = await postCorrectAPI({
+        const {res, j, dto} = await postCorrectAPI({
           username: creds.email,
           token: creds.token,
           jobId: creds.jobId,
@@ -1037,6 +1092,7 @@
           lastSaveTime = new Date();
           lastSavedContent = currentContent;
           updateStatusIndicator('saved');
+          notifySaved(creds.jobId, 'auto', dto);
           console.log('✅ Auto-save réussi');
           // ✅ SUPPRIMÉ : Pas de toast pour l'auto-save automatique
         } else {
@@ -1046,6 +1102,8 @@
       } catch (e) {
         console.warn('⚠️ Auto-save échoué:', e);
         updateStatusIndicator('error');
+      } finally {
+        if (acquired) setSaveInProgress(false);
       }
     }, AUTO_SAVE_INTERVAL);
   }
@@ -1083,7 +1141,7 @@
   // ✅ 5. SAUVEGARDE AVANT FERMETURE
   function setupBeforeUnload() {
     window.addEventListener('beforeunload', async (e) => {
-      if (isSaving) {
+      if (isSaving || window.__agiloTranscriptHistoryRestoring) {
         e.preventDefault();
         e.returnValue = 'Sauvegarde en cours, veuillez patienter...';
         return e.returnValue;
@@ -1103,13 +1161,23 @@
           if (pick.text && pick.text.trim().length >= MIN_CONTENT_LENGTH) {
             const currentContent = pick.text.trim();
             if (currentContent !== lastSavedContent) {
+              if (isSaving || window.__agiloTranscriptHistoryRestoring) return;
+              setSaveInProgress(true);
               updateStatusIndicator('saving');
-              await postCorrectAPI({
-                username: creds.email,
-                token: creds.token,
-                jobId: creds.jobId,
-                edition: creds.edition
-              }, pick, {});
+              try {
+                const {res, j, dto} = await postCorrectAPI({
+                  username: creds.email,
+                  token: creds.token,
+                  jobId: creds.jobId,
+                  edition: creds.edition
+                }, pick, {});
+                if (res.ok && j?.status === 'OK') {
+                  lastSavedContent = currentContent;
+                  notifySaved(creds.jobId, 'beforeunload', dto);
+                }
+              } finally {
+                setSaveInProgress(false);
+              }
             }
           }
         }
@@ -1315,6 +1383,9 @@
       saveBtn.style.setProperty('pointer-events', 'none', 'important');
       console.log('[agilo:save] ✅ Bouton Sauvegarder caché par défaut (onglet inconnu)');
     }
+    document.dispatchEvent(new CustomEvent('agilo:save-visibility', {
+      detail: { visible: Boolean(finalIsTranscript && !finalIsChat && !finalIsSummary) }
+    }));
   }
   
   // ✅ Exposer la fonction globalement pour pouvoir l'appeler manuellement
@@ -1389,6 +1460,45 @@
     alert('Version restaurée depuis le stockage local.');
   };
   window.agiloSaveNow = function(){ const btn=findSaveButton(); return doSave(btn||null); };
+  window.agiloSaveCurrentForHistory = function(){ return doSave(null, {history:true, force:true}); };
+  window.agiloPostTranscriptFromBackupJson = async function(dto) {
+    if (!window.__agiloTranscriptHistoryRestoring || isSaving) {
+      return {ok:false, reason:'busy'};
+    }
+    const creds = await ensureCreds();
+    if (!creds.email || !creds.token || !creds.jobId) return {ok:false, reason:'missing_credentials'};
+    let acquired = false;
+    try {
+      validateBackupDto(dto, creds.jobId);
+      if (isSaving) return {ok:false, reason:'busy'};
+      setSaveInProgress(true);
+      acquired = true;
+      const {res, j} = await postTranscriptDto({
+        username:creds.email, token:creds.token, jobId:creds.jobId, edition:creds.edition
+      }, dto);
+      if (!res.ok || j?.status !== 'OK') return {ok:false, reason:j?.errorMessage || 'server_error'};
+      notifySaved(creds.jobId, 'history-restore', dto);
+      return {ok:true};
+    } catch (error) {
+      return {ok:false, reason:error.message || 'network_error'};
+    } finally {
+      if (acquired) setSaveInProgress(false);
+    }
+  };
+  window.agiloFinishTranscriptRestore = async function(jobId) {
+    clearTimeout(__draftTimer);
+    try { localStorage.removeItem(`agilo:draft:${jobId}`); } catch (_) {}
+    const pick = await serializeAll();
+    lastSavedContent = String(pick.text || '').trim();
+    lastSaveTime = new Date();
+    updateStatusIndicator('saved');
+  };
+  window.addEventListener('agilo:transcript-loaded', (event) => {
+    if (window.__agiloTranscriptHistoryRestoring || String(event?.detail?.jobId || '') !== String(pickJobId())) return;
+    Promise.resolve().then(serializeAll).then((pick) => {
+      if (!isSaving && !window.__agiloTranscriptHistoryRestoring) lastSavedContent = String(pick.text || '').trim();
+    }).catch(() => {});
+  });
   window.serializeAll = serializeAll; window.ensureCreds = ensureCreds;
   window.agiloGetPayload = async()=>{ const creds=await ensureCreds(); const pick=await serializeAll(); const meta=buildMeta(pick.segments,pick.from); return {creds,pick,meta}; };
   window.agiloGetState = ()=>({ edition: pickEdition(), jobId: pickJobId(), email: pickEmail(), hasToken: !!pickToken(pickEdition(), pickEmail()) });
@@ -1400,22 +1510,19 @@
     
     try {
       const transcriptCheck = await verifyTranscriptReady();
-      console.log('📊 Vérification transcript:', transcriptCheck);
+      console.log('📊 Vérification transcript:', {isReady:transcriptCheck.isReady, reason:transcriptCheck.reason});
       
       const {creds, pick, meta} = await window.agiloGetPayload();
-      console.log('📊 Credentials:', creds);
-      console.log('📊 Pick data:', pick);
-      console.log('📊 Text content:', pick.text);
+      console.log('📊 Credentials:', {edition:creds.edition, jobId:creds.jobId, hasToken:!!creds.token});
       console.log('📊 Text length:', pick.text?.length || 0);
       console.log('📊 Segments count:', pick.segments?.length || 0);
-      console.log('📊 Last saved content:', lastSavedContent);
       console.log('📊 Content changed:', pick.text.trim() !== lastSavedContent);
       
       const { main } = getAllPanes();
       console.log('📊 Main editor:', main?.id, main?.className);
       
       console.groupEnd();
-      return { creds, pick, transcriptCheck, main };
+      return {edition:creds.edition, jobId:creds.jobId, hasToken:!!creds.token, textLength:pick.text?.length||0, segmentCount:pick.segments?.length||0, isReady:transcriptCheck.isReady};
       
     } catch (e) {
       console.error('❌ Erreur diagnostic:', e);
@@ -1492,4 +1599,3 @@
 
   if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init, {once:true}); else init();
 })();
-
