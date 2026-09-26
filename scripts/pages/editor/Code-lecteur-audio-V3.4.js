@@ -5,10 +5,11 @@
 //   3. durationchange : écoute le changement de durée pour recalculer la barre
 //   4. ensureSeekableFor() : timeout 30s sur loadedmetadata (évite blocage infini)
 //   5. suppression de newAbortCtrl() inutilisé
+//   6. privacy : pause forcée onglet/écran caché (veille Windows) ; jamais de reprise auto
 
 (function () {
   if (window.__agiloAudioLite) return;
-  window.__agiloAudioLite = '3.4-text-play-pause';
+  window.__agiloAudioLite = '3.4-privacy-vis';
 
   // ---------- Refs DOM ----------
   let wrap, audio, playBtn, backBtn, fwdBtn, speedBtn, dlBtn;
@@ -38,6 +39,7 @@
   let lastBlobUrl = '';
   let seekLocked = true;
   let isScrubbing = false;
+  let privacyPauseBound = false;
 
   // ---------- Cleanup ----------
   let cleanupListeners = [];
@@ -376,6 +378,65 @@
     }
   }
 
+  /** Page / écran non visible (veille, Win+L, autre onglet). */
+  function pageIsObscured() {
+    try {
+      if (document.hidden) return true;
+      if (document.visibilityState === 'hidden') return true;
+    } catch (_) { /* ignore */ }
+    return false;
+  }
+
+  /** Coupe le son sans reprise auto (confidentialité Windows veille / verrouillage). */
+  function forcePauseForPrivacy(reason) {
+    try { audio?.pause(); } catch (_) { /* ignore */ }
+    wasPlaying = false;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.mediaSession) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+    } catch (_) { /* ignore */ }
+    updatePlayUI();
+    log('privacy pause', reason || '');
+  }
+
+  function bindPrivacyPauseGuards() {
+    if (privacyPauseBound) return;
+    privacyPauseBound = true;
+
+    const onObscure = (reason) => {
+      if (!audio) return;
+      forcePauseForPrivacy(reason);
+    };
+
+    const onVisibility = () => {
+      if (pageIsObscured()) onObscure('visibilitychange');
+      else updatePlayUI();
+    };
+    const onPageHide = () => onObscure('pagehide');
+    const onFreeze = () => onObscure('freeze');
+    const onPageShow = () => { updatePlayUI(); };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
+    try { document.addEventListener('freeze', onFreeze); } catch (_) { /* ignore */ }
+
+    addCleanup(() => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('pageshow', onPageShow);
+      try { document.removeEventListener('freeze', onFreeze); } catch (_) { /* ignore */ }
+      privacyPauseBound = false;
+    });
+
+    window.AgiloAudioPrivacy = {
+      pageIsObscured,
+      forcePauseForPrivacy: (reason) => forcePauseForPrivacy(reason),
+      version: '3.4-privacy-vis'
+    };
+  }
+
   // ---------- Auth ----------
   async function ensureEmail() {
     const el = document.querySelector('[name="memberEmail"]');
@@ -545,7 +606,14 @@
     if (!audio) return;
 
     if (!audio.__agiloCoreBound) {
-      const playHandler = () => { wasPlaying = true; updatePlayUI(); };
+      const playHandler = () => {
+        if (pageIsObscured()) {
+          forcePauseForPrivacy('play-while-hidden');
+          return;
+        }
+        wasPlaying = true;
+        updatePlayUI();
+      };
       const pauseHandler = () => { wasPlaying = false; updatePlayUI(); };
       const endedHandler = () => { wasPlaying = false; updatePlayUI(); };
       const timeHandler = syncTime;
@@ -596,6 +664,8 @@
 
       audio.__agiloCoreBound = true;
     }
+
+    bindPrivacyPauseGuards();
 
     const playClick = async (e) => {
       e.preventDefault();
@@ -728,7 +798,7 @@
         if (playFromText && !e.isComposing) {
           e.preventDefault();
           e.stopPropagation();
-          if (!e.repeat && audio && getSafeDuration() > 0 && !seekLocked) {
+          if (!e.repeat && audio && getSafeDuration() > 0 && !seekLocked && !pageIsObscured()) {
             if (audio.paused) audio.play().catch(() => {});
             else audio.pause();
           }
@@ -740,7 +810,11 @@
         const step = e.shiftKey ? 10 : 5;
 
         switch ((e.key || '').toLowerCase()) {
-          case ' ': e.preventDefault(); if (!seekLocked) (audio.paused ? audio.play() : audio.pause()); break;
+          case ' ':
+            e.preventDefault();
+            if (seekLocked || pageIsObscured()) break;
+            (audio.paused ? audio.play() : audio.pause());
+            break;
           case 'arrowleft': e.preventDefault(); audio.currentTime = Math.max(0, audio.currentTime - step); break;
           case 'arrowright': e.preventDefault(); audio.currentTime = Math.min(dur, audio.currentTime + step); break;
           case 'home': e.preventDefault(); audio.currentTime = 0; break;
@@ -866,7 +940,9 @@
     if (!window.__agiloAudioLoadBound) {
       const loadHandler = async (ev) => {
         const newId = ev.detail?.jobId;
-        const wantPlay = (typeof ev.detail?.autoplay === 'boolean') ? ev.detail.autoplay : wasPlaying;
+        const wantPlay = (typeof ev.detail?.autoplay === 'boolean')
+          ? ev.detail.autoplay
+          : (wasPlaying && !pageIsObscured());
         if (!newId) return;
         activeJobId = String(newId);
         POS_KEY = `agilo:pos:${activeJobId}`;
@@ -883,7 +959,7 @@
             dlBtn.style.display = '';
           }
           try {
-            await ensureSeekableFor(url, { resumeTime: 0, autoplay: wantPlay });
+            await ensureSeekableFor(url, { resumeTime: 0, autoplay: wantPlay && !pageIsObscured() });
           } catch (err) {
             const code = err?.code || 'generic';
             const hideDownload = code === 'error_audio_file_expired';
