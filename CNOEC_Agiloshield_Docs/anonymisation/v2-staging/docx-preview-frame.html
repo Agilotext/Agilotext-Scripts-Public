@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://cdn.jsdelivr.net http://127.0.0.1:* http://localhost:*; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <style>
+    html,body{margin:0;background:#e8eef5;color:#17304e;font:14px/1.4 system-ui,sans-serif}
+    #status{padding:14px;text-align:center}
+    #docx{overflow:auto;min-height:100vh}
+    #docx .docx-wrapper{background:transparent;padding:18px}
+  </style>
+</head>
+<body>
+  <div id="status" role="status">Chargement de l’aperçu Word…</div>
+  <div id="docx"></div>
+  <script src="./vendor/jszip-3.10.2.min.js"></script>
+  <script src="./vendor/docx-preview-0.4.1.min.js"></script>
+  <script src="./docx-preview-frame.js"></script>
+</body>
+</html>

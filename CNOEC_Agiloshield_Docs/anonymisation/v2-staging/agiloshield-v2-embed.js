@@ -2,312 +2,574 @@ import { AgiloShieldV2Client } from './agiloshield-v2-client.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
-if (!mount || !config) throw new Error('AgiloShield V2 staging mount/config absent');
-if (!/^https:\/\//.test(config.BASE_URL || '') || typeof config.getAuthHeaders !== 'function') {
-  throw new Error('AgiloShield V2 staging URL/auth invalides');
-}
+if (!mount || !config || !/^https:\/\//.test(config.BASE_URL || '') ||
+    typeof config.getAuthHeaders !== 'function') throw new Error('Configuration V2 staging invalide');
 const api = new AgiloShieldV2Client({baseUrl:config.BASE_URL, authHeaders:config.getAuthHeaders});
 const codes = ['ADR','DAT','EML','IBA','IDN','JOB','LOC','ORG','PER','PII','PRO','TEL','URL'];
 const defaults = ['ADR','EML','IBA','IDN','PER','TEL','URL'];
-const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',LOC:'Lieu',ORG:'Organisation',PER:'Personne',PII:'Donnée personnelle générique',PRO:'Profession',TEL:'Téléphone',URL:'URL'};
-const state = {preferencesReady:false, jobId:null, file:null, digest:null, status:null, revision:null,
-  review:null, pdf:null, page:1, target:null, pollToken:0, previewKind:'origin',selectedSnapshot:null};
+const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',
+  LOC:'Lieu',ORG:'Organisation',PER:'Personne',PII:'Donnée personnelle générique',PRO:'Profession',
+  TEL:'Téléphone',URL:'URL'};
+const supported = /\.(pdf|docx|xlsx|pptx|txt|csv)$/i;
+const storageKey = 'agiloshield-v2-staging-session-jobs';
+const state = {preferencesReady:false, entries:[], active:null, running:false, drawerOpen:false,
+  lastFocus:null, previewSerial:0, previewCleanup:null};
+const el = (tag,text,klass,parent) => {
+  const out=document.createElement(tag);
+  if(text!==null && text!==undefined) out.textContent=String(text);
+  if(klass) out.className=klass;
+  if(parent) parent.appendChild(out);
+  return out;
+};
+const clear = element => element.replaceChildren();
+const button = (text,klass,parent,handler) => {
+  const out=el('button',text,klass,parent);out.type='button';if(handler)out.addEventListener('click',handler);return out;
+};
+const statusOf = job => job.anonStatus || job.status;
+const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
+const selected = () => codes.filter(code=>checks.get(code).checked);
+const isTerminal = status => ['READY','REVIEW_REQUIRED','FAILED'].includes(status);
+const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
+const errorText = error => error?.status===401?'Session Agilotext requise ou expirée.':
+  error?.status===409?'Révision périmée : actualisez ce document.':error?.message||'Erreur inconnue';
 
-function node(tag, text, klass, parent) {
-  const n = document.createElement(tag);
-  if (text !== undefined && text !== null) n.textContent = String(text);
-  if (klass) n.className = klass;
-  if (parent) parent.appendChild(n);
-  return n;
+const shell=el('section',null,'asv2-shell',mount);
+const head=el('header',null,'asv2-landing-head',shell);
+el('span','AgiloShield','asv2-brand',head);
+el('h2','Anonymiser vos documents',null,head);
+el('p','Choisissez les données à protéger. Chaque fichier conserve sa propre sélection et sa propre vérification.',null,head);
+const notice=el('div','Chargement des préférences…','asv2-notice',shell);
+notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
+const form=el('form',null,'asv2-form',shell);
+const policy=el('section',null,'asv2-policy',form);
+const policyHead=el('div',null,'asv2-section-head',policy);
+el('h3','Types de données à anonymiser',null,policyHead);
+el('span','13 catégories','asv2-count',policyHead);
+const grid=el('div',null,'asv2-grid',policy);
+const checks=new Map();
+for(const code of codes){
+  const label=el('label',null,'asv2-type',grid);
+  const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
+  el('span',code,'asv2-code',label);el('span',labels[code],null,label);checks.set(code,box);
 }
-function empty(n) { n.replaceChildren(); }
-const root = node('section',null,'v2-card',mount);
-node('h2','AgiloShield V2 — recette',null,root);
-node('p','Choisissez les catégories à protéger, déposez le fichier puis vérifiez le résultat réel.',null,root);
-const notice = node('div','Connexion et préférences en cours…','v2-notice',root);
-notice.setAttribute('role','status'); notice.setAttribute('aria-live','polite');
-const form = node('form',null,null,root);
-const fileLabel = node('label','Document PDF, DOCX, XLSX, PPTX, TXT ou CSV',null,form);
-const fileInput = node('input',null,null,fileLabel); fileInput.type='file'; fileInput.required=true;
-fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv'; fileInput.disabled=true;
-node('h3','Types de données à anonymiser (13)',null,form);
-const grid = node('div',null,'v2-grid',form);
-const checks = new Map();
-for (const code of codes) {
-  const lab=node('label',null,'v2-type',grid);
-  const box=node('input',null,null,lab); box.type='checkbox'; box.disabled=true; box.dataset.code=code;
-  node('span',code,'v2-code',lab); node('span',labels[code],null,lab);
-  checks.set(code,box);
+const shortcuts=el('div',null,'asv2-shortcuts',policy);
+for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
+  const control=button(caption,'asv2-link',shortcuts,()=>{
+    for(const [code,box] of checks) box.checked=values.includes(code);
+  });control.disabled=true;
 }
-const shortcuts=node('div',null,'v2-actions',form);
-for (const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]) {
-  const button=node('button',caption,'secondary',shortcuts); button.type='button'; button.disabled=true;
-  button.addEventListener('click',()=>{ for(const [code,box] of checks) box.checked=values.includes(code); });
-}
-const retry=node('button','Réessayer les préférences','secondary',form); retry.type='button'; retry.hidden=true;
-const upload=node('button','Anonymiser ce document',null,form); upload.type='submit'; upload.disabled=true;
-const policyNote=node('p','La sélection est enregistrée avec chaque job. Une catégorie décochée reste visible si elle est détectée.',null,form);
-const result=node('section',null,null,root);
-const issues=node('section',null,null,root);
-const previewSection=node('section',null,null,root);
+const drop=el('div',null,'asv2-drop',form);drop.tabIndex=0;drop.setAttribute('role','button');
+drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
+el('span','Déposez vos documents ici','asv2-drop-title',drop);
+el('span','ou cliquez pour choisir des fichiers · 12 maximum','asv2-drop-subtitle',drop);
+el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
+const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
+fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
+const queue=el('ul',null,'asv2-queue',form);queue.setAttribute('aria-label','Documents sélectionnés');
+const actions=el('div',null,'asv2-form-actions',form);
+const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
+const submit=el('button','Anonymiser les documents','asv2-primary',actions);submit.type='submit';submit.disabled=true;
+el('p','Une catégorie décochée peut rester visible dans le résultat. Le statut READY porte uniquement sur la sélection du job.','asv2-policy-note',form);
 
-function message(text,kind='') {notice.textContent=text; notice.className='v2-notice '+kind;}
-function setEnabled(yes) {
-  state.preferencesReady=yes; fileInput.disabled=!yes; upload.disabled=!yes;
-  for(const box of checks.values()) box.disabled=!yes;
-  for(const button of shortcuts.querySelectorAll('button')) button.disabled=!yes;
+const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
+const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);backdrop.setAttribute('aria-label','Fermer la revue');
+const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
+panel.setAttribute('aria-labelledby','asv2-drawer-title');
+const drawerHead=el('header',null,'asv2-drawer-head',panel);
+const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
+el('span','AgiloShield V2 · revue documentaire','asv2-overline',drawerHeading);
+const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
+const meta=el('p','', 'asv2-meta',drawerHeading);
+const close=button('×','asv2-close',drawerHead,closeDrawer);close.setAttribute('aria-label','Fermer le document');
+const drawerNotice=el('div','', 'asv2-drawer-notice',panel);drawerNotice.setAttribute('role','status');
+drawerNotice.setAttribute('aria-live','polite');
+const tabs=el('div',null,'asv2-mobile-tabs',panel);
+const tabDoc=button('Document','asv2-tab is-active',tabs,()=>setMobileTab('doc'));
+const tabIssues=button('Vérification','asv2-tab',tabs,()=>setMobileTab('issues'));
+const workspace=el('div',null,'asv2-workspace is-doc',panel);
+const issuePane=el('section',null,'asv2-issues',workspace);issuePane.setAttribute('aria-label','Détections et problèmes');
+const viewerPane=el('section',null,'asv2-viewer',workspace);viewerPane.setAttribute('aria-label','Aperçu du document');
+const viewerToolbar=el('div',null,'asv2-viewer-toolbar',viewerPane);
+const viewerBody=el('div',null,'asv2-viewer-body',viewerPane);
+const drawerFooter=el('footer',null,'asv2-drawer-footer',panel);
+
+function notify(text,kind='') {notice.textContent=text;notice.className='asv2-notice '+kind;}
+function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
+function setEnabled(yes){
+  state.preferencesReady=yes;fileInput.disabled=!yes;submit.disabled=!yes||state.running;
+  for(const box of checks.values())box.disabled=!yes;
+  for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
+  drop.classList.toggle('is-disabled',!yes);
 }
-function selected() {return codes.filter(code=>checks.get(code).checked);}
-function statusOf(job) {return job.anonStatus || job.status;}
-function assertDigest(value) {
-  if(!state.digest || value?.protectionPolicy?.digest!==state.digest) throw new Error('Empreinte de politique incohérente');
+async function loadPreferences(){
+  setEnabled(false);retry.hidden=true;notify('Chargement des préférences…');
+  try{
+    const response=await api.preferences();const types=response?.protectionPolicy?.selectedTypes;
+    if(!Array.isArray(types)||types.some(code=>!codes.includes(code)))throw new Error('Préférences serveur invalides');
+    const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
+    setEnabled(true);notify('Préférences chargées. Vous pouvez déposer vos documents.');
+  }catch(error){retry.hidden=false;notify(errorText(error),'is-error');}
 }
-function errorText(error) {
-  if(error.status===401) return 'Session Agilotext requise ou expirée.';
-  if(error.status===409) return 'Révision périmée : rechargez le job avant une nouvelle action.';
-  return error?.message || 'Erreur inconnue';
+function addFiles(files){
+  if(!state.preferencesReady)return;
+  const additions=[...files];
+  if(state.entries.length+additions.length>12){notify('Limite de 12 documents par session.','is-error');return;}
+  let firstAdded=null;
+  for(const file of additions){
+    if(!supported.test(file.name)){notify('Format non pris en charge : '+file.name,'is-error');continue;}
+    const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
+      digest:null,selectedTypes:null,status:'LOCAL',revision:null,review:null,regions:null,
+      previewKind:'origin',page:1,zoom:1,target:null,error:null,previewSerial:0};
+    state.entries.push(entry);
+    firstAdded ||= entry;
+  }
+  renderQueue();if(firstAdded)openDrawer(firstAdded);
+  fileInput.value='';
 }
-function reportError(error) {
-  if(error.status===401 && typeof window.agiloshieldV2ClearUserToken==='function') window.agiloshieldV2ClearUserToken();
-  message(errorText(error),'v2-error');
+fileInput.addEventListener('change',()=>addFiles(fileInput.files));
+drop.addEventListener('click',()=>{if(state.preferencesReady)fileInput.click();});
+drop.addEventListener('keydown',event=>{if((event.key==='Enter'||event.key===' ')&&state.preferencesReady){event.preventDefault();fileInput.click();}});
+for(const name of ['dragenter','dragover'])drop.addEventListener(name,event=>{
+  event.preventDefault();if(state.preferencesReady)drop.classList.add('is-dragging');
+});
+for(const name of ['dragleave','drop'])drop.addEventListener(name,event=>{
+  event.preventDefault();drop.classList.remove('is-dragging');
+});
+drop.addEventListener('drop',event=>addFiles(event.dataTransfer?.files||[]));
+function renderQueue(){
+  clear(queue);
+  for(const entry of state.entries){
+    const line=el('li',null,'asv2-queue-item',queue);
+    const open=button(entry.name,'asv2-queue-name',line,()=>openDrawer(entry));
+    open.title='Ouvrir le document';
+    el('span',entry.status==='LOCAL'?'À envoyer':entry.status==='UPLOADING'?'Envoi…':
+      entry.status==='TIMED_OUT'?'Suivi interrompu':entry.status==='ERROR'?'Erreur':entry.status,
+      'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
+    if(entry.status==='LOCAL')button('Retirer','asv2-link',line,()=>{
+      state.entries=state.entries.filter(item=>item!==entry);if(state.active===entry.key)closeDrawer();renderQueue();
+    });
+  }
 }
-function confirmAction(text) {
+function saveSession(){
+  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12).map(e=>({jobId:e.jobId,digest:e.digest}))));}
+  catch(_){/* Session recovery is optional when storage is unavailable. */}
+}
+async function restoreSession(){
+  if(!state.preferencesReady)return;
+  let saved=[];try{saved=JSON.parse(sessionStorage.getItem(storageKey)||'[]');}catch(_){return;}
+  if(!Array.isArray(saved))return;
+  for(const item of saved.slice(-12)){
+    if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
+    const entry={key:crypto.randomUUID(),file:null,name:'Job '+item.jobId,format:'',jobId:item.jobId,
+      digest:item.digest,selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
+      previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
+    state.entries.push(entry);
+    try{
+      const job=await api.status(entry.jobId);assertDigest(entry,job);
+      entry.status=statusOf(job);entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
+      entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
+      if(isTerminal(entry.status))await loadCurrent(entry);
+      else pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();});
+    }catch(error){entry.status='ERROR';entry.error=errorText(error);}
+  }
+  renderQueue();
+}
+function assertDigest(entry,value){
+  if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
+}
+async function confirmAction(text){
   return new Promise(resolve=>{
-    const box=node('div',null,'v2-confirm',root); node('p',text,null,box);
-    const yes=node('button','Confirmer',null,box); yes.type='button';
-    const no=node('button','Annuler','secondary',box); no.type='button';
-    yes.onclick=()=>{box.remove();resolve(true);}; no.onclick=()=>{box.remove();resolve(false);};
+    const box=el('div',null,'asv2-confirm',drawer.hidden?shell:panel);
+    el('p',text,null,box);
+    const yes=button('Confirmer','asv2-primary',box,()=>{box.remove();resolve(true);});
+    button('Annuler','asv2-secondary',box,()=>{box.remove();resolve(false);});yes.focus();
   });
 }
-async function loadPreferences() {
-  setEnabled(false); retry.hidden=true; message('Chargement des préférences…');
-  try {
-    const response=await api.preferences();
-    if(!Array.isArray(response?.protectionPolicy?.selectedTypes) ||
-       response.protectionPolicy.selectedTypes.some(code=>!codes.includes(code))) throw new Error('Préférences serveur invalides');
-    const active=new Set(response.protectionPolicy.selectedTypes);
-    for(const [code,box] of checks) box.checked=active.has(code);
-    setEnabled(true); message('Préférences chargées. Vous pouvez déposer un document.');
-  } catch(error) {retry.hidden=false;reportError(error);}
-}
-retry.onclick=loadPreferences;
-
-async function submit(event) {
-  event.preventDefault();
-  if(!state.preferencesReady || !fileInput.files?.[0]) return;
-  const file=fileInput.files[0];
-  if(!/\.(pdf|docx|xlsx|pptx|txt|csv)$/i.test(file.name)) return message('Format non pris en charge.','v2-error');
-  const active=selected(); const sensitive=defaults.some(code=>!active.includes(code));
-  if(sensitive && !await confirmAction(active.length ?
-     'Des données directement identifiantes resteront visibles. Confirmer cette sélection ?' :
-     'Aucune catégorie n’est sélectionnée : les données détectées resteront visibles. Confirmer ?')) return;
-  upload.disabled=true; state.pollToken++; empty(result);empty(issues);empty(previewSection);
-  const policy={schemaVersion:1,selectedTypes:active,sensitiveKeepAcknowledged:sensitive};
-  try {
+async function submitQueue(event){
+  event.preventDefault();if(!state.preferencesReady||state.running)return;
+  if(state.entries.some(entry=>['PENDING','PROCESSING','TIMED_OUT'].includes(entry.status)&&entry.jobId)){
+    notify('Reprenez d’abord le suivi du job déjà lancé avant d’envoyer la suite.','is-warning');return;
+  }
+  const pending=state.entries.filter(entry=>entry.status==='LOCAL');if(!pending.length)return;
+  const types=selected();const sensitive=defaults.some(code=>!types.includes(code));
+  if(sensitive&&!await confirmAction(types.length?
+    'Des catégories directement identifiantes resteront visibles. Confirmer la sélection ?':
+    'Aucune catégorie n’est sélectionnée. Confirmer que les données détectées resteront visibles ?'))return;
+  const policy={schemaVersion:1,selectedTypes:types,sensitiveKeepAcknowledged:sensitive};
+  state.running=true;submit.disabled=true;
+  try{
     const saved=await api.savePreferences(policy);
-    if(!Array.isArray(saved?.protectionPolicy?.selectedTypes) ||
-       JSON.stringify(saved.protectionPolicy.selectedTypes.slice().sort())!==JSON.stringify(active.slice().sort()))
+    if(!Array.isArray(saved?.protectionPolicy?.selectedTypes)||
+      JSON.stringify([...saved.protectionPolicy.selectedTypes].sort())!==JSON.stringify([...types].sort()))
       throw new Error('Préférences non enregistrées par la façade');
-    const created=await api.upload(file,policy);
-    if(!created.jobId || created?.protectionPolicy?.digest!==saved.protectionPolicy.digest)
-      throw new Error('Politique du job différente des préférences enregistrées');
-    state.jobId=created.jobId;state.file=file;state.digest=created.protectionPolicy.digest;
-    state.selectedSnapshot=active.slice();
-    state.status=null;state.revision=null;state.review=null;state.target=null;state.page=1;
-    message('Uploadé / En attente. Job '+state.jobId); await poll(state.pollToken);
-  } catch(error) {upload.disabled=false;reportError(error);}
+    for(const entry of pending){
+      entry.selectedTypes=[...types];entry.digest=saved.protectionPolicy.digest;
+      entry.status='UPLOADING';renderQueue();renderDrawer(entry);
+      try{
+        const created=await api.upload(entry.file,policy);
+        if(!created.jobId||created?.protectionPolicy?.digest!==entry.digest)
+          throw new Error('Politique du job différente de la sélection');
+        entry.jobId=created.jobId;entry.status=statusOf(created)||'PENDING';saveSession();renderQueue();
+        await pollEntry(entry);
+        if(entry.status==='TIMED_OUT')break;
+      }catch(error){entry.status='ERROR';entry.error=errorText(error);renderQueue();renderDrawer(entry);
+        if(error?.status===401)break;
+      }
+    }
+  }catch(error){notify(errorText(error),'is-error');}
+  finally{state.running=false;submit.disabled=!state.preferencesReady;renderQueue();}
 }
-form.addEventListener('submit',submit);
-
-async function poll(token) {
+form.addEventListener('submit',submitQueue);
+async function pollEntry(entry){
   const deadline=Date.now()+(config.MAX_WAIT_MS||180000);
-  while(token===state.pollToken && Date.now()<deadline) {
-    try {
-      const job=await api.status(state.jobId); assertDigest(job);
-      state.status=statusOf(job);
-      if(state.status==='PENDING') message('Uploadé / En attente');
-      else if(state.status==='PROCESSING') message('Traitement en cours');
-      else if(['READY','REVIEW_REQUIRED','FAILED'].includes(state.status)) {
-        await loadCurrent();upload.disabled=false;return;
-      } else throw new Error('Statut non reconnu : '+state.status);
-    } catch(error) {upload.disabled=false;reportError(error);return;}
+  while(Date.now()<deadline){
+    const job=await api.status(entry.jobId);assertDigest(entry,job);
+    entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
+    renderQueue();renderDrawer(entry);
+    if(isTerminal(entry.status)){await loadCurrent(entry);return;}
+    if(!['PENDING','PROCESSING'].includes(entry.status))throw new Error('Statut non reconnu : '+entry.status);
     await new Promise(resolve=>setTimeout(resolve,config.POLL_MS||1500));
   }
-  if(token===state.pollToken) {upload.disabled=false;message('Délai dépassé. Le job reste consultable par son identifiant.','v2-warning');}
+  entry.status='TIMED_OUT';entry.error='Le job existe toujours. Reprenez son suivi depuis cette session.';
+  renderQueue();renderDrawer(entry);
 }
-
-async function loadCurrent() {
-  const [job,review]=await Promise.all([api.status(state.jobId),api.review(state.jobId)]);
-  assertDigest(job);assertDigest(review);
-  state.status=statusOf(job);state.revision=review.revision;state.review=review;
-  message(state.status==='READY'?'Document prêt selon la sélection du job.':
-    state.status==='REVIEW_REQUIRED'?'Vérification nécessaire : résultat NON_VERIFIE.':
-    'Échec : résultat NON_VERIFIE.',state.status==='READY'?'v2-success':
-      state.status==='FAILED'?'v2-error':'v2-warning');
-  renderResult();renderIssues();
-  if(state.file?.name.toLowerCase().endsWith('.pdf')) await showPreview(state.previewKind).catch(reportError);
+async function loadCurrent(entry){
+  const [job,review,regions]=await Promise.all([
+    api.status(entry.jobId),api.review(entry.jobId),api.regions(entry.jobId).catch(()=>null)]);
+  assertDigest(entry,job);assertDigest(entry,review);
+  entry.status=statusOf(job);entry.revision=review.revision;entry.review=review;entry.regions=regions;
+  entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
+  entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
+  entry.format=formatOf(entry.name)||entry.format;
+  if(entry.previewKind==='origin')entry.previewKind='anon';
+  renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
 }
-function renderResult() {
-  empty(result);node('h3','Résultat',null,result);
-  const kind=state.status==='READY'?'v2-success':state.status==='FAILED'?'v2-error':'v2-warning';
-  node('p',state.status==='READY'?'Document prêt (selon la sélection du job)':
-      state.status==='REVIEW_REQUIRED'?'Vérification nécessaire — non certifié':'Échec — non certifié','v2-notice '+kind,result);
-  node('p','Catégories masquées pour ce job : '+(state.selectedSnapshot?.length?state.selectedSnapshot.join(', '):'aucune')+'.',null,result);
-  node('p','Révision '+state.revision+' · politique '+state.digest,null,result);
-  if(state.status==='READY') {
-    const button=node('button','Télécharger le document prêt',null,result);button.type='button';
-    button.onclick=()=>download(true);
-  } else if(['REVIEW_REQUIRED','FAILED'].includes(state.status)) {
-    const button=node('button','Télécharger le résultat NON_VERIFIE','secondary',result);button.type='button';
-    button.onclick=()=>download(false);
-  }
+function setMobileTab(value){
+  workspace.classList.toggle('is-doc',value==='doc');workspace.classList.toggle('is-issues',value==='issues');
+  tabDoc.classList.toggle('is-active',value==='doc');tabIssues.classList.toggle('is-active',value==='issues');
 }
-function occurrenceLabel(row) {
-  return [row.text||row.surface||'Occurrence',row.category||row.semanticType||'',
-    'p.'+(row.page||'?'),row.action||row.privacyAction||''].filter(Boolean).join(' · ');
+function openDrawer(entry){
+  if(!entry)return;state.active=entry.key;
+  if(!state.drawerOpen){state.lastFocus=document.activeElement;drawer.hidden=false;state.drawerOpen=true;
+    requestAnimationFrame(()=>drawer.classList.add('is-open'));document.body.classList.add('asv2-drawer-open');close.focus();}
+  setMobileTab('doc');renderDrawer(entry);renderPreview(entry).catch(showError);
 }
-function renderIssues() {
-  empty(issues);node('h3','Problèmes et décisions par occurrence',null,issues);
-  const review=state.review;
+function closeDrawer(){
+  if(!state.drawerOpen)return;state.drawerOpen=false;drawer.classList.remove('is-open');
+  document.body.classList.remove('asv2-drawer-open');state.previewSerial++;
+  if(state.previewCleanup)state.previewCleanup();
+  setTimeout(()=>{if(!state.drawerOpen)drawer.hidden=true;},260);
+  if(state.lastFocus?.isConnected)state.lastFocus.focus();
+}
+drawer.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();closeDrawer();return;}
+  if(event.key!=='Tab')return;
+  const focusables=[...panel.querySelectorAll('button:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+    .filter(item=>!item.hidden&&item.getClientRects().length);
+  if(!focusables.length)return;
+  if(event.shiftKey&&document.activeElement===focusables[0]){event.preventDefault();focusables.at(-1).focus();}
+  else if(!event.shiftKey&&document.activeElement===focusables.at(-1)){event.preventDefault();focusables[0].focus();}
+});
+function showError(error){drawerMessage(errorText(error),'is-error');}
+function renderDrawer(entry){
+  if(state.active!==entry.key||!state.drawerOpen)return;
+  title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
+    entry.revision?'Révision '+entry.revision:null,entry.jobId?'Job '+entry.jobId:null].filter(Boolean).join(' · ');
+  drawerMessage(entry.error||({LOCAL:'Original local — données sensibles visibles.',UPLOADING:'Envoi du document…',
+    PENDING:'Uploadé / En attente',PROCESSING:'Traitement en cours',READY:'Document prêt selon la sélection de ce job.',
+    REVIEW_REQUIRED:'Vérification nécessaire — résultat NON_VERIFIE.',FAILED:'Échec — résultat NON_VERIFIE.',
+    TIMED_OUT:'Suivi interrompu — le job reste consultable.'}[entry.status]||entry.status),
+    entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
+    entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
+  renderIssues(entry);renderFooter(entry);
+}
+function renderIssues(entry){
+  clear(issuePane);el('h3','Détections et vérification',null,issuePane);
+  el('p','Une décision concerne une seule occurrence. Les changements sont revérifiés par le serveur.','asv2-muted',issuePane);
+  if(entry.selectedTypes)el('p','Catégories sélectionnées : '+(entry.selectedTypes.length?entry.selectedTypes.join(', '):'aucune'),
+    'asv2-policy-summary',issuePane);
+  const review=entry.review;
+  if(!review){el('p',entry.jobId?'Les problèmes seront affichés après traitement.':'Déposez le fichier pour voir les décisions du moteur.',
+    'asv2-muted',issuePane);return;}
   const reasons=review.qaReasons||review.reasons||[];
-  if(reasons.length) node('p',reasons.join(' · '),'v2-notice v2-warning',issues);
-  const occurrences=Array.isArray(review.occurrences)?review.occurrences:[];
-  for(const row of occurrences) {
-    if(!row.id) continue;
-    const line=node('div',null,'v2-issue',issues);
-    node('div',occurrenceLabel(row),null,line);
-    node('small','Occurrence '+row.id,null,line);
-    for(const action of ['KEEP','MASK']) {
-      const button=node('button',action,'secondary',line);button.type='button';
-      button.disabled=!review.reviewable;
-      button.onclick=()=>decide(row.id,action);
+  if(reasons.length)el('p',reasons.join(' · '),'asv2-reasons',issuePane);
+  const rows=Array.isArray(review.occurrences)?review.occurrences:[];
+  for(const row of rows){
+    if(!row.id)continue;
+    const card=el('article',null,'asv2-issue',issuePane);
+    const top=el('div',null,'asv2-issue-head',card);
+    el('span',row.category||row.semanticType||'Donnée','asv2-badge',top);
+    if(row.page)el('span','Page '+row.page,'asv2-muted',top);
+    el('strong',row.text||row.surface||'Occurrence '+row.id,null,card);
+    el('small','ID '+row.id+' · '+(row.action||row.privacyAction||'à vérifier'),null,card);
+    const issueActions=el('div',null,'asv2-issue-actions',card);
+    if(row.page)button('Voir dans le document','asv2-secondary',issueActions,()=>focusOccurrence(entry,row));
+    for(const action of ['KEEP','MASK']){
+      const control=button(action,'asv2-secondary',issueActions,()=>decide(entry,row.id,action));
+      control.disabled=!review.reviewable;
     }
   }
   const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
-  if(unresolved.length) node('p','Obligations sans région vérifiée : '+unresolved.length,'v2-notice v2-warning',issues);
-  for(const target of unresolved) {
-    if(!target.maskOccurrenceId || !target.page) continue;
-    const line=node('div',null,'v2-issue',issues);
-    node('div',[target.category||target.semanticType||'MASK','page '+target.page,
-      target.maskOccurrenceId].join(' · '),null,line);
-    const button=node('button','Délimiter cette obligation dans le PDF','secondary',line);button.type='button';
-    button.disabled=!review.reviewable || !state.file?.name.toLowerCase().endsWith('.pdf');
-    button.onclick=async()=>{state.target=target;state.page=Number(target.page);await showPreview('origin');
-      message('Tracez une région pour la seule obligation '+target.maskOccurrenceId+'.');};
+  if(unresolved.length)el('h4',unresolved.length+' obligation(s) sans région vérifiée',null,issuePane);
+  for(const target of unresolved){
+    if(!target.maskOccurrenceId||!target.page)continue;
+    const card=el('article',null,'asv2-issue asv2-unresolved',issuePane);
+    el('strong',(target.category||target.semanticType||'MASK')+' · page '+target.page,null,card);
+    el('small','Obligation '+target.maskOccurrenceId,null,card);
+    const control=button('Tracer une région liée','asv2-secondary',card,()=>{
+      entry.target=target;entry.page=Number(target.page);entry.previewKind='origin';
+      setMobileTab('doc');renderPreview(entry).catch(showError);
+      drawerMessage('Tracez uniquement la cible de l’obligation '+target.maskOccurrenceId+'.','is-warning');
+    });
+    control.disabled=!review.reviewable||entry.format!=='pdf';
   }
-  if(!occurrences.length && !unresolved.length) node('p','Aucune correction interactive disponible pour ce job.',null,issues);
+  if(!rows.length&&!unresolved.length)el('p','Aucune correction interactive disponible.','asv2-muted',issuePane);
 }
-async function decide(occurrenceId,action) {
-  if(!await confirmAction(action+' uniquement pour cette occurrence ?')) return;
-  try {
-    const receipt=await api.decide(state.jobId,state.digest,{revision:state.revision,occurrenceId,action,reason:'review_explicit'});
-    await apply(receipt.revision);
-  } catch(error) {reportError(error);}
+function renderFooter(entry){
+  clear(drawerFooter);
+  el('span',entry.status==='READY'?'Prêt selon la politique de ce job':
+    entry.status==='REVIEW_REQUIRED'||entry.status==='FAILED'?'NON_VERIFIE — vérification nécessaire':
+    'Aucun résultat certifié disponible','asv2-footer-status',drawerFooter);
+  if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
+  if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le job','asv2-secondary',drawerFooter,
+    ()=>loadCurrent(entry).catch(showError));
+  if(entry.status==='READY')button('Télécharger le document prêt','asv2-primary',drawerFooter,
+    ()=>download(entry,true).catch(showError));
+  else if(['REVIEW_REQUIRED','FAILED'].includes(entry.status))button('Télécharger NON_VERIFIE','asv2-secondary',drawerFooter,
+    ()=>download(entry,false).catch(showError));
 }
-async function apply(revision) {
-  message('Nouvelle révision en vérification…');
-  await api.execute(state.jobId,state.digest,revision);
-  state.pollToken++; await poll(state.pollToken);
+async function decide(entry,occurrenceId,action){
+  if(!await confirmAction(action+' uniquement pour cette occurrence ?'))return;
+  try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
+    action,reason:'review_explicit'});await apply(entry,receipt.revision);}catch(error){showError(error);}
 }
-async function showPreview(kind='origin') {
-  if(!state.file?.name.toLowerCase().endsWith('.pdf')) return;
-  state.previewKind=kind;
-  empty(previewSection);node('h3','Aperçu PDF',null,previewSection);
-  const buttons=node('div',null,'v2-actions',previewSection);
-  for(const [caption,value] of [['Original','origin'],['Résultat courant — non certifié','anon']]) {
-    const button=node('button',caption,'secondary',buttons);button.type='button';
-    button.onclick=()=>showPreview(value).catch(reportError);
+async function apply(entry,revision){
+  entry.status='PROCESSING';renderDrawer(entry);renderQueue();
+  await api.execute(entry.jobId,entry.digest,revision);
+  await pollEntry(entry);
+}
+function focusOccurrence(entry,row){
+  entry.page=Number(row.page);entry.focusId=row.id;entry.previewKind='origin';
+  setMobileTab('doc');renderPreview(entry).catch(showError);
+}
+function pageGeometry(entry,pageNumber,base){
+  const page=(entry.regions?.pages||[]).find(item=>Number(item.page)===pageNumber);
+  const size=page?.size;
+  if(!Array.isArray(size)||size.length!==2||!size.every(Number.isFinite)||
+    Math.abs(size[0]-base.width)>1||Math.abs(size[1]-base.height)>1||
+    Number(page.rotation||0)!==0)return null;
+  return page;
+}
+function strictRegions(entry,base){
+  // The review ledger binds these fragments to the exact occurrence and current revision.
+  // regions.json supplies only the original page geometry; it has no revision field.
+  const row=entry.review?.occurrences?.find(item=>String(item.id)===String(entry.focusId));
+  if(!row||String(entry.review.revision)!==String(entry.revision)||
+    Number(row.page)!==entry.page||!pageGeometry(entry,entry.page,base))return [];
+  return (row.fragments||[]).filter(rect=>Array.isArray(rect)&&rect.length===4&&
+    rect.every(Number.isFinite)&&rect[0]>=0&&rect[1]>=0&&
+    rect[0]<rect[2]&&rect[1]<rect[3]&&rect[2]<=base.width&&rect[3]<=base.height);
+}
+async function previewBytes(entry,kind){
+  if(kind==='origin'&&entry.file&&!entry.jobId)return {bytes:await entry.file.arrayBuffer(),format:entry.format};
+  if(!entry.jobId)throw new Error('Document non déposé');
+  const response=await api.preview(entry.jobId,kind);
+  const revision=response.headers.get('X-Agiloshield-Revision');
+  if(kind==='anon'&&revision&&String(revision)!==String(entry.revision))throw new Error('Aperçu périmé');
+  const mime=response.headers.get('Content-Type')||'';
+  const format=entry.format||(mime.includes('pdf')?'pdf':mime.includes('wordprocessingml')?'docx':
+    mime.includes('csv')?'csv':mime.includes('text/plain')?'txt':'');
+  return {bytes:await response.arrayBuffer(),format};
+}
+async function renderPreview(entry){
+  if(state.active!==entry.key||!state.drawerOpen)return;
+  const serial=++state.previewSerial;
+  if(state.previewCleanup){state.previewCleanup();state.previewCleanup=null;}
+  clear(viewerToolbar);clear(viewerBody);
+  const kind=entry.previewKind;
+  const switcher=el('div',null,'asv2-preview-switch',viewerToolbar);
+  for(const [label,value] of [['Original','origin'],['Résultat courant','anon']]){
+    const control=button(label,'asv2-secondary'+(value===kind?' is-active':''),switcher,()=>{
+      entry.previewKind=value;renderPreview(entry).catch(showError);
+    });control.disabled=value==='anon'&&!isTerminal(entry.status);
   }
-  const response=await api.preview(state.jobId,kind);
-  const data=new Uint8Array(await response.arrayBuffer());
-  if(!window.pdfjsLib) throw new Error('PDF.js indisponible');
+  el('span',kind==='origin'?'Original — données sensibles visibles':
+    entry.status==='READY'?'Résultat courant · READY':'Résultat courant · NON_VERIFIE',
+    'asv2-preview-label',viewerToolbar);
+  const loading=el('p','Chargement de l’aperçu…','asv2-loading',viewerBody);
+  try{
+    if(['xlsx','pptx'].includes(entry.format)){
+      loading.textContent='Aperçu visuel '+entry.format.toUpperCase()+' non disponible dans cette version. Le traitement et la QA restent consultables.';
+      return;
+    }
+    const source=await previewBytes(entry,kind);
+    if(serial!==state.previewSerial||state.active!==entry.key)return;
+    clear(viewerBody);
+    if(source.format==='pdf')await renderPdf(entry,source.bytes,kind,serial);
+    else if(source.format==='docx')await renderDocx(source.bytes,serial);
+    else if(source.format==='txt')renderText(source.bytes);
+    else if(source.format==='csv')renderCsv(source.bytes);
+    else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
+  }catch(error){if(serial===state.previewSerial){clear(viewerBody);el('p',errorText(error),'asv2-error',viewerBody);}}
+}
+async function renderPdf(entry,bytes,kind,serial){
+  if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
-  state.pdf=await window.pdfjsLib.getDocument({data}).promise;
-  state.page=Math.min(Math.max(state.page,1),state.pdf.numPages);
-  const nav=node('div',null,'v2-actions',previewSection);
-  const prev=node('button','Page précédente','secondary',nav);prev.type='button';
-  const count=node('span',' Page '+state.page+' / '+state.pdf.numPages+' ',null,nav);
-  const next=node('button','Page suivante','secondary',nav);next.type='button';
-  prev.disabled=state.page<=1;next.disabled=state.page>=state.pdf.numPages;
-  prev.onclick=()=>{state.page--;renderPage().catch(reportError);};
-  next.onclick=()=>{state.page++;renderPage().catch(reportError);};
-  const pages=node('div',null,'v2-pages',previewSection);
-  async function renderPage() {
-    empty(pages);count.textContent=' Page '+state.page+' / '+state.pdf.numPages+' ';
-    prev.disabled=state.page<=1;next.disabled=state.page>=state.pdf.numPages;
-    const page=await state.pdf.getPage(state.page);
-    const view=page.getViewport({scale:1});
-    const scale=Math.min(1.7,Math.max(.6,850/view.width));
-    const viewport=page.getViewport({scale});
-    const wrap=node('div',null,'v2-page',pages);
-    const canvas=node('canvas',null,null,wrap);
-    canvas.width=Math.round(viewport.width);canvas.height=Math.round(viewport.height);
-    await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
-    node('span','Page '+state.page,null,pages).className='v2-page-label';
-    if(kind==='origin' && state.target && Number(state.target.page)===state.page && state.review?.reviewable) {
-      if((page.rotate||0)!==0) {
-        node('p','Cette page est tournée : le tracé manuel est désactivé pour éviter une mauvaise géométrie.','v2-notice v2-warning',pages);
-      } else bindDrawing(wrap,view,state.page);
+  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(bytes),enableScripting:false}).promise;
+  if(serial!==state.previewSerial){pdf.destroy();return;}
+  state.previewCleanup=()=>pdf.destroy();
+  entry.page=Math.min(Math.max(1,entry.page),pdf.numPages);
+  const nav=el('div',null,'asv2-pdf-nav',viewerBody);
+  const prev=button('←','asv2-secondary',nav,()=>{entry.page--;draw().catch(showError);});
+  const pageLabel=el('span','',null,nav);
+  const next=button('→','asv2-secondary',nav,()=>{entry.page++;draw().catch(showError);});
+  const less=button('−','asv2-secondary',nav,()=>{entry.zoom=Math.max(.6,entry.zoom-.2);draw().catch(showError);});
+  const zoomLabel=el('span','',null,nav);
+  const more=button('+','asv2-secondary',nav,()=>{entry.zoom=Math.min(2,entry.zoom+.2);draw().catch(showError);});
+  const pageBox=el('div',null,'asv2-page-scroll',viewerBody);
+  async function draw(){
+    if(serial!==state.previewSerial)return;
+    clear(pageBox);pageLabel.textContent='Page '+entry.page+' / '+pdf.numPages;
+    prev.disabled=entry.page<=1;next.disabled=entry.page>=pdf.numPages;
+    less.disabled=entry.zoom<=.6;more.disabled=entry.zoom>=2;
+    zoomLabel.textContent=Math.round(entry.zoom*100)+' %';
+    const page=await pdf.getPage(entry.page);
+    const base=page.getViewport({scale:1});
+    const fit=Math.min(1.8,Math.max(.4,(pageBox.clientWidth-30||750)/base.width));
+    const viewport=page.getViewport({scale:fit*entry.zoom});
+    const wrap=el('div',null,'asv2-page',pageBox);
+    const canvas=el('canvas',null,null,wrap);
+    const pixelRatio=Math.min(window.devicePixelRatio||1,2);
+    canvas.width=Math.ceil(viewport.width*pixelRatio);canvas.height=Math.ceil(viewport.height*pixelRatio);
+    canvas.style.width=viewport.width+'px';canvas.style.height=viewport.height+'px';
+    const context=canvas.getContext('2d');context.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+    await page.render({canvasContext:context,viewport}).promise;
+    if(serial!==state.previewSerial)return;
+    if(kind!=='origin')return;
+    const overlay=el('div',null,'asv2-page-overlay',wrap);
+    if(entry.focusId){
+      const regions=(page.rotate||0)===0?strictRegions(entry,base):[];
+      for(const rect of regions){
+        const marker=el('div',null,'asv2-region-marker',overlay);
+        marker.title='Localisation de l’occurrence dans l’original';
+        marker.style.left=(rect[0]/base.width*100)+'%';marker.style.top=(rect[1]/base.height*100)+'%';
+        marker.style.width=((rect[2]-rect[0])/base.width*100)+'%';
+        marker.style.height=((rect[3]-rect[1])/base.height*100)+'%';
+      }
+      if(!regions.length)el('p','La région exacte de cette occurrence n’est pas vérifiée pour cet aperçu.',
+        'asv2-geometry-note',pageBox);
+    }
+    if(entry.target&&Number(entry.target.page)===entry.page&&entry.review?.reviewable){
+      if((page.rotate||0)!==0||!pageGeometry(entry,entry.page,base))
+        el('p','Tracé indisponible : géométrie de la page non garantie.','asv2-geometry-note',pageBox);
+      else bindDrawing(entry,overlay,base,serial);
     }
   }
-  await renderPage();
+  await draw();
 }
-function bindDrawing(wrap,viewport,page) {
-  const overlay=node('div',null,'v2-overlay',wrap);
-  let start=null,ghost=null;
+function bindDrawing(entry,overlay,base,serial){
+  overlay.classList.add('is-drawing');let start=null,ghost=null;
   const point=event=>{
     const box=overlay.getBoundingClientRect();
-    return [Math.min(viewport.width,Math.max(0,(event.clientX-box.left)/box.width*viewport.width)),
-      Math.min(viewport.height,Math.max(0,(event.clientY-box.top)/box.height*viewport.height))];
+    return [Math.min(base.width,Math.max(0,(event.clientX-box.left)/box.width*base.width)),
+      Math.min(base.height,Math.max(0,(event.clientY-box.top)/box.height*base.height))];
   };
   overlay.onpointerdown=event=>{
-    if(!state.target || Number(state.target.page)!==page) return;
-    overlay.setPointerCapture(event.pointerId); start=point(event);
-    ghost=node('div',null,'v2-selection',overlay);
+    overlay.setPointerCapture(event.pointerId);start=point(event);ghost=el('div',null,'asv2-selection',overlay);
   };
   overlay.onpointermove=event=>{
-    if(!start || !ghost) return;
-    const end=point(event),box=overlay.getBoundingClientRect();
-    ghost.style.left=(Math.min(start[0],end[0])/viewport.width*box.width)+'px';
-    ghost.style.top=(Math.min(start[1],end[1])/viewport.height*box.height)+'px';
-    ghost.style.width=(Math.abs(start[0]-end[0])/viewport.width*box.width)+'px';
-    ghost.style.height=(Math.abs(start[1]-end[1])/viewport.height*box.height)+'px';
+    if(!start||!ghost)return;const end=point(event),box=overlay.getBoundingClientRect();
+    ghost.style.left=Math.min(start[0],end[0])/base.width*box.width+'px';
+    ghost.style.top=Math.min(start[1],end[1])/base.height*box.height+'px';
+    ghost.style.width=Math.abs(start[0]-end[0])/base.width*box.width+'px';
+    ghost.style.height=Math.abs(start[1]-end[1])/base.height*box.height+'px';
   };
   overlay.onpointerup=async event=>{
-    if(!start) return;
+    if(!start||serial!==state.previewSerial)return;
     const end=point(event),rect=[Math.min(start[0],end[0]),Math.min(start[1],end[1]),
       Math.max(start[0],end[0]),Math.max(start[1],end[1])];
-    start=null;if(ghost) ghost.remove();ghost=null;
-    if(rect[2]-rect[0]<4 || rect[3]-rect[1]<4) return;
-    const target=state.target;
-    if(!target || Number(target.page)!==page || !await confirmAction(
-      'Lier ce rectangle à l’obligation '+target.maskOccurrenceId+' (page '+page+') et régénérer ?')) return;
-    try {
-      const receipt=await api.addLinkedRegion(state.jobId,state.digest,{revision:state.revision,page,
-        rect:rect.map(x=>Math.round(x*100)/100),maskOccurrenceId:target.maskOccurrenceId,
-        sourceRevision:state.review.sourceRevision,documentId:state.review.documentId,
-        reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
-      state.target=null;await apply(receipt.revision);
-    } catch(error) {reportError(error);}
+    start=null;ghost?.remove();ghost=null;
+    if(rect[2]-rect[0]<4||rect[3]-rect[1]<4)return;
+    const target=entry.target;
+    if(!target||!await confirmAction('Lier cette région uniquement à '+target.maskOccurrenceId+' et régénérer ?'))return;
+    try{
+      const receipt=await api.addLinkedRegion(entry.jobId,entry.digest,{revision:entry.revision,
+        page:entry.page,rect:rect.map(value=>Math.round(value*100)/100),
+        maskOccurrenceId:target.maskOccurrenceId,sourceRevision:entry.review.sourceRevision,
+        documentId:entry.review.documentId,reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
+      entry.target=null;await apply(entry,receipt.revision);
+    }catch(error){showError(error);}
   };
-  overlay.onpointercancel=()=>{start=null;if(ghost) ghost.remove();ghost=null;};
+  overlay.onpointercancel=()=>{start=null;ghost?.remove();ghost=null;};
 }
-
-async function download(certified) {
-  if(!certified && !await confirmAction('Ce résultat est NON_VERIFIE : des données sensibles peuvent rester visibles. Télécharger quand même ?')) return;
-  try {
-    const response=await api.checkedArtifact(state.jobId,{certified,
-      expectedDigest:state.digest,expectedRevision:state.revision});
-    const blob=await response.blob();
-    const disposition=response.headers.get('Content-Disposition')||'';
-    const filename=(/filename="?([^";]+)"?/i.exec(disposition)?.[1]||
-      (certified?'document-anonymise':'document-NON_VERIFIE')+'.'+state.file.name.split('.').pop())
-      .replace(/[^A-Za-z0-9._-]/g,'_');
-    const url=URL.createObjectURL(blob);const link=node('a',null,null,document.body);
-    link.href=url;link.download=filename;link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-    message('Téléchargement '+(certified?'certifié':'NON_VERIFIE')+' démarré.');
-  } catch(error) {reportError(error);}
+async function renderDocx(bytes,serial){
+  if(!config.DOCX_FRAME_URL)throw new Error('Lecteur Word non configuré');
+  const frame=el('iframe',null,'asv2-docx-frame',viewerBody);
+  frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('title','Aperçu Word isolé');
+  const nonce=crypto.randomUUID();
+  const completion=new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{cleanup();reject(new Error('Délai de rendu Word dépassé'));},20000);
+    const onMessage=event=>{
+      if(event.source!==frame.contentWindow||serial!==state.previewSerial)return;
+      if(event.data?.type==='AGILOSHIELD_DOCX_READY'){
+        frame.contentWindow.postMessage({type:'AGILOSHIELD_DOCX_RENDER',nonce,bytes},'*',[bytes]);
+      }else if(event.data?.nonce===nonce&&event.data?.type==='AGILOSHIELD_DOCX_DONE'){
+        cleanup();resolve();
+      }else if(event.data?.nonce===nonce&&event.data?.type==='AGILOSHIELD_DOCX_ERROR'){
+        cleanup();reject(new Error(event.data.error||'Rendu Word impossible'));
+      }
+    };
+    function cleanup(){clearTimeout(timer);window.removeEventListener('message',onMessage);}
+    window.addEventListener('message',onMessage);
+    state.previewCleanup=()=>{cleanup();frame.remove();};
+  });
+  frame.src=config.DOCX_FRAME_URL;
+  await completion;
 }
-
-window.addEventListener('pagehide',()=>{state.pollToken++;});
-loadPreferences();
+function renderText(bytes){
+  const text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
+  if(text.length>2_000_000)el('p','Aperçu limité aux deux premiers millions de caractères.','asv2-geometry-note',viewerBody);
+  el('pre',text.slice(0,2_000_000),'asv2-text-preview',viewerBody);
+}
+function parseCsv(text,maxRows=300){
+  const firstLine=text.split(/\r?\n/,1)[0]||'';
+  const delimiter=(firstLine.match(/;/g)||[]).length>(firstLine.match(/,/g)||[]).length?';':',';
+  const rows=[];let row=[],cell='',quoted=false;
+  for(let i=0;i<text.length&&rows.length<maxRows;i++){
+    const char=text[i];
+    if(char==='"'){
+      if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;
+    }else if(char===delimiter&&!quoted){row.push(cell);cell='';}
+    else if((char==='\n'||char==='\r')&&!quoted){
+      if(char==='\r'&&text[i+1]==='\n')i++;
+      row.push(cell);rows.push(row);row=[];cell='';
+    }else cell+=char;
+  }
+  if(row.length||cell)rows.push([...row,cell]);
+  return rows;
+}
+function renderCsv(bytes){
+  const text=new TextDecoder('utf-8',{fatal:false}).decode(bytes).replace(/^\uFEFF/,'');
+  const rows=parseCsv(text);
+  if(rows.length>=300)el('p','Aperçu limité aux 300 premières lignes.','asv2-geometry-note',viewerBody);
+  const wrap=el('div',null,'asv2-csv-scroll',viewerBody);
+  const table=el('table',null,'asv2-csv',wrap);
+  for(const cells of rows){const tr=el('tr',null,null,table);
+    for(const value of cells.slice(0,80))el('td',value,null,tr);
+  }
+}
+async function download(entry,certified){
+  if(!certified&&!await confirmAction('Ce fichier est NON_VERIFIE : des données sensibles peuvent rester visibles. Télécharger ?'))return;
+  const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
+    expectedRevision:entry.revision});
+  const blob=await response.blob();
+  const disposition=response.headers.get('Content-Disposition')||'';
+  const fallback=(certified?'document-anonymise':'document-NON_VERIFIE')+'.'+(entry.format||'bin');
+  const filename=(/filename="?([^";]+)"?/i.exec(disposition)?.[1]||fallback).replace(/[^A-Za-z0-9._-]/g,'_');
+  const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
+  link.href=url;link.download=filename;link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  drawerMessage('Téléchargement '+(certified?'certifié':'NON_VERIFIE')+' démarré.');
+}
+window.addEventListener('pagehide',()=>{state.previewSerial++;state.previewCleanup?.();});
+loadPreferences().then(restoreSession);
