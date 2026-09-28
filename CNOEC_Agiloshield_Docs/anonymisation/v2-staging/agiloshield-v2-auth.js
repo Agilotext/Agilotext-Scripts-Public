@@ -11,9 +11,11 @@
       const email = member?.data?.auth?.email || member?.data?.email;
       if (email) return String(email).trim().toLowerCase();
     }
-    // Existing Memberstack v1 page writes this field; Java still validates its own user token.
+    // Memberstack v1 on this Webflow page renders the signed-in email in the navbar.
+    // The hidden field exists but is currently empty. Java validates the user token.
     const field = document.querySelector('[name="memberEmail"]');
-    const email = String(field?.value || '').trim().toLowerCase();
+    const display = document.querySelector('[data-ms-member="email"]');
+    const email = String(field?.value || display?.textContent || '').trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Session Agilotext introuvable');
     return email;
   }
