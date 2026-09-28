@@ -504,8 +504,22 @@ function bindDrawing(entry,overlay,base,serial){
 }
 async function renderDocx(bytes,serial){
   if(!config.DOCX_FRAME_URL)throw new Error('Lecteur Word non configuré');
+  // jsDelivr serves .html as text/plain. Read the immutable template and mount it
+  // as srcdoc, preserving the opaque sandbox origin and its restrictive CSP.
+  const frameUrl=new URL(config.DOCX_FRAME_URL,location.href);
+  if(frameUrl.protocol!=='https:'&&frameUrl.origin!==location.origin)
+    throw new Error('Origine du lecteur Word non autorisée');
+  const template=await fetch(frameUrl.href,{cache:'force-cache'});
+  if(!template.ok)throw new Error('Lecteur Word indisponible');
+  let html=await template.text();
+  let scripts=0;
+  html=html.replace(/src="\.\/([^"]+)"/g,(_,path)=>{
+    scripts++;return 'src="'+new URL(path,frameUrl).href+'"';
+  });
+  if(scripts!==3||serial!==state.previewSerial)return;
   const frame=el('iframe',null,'asv2-docx-frame',viewerBody);
   frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('title','Aperçu Word isolé');
+  frame.referrerPolicy='no-referrer';
   const nonce=crypto.randomUUID();
   const completion=new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{cleanup();reject(new Error('Délai de rendu Word dépassé'));},20000);
@@ -523,7 +537,7 @@ async function renderDocx(bytes,serial){
     window.addEventListener('message',onMessage);
     state.previewCleanup=()=>{cleanup();frame.remove();};
   });
-  frame.src=config.DOCX_FRAME_URL;
+  frame.srcdoc=html;
   await completion;
 }
 function renderText(bytes){
