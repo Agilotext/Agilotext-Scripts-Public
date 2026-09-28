@@ -6,10 +6,11 @@
 //   4. ensureSeekableFor() : timeout 30s sur loadedmetadata (évite blocage infini)
 //   5. suppression de newAbortCtrl() inutilisé
 //   6. privacy : pause forcée onglet/écran caché (veille Windows) ; jamais de reprise auto
+//   7. privacy-play : clic Lire / Espace volontaires OK après pause (intent + retry post-wake)
 
 (function () {
   if (window.__agiloAudioLite) return;
-  window.__agiloAudioLite = '3.4-privacy-vis';
+  window.__agiloAudioLite = '3.4-privacy-play';
 
   // ---------- Refs DOM ----------
   let wrap, audio, playBtn, backBtn, fwdBtn, speedBtn, dlBtn;
@@ -40,6 +41,9 @@
   let seekLocked = true;
   let isScrubbing = false;
   let privacyPauseBound = false;
+  /** Geste user récent : laisse play() passer même si hidden flaky post-wake. */
+  let userPlayIntentUntil = 0;
+  let playFailHintTimer = 0;
 
   // ---------- Cleanup ----------
   let cleanupListeners = [];
@@ -400,6 +404,44 @@
     log('privacy pause', reason || '');
   }
 
+  function showPlayFailHint() {
+    if (!playBtn) return;
+    const prev = playBtn.getAttribute('title') || '';
+    playBtn.setAttribute('title', 'Lecture impossible, réessayez');
+    playBtn.setAttribute('aria-live', 'polite');
+    playBtn.setAttribute('aria-label', 'Lecture impossible, réessayez');
+    if (playFailHintTimer) clearTimeout(playFailHintTimer);
+    playFailHintTimer = setTimeout(() => {
+      playFailHintTimer = 0;
+      if (prev) playBtn.setAttribute('title', prev);
+      else playBtn.removeAttribute('title');
+      playBtn.removeAttribute('aria-live');
+      playBtn.removeAttribute('aria-label');
+    }, 3000);
+  }
+
+  /** Play volontaire (bouton / Espace) : intent + retry post-wake. */
+  async function tryPlayFromUserGesture() {
+    if (!audio || seekLocked) return false;
+    userPlayIntentUntil = Date.now() + 2500;
+    const attempt = async () => {
+      try {
+        await audio.play();
+        return true;
+      } catch (err) {
+        log('play() rejected', err?.name || err, 'visible=', document.visibilityState);
+        return false;
+      }
+    };
+    if (await attempt()) return true;
+    await new Promise((r) => setTimeout(r, 200));
+    let visible = true;
+    try { visible = document.visibilityState === 'visible'; } catch (_) { /* ignore */ }
+    if (visible && (await attempt())) return true;
+    showPlayFailHint();
+    return false;
+  }
+
   function bindPrivacyPauseGuards() {
     if (privacyPauseBound) return;
     privacyPauseBound = true;
@@ -433,7 +475,9 @@
     window.AgiloAudioPrivacy = {
       pageIsObscured,
       forcePauseForPrivacy: (reason) => forcePauseForPrivacy(reason),
-      version: '3.4-privacy-vis'
+      tryPlayFromUserGesture,
+      get userPlayIntentUntil() { return userPlayIntentUntil; },
+      version: '3.4-privacy-play'
     };
   }
 
@@ -607,7 +651,8 @@
 
     if (!audio.__agiloCoreBound) {
       const playHandler = () => {
-        if (pageIsObscured()) {
+        // Auto browser pendant hidden : coupe. Geste user récent (intent) : laisse passer.
+        if (pageIsObscured() && Date.now() > userPlayIntentUntil) {
           forcePauseForPrivacy('play-while-hidden');
           return;
         }
@@ -670,7 +715,8 @@
     const playClick = async (e) => {
       e.preventDefault();
       if (seekLocked) return;
-      try { audio.paused ? await audio.play() : audio.pause(); } catch { }
+      if (audio.paused) await tryPlayFromUserGesture();
+      else audio.pause();
     };
     playBtn?.addEventListener?.('click', playClick);
     addCleanup(() => playBtn?.removeEventListener?.('click', playClick));
@@ -798,8 +844,8 @@
         if (playFromText && !e.isComposing) {
           e.preventDefault();
           e.stopPropagation();
-          if (!e.repeat && audio && getSafeDuration() > 0 && !seekLocked && !pageIsObscured()) {
-            if (audio.paused) audio.play().catch(() => {});
+          if (!e.repeat && audio && getSafeDuration() > 0 && !seekLocked) {
+            if (audio.paused) tryPlayFromUserGesture();
             else audio.pause();
           }
           return;
@@ -812,8 +858,9 @@
         switch ((e.key || '').toLowerCase()) {
           case ' ':
             e.preventDefault();
-            if (seekLocked || pageIsObscured()) break;
-            (audio.paused ? audio.play() : audio.pause());
+            if (seekLocked) break;
+            if (audio.paused) tryPlayFromUserGesture();
+            else audio.pause();
             break;
           case 'arrowleft': e.preventDefault(); audio.currentTime = Math.max(0, audio.currentTime - step); break;
           case 'arrowright': e.preventDefault(); audio.currentTime = Math.min(dur, audio.currentTime + step); break;
