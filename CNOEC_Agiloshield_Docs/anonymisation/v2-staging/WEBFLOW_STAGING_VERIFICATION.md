@@ -2,21 +2,24 @@
 
 ## État au 28 septembre 2026
 
-**Assets figés :** `bf501d4fe411b8c84dd5ade2b9742b1edd21d7c1` sur la branche `codex/agiloshield-v2-document-editor-20260928`. Aucun changement du moteur Python, de l’Entity Engine, de GLiNER, de la policy ou des writers. Aucun merge ni déploiement live.
+**Assets figés :** `edf56d66c629a3a923ba5fdd57e69650636e4fa1` sur la branche `codex/agiloshield-v2-document-editor-20260928`. Aucun changement du moteur Python, de l’Entity Engine, de GLiNER, de la policy ou des writers. Aucun merge ni déploiement live.
 
-**Verdict :** composant et bloc CDN prêts pour intégration staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. La page publiée `https://agilotext-test.webflow.io/app/business/dashboard/anonymiser` affiche encore Anon2. La session Webflow Designer n’était pas disponible pour remplacer et publier ses Embeds. Les essais ci-dessous ont donc été faits sur une page locale de recette avec transport synthétique, y compris avec le bloc exact et les assets chargés depuis jsDelivr.
+**Verdict :** composant et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le navigateur de test a été redirigé vers `/auth/access-denied` en ouvrant la page publiée ; il n’a donc pas pu vérifier la version réellement active ni appeler Java sous une session valide. La session Webflow Designer n’était pas disponible pour remplacer et publier les Embeds. Les essais ci-dessous utilisent une page locale avec transport synthétique, y compris le bloc exact chargé depuis jsDelivr.
 
 ## Remplacement dans Webflow
 
-La page comporte deux Embeds Anon2 concernés. Remplacer **tout** le premier Embed contenant `<form id="agfForm">` par le contenu de [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Supprimer **tout** le second Embed qui charge Lottie et `agiloshield-embed-anonymisation-anon2-beta.js` ; ne pas laisser ce script à côté de V2. Le contenu exact à retirer est conservé dans [WEBFLOW_STAGING_REMOVE_THIS.html](WEBFLOW_STAGING_REMOVE_THIS.html) et le retour arrière dans [WEBFLOW_STAGING_ROLLBACK.html](WEBFLOW_STAGING_ROLLBACK.html). Ne modifier aucun autre Embed du dashboard.
+Dans l’Embed principal Anonymiser, remplacer **tout** l’ancien bloc V2 épinglé à `bf501d4f` par [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Si la page contient encore `<form id="agfForm">`, remplacer cet Embed entier. Vérifier qu’un second Embed ne charge pas Lottie et `agiloshield-embed-anonymisation-anon2-beta.js` à côté de V2 ; le vider si présent. L’ancien HTML exact et le retour arrière sont conservés dans [WEBFLOW_STAGING_REMOVE_THIS.html](WEBFLOW_STAGING_REMOVE_THIS.html) et [WEBFLOW_STAGING_ROLLBACK.html](WEBFLOW_STAGING_ROLLBACK.html). Ne modifier aucun autre Embed du dashboard.
 
-Le bloc V2 utilise uniquement `https://apitest.agilotext.com:9443/api/agiloshield-v2`, l’auth utilisateur Agilotext/Memberstack et des assets jsDelivr épinglés au commit ci-dessus. Il ne contient aucun HMAC Python, secret interservice ou token codé en dur. Le navigateur ne contacte jamais `127.0.0.1:8091`. Les formats affichés sont PDF, DOCX, XLSX, PPTX, TXT et CSV ; les fonctions Anon2 restauration, pseudonymisation, JSON/FEC et inclusion/exclusion ne sont pas présentées comme V2.
+Le bloc V2 utilise uniquement `https://apitest.agilotext.com:9443/api/agiloshield-v2`, l’auth utilisateur Agilotext/Memberstack et des assets jsDelivr épinglés au commit ci-dessus. Il ne contient aucun HMAC Python, secret interservice ou token codé en dur. Le navigateur ne contacte jamais `127.0.0.1:8091`. Les formats affichés sont PDF, DOCX, XLSX, PPTX, TXT et CSV. L’interface reprend les onglets fichier/texte et la colonne de paramètres Agilotext ; les 13 cases sont dans la fenêtre « Types de données ». Un texte saisi devient un job TXT. La pseudonymisation et la restauration restent visibles mais indisponibles dans la façade V2 : aucun faux traitement V2 n’est lancé.
 
 ## Preuves locales
 
 | Contrôle | Résultat |
 | --- | --- |
 | 13 types, préférences bloquantes, sélection vide et confirmation | PASS sur mock |
+| Fenêtre de types : enregistrement, annulation sans modification, compteur 0–13 | PASS sur mock |
+| `fetch` natif rappelé avec le bon contexte ; ancien cas `Illegal invocation` | PASS Node et navigateur |
+| Texte saisi converti en job TXT, aperçu original et même revue | PASS sur mock |
 | 12 fichiers, un job/politique par fichier, soumission séquentielle, échec isolé | PASS sur mock |
 | Reprise des 12 IDs après rechargement, sans conserver les octets | PASS sur mock |
 | `READY`, `REVIEW_REQUIRED`, `FAILED`, téléchargement certifié seulement pour `READY` | PASS sur mock |
@@ -30,6 +33,8 @@ Le bloc V2 utilise uniquement `https://apitest.agilotext.com:9443/api/agiloshiel
 La réponse `/regions` réelle contient `pages[].occurrences[].rectangles`, et non un champ racine `revision`. Le surlignage utilise donc les `fragments` de l’occurrence fournis par **le ledger de revue courant**, puis vérifie la taille et la rotation de page données par `/regions`. Aucune recherche textuelle ne fabrique de rectangle. Un tracé manuel est désactivé si la géométrie de page n’est pas vérifiable. Le lecteur DOCX est une aide visuelle : seul le fichier final rouvert et la QA du serveur font foi. Les aperçus ne sont pas des téléchargements certifiés ; le téléchargement vérifie politique, révision, statut et assurance.
 
 jsDelivr renvoie le template HTML du lecteur DOCX comme `text/plain`. Le client le récupère comme texte figé et le place en `srcdoc` dans l’iframe sandbox ; les scripts restent épinglés au même commit. Le chargement direct du `.html` dans un iframe n’est pas utilisé.
+
+Un fichier `file://` tel que `WEBFLOW_STAGING_ROLLBACK.html` n’est pas une page de recette authentifiée. Il ne dispose pas de la session Memberstack ni de l’origine CORS autorisée ; le nouveau client affiche un message explicite au lieu de l’erreur brute. Tester le parcours réel sur la page HTTPS publiée.
 
 ## Gate encore ouverte sur la vraie page
 
