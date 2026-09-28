@@ -379,7 +379,17 @@ async function previewBytes(entry,kind){
   const mime=response.headers.get('Content-Type')||'';
   const format=entry.format||(mime.includes('pdf')?'pdf':mime.includes('wordprocessingml')?'docx':
     mime.includes('csv')?'csv':mime.includes('text/plain')?'txt':'');
-  return {bytes:await response.arrayBuffer(),format};
+  const bytes=await response.arrayBuffer();
+  if(kind==='anon'){
+    // The current preview route does not always provide a revision header.
+    // Refuse a response that raced with a new review revision.
+    const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
+    assertDigest(entry,job);assertDigest(entry,review);
+    if(String(job.reviewRevision)!==String(entry.revision)||
+      String(review.revision)!==String(entry.revision)||statusOf(job)!==entry.status)
+      throw new Error('Aperçu périmé : actualisez la révision');
+  }
+  return {bytes,format};
 }
 async function renderPreview(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
