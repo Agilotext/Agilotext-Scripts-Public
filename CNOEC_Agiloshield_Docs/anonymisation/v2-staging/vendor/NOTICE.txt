@@ -1,0 +1,4 @@
+pdf.js 3.11.174
+Source: https://github.com/mozilla/pdf.js
+License: Apache-2.0
+Vendored for local preview (no CDN at runtime).
