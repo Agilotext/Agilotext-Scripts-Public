@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="fr"><meta charset="utf-8"><title>Fetch browser binding regression</title>
+<body><output id="result">RUNNING</output>
+<script type="module">
+import {AgiloShieldV2Client} from '../agiloshield-v2-client.js';
+const output=document.getElementById('result');
+window.fetch=function(){
+  if(this!==window)throw new TypeError('Illegal invocation');
+  return Promise.resolve(new Response(JSON.stringify({protectionPolicy:{selectedTypes:[]}}),
+    {headers:{'Content-Type':'application/json'}}));
+};
+try{
+  const client=new AgiloShieldV2Client({baseUrl:'https://synthetic.test/api',authHeaders:async()=>({})});
+  const response=await client.preferences();
+  output.textContent=Array.isArray(response.protectionPolicy.selectedTypes)&&
+    response.protectionPolicy.selectedTypes.length===0?'PASS':'FAIL_RESPONSE';
+}catch(error){output.textContent='FAIL_'+error.message;}
+</script></body></html>

@@ -26,4 +26,14 @@ assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');
 job.reviewRevision = 'r3';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'}), /Stale/);
 assert.ok(seen.every(call => !call.url.includes(':8091')));
+const nativeFetch = globalThis.fetch;
+try {
+  globalThis.fetch = function () {
+    if (this !== globalThis) throw new TypeError('Illegal invocation');
+    return new Response(JSON.stringify({protectionPolicy:{selectedTypes:[]}}), {status:200});
+  };
+  const browserLikeClient = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
+    authHeaders:async () => ({})});
+  assert.deepEqual((await browserLikeClient.preferences()).protectionPolicy.selectedTypes, []);
+} finally { globalThis.fetch = nativeFetch; }
 console.log('reference client contract: PASS');

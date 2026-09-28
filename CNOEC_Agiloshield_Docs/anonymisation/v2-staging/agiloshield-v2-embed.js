@@ -30,18 +30,80 @@ const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
 const isTerminal = status => ['READY','REVIEW_REQUIRED','FAILED'].includes(status);
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
-const errorText = error => error?.status===401?'Session Agilotext requise ou expirée.':
+const errorText = error => location.protocol==='file:'?
+  'Ouvrez la page Webflow staging en HTTPS : un fichier local ne peut pas utiliser la session et l’API Agilotext.':
+  error?.status===401?'Session Agilotext requise ou expirée.':
   error?.status===409?'Révision périmée : actualisez ce document.':error?.message||'Erreur inconnue';
 
 const shell=el('section',null,'asv2-shell',mount);
 const head=el('header',null,'asv2-landing-head',shell);
-el('span','AgiloShield','asv2-brand',head);
-el('h2','Anonymiser vos documents',null,head);
-el('p','Choisissez les données à protéger. Chaque fichier conserve sa propre sélection et sa propre vérification.',null,head);
+el('span','AgiloShield V2 · recette','asv2-brand',head);
+el('h2','Anonymiser vos données avant usage IA',null,head);
+el('p','Déposez un document, puis consultez son original et son résultat dans le panneau de revue.',null,head);
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
 const form=el('form',null,'asv2-form',shell);
-const policy=el('section',null,'asv2-policy',form);
+const surfaceTabs=el('div',null,'asv2-surface-tabs',form);
+surfaceTabs.setAttribute('role','tablist');surfaceTabs.setAttribute('aria-label','Modes de traitement');
+const fileTab=button('', 'asv2-surface-tab is-active',surfaceTabs,()=>setSurface('file'));
+el('strong','Traitement de fichier',null,fileTab);
+el('small','PDF, Word, Excel, PowerPoint, TXT, CSV',null,fileTab);
+const textTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('text'));
+el('strong','Traitement de texte',null,textTab);el('small','Saisi ou collé',null,textTab);
+const restoreTab=button('', 'asv2-surface-tab',surfaceTabs);
+el('strong','Restauration',null,restoreTab);el('small','Ancien parcours',null,restoreTab);
+restoreTab.disabled=true;restoreTab.title='La restauration n’est pas exposée par la façade V2 de recette.';
+for(const tab of [fileTab,textTab,restoreTab])tab.setAttribute('role','tab');
+fileTab.setAttribute('aria-selected','true');textTab.setAttribute('aria-selected','false');
+restoreTab.setAttribute('aria-selected','false');
+const layout=el('div',null,'asv2-layout',form);
+const main=el('div',null,'asv2-main',layout);
+const side=el('aside',null,'asv2-side',layout);side.setAttribute('aria-label','Paramètres');
+const filePane=el('div',null,'asv2-file-pane',main);filePane.setAttribute('role','tabpanel');
+const textPane=el('div',null,'asv2-text-pane',main);textPane.setAttribute('role','tabpanel');textPane.hidden=true;
+fileTab.id='asv2-tab-file';textTab.id='asv2-tab-text';
+filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';
+fileTab.setAttribute('aria-controls',filePane.id);textTab.setAttribute('aria-controls',textPane.id);
+filePane.setAttribute('aria-labelledby',fileTab.id);textPane.setAttribute('aria-labelledby',textTab.id);
+el('h3','Traitement de texte',null,textPane);
+el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
+  'asv2-muted',textPane);
+const textInput=el('textarea',null,'asv2-text-input',textPane);
+textInput.placeholder='Collez ou saisissez le texte à anonymiser…';
+textInput.setAttribute('aria-label','Texte à anonymiser');
+const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=>{
+  if(!textInput.value.trim()){notify('Saisissez du texte avant de l’ajouter.','is-warning');return;}
+  addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
+  textInput.value='';
+});textAdd.disabled=true;
+el('h3','Mode de traitement',null,side);
+const anonMode=el('label',null,'asv2-mode is-selected',side);
+const anonRadio=el('input',null,null,anonMode);anonRadio.type='radio';anonRadio.name='asv2Mode';anonRadio.checked=true;
+el('span','Anonymiser','asv2-mode-title',anonMode);
+const pseudoMode=el('label',null,'asv2-mode is-unavailable',side);
+const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
+pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
+el('small','Ancien parcours uniquement ; pas de pseudonymisation V2 annoncée.',null,pseudoMode);
+el('h3','Paramètres',null,side);
+const typesButton=button('Types de données','asv2-types-button',side,openTypes);
+const typeCount=el('span','…','asv2-count',typesButton);
+typesButton.disabled=true;
+el('p','Cliquez pour choisir les 13 catégories. Les préférences sont enregistrées pour les prochains jobs.',
+  'asv2-muted asv2-side-help',side);
+el('p','Une catégorie décochée peut rester visible. READY porte uniquement sur la sélection du job.',
+  'asv2-policy-note',side);
+const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
+const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
+policyDialog.setAttribute('role','dialog');policyDialog.setAttribute('aria-modal','true');
+policyDialog.setAttribute('aria-labelledby','asv2-policy-title');
+const policyHeader=el('header',null,'asv2-policy-header',policyDialog);
+const policyHeading=el('div',null,null,policyHeader);
+const policyTitle=el('h2','Sélectionnez les types de données',null,policyHeading);policyTitle.id='asv2-policy-title';
+el('p','Ces préférences sont enregistrées et appliquées aux prochains traitements.',
+  'asv2-muted',policyHeading);
+const policyClose=button('×','asv2-close',policyHeader,()=>closeTypes(false));
+policyClose.setAttribute('aria-label','Fermer les types de données');
+const policy=el('section',null,'asv2-policy',policyDialog);
 const policyHead=el('div',null,'asv2-section-head',policy);
 el('h3','Types de données à anonymiser',null,policyHead);
 el('span','13 catégories','asv2-count',policyHead);
@@ -52,24 +114,29 @@ for(const code of codes){
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
   el('span',code,'asv2-code',label);el('span',labels[code],null,label);checks.set(code,box);
 }
-const shortcuts=el('div',null,'asv2-shortcuts',policy);
+const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
   const control=button(caption,'asv2-link',shortcuts,()=>{
     for(const [code,box] of checks) box.checked=values.includes(code);
   });control.disabled=true;
 }
-const drop=el('div',null,'asv2-drop',form);drop.tabIndex=0;drop.setAttribute('role','button');
+const policyActions=el('div',null,'asv2-policy-actions',policyDialog);
+const policyError=el('p','', 'asv2-policy-error',policyDialog);policyError.hidden=true;
+const policyCancel=button('Annuler','asv2-secondary',policyActions,()=>closeTypes(false));
+const policySave=button('Enregistrer','asv2-primary',policyActions,saveTypes);policySave.disabled=true;
+const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
 el('span','ou cliquez pour choisir des fichiers · 12 maximum','asv2-drop-subtitle',drop);
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
-const queue=el('ul',null,'asv2-queue',form);queue.setAttribute('aria-label','Documents sélectionnés');
-const actions=el('div',null,'asv2-form-actions',form);
+const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Documents sélectionnés');
+const actions=el('div',null,'asv2-form-actions',main);
 const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
 const submit=el('button','Anonymiser les documents','asv2-primary',actions);submit.type='submit';submit.disabled=true;
-el('p','Une catégorie décochée peut rester visible dans le résultat. Le statut READY porte uniquement sur la sélection du job.','asv2-policy-note',form);
+el('p','Sélectionnez un fichier pour ouvrir son aperçu et sa vérification.',
+  'asv2-preview-help',main);
 
 const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
 const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);backdrop.setAttribute('aria-label','Fermer la revue');
@@ -95,11 +162,62 @@ const drawerFooter=el('footer',null,'asv2-drawer-footer',panel);
 
 function notify(text,kind='') {notice.textContent=text;notice.className='asv2-notice '+kind;}
 function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
+function updateSubmit(){submit.disabled=!state.preferencesReady||state.running||
+  !state.entries.some(entry=>entry.status==='LOCAL');}
+let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
+function setSurface(kind){
+  const file=kind==='file';filePane.hidden=!file;textPane.hidden=file;
+  fileTab.classList.toggle('is-active',file);textTab.classList.toggle('is-active',!file);
+  fileTab.setAttribute('aria-selected',String(file));textTab.setAttribute('aria-selected',String(!file));
+}
+function openTypes(){
+  if(!state.preferencesReady)return;
+  typesSnapshot=selected();modalLastFocus=document.activeElement;
+  policyError.hidden=true;policyModal.hidden=false;document.body.classList.add('asv2-policy-open');
+  policyClose.focus();
+}
+function closeTypes(saved){
+  if(savingTypes||policyDialog.querySelector('.asv2-confirm'))return;
+  if(!saved){const keep=new Set(typesSnapshot);for(const [code,box] of checks)box.checked=keep.has(code);}
+  policyModal.hidden=true;document.body.classList.remove('asv2-policy-open');
+  if(modalLastFocus?.isConnected)modalLastFocus.focus();
+}
+policyModal.addEventListener('click',event=>{if(event.target===policyModal)closeTypes(false);});
+policyModal.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();closeTypes(false);return;}
+  if(event.key!=='Tab')return;
+  const items=[...policyDialog.querySelectorAll('button:not([disabled]),input:not([disabled])')]
+    .filter(item=>item.getClientRects().length);
+  if(!items.length)return;
+  if(event.shiftKey&&document.activeElement===items[0]){event.preventDefault();items.at(-1).focus();}
+  else if(!event.shiftKey&&document.activeElement===items.at(-1)){event.preventDefault();items[0].focus();}
+});
+async function saveTypes(){
+  const types=selected(),sensitive=defaults.some(code=>!types.includes(code));
+  if(sensitive&&!await confirmAction(types.length?
+    'Certaines données directement identifiantes resteront visibles. Enregistrer ce choix ?':
+    'Aucune catégorie n’est sélectionnée. Enregistrer ce choix ?'))return;
+  savingTypes=true;policySave.disabled=true;policyClose.disabled=true;policyCancel.disabled=true;
+  policyError.hidden=true;
+  try{
+    const response=await api.savePreferences({schemaVersion:1,selectedTypes:types,
+      sensitiveKeepAcknowledged:sensitive});
+    const saved=response?.protectionPolicy?.selectedTypes;
+    if(!Array.isArray(saved)||JSON.stringify([...saved].sort())!==JSON.stringify([...types].sort()))
+      throw new Error('Préférences non enregistrées par la façade');
+    typeCount.textContent=String(types.length);typesSnapshot=[...types];savingTypes=false;closeTypes(true);
+    notify('Préférences enregistrées. Elles seront appliquées aux prochains documents.');
+  }catch(error){policyError.textContent=errorText(error);policyError.hidden=false;}
+  finally{savingTypes=false;policySave.disabled=!state.preferencesReady;
+    policyClose.disabled=false;policyCancel.disabled=false;}
+}
 function setEnabled(yes){
-  state.preferencesReady=yes;fileInput.disabled=!yes;submit.disabled=!yes||state.running;
+  state.preferencesReady=yes;fileInput.disabled=!yes;textInput.disabled=!yes;
+  typesButton.disabled=!yes;textAdd.disabled=!yes;policySave.disabled=!yes;
   for(const box of checks.values())box.disabled=!yes;
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
   drop.classList.toggle('is-disabled',!yes);
+  drop.setAttribute('aria-disabled',String(!yes));updateSubmit();
 }
 async function loadPreferences(){
   setEnabled(false);retry.hidden=true;notify('Chargement des préférences…');
@@ -107,6 +225,7 @@ async function loadPreferences(){
     const response=await api.preferences();const types=response?.protectionPolicy?.selectedTypes;
     if(!Array.isArray(types)||types.some(code=>!codes.includes(code)))throw new Error('Préférences serveur invalides');
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
+    typeCount.textContent=String(types.length);
     setEnabled(true);notify('Préférences chargées. Vous pouvez déposer vos documents.');
   }catch(error){retry.hidden=false;notify(errorText(error),'is-error');}
 }
@@ -149,6 +268,7 @@ function renderQueue(){
       state.entries=state.entries.filter(item=>item!==entry);if(state.active===entry.key)closeDrawer();renderQueue();
     });
   }
+  updateSubmit();
 }
 function saveSession(){
   try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12).map(e=>({jobId:e.jobId,digest:e.digest}))));}
@@ -179,7 +299,8 @@ function assertDigest(entry,value){
 }
 async function confirmAction(text){
   return new Promise(resolve=>{
-    const box=el('div',null,'asv2-confirm',drawer.hidden?shell:panel);
+    const host=!policyModal.hidden?policyDialog:drawer.hidden?shell:panel;
+    const box=el('div',null,'asv2-confirm',host);
     el('p',text,null,box);
     const yes=button('Confirmer','asv2-primary',box,()=>{box.remove();resolve(true);});
     button('Annuler','asv2-secondary',box,()=>{box.remove();resolve(false);});yes.focus();
@@ -217,7 +338,7 @@ async function submitQueue(event){
       }
     }
   }catch(error){notify(errorText(error),'is-error');}
-  finally{state.running=false;submit.disabled=!state.preferencesReady;renderQueue();}
+  finally{state.running=false;renderQueue();}
 }
 form.addEventListener('submit',submitQueue);
 async function pollEntry(entry){

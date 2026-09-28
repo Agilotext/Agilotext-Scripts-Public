@@ -1,12 +1,12 @@
 /* Reference transport only. Browser -> authenticated Java HTTPS facade; no Python HMAC. */
 export class AgiloShieldV2Client {
-  constructor({baseUrl, authHeaders, credentials = 'omit', fetchImpl = fetch}) {
+  constructor({baseUrl, authHeaders, credentials = 'omit', fetchImpl = (...args) => globalThis.fetch(...args)}) {
     if (!/^https:\/\//.test(baseUrl)) throw new Error('HTTPS staging baseUrl required');
     if (typeof authHeaders !== 'function') throw new Error('authHeaders callback required');
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.authHeaders = authHeaders;
     this.credentials = credentials;
-    this.fetchImpl = fetchImpl;
+    this.fetchImpl = (...args) => fetchImpl(...args);
   }
   async request(path, {method = 'GET', body, digest, headers = {}} = {}) {
     const auth = await this.authHeaders();
