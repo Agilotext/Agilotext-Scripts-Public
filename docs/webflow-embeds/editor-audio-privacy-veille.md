@@ -2,7 +2,9 @@
 
 **Fichier :** `scripts/pages/editor/Code-lecteur-audio-V3.4.js`  
 **Version runtime :** `window.__agiloAudioLite === '3.4-privacy-play'`  
-**Debug :** `window.AgiloAudioPrivacy`
+**Pin staging :** `@26fc7b49` (`?v=privacy-play`) sur composant `Code-lecteur-audio` + share  
+**Debug :** `window.AgiloAudioPrivacy`  
+**Rollback éditeur :** `@dd9a6992` (privacy-vis) ou `@57101fff` (pre-privacy)
 
 ## Règle produit
 
@@ -34,9 +36,15 @@ node scripts/pages/editor/Code-lecteur-audio-V3.4.privacy.test.mjs
 5. Même scénario veille OS réelle.
 6. Mac smoke : autre onglet → pause ; pas de reprise auto ; clic Lire OK.
 
+## Staging
+
+Pin **une seule ligne** `Code-lecteur-audio-V3.4.js` :
+`https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@26fc7b49/scripts/pages/editor/Code-lecteur-audio-V3.4.js?v=privacy-play`  
+sur éditeur Free/Pro/Business + share. Publish : `agilotext-test` only. **Pas www** sans OK Florian.
+
 ## Share
 
-`/auth/share` charge le même `Code-lecteur-audio-V3.4.js` (voir `docs/webflow-embeds/share/share-page.html`). Après push, pinner le **même SHA** sur staging (éditeur + share) et purger jsDelivr. **Pas de www sans OK Florian.**
+Voir `docs/webflow-embeds/share/share-page.html` (même SHA lecteur).
 
 ## Hors scope (piste séparée)
 
