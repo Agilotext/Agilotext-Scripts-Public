@@ -25,9 +25,11 @@ export class AgiloShieldV2Client {
   json(path, options) { return this.request(path, options).then(r => r.json()); }
   preferences() { return this.json('/preferences'); }
   savePreferences(policy) { return this.json('/preferences', {method:'POST', body:JSON.stringify(policy), headers:{'Content-Type':'application/json'}}); }
-  async upload(file, policy, {removeImages} = {}) {
+  async upload(file, policy, {removeImages, processingMode = 'ANONYMIZE'} = {}) {
+    if (!['ANONYMIZE', 'PSEUDONYMIZE'].includes(processingMode)) throw new Error('Invalid processing mode');
     const form = new FormData(); form.append('file', file);
     form.append('protectionPolicy', JSON.stringify(policy));
+    form.append('processingMode', processingMode);
     if (removeImages !== undefined) form.append('removeImages', String(removeImages));
     return this.json('/jobs', {method:'POST', body:form});
   }
@@ -76,11 +78,41 @@ export class AgiloShieldV2Client {
       {'X-Agiloshield-Confirm-Non-Verifie':'true'} : {}});
   }
   certifiedDownload(id) { return this.request(this.path(id, '/download')); }
-  async checkedArtifact(id, {certified = true, expectedDigest, expectedRevision} = {}) {
+  pseudonymKey(id) { return this.request(this.path(id, '/pseudonym-key')); }
+  inspectRestoration(file, key) {
+    const form = new FormData(); form.append('file', file); form.append('key', key);
+    return this.json('/pseudonym/restore/inspect', {method:'POST', body:form});
+  }
+  restore(file, key, {confirmed = false} = {}) {
+    if (!confirmed) throw new Error('Explicit sensitive restoration confirmation required');
+    const form = new FormData(); form.append('file', file); form.append('key', key);
+    form.append('confirmSensitiveRestore', 'true');
+    return this.request('/pseudonym/restore', {method:'POST', body:form});
+  }
+  async checkedKey(id, {expectedDigest, expectedRevision} = {}) {
+    const [job, review] = await Promise.all([this.status(id), this.review(id)]);
+    if (job.processingMode !== 'PSEUDONYMIZE' || review.processingMode !== 'PSEUDONYMIZE' ||
+        (job.anonStatus || job.status) !== 'READY' || review.status !== 'READY' ||
+        job.protectionPolicy?.digest !== expectedDigest || review.protectionPolicy?.digest !== expectedDigest ||
+        String(job.reviewRevision) !== String(expectedRevision) ||
+        String(review.revision) !== String(expectedRevision)) throw new Error('Stale pseudonym key state');
+    const response = await this.pseudonymKey(id);
+    if (response.headers.get('X-Agiloshield-Processing-Mode') !== 'PSEUDONYMIZE' ||
+        response.headers.get('X-Agiloshield-Status') !== 'READY' ||
+        response.headers.get('X-Agiloshield-Assurance') !== 'technical-ready' ||
+        response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
+        response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision))
+      throw new Error('Stale pseudonym key');
+    return response;
+  }
+  async checkedArtifact(id, {certified = true, expectedDigest, expectedRevision,
+                              expectedMode = 'ANONYMIZE'} = {}) {
     const [job, review] = await Promise.all([this.status(id), this.review(id)]);
     const status = job.anonStatus || job.status;
     if (job.protectionPolicy?.digest !== expectedDigest ||
         review.protectionPolicy?.digest !== expectedDigest ||
+        (job.processingMode || 'ANONYMIZE') !== expectedMode ||
+        (review.processingMode || 'ANONYMIZE') !== expectedMode ||
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
         (review.status && review.status !== status) ||
         (certified && status !== 'READY') ||
@@ -91,6 +123,7 @@ export class AgiloShieldV2Client {
       await this.result(id, {confirmNonVerified:status === 'FAILED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
+        (response.headers.get('X-Agiloshield-Processing-Mode') || 'ANONYMIZE') !== expectedMode ||
         response.headers.get('X-Agiloshield-Status') !== status ||
         response.headers.get('X-Agiloshield-Assurance') !==
           (certified ? 'technical-ready' : 'non-verified')) {

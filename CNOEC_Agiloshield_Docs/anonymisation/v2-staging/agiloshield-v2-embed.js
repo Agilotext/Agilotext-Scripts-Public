@@ -50,9 +50,10 @@ el('strong','Traitement de fichier',null,fileTab);
 el('small','PDF, Word, Excel, PowerPoint, TXT, CSV',null,fileTab);
 const textTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('text'));
 el('strong','Traitement de texte',null,textTab);el('small','Saisi ou collé',null,textTab);
-const restoreTab=button('', 'asv2-surface-tab',surfaceTabs);
-el('strong','Restauration',null,restoreTab);el('small','Ancien parcours',null,restoreTab);
-restoreTab.disabled=true;restoreTab.title='La restauration n’est pas exposée par la façade V2 de recette.';
+const restoreTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('restore'));
+el('strong','Restauration',null,restoreTab);el('small','Fichier et clé V2',null,restoreTab);
+restoreTab.disabled=config.PSEUDONYMIZATION_ENABLED!==true;
+if(restoreTab.disabled)restoreTab.title='Restauration V2 non disponible sur cette recette.';
 for(const tab of [fileTab,textTab,restoreTab])tab.setAttribute('role','tab');
 fileTab.setAttribute('aria-selected','true');textTab.setAttribute('aria-selected','false');
 restoreTab.setAttribute('aria-selected','false');
@@ -61,10 +62,14 @@ const main=el('div',null,'asv2-main',layout);
 const side=el('aside',null,'asv2-side',layout);side.setAttribute('aria-label','Paramètres');
 const filePane=el('div',null,'asv2-file-pane',main);filePane.setAttribute('role','tabpanel');
 const textPane=el('div',null,'asv2-text-pane',main);textPane.setAttribute('role','tabpanel');textPane.hidden=true;
+const restorePane=el('div',null,'asv2-text-pane',main);restorePane.setAttribute('role','tabpanel');restorePane.hidden=true;
 fileTab.id='asv2-tab-file';textTab.id='asv2-tab-text';
 filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';
+restorePane.id='asv2-pane-restore';restoreTab.id='asv2-tab-restore';
 fileTab.setAttribute('aria-controls',filePane.id);textTab.setAttribute('aria-controls',textPane.id);
+restoreTab.setAttribute('aria-controls',restorePane.id);
 filePane.setAttribute('aria-labelledby',fileTab.id);textPane.setAttribute('aria-labelledby',textTab.id);
+restorePane.setAttribute('aria-labelledby',restoreTab.id);
 el('h3','Traitement de texte',null,textPane);
 el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
   'asv2-muted',textPane);
@@ -76,14 +81,32 @@ const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=
   addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
   textInput.value='';
 });textAdd.disabled=true;
+el('h3','Restituer un fichier pseudonymisé',null,restorePane);
+el('p','Choisissez le fichier et sa clé .properties. La restitution recrée des données sensibles. Un fichier édité ne peut pas être certifié identique à l’original.',
+  'asv2-muted',restorePane);
+el('label','Fichier pseudonymisé',null,restorePane);
+const restoreFile=el('input',null,'asv2-restore-input',restorePane);restoreFile.type='file';
+restoreFile.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';
+el('label','Clé de correspondance',null,restorePane);
+const restoreKey=el('input',null,'asv2-restore-input',restorePane);restoreKey.type='file';restoreKey.accept='.properties,.txt';
+const restoreInspect=button('Voir les substitutions','asv2-secondary',restorePane,inspectRestore);
+const restoreSummary=el('div','Aucune clé chargée.','asv2-preview-help',restorePane);
+const restoreConfirm=button('Confirmer et restituer','asv2-primary',restorePane,doRestore);
+restoreConfirm.disabled=true;
 el('h3','Mode de traitement',null,side);
 const anonMode=el('label',null,'asv2-mode is-selected',side);
 const anonRadio=el('input',null,null,anonMode);anonRadio.type='radio';anonRadio.name='asv2Mode';anonRadio.checked=true;
 el('span','Anonymiser','asv2-mode-title',anonMode);
-const pseudoMode=el('label',null,'asv2-mode is-unavailable',side);
+const pseudoMode=el('label',null,'asv2-mode'+(config.PSEUDONYMIZATION_ENABLED===true?'':' is-unavailable'),side);
 const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
-pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
-el('small','Ancien parcours uniquement ; pas de pseudonymisation V2 annoncée.',null,pseudoMode);
+pseudoRadio.disabled=config.PSEUDONYMIZATION_ENABLED!==true;
+el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
+el('small',pseudoRadio.disabled?'Non disponible sur cette recette.':'Étiquettes visibles et clé de restitution contrôlée.',null,pseudoMode);
+for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
+  anonMode.classList.toggle('is-selected',anonRadio.checked);
+  pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
+  submit.textContent=pseudoRadio.checked?'Pseudonymiser les documents':'Anonymiser les documents';
+});
 el('h3','Paramètres',null,side);
 const typesButton=button('Types de données','asv2-types-button',side,openTypes);
 const typeCount=el('span','…','asv2-count',typesButton);
@@ -166,9 +189,13 @@ function updateSubmit(){submit.disabled=!state.preferencesReady||state.running||
   !state.entries.some(entry=>entry.status==='LOCAL');}
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 function setSurface(kind){
-  const file=kind==='file';filePane.hidden=!file;textPane.hidden=file;
-  fileTab.classList.toggle('is-active',file);textTab.classList.toggle('is-active',!file);
-  fileTab.setAttribute('aria-selected',String(file));textTab.setAttribute('aria-selected',String(!file));
+  const file=kind==='file',text=kind==='text',restore=kind==='restore';
+  if(restore&&restoreTab.disabled)return;
+  filePane.hidden=!file;textPane.hidden=!text;restorePane.hidden=!restore;
+  fileTab.classList.toggle('is-active',file);textTab.classList.toggle('is-active',text);
+  restoreTab.classList.toggle('is-active',restore);
+  fileTab.setAttribute('aria-selected',String(file));textTab.setAttribute('aria-selected',String(text));
+  restoreTab.setAttribute('aria-selected',String(restore));
 }
 function openTypes(){
   if(!state.preferencesReady)return;
@@ -237,7 +264,8 @@ function addFiles(files){
   for(const file of additions){
     if(!supported.test(file.name)){notify('Format non pris en charge : '+file.name,'is-error');continue;}
     const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
-      digest:null,selectedTypes:null,status:'LOCAL',revision:null,review:null,regions:null,
+      digest:null,selectedTypes:null,processingMode:pseudoRadio.checked?'PSEUDONYMIZE':'ANONYMIZE',
+      status:'LOCAL',revision:null,review:null,regions:null,
       previewKind:'origin',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
     firstAdded ||= entry;
@@ -271,7 +299,8 @@ function renderQueue(){
   updateSubmit();
 }
 function saveSession(){
-  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12).map(e=>({jobId:e.jobId,digest:e.digest}))));}
+  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12)
+    .map(e=>({jobId:e.jobId,digest:e.digest,processingMode:e.processingMode}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
@@ -281,11 +310,13 @@ async function restoreSession(){
   for(const item of saved.slice(-12)){
     if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
     const entry={key:crypto.randomUUID(),file:null,name:'Job '+item.jobId,format:'',jobId:item.jobId,
-      digest:item.digest,selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
+      digest:item.digest,selectedTypes:null,processingMode:item.processingMode||'ANONYMIZE',
+      status:'PENDING',revision:null,review:null,regions:null,
       previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
     try{
       const job=await api.status(entry.jobId);assertDigest(entry,job);
+      assertMode(entry,job);
       entry.status=statusOf(job);entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
       entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
       if(isTerminal(entry.status))await loadCurrent(entry);
@@ -297,6 +328,10 @@ async function restoreSession(){
 function assertDigest(entry,value){
   if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
 }
+function assertMode(entry,value){
+  if((value?.processingMode||'ANONYMIZE')!==entry.processingMode)
+    throw new Error('Mode de traitement incohérent avec le job');
+}
 async function confirmAction(text){
   return new Promise(resolve=>{
     const host=!policyModal.hidden?policyDialog:drawer.hidden?shell:panel;
@@ -305,6 +340,52 @@ async function confirmAction(text){
     const yes=button('Confirmer','asv2-primary',box,()=>{box.remove();resolve(true);});
     button('Annuler','asv2-secondary',box,()=>{box.remove();resolve(false);});yes.focus();
   });
+}
+let inspectedRestore=null;
+async function inspectRestore(){
+  restoreConfirm.disabled=true;inspectedRestore=null;clear(restoreSummary);
+  const file=restoreFile.files?.[0],key=restoreKey.files?.[0];
+  if(!file||!key){el('p','Choisissez le fichier et la clé .properties.','asv2-policy-error',restoreSummary);return;}
+  try{
+    const inspected=await api.inspectRestoration(file,key);
+    if(inspected.mode!=='PSEUDONYMIZE'||inspected.confirmationRequired!==true)
+      throw new Error('Contrat de restitution inattendu');
+    inspectedRestore={file,key};
+    el('p','La sortie contiendra de nouveau des données sensibles. Contrôlez ces substitutions :',
+      'asv2-policy-note',restoreSummary);
+    const list=el('ul',null,null,restoreSummary);
+    for(const row of inspected.substitutions||[])
+      el('li',`${row.marker} → ${row.original} (${row.count} occurrence(s))`,null,list);
+    if(inspected.pdfOriginalOnly)
+      el('p','Pour un PDF, seul l’original conservé du job peut être rendu. Après purge, la restitution est impossible.',
+        'asv2-policy-note',restoreSummary);
+    if(inspected.nonTextMediaAltered)
+      el('p','Des médias ont changé : la clé textuelle ne les restaure pas. Le résultat ne sera pas certifié identique à l’original.',
+        'asv2-policy-note',restoreSummary);
+    restoreConfirm.disabled=false;
+  }catch(error){el('p',errorText(error),'asv2-policy-error',restoreSummary);}
+}
+for(const input of [restoreFile,restoreKey])input.addEventListener('change',()=>{
+  restoreConfirm.disabled=true;inspectedRestore=null;restoreSummary.textContent='Vérifiez à nouveau le fichier et sa clé.';
+});
+async function doRestore(){
+  if(!inspectedRestore)return;
+  if(!await confirmAction('Cette opération recrée des données sensibles. Confirmer la restitution contrôlée ?'))return;
+  restoreConfirm.disabled=true;
+  try{
+    const response=await api.restore(inspectedRestore.file,inspectedRestore.key,{confirmed:true});
+    const assurance=response.headers.get('X-Agiloshield-Assurance');
+    if(!['sensitive-restored-not-original-certified','original-retained'].includes(assurance))
+      throw new Error('Réponse de restitution non vérifiée');
+    const blob=await response.blob();
+    const disposition=response.headers.get('Content-Disposition')||'';
+    const fallback='document.RESTORED.'+(formatOf(inspectedRestore.file.name)||'bin');
+    const filename=(/filename="?([^";]+)"?/i.exec(disposition)?.[1]||fallback).replace(/[^A-Za-z0-9._-]/g,'_');
+    const href=URL.createObjectURL(blob),link=el('a',null,null,document.body);
+    link.href=href;link.download=filename;link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(href),1500);
+    restoreFile.value='';restoreKey.value='';inspectedRestore=null;
+    restoreSummary.textContent='Fichier sensible restitué. Conservez-le dans un espace protégé.';
+  }catch(error){el('p',errorText(error),'asv2-policy-error',restoreSummary);restoreConfirm.disabled=false;}
 }
 async function submitQueue(event){
   event.preventDefault();if(!state.preferencesReady||state.running)return;
@@ -317,6 +398,7 @@ async function submitQueue(event){
     'Des catégories directement identifiantes resteront visibles. Confirmer la sélection ?':
     'Aucune catégorie n’est sélectionnée. Confirmer que les données détectées resteront visibles ?'))return;
   const policy={schemaVersion:1,selectedTypes:types,sensitiveKeepAcknowledged:sensitive};
+  const processingMode=pseudoRadio.checked?'PSEUDONYMIZE':'ANONYMIZE';
   state.running=true;submit.disabled=true;
   try{
     const saved=await api.savePreferences(policy);
@@ -325,11 +407,13 @@ async function submitQueue(event){
       throw new Error('Préférences non enregistrées par la façade');
     for(const entry of pending){
       entry.selectedTypes=[...types];entry.digest=saved.protectionPolicy.digest;
+      entry.processingMode=processingMode;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
-        const created=await api.upload(entry.file,policy);
+        const created=await api.upload(entry.file,policy,{processingMode});
         if(!created.jobId||created?.protectionPolicy?.digest!==entry.digest)
           throw new Error('Politique du job différente de la sélection');
+        assertMode(entry,created);
         entry.jobId=created.jobId;entry.status=statusOf(created)||'PENDING';saveSession();renderQueue();
         await pollEntry(entry);
         if(entry.status==='TIMED_OUT')break;
@@ -345,6 +429,7 @@ async function pollEntry(entry){
   const deadline=Date.now()+(config.MAX_WAIT_MS||180000);
   while(Date.now()<deadline){
     const job=await api.status(entry.jobId);assertDigest(entry,job);
+    assertMode(entry,job);
     entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
     renderQueue();renderDrawer(entry);
     if(isTerminal(entry.status)){await loadCurrent(entry);return;}
@@ -358,6 +443,7 @@ async function loadCurrent(entry){
   const [job,review,regions]=await Promise.all([
     api.status(entry.jobId),api.review(entry.jobId),api.regions(entry.jobId).catch(()=>null)]);
   assertDigest(entry,job);assertDigest(entry,review);
+  assertMode(entry,job);assertMode(entry,review);
   entry.status=statusOf(job);entry.revision=review.revision;entry.review=review;entry.regions=regions;
   entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
   entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
@@ -395,6 +481,7 @@ function showError(error){drawerMessage(errorText(error),'is-error');}
 function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
+    entry.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé',
     entry.revision?'Révision '+entry.revision:null,entry.jobId?'Job '+entry.jobId:null].filter(Boolean).join(' · ');
   drawerMessage(entry.error||({LOCAL:'Original local — données sensibles visibles.',UPLOADING:'Envoi du document…',
     PENDING:'Uploadé / En attente',PROCESSING:'Traitement en cours',READY:'Document prêt selon la sélection de ce job.',
@@ -456,6 +543,9 @@ function renderFooter(entry){
     ()=>loadCurrent(entry).catch(showError));
   if(entry.status==='READY')button('Télécharger le document prêt','asv2-primary',drawerFooter,
     ()=>download(entry,true).catch(showError));
+  if(entry.status==='READY'&&entry.processingMode==='PSEUDONYMIZE')
+    button('Télécharger la clé de restitution','asv2-secondary',drawerFooter,
+      ()=>downloadKey(entry).catch(showError));
   else if(['REVIEW_REQUIRED','FAILED'].includes(entry.status))button('Télécharger NON_VERIFIE','asv2-secondary',drawerFooter,
     ()=>download(entry,false).catch(showError));
 }
@@ -706,7 +796,7 @@ function renderCsv(bytes){
 async function download(entry,certified){
   if(!certified&&!await confirmAction('Ce fichier est NON_VERIFIE : des données sensibles peuvent rester visibles. Télécharger ?'))return;
   const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
-    expectedRevision:entry.revision});
+    expectedRevision:entry.revision,expectedMode:entry.processingMode});
   const blob=await response.blob();
   const disposition=response.headers.get('Content-Disposition')||'';
   const fallback=(certified?'document-anonymise':'document-NON_VERIFIE')+'.'+(entry.format||'bin');
@@ -715,6 +805,15 @@ async function download(entry,certified){
   link.href=url;link.download=filename;link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
   drawerMessage('Téléchargement '+(certified?'certifié':'NON_VERIFIE')+' démarré.');
+}
+async function downloadKey(entry){
+  const response=await api.checkedKey(entry.jobId,{expectedDigest:entry.digest,
+    expectedRevision:entry.revision});
+  const blob=await response.blob();
+  const href=URL.createObjectURL(blob),link=el('a',null,null,document.body);
+  link.href=href;link.download='anon.properties';link.click();link.remove();
+  setTimeout(()=>URL.revokeObjectURL(href),1500);
+  drawerMessage('Clé téléchargée. Elle contient des données sensibles : conservez-la dans un espace protégé.');
 }
 window.addEventListener('pagehide',()=>{state.previewSerial++;state.previewCleanup?.();});
 loadPreferences().then(restoreSession);

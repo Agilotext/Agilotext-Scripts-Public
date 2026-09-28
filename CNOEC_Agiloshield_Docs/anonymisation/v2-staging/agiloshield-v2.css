@@ -32,6 +32,7 @@
 #agiloshield-v2-staging .asv2-drop-subtitle{color:var(--asv2-muted)}
 #agiloshield-v2-staging .asv2-drop-types{margin-top:8px;font-size:12px;font-weight:700;color:#456990}
 #agiloshield-v2-staging .asv2-file-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+#agiloshield-v2-staging .asv2-restore-input{display:block;max-width:100%;margin:8px 0 16px;padding:10px;border:1px solid var(--asv2-line);border-radius:9px;background:#fff}
 #agiloshield-v2-staging .asv2-queue{list-style:none;padding:0;margin:14px 0;display:grid;gap:7px}
 #agiloshield-v2-staging .asv2-queue-item{display:flex;align-items:center;gap:10px;border:1px solid var(--asv2-line);border-radius:10px;padding:8px 10px;min-width:0}
 #agiloshield-v2-staging .asv2-queue-name{border:0;background:none;text-align:left;color:var(--asv2-navy);font-weight:650;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}

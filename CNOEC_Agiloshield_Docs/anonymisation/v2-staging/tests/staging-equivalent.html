@@ -13,16 +13,19 @@ try{
 }catch(_){}
 function persistMock(){sessionStorage.setItem('asv2-mock-jobs',JSON.stringify([...jobs.values()].map(job=>({
  id:job.id,fileName:job.file.name,fileType:job.file.type,policy:job.policy,status:job.status,
- target:job.target,rev:job.rev,polls:job.polls,unresolved:job.unresolved}))));}
+ target:job.target,rev:job.rev,polls:job.polls,unresolved:job.unresolved,processingMode:job.processingMode}))));}
 window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2',
+ PSEUDONYMIZATION_ENABLED:true,
  PDF_WORKER_URL:new URL('../vendor/pdf.worker.min.js',location.href).href,
  DOCX_FRAME_URL:new URL('../docx-preview-frame.html',location.href).href,
  POLL_MS:100,MAX_WAIT_MS:5000,getAuthHeaders:async()=>({'X-Mock-Actor':'local-test'})};
 function json(v,status=200){return new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json'}});}
 function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.status,status:job.status,
- reviewRevision:job.rev,protectionPolicy:job.policy,qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
+ reviewRevision:job.rev,protectionPolicy:job.policy,processingMode:job.processingMode,
+ qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
 function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED',
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
+ processingMode:job.processingMode,
  occurrences:job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
   category:'EML',action:'MASK',fragments:[[72,94,202,109]]}]:[],
  unresolvedMasks:job.status==='REVIEW_REQUIRED'&&job.file.name.endsWith('.pdf')&&job.unresolved?
@@ -36,10 +39,16 @@ window.fetch=async(url,options={})=>{
   if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:'mock-digest'};}
   return json({protectionPolicy:preference});
  }
+ if(path==='/pseudonym/restore/inspect')return json({mode:'PSEUDONYMIZE',confirmationRequired:true,
+  substitutions:[{marker:'<EML_AA>',original:'contact@example.test',count:1}],exactOriginalCertified:false});
+ if(path==='/pseudonym/restore')return new Response('SYNTHETIC RESTORED',{headers:{
+  'X-Agiloshield-Assurance':'sensitive-restored-not-original-certified',
+  'Content-Disposition':'attachment; filename="synthetic.RESTORED.txt"'}});
  if(path==='/jobs'&&options.method==='POST'){
   const file=options.body.get('file');const policy=JSON.parse(options.body.get('protectionPolicy'));
+  const processingMode=options.body.get('processingMode')||'ANONYMIZE';
   const id='synthetic-job-'+nextId++;
-  const job={id,file,policy:{...policy,digest:'mock-digest'},status:'PENDING',
+  const job={id,file,policy:{...policy,digest:'mock-digest'},processingMode,status:'PENDING',
    target:/failed/i.test(file.name)?'FAILED':/review/i.test(file.name)?'REVIEW_REQUIRED':'READY',
    rev:'mock-r1',polls:0,unresolved:/review/i.test(file.name)&&file.name.endsWith('.pdf')};
   jobs.set(id,job);persistMock();return json(meta(job));
@@ -77,11 +86,19 @@ window.fetch=async(url,options={})=>{
   job.target=job.unresolved?'REVIEW_REQUIRED':'READY';job.status='PROCESSING';job.polls=0;
   persistMock();return json(meta(job));
  }
+ if(tail==='/pseudonym-key'){
+  if(job.processingMode!=='PSEUDONYMIZE'||job.status!=='READY')return json({error:'NOT_READY'},409);
+  return new Response('EML_AA=contact@example.test\n',{headers:{
+   'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Status':'READY',
+   'X-Agiloshield-Policy-Digest':job.policy.digest,'X-Agiloshield-Processing-Mode':'PSEUDONYMIZE',
+   'X-Agiloshield-Assurance':'technical-ready'}});
+ }
  if(tail==='/download'||tail==='/result'){
   const certified=tail==='/download';if(certified&&job.status!=='READY')return json({error:'NOT_READY'},409);
   return new Response('SYNTHETIC ONLY',{headers:{'Content-Type':'text/plain',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Status':job.status,
    'X-Agiloshield-Policy-Digest':job.policy.digest,
+   'X-Agiloshield-Processing-Mode':job.processingMode,
    'X-Agiloshield-Assurance':certified?'technical-ready':'non-verified'}});
  }
  return json({error:'NOT_FOUND'},404);
