@@ -93,7 +93,7 @@ function makeController(mode = 'faithful') {
     suspend: async () => {}, close: async () => {}
   };
   controller.setStatus('recording', 'En écoute...');
-  return { controller, textarea, FakeWebSocket, events, drafts, savedAudio, errors };
+  return { controller, textarea, FakeWebSocket, events, drafts, savedAudio, errors, sandbox };
 }
 
 function result(text) {
@@ -271,6 +271,23 @@ test('arrêter pendant la connexion ne redémarre pas la prise après coup', asy
   assert.equal(controller.state.status, 'idle');
   assert.equal(realtimeCalls, 0);
   assert.equal(textarea.value, 'Brouillon conservé');
+});
+
+test('une autorisation micro tardive libère sa prise sans toucher la suivante', async () => {
+  const { controller, sandbox } = makeController();
+  controller.state.audioContext = null;
+  controller.state.startToken = 1;
+  let resolveMicro;
+  let stopped = 0;
+  sandbox.navigator = {
+    mediaDevices: { getUserMedia: () => new Promise((resolve) => { resolveMicro = resolve; }) }
+  };
+  const pending = controller.ensureAudioPipeline(1);
+  controller.state.startToken = 2;
+  resolveMicro({ getTracks: () => [{ stop: () => { stopped += 1; } }] });
+  await assert.rejects(pending, /start_cancelled/);
+  assert.equal(stopped, 1);
+  assert.equal(controller.state.audioContext, null);
 });
 
 test('Réunion garde son envoi audio habituel sans sauvegarde solo', async () => {

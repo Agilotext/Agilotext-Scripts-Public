@@ -753,9 +753,18 @@
 
   /* ── Audio pipeline ─────────────────────────────────────────────── */
 
-  AgiloLiveVoiceController.prototype.ensureAudioPipeline = function () {
+  AgiloLiveVoiceController.prototype.ensureAudioPipeline = function (startToken) {
     var self = this;
     if (this.state.audioContext) return Promise.resolve();
+
+    function cancelled() {
+      return startToken != null && self.state.startToken !== startToken;
+    }
+
+    function release(stream, context) {
+      if (stream) stream.getTracks().forEach(function (track) { track.stop(); });
+      if (context) context.close().catch(function () {});
+    }
 
     return navigator.mediaDevices.getUserMedia({
       audio: {
@@ -765,9 +774,16 @@
         autoGainControl: true
       }
     }).then(function (mediaStream) {
+      if (cancelled()) {
+        release(mediaStream);
+        throw new Error("start_cancelled");
+      }
       var audioContext = new AudioContext({ sampleRate: 16000 });
 
       return audioContext.audioWorklet.addModule(self.config.workletUrl).then(function () {
+        if (cancelled()) {
+          throw new Error("start_cancelled");
+        }
         var mediaSource = audioContext.createMediaStreamSource(mediaStream);
         var workletNode = new AudioWorkletNode(audioContext, "agilo-pcm-processor");
         var muteGain = audioContext.createGain();
@@ -799,6 +815,9 @@
         self.state.workletNode = workletNode;
         self.state.muteGain = muteGain;
         self.state.sampleRate = audioContext.sampleRate;
+      }).catch(function (error) {
+        release(mediaStream, audioContext);
+        throw error;
       });
     });
   };
@@ -1050,9 +1069,9 @@
 
     this.setStatus("initializing", "Initialisation micro...");
 
-    this.ensureAudioPipeline()
+    this.ensureAudioPipeline(startToken)
       .then(function () {
-        if (self.state.startToken !== startToken) return self.teardownAudio();
+        if (self.state.startToken !== startToken) return;
         if (isCarnet) {
           if (self.state.soloMode === "faithful") {
             self.setStatus("connecting", "Connexion au texte en direct...");
