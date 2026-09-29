@@ -37,6 +37,8 @@ Le bloc utilise uniquement `https://apitest.agilotext.com:9443/api/agiloshield-v
 | Libellés des trois statuts, actions de revue, erreur serveur sûre, sélection vide visible avant dépôt et dans le résultat | PASS sur mock |
 | Console de la page synthétique | Aucune erreur observée |
 | Bloc épinglé/jsDelivr, `docx-preview` 0.4.1 et JSZip 3.10.2 | PASS local/CDN |
+| JS et CSS servis par jsDelivr au SHA `224e0da269925941965c56ee84348f5fe483385b` | SHA-256 identiques aux fichiers du commit : JS `1dc2971122244fc2dac8a4d6dcf1069487a22f01c3e948c2151dfff9de4b872c`, CSS `addadbaa7fdd5d8c7a3938dfa5964a0f84a604fc478db7d5417d9772f4d37f81` |
+| Bloc épinglé chargé dans une page locale avec API synthétique | PASS ; aucune erreur console observée |
 | Tests Node du client et de l’adaptateur auth, vérification syntaxique JS | PASS |
 
 La réponse `/regions` réelle contient `pages[].occurrences[].rectangles`, et non un champ racine `revision`. Le surlignage utilise donc les `fragments` de l’occurrence fournis par **le ledger de revue courant**, puis vérifie la taille et la rotation de page données par `/regions`. Aucune recherche textuelle ne fabrique de rectangle. Un tracé manuel est désactivé si la géométrie de page n’est pas vérifiable. Le lecteur DOCX est une aide visuelle : seul le fichier final rouvert et la QA du serveur font foi. Les aperçus ne sont pas des téléchargements certifiés ; le téléchargement vérifie politique, révision, statut et assurance.
