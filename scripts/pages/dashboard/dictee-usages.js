@@ -38,8 +38,10 @@
     userChosen: false,
     modeUserChosen: false,
     meetingPreview: "",
+    draftReadyEmail: "",
     mounted: false
   };
+  var draftWriteTimer = null;
 
   function nucleoSvg(key) {
     var Core = global.AgiloLibraryCore;
@@ -134,10 +136,11 @@
   }
 
   function writeDraft(email, text) {
-    if (!email) return;
+    if (!email) return false;
     try {
       localStorage.setItem(draftKey(email), String(text || "").slice(0, 80000));
-    } catch (e) {}
+      return true;
+    } catch (e) { return false; }
   }
 
   function isDicteeTab() {
@@ -355,16 +358,12 @@
     var isCarnet = state.usage === "carnet";
     if (preview) setWrapDisplay(preview, isCarnet);
     if (help) setWrapDisplay(help, !isCarnet);
-    if (help && isCarnet) {
-      help.textContent = state.soloMode === "faithful"
-        ? "Le texte s’affiche en direct. Arrêtez la prise pour le corriger ; relisez-le avant de générer le document. Le son est transmis à Speechmatics pendant l’enregistrement."
-        : "Le texte ponctué s’ajoute après chaque pause. Relisez-le avant de générer le document. Les extraits audio sont envoyés à AssemblyAI au fil des pauses.";
-    }
+    if (help && isCarnet) help.textContent = "Relisez le texte avant de générer le document.";
     if (chrome) chrome.hidden = !isCarnet;
     if (after) after.hidden = !isCarnet;
     if (generate) generate.hidden = !isCarnet;
     if (note) {
-      if (isCarnet) setWrapDisplay(note, true);
+      if (isCarnet) setWrapDisplay(note, false);
       else {
         setWrapDisplay(note, false);
         note.textContent =
@@ -379,6 +378,11 @@
     var ta = document.querySelector("[data-agilo-streaming-text]");
     if (!ta) return;
     if (state.usage === "carnet") {
+      if (state.draftReadyEmail !== state.email) {
+        ta.value = "";
+        ta.readOnly = true;
+        return;
+      }
       var draft = readDraft(state.email);
       if (draft && !ta.value) ta.value = draft;
       ta.readOnly = false;
@@ -386,10 +390,31 @@
   }
 
   function persistDraftFromTextarea() {
-    if (state.usage !== "carnet") return;
+    if (state.usage !== "carnet" || state.draftReadyEmail !== state.email) return;
     var ta = document.querySelector("[data-agilo-streaming-text]");
     writeDraft(state.email, ta ? ta.value : "");
   }
+
+  function holdDraft(email) {
+    if (draftWriteTimer) clearTimeout(draftWriteTimer);
+    draftWriteTimer = null;
+    state.draftReadyEmail = "";
+    if (email === state.email && state.usage === "carnet") applyDraftToTextarea();
+  }
+
+  function unlockDraft(email, text) {
+    if (!email || (email !== state.email && email !== readMemberEmail())) return false;
+    state.email = email;
+    state.draftReadyEmail = email;
+    var ta = document.querySelector("[data-agilo-streaming-text]");
+    if (ta && state.usage === "carnet") {
+      ta.value = String(text || "");
+      ta.readOnly = false;
+    }
+    return true;
+  }
+
+  function isDraftReady() { return !!state.email && state.draftReadyEmail === state.email; }
 
   function applyUsageUi() {
     setBtnSelected(document.getElementById("agilo-dictee-usage"), state.usage);
@@ -509,8 +534,8 @@
     chrome.innerHTML =
       '<fieldset id="agilo-solo-mode" class="agilo-solo-mode"><legend>Affichage du texte</legend>' +
       '<div class="agilo-solo-mode__choices">' +
-      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="smooth" checked><strong>Lissée</strong><small>Texte après chaque pause</small></label>' +
-      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="faithful"><strong>Fidèle</strong><small>Texte affiché en direct</small></label>' +
+      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="faithful"><strong>Fidèle</strong><small>Texte affiché pendant que vous parlez, proche de l’oral</small></label>' +
+      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="smooth" checked><strong>Lissée</strong><small>Phrases ponctuées ajoutées après les pauses, plus fluides</small></label>' +
       '</div></fieldset>' +
       '<p id="agilo-carnet-help" class="agilo-carnet-help"></p>';
     chrome.addEventListener("change", function (event) {
@@ -596,13 +621,14 @@
     var ta = panel.querySelector("[data-agilo-streaming-text]");
     if (!ta || ta.dataset.agiloCarnetDraftBound) return;
     ta.dataset.agiloCarnetDraftBound = "1";
-    var t = null;
     var enterBreakHandledThisTick = false;
     ta.addEventListener("input", function () {
-      if (state.usage !== "carnet") return;
-      if (t) clearTimeout(t);
-      t = setTimeout(function () {
-        writeDraft(state.email, ta.value);
+      if (state.usage !== "carnet" || !isDraftReady()) return;
+      if (draftWriteTimer) clearTimeout(draftWriteTimer);
+      var email = state.email;
+      draftWriteTimer = setTimeout(function () {
+        draftWriteTimer = null;
+        if (state.email === email && isDraftReady()) writeDraft(email, ta.value);
       }, 400);
     });
     ta.addEventListener(
@@ -671,6 +697,7 @@
     var email = readMemberEmail();
     if (email === state.email || state.recording) return;
     persistDraftFromTextarea();
+    holdDraft("");
     var ta = document.querySelector("[data-agilo-streaming-text]");
     if (ta) ta.value = "";
     state.email = email;
@@ -753,6 +780,9 @@
     setUsage: setUsage,
     readDraft: readDraft,
     writeDraft: writeDraft,
+    holdDraft: holdDraft,
+    unlockDraft: unlockDraft,
+    isDraftReady: isDraftReady,
     persistDraftFromTextarea: persistDraftFromTextarea,
     setCarnetError: setCarnetError,
     onVoiceStatus: function (status) {

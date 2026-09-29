@@ -32,6 +32,14 @@ test("les identifiants de brouillon restent séparés par compte", () => {
   assert.notEqual(audio.nextDraftId("a@example.com"), a);
 });
 
+test("un autre onglet ne peut pas remplacer un identifiant de brouillon périmé", () => {
+  const { audio } = load();
+  const old = audio.getDraftId("person@example.invalid");
+  audio.setDraftId("person@example.invalid", old, "new-synthetic-draft");
+  assert.equal(audio.getDraftId("person@example.invalid"), "new-synthetic-draft");
+  assert.throws(() => audio.setDraftId("person@example.invalid", old, "other"), /draft_changed/);
+});
+
 test("deux sessions WAV donnent un seul WAV PCM dans le bon ordre", async () => {
   const { audio } = load();
   const first = new Int16Array([100, -200]);

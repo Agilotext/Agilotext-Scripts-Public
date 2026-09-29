@@ -588,7 +588,9 @@
 
     if (this.els.text) {
       this.els.text.readOnly = isCarnet
-        ? this.state.soloMode === "faithful" && !isIdle
+        ? (window.AgiloDicteeUsages && typeof window.AgiloDicteeUsages.isDraftReady === "function" &&
+           !window.AgiloDicteeUsages.isDraftReady()) ||
+          (this.state.soloMode === "faithful" && !isIdle)
         : !isPaused;
     }
 
@@ -1004,12 +1006,32 @@
     if (this.state.status !== "idle") return;
     var self = this;
     var isCarnet = this.getUsage() === "carnet";
+    if (isCarnet && this.config.prepareCarnetStart) {
+      if (this._soloStartPreparing) return;
+      var email = this.getEmail();
+      var prepared;
+      try { prepared = this.config.prepareCarnetStart(); }
+      catch (e) { prepared = false; }
+      if (prepared === true) { this._startReady(); return; }
+      this._soloStartPreparing = true;
+      Promise.resolve(prepared).then(function (allowed) {
+        self._soloStartPreparing = false;
+        if (allowed && self.state.status === "idle" && self.getUsage() === "carnet" &&
+            self.getEmail() === email) self._startReady();
+      }).catch(function () { self._soloStartPreparing = false; });
+      return;
+    }
+    this._startReady();
+  };
+
+  AgiloLiveVoiceController.prototype._startReady = function () {
+    if (this.state.status !== "idle") return;
+    var self = this;
+    var isCarnet = this.getUsage() === "carnet";
 
     if (isCarnet && this.config.canStartCarnet && !this.config.canStartCarnet()) {
       if (window.AgiloDicteeUsages) {
-        window.AgiloDicteeUsages.setCarnetError(
-          "Terminez l’envoi précédent ou démarrez une nouvelle dictée solo."
-        );
+        window.AgiloDicteeUsages.setCarnetError("Cette dictée n’est pas prête. Réessayez après le choix du brouillon.");
       }
       return;
     }
@@ -1044,10 +1066,6 @@
       }
       this.refreshDomRefs();
       var existing = (this.els.text && this.els.text.value) || "";
-      if (!existing && window.AgiloDicteeUsages) {
-        existing = window.AgiloDicteeUsages.readDraft(this.state.email) || "";
-        if (this.els.text && existing) this.els.text.value = existing;
-      }
       this.state.committedText = existing;
       this.state.soloBaseText = existing;
       this.state.partialText = "";

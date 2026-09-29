@@ -162,6 +162,52 @@ test('Copier est au-dessus du champ, et le choix de moteur reste dans la dictée
   assert.match(usages, /<fieldset id="agilo-solo-mode/);
   assert.match(usages, /state\.soloMode = readStoredSoloMode\(email\)/);
   assert.match(read('scripts/pages/dashboard/mount-streaming.js'), /getSoloMode: function/);
+  assert.ok(usages.indexOf('value="faithful"') < usages.indexOf('value="smooth"'));
+  assert.match(usages, /value="smooth" checked/);
+  assert.doesNotMatch(usages, /textContent = .*Speechmatics|textContent = .*AssemblyAI|son est transmis à Speechmatics|extraits audio sont envoyés à AssemblyAI/);
+});
+
+test('un brouillon ancien reste caché et protégé jusqu’au choix explicite', () => {
+  const values = new Map([['agilotext:dicteeCarnet:person@example.invalid', 'Texte ancien']]);
+  const ta = { value: '', readOnly: false };
+  const sandbox = {
+    window: null, edition: 'ent',
+    document: { querySelector: selector => selector === '[data-agilo-streaming-text]' ? ta : null },
+    localStorage: {
+      getItem: key => values.get(key) || null,
+      setItem: (key, value) => values.set(key, value)
+    },
+    clearTimeout
+  };
+  sandbox.window = sandbox;
+  const source = read('scripts/pages/dashboard/dictee-usages.js');
+  vm.runInNewContext(source.replace('  global.AgiloDicteeUsages = {',
+    '  global.__test = { state, applyDraftToTextarea, persistDraftFromTextarea };\n  global.AgiloDicteeUsages = {'), sandbox);
+  sandbox.__test.state.email = 'person@example.invalid';
+  sandbox.__test.state.usage = 'carnet';
+  sandbox.__test.applyDraftToTextarea();
+  assert.equal(ta.value, '');
+  assert.equal(ta.readOnly, true);
+  sandbox.__test.persistDraftFromTextarea();
+  assert.equal(values.get('agilotext:dicteeCarnet:person@example.invalid'), 'Texte ancien');
+  sandbox.AgiloDicteeUsages.unlockDraft('person@example.invalid', 'Texte ancien');
+  assert.equal(ta.value, 'Texte ancien');
+  assert.equal(ta.readOnly, false);
+});
+
+test('deux clics pendant le choix du brouillon ne démarrent qu’une prise', async () => {
+  const { controller } = makeController();
+  controller.setStatus('idle', 'Prêt');
+  controller.getEmail = () => 'person@example.invalid';
+  let resolveChoice;
+  let starts = 0;
+  controller.config.prepareCarnetStart = () => new Promise(resolve => { resolveChoice = resolve; });
+  controller._startReady = () => { starts += 1; };
+  controller.start();
+  controller.start();
+  resolveChoice(true);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(starts, 1);
 });
 
 test('le mode est mémorisé par compte et reste figé pendant une prise', () => {

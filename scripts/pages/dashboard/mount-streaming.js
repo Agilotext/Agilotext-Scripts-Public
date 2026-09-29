@@ -354,6 +354,10 @@ function mountAgiloLiveVoice() {
       return !window.AgiloDicteeSoloDocument || window.AgiloDicteeSoloDocument.canStart();
     },
 
+    prepareCarnetStart: function () {
+      return !window.AgiloDicteeSoloDocument || window.AgiloDicteeSoloDocument.prepareStart();
+    },
+
     postCarnetSegment: async function ({ blob, email, sessionId, segmentId }) {
       var tokenOk = await ensureValidToken(email, true);
       if (!tokenOk || !globalToken) {

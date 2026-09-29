@@ -37,6 +37,15 @@
     return id;
   }
 
+  function setDraftId(email, expectedId, nextId) {
+    var key = DRAFT_PREFIX + emailKey(email);
+    if (!emailKey(email) || !expectedId || !nextId || global.localStorage.getItem(key) !== expectedId) {
+      throw new Error("draft_changed");
+    }
+    global.localStorage.setItem(key, nextId);
+    return nextId;
+  }
+
   function openDb() {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise(function (resolve, reject) {
@@ -226,6 +235,27 @@
     });
   }
   function getSubmission(email, draftId) { return get("submissions", submissionId(email, draftId)); }
+  function listUnresolvedSubmissions(email) {
+    return openDb().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var rows = [];
+        var request = db.transaction("submissions", "readonly").objectStore("submissions").openCursor();
+        request.onsuccess = function () {
+          var cursor = request.result;
+          if (!cursor) {
+            rows.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+            resolve(rows);
+            return;
+          }
+          var row = cursor.value;
+          if (row.email === emailKey(email) &&
+              (row.status === "pending" || row.status === "uncertain" || row.status === "conflict")) rows.push(row);
+          cursor.continue();
+        };
+        request.onerror = function () { reject(request.error || new Error("indexeddb_read_failed")); };
+      });
+    });
+  }
   function clearSubmission(email, draftId) {
     return openDb().then(function (db) {
       return new Promise(function (resolve, reject) {
@@ -242,6 +272,7 @@
     newId: newId,
     getDraftId: getDraftId,
     nextDraftId: nextDraftId,
+    setDraftId: setDraftId,
     saveSession: saveSession,
     listSessions: listSessions,
     clearAudio: clearAudio,
@@ -249,6 +280,7 @@
     saveSubmission: saveSubmission,
     reserveSubmission: reserveSubmission,
     getSubmission: getSubmission,
+    listUnresolvedSubmissions: listUnresolvedSubmissions,
     clearSubmission: clearSubmission,
     wavParts: wavParts,
     wavHeader: wavHeader,
