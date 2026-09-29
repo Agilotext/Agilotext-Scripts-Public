@@ -6,8 +6,8 @@
 (function () {
   "use strict";
 
-  var BUILD = "20260929solo10";
-  var PIN = "36770c82cc03a1390a4ba4d75a9fbc0812fb100a";
+  var BUILD = "20260929solo11";
+  var PIN = "adacc57c3a923f94c199696f0383b67cc4d3b7c0";
   var CDN = "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@" + PIN;
 
   function bust(path) {
