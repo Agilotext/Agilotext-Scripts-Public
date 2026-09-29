@@ -320,7 +320,13 @@
       carnetBlocked: false,
       soloSessionId: "",
       soloDraftId: "",
-      soloStartedAt: 0
+      soloStartedAt: 0,
+      soloMode: "smooth",
+      soloBaseText: "",
+      soloFinalText: "",
+      soloAcceptResults: false,
+      soloConnectionLost: false,
+      startToken: 0
     };
     this._carnet = null;
 
@@ -581,7 +587,9 @@
     }
 
     if (this.els.text) {
-      this.els.text.readOnly = isCarnet ? false : !isPaused;
+      this.els.text.readOnly = isCarnet
+        ? this.state.soloMode === "faithful" && !isIdle
+        : !isPaused;
     }
 
     if (this.els.dot) {
@@ -638,6 +646,12 @@
   AgiloLiveVoiceController.prototype.renderText = function () {
     this.refreshDomRefs();
     if (this.getUsage() === "carnet") {
+      if (this.state.soloMode === "faithful" && this.state.soloAcceptResults && this.els.text) {
+        var added = joinCommittedPartial(this.state.soloFinalText, this.state.partialText);
+        this.els.text.value = this.state.soloBaseText
+          ? this.state.soloBaseText + (added ? "\n\n" + added : "")
+          : added;
+      }
       this.syncLivePreviewUi();
       return;
     }
@@ -765,7 +779,7 @@
 
           self.state.pcmChunks.push(chunk);
 
-          if (self.getUsage() === "carnet") {
+          if (self.getUsage() === "carnet" && self.state.soloMode !== "faithful") {
             self._carnetPushPcm(chunk);
           } else if (self.state.ws && self.state.ws.readyState === WebSocket.OPEN) {
             self.state.ws.send(chunk.buffer);
@@ -800,11 +814,13 @@
         var ws = new WebSocket(
           auth.websocketUrl + "?jwt=" + encodeURIComponent(auth.jwt)
         );
+        var recognitionStarted = false;
 
         self.state.ws = ws;
         self.state.seqNo = 0;
 
         ws.addEventListener("open", function () {
+          if (self.state.ws !== ws) return;
           var transcriptionConfig = {
             language: self.getLanguage(),
             operating_point: "enhanced",
@@ -841,15 +857,18 @@
         });
 
         ws.addEventListener("message", function (evt) {
+          if (self.state.ws !== ws) return;
           var msg;
           try { msg = JSON.parse(evt.data); } catch (e) { return; }
 
           if (msg.message === "RecognitionStarted") {
+            recognitionStarted = true;
             resolve();
             return;
           }
 
           if (msg.message === "AddPartialTranscript") {
+            if (self.getUsage() === "carnet" && !self.state.soloAcceptResults) return;
             // Partials: texte plat (évite flicker labels).
             self.state.partialText = resultsToText(msg.results || []);
             self.renderText();
@@ -857,7 +876,13 @@
           }
 
           if (msg.message === "AddTranscript") {
-            if (self.state.liveDiarization) {
+            if (self.getUsage() === "carnet" && self.state.soloMode === "faithful") {
+              if (!self.state.soloAcceptResults) return;
+              self.state.soloFinalText = joinText([
+                self.state.soloFinalText,
+                resultsToText(msg.results || [])
+              ]);
+            } else if (self.state.liveDiarization) {
               self.state.committedText = appendDiarizedFinals(
                 self.state.committedText,
                 msg.results || [],
@@ -882,29 +907,44 @@
 
           if (msg.message === "Error") {
             console.error("[AgiloLive] Speechmatics Error:", msg.reason || msg);
+            if (self.getUsage() === "carnet" && self.state.soloMode === "faithful") {
+              self.state.soloConnectionLost = true;
+              if (self.state.status === "recording") self.stop();
+            }
             reject(new Error(msg.reason || "rt_stream_error"));
           }
         });
 
         ws.addEventListener("error", function () {
+          if (self.state.ws !== ws) return;
+          if (self.getUsage() === "carnet" && self.state.soloMode === "faithful") {
+            self.state.soloConnectionLost = true;
+            if (self.state.status === "recording") self.stop();
+          }
           reject(new Error("rt_channel_error"));
         });
 
         ws.addEventListener("close", function () {
+          if (!recognitionStarted) reject(new Error("rt_channel_closed"));
+          if (self.state.ws !== ws) return;
           if (self.state.status === "recording") {
-            if (self.config.onError) self.config.onError("default");
+            if (self.getUsage() === "carnet" && self.state.soloMode === "faithful") {
+              self.state.soloConnectionLost = true;
+              self.stop();
+            } else if (self.config.onError) self.config.onError("default");
           }
         });
       });
     });
   };
 
-  AgiloLiveVoiceController.prototype.closeRealtimeSession = function () {
+  AgiloLiveVoiceController.prototype.closeRealtimeSession = function (timeoutMs) {
     var self = this;
     var ws = this.state.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
+      if (ws) { try { ws.close(); } catch (e) {} }
       this.state.ws = null;
-      return Promise.resolve();
+      return Promise.resolve(false);
     }
 
     this.state.wsEndPromise = new Promise(function (resolve) {
@@ -916,13 +956,25 @@
       last_seq_no: this.state.seqNo
     }));
 
-    return this.state.wsEndPromise.catch(function () {}).then(function () {
-      ws.close();
+    var timer = null;
+    var end = this.state.wsEndPromise.then(function () { return true; });
+    if (timeoutMs > 0) {
+      end = Promise.race([
+        end,
+        new Promise(function (resolve) {
+          timer = setTimeout(function () { resolve(false); }, timeoutMs);
+        })
+      ]);
+    }
+    return end.catch(function () { return false; }).then(function (complete) {
+      if (timer) clearTimeout(timer);
+      try { ws.close(); } catch (e) {}
       self.state.ws = null;
       self.state.wsEndPromise = null;
       self.state.wsEndResolve = null;
       self.state.partialText = "";
       self.renderText();
+      return complete;
     });
   };
 
@@ -930,6 +982,7 @@
   /* ── Actions ────────────────────────────────────────────────────── */
 
   AgiloLiveVoiceController.prototype.start = function () {
+    if (this.state.status !== "idle") return;
     var self = this;
     var isCarnet = this.getUsage() === "carnet";
 
@@ -943,6 +996,7 @@
     }
 
     if (!this._checkLimits()) return;
+    var startToken = ++this.state.startToken;
 
     this.state.email = this.getEmail();
     if (!this.state.email) {
@@ -954,6 +1008,11 @@
     }
 
     if (isCarnet) {
+      this.state.soloMode = this.config.getSoloMode && this.config.getSoloMode() === "faithful"
+        ? "faithful" : "smooth";
+      this.state.soloConnectionLost = false;
+      this.state.soloAcceptResults = this.state.soloMode === "faithful";
+      this.state.soloFinalText = "";
       if (window.AgiloSoloAudio) {
         try {
           this.state.soloSessionId = window.AgiloSoloAudio.newId();
@@ -971,6 +1030,7 @@
         if (this.els.text && existing) this.els.text.value = existing;
       }
       this.state.committedText = existing;
+      this.state.soloBaseText = existing;
       this.state.partialText = "";
       this.state.pcmChunks = [];
       this.state.carnetBlocked = false;
@@ -992,36 +1052,53 @@
 
     this.ensureAudioPipeline()
       .then(function () {
+        if (self.state.startToken !== startToken) return self.teardownAudio();
         if (isCarnet) {
+          if (self.state.soloMode === "faithful") {
+            self.setStatus("connecting", "Connexion au texte en direct...");
+            return self.openRealtimeSession().then(function () {
+              if (self.state.startToken !== startToken || !self.state.audioContext) return;
+              return self.state.audioContext.resume();
+            });
+          }
           self._carnetStartSession();
           return self.state.audioContext.resume();
         }
         self.setStatus("connecting", "Connexion au service vocal en direct...");
         return self.openRealtimeSession().then(function () {
+          if (self.state.startToken !== startToken || !self.state.audioContext) return;
           return self.state.audioContext.resume();
         });
       })
       .then(function () {
+        if (self.state.startToken !== startToken) return;
         self.setStatus("recording", "En écoute...");
         self.startTimer();
       })
       .catch(function (err) {
+        if (self.state.startToken !== startToken) return;
         console.error(err);
         self.resetTimer();
         var msg = (err && err.message) || "";
         if (isCarnet) {
-          self.setStatus("idle", "Erreur");
-          if (window.AgiloDicteeUsages) {
-            if (msg === "NotAllowedError" || msg === "Permission denied" ||
-                (err && err.name === "NotAllowedError")) {
-              window.AgiloDicteeUsages.setCarnetError(
-                "Le micro n’est pas accessible. Vérifiez l’autorisation du navigateur."
-              );
-            } else {
-              window.AgiloDicteeUsages.setCarnetError("Impossible de démarrer le carnet.");
+          self.state.soloAcceptResults = false;
+          return self.teardownAudio().then(function () {
+            self.setStatus("idle", "Erreur");
+            if (window.AgiloDicteeUsages) {
+              if (msg === "NotAllowedError" || msg === "Permission denied" ||
+                  (err && err.name === "NotAllowedError")) {
+                window.AgiloDicteeUsages.setCarnetError(
+                  "Le micro n’est pas accessible. Vérifiez l’autorisation du navigateur."
+                );
+              } else {
+                window.AgiloDicteeUsages.setCarnetError(
+                  self.state.soloMode === "faithful"
+                    ? "Impossible de connecter le texte en direct. La prise n’a pas démarré."
+                    : "Impossible de démarrer la dictée solo."
+                );
+              }
             }
-          }
-          return;
+          });
         }
         if (msg === "rt_channel_error" || msg === "rt_stream_error") {
           self.setStatus("idle", "Connexion bloquée");
@@ -1102,13 +1179,44 @@
 
   AgiloLiveVoiceController.prototype.stop = function () {
     if (this.state.status === "idle" || this.state.status === "uploading") return;
+    this.state.startToken += 1;
     var self = this;
     var isCarnet = this.getUsage() === "carnet";
 
     if (isCarnet) {
+      var wasRecording = this.state.status === "recording";
       this.stopTimer();
       this.setStatus("uploading", "Finalisation de la dictée…");
-      var flush = this._carnetRequestStop ? this._carnetRequestStop() : Promise.resolve();
+      var flush;
+      if (this.state.soloMode === "faithful") {
+        flush = (wasRecording && this.state.audioContext
+          ? this.state.audioContext.suspend().catch(function () {})
+          : Promise.resolve())
+          .then(function () { return self.closeRealtimeSession(10000); })
+          .catch(function () { return false; })
+          .then(function (complete) {
+            self.state.soloAcceptResults = false;
+            self.refreshDomRefs();
+            var added = self.state.soloFinalText;
+            var text = self.state.soloBaseText
+              ? self.state.soloBaseText + (added ? "\n\n" + added : "")
+              : added;
+            if (self.els.text) self.els.text.value = text;
+            if (window.AgiloDicteeUsages) window.AgiloDicteeUsages.writeDraft(self.state.email, text);
+            if (!complete || self.state.soloConnectionLost || (!added && self.state.pcmChunks.length)) {
+              if (window.AgiloDicteeUsages) {
+                window.AgiloDicteeUsages.setCarnetError(
+                  "Texte en direct incomplet. L’audio est conservé ; corrigez et confirmez la relecture avant de générer."
+                );
+              }
+              document.dispatchEvent(new CustomEvent("agilo-carnet-segment-failed", {
+                detail: { errorCode: "realtime_incomplete" }
+              }));
+            }
+          });
+      } else {
+        flush = this._carnetRequestStop ? this._carnetRequestStop() : Promise.resolve();
+      }
       return flush
         .catch(function () {})
         .then(function () {
@@ -1379,6 +1487,7 @@
   /* ── Teardown ───────────────────────────────────────────────────── */
 
   AgiloLiveVoiceController.prototype.teardownAudio = function () {
+    try { this.state.ws && this.state.ws.close(); } catch (e) {}
     try { this.state.workletNode && this.state.workletNode.disconnect(); } catch (e) {}
     try { this.state.mediaSource && this.state.mediaSource.disconnect(); } catch (e) {}
     try { this.state.muteGain && this.state.muteGain.disconnect(); } catch (e) {}

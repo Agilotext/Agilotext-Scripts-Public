@@ -8,6 +8,7 @@
 
   var USAGE_PREFIX = "agilotext:dicteeUsage:";
   var DRAFT_PREFIX = "agilotext:dicteeCarnet:";
+  var SOLO_MODE_PREFIX = "agilotext:dicteeSoloMode:";
   var PROMPT_PREFIX = "agilotext:dicteeCarnetPrompt:";
   var RECENTS_PREFIX = "agilotext:dicteeCarnetRecents:";
   var DEFAULT_USAGE = "reunion";
@@ -15,6 +16,8 @@
   var EMAIL_POLL_MS = 200;
   var PLACEHOLDER_CARNET =
     "Le texte ponctué s’ajoute ici à chaque pause. Vous pouvez corriger avant de copier.";
+  var PLACEHOLDER_CARNET_FAITHFUL =
+    "Le texte s’affiche en direct. Arrêtez la prise pour le corriger.";
   var PLACEHOLDER_REUNION =
     "La transcription apparaîtra ici dès que vous commencerez à parler...";
 
@@ -29,9 +32,12 @@
 
   var state = {
     usage: DEFAULT_USAGE,
+    soloMode: "smooth",
     email: "",
     recording: false,
     userChosen: false,
+    modeUserChosen: false,
+    meetingPreview: "",
     mounted: false
   };
 
@@ -82,6 +88,16 @@
 
   function draftKey(email) {
     return DRAFT_PREFIX + String(email || "").toLowerCase();
+  }
+
+  function soloModeKey(email) {
+    return SOLO_MODE_PREFIX + String(email || "").toLowerCase();
+  }
+
+  function readStoredSoloMode(email) {
+    if (!email) return "smooth";
+    try { return localStorage.getItem(soloModeKey(email)) === "faithful" ? "faithful" : "smooth"; }
+    catch (e) { return "smooth"; }
   }
 
   function promptKey(email) {
@@ -227,12 +243,23 @@
       ".agilo-dictee-usage__sub{display:block;margin-top:.28rem;font-size:.75rem;line-height:1.35;color:#525252;font-weight:400;}" +
       ".agilo-carnet-chrome{margin:0 0 .75rem;}" +
       ".agilo-carnet-help{margin:0 0 .65rem;font-size:.82rem;line-height:1.45;color:#404040;}" +
+      ".agilo-solo-mode{border:0;padding:0;margin:0 0 .7rem;min-width:0;}" +
+      ".agilo-solo-mode legend{font-size:.84rem;font-weight:700;margin-bottom:.4rem;}" +
+      ".agilo-solo-mode__choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;}" +
+      "@media(max-width:640px){.agilo-solo-mode__choices{grid-template-columns:1fr;}}" +
+      ".agilo-solo-mode__choice{display:block;border:1.5px solid #d4d4d4;border-radius:9px;padding:.55rem .65rem;cursor:pointer;font-size:.82rem;line-height:1.35;}" +
+      ".agilo-solo-mode__choice:has(input:checked){border-color:var(--agilo-primary,#174a96);background:#f4f7fb;}" +
+      ".agilo-solo-mode__choice:has(input:focus-visible){outline:3px solid var(--agilo-primary,#174a96);outline-offset:2px;}" +
+      ".agilo-solo-mode__choice:has(input:disabled){opacity:.6;cursor:not-allowed;}" +
+      ".agilo-solo-mode__choice input{accent-color:var(--agilo-primary,#174a96);margin:0 .35rem 0 0;}" +
+      ".agilo-solo-mode__choice small{display:block;margin-left:1.15rem;color:#525252;}" +
       ".agilo-carnet-after{margin:.35rem 0 .75rem;}" +
       ".agilo-carnet-error{min-height:1.1rem;margin:.25rem 0 .45rem;font-size:.8rem;line-height:1.35;color:#b42318;}" +
-      ".agilo-solo-ta-wrap{position:relative;}" +
+      ".agilo-solo-ta-wrap{width:100%;min-width:0;}" +
+      ".agilo-solo-ta-tools{display:flex;justify-content:flex-end;margin:0 0 .35rem;}" +
       ".is-carnet [data-agilo-streaming-text],#live-streaming-panel.is-carnet [data-agilo-streaming-text]," +
       "[data-agilo-streaming-root].is-carnet [data-agilo-streaming-text]{white-space:pre-wrap;}" +
-      ".agilo-solo-ta-copy{position:absolute;top:.45rem;right:.45rem;z-index:2;appearance:none;border:1.5px solid #d4d4d4;background:#fff;border-radius:8px;padding:.28rem .55rem;font-family:inherit;font-size:.75rem;font-weight:600;color:var(--agilo-primary,#174a96);cursor:pointer;line-height:1.2;}" +
+      ".agilo-solo-ta-copy{appearance:none;border:1.5px solid #d4d4d4;background:#fff;border-radius:8px;padding:.28rem .55rem;font-family:inherit;font-size:.75rem;font-weight:600;color:var(--agilo-primary,#174a96);cursor:pointer;line-height:1.2;}" +
       ".agilo-solo-ta-copy:hover{border-color:var(--agilo-primary,#174a96);background:#f4f7fb;}" +
       ".agilo-solo-ta-copy:focus-visible{outline:3px solid var(--agilo-primary,#174a96);outline-offset:2px;}" +
       ".agilo-solo-ta-copy.is-done{border-color:#16a34a;color:#15803d;}" +
@@ -273,6 +300,22 @@
     if (global.AgiloDicteeCarnetPicker && typeof AgiloDicteeCarnetPicker.setDisabled === "function") {
       AgiloDicteeCarnetPicker.setDisabled(!!disabled);
     }
+    document.querySelectorAll('#agilo-solo-mode input[name="agilo-solo-mode"]').forEach(function (input) {
+      input.disabled = !!disabled;
+    });
+  }
+
+  function setSoloMode(next, persist) {
+    if (state.recording || !soloTabAllowed()) return;
+    state.soloMode = next === "faithful" ? "faithful" : "smooth";
+    var email = readMemberEmail() || state.email;
+    if (persist) {
+      state.modeUserChosen = true;
+      if (email) {
+        try { localStorage.setItem(soloModeKey(email), state.soloMode); } catch (e) {}
+      }
+    }
+    applyUsageUi();
   }
 
   function applyCopyLabel() {
@@ -288,11 +331,17 @@
     }
     ta.setAttribute(
       "placeholder",
-      state.usage === "carnet" ? PLACEHOLDER_CARNET : ta.dataset.agiloPhReunion
+      state.usage === "carnet"
+        ? (state.soloMode === "faithful" ? PLACEHOLDER_CARNET_FAITHFUL : PLACEHOLDER_CARNET)
+        : ta.dataset.agiloPhReunion
     );
   }
 
   function applyPreviewAndNote() {
+    var soloSubtitle = document.querySelector('[data-agilo-usage="carnet"] .agilo-dictee-usage__sub');
+    if (soloSubtitle) soloSubtitle.textContent = state.soloMode === "faithful"
+      ? "Le texte s’affiche pendant que vous parlez. À relire avant le document."
+      : "Une phrase ponctuée à chaque pause. À relire avant le document.";
     var root = document.querySelector("[data-agilo-streaming-root]");
     if (root) root.classList.toggle("is-carnet", state.usage === "carnet");
     var livePanel = document.getElementById("live-streaming-panel");
@@ -306,6 +355,11 @@
     var isCarnet = state.usage === "carnet";
     if (preview) setWrapDisplay(preview, isCarnet);
     if (help) setWrapDisplay(help, !isCarnet);
+    if (help && isCarnet) {
+      help.textContent = state.soloMode === "faithful"
+        ? "Le texte s’affiche en direct. Arrêtez la prise pour le corriger ; relisez-le avant de générer le document. Le son est transmis à Speechmatics pendant l’enregistrement."
+        : "Le texte ponctué s’ajoute après chaque pause. Relisez-le avant de générer le document. Les extraits audio sont envoyés à AssemblyAI au fil des pauses.";
+    }
     if (chrome) chrome.hidden = !isCarnet;
     if (after) after.hidden = !isCarnet;
     if (generate) generate.hidden = !isCarnet;
@@ -313,9 +367,8 @@
       if (isCarnet) setWrapDisplay(note, true);
       else {
         setWrapDisplay(note, false);
-        note.innerHTML =
-          "L'audio reste en local sur votre appareil et n'est envoyé qu'à l'arrêt.<br>" +
-          "Conforme RGPD (serveurs UE). Vous pouvez aussi copier le texte sans envoyer.";
+        note.textContent =
+          "Le son est transmis en direct au service vocal ; le fichier complet est envoyé à l’arrêt. Vous pouvez aussi copier le texte.";
       }
     }
     applyCopyLabel();
@@ -343,6 +396,9 @@
     hideGlobalOptionsIfNeeded();
     applyPreviewAndNote();
     applyDraftToTextarea();
+    document.querySelectorAll('#agilo-solo-mode input[name="agilo-solo-mode"]').forEach(function (input) {
+      input.checked = input.value === state.soloMode;
+    });
     if (global.AgiloDicteeCarnetPicker && typeof AgiloDicteeCarnetPicker.setVisible === "function") {
       AgiloDicteeCarnetPicker.setVisible(state.usage === "carnet");
     }
@@ -352,7 +408,20 @@
     var usage = normalizeUsage(next);
     if (usage === "carnet" && !soloTabAllowed()) return;
     if (state.recording && usage !== state.usage) return;
+    var previous = state.usage;
     persistDraftFromTextarea();
+    if (usage !== previous) {
+      var ta = document.querySelector("[data-agilo-streaming-text]");
+      if (ta) {
+        if (usage === "carnet") {
+          state.meetingPreview = ta.value;
+          ta.value = "";
+        } else {
+          ta.value = state.meetingPreview;
+          state.meetingPreview = "";
+        }
+      }
+    }
     state.usage = usage;
     if (persist) {
       state.userChosen = true;
@@ -438,7 +507,17 @@
     chrome.className = "agilo-carnet-chrome";
     chrome.hidden = true;
     chrome.innerHTML =
-      '<p id="agilo-carnet-help" class="agilo-carnet-help">À chaque pause, une phrase ponctuée s’ajoute. Corrigez le texte avant de générer le document ; celui-ci sera traité après l’envoi.</p>';
+      '<fieldset id="agilo-solo-mode" class="agilo-solo-mode"><legend>Affichage du texte</legend>' +
+      '<div class="agilo-solo-mode__choices">' +
+      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="smooth" checked><strong>Lissée</strong><small>Texte après chaque pause</small></label>' +
+      '<label class="agilo-solo-mode__choice"><input type="radio" name="agilo-solo-mode" value="faithful"><strong>Fidèle</strong><small>Texte affiché en direct</small></label>' +
+      '</div></fieldset>' +
+      '<p id="agilo-carnet-help" class="agilo-carnet-help"></p>';
+    chrome.addEventListener("change", function (event) {
+      if (event.target && event.target.name === "agilo-solo-mode") {
+        setSoloMode(event.target.value, true);
+      }
+    });
     ta.parentNode.insertBefore(chrome, ta);
 
     var wrap = document.createElement("div");
@@ -447,13 +526,17 @@
     ta.parentNode.insertBefore(wrap, ta);
     wrap.appendChild(ta);
 
+    var tools = document.createElement("div");
+    tools.className = "agilo-solo-ta-tools";
+    wrap.insertBefore(tools, ta);
+
     var copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "agilo-solo-ta-copy";
     copyBtn.id = "agilo-solo-ta-copy";
     copyBtn.setAttribute("aria-label", "Copier le texte");
     copyBtn.textContent = "Copier";
-    wrap.appendChild(copyBtn);
+    tools.appendChild(copyBtn);
     var copyTimer = null;
     copyBtn.addEventListener("click", function () {
       var text = ta.value || "";
@@ -469,17 +552,23 @@
       if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done).catch(function () {
           try {
+            var selectionStart = ta.selectionStart;
+            var selectionEnd = ta.selectionEnd;
             ta.focus();
             ta.select();
             document.execCommand("copy");
+            if (selectionStart != null && selectionEnd != null) ta.setSelectionRange(selectionStart, selectionEnd);
             done();
           } catch (e) {}
         });
       } else {
         try {
+          var selectionStart = ta.selectionStart;
+          var selectionEnd = ta.selectionEnd;
           ta.focus();
           ta.select();
           document.execCommand("copy");
+          if (selectionStart != null && selectionEnd != null) ta.setSelectionRange(selectionStart, selectionEnd);
           done();
         } catch (e) {}
       }
@@ -522,6 +611,7 @@
         if (e.key !== "Enter") return;
         if (e.isComposing) return;
         if (state.usage !== "carnet") return;
+        if (ta.readOnly) { e.preventDefault(); return; }
         e.preventDefault();
         e.stopPropagation();
         enterBreakHandledThisTick = true;
@@ -538,6 +628,7 @@
         if (e.inputType !== "insertLineBreak" && e.inputType !== "insertParagraph") return;
         if (e.isComposing) return;
         if (state.usage !== "carnet") return;
+        if (ta.readOnly) { e.preventDefault(); return; }
         e.preventDefault();
         e.stopPropagation();
         if (enterBreakHandledThisTick) return;
@@ -584,6 +675,9 @@
     if (ta) ta.value = "";
     state.email = email;
     state.userChosen = false;
+    state.modeUserChosen = false;
+    state.meetingPreview = "";
+    state.soloMode = readStoredSoloMode(email);
     state.usage = email && soloTabAllowed() ? readStoredUsage(email) : DEFAULT_USAGE;
     applyUsageUi();
     document.dispatchEvent(new CustomEvent("agilo-dictee-usage-change", { detail: { usage: state.usage } }));
@@ -606,6 +700,10 @@
     waitForEmail(function (email) {
       state.email = email;
       if (email) {
+        if (!state.modeUserChosen) state.soloMode = readStoredSoloMode(email);
+        else {
+          try { localStorage.setItem(soloModeKey(email), state.soloMode); } catch (e) {}
+        }
         state.usage = soloTabAllowed()
           ? (state.userChosen ? state.usage : readStoredUsage(email))
           : DEFAULT_USAGE;
@@ -627,6 +725,7 @@
   global.AgiloDicteeUsages = {
     USAGE_PREFIX: USAGE_PREFIX,
     DRAFT_PREFIX: DRAFT_PREFIX,
+    SOLO_MODE_PREFIX: SOLO_MODE_PREFIX,
     DEFAULT_USAGE: DEFAULT_USAGE,
     PLACEHOLDER_CARNET: PLACEHOLDER_CARNET,
     normalizeUsage: normalizeUsage,
@@ -634,6 +733,7 @@
     refreshAccount: refreshAccount,
     usageKey: usageKey,
     draftKey: draftKey,
+    soloModeKey: soloModeKey,
     promptKey: promptKey,
     recentsKey: recentsKey,
     shouldHideGlobalOptions: shouldHideGlobalOptions,
@@ -641,6 +741,8 @@
     getUsage: function () {
       return state.usage;
     },
+    getSoloMode: function () { return state.soloMode; },
+    setSoloMode: setSoloMode,
     getEmail: function () {
       return readMemberEmail();
     },

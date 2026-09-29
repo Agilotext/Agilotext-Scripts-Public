@@ -346,6 +346,10 @@ function mountAgiloLiveVoice() {
       return (window.AgiloDicteeUsages && window.AgiloDicteeUsages.getUsage()) || "reunion";
     },
 
+    getSoloMode: function () {
+      return (window.AgiloDicteeUsages && window.AgiloDicteeUsages.getSoloMode()) || "smooth";
+    },
+
     canStartCarnet: function () {
       return !window.AgiloDicteeSoloDocument || window.AgiloDicteeSoloDocument.canStart();
     },

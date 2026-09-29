@@ -102,11 +102,10 @@ describe("Dictee Carnet v2", function () {
     assert.match(src, /maxUsagesPerDay: 1/);
   });
 
-  it("copy sans Fidele / Lisse / doses", function () {
+  it("choix Fidèle / Lissée limité à la dictée solo, sans doses", function () {
     const files = [
       "scripts/shared/agilo-live-transcribe.js",
       "scripts/pages/dashboard/mount-streaming.js",
-      "scripts/pages/dashboard/dictee-usages.js",
       "scripts/pages/dashboard/dictee-carnet-picker.js"
     ];
     files.forEach(function (f) {
@@ -115,6 +114,10 @@ describe("Dictee Carnet v2", function () {
       assert.doesNotMatch(src, /Liss[eé]/);
       assert.doesNotMatch(src, /doses/i);
     });
+    const usages = read("scripts/pages/dashboard/dictee-usages.js");
+    assert.match(usages, /<strong>Fidèle<\/strong>/);
+    assert.match(usages, /<strong>Lissée<\/strong>/);
+    assert.doesNotMatch(usages, /doses/i);
   });
 
   it("persist email + hide seulement dictee+carnet", function () {
