@@ -432,9 +432,9 @@ async function drainQueue(){
     while(true){
       const entry=state.entries.find(item=>item.status==='LOCAL');
       if(!entry)break;
-      entry.listDigest=entry.lists?await digestListDirectives(entry.lists):null;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
+        entry.listDigest=entry.lists?await digestListDirectives(entry.lists):null;
         const progress=config.UPLOAD_PROGRESS===false||typeof XMLHttpRequest==='undefined'?undefined:
           (loaded,total)=>{entry.uploadProgress=Math.min(100,Math.round(loaded/total*100));renderQueue();};
         const created=await api.upload(entry.file,entry.policy,{
@@ -461,7 +461,11 @@ async function drainQueue(){
       }
     }
   }catch(error){notify(errorText(error),'is-error');}
-  finally{state.running=false;renderQueue();}
+  finally{
+    state.running=false;renderQueue();
+    if(state.entries.some(entry=>entry.status==='LOCAL'))
+      queueMicrotask(()=>drainQueue().catch(error=>notify(errorText(error),'is-error')));
+  }
 }
 async function pollEntry(entry){
   const deadline=Date.now()+(config.MAX_WAIT_MS||180000);
