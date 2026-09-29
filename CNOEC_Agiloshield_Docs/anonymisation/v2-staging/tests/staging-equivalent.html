@@ -8,6 +8,8 @@ function policyDigest(policy){return 'mock-'+[...policy.selectedTypes].sort().jo
  '-'+String(policy.sensitiveKeepAcknowledged===true);}
 let preference={schemaVersion:1,selectedTypes:['ADR','EML','IBA','IDN','PER','TEL','URL'],
  sensitiveKeepAcknowledged:false};preference.digest=policyDigest(preference);
+try{const saved=JSON.parse(sessionStorage.getItem('asv2-mock-preference')||'null');
+ if(saved&&Array.isArray(saved.selectedTypes))preference=saved;}catch(_){}
 const jobs=new Map();let nextId=1;
 let failAuthOnce=new URLSearchParams(location.search).has('authFirst');
 let accountRef='synthetic-account-1';
@@ -60,7 +62,8 @@ window.fetch=async(url,options={})=>{
  const path=String(url).slice(window.AGILOSHIELD_V2_CONFIG.BASE_URL.length);
  if(path==='/preferences'){
   if(location.search.includes('slow=1')&&options.method!=='POST')await new Promise(resolve=>setTimeout(resolve,1500));
-  if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:policyDigest(p)};}
+  if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:policyDigest(p)};
+   sessionStorage.setItem('asv2-mock-preference',JSON.stringify(preference));}
   return json({protectionPolicy:preference,accountRef,capabilities});
  }
  if(path.startsWith('/history/v2?')&&options.method!=='POST')

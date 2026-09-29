@@ -18,8 +18,27 @@ const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant
   TEL:'Téléphone',URL:'URL'};
 const supported = /\.(pdf|docx|xlsx|pptx|txt|csv)$/i;
 const storageKey = 'agiloshield-v2-staging-session-jobs';
+const recentSessionLimit = 50;
+const tourKey = 'agiloshield-first-visit-guide-v1';
 const terminal = new Set(['READY','REVIEW_REQUIRED','FAILED']);
 const active = new Set(['LOCAL','UPLOADING','PENDING','PROCESSING','UNCERTAIN','AUTH_REQUIRED','TIMED_OUT']);
+const copy = Object.freeze({
+  brand:'AgiloShield',testBadge:'Version en test',
+  heading:'Protégez vos documents avant de les utiliser avec l’IA',
+  intro:'Choisissez les données à masquer, déposez vos fichiers et vérifiez chaque résultat.',
+  historySession:'Documents de cette session',historyDurable:'Mes documents',
+  historyOld:'Documents de l’ancienne version',
+  status:{LOCAL:'À envoyer',UPLOADING:'Envoi en cours',PENDING:'Fichier reçu, en attente',
+    PROCESSING:'Protection en cours',READY:'Résultat prêt selon vos réglages',
+    REVIEW_REQUIRED:'Vérification nécessaire',FAILED:'Traitement impossible',
+    AUTH_REQUIRED:'Connexion requise',TIMED_OUT:'Suivi interrompu',
+    UNCERTAIN:'Envoi à vérifier',ERROR:'Action impossible'},
+  reviewAction:{KEEP:'Conserver ce passage',MASK:'Masquer ce passage'},
+  issueReason:{FIRST_ROW_PER_REVIEW:'La première ligne demande une vérification.',
+    LIST_EXCLUSION_REVIEW:'Une règle particulière contredit un masquage nécessaire.',
+    LIST_INCLUSION_UNLOCATED:'Un passage à masquer n’a pas été localisé avec certitude.'},
+  genericError:'Cette action n’a pas abouti. Actualisez le document ou réessayez.',
+});
 const iconsBase = new URL('./assets/nucleo/', import.meta.url);
 const state = {preferencesReady:false, currentPolicy:null, accountRef:null,
   capabilities:{}, entries:[], active:null,
@@ -47,16 +66,32 @@ const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
 const isTerminal = status => terminal.has(status);
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
+const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par terme.',
+  'Un terme est présent plusieurs fois.',
+  'Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.']);
 const errorText = error => location.protocol==='file:'?
-  'Ouvrez la page Webflow staging en HTTPS : un fichier local ne peut pas utiliser la session et l’API Agilotext.':
-  error?.status===401?'Session Agilotext requise ou expirée.':
-  error?.status===409?'Révision périmée : actualisez ce document.':error?.message||'Erreur inconnue';
+  'Ouvrez la page de test publiée : une copie locale ne peut pas utiliser votre connexion.':
+  error?.status===401?'Votre session a expiré. Reconnectez-vous, puis reprenez.':
+  error?.status===403?'Vous n’avez pas accès à ce document.':
+  error?.status===404?'Ce document n’est plus accessible. Actualisez la liste.':
+  error?.status===409?'Le document a changé. Actualisez-le avant de continuer.':
+  error?.status===413?'Ce fichier dépasse la taille autorisée.':
+  localErrors.has(error?.message)?error.message:copy.genericError;
+const policySummary = types => Array.isArray(types)?types.length?
+  types.length+' catégorie'+(types.length>1?'s':'')+' sur 13 · '+
+    types.map(code=>labels[code]||code).join(', '):
+  'Aucune catégorie sélectionnée — les données détectées seront conservées.':
+  'Sélection en cours de chargement';
+const safeStatus = status => copy.status[status]||copy.status.ERROR;
 
 const shell=el('section',null,'asv2-shell',mount);
 const head=el('header',null,'asv2-landing-head',shell);
-el('span','AgiloShield V2 · recette','asv2-brand',head);
-el('h2','Anonymiser vos données avant usage IA',null,head);
-el('p','Déposez un document, puis consultez son original et son résultat dans le panneau de revue.',null,head);
+const brand=el('div',null,'asv2-brand-row',head);
+el('span',copy.brand,'asv2-brand',brand);
+el('span',copy.testBadge,'asv2-test-badge',brand);
+el('h2',copy.heading,null,head);
+el('p',copy.intro,null,head);
+const tourReplay=button('Comment ça marche ?','asv2-link asv2-tour-replay',head,()=>startTour(true));
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
 const form=el('form',null,'asv2-form',shell);
@@ -67,12 +102,8 @@ el('strong','Traitement de fichier',null,fileTab);
 el('small','PDF, Word, Excel, PowerPoint, TXT, CSV',null,fileTab);
 const textTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('text'));
 el('strong','Traitement de texte',null,textTab);el('small','Saisi ou collé',null,textTab);
-const restoreTab=button('', 'asv2-surface-tab',surfaceTabs);
-el('strong','Restauration',null,restoreTab);el('small','Ancien parcours',null,restoreTab);
-restoreTab.disabled=true;restoreTab.title='La restauration n’est pas exposée par la façade V2 de recette.';
-for(const tab of [fileTab,textTab,restoreTab])tab.setAttribute('role','tab');
+for(const tab of [fileTab,textTab])tab.setAttribute('role','tab');
 fileTab.setAttribute('aria-selected','true');textTab.setAttribute('aria-selected','false');
-restoreTab.setAttribute('aria-selected','false');
 const layout=el('div',null,'asv2-layout',form);
 const main=el('div',null,'asv2-main',layout);
 const side=el('aside',null,'asv2-side',layout);side.setAttribute('aria-label','Paramètres');
@@ -100,23 +131,24 @@ el('span','Anonymiser','asv2-mode-title',anonMode);
 const pseudoMode=el('label',null,'asv2-mode is-unavailable',side);
 const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
 pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
-const pseudoHelp=el('small','Disponible après qualification du parcours Java → worker et de la clé.',null,pseudoMode);
+const pseudoHelp=el('small','Ce mode n’est pas encore disponible sur cette page.',null,pseudoMode);
 for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
   anonMode.classList.toggle('is-selected',anonRadio.checked);
   pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
+  updatePolicySummary();
 });
 el('h3','Paramètres',null,side);
-const typesButton=button('Types de données','asv2-types-button',side,openTypes);
+const typesButton=button('Données à masquer','asv2-types-button',side,openTypes);
 const typeCount=el('span','…','asv2-count',typesButton);
 typesButton.disabled=true;
-el('p','Cliquez pour choisir les 13 catégories. Les préférences sont enregistrées pour les prochains jobs.',
+el('p','Choisissez les catégories à protéger. Votre choix sera appliqué aux prochains fichiers.',
   'asv2-muted asv2-side-help',side);
-el('p','Une catégorie décochée peut rester visible. READY porte uniquement sur la sélection du job.',
+el('p','Une catégorie décochée peut rester visible. Le résultat est vérifié selon vos réglages.',
   'asv2-policy-note',side);
-const listsButton=button('Listes d’inclusion / exclusion','asv2-types-button',side,openLists);
+const listsButton=button('Règles particulières','asv2-types-button',side,openLists);
 listsButton.disabled=true;
-listsButton.title='Disponible après le raccordement vérifié du worker par fichiers à Java.';
-const listsHelp=el('p','Listes en préparation : non actives sur la façade Java actuelle.',
+listsButton.title='Cette option n’est pas encore disponible sur cette page.';
+const listsHelp=el('p','Cette option sera disponible après son activation sur cette page.',
   'asv2-muted asv2-side-help',side);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
@@ -124,14 +156,14 @@ policyDialog.setAttribute('role','dialog');policyDialog.setAttribute('aria-modal
 policyDialog.setAttribute('aria-labelledby','asv2-policy-title');
 const policyHeader=el('header',null,'asv2-policy-header',policyDialog);
 const policyHeading=el('div',null,null,policyHeader);
-const policyTitle=el('h2','Sélectionnez les types de données',null,policyHeading);policyTitle.id='asv2-policy-title';
+const policyTitle=el('h2','Choisissez les données à masquer',null,policyHeading);policyTitle.id='asv2-policy-title';
 el('p','Ces préférences sont enregistrées et appliquées aux prochains traitements.',
   'asv2-muted',policyHeading);
 const policyClose=button('×','asv2-close',policyHeader,()=>closeTypes(false));
 policyClose.setAttribute('aria-label','Fermer les types de données');
 const policy=el('section',null,'asv2-policy',policyDialog);
 const policyHead=el('div',null,'asv2-section-head',policy);
-el('h3','Types de données à anonymiser',null,policyHead);
+el('h3','Données à masquer',null,policyHead);
 el('span','13 catégories','asv2-count',policyHead);
 const grid=el('div',null,'asv2-grid',policy);
 const checks=new Map();
@@ -179,7 +211,17 @@ el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
-const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Documents sélectionnés');
+const mobileSettings=el('div',null,'asv2-mobile-settings',filePane);
+const mobileSettingsText=el('p','Chargement de vos réglages…',null,mobileSettings);
+const mobileSettingsEdit=button('Modifier','asv2-secondary',mobileSettings,openTypes);
+mobileSettingsEdit.disabled=true;
+filePane.insertBefore(mobileSettings,drop);
+const emptyPolicyWarning=el('p','Aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.',
+  'asv2-empty-policy-warning',filePane);
+emptyPolicyWarning.hidden=true;filePane.insertBefore(emptyPolicyWarning,drop);
+const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Fichiers en cours');
+const queueHeading=el('h3','Fichiers en cours','asv2-queue-heading',main);
+main.insertBefore(queueHeading,queue);
 const rejectedList=el('ul',null,'asv2-rejections',main);rejectedList.setAttribute('aria-label','Fichiers refusés');
 const actions=el('div',null,'asv2-form-actions',main);
 const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
@@ -191,15 +233,16 @@ el('p','Le premier résultat prêt s’ouvre automatiquement. Chaque document re
 
 const historySection=el('section',null,'asv2-history',shell);
 const historyHead=el('div',null,'asv2-history-head',historySection);
-el('h3','Historique — documents traités',null,historyHead);
+const historyTitle=el('h3',copy.historySession,null,historyHead);
 const historyCount=el('span','0 document','asv2-history-count',historyHead);
 const historyTabs=el('div',null,'asv2-history-tabs',historySection);
 historyTabs.setAttribute('role','tablist');historyTabs.setAttribute('aria-label','Source de l’historique');
-const v2HistoryTab=button('AgiloShield V2','asv2-history-tab is-active',historyTabs,()=>setHistoryTab('v2'));
-const anon2HistoryTab=button('Ancien parcours Anon2','asv2-history-tab',historyTabs,()=>setHistoryTab('anon2'));
+const v2HistoryTab=button('Documents récents','asv2-history-tab is-active',historyTabs,()=>setHistoryTab('v2'));
+const anon2HistoryTab=button(copy.historyOld,'asv2-history-tab',historyTabs,()=>setHistoryTab('anon2'));
+historyTabs.hidden=true;anon2HistoryTab.hidden=true;
 for(const tab of [v2HistoryTab,anon2HistoryTab])tab.setAttribute('role','tab');
 v2HistoryTab.setAttribute('aria-selected','true');anon2HistoryTab.setAttribute('aria-selected','false');
-const historyHint=el('p','Documents de cette session. L’historique durable attend la liste Java V2.',
+const historyHint=el('p','Les documents de vos visites précédentes ne sont pas encore disponibles ici.',
   'asv2-history-hint',historySection);
 const historyActions=el('div',null,'asv2-history-actions',historySection);
 const refreshHistoryButton=button('Actualiser','asv2-secondary',historyActions,()=>loadHistory().catch(error=>{
@@ -210,7 +253,8 @@ const moreHistoryButton=button('Charger plus','asv2-secondary',historyActions,
   ()=>loadHistory(true).catch(error=>{historyHint.textContent=errorText(error);renderHistory();}));
 const historyTableWrap=el('div',null,'asv2-history-wrap',historySection);
 const historyTable=el('table',null,'asv2-history-table',historyTableWrap);
-historyTable.setAttribute('aria-label','Documents anonymisés et pseudonymisés');
+historyTable.setAttribute('aria-label','Documents traités');
+const historyCards=el('div',null,'asv2-history-cards',historySection);
 
 const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
 const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);backdrop.setAttribute('aria-label','Fermer la revue');
@@ -218,7 +262,7 @@ const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dial
 panel.setAttribute('aria-labelledby','asv2-drawer-title');
 const drawerHead=el('header',null,'asv2-drawer-head',panel);
 const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
-el('span','AgiloShield V2 · revue documentaire','asv2-overline',drawerHeading);
+el('span','AgiloShield · vérification du document','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
 const close=button('×','asv2-close',drawerHead,closeDrawer);close.setAttribute('aria-label','Fermer le document');
@@ -238,6 +282,72 @@ function notify(text,kind='') {notice.textContent=text;notice.className='asv2-no
 function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
 form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
+const tourSteps=[
+  {target:typesButton,title:'Choisissez quoi masquer',body:'Sélectionnez les données à protéger parmi 13 catégories. Les catégories laissées de côté peuvent rester visibles.'},
+  {target:drop,title:'Déposez vos fichiers',body:'Ajoutez jusqu’à 12 fichiers. Chaque fichier garde les réglages choisis au moment du dépôt.'},
+  {target:historyHead,title:'Consultez et corrigez',body:'Ouvrez chaque résultat, vérifiez les passages signalés et téléchargez le fichier prêt selon vos réglages.'},
+];
+let tourIndex=-1;let tourLastFocus=null;let firstTourTimer=null;let guideDoneInMemory=false;
+const tour=el('div',null,'asv2-tour',mount);tour.hidden=true;
+const tourBackdrop=el('div',null,'asv2-tour-backdrop',tour);
+const tourCard=el('section',null,'asv2-tour-card',tour);tourCard.setAttribute('role','dialog');
+tourCard.setAttribute('aria-modal','true');tourCard.setAttribute('aria-labelledby','asv2-tour-title');
+const tourCount=el('span','', 'asv2-tour-count',tourCard);
+const tourTitle=el('h2','',null,tourCard);tourTitle.id='asv2-tour-title';
+const tourBody=el('p','',null,tourCard);
+const tourControls=el('div',null,'asv2-tour-controls',tourCard);
+const tourPrev=button('Précédent','asv2-secondary',tourControls,()=>showTourStep(tourIndex-1));
+const tourNext=button('Suivant','asv2-primary',tourControls,()=>tourIndex===tourSteps.length-1?closeTour():showTourStep(tourIndex+1));
+const tourSkip=button('Passer','asv2-link',tourControls,closeTour);
+function guideSeen(){try{return localStorage.getItem(tourKey)==='seen';}
+  catch(_){return guideDoneInMemory;}}
+function rememberGuide(){guideDoneInMemory=true;
+  try{localStorage.setItem(tourKey,'seen');}catch(_){/* Browser storage may be unavailable. */}}
+function anotherTourOpen(){return !!document.querySelector('.driver-overlay,.driver-popover,[data-driverjs-tour]')||
+  !!window.__agiloPendingFirstTour;}
+function showTourStep(index){
+  if(tourIndex>=0)tourSteps[tourIndex].target.classList.remove('asv2-tour-target');
+  tourIndex=index;const step=tourSteps[index];
+  step.target.classList.add('asv2-tour-target');
+  step.target.scrollIntoView({block:'center',behavior:'auto'});
+  tourCount.textContent='Étape '+(index+1)+' sur '+tourSteps.length;
+  tourTitle.textContent=step.title;tourBody.textContent=step.body;
+  tourPrev.hidden=index===0;tourNext.textContent=index===tourSteps.length-1?'Terminer':'Suivant';
+  const rect=step.target.getBoundingClientRect();
+  tourCard.style.setProperty('--asv2-tour-top',Math.max(16,Math.min(innerHeight-250,rect.bottom+12))+'px');
+  tourCard.style.setProperty('--asv2-tour-left',Math.max(16,Math.min(innerWidth-390,rect.left))+'px');
+  tourNext.focus();
+}
+function startTour(manual=false){
+  if(!tour.hidden)return true;
+  if(!state.preferencesReady||state.drawerOpen||!policyModal.hidden||!listsModal.hidden||
+      state.entries.some(entry=>active.has(entry.status))||anotherTourOpen()){
+    if(manual)notify('Terminez l’action en cours, puis rouvrez le guide.','is-warning');
+    return false;
+  }
+  tourLastFocus=document.activeElement;tour.hidden=false;document.body.classList.add('asv2-tour-open');
+  showTourStep(0);return true;
+}
+function closeTour(){tour.hidden=true;tourIndex=-1;document.body.classList.remove('asv2-tour-open');
+  for(const step of tourSteps)step.target.classList.remove('asv2-tour-target');
+  rememberGuide();if(tourLastFocus?.isConnected)tourLastFocus.focus();}
+tourBackdrop.addEventListener('click',closeTour);
+tour.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();closeTour();}
+  if(event.key!=='Tab')return;
+  const controls=[...tourCard.querySelectorAll('button:not([hidden]):not([disabled])')];
+  if(!controls.length)return;
+  if(event.shiftKey&&document.activeElement===controls[0]){event.preventDefault();controls.at(-1).focus();}
+  else if(!event.shiftKey&&document.activeElement===controls.at(-1)){event.preventDefault();controls[0].focus();}
+});
+function scheduleFirstTour(){
+  if(guideSeen()||firstTourTimer)return;
+  let attempts=0;
+  firstTourTimer=setInterval(()=>{
+    if(state.disposed||guideSeen()||++attempts>30){clearInterval(firstTourTimer);firstTourTimer=null;return;}
+    if(startTour()){clearInterval(firstTourTimer);firstTourTimer=null;}
+  },1000);
+}
 function setSurface(kind){
   const file=kind==='file';filePane.hidden=!file;textPane.hidden=file;
   fileTab.classList.toggle('is-active',file);textTab.classList.toggle('is-active',!file);
@@ -304,8 +414,10 @@ async function saveTypes(){
       JSON.stringify([...saved].sort())!==JSON.stringify([...types].sort()))
       throw new Error('Préférences non enregistrées par la façade');
     state.currentPolicy={...response.protectionPolicy,selectedTypes:[...saved]};
-    typeCount.textContent=String(types.length);typesSnapshot=[...types];savingTypes=false;closeTypes(true);
-    notify('Préférences enregistrées. Elles seront appliquées aux prochains documents.');
+    updatePolicySummary();typesSnapshot=[...types];savingTypes=false;closeTypes(true);
+    notify(types.length?'Préférences enregistrées pour les prochains documents.':
+      'Aucune catégorie sélectionnée. Les données détectées resteront visibles dans les prochains documents.',
+      types.length?'':'is-warning');
   }catch(error){policyError.textContent=errorText(error);policyError.hidden=false;}
   finally{savingTypes=false;policySave.disabled=!state.preferencesReady;
     policyClose.disabled=false;policyCancel.disabled=false;}
@@ -318,16 +430,26 @@ function setEnabled(yes){
   pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
   if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
     anonMode.classList.add('is-selected');pseudoMode.classList.remove('is-selected');}
-  pseudoHelp.textContent=pseudoReady?'Étiquettes visibles et clé de cette révision READY.':
-    'Disponible après qualification du parcours Java → worker et de la clé.';
+  pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes ; conservez la clé de restitution.':
+    'Ce mode n’est pas encore disponible sur cette page.';
   listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
-    'Disponible après le raccordement vérifié du worker par fichiers à Java.';
+    'Cette option n’est pas encore disponible sur cette page.';
   listsHelp.textContent=listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
-    'Listes en préparation : non actives sur la façade Java actuelle.';
+    'Cette option sera disponible après son activation sur cette page.';
+  mobileSettingsEdit.disabled=!yes;
   for(const box of checks.values())box.disabled=!yes;
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
   drop.classList.toggle('is-disabled',!yes);
   drop.setAttribute('aria-disabled',String(!yes));
+}
+function updatePolicySummary(){
+  const types=state.currentPolicy?.selectedTypes;
+  typeCount.textContent=Array.isArray(types)?types.length?
+    types.length+' catégorie'+(types.length>1?'s':'')+' sur 13':
+    'Aucune catégorie sélectionnée':'…';
+  mobileSettingsText.textContent='Mode : '+(pseudoRadio.checked?'Pseudonymiser':'Anonymiser')+
+    ' · Données à masquer : '+policySummary(types);
+  emptyPolicyWarning.hidden=!Array.isArray(types)||types.length>0;
 }
 async function loadPreferences(){
   state.currentPolicy=null;listsReady=false;pseudoReady=false;
@@ -347,8 +469,10 @@ async function loadPreferences(){
       state.capabilities.processingModes?.includes('PSEUDONYMIZE')&&
       state.capabilities.pseudonymKeyDownload===true;
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
-    typeCount.textContent=String(types.length);
-    setEnabled(true);notify('Préférences chargées. Vous pouvez déposer vos documents.');
+    updatePolicySummary();setEnabled(true);
+    notify(types.length?'Vos réglages sont chargés. Vous pouvez déposer vos documents.':
+      'Aucune catégorie sélectionnée. Les données détectées resteront visibles.');
+    scheduleFirstTour();
   }catch(error){retry.hidden=false;notify(errorText(error),'is-error');}
 }
 function addFiles(files){
@@ -369,7 +493,7 @@ function addFiles(files){
   for(const file of additions){
     if(!supported.test(file.name)){rejections.push(file.name+' : format non pris en charge');continue;}
     if(maxBytes&&file.size>maxBytes){rejections.push(file.name+' : taille supérieure à la limite de recette');continue;}
-    if(accepted>=available){rejections.push(file.name+' : limite de 12 jobs actifs atteinte');continue;}
+    if(accepted>=available){rejections.push(file.name+' : limite de 12 fichiers en cours atteinte');continue;}
     const snapshot=freezeJobSelection({policy:current,lists,mode});
     const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
       ...snapshot,listDigest:null,batchId,createdAt:new Date().toISOString(),sizeBytes:file.size,
@@ -397,15 +521,15 @@ for(const name of ['dragleave','drop'])drop.addEventListener(name,event=>{
 drop.addEventListener('drop',event=>addFiles(event.dataTransfer?.files||[]));
 function renderQueue(){
   clear(queue);
-  for(const entry of state.entries){
+  const underway=state.entries.filter(entry=>!isTerminal(entry.status));
+  queueHeading.hidden=!underway.length;
+  for(const entry of underway){
     const line=el('li',null,'asv2-queue-item',queue);
     const details=el('div',null,'asv2-queue-details',line);
     el('strong',entry.name,'asv2-queue-name',details);
-    const statusText={LOCAL:'À envoyer',UPLOADING:entry.uploadProgress===null?'Envoi en cours':
-      'Envoi '+entry.uploadProgress+' %',PENDING:'En attente',PROCESSING:'Traitement en cours',
-      READY:'Prêt',REVIEW_REQUIRED:'Vérification requise',FAILED:'Échec',AUTH_REQUIRED:'Connexion requise',
-      TIMED_OUT:'Suivi interrompu',UNCERTAIN:'Envoi à vérifier',ERROR:'Erreur'};
-    el('span',statusText[entry.status]||entry.status,
+    const statusText=entry.status==='UPLOADING'&&entry.uploadProgress!==null?
+      'Envoi '+entry.uploadProgress+' %':safeStatus(entry.status);
+    el('span',statusText,
       'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
     if(entry.status==='UPLOADING'){
       const track=el('div',null,'asv2-upload-track',details);
@@ -416,9 +540,6 @@ function renderQueue(){
       if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
     }else if(['PENDING','PROCESSING'].includes(entry.status))
       el('div',null,'asv2-processing-line',details);
-    if(isTerminal(entry.status))button(entry.status==='READY'?'Afficher':
-      entry.status==='REVIEW_REQUIRED'?'Vérifier':'Voir l’échec',
-      'asv2-secondary asv2-queue-action',line,()=>openDrawer(entry));
     if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary asv2-queue-action',line,
       ()=>pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();}));
     if(entry.status==='AUTH_REQUIRED')button(state.accountRef?'Reprendre après connexion':
@@ -468,7 +589,7 @@ function historyRows(source){
       }
     }
   }
-  return rows.sort((a,b)=>{
+  return rows.filter(row=>isTerminal(historyStatus(row))).sort((a,b)=>{
     const left=Date.parse(a.createdAt||a.dtCreation||0)||0;
     const right=Date.parse(b.createdAt||b.dtCreation||0)||0;
     return right-left||String(b.jobId).localeCompare(String(a.jobId));
@@ -500,6 +621,12 @@ function renderHistory(){
   const source=state.historyTab;
   const serverReady=source==='v2'?state.capabilities.historyV2===true:
     state.capabilities.historyAnon2===true;
+  const oldReady=config.OLD_HISTORY_READY===true&&
+    state.capabilities.historyAnon2===true&&!!config.HISTORY_ANON2_PATH;
+  historyTabs.hidden=!oldReady;anon2HistoryTab.hidden=!oldReady;
+  if(!oldReady&&source==='anon2'){state.historyTab='v2';return renderHistory();}
+  historyTitle.textContent=source==='anon2'?copy.historyOld:
+    serverReady?copy.historyDurable:copy.historySession;
   const rows=historyRows(source);
   const availableIds=new Set(rows.filter(row=>historyStatus(row)==='READY')
     .map(row=>String(row.jobId)));
@@ -507,61 +634,78 @@ function renderHistory(){
   const ready=rows.filter(row=>historyStatus(row)==='READY').length;
   historyCount.textContent=rows.length+' document'+(rows.length!==1?'s':'')+
     (ready?' · '+ready+' prêt'+(ready!==1?'s':''):'');
-  historyHint.textContent=source==='anon2'&&!serverReady?
-    'L’ancien historique attend son adaptateur Java. Aucun job Anon2 n’est mélangé à V2.':
-    source==='v2'&&!serverReady?'Documents de cette session uniquement. L’historique durable attend la liste Java V2.':
-    'Historique fourni par Java pour le compte connecté.';
-  refreshHistoryButton.disabled=!serverReady;
+  historyHint.textContent=source==='v2'&&!serverReady?
+    'Les documents de vos visites précédentes ne sont pas encore disponibles ici.':
+    'Retrouvez les documents accessibles à votre compte.';
+  refreshHistoryButton.hidden=!serverReady;
   moreHistoryButton.hidden=!serverReady||!state.history.cursors[source];
   const zipReady=source==='v2'&&state.capabilities.bulkZipV2===true&&
     typeof config.BULK_ZIP_V2_PATH==='string';
+  zipHistoryButton.hidden=!zipReady;
   zipHistoryButton.disabled=!zipReady||state.selectedHistory.size<2;
-  zipHistoryButton.title=zipReady?'ZIP certifié des jobs READY sélectionnés':
-    'Disponible après raccordement du ZIP certifié côté Java.';
+  zipHistoryButton.title=zipReady?'Télécharger les résultats prêts sélectionnés':'';
   zipHistoryButton.textContent='Télécharger la sélection (.zip)'+
     (state.selectedHistory.size?' · '+state.selectedHistory.size:'');
   clear(historyTable);
   const head=el('thead',null,null,historyTable),heading=el('tr',null,null,head);
-  for(const label of ['','N°','Fichier','Date','Taille','Mode','Statut','Actions']){
+  for(const label of [...(zipReady?['']:[]),'N°','Fichier','Date','Taille','Mode','Statut','Actions']){
     const th=el('th',label,null,heading);th.scope='col';
   }
   const body=el('tbody',null,null,historyTable);
   if(!rows.length){const line=el('tr',null,null,body);
-    const cell=el('td',source==='v2'?'Aucun document V2 à afficher.':
-      'Ancien historique indisponible sur cette façade.',null,line);
-    cell.colSpan=8;cell.className='asv2-history-empty';return;}
+    const cell=el('td','Aucun document terminé pour le moment.',null,line);
+    cell.colSpan=zipReady?8:7;cell.className='asv2-history-empty';
+    clear(historyCards);el('p','Vos résultats apparaîtront ici dès que leur traitement sera terminé.',
+      'asv2-muted',historyCards);return;}
+  clear(historyCards);
   rows.forEach((row,index)=>{
     const line=el('tr',null,null,body),status=historyStatus(row);
     const selectable=source==='v2'&&status==='READY'&&zipReady&&!!row.jobId;
-    const selectCell=el('td',null,null,line),box=el('input',null,null,selectCell);
-    box.type='checkbox';box.disabled=!selectable;box.checked=state.selectedHistory.has(String(row.jobId));
-    box.setAttribute('aria-label','Sélectionner '+(row.fileName||row.filename||row.jobId));
-    box.addEventListener('change',()=>{
-      if(box.checked)state.selectedHistory.add(String(row.jobId));
-      else state.selectedHistory.delete(String(row.jobId));
-      zipHistoryButton.disabled=state.selectedHistory.size<2;
-      zipHistoryButton.textContent='Télécharger la sélection (.zip) · '+state.selectedHistory.size;
-    });
+    if(zipReady){
+      const selectCell=el('td',null,null,line);
+      const box=el('input',null,null,selectCell);
+      box.type='checkbox';box.disabled=!selectable;box.checked=state.selectedHistory.has(String(row.jobId));
+      box.setAttribute('aria-label','Sélectionner '+(row.fileName||row.filename||row.jobId));
+      box.addEventListener('change',()=>{
+        if(box.checked)state.selectedHistory.add(String(row.jobId));
+        else state.selectedHistory.delete(String(row.jobId));
+        zipHistoryButton.disabled=state.selectedHistory.size<2;
+        zipHistoryButton.textContent='Télécharger la sélection (.zip) · '+state.selectedHistory.size;
+      });
+    }
     el('td',String(index+1),null,line);
     const nameCell=el('td',null,'asv2-history-name',line);
-    historyIcon('file',nameCell);el('span',row.fileName||row.filename||'Job '+row.jobId,null,nameCell);
+    historyIcon('file',nameCell);el('span',row.fileName||row.filename||'Document',null,nameCell);
     el('td',historyDate(row.createdAt||row.dtCreation),null,line);
     el('td',historySize(row.sizeBytes??row.fileLength),null,line);
-    el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudo':'Anonyme',null,line);
+    el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',null,line);
     const statusCell=el('td',null,null,line);
-    el('span',({READY:'Prêt',REVIEW_REQUIRED:'À vérifier',FAILED:'Échec',PENDING:'En attente',
-      PROCESSING:'En cours',TIMED_OUT:'Suivi interrompu',UNCERTAIN:'Envoi à vérifier'})[status]||status,
+    el('span',safeStatus(status),
       'asv2-status asv2-status-'+status.toLowerCase(),statusCell);
     const controls=el('td',null,'asv2-history-controls',line);
     if(source==='v2'&&row.jobId){
-      historyAction(status==='READY'?'Afficher le résultat':'Afficher le job','eye',controls,
+      historyAction(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
+        'Vérifier le document':'Voir ce qui s’est passé','eye',controls,
         ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if(status==='READY')historyAction('Télécharger le document certifié','download',controls,
+      if(status==='READY')historyAction('Télécharger le résultat','download',controls,
         ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
       if(status==='READY'&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
         historyAction('Télécharger la clé de la révision','key',controls,
           ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
     }
+    const card=el('article',null,'asv2-history-card',historyCards);
+    const cardTop=el('div',null,'asv2-history-card-top',card);
+    historyIcon('file',cardTop);
+    el('strong',row.fileName||row.filename||'Document',null,cardTop);
+    el('span',safeStatus(status),'asv2-status asv2-status-'+status.toLowerCase(),card);
+    el('small',historyDate(row.createdAt||row.dtCreation)+' · '+
+      historySize(row.sizeBytes??row.fileLength),null,card);
+    const cardActions=el('div',null,'asv2-history-card-actions',card);
+    button(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
+      'Vérifier le document':'Voir ce qui s’est passé','asv2-primary',cardActions,
+      ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+    if(status==='READY')button('Télécharger le résultat','asv2-secondary',cardActions,
+      ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
   });
 }
 async function loadHistory(more=false){
@@ -585,7 +729,7 @@ async function entryForHistory(row){
   let entry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
   if(!entry){
     if(!row.protectionPolicy?.digest)throw new Error('Empreinte de politique manquante dans l’historique');
-    entry={key:crypto.randomUUID(),file:null,name:row.fileName||row.filename||'Job '+row.jobId,
+    entry={key:crypto.randomUUID(),file:null,name:row.fileName||row.filename||'Document',
       format:formatOf(row.fileName||row.filename),jobId:row.jobId,digest:row.protectionPolicy.digest,
       listDigest:row.listDigest||null,mode:row.processingMode||'ANONYMIZE',
       selectedTypes:row.protectionPolicy.selectedTypes||null,status:historyStatus(row),
@@ -605,7 +749,7 @@ async function entryForHistory(row){
 async function openHistoryRow(row){const entry=await entryForHistory(row);openDrawer(entry);}
 async function downloadHistoryRow(row){
   const entry=await entryForHistory(row);
-  if(entry.status!=='READY')throw new Error('Ce job n’est plus READY');
+  if(entry.status!=='READY')throw new Error('Le résultat n’est plus prêt.');
   await download(entry,true);
 }
 async function downloadHistoryKey(row){
@@ -641,7 +785,7 @@ async function downloadSelectedZip(){
 function saveSession(){
   const known=state.entries.filter(entry=>entry.jobId);
   const pending=known.filter(entry=>!isTerminal(entry.status)).slice(-12);
-  const slots=12-pending.length;
+  const slots=recentSessionLimit-pending.length;
   const recent=slots?known.filter(entry=>isTerminal(entry.status)).slice(-slots):[];
   try{sessionStorage.setItem(storageKey,JSON.stringify([...pending,...recent]
     .map(entry=>({jobId:entry.jobId,digest:entry.digest,
@@ -652,9 +796,12 @@ async function restoreSession(){
   if(!state.preferencesReady)return;
   let saved=[];try{saved=JSON.parse(sessionStorage.getItem(storageKey)||'[]');}catch(_){return;}
   if(!Array.isArray(saved))return;
-  for(const item of saved.slice(-12)){
+  const savedEntries=saved.slice(-recentSessionLimit);
+  let nextSaved=0;
+  async function restoreNext(){while(nextSaved<savedEntries.length){
+    const item=savedEntries[nextSaved++];
     if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
-    const entry={key:crypto.randomUUID(),file:null,name:'Job '+item.jobId,format:'',jobId:item.jobId,
+    const entry={key:crypto.randomUUID(),file:null,name:'Document',format:'',jobId:item.jobId,
       digest:item.digest,listDigest:item.listDigest||null,mode:item.mode||null,
       selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
       previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
@@ -670,7 +817,8 @@ async function restoreSession(){
       if([403,404].includes(error?.status))state.entries=state.entries.filter(candidate=>candidate!==entry);
       else{entry.status='ERROR';entry.error=errorText(error);}
     }
-  }
+  }}
+  await Promise.all([restoreNext(),restoreNext()]);
   saveSession();
   renderQueue();
 }
@@ -731,7 +879,7 @@ async function drainQueue(){
         entry.lists=null;
         entry.status=entry.jobId||!error.status||error.status>=500?'UNCERTAIN':'ERROR';
         entry.error=entry.status==='UNCERTAIN'?
-          'Le serveur a peut-être créé ce job. Aucun renvoi automatique ne sera effectué.':errorText(error);
+          'Le fichier a peut-être été reçu. Vérifiez son état avant de le déposer à nouveau.':errorText(error);
         renderQueue();renderDrawer(entry);
       }
     }
@@ -805,6 +953,11 @@ async function loadCurrent(entry){
   entry.format=formatOf(entry.name)||entry.format;
   if(entry.previewKind==='origin'&&currentStatus!=='FAILED')entry.previewKind='anon';
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
+  if(isTerminal(currentStatus)&&!entry.announcedComplete){
+    entry.announcedComplete=true;
+    notify(entry.name+' : '+safeStatus(currentStatus)+'. Retrouvez ce fichier dans « '+
+      (state.capabilities.historyV2===true?copy.historyDurable:copy.historySession)+' ».');
+  }
   if(currentStatus==='READY'&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
     state.autoOpenedBatches.add(entry.batchId);
     if(!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
@@ -812,7 +965,7 @@ async function loadCurrent(entry){
         !document.activeElement?.matches?.('textarea, input[type="text"], input[type="search"]')&&
         document.visibilityState==='visible')
       openDrawer(entry);
-    else notify('Un résultat est prêt. Cliquez sur Afficher pour le consulter.');
+    else notify('Un résultat est prêt. Ouvrez-le depuis « Documents de cette session ».');
   }
 }
 function setMobileTab(value){
@@ -846,51 +999,60 @@ function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',
-    entry.revision?'Révision '+entry.revision:null,entry.jobId?'Job '+entry.jobId:null].filter(Boolean).join(' · ');
-  drawerMessage(entry.error||({LOCAL:'Original local — données sensibles visibles.',UPLOADING:'Envoi du document…',
-    PENDING:'Uploadé / En attente',PROCESSING:'Traitement en cours',READY:'Document prêt selon la sélection de ce job.',
-    REVIEW_REQUIRED:'Vérification nécessaire — résultat NON_VERIFIE.',FAILED:'Échec — résultat NON_VERIFIE.',
-    TIMED_OUT:'Suivi interrompu — le job reste consultable.'}[entry.status]||entry.status),
+    entry.revision?'Version actuelle':null].filter(Boolean).join(' · ');
+  drawerMessage(entry.error&&entry.status!=='FAILED'?entry.error:({
+    LOCAL:'Original non protégé — des données sensibles peuvent être visibles.',
+    UPLOADING:'Envoi du document en cours…',PENDING:copy.status.PENDING,
+    PROCESSING:copy.status.PROCESSING,
+    READY:'Résultat prêt selon les catégories choisies pour ce document.',
+    REVIEW_REQUIRED:'Vérification nécessaire avant de considérer le résultat comme prêt.',
+    FAILED:'Traitement impossible. Aucun résultat protégé n’est certifié.',
+    TIMED_OUT:'Le suivi est interrompu. Le traitement peut encore être en cours.'
+  })[entry.status]||safeStatus(entry.status),
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
   renderIssues(entry);renderFooter(entry);
 }
 function renderIssues(entry){
-  clear(issuePane);el('h3','Détections et vérification',null,issuePane);
-  el('p','Une décision concerne une seule occurrence. Les changements sont revérifiés par le serveur.','asv2-muted',issuePane);
-  if(entry.selectedTypes)el('p','Catégories sélectionnées : '+(entry.selectedTypes.length?entry.selectedTypes.join(', '):'aucune'),
+  clear(issuePane);el('h3','Passages à vérifier',null,issuePane);
+  el('p','Chaque correction concerne uniquement le passage choisi. Le fichier est vérifié de nouveau ensuite.','asv2-muted',issuePane);
+  if(Array.isArray(entry.selectedTypes))el('p','Données à masquer : '+policySummary(entry.selectedTypes),
     'asv2-policy-summary',issuePane);
   const review=entry.review;
-  if(!review){el('p',entry.jobId?'Les problèmes seront affichés après traitement.':'Déposez le fichier pour voir les décisions du moteur.',
+  if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
   const reasons=review.qaReasons||review.reasons||[];
-  if(reasons.length)el('p',reasons.join(' · '),'asv2-reasons',issuePane);
+  if(reasons.length)el('p',reasons.map(reason=>copy.issueReason[typeof reason==='string'?
+    reason:reason?.code]||'Un passage demande une vérification.').join(' '),
+    'asv2-reasons',issuePane);
   const listProblems=Array.isArray(review.listProblems)?review.listProblems:[];
   if(listProblems.length)el('h4',listProblems.length+' conflit(s) de listes à vérifier',null,issuePane);
   for(const problem of listProblems){
     const card=el('article',null,'asv2-issue',issuePane);
-    el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?'Exclusion en conflit avec un masque':
-      'Inclusion non localisable automatiquement',null,card);
-    el('small','Problème '+problem.issueId,null,card);
+    el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
+      'Une règle de conservation contredit un masquage nécessaire':
+      'Un passage demandé n’a pas été localisé avec certitude',null,card);
     if(problem.occurrenceId&&review.reviewable){
       const actions=el('div',null,'asv2-issue-actions',card);
-      for(const action of ['KEEP','MASK'])button(action,'asv2-secondary',actions,
+      for(const action of ['KEEP','MASK'])button(copy.reviewAction[action],'asv2-secondary',actions,
         ()=>decide(entry,problem.occurrenceId,action));
-    }else el('small','Correction interactive indisponible : déposez un nouveau job avec des listes corrigées.',null,card);
+    }else el('small','La correction de ce format n’est pas disponible ici. Ajustez les règles et déposez un nouveau fichier.',null,card);
   }
   const rows=Array.isArray(review.occurrences)?review.occurrences:[];
   for(const row of rows){
     if(!row.id)continue;
     const card=el('article',null,'asv2-issue',issuePane);
     const top=el('div',null,'asv2-issue-head',card);
-    el('span',row.category||row.semanticType||'Donnée','asv2-badge',top);
+    el('span',labels[row.category||row.semanticType]||'Donnée repérée','asv2-badge',top);
     if(row.page)el('span','Page '+row.page,'asv2-muted',top);
-    el('strong',row.text||row.surface||'Occurrence '+row.id,null,card);
-    el('small','ID '+row.id+' · '+(row.action||row.privacyAction||'à vérifier'),null,card);
+    el('strong',row.text||row.surface||'Passage à vérifier',null,card);
+    el('small',({MASK:'À masquer',KEEP:'À conserver',REVIEW:'À vérifier'})[
+      row.action||row.privacyAction]||'À vérifier',null,card);
     const issueActions=el('div',null,'asv2-issue-actions',card);
     if(row.page)button('Voir dans le document','asv2-secondary',issueActions,()=>focusOccurrence(entry,row));
     for(const action of ['KEEP','MASK']){
-      const control=button(action,'asv2-secondary',issueActions,()=>decide(entry,row.id,action));
+      const control=button(copy.reviewAction[action],'asv2-secondary',issueActions,
+        ()=>decide(entry,row.id,action));
       control.disabled=!review.reviewable;
     }
   }
@@ -899,12 +1061,12 @@ function renderIssues(entry){
   for(const target of unresolved){
     if(!target.maskOccurrenceId||!target.page)continue;
     const card=el('article',null,'asv2-issue asv2-unresolved',issuePane);
-    el('strong',(target.category||target.semanticType||'MASK')+' · page '+target.page,null,card);
-    el('small','Obligation '+target.maskOccurrenceId,null,card);
-    const control=button('Tracer une région liée','asv2-secondary',card,()=>{
+    el('strong',(labels[target.category||target.semanticType]||'Donnée à masquer')+
+      ' · page '+target.page,null,card);
+    const control=button('Indiquer la zone à masquer','asv2-secondary',card,()=>{
       entry.target=target;entry.page=Number(target.page);entry.previewKind='origin';
       setMobileTab('doc');renderPreview(entry).catch(showError);
-      drawerMessage('Tracez uniquement la cible de l’obligation '+target.maskOccurrenceId+'.','is-warning');
+      drawerMessage('Tracez la zone correspondant uniquement à ce passage.','is-warning');
     });
     control.disabled=!review.reviewable||entry.format!=='pdf';
   }
@@ -912,22 +1074,23 @@ function renderIssues(entry){
 }
 function renderFooter(entry){
   clear(drawerFooter);
-  el('span',entry.status==='READY'?'Prêt selon la politique de ce job':
-    entry.status==='REVIEW_REQUIRED'||entry.status==='FAILED'?'NON_VERIFIE — vérification nécessaire':
-    'Aucun résultat certifié disponible','asv2-footer-status',drawerFooter);
+  el('span',entry.status==='READY'?'Prêt selon vos réglages · '+policySummary(entry.selectedTypes):
+    entry.status==='REVIEW_REQUIRED'||entry.status==='FAILED'?
+      'Résultat non vérifié — des données peuvent rester visibles':
+      'Aucun résultat prêt à télécharger','asv2-footer-status',drawerFooter);
   if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
-  if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le job','asv2-secondary',drawerFooter,
+  if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
     ()=>loadCurrent(entry).catch(showError));
-  if(entry.status==='READY')button('Télécharger le document prêt','asv2-primary',drawerFooter,
+  if(entry.status==='READY')button('Télécharger le résultat','asv2-primary',drawerFooter,
     ()=>download(entry,true).catch(showError));
   if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
     button('Télécharger la clé de cette révision','asv2-secondary',drawerFooter,
       ()=>downloadKey(entry).catch(showError));
-  else if(['REVIEW_REQUIRED','FAILED'].includes(entry.status))button('Télécharger NON_VERIFIE','asv2-secondary',drawerFooter,
+  else if(['REVIEW_REQUIRED','FAILED'].includes(entry.status))button('Télécharger le résultat non vérifié','asv2-secondary',drawerFooter,
     ()=>download(entry,false).catch(showError));
 }
 async function decide(entry,occurrenceId,action){
-  if(!await confirmAction(action+' uniquement pour cette occurrence ?'))return;
+  if(!await confirmAction(copy.reviewAction[action]+' uniquement dans le passage choisi ?'))return;
   try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
     action,reason:'review_explicit'});await apply(entry,receipt.revision);}catch(error){showError(error);}
 }
@@ -999,19 +1162,24 @@ async function renderPreview(entry){
     });control.disabled=value==='anon'&&!isTerminal(entry.status);
   }
   el('span',kind==='origin'?'Original — données sensibles visibles':
-    entry.status==='READY'?'Résultat courant · READY':'Résultat courant · NON_VERIFIE',
+    entry.status==='READY'?'Résultat · prêt selon vos réglages':
+      'Résultat · non vérifié, des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
   const loading=el('p','Chargement de l’aperçu…','asv2-loading',viewerBody);
   try{
     if(['xlsx','pptx'].includes(entry.format)){
-      loading.textContent='Aperçu visuel '+entry.format.toUpperCase()+' non disponible dans cette version. Le traitement et la QA restent consultables.';
+      loading.textContent='Aperçu intégré indisponible pour ce format. Consultez le statut du traitement et téléchargez le résultat s’il est prêt.';
       return;
     }
     const source=await previewBytes(entry,kind);
     if(serial!==state.previewSerial||state.active!==entry.key)return;
     clear(viewerBody);
     if(source.format==='pdf')await renderPdf(entry,source.bytes,kind,serial);
-    else if(source.format==='docx')await renderDocx(source.bytes,serial);
+    else if(source.format==='docx'){
+      el('p','Cet aperçu Word est indicatif : sa mise en page peut différer du fichier téléchargé.',
+        'asv2-geometry-note',viewerBody);
+      await renderDocx(source.bytes,serial);
+    }
     else if(source.format==='txt')renderText(source.bytes);
     else if(source.format==='csv')renderCsv(source.bytes);
     else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
@@ -1096,7 +1264,7 @@ function bindDrawing(entry,overlay,base,serial){
     start=null;ghost?.remove();ghost=null;
     if(rect[2]-rect[0]<4||rect[3]-rect[1]<4)return;
     const target=entry.target;
-    if(!target||!await confirmAction('Lier cette région uniquement à '+target.maskOccurrenceId+' et régénérer ?'))return;
+    if(!target||!await confirmAction('Masquer uniquement la zone tracée pour ce passage, puis vérifier à nouveau le document ?'))return;
     try{
       const receipt=await api.addLinkedRegion(entry.jobId,entry.digest,{revision:entry.revision,
         page:entry.page,rect:rect.map(value=>Math.round(value*100)/100),
@@ -1178,18 +1346,19 @@ function renderCsv(bytes){
   }
 }
 async function download(entry,certified){
-  if(!certified&&!await confirmAction('Ce fichier est NON_VERIFIE : des données sensibles peuvent rester visibles. Télécharger ?'))return;
+  if(!certified&&!await confirmAction('Ce résultat n’est pas vérifié : des données sensibles peuvent rester visibles. Voulez-vous quand même le télécharger ?'))return;
   const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,
     expectedRevision:entry.revision});
   const blob=await response.blob();
   const disposition=response.headers.get('Content-Disposition')||'';
-  const fallback=(certified?'document-anonymise':'document-NON_VERIFIE')+'.'+(entry.format||'bin');
+  const fallback=(certified?'document-protege':'document-non-verifie')+'.'+(entry.format||'bin');
   const filename=(/filename="?([^";]+)"?/i.exec(disposition)?.[1]||fallback).replace(/[^A-Za-z0-9._-]/g,'_');
   const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
   link.href=url;link.download=filename;link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
-  drawerMessage('Téléchargement '+(certified?'certifié':'NON_VERIFIE')+' démarré.');
+  drawerMessage(certified?'Téléchargement du résultat démarré.':
+    'Téléchargement du résultat non vérifié démarré.');
 }
 async function downloadKey(entry){
   const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,
