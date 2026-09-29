@@ -39,6 +39,15 @@ await client.upload(new Blob(['synthetic']), {schemaVersion:1,selectedTypes:[]},
 const form=seen.at(-1).options.body;
 assert.deepEqual(JSON.parse(form.get('anon2InclusionList')), ['MOT A']);
 assert.deepEqual(JSON.parse(form.get('anon2ExclusionList')), []);
+await client.listHistory('/history/v2',{cursor:'page-2',limit:12});
+assert.equal(new URL(seen.at(-1).url).searchParams.get('cursor'),'page-2');
+assert.throws(()=>client.listHistory('https://external.test/jobs'),/Invalid Java history route/);
+await client.downloadZip('/history/v2/zip',[
+  {jobId:'1',revision:'r1',policyDigest:'d1'},
+  {jobId:'2',revision:'r2',policyDigest:'d2'}]);
+assert.deepEqual(JSON.parse(seen.at(-1).options.body).jobs.map(item=>item.jobId),['1','2']);
+assert.throws(()=>client.downloadZip('/history/v2/zip',[
+  {jobId:'1',revision:'r1',policyDigest:'d1'}]),/Invalid certified ZIP selection/);
 await assert.rejects(() => client.upload(new Blob(['synthetic']), {}, {
   anon2InclusionList:[]}), /Both V2 list arrays/);
 await client.decide(7, 'd1', {revision:'r2', occurrenceId:'o1', action:'KEEP', reason:'test'});

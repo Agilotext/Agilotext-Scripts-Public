@@ -18,8 +18,15 @@ const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant
   TEL:'Téléphone',URL:'URL'};
 const supported = /\.(pdf|docx|xlsx|pptx|txt|csv)$/i;
 const storageKey = 'agiloshield-v2-staging-session-jobs';
-const state = {preferencesReady:false, currentPolicy:null, capabilities:{}, entries:[], active:null,
-  running:false, drawerOpen:false,
+const terminal = new Set(['READY','REVIEW_REQUIRED','FAILED']);
+const active = new Set(['LOCAL','UPLOADING','PENDING','PROCESSING','UNCERTAIN','AUTH_REQUIRED','TIMED_OUT']);
+const iconsBase = new URL('./assets/nucleo/', import.meta.url);
+const state = {preferencesReady:false, currentPolicy:null, accountRef:null,
+  capabilities:{}, entries:[], active:null,
+  running:false, authPaused:false, disposed:false, drawerOpen:false,
+  pollRequests:0, pollWaiters:[], autoOpenedBatches:new Set(), historyTab:'v2',
+  history:{v2:[],anon2:[],v2Loaded:false,anon2Loaded:false,cursors:{v2:null,anon2:null}},
+  selectedHistory:new Set(),
   lastFocus:null, previewSerial:0, previewCleanup:null};
 const el = (tag,text,klass,parent) => {
   const out=document.createElement(tag);
@@ -38,7 +45,7 @@ const statusOf = job => {
 };
 const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
-const isTerminal = status => ['READY','REVIEW_REQUIRED','FAILED'].includes(status);
+const isTerminal = status => terminal.has(status);
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
 const errorText = error => location.protocol==='file:'?
   'Ouvrez la page Webflow staging en HTTPS : un fichier local ne peut pas utiliser la session et l’API Agilotext.':
@@ -168,15 +175,42 @@ button('Utiliser pour les prochains fichiers','asv2-primary',listsActions,saveLi
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
-el('span','Le traitement démarre au dépôt · 12 fichiers maximum','asv2-drop-subtitle',drop);
+el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv2-drop-subtitle',drop);
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
 const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Documents sélectionnés');
+const rejectedList=el('ul',null,'asv2-rejections',main);rejectedList.setAttribute('aria-label','Fichiers refusés');
 const actions=el('div',null,'asv2-form-actions',main);
 const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
-el('p','Après traitement, choisissez Afficher ou Vérifier pour ouvrir le document.',
+const resumeAuthButton=button('Reprendre après connexion','asv2-secondary',actions,
+  ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
+resumeAuthButton.hidden=true;
+el('p','Le premier résultat prêt s’ouvre automatiquement. Chaque document reste accessible ci-dessous.',
   'asv2-preview-help',main);
+
+const historySection=el('section',null,'asv2-history',shell);
+const historyHead=el('div',null,'asv2-history-head',historySection);
+el('h3','Historique — documents traités',null,historyHead);
+const historyCount=el('span','0 document','asv2-history-count',historyHead);
+const historyTabs=el('div',null,'asv2-history-tabs',historySection);
+historyTabs.setAttribute('role','tablist');historyTabs.setAttribute('aria-label','Source de l’historique');
+const v2HistoryTab=button('AgiloShield V2','asv2-history-tab is-active',historyTabs,()=>setHistoryTab('v2'));
+const anon2HistoryTab=button('Ancien parcours Anon2','asv2-history-tab',historyTabs,()=>setHistoryTab('anon2'));
+for(const tab of [v2HistoryTab,anon2HistoryTab])tab.setAttribute('role','tab');
+v2HistoryTab.setAttribute('aria-selected','true');anon2HistoryTab.setAttribute('aria-selected','false');
+const historyHint=el('p','Documents de cette session. L’historique durable attend la liste Java V2.',
+  'asv2-history-hint',historySection);
+const historyActions=el('div',null,'asv2-history-actions',historySection);
+const refreshHistoryButton=button('Actualiser','asv2-secondary',historyActions,()=>loadHistory().catch(error=>{
+  historyHint.textContent=errorText(error);renderHistory();}));
+const zipHistoryButton=button('Télécharger la sélection (.zip)','asv2-secondary',historyActions,
+  ()=>downloadSelectedZip().catch(error=>notify(errorText(error),'is-error')));
+const moreHistoryButton=button('Charger plus','asv2-secondary',historyActions,
+  ()=>loadHistory(true).catch(error=>{historyHint.textContent=errorText(error);renderHistory();}));
+const historyTableWrap=el('div',null,'asv2-history-wrap',historySection);
+const historyTable=el('table',null,'asv2-history-table',historyTableWrap);
+historyTable.setAttribute('aria-label','Documents anonymisés et pseudonymisés');
 
 const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
 const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);backdrop.setAttribute('aria-label','Fermer la revue');
@@ -303,6 +337,7 @@ async function loadPreferences(){
     if(!Array.isArray(types)||types.some(code=>!codes.includes(code))||
       typeof response.protectionPolicy.digest!=='string')throw new Error('Préférences serveur invalides');
     state.currentPolicy={...response.protectionPolicy,selectedTypes:[...types]};
+    state.accountRef=typeof response.accountRef==='string'&&response.accountRef?response.accountRef:null;
     state.capabilities=response.capabilities||{};
     const workerMatches=!!config.FILE_WORKER_CODE_SHA&&
       state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA;
@@ -319,7 +354,8 @@ async function loadPreferences(){
 function addFiles(files){
   if(!state.preferencesReady||!state.currentPolicy)return;
   const additions=[...files];
-  if(state.entries.length+additions.length>12){notify('Limite de 12 documents par session.','is-error');return;}
+  const available=Math.max(0,12-state.entries.filter(item=>active.has(item.status)).length);
+  const maxBytes=Number(state.capabilities.maxUploadBytes||config.MAX_UPLOAD_BYTES||0);
   const current=state.currentPolicy;
   const types=[...current.selectedTypes];
   if(defaults.some(code=>!types.includes(code))&&current.sensitiveKeepAcknowledged!==true){
@@ -328,16 +364,24 @@ function addFiles(files){
   }
   const mode=pseudoRadio.checked?'PSEUDONYMIZE':'ANONYMIZE';
   const lists=listsReady?listSnapshot():null;
+  const batchId=crypto.randomUUID();
+  let accepted=0;const rejections=[];clear(rejectedList);
   for(const file of additions){
-    if(!supported.test(file.name)){notify('Format non pris en charge : '+file.name,'is-error');continue;}
+    if(!supported.test(file.name)){rejections.push(file.name+' : format non pris en charge');continue;}
+    if(maxBytes&&file.size>maxBytes){rejections.push(file.name+' : taille supérieure à la limite de recette');continue;}
+    if(accepted>=available){rejections.push(file.name+' : limite de 12 jobs actifs atteinte');continue;}
     const snapshot=freezeJobSelection({policy:current,lists,mode});
     const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
-      ...snapshot,listDigest:null,
+      ...snapshot,listDigest:null,batchId,createdAt:new Date().toISOString(),sizeBytes:file.size,
       uploadId:crypto.randomUUID(),uploadProgress:null,status:'LOCAL',
       revision:null,review:null,regions:null,
       previewKind:'origin',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
+    accepted++;
   }
+  for(const reason of rejections)el('li',reason,null,rejectedList);
+  if(rejections.length)notify(rejections.length+' fichier(s) refusé(s) ; consultez le détail sous la file.','is-warning');
+  else if(accepted)notify(accepted+' fichier(s) ajouté(s) à la file.');
   renderQueue();drainQueue().catch(error=>notify(errorText(error),'is-error'));
   fileInput.value='';
 }
@@ -359,7 +403,7 @@ function renderQueue(){
     el('strong',entry.name,'asv2-queue-name',details);
     const statusText={LOCAL:'À envoyer',UPLOADING:entry.uploadProgress===null?'Envoi en cours':
       'Envoi '+entry.uploadProgress+' %',PENDING:'En attente',PROCESSING:'Traitement en cours',
-      READY:'Prêt',REVIEW_REQUIRED:'Vérification requise',FAILED:'Échec',
+      READY:'Prêt',REVIEW_REQUIRED:'Vérification requise',FAILED:'Échec',AUTH_REQUIRED:'Connexion requise',
       TIMED_OUT:'Suivi interrompu',UNCERTAIN:'Envoi à vérifier',ERROR:'Erreur'};
     el('span',statusText[entry.status]||entry.status,
       'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
@@ -377,15 +421,231 @@ function renderQueue(){
       'asv2-secondary asv2-queue-action',line,()=>openDrawer(entry));
     if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary asv2-queue-action',line,
       ()=>pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();}));
+    if(entry.status==='AUTH_REQUIRED')button(state.accountRef?'Reprendre après connexion':
+      'Recharger et redéposer','asv2-secondary asv2-queue-action',line,
+      ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
     if(entry.error)el('small',entry.error,'asv2-queue-error',details);
     if(entry.status==='LOCAL')button('Retirer','asv2-link',line,()=>{
       state.entries=state.entries.filter(item=>item!==entry);renderQueue();
     });
   }
+  scheduleHistoryRender();
+}
+let historyRenderScheduled=false;
+function scheduleHistoryRender(){
+  if(historyRenderScheduled)return;
+  historyRenderScheduled=true;
+  requestAnimationFrame(()=>{historyRenderScheduled=false;renderHistory();});
+}
+function setHistoryTab(source){
+  state.historyTab=source;state.selectedHistory.clear();
+  v2HistoryTab.classList.toggle('is-active',source==='v2');
+  anon2HistoryTab.classList.toggle('is-active',source==='anon2');
+  v2HistoryTab.setAttribute('aria-selected',String(source==='v2'));
+  anon2HistoryTab.setAttribute('aria-selected',String(source==='anon2'));
+  renderHistory();
+  loadHistory().catch(error=>{historyHint.textContent=errorText(error);});
+}
+function historyRows(source){
+  const rows=source==='v2'?[...state.history.v2]:[...state.history.anon2];
+  if(source==='v2'){
+    const known=new Map(rows.map((row,index)=>[String(row.jobId),index]));
+    for(const entry of state.entries){
+      if(!entry.jobId)continue;
+      const current={jobId:entry.jobId,fileName:entry.name,createdAt:entry.createdAt,
+        sizeBytes:entry.sizeBytes,status:entry.status,processingMode:entry.mode,
+        reviewRevision:entry.revision,protectionPolicy:{digest:entry.digest,
+          selectedTypes:entry.selectedTypes},listDigest:entry.listDigest};
+      const index=known.get(String(entry.jobId));
+      if(index===undefined)rows.push(current);
+      else{
+        const knownRow=rows[index];
+        const present=Object.fromEntries(Object.entries(current)
+          .filter(([,value])=>value!==null&&value!==undefined));
+        rows[index]={...knownRow,...present,
+          protectionPolicy:{...knownRow.protectionPolicy,...current.protectionPolicy,
+            selectedTypes:entry.selectedTypes??knownRow.protectionPolicy?.selectedTypes}};
+      }
+    }
+  }
+  return rows.sort((a,b)=>{
+    const left=Date.parse(a.createdAt||a.dtCreation||0)||0;
+    const right=Date.parse(b.createdAt||b.dtCreation||0)||0;
+    return right-left||String(b.jobId).localeCompare(String(a.jobId));
+  });
+}
+function historyStatus(row){return statusOf(row)||'PENDING';}
+function historyIcon(name,parent){
+  const picture=el('img',null,'asv2-nucleo-icon',parent);
+  picture.src=new URL(name+'.svg',iconsBase).href;
+  picture.alt='';picture.setAttribute('aria-hidden','true');
+}
+function historyAction(label,iconName,parent,handler){
+  const control=button('', 'asv2-history-icon-button',parent,handler);
+  control.setAttribute('aria-label',label);control.title=label;
+  historyIcon(iconName,control);
+  return control;
+}
+function historyDate(value){
+  const date=new Date(value||'');
+  return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat('fr-FR',
+    {dateStyle:'short',timeStyle:'short'}).format(date);
+}
+function historySize(value){
+  const size=Number(value);
+  return Number.isFinite(size)&&size>=0?(size<1024?size+' o':
+    (size/1024/1024>=1?(size/1024/1024).toFixed(1)+' Mio':(size/1024).toFixed(1)+' Kio')):'—';
+}
+function renderHistory(){
+  const source=state.historyTab;
+  const serverReady=source==='v2'?state.capabilities.historyV2===true:
+    state.capabilities.historyAnon2===true;
+  const rows=historyRows(source);
+  const availableIds=new Set(rows.filter(row=>historyStatus(row)==='READY')
+    .map(row=>String(row.jobId)));
+  for(const id of state.selectedHistory)if(!availableIds.has(id))state.selectedHistory.delete(id);
+  const ready=rows.filter(row=>historyStatus(row)==='READY').length;
+  historyCount.textContent=rows.length+' document'+(rows.length!==1?'s':'')+
+    (ready?' · '+ready+' prêt'+(ready!==1?'s':''):'');
+  historyHint.textContent=source==='anon2'&&!serverReady?
+    'L’ancien historique attend son adaptateur Java. Aucun job Anon2 n’est mélangé à V2.':
+    source==='v2'&&!serverReady?'Documents de cette session uniquement. L’historique durable attend la liste Java V2.':
+    'Historique fourni par Java pour le compte connecté.';
+  refreshHistoryButton.disabled=!serverReady;
+  moreHistoryButton.hidden=!serverReady||!state.history.cursors[source];
+  const zipReady=source==='v2'&&state.capabilities.bulkZipV2===true&&
+    typeof config.BULK_ZIP_V2_PATH==='string';
+  zipHistoryButton.disabled=!zipReady||state.selectedHistory.size<2;
+  zipHistoryButton.title=zipReady?'ZIP certifié des jobs READY sélectionnés':
+    'Disponible après raccordement du ZIP certifié côté Java.';
+  zipHistoryButton.textContent='Télécharger la sélection (.zip)'+
+    (state.selectedHistory.size?' · '+state.selectedHistory.size:'');
+  clear(historyTable);
+  const head=el('thead',null,null,historyTable),heading=el('tr',null,null,head);
+  for(const label of ['','N°','Fichier','Date','Taille','Mode','Statut','Actions']){
+    const th=el('th',label,null,heading);th.scope='col';
+  }
+  const body=el('tbody',null,null,historyTable);
+  if(!rows.length){const line=el('tr',null,null,body);
+    const cell=el('td',source==='v2'?'Aucun document V2 à afficher.':
+      'Ancien historique indisponible sur cette façade.',null,line);
+    cell.colSpan=8;cell.className='asv2-history-empty';return;}
+  rows.forEach((row,index)=>{
+    const line=el('tr',null,null,body),status=historyStatus(row);
+    const selectable=source==='v2'&&status==='READY'&&zipReady&&!!row.jobId;
+    const selectCell=el('td',null,null,line),box=el('input',null,null,selectCell);
+    box.type='checkbox';box.disabled=!selectable;box.checked=state.selectedHistory.has(String(row.jobId));
+    box.setAttribute('aria-label','Sélectionner '+(row.fileName||row.filename||row.jobId));
+    box.addEventListener('change',()=>{
+      if(box.checked)state.selectedHistory.add(String(row.jobId));
+      else state.selectedHistory.delete(String(row.jobId));
+      zipHistoryButton.disabled=state.selectedHistory.size<2;
+      zipHistoryButton.textContent='Télécharger la sélection (.zip) · '+state.selectedHistory.size;
+    });
+    el('td',String(index+1),null,line);
+    const nameCell=el('td',null,'asv2-history-name',line);
+    historyIcon('file',nameCell);el('span',row.fileName||row.filename||'Job '+row.jobId,null,nameCell);
+    el('td',historyDate(row.createdAt||row.dtCreation),null,line);
+    el('td',historySize(row.sizeBytes??row.fileLength),null,line);
+    el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudo':'Anonyme',null,line);
+    const statusCell=el('td',null,null,line);
+    el('span',({READY:'Prêt',REVIEW_REQUIRED:'À vérifier',FAILED:'Échec',PENDING:'En attente',
+      PROCESSING:'En cours',TIMED_OUT:'Suivi interrompu',UNCERTAIN:'Envoi à vérifier'})[status]||status,
+      'asv2-status asv2-status-'+status.toLowerCase(),statusCell);
+    const controls=el('td',null,'asv2-history-controls',line);
+    if(source==='v2'&&row.jobId){
+      historyAction(status==='READY'?'Afficher le résultat':'Afficher le job','eye',controls,
+        ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+      if(status==='READY')historyAction('Télécharger le document certifié','download',controls,
+        ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+      if(status==='READY'&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
+        historyAction('Télécharger la clé de la révision','key',controls,
+          ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
+    }
+  });
+}
+async function loadHistory(more=false){
+  const source=state.historyTab;
+  const enabled=source==='v2'?state.capabilities.historyV2===true:
+    state.capabilities.historyAnon2===true;
+  const path=source==='v2'?config.HISTORY_V2_PATH:config.HISTORY_ANON2_PATH;
+  if(!enabled||!path){renderHistory();return;}
+  const cursor=more?state.history.cursors[source]:null;
+  if(more&&!cursor)return;
+  const response=await api.listHistory(path,{cursor,limit:50});
+  if(!Array.isArray(response?.items))throw new Error('Historique Java invalide');
+  const prior=more?state.history[source]:[];
+  const merged=new Map(prior.map(row=>[String(row.jobId),row]));
+  for(const row of response.items)if(row&&row.jobId)merged.set(String(row.jobId),row);
+  state.history[source]=[...merged.values()];state.history[source+'Loaded']=true;
+  state.history.cursors[source]=response.nextCursor||null;
+  renderHistory();
+}
+async function entryForHistory(row){
+  let entry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
+  if(!entry){
+    if(!row.protectionPolicy?.digest)throw new Error('Empreinte de politique manquante dans l’historique');
+    entry={key:crypto.randomUUID(),file:null,name:row.fileName||row.filename||'Job '+row.jobId,
+      format:formatOf(row.fileName||row.filename),jobId:row.jobId,digest:row.protectionPolicy.digest,
+      listDigest:row.listDigest||null,mode:row.processingMode||'ANONYMIZE',
+      selectedTypes:row.protectionPolicy.selectedTypes||null,status:historyStatus(row),
+      createdAt:row.createdAt||row.dtCreation,sizeBytes:row.sizeBytes??row.fileLength,
+      revision:row.reviewRevision||null,review:null,regions:null,previewKind:'anon',page:1,zoom:1,
+      target:null,error:null,previewSerial:0};
+    state.entries.push(entry);saveSession();
+  }
+  const job=await api.status(entry.jobId);assertDigest(entry,job);
+  entry.status=statusOf(job);
+  if(['PENDING','PROCESSING'].includes(entry.status)){
+    renderQueue();pollEntry(entry).catch(error=>{
+      entry.status='TIMED_OUT';entry.error=errorText(error);renderQueue();});
+  }else await loadCurrent(entry);
+  return entry;
+}
+async function openHistoryRow(row){const entry=await entryForHistory(row);openDrawer(entry);}
+async function downloadHistoryRow(row){
+  const entry=await entryForHistory(row);
+  if(entry.status!=='READY')throw new Error('Ce job n’est plus READY');
+  await download(entry,true);
+}
+async function downloadHistoryKey(row){
+  const entry=await entryForHistory(row);
+  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
+  await downloadKey(entry);
+}
+async function downloadSelectedZip(){
+  if(state.historyTab!=='v2'||state.capabilities.bulkZipV2!==true||!config.BULK_ZIP_V2_PATH)
+    throw new Error('ZIP certifié non raccordé à Java');
+  const chosen=historyRows('v2').filter(row=>state.selectedHistory.has(String(row.jobId)));
+  if(chosen.length<2||chosen.length>12||chosen.some(row=>historyStatus(row)!=='READY'))
+    throw new Error('Sélectionnez entre 2 et 12 documents READY');
+  const jobs=[];
+  for(const row of chosen){
+    const entry=await entryForHistory(row);
+    if(entry.status!=='READY'||!entry.revision||
+        String(row.reviewRevision)!==String(entry.revision)||
+        row.protectionPolicy?.digest!==entry.digest||
+        (row.listDigest||null)!==(entry.listDigest||null))
+      throw new Error('Une ligne a changé : actualisez la sélection avant le ZIP');
+    jobs.push({jobId:entry.jobId,revision:entry.revision,policyDigest:entry.digest,
+      listDigest:entry.listDigest||null});
+  }
+  const response=await api.downloadZip(config.BULK_ZIP_V2_PATH,jobs);
+  if(response.headers.get('X-Agiloshield-Zip-Certified')!=='true'||
+      !/application\/zip/i.test(response.headers.get('Content-Type')||''))
+    throw new Error('ZIP non certifié par Java');
+  const url=URL.createObjectURL(await response.blob());
+  const link=el('a',null,null,document.body);link.href=url;link.download='agiloshield-v2-selection.zip';
+  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 function saveSession(){
-  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12)
-    .map(e=>({jobId:e.jobId,digest:e.digest,listDigest:e.listDigest||null,mode:e.mode}))));}
+  const known=state.entries.filter(entry=>entry.jobId);
+  const pending=known.filter(entry=>!isTerminal(entry.status)).slice(-12);
+  const slots=12-pending.length;
+  const recent=slots?known.filter(entry=>isTerminal(entry.status)).slice(-slots):[];
+  try{sessionStorage.setItem(storageKey,JSON.stringify([...pending,...recent]
+    .map(entry=>({jobId:entry.jobId,digest:entry.digest,
+      listDigest:entry.listDigest||null,mode:entry.mode}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
@@ -406,8 +666,12 @@ async function restoreSession(){
       entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
       if(isTerminal(entry.status))await loadCurrent(entry);
       else pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();});
-    }catch(error){entry.status='ERROR';entry.error=errorText(error);}
+    }catch(error){
+      if([403,404].includes(error?.status))state.entries=state.entries.filter(candidate=>candidate!==entry);
+      else{entry.status='ERROR';entry.error=errorText(error);}
+    }
   }
+  saveSession();
   renderQueue();
 }
 function assertDigest(entry,value){
@@ -426,10 +690,11 @@ async function confirmAction(text){
   });
 }
 async function drainQueue(){
-  if(!state.preferencesReady||state.running)return;
+  if(!state.preferencesReady||state.running||state.authPaused)return;
   state.running=true;
   try{
     while(true){
+      if(state.authPaused)break;
       const entry=state.entries.find(item=>item.status==='LOCAL');
       if(!entry)break;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
@@ -448,37 +713,79 @@ async function drainQueue(){
         if(entry.mode==='PSEUDONYMIZE'&&created.processingMode!==entry.mode)
           throw new Error('Mode de traitement différent de la sélection');
         entry.file=null;entry.lists=null;entry.status=statusOf(created)||'PENDING';
+        entry.createdAt=created.createdAt||entry.createdAt;
+        entry.sizeBytes=created.sizeBytes||entry.sizeBytes;
         saveSession();renderQueue();
         pollEntry(entry).catch(error=>{entry.status='TIMED_OUT';entry.error=errorText(error);
           renderQueue();renderDrawer(entry);});
       }catch(error){
+        if(error?.status===401){
+          state.authPaused=true;resumeAuthButton.hidden=false;
+          resumeAuthButton.textContent=state.accountRef?'Reprendre après connexion':
+            'Recharger puis redéposer les fichiers non envoyés';
+          entry.status='AUTH_REQUIRED';entry.error=state.accountRef?
+            'Session expirée. Reconnectez-vous puis reprenez la file.':
+            'Session expirée. Compte non vérifiable : rechargez puis redéposez les fichiers non envoyés.';
+          renderQueue();notify(entry.error,'is-warning');break;
+        }
         entry.lists=null;
         entry.status=entry.jobId||!error.status||error.status>=500?'UNCERTAIN':'ERROR';
         entry.error=entry.status==='UNCERTAIN'?
           'Le serveur a peut-être créé ce job. Aucun renvoi automatique ne sera effectué.':errorText(error);
         renderQueue();renderDrawer(entry);
-        if(error?.status===401)break;
       }
     }
   }catch(error){notify(errorText(error),'is-error');}
   finally{
     state.running=false;renderQueue();
-    if(state.entries.some(entry=>entry.status==='LOCAL'))
+    if(!state.authPaused&&state.entries.some(entry=>entry.status==='LOCAL'))
       queueMicrotask(()=>drainQueue().catch(error=>notify(errorText(error),'is-error')));
   }
 }
+async function resumeAfterAuth(){
+  if(!state.accountRef){location.reload();return;}
+  const response=await api.preferences();
+  if(response?.accountRef!==state.accountRef)
+    throw new Error('Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.');
+  state.authPaused=false;resumeAuthButton.hidden=true;
+  for(const entry of state.entries)if(entry.status==='AUTH_REQUIRED'){
+    entry.status='LOCAL';entry.error=null;
+  }
+  renderQueue();notify('Session rétablie. Reprise des fichiers non envoyés.');
+  for(const entry of state.entries)if(entry.status==='TIMED_OUT'&&entry.jobId)
+    pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();});
+  await drainQueue();
+}
+async function limitedStatus(jobId){
+  if(state.pollRequests>=2)await new Promise(resolve=>state.pollWaiters.push(resolve));
+  state.pollRequests++;
+  try{return await api.status(jobId);}
+  catch(error){
+    if(error?.status===401&&!state.authPaused){state.authPaused=true;
+      resumeAuthButton.hidden=false;
+      resumeAuthButton.textContent=state.accountRef?'Reprendre après connexion':
+        'Recharger puis redéposer les fichiers non envoyés';
+      notify('Session expirée. Reconnectez-vous puis reprenez la file.','is-warning');}
+    throw error;
+  }
+  finally{
+    state.pollRequests--;
+    state.pollWaiters.shift()?.();
+  }
+}
 async function pollEntry(entry){
-  const deadline=Date.now()+(config.MAX_WAIT_MS||180000);
-  while(Date.now()<deadline){
-    const job=await api.status(entry.jobId);assertDigest(entry,job);
+  if(entry.polling||!entry.jobId)return;
+  entry.polling=true;
+  try{while(!state.disposed){
+    const job=await limitedStatus(entry.jobId);assertDigest(entry,job);
     entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
     renderQueue();renderDrawer(entry);
     if(isTerminal(entry.status)){await loadCurrent(entry);return;}
     if(!['PENDING','PROCESSING'].includes(entry.status))throw new Error('Statut non reconnu : '+entry.status);
-    await new Promise(resolve=>setTimeout(resolve,config.POLL_MS||1500));
-  }
-  entry.status='TIMED_OUT';entry.error='Le job existe toujours. Reprenez son suivi depuis cette session.';
-  renderQueue();renderDrawer(entry);
+    const interval=document.visibilityState==='hidden'?Math.max(15000,config.POLL_MS||5000):
+      Math.max(1000,config.POLL_MS||5000);
+    await new Promise(resolve=>setTimeout(resolve,interval));
+  }}finally{entry.polling=false;}
 }
 async function loadCurrent(entry){
   const job=await api.status(entry.jobId);assertDigest(entry,job);
@@ -489,13 +796,24 @@ async function loadCurrent(entry){
   if(review)assertDigest(entry,review);
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   entry.review=review;entry.regions=regions;
-  if(currentStatus==='FAILED')entry.error=job.error?.code||job.errorCode||job.reason||null;
+  entry.error=currentStatus==='FAILED'?job.error?.code||job.errorCode||job.reason||null:null;
   entry.mode=job.processingMode||entry.mode;
   entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
   entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
+  entry.createdAt=job.createdAt||job.dtCreation||entry.createdAt;
+  entry.sizeBytes=job.sizeBytes||job.fileLength||entry.sizeBytes;
   entry.format=formatOf(entry.name)||entry.format;
   if(entry.previewKind==='origin'&&currentStatus!=='FAILED')entry.previewKind='anon';
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
+  if(currentStatus==='READY'&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
+    state.autoOpenedBatches.add(entry.batchId);
+    if(!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
+        !drop.classList.contains('is-dragging')&&
+        !document.activeElement?.matches?.('textarea, input[type="text"], input[type="search"]')&&
+        document.visibilityState==='visible')
+      openDrawer(entry);
+    else notify('Un résultat est prêt. Cliquez sur Afficher pour le consulter.');
+  }
 }
 function setMobileTab(value){
   workspace.classList.toggle('is-doc',value==='doc');workspace.classList.toggle('is-issues',value==='issues');
@@ -883,5 +1201,12 @@ async function downloadKey(entry){
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
 }
-window.addEventListener('pagehide',()=>{state.previewSerial++;state.previewCleanup?.();});
-loadPreferences().then(restoreSession);
+window.addEventListener('pagehide',()=>{state.disposed=true;state.previewSerial++;state.previewCleanup?.();});
+window.addEventListener('pageshow',event=>{
+  if(!event.persisted)return;
+  state.disposed=false;
+  for(const entry of state.entries)if(['PENDING','PROCESSING'].includes(entry.status))
+    pollEntry(entry).catch(error=>{entry.status='TIMED_OUT';entry.error=errorText(error);renderQueue();});
+});
+loadPreferences().then(async()=>{await restoreSession();await loadHistory();}).catch(error=>{
+  historyHint.textContent=errorText(error);renderHistory();});

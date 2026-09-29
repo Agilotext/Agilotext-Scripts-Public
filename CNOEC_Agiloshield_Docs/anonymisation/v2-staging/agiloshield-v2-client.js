@@ -46,6 +46,23 @@ export class AgiloShieldV2Client {
   }
   path(id, tail = '') { return `/jobs/${encodeURIComponent(String(id))}${tail}`; }
   json(path, options) { return this.request(path, options).then(r => r.json()); }
+  historyRoute(path) {
+    if (typeof path !== 'string' || !/^\/[a-z0-9/_-]+$/i.test(path) ||
+        path.includes('//') || path.includes('..')) throw new Error('Invalid Java history route');
+    return path;
+  }
+  listHistory(path, {cursor, limit = 50} = {}) {
+    const query = new URLSearchParams({limit:String(limit)});
+    if (cursor) query.set('cursor', cursor);
+    return this.json(this.historyRoute(path) + '?' + query);
+  }
+  downloadZip(path, jobs) {
+    if (!Array.isArray(jobs) || jobs.length < 2 || jobs.length > 12 ||
+        jobs.some(job => !job.jobId || !job.revision || !job.policyDigest))
+      throw new Error('Invalid certified ZIP selection');
+    return this.request(this.historyRoute(path), {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify({jobs})});
+  }
   preferences() { return this.json('/preferences'); }
   savePreferences(policy) { return this.json('/preferences', {method:'POST', body:JSON.stringify(policy), headers:{'Content-Type':'application/json'}}); }
   async upload(file, policy, {removeImages, anon2InclusionList, anon2ExclusionList,

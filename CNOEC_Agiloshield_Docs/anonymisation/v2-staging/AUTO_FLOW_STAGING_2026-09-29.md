@@ -1,7 +1,9 @@
 # AgiloShield V2 — dépôt automatique, contrat de recette
 
-La branche front ajoute le dépôt automatique et l'ouverture du document sur
-**Afficher/Vérifier**. Elle ne modifie ni Python, ni Java, ni la page Webflow
+La branche front ajoute le dépôt automatique et ouvre une seule fois le premier
+résultat `READY` d'un lot, si l'utilisateur n'est pas déjà occupé dans un panneau
+ou un réglage. Les autres résultats restent accessibles par **Afficher/Vérifier**.
+Elle ne modifie ni Python, ni Java, ni la page Webflow
 publiée. La façade Java actuelle relaie encore le service Python HTTP ; le
 worker par fichiers `codeSha=6498642a2702cbe5` est une autre empreinte.
 Contrôle lecture seule du 29 septembre : aucun `agiloshield_main.py` en cours
@@ -14,10 +16,18 @@ comme passées de bout en bout.
 La réponse `GET /preferences` doit contenir `protectionPolicy` avec son
 `digest`. Elle reste autoritaire, y compris pour `selectedTypes: []`. Un dépôt
 copie cette politique, le mode et les listes pour chaque fichier. Les uploads
-partent un par un ; chaque job accepté est ensuite suivi indépendamment.
+partent un par un ; les appels de suivi des jobs acceptés sont bornés à deux
+requêtes simultanées. Douze fichiers peuvent être actifs ; une fois terminés,
+un nouveau lot peut être déposé. Les refus sont expliqués par fichier. Un `401`
+suspend les envois restants jusqu'à une reprise explicite. Une réponse de
+création perdue n'est jamais renvoyée automatiquement.
 Pendant l'upload, un pourcentage n'apparaît que si le navigateur reçoit les
 octets réellement transférés. `PENDING` et `PROCESSING` restent indéterminés.
-Le panneau ne s'ouvre qu'au clic sur Afficher, Vérifier ou Voir l'échec.
+Le premier `READY` peut ouvrir le panneau ; les autres documents ne prennent
+jamais sa place. La table sous le dépôt liste les jobs de cette session. Sans
+capacité de liste Java, elle n'est **pas** un historique durable. Le ZIP et
+l'ancien historique restent désactivés jusqu'aux routes Java décrites dans
+`HISTORY_BATCH_STAGING_2026-09-29.md`.
 
 Pour ouvrir les listes, Java doit annoncer dans la même réponse :
 
