@@ -82,7 +82,9 @@
       ".agilo-solo-document__status.is-error{color:#b42318;}" +
       ".agilo-solo-document__links{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;font-size:.82rem;}" +
       ".agilo-solo-document__links a,.agilo-solo-document__links button{color:var(--agilo-primary,#174a96);text-decoration:underline;background:none;border:0;padding:0;font:inherit;cursor:pointer;}" +
-      ".agilo-solo-document__links button:disabled{opacity:.55;cursor:not-allowed;}";
+      "#agilo-solo-new-draft{display:block;margin:.1rem auto .75rem;padding:.4rem .7rem;background:#fff;color:var(--agilo-primary,#174a96);border:1px solid currentColor;border-radius:7px;font:inherit;font-size:.82rem;cursor:pointer;}" +
+      "#agilo-solo-new-draft[hidden]{display:none!important;}" +
+      "#agilo-solo-new-draft:disabled{opacity:.55;cursor:not-allowed;}";
     document.head.appendChild(style);
   }
 
@@ -103,7 +105,7 @@
     var review = root.querySelector(".agilo-solo-document__review");
     var editorLink = root.querySelector(".agilo-solo-document__editor");
     var retry = root.querySelector(".agilo-solo-document__retry");
-    var fresh = root.querySelector(".agilo-solo-document__new");
+    var fresh = document.getElementById("agilo-solo-new-draft");
     var pending = state.submission &&
       (state.submission.status === "uncertain" || state.submission.status === "pending");
     var conflict = state.submission && state.submission.status === "conflict";
@@ -115,8 +117,10 @@
     editorLink.hidden = !done;
     if (done) editorLink.href = editorUrl(state.submission.jobId, state.submission.edition);
     retry.hidden = !pending || state.sending;
-    fresh.hidden = !state.email || !(state.submission || state.audioCount || hasText);
-    fresh.disabled = state.recording || state.saving || state.sending || !state.ready;
+    if (fresh) {
+      fresh.hidden = !state.email || !(state.submission || state.audioCount || hasText);
+      fresh.disabled = state.recording || state.saving || state.sending || !state.ready;
+    }
     btn.disabled = state.recording || state.saving || state.sending || pending || conflict || done ||
       !state.ready || !state.email || state.serverBlocked || !!state.storageError ||
       !state.audioCount || !hasText || !selected ||
@@ -406,15 +410,23 @@
       '<p class="agilo-solo-document__status" role="status" aria-live="polite"></p>' +
       '<div class="agilo-solo-document__links">' +
       '<a class="agilo-solo-document__editor" hidden>Ouvrir ce document</a>' +
-      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button>' +
-      '<button type="button" class="agilo-solo-document__new" hidden>Nouvelle dictée solo</button></div>';
+      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button></div>';
     var after = document.getElementById("agilo-carnet-after");
     var secondary = panel.querySelector(".dictee-secondary-actions");
     if (after && after.parentNode) after.parentNode.insertBefore(root, after.nextSibling);
     else if (secondary && secondary.parentNode) secondary.parentNode.insertBefore(root, secondary);
     else ta.parentNode.insertBefore(root, ta.nextSibling);
+    if (after && !document.getElementById("agilo-solo-new-draft")) {
+      var newDraft = document.createElement("button");
+      newDraft.id = "agilo-solo-new-draft";
+      newDraft.type = "button";
+      newDraft.textContent = "Nouvelle dictée solo";
+      newDraft.hidden = true;
+      newDraft.addEventListener("click", reset);
+      var pickerHost = after.querySelector("#agilo-carnet-picker-host");
+      after.insertBefore(newDraft, pickerHost || null);
+    }
     root.querySelector(".agilo-solo-document__button").addEventListener("click", create);
-    root.querySelector(".agilo-solo-document__new").addEventListener("click", reset);
     root.querySelector(".agilo-solo-document__retry").addEventListener("click", function () {
       if (state.submission && (state.submission.status === "uncertain" ||
           state.submission.status === "pending") && !state.sending) send(state.submission);

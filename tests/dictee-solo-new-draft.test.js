@@ -37,7 +37,7 @@ function setup(status, confirmed = true) {
     localStorage: { removeItem: key => storage.delete(key), setItem: (key, value) => storage.set(key, value) },
     confirm: message => { calls.push('confirm:' + message); return confirmed; },
     Event: class Event { constructor(type) { this.type = type; } },
-    document: { querySelector: () => ta }
+    document: { querySelector: () => ta, getElementById: id => el(id) }
   };
   vm.runInNewContext(source.replace(marker,
     '  global.__test = { state, reset, setRoot: function (value) { root = value; }, update };\n' + marker), sandbox);
@@ -52,7 +52,7 @@ function setup(status, confirmed = true) {
 
 test('accepted draft exposes a fresh start and clears old local draft after confirmation', async () => {
   const ctx = setup('accepted');
-  assert.equal(ctx.el('.agilo-solo-document__new').hidden, false);
+  assert.equal(ctx.el('agilo-solo-new-draft').hidden, false);
   assert.equal(ctx.controller.canStart(), false);
   await ctx.test.reset();
   assert.deepEqual(ctx.calls.slice(0, 4), [
