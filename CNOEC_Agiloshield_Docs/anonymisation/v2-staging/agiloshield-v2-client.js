@@ -136,6 +136,12 @@ export class AgiloShieldV2Client {
       commandId:crypto.randomUUID(), page, rect, reason, sourceRevision, documentId,
       ...(occurrenceId ? {occurrenceId} : {maskOccurrenceId})});
   }
+  addManualRegion(id, digest, {revision, page, rect, reason = 'ZONE_MASQUEE_MANUELLEMENT'}) {
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite) ||
+        rect[0] >= rect[2] || rect[1] >= rect[3]) throw new Error('Invalid PDF rectangle');
+    return this.command(id, digest, {op:'ADD_MANUAL_REGION', revision,
+      commandId:crypto.randomUUID(), page, rect, reason});
+  }
   execute(id, digest, revision) {
     return this.json(this.path(id, '/review/execute'), {method:'POST', digest,
       headers:{'Content-Type':'application/json'}, body:JSON.stringify({revision})});

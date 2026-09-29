@@ -55,6 +55,10 @@ assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
   occurrenceId:'o1', sourceRevision:'s1', documentId:'doc', reason:'test'});
 assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');
+await client.addManualRegion(7, 'd1', {revision:'r2', page:1, rect:[5,6,15,16]});
+assert.equal(JSON.parse(seen.at(-1).options.body).op, 'ADD_MANUAL_REGION');
+assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, undefined);
+assert.deepEqual(JSON.parse(seen.at(-1).options.body).rect, [5,6,15,16]);
 job.reviewRevision = 'r3';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'}), /Stale/);
 job.reviewRevision='r2';

@@ -86,10 +86,7 @@ const safeStatus = status => copy.status[status]||copy.status.ERROR;
 
 const shell=el('section',null,'asv2-shell',mount);
 const head=el('header',null,'asv2-landing-head',shell);
-const brand=el('div',null,'asv2-brand-row',head);
-el('span',copy.brand,'asv2-brand',brand);
-el('span',copy.testBadge,'asv2-test-badge',brand);
-el('h2',copy.heading,null,head);
+el('h1',copy.heading,'asv2-main-title',head);
 el('p',copy.intro,null,head);
 const tourReplay=button('Comment ça marche ?','asv2-link asv2-tour-replay',head,()=>startTour(true));
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);
@@ -209,6 +206,32 @@ drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
 el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv2-drop-subtitle',drop);
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
+const lastDocCard=el('div',null,'asv2-last-doc',filePane);lastDocCard.hidden=true;
+const lastDocInfo=el('div',null,'asv2-last-doc-info',lastDocCard);
+const lastDocHead=el('div',null,'asv2-last-doc-head',lastDocInfo);
+el('span','Dernier document','asv2-last-doc-badge',lastDocHead);
+const lastDocName=el('strong','','asv2-last-doc-name',lastDocHead);
+const lastDocStatus=el('span','','asv2-last-doc-status',lastDocInfo);
+const lastDocAction=button('Consulter le document','asv2-secondary asv2-last-doc-action',lastDocCard);
+function updateLastDocCard(entry){
+  if(!entry||!isTerminal(entry.status))return;
+  lastDocName.textContent=entry.name;
+  if(entry.status==='READY'){
+    lastDocStatus.textContent='Résultat prêt selon vos réglages';
+    lastDocAction.textContent='Consulter le résultat';
+    lastDocAction.className='asv2-primary asv2-last-doc-action';
+  } else if(entry.status==='REVIEW_REQUIRED'){
+    lastDocStatus.textContent='Vérification nécessaire';
+    lastDocAction.textContent='Vérifier le document';
+    lastDocAction.className='asv2-secondary asv2-last-doc-action';
+  } else {
+    lastDocStatus.textContent='Traitement impossible';
+    lastDocAction.textContent='Voir les détails';
+    lastDocAction.className='asv2-secondary asv2-last-doc-action';
+  }
+  lastDocAction.onclick=()=>openDrawer(entry);
+  lastDocCard.hidden=false;
+}
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
 const mobileSettings=el('div',null,'asv2-mobile-settings',filePane);
@@ -445,11 +468,14 @@ function setEnabled(yes){
 function updatePolicySummary(){
   const types=state.currentPolicy?.selectedTypes;
   typeCount.textContent=Array.isArray(types)?types.length?
-    types.length+' catégorie'+(types.length>1?'s':'')+' sur 13':
-    'Aucune catégorie sélectionnée':'…';
+    types.length+'/13':
+    '0/13 — aucune catégorie sélectionnée':'…';
   mobileSettingsText.textContent='Mode : '+(pseudoRadio.checked?'Pseudonymiser':'Anonymiser')+
     ' · Données à masquer : '+policySummary(types);
   emptyPolicyWarning.hidden=!Array.isArray(types)||types.length>0;
+  if(!emptyPolicyWarning.hidden){
+    emptyPolicyWarning.textContent='0/13 — aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.';
+  }
 }
 async function loadPreferences(){
   state.currentPolicy=null;listsReady=false;pseudoReady=false;
@@ -957,8 +983,9 @@ async function loadCurrent(entry){
     entry.announcedComplete=true;
     notify(entry.name+' : '+safeStatus(currentStatus)+'. Retrouvez ce fichier dans « '+
       (state.capabilities.historyV2===true?copy.historyDurable:copy.historySession)+' ».');
+    updateLastDocCard(entry);
   }
-  if(currentStatus==='READY'&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
+  if((currentStatus==='READY'||currentStatus==='REVIEW_REQUIRED')&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
     state.autoOpenedBatches.add(entry.batchId);
     if(!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
         !drop.classList.contains('is-dragging')&&
@@ -974,6 +1001,7 @@ function setMobileTab(value){
 }
 function openDrawer(entry){
   if(!entry)return;state.active=entry.key;
+  try{sessionStorage.setItem('asv2-open-drawer-key',entry.key);}catch(_){}
   if(!state.drawerOpen){state.lastFocus=document.activeElement;drawer.hidden=false;state.drawerOpen=true;
     requestAnimationFrame(()=>drawer.classList.add('is-open'));document.body.classList.add('asv2-drawer-open');close.focus();}
   setMobileTab('doc');renderDrawer(entry);renderPreview(entry).catch(showError);
@@ -981,6 +1009,7 @@ function openDrawer(entry){
 function closeDrawer(){
   if(!state.drawerOpen)return;state.drawerOpen=false;drawer.classList.remove('is-open');
   document.body.classList.remove('asv2-drawer-open');state.previewSerial++;
+  try{sessionStorage.removeItem('asv2-open-drawer-key');}catch(_){}
   if(state.previewCleanup)state.previewCleanup();
   setTimeout(()=>{if(!state.drawerOpen)drawer.hidden=true;},260);
   if(state.lastFocus?.isConnected)state.lastFocus.focus();
@@ -1021,27 +1050,44 @@ function renderIssues(entry){
   const review=entry.review;
   if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
-  const reasons=review.qaReasons||review.reasons||[];
-  if(reasons.length)el('p',reasons.map(reason=>copy.issueReason[typeof reason==='string'?
-    reason:reason?.code]||'Un passage demande une vérification.').join(' '),
-    'asv2-reasons',issuePane);
+
+  const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
   const listProblems=Array.isArray(review.listProblems)?review.listProblems:[];
-  if(listProblems.length)el('h4',listProblems.length+' conflit(s) de listes à vérifier',null,issuePane);
-  for(const problem of listProblems){
-    const card=el('article',null,'asv2-issue',issuePane);
-    el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
-      'Une règle de conservation contredit un masquage nécessaire':
-      'Un passage demandé n’a pas été localisé avec certitude',null,card);
-    if(problem.occurrenceId&&review.reviewable){
-      const actions=el('div',null,'asv2-issue-actions',card);
-      for(const action of ['KEEP','MASK'])button(copy.reviewAction[action],'asv2-secondary',actions,
-        ()=>decide(entry,problem.occurrenceId,action));
-    }else el('small','La correction de ce format n’est pas disponible ici. Ajustez les règles et déposez un nouveau fichier.',null,card);
+  const allRows=Array.isArray(review.occurrences)?review.occurrences:[];
+  const actionRequiredRows=allRows.filter(r=>r.action==='REVIEW'||r.privacyAction==='REVIEW');
+  const otherRows=allRows.filter(r=>r.action!=='REVIEW'&&r.privacyAction!=='REVIEW');
+
+  const controls=el('div',null,'asv2-issues-controls',issuePane);
+  const countersText=[
+    unresolved.length?unresolved.length+' obligation(s) à localiser':null,
+    listProblems.length?listProblems.length+' conflit(s)':null,
+    allRows.length?allRows.length+' passage(s) repéré(s)':null
+  ].filter(Boolean).join(' · ');
+  if(countersText)el('div',countersText,'asv2-issues-counters',controls);
+
+  const searchInput=el('input',null,'asv2-issues-search',controls);
+  searchInput.type='search';
+  searchInput.placeholder='Rechercher un passage…';
+  searchInput.value=entry.issueSearchQuery||'';
+
+  const pagesSet=new Set();
+  for(const r of allRows)if(r.page)pagesSet.add(Number(r.page));
+  for(const u of unresolved)if(u.page)pagesSet.add(Number(u.page));
+  let pageSelect=null;
+  if(pagesSet.size>1){
+    pageSelect=el('select',null,'asv2-issues-page-filter',controls);
+    const allOpt=el('option','Toutes les pages',null,pageSelect);allOpt.value='all';
+    for(const p of [...pagesSet].sort((a,b)=>a-b)){
+      const opt=el('option','Page '+p,null,pageSelect);opt.value=String(p);
+    }
+    pageSelect.value=entry.issuePageFilter||'all';
   }
-  const rows=Array.isArray(review.occurrences)?review.occurrences:[];
-  for(const row of rows){
-    if(!row.id)continue;
-    const card=el('article',null,'asv2-issue',issuePane);
+
+  const issuesContent=el('div',null,'asv2-issues-content',issuePane);
+
+  function renderOccurrenceCard(row,parent){
+    if(!row.id)return;
+    const card=el('article',null,'asv2-issue',parent);
     const top=el('div',null,'asv2-issue-head',card);
     el('span',labels[row.category||row.semanticType]||'Donnée repérée','asv2-badge',top);
     if(row.page)el('span','Page '+row.page,'asv2-muted',top);
@@ -1056,21 +1102,104 @@ function renderIssues(entry){
       control.disabled=!review.reviewable;
     }
   }
-  const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
-  if(unresolved.length)el('h4',unresolved.length+' obligation(s) sans région vérifiée',null,issuePane);
-  for(const target of unresolved){
-    if(!target.maskOccurrenceId||!target.page)continue;
-    const card=el('article',null,'asv2-issue asv2-unresolved',issuePane);
-    el('strong',(labels[target.category||target.semanticType]||'Donnée à masquer')+
-      ' · page '+target.page,null,card);
-    const control=button('Indiquer la zone à masquer','asv2-secondary',card,()=>{
-      entry.target=target;entry.page=Number(target.page);entry.previewKind='origin';
-      setMobileTab('doc');renderPreview(entry).catch(showError);
-      drawerMessage('Tracez la zone correspondant uniquement à ce passage.','is-warning');
+
+  function renderIssuesContent(){
+    clear(issuesContent);
+    const q=(entry.issueSearchQuery||'').toLowerCase();
+    const pf=entry.issuePageFilter||'all';
+
+    // 1. Problèmes demandant action en premier
+    const filteredUnresolved=unresolved.filter(u=>pf==='all'||String(u.page)===pf);
+    if(filteredUnresolved.length){
+      el('h4',filteredUnresolved.length+' obligation(s) sans région vérifiée',null,issuesContent);
+      for(const target of filteredUnresolved){
+        if(!target.maskOccurrenceId||!target.page)continue;
+        const card=el('article',null,'asv2-issue asv2-unresolved',issuesContent);
+        el('strong',(labels[target.category||target.semanticType]||'Donnée à masquer')+
+          ' · page '+target.page,null,card);
+        const control=button('Indiquer la zone à masquer','asv2-secondary',card,()=>{
+          entry.target=target;entry.manualMaskActive=false;entry.page=Number(target.page);entry.previewKind='origin';
+          setMobileTab('doc');renderPreview(entry).catch(showError);
+          drawerMessage('Tracez la zone correspondant uniquement à ce passage.','is-warning');
+        });
+        control.disabled=!review.reviewable||entry.format!=='pdf';
+      }
+    }
+
+    if(listProblems.length){
+      el('h4',listProblems.length+' conflit(s) de listes à vérifier',null,issuesContent);
+      for(const problem of listProblems){
+        const card=el('article',null,'asv2-issue',issuesContent);
+        el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
+          'Une règle de conservation contredit un masquage nécessaire':
+          'Un passage demandé n’a pas été localisé avec certitude',null,card);
+        if(problem.occurrenceId&&review.reviewable){
+          const actions=el('div',null,'asv2-issue-actions',card);
+          for(const action of ['KEEP','MASK'])button(copy.reviewAction[action],'asv2-secondary',actions,
+            ()=>decide(entry,problem.occurrenceId,action));
+        }else el('small','La correction de ce format n’est pas disponible ici. Ajustez les règles et déposez un nouveau fichier.',null,card);
+      }
+    }
+
+    const filteredActionRows=actionRequiredRows.filter(r=>{
+      if(pf!=='all'&&String(r.page)!==pf)return false;
+      if(q&&!(r.text||r.surface||'').toLowerCase().includes(q))return false;
+      return true;
     });
-    control.disabled=!review.reviewable||entry.format!=='pdf';
+    if(filteredActionRows.length){
+      el('h4',filteredActionRows.length+' décision(s) requise(s)',null,issuesContent);
+      for(const row of filteredActionRows)renderOccurrenceCard(row,issuesContent);
+    }
+
+    // 2. Blocages globaux du document ensuite
+    const rawReasons=review.qaReasons||review.reasons||[];
+    const uniqueReasons=[...new Set(rawReasons.map(r=>typeof r==='string'?r:r?.code).filter(Boolean))];
+    if(uniqueReasons.length){
+      el('h4','Vérifications globales',null,issuesContent);
+      const reasonText=uniqueReasons.map(code=>copy.issueReason[code]||'Un élément du document demande une vérification.').join(' ');
+      el('p',reasonText,'asv2-reasons',issuesContent);
+    }
+
+    // 3. Autres occurrences regroupées par catégorie
+    const filteredOtherRows=otherRows.filter(r=>{
+      if(pf!=='all'&&String(r.page)!==pf)return false;
+      if(q&&!(r.text||r.surface||'').toLowerCase().includes(q))return false;
+      return true;
+    });
+    if(filteredOtherRows.length){
+      const groups=new Map();
+      for(const row of filteredOtherRows){
+        const cat=row.category||row.semanticType||'PII';
+        if(!groups.has(cat))groups.set(cat,[]);
+        groups.get(cat).push(row);
+      }
+      el('h4','Autres données détectées ('+filteredOtherRows.length+')',null,issuesContent);
+      for(const [cat,catRows] of groups.entries()){
+        const details=el('details',null,'asv2-issue-group',issuesContent);
+        const summary=el('summary',null,null,details);
+        el('span',labels[cat]||cat,null,summary);
+        el('span',catRows.length+' passage'+(catRows.length>1?'s':''),'asv2-count',summary);
+        const groupContent=el('div',null,'asv2-issue-group-content',details);
+        for(const row of catRows)renderOccurrenceCard(row,groupContent);
+      }
+    }
+
+    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&!filteredOtherRows.length&&!uniqueReasons.length){
+      el('p','Aucune correction interactive disponible ou aucun passage ne correspond aux filtres.','asv2-muted',issuesContent);
+    }
   }
-  if(!rows.length&&!unresolved.length&&!listProblems.length)el('p','Aucune correction interactive disponible.','asv2-muted',issuePane);
+
+  searchInput.addEventListener('input',()=>{
+    entry.issueSearchQuery=searchInput.value.toLowerCase().trim();
+    renderIssuesContent();
+  });
+  if(pageSelect){
+    pageSelect.addEventListener('change',()=>{
+      entry.issuePageFilter=pageSelect.value;
+      renderIssuesContent();
+    });
+  }
+  renderIssuesContent();
 }
 function renderFooter(entry){
   clear(drawerFooter);
@@ -1156,12 +1285,15 @@ async function renderPreview(entry){
   clear(viewerToolbar);clear(viewerBody);
   const kind=entry.previewKind;
   const switcher=el('div',null,'asv2-preview-switch',viewerToolbar);
-  for(const [label,value] of [['Original','origin'],['Résultat courant','anon']]){
+  const options=[['Original','origin'],['Résultat courant','anon']];
+  if(entry.format==='pdf'&&isTerminal(entry.status))options.push(['Comparer côte à côte','compare']);
+  for(const [label,value] of options){
     const control=button(label,'asv2-secondary'+(value===kind?' is-active':''),switcher,()=>{
       entry.previewKind=value;renderPreview(entry).catch(showError);
-    });control.disabled=value==='anon'&&!isTerminal(entry.status);
+    });control.disabled=(value==='anon'||value==='compare')&&!isTerminal(entry.status);
   }
   el('span',kind==='origin'?'Original — données sensibles visibles':
+    kind==='compare'?'Comparaison côte à côte — original vs résultat':
     entry.status==='READY'?'Résultat · prêt selon vos réglages':
       'Résultat · non vérifié, des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
@@ -1169,6 +1301,10 @@ async function renderPreview(entry){
   try{
     if(['xlsx','pptx'].includes(entry.format)){
       loading.textContent='Aperçu intégré indisponible pour ce format. Consultez le statut du traitement et téléchargez le résultat s’il est prêt.';
+      return;
+    }
+    if(kind==='compare'&&entry.format==='pdf'){
+      await renderPdfCompare(entry,serial);
       return;
     }
     const source=await previewBytes(entry,kind);
@@ -1185,6 +1321,67 @@ async function renderPreview(entry){
     else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
   }catch(error){if(serial===state.previewSerial){clear(viewerBody);el('p',errorText(error),'asv2-error',viewerBody);}}
 }
+async function renderPdfCompare(entry,serial){
+  if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
+  const [origSrc,anonSrc]=await Promise.all([previewBytes(entry,'origin'),previewBytes(entry,'anon')]);
+  if(serial!==state.previewSerial)return;
+  const [origPdf,anonPdf]=await Promise.all([
+    window.pdfjsLib.getDocument({data:new Uint8Array(origSrc.bytes),enableScripting:false}).promise,
+    window.pdfjsLib.getDocument({data:new Uint8Array(anonSrc.bytes),enableScripting:false}).promise
+  ]);
+  if(serial!==state.previewSerial){origPdf.destroy();anonPdf.destroy();return;}
+  state.previewCleanup=()=>{origPdf.destroy();anonPdf.destroy();};
+  const maxPages=Math.min(origPdf.numPages,anonPdf.numPages);
+  entry.page=Math.min(Math.max(1,entry.page),maxPages);
+
+  clear(viewerBody);
+  const nav=el('div',null,'asv2-pdf-nav',viewerBody);
+  const prev=button('←','asv2-secondary',nav,()=>{entry.page--;draw().catch(showError);});
+  const pageLabel=el('span','',null,nav);
+  const next=button('→','asv2-secondary',nav,()=>{entry.page++;draw().catch(showError);});
+  const less=button('−','asv2-secondary',nav,()=>{entry.zoom=Math.max(.5,entry.zoom-.2);draw().catch(showError);});
+  const zoomLabel=el('span','',null,nav);
+  const more=button('+','asv2-secondary',nav,()=>{entry.zoom=Math.min(1.8,entry.zoom+.2);draw().catch(showError);});
+
+  const compareContainer=el('div',null,'asv2-compare-container asv2-page-scroll',viewerBody);
+  const colOrig=el('div',null,'asv2-compare-col',compareContainer);
+  el('span','Original — données sensibles visibles','asv2-compare-title',colOrig);
+  const wrapOrig=el('div',null,'asv2-page',colOrig);
+
+  const colAnon=el('div',null,'asv2-compare-col',compareContainer);
+  el('span',entry.status==='READY'?'Résultat courant certifié':'Résultat courant non vérifié','asv2-compare-title',colAnon);
+  const wrapAnon=el('div',null,'asv2-page',colAnon);
+
+  async function draw(){
+    if(serial!==state.previewSerial)return;
+    clear(wrapOrig);clear(wrapAnon);
+    pageLabel.textContent='Page '+entry.page+' / '+maxPages;
+    prev.disabled=entry.page<=1;next.disabled=entry.page>=maxPages;
+    less.disabled=entry.zoom<=.5;more.disabled=entry.zoom>=1.8;
+    zoomLabel.textContent=Math.round(entry.zoom*100)+' %';
+
+    const [pageO,pageA]=await Promise.all([origPdf.getPage(entry.page),anonPdf.getPage(entry.page)]);
+    const baseO=pageO.getViewport({scale:1});
+    const fit=Math.min(1.5,Math.max(.35,((compareContainer.clientWidth/2)-30||400)/baseO.width));
+    const viewportO=pageO.getViewport({scale:fit*entry.zoom});
+    const viewportA=pageA.getViewport({scale:fit*entry.zoom});
+    const pixelRatio=Math.min(window.devicePixelRatio||1,2);
+
+    const canvasOrig=el('canvas',null,null,wrapOrig);
+    canvasOrig.width=Math.ceil(viewportO.width*pixelRatio);canvasOrig.height=Math.ceil(viewportO.height*pixelRatio);
+    canvasOrig.style.width=viewportO.width+'px';canvasOrig.style.height=viewportO.height+'px';
+    const ctxO=canvasOrig.getContext('2d');ctxO.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+    await pageO.render({canvasContext:ctxO,viewport:viewportO}).promise;
+
+    const canvasAnon=el('canvas',null,null,wrapAnon);
+    canvasAnon.width=Math.ceil(viewportA.width*pixelRatio);canvasAnon.height=Math.ceil(viewportA.height*pixelRatio);
+    canvasAnon.style.width=viewportA.width+'px';canvasAnon.style.height=viewportA.height+'px';
+    const ctxA=canvasAnon.getContext('2d');ctxA.setTransform(pixelRatio,0,0,pixelRatio,0,0);
+    await pageA.render({canvasContext:ctxA,viewport:viewportA}).promise;
+  }
+  await draw();
+}
 async function renderPdf(entry,bytes,kind,serial){
   if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
@@ -1199,6 +1396,16 @@ async function renderPdf(entry,bytes,kind,serial){
   const less=button('−','asv2-secondary',nav,()=>{entry.zoom=Math.max(.6,entry.zoom-.2);draw().catch(showError);});
   const zoomLabel=el('span','',null,nav);
   const more=button('+','asv2-secondary',nav,()=>{entry.zoom=Math.min(2,entry.zoom+.2);draw().catch(showError);});
+  if(kind==='origin'&&entry.format==='pdf'&&entry.review?.reviewable){
+    button(entry.manualMaskActive?'Annuler le masquage':'Masquer une zone',
+      'asv2-secondary asv2-manual-mask-btn'+(entry.manualMaskActive?' is-active':''),nav,()=>{
+        entry.manualMaskActive=!entry.manualMaskActive;
+        entry.target=null;
+        if(entry.manualMaskActive)drawerMessage('Tracez un rectangle sur l’original pour masquer cette zone.','is-warning');
+        else drawerMessage(null);
+        draw().catch(showError);
+      });
+  }
   const pageBox=el('div',null,'asv2-page-scroll',viewerBody);
   async function draw(){
     if(serial!==state.previewSerial)return;
@@ -1232,15 +1439,15 @@ async function renderPdf(entry,bytes,kind,serial){
       if(!regions.length)el('p','La région exacte de cette occurrence n’est pas vérifiée pour cet aperçu.',
         'asv2-geometry-note',pageBox);
     }
-    if(entry.target&&Number(entry.target.page)===entry.page&&entry.review?.reviewable){
+    if(((entry.target&&Number(entry.target.page)===entry.page)||entry.manualMaskActive)&&entry.review?.reviewable){
       if((page.rotate||0)!==0||!pageGeometry(entry,entry.page,base))
         el('p','Tracé indisponible : géométrie de la page non garantie.','asv2-geometry-note',pageBox);
-      else bindDrawing(entry,overlay,base,serial);
+      else bindDrawing(entry,overlay,base,serial,entry.manualMaskActive);
     }
   }
   await draw();
 }
-function bindDrawing(entry,overlay,base,serial){
+function bindDrawing(entry,overlay,base,serial,isManualFree=false){
   overlay.classList.add('is-drawing');let start=null,ghost=null;
   const point=event=>{
     const box=overlay.getBoundingClientRect();
@@ -1263,6 +1470,18 @@ function bindDrawing(entry,overlay,base,serial){
       Math.max(start[0],end[0]),Math.max(start[1],end[1])];
     start=null;ghost?.remove();ghost=null;
     if(rect[2]-rect[0]<4||rect[3]-rect[1]<4)return;
+    if(isManualFree){
+      if(!await confirmAction('Masquer manuellement la zone tracée sur cette page, puis vérifier à nouveau le document ?'))return;
+      try{
+        entry.manualMaskActive=false;
+        drawerMessage('Application du masquage manuel…');
+        const receipt=await api.addManualRegion(entry.jobId,entry.digest,{revision:entry.revision,
+          page:entry.page,rect:rect.map(value=>Math.round(value*100)/100),
+          reason:'ZONE_MASQUEE_MANUELLEMENT'});
+        await apply(entry,receipt.revision);
+      }catch(error){showError(error);}
+      return;
+    }
     const target=entry.target;
     if(!target||!await confirmAction('Masquer uniquement la zone tracée pour ce passage, puis vérifier à nouveau le document ?'))return;
     try{
@@ -1370,6 +1589,16 @@ async function downloadKey(entry){
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
 }
+function suppressGeneralTourLauncher(){
+  try{
+    document.querySelectorAll('[data-agilo-tour="start"], [data-agilo-tour], .agilo-tour-launcher, #agilo-tour-start').forEach(node=>{
+      node.style.setProperty('display','none','important');
+    });
+  }catch(_){}
+}
+suppressGeneralTourLauncher();
+setInterval(suppressGeneralTourLauncher, 1000);
+
 window.addEventListener('pagehide',()=>{state.disposed=true;state.previewSerial++;state.previewCleanup?.();});
 window.addEventListener('pageshow',event=>{
   if(!event.persisted)return;
@@ -1377,5 +1606,15 @@ window.addEventListener('pageshow',event=>{
   for(const entry of state.entries)if(['PENDING','PROCESSING'].includes(entry.status))
     pollEntry(entry).catch(error=>{entry.status='TIMED_OUT';entry.error=errorText(error);renderQueue();});
 });
-loadPreferences().then(async()=>{await restoreSession();await loadHistory();}).catch(error=>{
+loadPreferences().then(async()=>{
+  await restoreSession();
+  await loadHistory();
+  try{
+    const activeKey=sessionStorage.getItem('asv2-open-drawer-key');
+    if(activeKey){
+      const entry=state.entries.find(e=>e.key===activeKey);
+      if(entry)openDrawer(entry);
+    }
+  }catch(_){}
+}).catch(error=>{
   historyHint.textContent=errorText(error);renderHistory();});

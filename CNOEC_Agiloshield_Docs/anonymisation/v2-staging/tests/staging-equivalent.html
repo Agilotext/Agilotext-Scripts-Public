@@ -131,7 +131,7 @@ window.fetch=async(url,options={})=>{
  if(tail==='/review/commands'){
   const payload=JSON.parse(options.body);
   if(payload.revision!==job.rev)return json({error:'STALE_REVISION'},409);
-  if(payload.op==='ADD_MANUAL_REGION'&&payload.maskOccurrenceId!=='synthetic-mask-1')return json({error:'BAD_TARGET'},422);
+  if(payload.op==='ADD_MANUAL_REGION'&&payload.maskOccurrenceId&&payload.maskOccurrenceId!=='synthetic-mask-1')return json({error:'BAD_TARGET'},422);
   if(!payload.op&&payload.occurrenceId!=='synthetic-email-1')return json({error:'BAD_OCCURRENCE'},422);
   if(payload.op==='ADD_MANUAL_REGION')job.unresolved=false;
   job.rev='mock-r2';persistMock();return json({accepted:true,revision:job.rev});
