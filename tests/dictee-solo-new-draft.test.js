@@ -26,7 +26,11 @@ function setup(status, confirmed = true) {
     clearSubmission: async () => calls.push('clearSubmission'),
     nextDraftId: () => { calls.push('nextDraftId'); return 'new-draft'; }
   };
-  const usages = { getUsage: () => 'carnet', writeDraft: (_email, text) => calls.push('writeDraft:' + text) };
+  const usages = {
+    getUsage: () => 'carnet',
+    writeDraft: (_email, text) => calls.push('writeDraft:' + text),
+    setCarnetError: message => calls.push('setCarnetError:' + message)
+  };
   const sandbox = {
     AgiloSoloAudio: api, AgiloDicteeUsages: usages,
     AgiloDicteeCarnetPicker: { getSelected: () => ({ id: 1 }) },
@@ -60,6 +64,7 @@ test('accepted draft exposes a fresh start and clears old local draft after conf
   assert.equal(ctx.controller.canStart(), true);
   assert.ok(ctx.calls.includes('input:input'));
   assert.ok(ctx.calls.includes('writeDraft:'));
+  assert.ok(ctx.calls.includes('setCarnetError:'));
 });
 
 test('uncertain submission can start fresh without deleting or retrying its frozen request', async () => {

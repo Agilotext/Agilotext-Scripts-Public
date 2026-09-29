@@ -365,6 +365,7 @@
         textEl().dispatchEvent(new Event("input", { bubbles: true }));
       }
       if (usages()) usages().writeDraft(email, "");
+      if (usages() && typeof usages().setCarnetError === "function") usages().setCarnetError("");
       state.draftId = nextId;
       state.audioCount = 0;
       state.submission = null;
