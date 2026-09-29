@@ -4,7 +4,10 @@
 <script>
 // Synthetic-only transport. No request is sent to Java or Python.
 const nativeFetch=window.fetch.bind(window);
-let preference={schemaVersion:1,selectedTypes:['ADR','EML','IBA','IDN','PER','TEL','URL'],sensitiveKeepAcknowledged:false,digest:'mock-digest'};
+function policyDigest(policy){return 'mock-'+[...policy.selectedTypes].sort().join('-')+
+ '-'+String(policy.sensitiveKeepAcknowledged===true);}
+let preference={schemaVersion:1,selectedTypes:['ADR','EML','IBA','IDN','PER','TEL','URL'],
+ sensitiveKeepAcknowledged:false};preference.digest=policyDigest(preference);
 const jobs=new Map();let nextId=1;
 try{
  const saved=JSON.parse(sessionStorage.getItem('asv2-mock-jobs')||'[]');
@@ -13,16 +16,33 @@ try{
 }catch(_){}
 function persistMock(){sessionStorage.setItem('asv2-mock-jobs',JSON.stringify([...jobs.values()].map(job=>({
  id:job.id,fileName:job.file.name,fileType:job.file.type,policy:job.policy,status:job.status,
- target:job.target,rev:job.rev,polls:job.polls,unresolved:job.unresolved}))));}
+ target:job.target,rev:job.rev,polls:job.polls,unresolved:job.unresolved,
+ listDigest:job.listDigest,mode:job.mode}))));}
+const params=new URLSearchParams(location.search);
+const listsEnabled=params.has('lists');
+const pseudoEnabled=params.has('pseudo');
 window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2',
  PDF_WORKER_URL:new URL('../vendor/pdf.worker.min.js',location.href).href,
  DOCX_FRAME_URL:new URL('../docx-preview-frame.html',location.href).href,
- POLL_MS:100,MAX_WAIT_MS:5000,getAuthHeaders:async()=>({'X-Mock-Actor':'local-test'})};
+ POLL_MS:100,MAX_WAIT_MS:5000,UPLOAD_PROGRESS:params.has('progress'),
+ FILE_LISTS_READY:listsEnabled,PSEUDONYMIZE_READY:pseudoEnabled,
+ FILE_WORKER_CODE_SHA:'6498642a2702cbe5',
+ getAuthHeaders:async()=>({'X-Mock-Actor':'local-test'})};
+const capabilities={workerCodeSha:'6498642a2702cbe5',listDirectives:listsEnabled,
+ processingModes:pseudoEnabled?['ANONYMIZE','PSEUDONYMIZE']:['ANONYMIZE'],
+ pseudonymKeyDownload:pseudoEnabled,uploadIdempotency:false};
+async function listDigest(inclusion,exclusion){
+ const canonical=JSON.stringify({anon2ExclusionList:exclusion,anon2InclusionList:inclusion});
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
+ return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
 function json(v,status=200){return new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json'}});}
 function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.status,status:job.status,
- reviewRevision:job.rev,protectionPolicy:job.policy,qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
+ reviewRevision:job.rev,protectionPolicy:job.policy,listDigest:job.listDigest,
+ processingMode:job.mode,qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
 function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED',
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
+ listDigest:job.listDigest,processingMode:job.mode,
  occurrences:job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
   category:'EML',action:'MASK',fragments:[[72,94,202,109]]}]:[],
  unresolvedMasks:job.status==='REVIEW_REQUIRED'&&job.file.name.endsWith('.pdf')&&job.unresolved?
@@ -33,16 +53,24 @@ window.fetch=async(url,options={})=>{
  const path=String(url).slice(window.AGILOSHIELD_V2_CONFIG.BASE_URL.length);
  if(path==='/preferences'){
   if(location.search.includes('slow=1')&&options.method!=='POST')await new Promise(resolve=>setTimeout(resolve,1500));
-  if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:'mock-digest'};}
-  return json({protectionPolicy:preference});
+  if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:policyDigest(p)};}
+  return json({protectionPolicy:preference,capabilities});
  }
  if(path==='/jobs'&&options.method==='POST'){
   const file=options.body.get('file');const policy=JSON.parse(options.body.get('protectionPolicy'));
+  const inclusion=options.body.has('anon2InclusionList')?
+   JSON.parse(options.body.get('anon2InclusionList')):null;
+  const exclusion=options.body.has('anon2ExclusionList')?
+   JSON.parse(options.body.get('anon2ExclusionList')):null;
+  const mode=options.body.get('processingMode')||'ANONYMIZE';
   const id='synthetic-job-'+nextId++;
-  const job={id,file,policy:{...policy,digest:'mock-digest'},status:'PENDING',
+  const job={id,file,policy:{...policy,digest:policyDigest(policy)},status:'PENDING',
+   listDigest:inclusion&&exclusion?await listDigest(inclusion,exclusion):null,mode,
    target:/failed/i.test(file.name)?'FAILED':/review/i.test(file.name)?'REVIEW_REQUIRED':'READY',
    rev:'mock-r1',polls:0,unresolved:/review/i.test(file.name)&&file.name.endsWith('.pdf')};
-  jobs.set(id,job);persistMock();return json(meta(job));
+  jobs.set(id,job);persistMock();
+  if(params.has('lostCreate')&&nextId===2)throw new TypeError('Synthetic response lost after creation');
+  return json(meta(job));
  }
  const match=/^\/jobs\/([^/?]+)(.*)$/.exec(path);if(!match)return json({error:'NOT_FOUND'},404);
  const job=jobs.get(match[1]);if(!job)return json({error:'NO_JOB'},404);
@@ -62,7 +90,10 @@ window.fetch=async(url,options={})=>{
   else if(job.file.name.endsWith('.docx'))response=await nativeFetch('./ready-synthetic.docx');
   else response=typeof job.file.arrayBuffer==='function'?job.file:new Blob(['SYNTHETIC ONLY'],{type:job.file.type||'text/plain'});
   return new Response(await response.arrayBuffer(),{headers:{'Content-Type':response.type||'application/octet-stream',
-   'X-Agiloshield-Revision':job.rev}});
+   'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Policy-Digest':job.policy.digest,
+   ...(job.listDigest?{'X-Agiloshield-List-Digest':job.listDigest}:{}),
+   'X-Agiloshield-Status':job.status,
+   'X-Agiloshield-Assurance':job.status==='READY'?'technical-ready':'non-verified'}});
  }
  if(tail==='/review/commands'){
   const payload=JSON.parse(options.body);
@@ -77,14 +108,33 @@ window.fetch=async(url,options={})=>{
   job.target=job.unresolved?'REVIEW_REQUIRED':'READY';job.status='PROCESSING';job.polls=0;
   persistMock();return json(meta(job));
  }
- if(tail==='/download'||tail==='/result'){
-  const certified=tail==='/download';if(certified&&job.status!=='READY')return json({error:'NOT_READY'},409);
+ if(tail==='/download'||tail==='/result'||tail==='/pseudonym-key'){
+  const certified=tail==='/download'||tail==='/pseudonym-key';
+  if(certified&&job.status!=='READY')return json({error:'NOT_READY'},409);
+  if(tail==='/pseudonym-key'&&job.mode!=='PSEUDONYMIZE')return json({error:'NO_KEY'},404);
   return new Response('SYNTHETIC ONLY',{headers:{'Content-Type':'text/plain',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Status':job.status,
    'X-Agiloshield-Policy-Digest':job.policy.digest,
+   ...(job.listDigest?{'X-Agiloshield-List-Digest':job.listDigest}:{}),
+   'X-Agiloshield-Processing-Mode':job.mode,
    'X-Agiloshield-Assurance':certified?'technical-ready':'non-verified'}});
  }
  return json({error:'NOT_FOUND'},404);
+};
+if(params.has('progress'))window.XMLHttpRequest=class SyntheticUpload {
+ constructor(){this.upload={};this.headers={};}
+ open(method,url){this.method=method;this.url=url;}
+ setRequestHeader(name,value){this.headers[name]=value;}
+ async send(body){
+  try{
+   for(const loaded of [20,65,100]){
+    this.upload.onprogress?.({lengthComputable:true,loaded,total:100});
+    await new Promise(resolve=>setTimeout(resolve,180));
+   }
+   const response=await window.fetch(this.url,{method:this.method,body,headers:this.headers});
+   this.status=response.status;this.responseText=await response.text();this.onload?.();
+  }catch(_){this.onerror?.();}
+ }
 };
 </script>
 <script src="../vendor/pdf.min.js"></script>

@@ -1,4 +1,4 @@
-import { AgiloShieldV2Client } from './agiloshield-v2-client.js';
+import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from './agiloshield-v2-client.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -7,23 +7,19 @@ if (!mount || !config || !/^https:\/\//.test(config.BASE_URL || '') ||
 const api = new AgiloShieldV2Client({baseUrl:config.BASE_URL, authHeaders:config.getAuthHeaders});
 const codes = ['ADR','DAT','EML','IBA','IDN','JOB','LOC','ORG','PER','PII','PRO','TEL','URL'];
 const defaults = ['ADR','EML','IBA','IDN','PER','TEL','URL'];
-// Remains disabled until Nicolas exposes and verifies the file-worker lists through Java.
-const listsReady = config.FILE_LISTS_READY === true;
+// A Webflow switch alone cannot certify that Java is connected to the file worker.
+let listsReady = false;
+let pseudoReady = false;
 let listSelection = {anon2InclusionList:[],anon2ExclusionList:[]};
 const listSnapshot = () => ({anon2InclusionList:[...listSelection.anon2InclusionList],
   anon2ExclusionList:[...listSelection.anon2ExclusionList]});
-async function digestLists(value){
-  const canonical=JSON.stringify({anon2ExclusionList:value.anon2ExclusionList,
-    anon2InclusionList:value.anon2InclusionList});
-  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
-  return [...new Uint8Array(bytes)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
-}
 const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',
   LOC:'Lieu',ORG:'Organisation',PER:'Personne',PII:'Donnée personnelle générique',PRO:'Profession',
   TEL:'Téléphone',URL:'URL'};
 const supported = /\.(pdf|docx|xlsx|pptx|txt|csv)$/i;
 const storageKey = 'agiloshield-v2-staging-session-jobs';
-const state = {preferencesReady:false, entries:[], active:null, running:false, drawerOpen:false,
+const state = {preferencesReady:false, currentPolicy:null, capabilities:{}, entries:[], active:null,
+  running:false, drawerOpen:false,
   lastFocus:null, previewSerial:0, previewCleanup:null};
 const el = (tag,text,klass,parent) => {
   const out=document.createElement(tag);
@@ -36,7 +32,10 @@ const clear = element => element.replaceChildren();
 const button = (text,klass,parent,handler) => {
   const out=el('button',text,klass,parent);out.type='button';if(handler)out.addEventListener('click',handler);return out;
 };
-const statusOf = job => job.anonStatus || job.status;
+const statusOf = job => {
+  const value=job.anonStatus || job.status;
+  return ['ON_ERROR','UNSUPPORTED'].includes(value)?'FAILED':value;
+};
 const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
 const isTerminal = status => ['READY','REVIEW_REQUIRED','FAILED'].includes(status);
@@ -94,7 +93,11 @@ el('span','Anonymiser','asv2-mode-title',anonMode);
 const pseudoMode=el('label',null,'asv2-mode is-unavailable',side);
 const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
 pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
-el('small','Ancien parcours uniquement ; pas de pseudonymisation V2 annoncée.',null,pseudoMode);
+const pseudoHelp=el('small','Disponible après qualification du parcours Java → worker et de la clé.',null,pseudoMode);
+for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
+  anonMode.classList.toggle('is-selected',anonRadio.checked);
+  pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
+});
 el('h3','Paramètres',null,side);
 const typesButton=button('Types de données','asv2-types-button',side,openTypes);
 const typeCount=el('span','…','asv2-count',typesButton);
@@ -105,10 +108,8 @@ el('p','Une catégorie décochée peut rester visible. READY porte uniquement su
   'asv2-policy-note',side);
 const listsButton=button('Listes d’inclusion / exclusion','asv2-types-button',side,openLists);
 listsButton.disabled=true;
-listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
-  'Disponible après le raccordement du worker par fichiers à Java.';
-el('p',listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
-  'Listes en préparation : non actives sur la façade Java actuelle.',
+listsButton.title='Disponible après le raccordement vérifié du worker par fichiers à Java.';
+const listsHelp=el('p','Listes en préparation : non actives sur la façade Java actuelle.',
   'asv2-muted asv2-side-help',side);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
@@ -167,15 +168,14 @@ button('Utiliser pour les prochains fichiers','asv2-primary',listsActions,saveLi
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
-el('span','ou cliquez pour choisir des fichiers · 12 maximum','asv2-drop-subtitle',drop);
+el('span','Le traitement démarre au dépôt · 12 fichiers maximum','asv2-drop-subtitle',drop);
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
 const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Documents sélectionnés');
 const actions=el('div',null,'asv2-form-actions',main);
 const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
-const submit=el('button','Anonymiser les documents','asv2-primary',actions);submit.type='submit';submit.disabled=true;
-el('p','Sélectionnez un fichier pour ouvrir son aperçu et sa vérification.',
+el('p','Après traitement, choisissez Afficher ou Vérifier pour ouvrir le document.',
   'asv2-preview-help',main);
 
 const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
@@ -202,8 +202,7 @@ const drawerFooter=el('footer',null,'asv2-drawer-footer',panel);
 
 function notify(text,kind='') {notice.textContent=text;notice.className='asv2-notice '+kind;}
 function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
-function updateSubmit(){submit.disabled=!state.preferencesReady||state.running||
-  !state.entries.some(entry=>entry.status==='LOCAL');}
+form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 function setSurface(kind){
   const file=kind==='file';filePane.hidden=!file;textPane.hidden=file;
@@ -267,8 +266,10 @@ async function saveTypes(){
     const response=await api.savePreferences({schemaVersion:1,selectedTypes:types,
       sensitiveKeepAcknowledged:sensitive});
     const saved=response?.protectionPolicy?.selectedTypes;
-    if(!Array.isArray(saved)||JSON.stringify([...saved].sort())!==JSON.stringify([...types].sort()))
+    if(!Array.isArray(saved)||!response.protectionPolicy.digest||
+      JSON.stringify([...saved].sort())!==JSON.stringify([...types].sort()))
       throw new Error('Préférences non enregistrées par la façade');
+    state.currentPolicy={...response.protectionPolicy,selectedTypes:[...saved]};
     typeCount.textContent=String(types.length);typesSnapshot=[...types];savingTypes=false;closeTypes(true);
     notify('Préférences enregistrées. Elles seront appliquées aux prochains documents.');
   }catch(error){policyError.textContent=errorText(error);policyError.hidden=false;}
@@ -279,35 +280,65 @@ function setEnabled(yes){
   state.preferencesReady=yes;fileInput.disabled=!yes;textInput.disabled=!yes;
   typesButton.disabled=!yes;textAdd.disabled=!yes;policySave.disabled=!yes;
   listsButton.disabled=!yes||!listsReady;
+  pseudoRadio.disabled=!yes||!pseudoReady;
+  pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
+  if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
+    anonMode.classList.add('is-selected');pseudoMode.classList.remove('is-selected');}
+  pseudoHelp.textContent=pseudoReady?'Étiquettes visibles et clé de cette révision READY.':
+    'Disponible après qualification du parcours Java → worker et de la clé.';
+  listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
+    'Disponible après le raccordement vérifié du worker par fichiers à Java.';
+  listsHelp.textContent=listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
+    'Listes en préparation : non actives sur la façade Java actuelle.';
   for(const box of checks.values())box.disabled=!yes;
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
   drop.classList.toggle('is-disabled',!yes);
-  drop.setAttribute('aria-disabled',String(!yes));updateSubmit();
+  drop.setAttribute('aria-disabled',String(!yes));
 }
 async function loadPreferences(){
+  state.currentPolicy=null;listsReady=false;pseudoReady=false;
   setEnabled(false);retry.hidden=true;notify('Chargement des préférences…');
   try{
     const response=await api.preferences();const types=response?.protectionPolicy?.selectedTypes;
-    if(!Array.isArray(types)||types.some(code=>!codes.includes(code)))throw new Error('Préférences serveur invalides');
+    if(!Array.isArray(types)||types.some(code=>!codes.includes(code))||
+      typeof response.protectionPolicy.digest!=='string')throw new Error('Préférences serveur invalides');
+    state.currentPolicy={...response.protectionPolicy,selectedTypes:[...types]};
+    state.capabilities=response.capabilities||{};
+    const workerMatches=!!config.FILE_WORKER_CODE_SHA&&
+      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA;
+    listsReady=config.FILE_LISTS_READY===true&&workerMatches&&
+      state.capabilities.listDirectives===true;
+    pseudoReady=config.PSEUDONYMIZE_READY===true&&workerMatches&&
+      state.capabilities.processingModes?.includes('PSEUDONYMIZE')&&
+      state.capabilities.pseudonymKeyDownload===true;
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
     typeCount.textContent=String(types.length);
     setEnabled(true);notify('Préférences chargées. Vous pouvez déposer vos documents.');
   }catch(error){retry.hidden=false;notify(errorText(error),'is-error');}
 }
 function addFiles(files){
-  if(!state.preferencesReady)return;
+  if(!state.preferencesReady||!state.currentPolicy)return;
   const additions=[...files];
   if(state.entries.length+additions.length>12){notify('Limite de 12 documents par session.','is-error');return;}
-  let firstAdded=null;
+  const current=state.currentPolicy;
+  const types=[...current.selectedTypes];
+  if(defaults.some(code=>!types.includes(code))&&current.sensitiveKeepAcknowledged!==true){
+    notify('Confirmez les catégories conservées dans les paramètres avant le dépôt.','is-warning');
+    openTypes();return;
+  }
+  const mode=pseudoRadio.checked?'PSEUDONYMIZE':'ANONYMIZE';
+  const lists=listsReady?listSnapshot():null;
   for(const file of additions){
     if(!supported.test(file.name)){notify('Format non pris en charge : '+file.name,'is-error');continue;}
+    const snapshot=freezeJobSelection({policy:current,lists,mode});
     const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
-      digest:null,selectedTypes:null,status:'LOCAL',revision:null,review:null,regions:null,
+      ...snapshot,listDigest:null,
+      uploadId:crypto.randomUUID(),uploadProgress:null,status:'LOCAL',
+      revision:null,review:null,regions:null,
       previewKind:'origin',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
-    firstAdded ||= entry;
   }
-  renderQueue();if(firstAdded)openDrawer(firstAdded);
+  renderQueue();drainQueue().catch(error=>notify(errorText(error),'is-error'));
   fileInput.value='';
 }
 fileInput.addEventListener('change',()=>addFiles(fileInput.files));
@@ -324,20 +355,37 @@ function renderQueue(){
   clear(queue);
   for(const entry of state.entries){
     const line=el('li',null,'asv2-queue-item',queue);
-    const open=button(entry.name,'asv2-queue-name',line,()=>openDrawer(entry));
-    open.title='Ouvrir le document';
-    el('span',entry.status==='LOCAL'?'À envoyer':entry.status==='UPLOADING'?'Envoi…':
-      entry.status==='TIMED_OUT'?'Suivi interrompu':entry.status==='ERROR'?'Erreur':entry.status,
+    const details=el('div',null,'asv2-queue-details',line);
+    el('strong',entry.name,'asv2-queue-name',details);
+    const statusText={LOCAL:'À envoyer',UPLOADING:entry.uploadProgress===null?'Envoi en cours':
+      'Envoi '+entry.uploadProgress+' %',PENDING:'En attente',PROCESSING:'Traitement en cours',
+      READY:'Prêt',REVIEW_REQUIRED:'Vérification requise',FAILED:'Échec',
+      TIMED_OUT:'Suivi interrompu',UNCERTAIN:'Envoi à vérifier',ERROR:'Erreur'};
+    el('span',statusText[entry.status]||entry.status,
       'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
+    if(entry.status==='UPLOADING'){
+      const track=el('div',null,'asv2-upload-track',details);
+      track.setAttribute('role','progressbar');track.setAttribute('aria-label','Envoi de '+entry.name);
+      if(entry.uploadProgress!==null){track.setAttribute('aria-valuemin','0');
+        track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',String(entry.uploadProgress));}
+      const fill=el('div',null,'asv2-upload-fill'+(entry.uploadProgress===null?' is-indeterminate':''),track);
+      if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
+    }else if(['PENDING','PROCESSING'].includes(entry.status))
+      el('div',null,'asv2-processing-line',details);
+    if(isTerminal(entry.status))button(entry.status==='READY'?'Afficher':
+      entry.status==='REVIEW_REQUIRED'?'Vérifier':'Voir l’échec',
+      'asv2-secondary asv2-queue-action',line,()=>openDrawer(entry));
+    if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary asv2-queue-action',line,
+      ()=>pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();}));
+    if(entry.error)el('small',entry.error,'asv2-queue-error',details);
     if(entry.status==='LOCAL')button('Retirer','asv2-link',line,()=>{
-      state.entries=state.entries.filter(item=>item!==entry);if(state.active===entry.key)closeDrawer();renderQueue();
+      state.entries=state.entries.filter(item=>item!==entry);renderQueue();
     });
   }
-  updateSubmit();
 }
 function saveSession(){
   try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12)
-    .map(e=>({jobId:e.jobId,digest:e.digest,listDigest:e.listDigest||null}))));}
+    .map(e=>({jobId:e.jobId,digest:e.digest,listDigest:e.listDigest||null,mode:e.mode}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
@@ -347,12 +395,14 @@ async function restoreSession(){
   for(const item of saved.slice(-12)){
     if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
     const entry={key:crypto.randomUUID(),file:null,name:'Job '+item.jobId,format:'',jobId:item.jobId,
-      digest:item.digest,listDigest:item.listDigest||null,selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
+      digest:item.digest,listDigest:item.listDigest||null,mode:item.mode||null,
+      selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
       previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
     try{
       const job=await api.status(entry.jobId);assertDigest(entry,job);
       entry.status=statusOf(job);entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
+      entry.mode=job.processingMode||entry.mode;
       entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
       if(isTerminal(entry.status))await loadCurrent(entry);
       else pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();});
@@ -363,6 +413,8 @@ async function restoreSession(){
 function assertDigest(entry,value){
   if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
   if(entry.listDigest&&value?.listDigest!==entry.listDigest)throw new Error('Empreinte des listes incohérente');
+  if(entry.mode&&value?.processingMode&&value.processingMode!==entry.mode)
+    throw new Error('Mode de traitement incohérent');
 }
 async function confirmAction(text){
   return new Promise(resolve=>{
@@ -373,46 +425,44 @@ async function confirmAction(text){
     button('Annuler','asv2-secondary',box,()=>{box.remove();resolve(false);});yes.focus();
   });
 }
-async function submitQueue(event){
-  event.preventDefault();if(!state.preferencesReady||state.running)return;
-  if(state.entries.some(entry=>['PENDING','PROCESSING','TIMED_OUT'].includes(entry.status)&&entry.jobId)){
-    notify('Reprenez d’abord le suivi du job déjà lancé avant d’envoyer la suite.','is-warning');return;
-  }
-  const pending=state.entries.filter(entry=>entry.status==='LOCAL');if(!pending.length)return;
-  const types=selected();const sensitive=defaults.some(code=>!types.includes(code));
-  if(sensitive&&!await confirmAction(types.length?
-    'Des catégories directement identifiantes resteront visibles. Confirmer la sélection ?':
-    'Aucune catégorie n’est sélectionnée. Confirmer que les données détectées resteront visibles ?'))return;
-  const policy={schemaVersion:1,selectedTypes:types,sensitiveKeepAcknowledged:sensitive};
-  const lists=listsReady?listSnapshot():null;
-  const expectedListDigest=lists?await digestLists(lists):null;
-  state.running=true;submit.disabled=true;
+async function drainQueue(){
+  if(!state.preferencesReady||state.running)return;
+  state.running=true;
   try{
-    const saved=await api.savePreferences(policy);
-    if(!Array.isArray(saved?.protectionPolicy?.selectedTypes)||
-      JSON.stringify([...saved.protectionPolicy.selectedTypes].sort())!==JSON.stringify([...types].sort()))
-      throw new Error('Préférences non enregistrées par la façade');
-    for(const entry of pending){
-      entry.selectedTypes=[...types];entry.digest=saved.protectionPolicy.digest;
-      entry.listDigest=expectedListDigest;
+    while(true){
+      const entry=state.entries.find(item=>item.status==='LOCAL');
+      if(!entry)break;
+      entry.listDigest=entry.lists?await digestListDirectives(entry.lists):null;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
-        const created=await api.upload(entry.file,policy,lists||{});
-        if(!created.jobId||created?.protectionPolicy?.digest!==entry.digest)
+        const progress=config.UPLOAD_PROGRESS===false||typeof XMLHttpRequest==='undefined'?undefined:
+          (loaded,total)=>{entry.uploadProgress=Math.min(100,Math.round(loaded/total*100));renderQueue();};
+        const created=await api.upload(entry.file,entry.policy,{
+          ...(entry.lists||{}),processingMode:entry.mode,onUploadProgress:progress,
+          uploadId:state.capabilities.uploadIdempotency===true?entry.uploadId:undefined});
+        entry.jobId=created.jobId||null;
+        if(!entry.jobId||created?.protectionPolicy?.digest!==entry.digest)
           throw new Error('Politique du job différente de la sélection');
-        if(expectedListDigest&&created.listDigest!==expectedListDigest)
+        if(entry.listDigest&&created.listDigest!==entry.listDigest)
           throw new Error('Listes du job différentes de la sélection');
-        entry.jobId=created.jobId;entry.status=statusOf(created)||'PENDING';saveSession();renderQueue();
-        await pollEntry(entry);
-        if(entry.status==='TIMED_OUT')break;
-      }catch(error){entry.status='ERROR';entry.error=errorText(error);renderQueue();renderDrawer(entry);
+        if(entry.mode==='PSEUDONYMIZE'&&created.processingMode!==entry.mode)
+          throw new Error('Mode de traitement différent de la sélection');
+        entry.file=null;entry.lists=null;entry.status=statusOf(created)||'PENDING';
+        saveSession();renderQueue();
+        pollEntry(entry).catch(error=>{entry.status='TIMED_OUT';entry.error=errorText(error);
+          renderQueue();renderDrawer(entry);});
+      }catch(error){
+        entry.lists=null;
+        entry.status=entry.jobId||!error.status||error.status>=500?'UNCERTAIN':'ERROR';
+        entry.error=entry.status==='UNCERTAIN'?
+          'Le serveur a peut-être créé ce job. Aucun renvoi automatique ne sera effectué.':errorText(error);
+        renderQueue();renderDrawer(entry);
         if(error?.status===401)break;
       }
     }
   }catch(error){notify(errorText(error),'is-error');}
   finally{state.running=false;renderQueue();}
 }
-form.addEventListener('submit',submitQueue);
 async function pollEntry(entry){
   const deadline=Date.now()+(config.MAX_WAIT_MS||180000);
   while(Date.now()<deadline){
@@ -427,14 +477,20 @@ async function pollEntry(entry){
   renderQueue();renderDrawer(entry);
 }
 async function loadCurrent(entry){
-  const [job,review,regions]=await Promise.all([
-    api.status(entry.jobId),api.review(entry.jobId),api.regions(entry.jobId).catch(()=>null)]);
-  assertDigest(entry,job);assertDigest(entry,review);
-  entry.status=statusOf(job);entry.revision=review.revision;entry.review=review;entry.regions=regions;
+  const job=await api.status(entry.jobId);assertDigest(entry,job);
+  const currentStatus=statusOf(job);
+  const [review,regions]=await Promise.all([
+    api.review(entry.jobId).catch(error=>{if(currentStatus!=='FAILED')throw error;return null;}),
+    api.regions(entry.jobId).catch(()=>null)]);
+  if(review)assertDigest(entry,review);
+  entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
+  entry.review=review;entry.regions=regions;
+  if(currentStatus==='FAILED')entry.error=job.error?.code||job.errorCode||job.reason||null;
+  entry.mode=job.processingMode||entry.mode;
   entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
   entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
   entry.format=formatOf(entry.name)||entry.format;
-  if(entry.previewKind==='origin')entry.previewKind='anon';
+  if(entry.previewKind==='origin'&&currentStatus!=='FAILED')entry.previewKind='anon';
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
 }
 function setMobileTab(value){
@@ -467,6 +523,7 @@ function showError(error){drawerMessage(errorText(error),'is-error');}
 function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
+    entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',
     entry.revision?'Révision '+entry.revision:null,entry.jobId?'Job '+entry.jobId:null].filter(Boolean).join(' · ');
   drawerMessage(entry.error||({LOCAL:'Original local — données sensibles visibles.',UPLOADING:'Envoi du document…',
     PENDING:'Uploadé / En attente',PROCESSING:'Traitement en cours',READY:'Document prêt selon la sélection de ce job.',
@@ -541,6 +598,9 @@ function renderFooter(entry){
     ()=>loadCurrent(entry).catch(showError));
   if(entry.status==='READY')button('Télécharger le document prêt','asv2-primary',drawerFooter,
     ()=>download(entry,true).catch(showError));
+  if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+    button('Télécharger la clé de cette révision','asv2-secondary',drawerFooter,
+      ()=>downloadKey(entry).catch(showError));
   else if(['REVIEW_REQUIRED','FAILED'].includes(entry.status))button('Télécharger NON_VERIFIE','asv2-secondary',drawerFooter,
     ()=>download(entry,false).catch(showError));
 }
@@ -582,6 +642,13 @@ async function previewBytes(entry,kind){
   const response=await api.preview(entry.jobId,kind);
   const revision=response.headers.get('X-Agiloshield-Revision');
   if(kind==='anon'&&revision&&String(revision)!==String(entry.revision))throw new Error('Aperçu périmé');
+  if(kind==='anon'&&entry.listDigest&&(
+    response.headers.get('X-Agiloshield-List-Digest')!==entry.listDigest||
+    response.headers.get('X-Agiloshield-Policy-Digest')!==entry.digest||
+    response.headers.get('X-Agiloshield-Status')!==entry.status||
+    response.headers.get('X-Agiloshield-Assurance')!==
+      (entry.status==='READY'?'technical-ready':'non-verified')||
+    String(revision)!==String(entry.revision)))throw new Error('Aperçu non conforme au job courant');
   const mime=response.headers.get('Content-Type')||'';
   const format=entry.format||(mime.includes('pdf')?'pdf':mime.includes('wordprocessingml')?'docx':
     mime.includes('csv')?'csv':mime.includes('text/plain')?'txt':'');
@@ -801,6 +868,16 @@ async function download(entry,certified){
   link.href=url;link.download=filename;link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
   drawerMessage('Téléchargement '+(certified?'certifié':'NON_VERIFIE')+' démarré.');
+}
+async function downloadKey(entry){
+  const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,
+    expectedListDigest:entry.listDigest,expectedRevision:entry.revision});
+  const blob=await response.blob();
+  const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
+  link.href=url;link.download='cle-pseudonymes-'+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
+    '-'+String(entry.revision).replace(/[^A-Za-z0-9_-]/g,'')+'.properties';
+  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
 }
 window.addEventListener('pagehide',()=>{state.previewSerial++;state.previewCleanup?.();});
 loadPreferences().then(restoreSession);

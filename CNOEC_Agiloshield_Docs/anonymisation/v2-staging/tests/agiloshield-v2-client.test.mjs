@@ -1,5 +1,17 @@
 import assert from 'node:assert/strict';
-import { AgiloShieldV2Client } from '../agiloshield-v2-client.js';
+import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from '../agiloshield-v2-client.js';
+
+assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines'],
+  anon2InclusionList:['Jean Dupont','Cœur-de-l’Est']}),
+  '273dd46bede9bf24db124ba3d7c9037b04958236c5fe447807fb058384f9d91a');
+const mutablePolicy={schemaVersion:1,selectedTypes:['PER'],sensitiveKeepAcknowledged:false,digest:'first'};
+const mutableLists={anon2InclusionList:['Jean Dupont'],anon2ExclusionList:[]};
+const frozen=freezeJobSelection({policy:mutablePolicy,lists:mutableLists,mode:'ANONYMIZE'});
+mutablePolicy.selectedTypes.push('ORG');mutablePolicy.digest='second';
+mutableLists.anon2InclusionList[0]='Alice Martin';
+assert.deepEqual(frozen,{digest:'first',selectedTypes:['PER'],mode:'ANONYMIZE',
+  policy:{schemaVersion:1,selectedTypes:['PER'],sensitiveKeepAcknowledged:false},
+  lists:{anon2InclusionList:['Jean Dupont'],anon2ExclusionList:[]}});
 
 const seen = [];
 const job = {status:'READY', reviewRevision:'r2', protectionPolicy:{digest:'d1'}};
@@ -11,6 +23,10 @@ const fetchImpl = async (url, options) => {
   if (path.endsWith('/download')) return new Response('file', {status:200, headers:{
     'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-Revision':'r2',
     'X-Agiloshield-Status':'READY', 'X-Agiloshield-Assurance':'technical-ready'}});
+  if (path.endsWith('/pseudonym-key')) return new Response('SYNTHETIC_KEY', {status:200, headers:{
+    'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-List-Digest':'list-current',
+    'X-Agiloshield-Revision':'r2','X-Agiloshield-Status':'READY',
+    'X-Agiloshield-Assurance':'technical-ready','X-Agiloshield-Processing-Mode':'PSEUDONYMIZE'}});
   if (path.endsWith('/review/commands')) return new Response(JSON.stringify({revision:'r3'}), {status:200});
   return new Response(JSON.stringify(job), {status:200});
 };
@@ -36,7 +52,28 @@ job.reviewRevision='r2';
 job.listDigest='list-current';review.listDigest='list-current';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
   expectedListDigest:'list-older', expectedRevision:'r2'}), /Stale/);
+job.processingMode='PSEUDONYMIZE';
+assert.equal(await (await client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
+  expectedListDigest:'list-current',expectedRevision:'r2'})).text(),'SYNTHETIC_KEY');
 assert.ok(seen.every(call => !call.url.includes(':8091')));
+const xhrCalls=[];
+const progress=[];
+const xhrClient=new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
+  authHeaders:async()=>({'X-Agilotext-Token':'USER_ONLY'}),
+  xhrFactory:()=>({upload:{},headers:{},open(method,url){this.method=method;this.url=url;},
+    setRequestHeader(name,value){this.headers[name]=value;},send(body){
+      xhrCalls.push({method:this.method,url:this.url,headers:this.headers,body});
+      this.upload.onprogress({lengthComputable:true,loaded:5,total:10});
+      this.status=202;this.responseText=JSON.stringify({jobId:'synthetic-1'});this.onload();
+    }})});
+assert.equal((await xhrClient.upload(new Blob(['test']),{schemaVersion:1,selectedTypes:[]},
+  {processingMode:'ANONYMIZE',uploadId:'stable-operation-1',
+    onUploadProgress:(loaded,total)=>progress.push([loaded,total])})).jobId,'synthetic-1');
+assert.deepEqual(progress,[[5,10]]);
+assert.equal(xhrCalls[0].headers['X-Agiloshield-Upload-Id'],'stable-operation-1');
+assert.equal(xhrCalls[0].headers['X-Agilotext-Token'],'USER_ONLY');
+assert.equal(xhrCalls[0].headers['Content-Type'],undefined);
+assert.equal(xhrCalls[0].body.get('processingMode'),'ANONYMIZE');
 const nativeFetch = globalThis.fetch;
 try {
   globalThis.fetch = function () {
