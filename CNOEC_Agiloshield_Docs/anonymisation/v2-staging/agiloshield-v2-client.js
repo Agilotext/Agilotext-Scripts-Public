@@ -25,10 +25,16 @@ export class AgiloShieldV2Client {
   json(path, options) { return this.request(path, options).then(r => r.json()); }
   preferences() { return this.json('/preferences'); }
   savePreferences(policy) { return this.json('/preferences', {method:'POST', body:JSON.stringify(policy), headers:{'Content-Type':'application/json'}}); }
-  async upload(file, policy, {removeImages} = {}) {
+  async upload(file, policy, {removeImages, anon2InclusionList, anon2ExclusionList} = {}) {
     const form = new FormData(); form.append('file', file);
     form.append('protectionPolicy', JSON.stringify(policy));
     if (removeImages !== undefined) form.append('removeImages', String(removeImages));
+    if (anon2InclusionList !== undefined || anon2ExclusionList !== undefined) {
+      if (!Array.isArray(anon2InclusionList) || !Array.isArray(anon2ExclusionList))
+        throw new Error('Both V2 list arrays are required');
+      form.append('anon2InclusionList', JSON.stringify(anon2InclusionList));
+      form.append('anon2ExclusionList', JSON.stringify(anon2ExclusionList));
+    }
     return this.json('/jobs', {method:'POST', body:form});
   }
   status(id) { return this.json(this.path(id)); }
@@ -76,11 +82,13 @@ export class AgiloShieldV2Client {
       {'X-Agiloshield-Confirm-Non-Verifie':'true'} : {}});
   }
   certifiedDownload(id) { return this.request(this.path(id, '/download')); }
-  async checkedArtifact(id, {certified = true, expectedDigest, expectedRevision} = {}) {
+  async checkedArtifact(id, {certified = true, expectedDigest, expectedListDigest, expectedRevision} = {}) {
     const [job, review] = await Promise.all([this.status(id), this.review(id)]);
     const status = job.anonStatus || job.status;
     if (job.protectionPolicy?.digest !== expectedDigest ||
         review.protectionPolicy?.digest !== expectedDigest ||
+        (expectedListDigest && (job.listDigest !== expectedListDigest ||
+          review.listDigest !== expectedListDigest)) ||
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
         (review.status && review.status !== status) ||
         (certified && status !== 'READY') ||
@@ -91,6 +99,7 @@ export class AgiloShieldV2Client {
       await this.result(id, {confirmNonVerified:status === 'FAILED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
+        (expectedListDigest && response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest) ||
         response.headers.get('X-Agiloshield-Status') !== status ||
         response.headers.get('X-Agiloshield-Assurance') !==
           (certified ? 'technical-ready' : 'non-verified')) {

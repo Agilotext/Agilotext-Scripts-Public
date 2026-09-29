@@ -18,6 +18,13 @@ const client = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
   authHeaders:async () => ({'X-Agilotext-Token':'USER_ONLY'}), fetchImpl});
 const response = await client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'});
 assert.equal(await response.text(), 'file');
+await client.upload(new Blob(['synthetic']), {schemaVersion:1,selectedTypes:[]}, {
+  anon2InclusionList:['MOT A'],anon2ExclusionList:[]});
+const form=seen.at(-1).options.body;
+assert.deepEqual(JSON.parse(form.get('anon2InclusionList')), ['MOT A']);
+assert.deepEqual(JSON.parse(form.get('anon2ExclusionList')), []);
+await assert.rejects(() => client.upload(new Blob(['synthetic']), {}, {
+  anon2InclusionList:[]}), /Both V2 list arrays/);
 await client.decide(7, 'd1', {revision:'r2', occurrenceId:'o1', action:'KEEP', reason:'test'});
 assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
@@ -25,6 +32,10 @@ await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
 assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');
 job.reviewRevision = 'r3';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'}), /Stale/);
+job.reviewRevision='r2';
+job.listDigest='list-current';review.listDigest='list-current';
+await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
+  expectedListDigest:'list-older', expectedRevision:'r2'}), /Stale/);
 assert.ok(seen.every(call => !call.url.includes(':8091')));
 const nativeFetch = globalThis.fetch;
 try {

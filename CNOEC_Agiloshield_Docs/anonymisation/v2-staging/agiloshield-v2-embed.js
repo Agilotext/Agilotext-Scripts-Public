@@ -7,6 +7,17 @@ if (!mount || !config || !/^https:\/\//.test(config.BASE_URL || '') ||
 const api = new AgiloShieldV2Client({baseUrl:config.BASE_URL, authHeaders:config.getAuthHeaders});
 const codes = ['ADR','DAT','EML','IBA','IDN','JOB','LOC','ORG','PER','PII','PRO','TEL','URL'];
 const defaults = ['ADR','EML','IBA','IDN','PER','TEL','URL'];
+// Remains disabled until Nicolas exposes and verifies the file-worker lists through Java.
+const listsReady = config.FILE_LISTS_READY === true;
+let listSelection = {anon2InclusionList:[],anon2ExclusionList:[]};
+const listSnapshot = () => ({anon2InclusionList:[...listSelection.anon2InclusionList],
+  anon2ExclusionList:[...listSelection.anon2ExclusionList]});
+async function digestLists(value){
+  const canonical=JSON.stringify({anon2ExclusionList:value.anon2ExclusionList,
+    anon2InclusionList:value.anon2InclusionList});
+  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
+  return [...new Uint8Array(bytes)].map(byte=>byte.toString(16).padStart(2,'0')).join('');
+}
 const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',
   LOC:'Lieu',ORG:'Organisation',PER:'Personne',PII:'Donnée personnelle générique',PRO:'Profession',
   TEL:'Téléphone',URL:'URL'};
@@ -92,6 +103,13 @@ el('p','Cliquez pour choisir les 13 catégories. Les préférences sont enregist
   'asv2-muted asv2-side-help',side);
 el('p','Une catégorie décochée peut rester visible. READY porte uniquement sur la sélection du job.',
   'asv2-policy-note',side);
+const listsButton=button('Listes d’inclusion / exclusion','asv2-types-button',side,openLists);
+listsButton.disabled=true;
+listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
+  'Disponible après le raccordement du worker par fichiers à Java.';
+el('p',listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
+  'Listes en préparation : non actives sur la façade Java actuelle.',
+  'asv2-muted asv2-side-help',side);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
 policyDialog.setAttribute('role','dialog');policyDialog.setAttribute('aria-modal','true');
@@ -124,6 +142,28 @@ const policyActions=el('div',null,'asv2-policy-actions',policyDialog);
 const policyError=el('p','', 'asv2-policy-error',policyDialog);policyError.hidden=true;
 const policyCancel=button('Annuler','asv2-secondary',policyActions,()=>closeTypes(false));
 const policySave=button('Enregistrer','asv2-primary',policyActions,saveTypes);policySave.disabled=true;
+const listsModal=el('div',null,'asv2-policy-modal',mount);listsModal.hidden=true;
+const listsDialog=el('section',null,'asv2-policy-dialog',listsModal);
+listsDialog.setAttribute('role','dialog');listsDialog.setAttribute('aria-modal','true');
+listsDialog.setAttribute('aria-labelledby','asv2-lists-title');
+const listsHeader=el('header',null,'asv2-policy-header',listsDialog);
+const listsTitle=el('h2','Listes d’inclusion et d’exclusion',null,listsHeader);
+listsTitle.id='asv2-lists-title';
+const listsClose=button('×','asv2-close',listsHeader,()=>closeLists());
+listsClose.setAttribute('aria-label','Fermer les listes');
+const listsBody=el('div',null,'asv2-list-fields',listsDialog);
+el('p','Une ligne par terme. Inclusion : masquer cette occurrence même si sa catégorie est décochée. '
+  +'Exclusion : demander une revue si elle contredit un masque.', 'asv2-muted',listsBody);
+const inclusionLabel=el('label','Inclusions',null,listsBody);
+const inclusionInput=el('textarea',null,'asv2-list-input',inclusionLabel);
+inclusionInput.setAttribute('aria-label','Termes à inclure');
+const exclusionLabel=el('label','Exclusions',null,listsBody);
+const exclusionInput=el('textarea',null,'asv2-list-input',exclusionLabel);
+exclusionInput.setAttribute('aria-label','Termes à exclure');
+const listsError=el('p','', 'asv2-policy-error',listsDialog);listsError.hidden=true;
+const listsActions=el('div',null,'asv2-policy-actions',listsDialog);
+button('Annuler','asv2-secondary',listsActions,()=>closeLists());
+button('Utiliser pour les prochains fichiers','asv2-primary',listsActions,saveLists);
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
@@ -176,6 +216,30 @@ function openTypes(){
   policyError.hidden=true;policyModal.hidden=false;document.body.classList.add('asv2-policy-open');
   policyClose.focus();
 }
+function openLists(){
+  if(!listsReady||!state.preferencesReady)return;
+  inclusionInput.value=listSelection.anon2InclusionList.join('\n');
+  exclusionInput.value=listSelection.anon2ExclusionList.join('\n');
+  listsError.hidden=true;listsModal.hidden=false;document.body.classList.add('asv2-policy-open');
+  inclusionInput.focus();
+}
+function closeLists(){listsModal.hidden=true;document.body.classList.remove('asv2-policy-open');listsButton.focus();}
+function listLines(input){
+  const values=input.value.split(/\r?\n/).map(value=>value.trim()).filter(Boolean);
+  if(values.length>100||values.some(value=>value.length>256||/[\x00-\x1f]/.test(value)))
+    throw new Error('Maximum 100 termes par liste, 256 caractères par terme.');
+  const folded=values.map(value=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr'));
+  if(new Set(folded).size!==folded.length)throw new Error('Un terme est présent plusieurs fois.');
+  return values;
+}
+function saveLists(){
+  try{listSelection={anon2InclusionList:listLines(inclusionInput),
+    anon2ExclusionList:listLines(exclusionInput)};closeLists();
+    notify('Listes appliquées uniquement aux prochains documents de cette session.');
+  }catch(error){listsError.textContent=errorText(error);listsError.hidden=false;}
+}
+listsModal.addEventListener('click',event=>{if(event.target===listsModal)closeLists();});
+listsModal.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeLists();}});
 function closeTypes(saved){
   if(savingTypes||policyDialog.querySelector('.asv2-confirm'))return;
   if(!saved){const keep=new Set(typesSnapshot);for(const [code,box] of checks)box.checked=keep.has(code);}
@@ -214,6 +278,7 @@ async function saveTypes(){
 function setEnabled(yes){
   state.preferencesReady=yes;fileInput.disabled=!yes;textInput.disabled=!yes;
   typesButton.disabled=!yes;textAdd.disabled=!yes;policySave.disabled=!yes;
+  listsButton.disabled=!yes||!listsReady;
   for(const box of checks.values())box.disabled=!yes;
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
   drop.classList.toggle('is-disabled',!yes);
@@ -271,7 +336,8 @@ function renderQueue(){
   updateSubmit();
 }
 function saveSession(){
-  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12).map(e=>({jobId:e.jobId,digest:e.digest}))));}
+  try{sessionStorage.setItem(storageKey,JSON.stringify(state.entries.filter(e=>e.jobId).slice(-12)
+    .map(e=>({jobId:e.jobId,digest:e.digest,listDigest:e.listDigest||null}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
@@ -281,7 +347,7 @@ async function restoreSession(){
   for(const item of saved.slice(-12)){
     if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
     const entry={key:crypto.randomUUID(),file:null,name:'Job '+item.jobId,format:'',jobId:item.jobId,
-      digest:item.digest,selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
+      digest:item.digest,listDigest:item.listDigest||null,selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
       previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
     state.entries.push(entry);
     try{
@@ -296,6 +362,7 @@ async function restoreSession(){
 }
 function assertDigest(entry,value){
   if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
+  if(entry.listDigest&&value?.listDigest!==entry.listDigest)throw new Error('Empreinte des listes incohérente');
 }
 async function confirmAction(text){
   return new Promise(resolve=>{
@@ -317,6 +384,8 @@ async function submitQueue(event){
     'Des catégories directement identifiantes resteront visibles. Confirmer la sélection ?':
     'Aucune catégorie n’est sélectionnée. Confirmer que les données détectées resteront visibles ?'))return;
   const policy={schemaVersion:1,selectedTypes:types,sensitiveKeepAcknowledged:sensitive};
+  const lists=listsReady?listSnapshot():null;
+  const expectedListDigest=lists?await digestLists(lists):null;
   state.running=true;submit.disabled=true;
   try{
     const saved=await api.savePreferences(policy);
@@ -325,11 +394,14 @@ async function submitQueue(event){
       throw new Error('Préférences non enregistrées par la façade');
     for(const entry of pending){
       entry.selectedTypes=[...types];entry.digest=saved.protectionPolicy.digest;
+      entry.listDigest=expectedListDigest;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
-        const created=await api.upload(entry.file,policy);
+        const created=await api.upload(entry.file,policy,lists||{});
         if(!created.jobId||created?.protectionPolicy?.digest!==entry.digest)
           throw new Error('Politique du job différente de la sélection');
+        if(expectedListDigest&&created.listDigest!==expectedListDigest)
+          throw new Error('Listes du job différentes de la sélection');
         entry.jobId=created.jobId;entry.status=statusOf(created)||'PENDING';saveSession();renderQueue();
         await pollEntry(entry);
         if(entry.status==='TIMED_OUT')break;
@@ -414,6 +486,19 @@ function renderIssues(entry){
     'asv2-muted',issuePane);return;}
   const reasons=review.qaReasons||review.reasons||[];
   if(reasons.length)el('p',reasons.join(' · '),'asv2-reasons',issuePane);
+  const listProblems=Array.isArray(review.listProblems)?review.listProblems:[];
+  if(listProblems.length)el('h4',listProblems.length+' conflit(s) de listes à vérifier',null,issuePane);
+  for(const problem of listProblems){
+    const card=el('article',null,'asv2-issue',issuePane);
+    el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?'Exclusion en conflit avec un masque':
+      'Inclusion non localisable automatiquement',null,card);
+    el('small','Problème '+problem.issueId,null,card);
+    if(problem.occurrenceId&&review.reviewable){
+      const actions=el('div',null,'asv2-issue-actions',card);
+      for(const action of ['KEEP','MASK'])button(action,'asv2-secondary',actions,
+        ()=>decide(entry,problem.occurrenceId,action));
+    }else el('small','Correction interactive indisponible : déposez un nouveau job avec des listes corrigées.',null,card);
+  }
   const rows=Array.isArray(review.occurrences)?review.occurrences:[];
   for(const row of rows){
     if(!row.id)continue;
@@ -444,7 +529,7 @@ function renderIssues(entry){
     });
     control.disabled=!review.reviewable||entry.format!=='pdf';
   }
-  if(!rows.length&&!unresolved.length)el('p','Aucune correction interactive disponible.','asv2-muted',issuePane);
+  if(!rows.length&&!unresolved.length&&!listProblems.length)el('p','Aucune correction interactive disponible.','asv2-muted',issuePane);
 }
 function renderFooter(entry){
   clear(drawerFooter);
@@ -706,6 +791,7 @@ function renderCsv(bytes){
 async function download(entry,certified){
   if(!certified&&!await confirmAction('Ce fichier est NON_VERIFIE : des données sensibles peuvent rester visibles. Télécharger ?'))return;
   const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
+    expectedListDigest:entry.listDigest,
     expectedRevision:entry.revision});
   const blob=await response.blob();
   const disposition=response.headers.get('Content-Disposition')||'';
