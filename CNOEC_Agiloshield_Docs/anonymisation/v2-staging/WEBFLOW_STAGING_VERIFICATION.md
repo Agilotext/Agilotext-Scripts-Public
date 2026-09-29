@@ -1,10 +1,10 @@
 # AgiloShield V2 — éditeur documentaire Webflow staging
 
-## État au 28 septembre 2026
+## État au 29 septembre 2026
 
-**Assets figés :** `edf56d66c629a3a923ba5fdd57e69650636e4fa1` sur la branche `codex/agiloshield-v2-document-editor-20260928`. Aucun changement du moteur Python, de l’Entity Engine, de GLiNER, de la policy ou des writers. Aucun merge ni déploiement live.
+**Assets figés :** `6520ede5c9ad63025402074de6b7fbb30ded2252` sur la branche `codex/agiloshield-v2-history-batch-20260929`. Aucun changement du moteur Python, de l’Entity Engine, de GLiNER, de la policy ou des writers. Aucun merge ni déploiement live.
 
-**Verdict :** composant et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le navigateur de test a été redirigé vers `/auth/access-denied` en ouvrant la page publiée ; il n’a donc pas pu vérifier la version réellement active ni appeler Java sous une session valide. La session Webflow Designer n’était pas disponible pour remplacer et publier les Embeds. Les essais ci-dessous utilisent une page locale avec transport synthétique, y compris le bloc exact chargé depuis jsDelivr.
+**Verdict :** composant et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le navigateur de test a été redirigé vers `/auth/access-denied` en ouvrant la page publiée ; il n’a donc pas pu vérifier la version réellement active ni appeler Java sous une session valide. La session Webflow Designer n’était pas disponible pour remplacer et publier les Embeds. Les essais ci-dessous utilisent une page locale avec transport synthétique. Le tableau V2 durable, le ZIP et l'ancien historique restent désactivés par capacités Java.
 
 ## Remplacement dans Webflow
 
@@ -22,6 +22,10 @@ Le bloc V2 utilise uniquement `https://apitest.agilotext.com:9443/api/agiloshiel
 | Texte saisi converti en job TXT, aperçu original et même revue | PASS sur mock |
 | 12 fichiers, un job/politique par fichier, soumission séquentielle, échec isolé | PASS sur mock |
 | Reprise des 12 IDs après rechargement, sans conserver les octets | PASS sur mock |
+| 13e fichier refusé avec motif précis ; premier résultat prêt ouvert une seule fois par dépôt | PASS sur mock |
+| Session expirée : pause des uploads suivants, reprise même compte, refus compte différent | PASS sur mock |
+| Réponse de création perdue : aucun doublon et job visible après actualisation mock | PASS sur mock |
+| Tableau V2, statut par document, icônes Nucleo, ZIP synthétique soumis seulement après contrôle des révisions et digests | PASS sur mock |
 | `READY`, `REVIEW_REQUIRED`, `FAILED`, téléchargement certifié seulement pour `READY` | PASS sur mock |
 | PDF original/résultat, zoom, pagination, occurrence → fragments du ledger, région manuelle liée, révision | PASS sur mock |
 | DOCX original/résultat dans iframe sandbox à origine opaque, CSP restrictive et `renderAltChunks:false` | PASS sur mock |
