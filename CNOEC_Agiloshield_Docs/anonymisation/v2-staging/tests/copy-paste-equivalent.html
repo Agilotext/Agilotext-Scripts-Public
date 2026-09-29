@@ -19,7 +19,7 @@ window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2'
 function json(v,status=200){return new Response(JSON.stringify(v),{status,headers:{'Content-Type':'application/json'}});}
 function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.status,status:job.status,
  reviewRevision:job.rev,protectionPolicy:job.policy,qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
-function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED',
+function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED'||job.status==='READY',
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  occurrences:job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
   category:'EML',action:'MASK',fragments:[[72,94,202,109]]}]:[],

@@ -49,7 +49,7 @@ function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.st
  reviewRevision:job.rev,protectionPolicy:job.policy,listDigest:job.listDigest,
  processingMode:job.mode,createdAt:job.createdAt,sizeBytes:job.sizeBytes,
  qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
-function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED',
+function review(job){return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED'||job.status==='READY',
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  listDigest:job.listDigest,processingMode:job.mode,
  occurrences:job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,

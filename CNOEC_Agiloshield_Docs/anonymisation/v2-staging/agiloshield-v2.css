@@ -175,8 +175,15 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-unresolved{border-left:4px solid #df9924}
 #agiloshield-v2-staging .asv2-viewer{display:flex;flex-direction:column;min-width:0;min-height:0;background:#e8eef5}
 #agiloshield-v2-staging .asv2-viewer-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:9px 16px;background:#fff;border-bottom:1px solid var(--asv2-line);flex:none}
+#agiloshield-v2-staging .asv2-btn-with-icon{display:inline-flex;align-items:center;gap:6px}
+#agiloshield-v2-staging .asv2-btn-icon{display:block;width:16px;height:16px;flex:none;pointer-events:none}
+#agiloshield-v2-staging .asv2-icon-only-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border-radius:6px}
+#agiloshield-v2-staging .asv2-icon-only-btn .asv2-btn-icon{width:16px;height:16px}
+#agiloshield-v2-staging button.is-active .asv2-btn-icon,
+#agiloshield-v2-staging .asv2-primary .asv2-btn-icon,
+#agiloshield-v2-staging .asv2-manual-mask-btn.is-active .asv2-btn-icon{filter:brightness(0) invert(1)}
 #agiloshield-v2-staging .asv2-preview-switch{display:flex;gap:4px;background:#e9f0f9;padding:3px;border-radius:8px}
-#agiloshield-v2-staging .asv2-preview-switch button{padding:6px 12px;border:1px solid transparent;border-radius:6px;font-size:12px;font-weight:700;background:transparent;color:var(--asv2-navy);transition:all .15s}
+#agiloshield-v2-staging .asv2-preview-switch button{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid transparent;border-radius:6px;font-size:12px;font-weight:700;background:transparent;color:var(--asv2-navy);transition:all .15s}
 #agiloshield-v2-staging .asv2-preview-switch button:hover{background:#d5e4f5;color:var(--asv2-navy)}
 #agiloshield-v2-staging .asv2-preview-switch button.is-active{background:var(--asv2-blue);color:#fff;box-shadow:0 2px 4px rgba(32,92,183,.25)}
 #agiloshield-v2-staging .asv2-preview-switch button.is-active:hover{background:#184a95;color:#fff}
@@ -190,8 +197,10 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-last-doc-name{font-weight:700;font-size:13px;color:var(--asv2-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #agiloshield-v2-staging .asv2-last-doc-status{font-size:12px;color:var(--asv2-muted)}
 #agiloshield-v2-staging .asv2-last-doc-action{font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0}
-#agiloshield-v2-staging .asv2-manual-mask-btn{margin-left:auto;font-size:12px;padding:5px 10px}
+#agiloshield-v2-staging .asv2-manual-mask-btn{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font-size:12px;font-weight:700;padding:5px 12px;border-radius:6px;transition:all .15s}
+#agiloshield-v2-staging .asv2-manual-mask-btn:hover{border-color:#91b9ef;background:#eef5ff}
 #agiloshield-v2-staging .asv2-manual-mask-btn.is-active{background:#c0392b;color:#fff;border-color:#c0392b}
+#agiloshield-v2-staging .asv2-manual-mask-btn.is-active:hover{background:#a93226;border-color:#a93226}
 #agiloshield-v2-staging .asv2-compare-container{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%}
 #agiloshield-v2-staging .asv2-compare-col{display:flex;flex-direction:column;align-items:center;gap:8px}
 #agiloshield-v2-staging .asv2-compare-title{font-size:13px;font-weight:700;color:var(--asv2-navy)}
@@ -199,7 +208,7 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-viewer-body{flex:1;overflow:auto;padding:15px;min-height:0}
 #agiloshield-v2-staging .asv2-loading,#agiloshield-v2-staging .asv2-error{padding:20px;text-align:center}
 #agiloshield-v2-staging .asv2-error{color:#ad2d28}
-#agiloshield-v2-staging .asv2-pdf-nav{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 12px}
+#agiloshield-v2-staging .asv2-pdf-nav{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 12px;flex-wrap:wrap}
 #agiloshield-v2-staging .asv2-page-scroll{overflow:auto;min-height:0;max-height:calc(100dvh - 300px)}
 #agiloshield-v2-staging .asv2-page{position:relative;width:max-content;max-width:none;margin:0 auto 15px;background:#fff;box-shadow:0 3px 15px rgba(0,0,0,.15)}
 #agiloshield-v2-staging .asv2-page canvas{display:block}
