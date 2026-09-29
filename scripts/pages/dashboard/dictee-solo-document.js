@@ -20,6 +20,27 @@
     try { global.localStorage.setItem(reviewKey(state.email, state.draftId), value); } catch (e) {}
   }
   function contractReady() { return global.AGILO_SOLO_DOCUMENT_CONTRACT_READY === true; }
+  function submissionError(error) {
+    var code = error && error.message;
+    var details = String((error && error.details) || "");
+    if (code === "invalid_token") return "Session expirée. Reconnectez-vous puis réessayez.";
+    if (code === "invalid_request") {
+      return /promptId|modèle/i.test(details)
+        ? "Le modèle choisi n’est plus accessible. Choisissez-en un autre, puis réessayez."
+        : "La demande de document n’est pas compatible avec le serveur. Rechargez la page, puis réessayez.";
+    }
+    if (code === "invalid_audio" || code === "unsupported_audio_format" ||
+        code === "invalid_saved_wav") return "L’audio de cette dictée est illisible. Conservez le texte et vérifiez l’enregistrement.";
+    if (code === "audio_missing") return "L’audio local de cette dictée est introuvable. Le texte reste copiable.";
+    if (code === "quota_uploads_exceeded") return "Limite d’envois atteinte. Consultez vos compteurs.";
+    if (code === "quota_minutes_exceeded") return "Quota mensuel de dictée atteint. Consultez vos compteurs.";
+    if (code === "audio_too_long") return "Cette dictée dépasse la durée autorisée. Conservez le texte et recommencez plus court.";
+    if (code === "account_not_allowed" || code === "subscription_required")
+      return "Dictée solo et génération réservées aux offres Pro et Business/ENT.";
+    if (code === "idempotency_conflict")
+      return "Cet envoi ne correspond plus au brouillon reçu par le serveur. Vérifiez Mes fichiers avant d’effacer ou de recommencer.";
+    return "Le document n’a pas été créé. Vérifiez Mes fichiers, puis réessayez si aucun travail n’apparaît.";
+  }
   function previewReady() {
     return global.AGILO_SOLO_DOCUMENT_PREVIEW === true && state.email === "bauerwebpro@gmail.com";
   }
@@ -83,6 +104,7 @@
     var retry = root.querySelector(".agilo-solo-document__retry");
     var pending = state.submission &&
       (state.submission.status === "uncertain" || state.submission.status === "pending");
+    var conflict = state.submission && state.submission.status === "conflict";
     var done = state.submission && state.submission.status === "accepted";
     var selected = global.AgiloDicteeCarnetPicker && global.AgiloDicteeCarnetPicker.getSelected();
     var hasText = !!(textEl() && textEl().value.trim());
@@ -90,8 +112,8 @@
     review.hidden = !state.segmentFailed;
     editorLink.hidden = !done;
     if (done) editorLink.href = editorUrl(state.submission.jobId, state.submission.edition);
-    retry.hidden = !pending || !contractReady();
-    btn.disabled = state.recording || state.saving || state.sending || pending || done ||
+    retry.hidden = !pending || state.sending;
+    btn.disabled = state.recording || state.saving || state.sending || pending || conflict || done ||
       !state.ready || !state.email || state.serverBlocked || !!state.storageError ||
       !state.audioCount || !hasText || !selected ||
       (state.segmentFailed && !state.reviewConfirmed) || !available();
@@ -100,6 +122,7 @@
     else if (done && (state.cleanupWarning || state.audioCount > 0))
       setStatus("Reçu pour traitement. L’audio local est conservé ; vérifiez Mes fichiers avant d’effacer ce brouillon.", true);
     else if (done) setStatus("Reçu pour traitement. Le document sera disponible dans l’éditeur.", false);
+    else if (conflict) setStatus(state.apiError || submissionError({ message: "idempotency_conflict" }), true);
     else if (pending) setStatus("Réponse incertaine. Vérifiez Mes fichiers avant de reprendre cet envoi.", true);
     else if (state.storageError) setStatus("Audio local indisponible. Le texte reste copiable ; la génération ne peut pas démarrer.", true);
     else if (state.saving) setStatus("Finalisation de la dictée…", false);
@@ -200,7 +223,7 @@
     fd.append("transcriptContent", snapshot.text);
     fd.append("audio", new File([wav], "dictee-solo.wav", { type: "audio/wav" }));
     fd.append("promptId", String(snapshot.promptId));
-    if (contractReady()) fd.append("requestId", snapshot.requestId);
+    fd.append("requestId", snapshot.requestId);
     var response = await fetch("https://api.agilotext.com/api/v1/createTranscriptFromText", {
       method: "POST", body: fd
     });
@@ -209,6 +232,8 @@
     catch (e) { throw new Error("uncertain_response"); }
     if (!response.ok || !data || data.status !== "OK") {
       var err = new Error((data && data.errorMessage) || "api_rejected");
+      err.details = data && data.errorDetails;
+      err.httpStatus = response.status;
       err.certain = response.status >= 400 && response.status < 500 && response.status !== 408;
       throw err;
     }
@@ -243,19 +268,20 @@
         try { global.open(editorUrl(jobId, snapshot.edition), "_blank", "noopener"); } catch (e) {}
       }
     } catch (e) {
-      if (e.certain || e.message === "invalid_token" || e.message === "audio_missing" ||
+      if (e.message === "idempotency_conflict") {
+        var conflict = Object.assign({}, snapshot, { status: "conflict" });
+        await api().saveSubmission(snapshot.email, snapshot.draftId, conflict).catch(function () {});
+        if (snapshot.email === state.email && snapshot.draftId === state.draftId) state.submission = conflict;
+        state.apiError = submissionError(e);
+        notifyOtherTabs();
+      } else if (e.certain || e.message === "invalid_token" || e.message === "audio_missing" ||
           e.message === "invalid_saved_wav") {
         await api().clearSubmission(snapshot.email, snapshot.draftId).catch(function () {});
         if (snapshot.email === state.email && snapshot.draftId === state.draftId) state.submission = null;
         notifyOtherTabs();
         state.storageError = e.message === "audio_missing" || e.message === "invalid_saved_wav" ? e.message : "";
-        if (e.message === "invalid_token") state.apiError = "Session expirée. Reconnectez-vous puis réessayez.";
-        else if (e.message === "quota_uploads_exceeded") state.apiError = "Limite d’envois atteinte. Consultez vos compteurs.";
-        else if (e.message === "quota_minutes_exceeded") state.apiError = "Quota mensuel de dictée atteint. Consultez vos compteurs.";
-        else if (e.message === "audio_too_long") state.apiError = "Cette dictée dépasse la durée autorisée. Conservez le texte et recommencez plus court.";
-        else if (e.message === "account_not_allowed" || e.message === "subscription_required")
-          { state.apiError = "Dictée solo et génération réservées aux offres Pro et Business/ENT."; state.serverBlocked = true; }
-        else state.apiError = "Le document a été refusé. Vérifiez le modèle ou l’audio, puis réessayez.";
+        state.apiError = submissionError(e);
+        if (e.message === "account_not_allowed" || e.message === "subscription_required") state.serverBlocked = true;
       } else {
         var uncertain = Object.assign({}, snapshot, { status: "uncertain" });
         await api().saveSubmission(snapshot.email, snapshot.draftId, uncertain).catch(function () {});
@@ -367,7 +393,8 @@
     else ta.parentNode.insertBefore(root, ta.nextSibling);
     root.querySelector(".agilo-solo-document__button").addEventListener("click", create);
     root.querySelector(".agilo-solo-document__retry").addEventListener("click", function () {
-      if (state.submission && state.submission.status === "uncertain" && !state.sending) send(state.submission);
+      if (state.submission && (state.submission.status === "uncertain" ||
+          state.submission.status === "pending") && !state.sending) send(state.submission);
     });
     root.querySelector(".agilo-solo-document__review input").addEventListener("change", function (e) {
       state.reviewConfirmed = e.target.checked;
@@ -419,7 +446,8 @@
     canStart: function () {
       return state.ready && !state.serverBlocked && !state.saving && !state.sending &&
         !(state.submission && (state.submission.status === "pending" ||
-          state.submission.status === "uncertain" || state.submission.status === "accepted"));
+          state.submission.status === "uncertain" || state.submission.status === "conflict" ||
+          state.submission.status === "accepted"));
     }
   };
 })(typeof window !== "undefined" ? window : globalThis);
