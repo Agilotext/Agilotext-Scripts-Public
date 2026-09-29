@@ -13,6 +13,11 @@ non raccordées restent désactivées.
   acceptés sont suivis avec au plus deux appels de statut simultanés. Une fin
   de job libère une place pour un nouveau dépôt ; les autres fichiers ne sont
   pas effacés par un échec.
+- Le tableau « Documents de cette session » montre les résultats terminés,
+  tandis que la file ne montre que les fichiers en cours. Le navigateur garde
+  au plus 50 identifiants récents de cette session pour une reprise après
+  rechargement, sans octets documentaires. Il ne remplace pas un historique
+  durable fourni par Java.
 - Mode, `protectionPolicy` et listes sont copiés pour chaque fichier au moment
   du dépôt. Une modification des préférences ultérieure n'affecte pas ce job.
 - `PENDING` et `PROCESSING` n'ont ni pourcentage ni phase inventée. Le temps de
