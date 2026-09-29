@@ -216,7 +216,7 @@ describe("Dictee Carnet v2", function () {
     assert.match(usages, /agilo-dictee-toolbar\{display:flex;flex-direction:column/);
     assert.match(document, /Générer le document/);
     assert.doesNotMatch(document, /Bientôt/);
-    assert.doesNotMatch(document, /Nouvelle dictée solo/);
+    assert.match(document, /Nouvelle dictée solo/);
     assert.doesNotMatch(document, /attente de validation de l.API/);
     assert.doesNotMatch(document, /mesTranscriptsHref|class="agilo-solo-document__files"/);
     assert.match(usages, /generate\.hidden = !isCarnet/);

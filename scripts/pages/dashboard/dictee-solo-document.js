@@ -81,7 +81,8 @@
       ".agilo-solo-document__status{min-height:1.1rem;margin:.5rem 0;color:#404040;font-size:.82rem;line-height:1.4;}" +
       ".agilo-solo-document__status.is-error{color:#b42318;}" +
       ".agilo-solo-document__links{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap;font-size:.82rem;}" +
-      ".agilo-solo-document__links a,.agilo-solo-document__links button{color:var(--agilo-primary,#174a96);text-decoration:underline;background:none;border:0;padding:0;font:inherit;cursor:pointer;}";
+      ".agilo-solo-document__links a,.agilo-solo-document__links button{color:var(--agilo-primary,#174a96);text-decoration:underline;background:none;border:0;padding:0;font:inherit;cursor:pointer;}" +
+      ".agilo-solo-document__links button:disabled{opacity:.55;cursor:not-allowed;}";
     document.head.appendChild(style);
   }
 
@@ -102,6 +103,7 @@
     var review = root.querySelector(".agilo-solo-document__review");
     var editorLink = root.querySelector(".agilo-solo-document__editor");
     var retry = root.querySelector(".agilo-solo-document__retry");
+    var fresh = root.querySelector(".agilo-solo-document__new");
     var pending = state.submission &&
       (state.submission.status === "uncertain" || state.submission.status === "pending");
     var conflict = state.submission && state.submission.status === "conflict";
@@ -113,6 +115,8 @@
     editorLink.hidden = !done;
     if (done) editorLink.href = editorUrl(state.submission.jobId, state.submission.edition);
     retry.hidden = !pending || state.sending;
+    fresh.hidden = !state.email || !(state.submission || state.audioCount || hasText);
+    fresh.disabled = state.recording || state.saving || state.sending || !state.ready;
     btn.disabled = state.recording || state.saving || state.sending || pending || conflict || done ||
       !state.ready || !state.email || state.serverBlocked || !!state.storageError ||
       !state.audioCount || !hasText || !selected ||
@@ -334,21 +338,34 @@
   }
 
   async function reset() {
-    if (state.recording || state.saving || state.sending) return;
-    var existing = await api().getSubmission(state.email, state.draftId).catch(function () { return null; });
-    if (existing && (existing.status === "pending" || existing.status === "uncertain")) {
-      state.submission = existing;
-      update();
-      return;
-    }
-    if (!global.confirm("Effacer le texte et l’audio local de cette dictée solo ?")) return;
+    if (!state.ready || !state.email || state.recording || state.saving || state.sending) return;
+    var email = state.email, draftId = state.draftId, existing;
+    state.saving = true;
+    update();
     try {
-      await Promise.all([api().clearAudio(state.email, state.draftId),
-        api().clearSubmission(state.email, state.draftId)]);
-      try { global.localStorage.removeItem(reviewKey(state.email, state.draftId)); } catch (e) {}
-      if (textEl()) textEl().value = "";
-      if (usages()) usages().writeDraft(state.email, "");
-      state.draftId = api().nextDraftId(state.email);
+      existing = await api().getSubmission(email, draftId);
+      if (email !== state.email || draftId !== state.draftId) return;
+      var unresolved = existing && (existing.status === "pending" ||
+        existing.status === "uncertain" || existing.status === "conflict");
+      var message = unresolved
+        ? "L’envoi précédent peut encore être traité. Vérifiez Mes fichiers. Démarrer une nouvelle dictée sans le renvoyer ?"
+        : existing && existing.status === "accepted"
+        ? "Le document précédent reste dans Mes fichiers. Démarrer une nouvelle dictée solo ?"
+        : "Démarrer une nouvelle dictée solo ? Le texte et l’audio non envoyés de ce brouillon seront effacés.";
+      if (!global.confirm(message)) return;
+      if (!unresolved) {
+        await api().clearAudio(email, draftId);
+        await api().clearSubmission(email, draftId);
+        try { global.localStorage.removeItem(reviewKey(email, draftId)); } catch (e) {}
+      }
+      if (email !== state.email || draftId !== state.draftId) return;
+      var nextId = api().nextDraftId(email);
+      if (textEl()) {
+        textEl().value = "";
+        textEl().dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (usages()) usages().writeDraft(email, "");
+      state.draftId = nextId;
       state.audioCount = 0;
       state.submission = null;
       state.segmentFailed = false;
@@ -361,6 +378,9 @@
       update();
     } catch (e) {
       state.storageError = e.message || "storage_error";
+      update();
+    } finally {
+      state.saving = false;
       update();
     }
   }
@@ -385,13 +405,15 @@
       '<p class="agilo-solo-document__status" role="status" aria-live="polite"></p>' +
       '<div class="agilo-solo-document__links">' +
       '<a class="agilo-solo-document__editor" hidden>Ouvrir ce document</a>' +
-      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button></div>';
+      '<button type="button" class="agilo-solo-document__retry" hidden>Reprendre le même envoi</button>' +
+      '<button type="button" class="agilo-solo-document__new" hidden>Nouvelle dictée solo</button></div>';
     var after = document.getElementById("agilo-carnet-after");
     var secondary = panel.querySelector(".dictee-secondary-actions");
     if (after && after.parentNode) after.parentNode.insertBefore(root, after.nextSibling);
     else if (secondary && secondary.parentNode) secondary.parentNode.insertBefore(root, secondary);
     else ta.parentNode.insertBefore(root, ta.nextSibling);
     root.querySelector(".agilo-solo-document__button").addEventListener("click", create);
+    root.querySelector(".agilo-solo-document__new").addEventListener("click", reset);
     root.querySelector(".agilo-solo-document__retry").addEventListener("click", function () {
       if (state.submission && (state.submission.status === "uncertain" ||
           state.submission.status === "pending") && !state.sending) send(state.submission);
