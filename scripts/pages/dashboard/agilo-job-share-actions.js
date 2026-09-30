@@ -64,6 +64,11 @@
       '  color: #174a96 !important;' +
       '  background-color: #eff6ff !important;' +
       '}' +
+      '.agilo-row-share.is-copied, .agilo-row-email.is-copied {' +
+      '  color: #15803d !important;' +
+      '  background-color: #f0fdf4 !important;' +
+      '  transform: scale(1.08) !important;' +
+      '}' +
       '.agilo-row-share:disabled, .agilo-row-share.is-disabled, .agilo-row-email:disabled, .agilo-row-email.is-disabled {' +
       '  opacity: 0.35 !important;' +
       '  cursor: not-allowed !important;' +
@@ -152,8 +157,8 @@
 
     if (deleteBtn) {
       deleteBtn.classList.add('agilo-action-btn');
-      if (!deleteBtn.getAttribute('title')) deleteBtn.setAttribute('title', 'Supprimer');
-      if (!deleteBtn.getAttribute('aria-label')) deleteBtn.setAttribute('aria-label', 'Supprimer');
+      if (!deleteBtn.getAttribute('title')) deleteBtn.setAttribute('title', 'Supprimer cette transcription');
+      if (!deleteBtn.getAttribute('aria-label')) deleteBtn.setAttribute('aria-label', 'Supprimer cette transcription');
     }
 
     var shareBtn = cell.querySelector('.agilo-row-share');
@@ -188,13 +193,13 @@
     if (ready) {
       shareBtn.disabled = false;
       shareBtn.classList.remove('is-disabled');
-      shareBtn.setAttribute('title', 'Copier le lien et ouvrir la vue partagée');
-      shareBtn.setAttribute('aria-label', 'Copier le lien et ouvrir');
+      shareBtn.setAttribute('title', 'Copier le lien public et ouvrir la vue partagée');
+      shareBtn.setAttribute('aria-label', 'Copier le lien public et ouvrir la vue partagée');
 
       emailBtn.disabled = false;
       emailBtn.classList.remove('is-disabled');
-      emailBtn.setAttribute('title', 'Copier le message d’invitation et ouvrir l’e-mail');
-      emailBtn.setAttribute('aria-label', 'Inviter par e-mail');
+      emailBtn.setAttribute('title', 'Copier le message d’invitation personnalisé et ouvrir l’e-mail');
+      emailBtn.setAttribute('aria-label', 'Copier le message d’invitation personnalisé et ouvrir l’e-mail');
     } else {
       shareBtn.disabled = true;
       shareBtn.classList.add('is-disabled');
@@ -259,6 +264,13 @@
     if (shareBtn) {
       if (shareBtn.disabled) return;
       shareBtn.disabled = true;
+
+      // Ouvrir l'onglet cible dès le clic pour éviter le blocage de popup du navigateur
+      var newWin = null;
+      try {
+        newWin = window.open('about:blank', '_blank');
+      } catch (_) { /* ignore */ }
+
       try {
         var viewUrl = await getOrFetchShareUrl(jobId, auth);
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -266,9 +278,26 @@
         } else {
           window.prompt('Copiez le lien de lecture', viewUrl);
         }
-        window.open(viewUrl, '_blank');
-        toast('Lien copié & page ouverte');
+
+        // Feedback visuel : bouton vert et toast
+        shareBtn.classList.add('is-copied');
+        toast('✓ Lien copié dans le presse-papier !');
+
+        // Courte temporisation pour bien voir la confirmation avant l'ouverture
+        await new Promise(function (resolve) { setTimeout(resolve, 800); });
+
+        if (newWin && !newWin.closed) {
+          newWin.location.href = viewUrl;
+        } else {
+          window.open(viewUrl, '_blank');
+        }
+
+        setTimeout(function () {
+          shareBtn.classList.remove('is-copied');
+        }, 1500);
+
       } catch (e) {
+        if (newWin && !newWin.closed) newWin.close();
         toast(e.message || 'Erreur réseau');
       } finally {
         shareBtn.disabled = false;
@@ -281,22 +310,42 @@
       emailBtn.disabled = true;
       try {
         var shareUrl = await getOrFetchShareUrl(jobId, auth);
-        var titleEl = row.querySelector('.wrapper-content_item-name, [data-aq="job-name"], .file-name');
-        var audioTitle = (titleEl && (titleEl.value || titleEl.textContent) || 'votre enregistrement').trim();
+
+        // Nom exact du fichier de la ligne
+        var titleEl = row.querySelector('.file-name, .wrapper-content_item-name, [data-aq="job-name"]');
+        var audioTitle = (titleEl && (titleEl.textContent || titleEl.innerText || titleEl.value) || 'votre enregistrement').trim();
+
+        // Prénom / Nom de l'utilisateur connecté depuis le profil Webflow
+        var nameEl = document.querySelector('#ms-first-name, [data-ms-member="first-name"], .ms-first-name');
+        var senderName = (nameEl && (nameEl.textContent || nameEl.innerText) || '').trim();
+        var signature = senderName ? senderName : 'L\'équipe Agilotext';
+
         var msgText =
           'Bonjour,\n\n' +
-          'Voici le lien pour accéder à la transcription de l\'enregistrement "' + audioTitle + '" :\n' +
+          'Je vous partage la transcription et le compte-rendu de l\'enregistrement « ' + audioTitle + ' ».\n\n' +
+          'Vous pouvez y accéder directement via ce lien sécurisé :\n' +
           shareUrl + '\n\n' +
-          'Bonne consultation,\n' +
-          'Agilotext';
+          'Bonne lecture,\n' +
+          signature;
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(msgText);
         }
-        var mailtoUrl = 'mailto:?subject=' + encodeURIComponent('Transcription partagée : ' + audioTitle) +
+
+        emailBtn.classList.add('is-copied');
+        toast('✓ Message copié dans le presse-papier !');
+
+        var mailtoUrl = 'mailto:?subject=' + encodeURIComponent('Transcription : ' + audioTitle) +
           '&body=' + encodeURIComponent(msgText);
-        window.location.href = mailtoUrl;
-        toast('Message copié dans le presse-papier & e-mail ouvert');
+
+        setTimeout(function () {
+          window.location.href = mailtoUrl;
+        }, 400);
+
+        setTimeout(function () {
+          emailBtn.classList.remove('is-copied');
+        }, 2000);
+
       } catch (e2) {
         toast(e2.message || 'Erreur réseau');
       } finally {

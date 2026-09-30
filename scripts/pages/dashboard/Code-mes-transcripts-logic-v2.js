@@ -1343,7 +1343,7 @@
         <a href="#" class="download_wrapper-link_summary_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
       </div>
       <div class="custom-element titles actions-cell">
-        <button type="button" class="agilo-row-share agilo-action-btn" title="Copier le lien et ouvrir la vue partagée" aria-label="Copier le lien et ouvrir">
+        <button type="button" class="agilo-row-share agilo-action-btn" title="Copier le lien public et ouvrir la vue partagée" aria-label="Copier le lien public et ouvrir la vue partagée">
           <svg class="agilo-ico-share" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="13.5" cy="4.5" r="2.25"/>
             <circle cx="4.5" cy="9" r="2.25"/>
@@ -1351,13 +1351,13 @@
             <path d="M6.5 7.9l4.9-2.4M6.5 10.1l4.9 2.4"/>
           </svg>
         </button>
-        <button type="button" class="agilo-row-email agilo-action-btn" title="Copier le message d’invitation et ouvrir l’e-mail" aria-label="Inviter par e-mail">
+        <button type="button" class="agilo-row-email agilo-action-btn" title="Copier le message d’invitation personnalisé et ouvrir l’e-mail" aria-label="Copier le message d’invitation personnalisé et ouvrir l’e-mail">
           <svg class="agilo-ico-email" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <rect x="2" y="3.5" width="14" height="11" rx="2"/>
             <polyline points="3 5.5 9 10 15 5.5"/>
           </svg>
         </button>
-        <button class="delete-job-button delete-job-button_to-confirm agilo-action-btn" title="Supprimer" aria-label="Supprimer">
+        <button class="delete-job-button delete-job-button_to-confirm agilo-action-btn" title="Supprimer cette transcription" aria-label="Supprimer cette transcription">
           <svg class="delete-icon" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M2.25 4.5h13.5"/>
             <path d="M6.75 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5"/>
