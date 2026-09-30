@@ -2,13 +2,13 @@
 
 ## État au 29 septembre 2026
 
-**Assets figés :** `f61988bb1fb14aa3abce26b7a0dcc64b0fd76047` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
+**Assets figés :** `825eadc513ee63bcdd5dcda3565e317d7b3ea6b0` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
 
 **Verdict :** interface et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le 29/09/2026, la page publiée a affiché « Accès limité » dans le navigateur disponible. Il n’a donc pas été possible de vérifier la version réellement active ni d’appeler Java sous une session valide. Les essais ci-dessous utilisent une page locale avec transport synthétique. L’historique durable, le ZIP et les documents de l’ancienne version restent cachés tant que leurs capacités ne sont pas effectivement raccordées.
 
 ## Remplacement dans Webflow
 
-Dans l’Embed principal Anonymiser, remplacer **tout** l’ancien bloc par [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Si la page contient encore `<form id="agfForm">`, remplacer cet Embed entier. Vérifier qu’un second Embed ne charge pas Lottie et `agiloshield-embed-anonymisation-anon2-beta.js` à côté du nouveau parcours ; le vider si présent. Le retour immédiat au front précédent se fait avec [WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html](WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html) (épinglé à `5c2d9978dbb9d2fb399bf1bdda562f00450182b3`). Le retour historique antérieur reste dans [WEBFLOW_STAGING_ROLLBACK.html](WEBFLOW_STAGING_ROLLBACK.html). Ne modifier aucun autre Embed du dashboard.
+Dans l’Embed principal Anonymiser, remplacer **tout** l’ancien bloc par [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Si la page contient encore `<form id="agfForm">`, remplacer cet Embed entier. Vérifier qu’un second Embed ne charge pas Lottie et `agiloshield-embed-anonymisation-anon2-beta.js` à côté du nouveau parcours ; le vider si présent. Le retour immédiat au front précédent se fait avec [WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html](WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html) (épinglé à `f61988bb1fb14aa3abce26b7a0dcc64b0fd76047`). Le retour historique antérieur reste dans [WEBFLOW_STAGING_ROLLBACK.html](WEBFLOW_STAGING_ROLLBACK.html). Ne modifier aucun autre Embed du dashboard.
 
 Le bloc utilise uniquement `https://apitest.agilotext.com/api/agiloshield-v2`, l’auth utilisateur Agilotext/Memberstack et des assets jsDelivr épinglés au commit ci-dessus. Le port explicite `:9443` de l’ancien bloc expire depuis un client externe ; le HTTPS standard répond `401` sans authentification et autorise l’origine Webflow staging lors du précontrôle CORS. Cela ne prouve pas encore le parcours authentifié. Il ne contient aucun HMAC Python, secret interservice ou token codé en dur. Le navigateur ne contacte jamais `127.0.0.1:8091`. Les formats affichés sont PDF, DOCX, XLSX, PPTX, TXT et CSV. Les 13 cases sont dans la fenêtre « Données à masquer » ; un texte saisi suit le traitement TXT. « Pseudonymiser » reste désactivé et la navigation « Restaurer » est cachée tant que ces capacités ne sont pas prouvées.
 
@@ -16,6 +16,11 @@ Le bloc utilise uniquement `https://apitest.agilotext.com/api/agiloshield-v2`, l
 
 | Contrôle | Résultat |
 | --- | --- |
+| Téléchargement omnicanal immédiat (bouton toolbar viewer, carte dernier doc, tableau sessions) avec icônes Nucleo download/key | PASS sur mock / synthétique |
+| Téléchargement sans friction sur document à vérifier (`REVIEW_REQUIRED`) avec notification non-bloquante et header `X-Agiloshield-Confirm-Non-Verifie` | PASS sur mock / synthétique |
+| Téléchargement immédiat de la clé de pseudonymisation (`PSEUDONYMIZE`) pour `READY` et `REVIEW_REQUIRED` | PASS sur mock / synthétique |
+| Carte d'action dédiée avec boutons directs pour formats sans aperçu interactif (XLSX, PPTX) | PASS sur mock |
+| Déverrouillage côté front du mode Pseudonymisation et des listes d'inclusion/exclusion (flags staging + URL `?pseudo=1` & `?lists=1`) avec résilience si le serveur n'échoe pas encore `listDigest` | PASS sur mock / syntaxe validée |
 | Accueil épuré sans bandeau de test, compteur compact "X/13", carte "Dernier document" avec action contextuelle | PASS sur mock |
 | Auto-ouverture du tiroir au premier document prêt/à vérifier sans perte du focus utilisateur | PASS sur mock |
 | Restauration de l'état du tiroir via sessionStorage | PASS sur mock |
@@ -46,7 +51,7 @@ Le bloc utilise uniquement `https://apitest.agilotext.com/api/agiloshield-v2`, l
 | Libellés des trois statuts, actions de revue, erreur serveur sûre, sélection vide visible avant dépôt et dans le résultat | PASS sur mock |
 | Console de la page synthétique | Aucune erreur observée |
 | Bloc épinglé/jsDelivr, `docx-preview` 0.4.1 et JSZip 3.10.2 | PASS local/CDN |
-| JS et CSS servis par jsDelivr au SHA `f61988bb1fb14aa3abce26b7a0dcc64b0fd76047` | SHA-256 identiques aux fichiers du commit : JS `3b78a439e5ecd6dcc9f0c2ad2d98512701de16696d7906146fd3a4c3ff897b75`, CSS `cba209d09d4616a1fa41a9aaa9e7923c4976b993fd4560096da18e10d9ca9a16` |
+| JS et CSS servis par jsDelivr au SHA `825eadc513ee63bcdd5dcda3565e317d7b3ea6b0` | SHA-256 identiques aux fichiers du commit : JS `ab86ec4cf1aa2968f23ef69eeb89e21c86f7569e24fb463b5f69c75f596a9396`, CSS `8760de840aa98279876907ec3a84049622823af82e9da242af89bab6b7e8a7bd` |
 | Bloc épinglé chargé dans une page locale avec API synthétique | PASS ; aucune erreur console observée |
 | Tests Node du client et de l’adaptateur auth, vérification syntaxique JS | PASS |
 
