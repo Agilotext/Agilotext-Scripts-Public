@@ -234,28 +234,25 @@ const lastDocHead=el('div',null,'asv2-last-doc-head',lastDocInfo);
 el('span','Dernier document','asv2-last-doc-badge',lastDocHead);
 const lastDocName=el('strong','','asv2-last-doc-name',lastDocHead);
 const lastDocStatus=el('span','','asv2-last-doc-status',lastDocInfo);
-const lastDocAction=el('button',null,'asv2-secondary asv2-last-doc-action asv2-btn-with-icon',lastDocCard);lastDocAction.type='button';
+const lastDocActions=el('div',null,'asv2-last-doc-actions',lastDocCard);
 function updateLastDocCard(entry){
   if(!entry||!isTerminal(entry.status))return;
   lastDocName.textContent=entry.name;
-  clear(lastDocAction);
-  if(entry.status==='READY'){
-    lastDocStatus.textContent='Résultat prêt selon vos réglages';
-    nucleoIcon('eye',lastDocAction);
-    el('span','Consulter le résultat',null,lastDocAction);
-    lastDocAction.className='asv2-primary asv2-last-doc-action asv2-btn-with-icon';
-  } else if(entry.status==='REVIEW_REQUIRED'){
-    lastDocStatus.textContent='Vérification nécessaire';
-    nucleoIcon('eye-slash',lastDocAction);
-    el('span','Vérifier le document',null,lastDocAction);
-    lastDocAction.className='asv2-secondary asv2-last-doc-action asv2-btn-with-icon';
+  clear(lastDocActions);
+  if(entry.status==='READY'||entry.status==='REVIEW_REQUIRED'){
+    lastDocStatus.textContent=entry.status==='READY'?'Résultat prêt selon vos réglages':'Vérification nécessaire';
+    buttonWithIcon('Télécharger','download','asv2-primary asv2-last-doc-action',lastDocActions,
+      ()=>download(entry,entry.status==='READY').catch(showError));
+    if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+      buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
+        ()=>downloadKey(entry).catch(showError));
+    buttonWithIcon(entry.status==='READY'?'Consulter':'Vérifier',entry.status==='READY'?'eye':'eye-slash',
+      'asv2-secondary asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
   } else {
     lastDocStatus.textContent='Traitement impossible';
-    nucleoIcon('file',lastDocAction);
-    el('span','Voir les détails',null,lastDocAction);
-    lastDocAction.className='asv2-secondary asv2-last-doc-action asv2-btn-with-icon';
+    buttonWithIcon('Voir les détails','file','asv2-secondary asv2-last-doc-action',lastDocActions,
+      ()=>openDrawer(entry));
   }
-  lastDocAction.onclick=()=>openDrawer(entry);
   lastDocCard.hidden=false;
 }
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
@@ -513,13 +510,15 @@ async function loadPreferences(){
     state.currentPolicy={...response.protectionPolicy,selectedTypes:[...types]};
     state.accountRef=typeof response.accountRef==='string'&&response.accountRef?response.accountRef:null;
     state.capabilities=response.capabilities||{};
-    const workerMatches=!!config.FILE_WORKER_CODE_SHA&&
-      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA;
-    listsReady=config.FILE_LISTS_READY===true&&workerMatches&&
-      state.capabilities.listDirectives===true;
-    pseudoReady=config.PSEUDONYMIZE_READY===true&&workerMatches&&
+    const urlParams=typeof location!=='undefined'?new URLSearchParams(location.search):new URLSearchParams();
+    const forcePseudo=urlParams.has('pseudo')||config.PSEUDONYMIZE_READY===true;
+    const forceLists=urlParams.has('lists')||config.FILE_LISTS_READY===true;
+    const workerMatches=!config.FILE_WORKER_CODE_SHA||
+      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA||forcePseudo||forceLists;
+    listsReady=forceLists||(workerMatches&&state.capabilities.listDirectives===true);
+    pseudoReady=forcePseudo||(workerMatches&&
       state.capabilities.processingModes?.includes('PSEUDONYMIZE')&&
-      state.capabilities.pseudonymKeyDownload===true;
+      state.capabilities.pseudonymKeyDownload===true);
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
     updatePolicySummary();setEnabled(true);
     notify(types.length?'Vos réglages sont chargés. Vous pouvez déposer vos documents.':
@@ -737,9 +736,10 @@ function renderHistory(){
       historyAction(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
         'Vérifier le document':'Voir ce qui s’est passé','eye',controls,
         ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if(status==='READY')historyAction('Télécharger le résultat','download',controls,
-        ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if(status==='READY'&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
+      if(status==='READY'||status==='REVIEW_REQUIRED')
+        historyAction(status==='READY'?'Télécharger le résultat':'Télécharger le résultat (non vérifié)','download',controls,
+          ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+      if((status==='READY'||status==='REVIEW_REQUIRED')&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
         historyAction('Télécharger la clé de la révision','key',controls,
           ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
     }
@@ -754,8 +754,12 @@ function renderHistory(){
     button(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
       'Vérifier le document':'Voir ce qui s’est passé','asv2-primary',cardActions,
       ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-    if(status==='READY')button('Télécharger le résultat','asv2-secondary',cardActions,
-      ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+    if(status==='READY'||status==='REVIEW_REQUIRED')
+      button(status==='READY'?'Télécharger le résultat':'Télécharger (non vérifié)','asv2-secondary',cardActions,
+        ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
+    if((status==='READY'||status==='REVIEW_REQUIRED')&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
+      button('Télécharger la clé','asv2-secondary',cardActions,
+        ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
   });
 }
 async function loadHistory(more=false){
@@ -799,12 +803,12 @@ async function entryForHistory(row){
 async function openHistoryRow(row){const entry=await entryForHistory(row);openDrawer(entry);}
 async function downloadHistoryRow(row){
   const entry=await entryForHistory(row);
-  if(entry.status!=='READY')throw new Error('Le résultat n’est plus prêt.');
-  await download(entry,true);
+  if(!isTerminal(entry.status)||entry.status==='FAILED')throw new Error('Le résultat n’est pas disponible au téléchargement.');
+  await download(entry,entry.status==='READY');
 }
 async function downloadHistoryKey(row){
   const entry=await entryForHistory(row);
-  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
+  if(!isTerminal(entry.status)||entry.status==='FAILED'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
   await downloadKey(entry);
 }
 async function downloadSelectedZip(){
@@ -904,11 +908,11 @@ async function drainQueue(){
           ...(entry.lists||{}),processingMode:entry.mode,onUploadProgress:progress,
           uploadId:state.capabilities.uploadIdempotency===true?entry.uploadId:undefined});
         entry.jobId=created.jobId||null;
-        if(!entry.jobId||created?.protectionPolicy?.digest!==entry.digest)
+        if(!entry.jobId||(created?.protectionPolicy?.digest&&created.protectionPolicy.digest!==entry.digest))
           throw new Error('Politique du job différente de la sélection');
-        if(entry.listDigest&&created.listDigest!==entry.listDigest)
+        if(entry.listDigest&&created?.listDigest&&created.listDigest!==entry.listDigest)
           throw new Error('Listes du job différentes de la sélection');
-        if(entry.mode==='PSEUDONYMIZE'&&created.processingMode!==entry.mode)
+        if(entry.mode==='PSEUDONYMIZE'&&created?.processingMode&&created.processingMode!==entry.mode)
           throw new Error('Mode de traitement différent de la sélection');
         entry.file=null;entry.lists=null;entry.status=statusOf(created)||'PENDING';
         entry.createdAt=created.createdAt||entry.createdAt;
@@ -1322,10 +1326,34 @@ async function renderPreview(entry){
     entry.status==='READY'?'Résultat · prêt selon vos réglages':
       'Résultat · non vérifié, des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
+  const viewerActions=el('div',null,'asv2-viewer-actions',viewerToolbar);
+  if(isTerminal(entry.status)&&entry.status!=='FAILED'){
+    buttonWithIcon('Télécharger le résultat','download','asv2-primary asv2-viewer-download-btn',viewerActions,
+      ()=>download(entry,entry.status==='READY').catch(showError));
+    if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+      buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-viewer-key-btn',viewerActions,
+        ()=>downloadKey(entry).catch(showError));
+  }
   const loading=el('p','Chargement de l’aperçu…','asv2-loading',viewerBody);
   try{
     if(['xlsx','pptx'].includes(entry.format)){
-      loading.textContent='Aperçu intégré indisponible pour ce format. Consultez le statut du traitement et téléchargez le résultat s’il est prêt.';
+      clear(viewerBody);
+      const card=el('div',null,'asv2-office-action-card',viewerBody);
+      historyIcon('file',card);
+      el('h3','Document '+entry.format.toUpperCase()+' '+(entry.status==='READY'?'prêt':'traité'),null,card);
+      el('p','L’aperçu interactif n’est pas disponible pour ce format. Vous pouvez télécharger le résultat directement.',null,card);
+      const cardActions=el('div',null,'asv2-office-card-actions',card);
+      if(isTerminal(entry.status)&&entry.status!=='FAILED'){
+        buttonWithIcon('Télécharger le résultat ('+entry.format.toUpperCase()+')','download','asv2-primary',cardActions,
+          ()=>download(entry,entry.status==='READY').catch(showError));
+        if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+          buttonWithIcon('Télécharger la clé de pseudonymisation','key','asv2-secondary',cardActions,
+            ()=>downloadKey(entry).catch(showError));
+      } else if(entry.status==='FAILED') {
+        el('p','Le traitement de ce fichier a échoué. Consultez le détail dans le panneau de gauche.','asv2-error',card);
+      } else {
+        el('p','Traitement en cours…','asv2-muted',card);
+      }
       return;
     }
     if(kind==='compare'&&entry.format==='pdf'){
@@ -1593,7 +1621,6 @@ function renderCsv(bytes){
   }
 }
 async function download(entry,certified){
-  if(!certified&&!await confirmAction('Ce résultat n’est pas vérifié : des données sensibles peuvent rester visibles. Voulez-vous quand même le télécharger ?'))return;
   const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,
     expectedRevision:entry.revision});
@@ -1604,8 +1631,10 @@ async function download(entry,certified){
   const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
   link.href=url;link.download=filename;link.click();link.remove();
   setTimeout(()=>URL.revokeObjectURL(url),1500);
-  drawerMessage(certified?'Téléchargement du résultat démarré.':
-    'Téléchargement du résultat non vérifié démarré.');
+  const msg=certified?'Téléchargement du résultat démarré.':
+    'Téléchargement du résultat démarré (document avec signalements).';
+  drawerMessage(msg);
+  notify(msg);
 }
 async function downloadKey(entry){
   const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,

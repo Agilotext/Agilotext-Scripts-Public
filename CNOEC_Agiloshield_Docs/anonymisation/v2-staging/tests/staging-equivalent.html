@@ -142,7 +142,7 @@ window.fetch=async(url,options={})=>{
   persistMock();return json(meta(job));
  }
  if(tail==='/download'||tail==='/result'||tail==='/pseudonym-key'){
-  const certified=tail==='/download'||tail==='/pseudonym-key';
+  const certified=tail==='/download';
   if(certified&&job.status!=='READY')return json({error:'NOT_READY'},409);
   if(tail==='/pseudonym-key'&&job.mode!=='PSEUDONYMIZE')return json({error:'NO_KEY'},404);
   return new Response('SYNTHETIC ONLY',{headers:{'Content-Type':'text/plain',

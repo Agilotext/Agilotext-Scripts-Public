@@ -189,6 +189,8 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-preview-switch button.is-active:hover{background:#184a95;color:#fff}
 #agiloshield-v2-staging .asv2-preview-switch button:focus-visible{outline:2px solid var(--asv2-navy);outline-offset:1px}
 #agiloshield-v2-staging .asv2-preview-label{color:#8a5100;font-size:12px;font-weight:750}
+#agiloshield-v2-staging .asv2-viewer-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+#agiloshield-v2-staging .asv2-viewer-actions button{font-size:12px;padding:6px 12px;border-radius:6px}
 #agiloshield-v2-staging .asv2-last-doc{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0 6px;padding:12px 16px;background:#f8faff;border:1px solid #cce0f5;border-radius:10px}
 #agiloshield-v2-staging .asv2-last-doc[hidden]{display:none!important}
 #agiloshield-v2-staging .asv2-last-doc-info{display:flex;flex-direction:column;gap:3px;min-width:0}
@@ -196,6 +198,7 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-last-doc-badge{font-size:11px;font-weight:800;text-transform:uppercase;color:var(--asv2-blue);background:#e4eefb;padding:2px 7px;border-radius:6px}
 #agiloshield-v2-staging .asv2-last-doc-name{font-weight:700;font-size:13px;color:var(--asv2-navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #agiloshield-v2-staging .asv2-last-doc-status{font-size:12px;color:var(--asv2-muted)}
+#agiloshield-v2-staging .asv2-last-doc-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
 #agiloshield-v2-staging .asv2-last-doc-action{font-size:12px;padding:6px 12px;white-space:nowrap;flex-shrink:0}
 #agiloshield-v2-staging .asv2-manual-mask-btn{display:inline-flex;align-items:center;gap:6px;margin-left:auto;font-size:12px;font-weight:700;padding:5px 12px;border-radius:6px;transition:all .15s}
 #agiloshield-v2-staging .asv2-manual-mask-btn:hover{border-color:#91b9ef;background:#eef5ff}
@@ -204,6 +207,10 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-compare-container{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%}
 #agiloshield-v2-staging .asv2-compare-col{display:flex;flex-direction:column;align-items:center;gap:8px}
 #agiloshield-v2-staging .asv2-compare-title{font-size:13px;font-weight:700;color:var(--asv2-navy)}
+#agiloshield-v2-staging .asv2-office-action-card{max-width:520px;margin:50px auto;padding:32px 24px;border:1px solid #c9d8e9;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(10,30,59,.06);text-align:center}
+#agiloshield-v2-staging .asv2-office-action-card h3{font-size:18px;margin:12px 0 8px;color:var(--asv2-navy)}
+#agiloshield-v2-staging .asv2-office-action-card p{font-size:13px;color:var(--asv2-muted);margin:0 0 20px;line-height:1.45}
+#agiloshield-v2-staging .asv2-office-card-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
 @media(max-width:960px){#agiloshield-v2-staging .asv2-compare-container{grid-template-columns:1fr}}
 #agiloshield-v2-staging .asv2-viewer-body{flex:1;overflow:auto;padding:15px;min-height:0}
 #agiloshield-v2-staging .asv2-loading,#agiloshield-v2-staging .asv2-error{padding:20px;text-align:center}

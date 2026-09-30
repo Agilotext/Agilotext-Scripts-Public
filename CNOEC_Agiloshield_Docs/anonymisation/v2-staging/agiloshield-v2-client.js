@@ -176,10 +176,10 @@ export class AgiloShieldV2Client {
         (!certified && !['REVIEW_REQUIRED', 'FAILED'].includes(status))) {
       throw new Error('Stale job state');
     }
-    if (kind === 'key' && (!certified || job.processingMode !== 'PSEUDONYMIZE'))
+    if (kind === 'key' && job.processingMode !== 'PSEUDONYMIZE')
       throw new Error('Pseudonym key unavailable');
     const response = kind === 'key' ? await this.pseudonymKey(id) : certified ? await this.certifiedDownload(id) :
-      await this.result(id, {confirmNonVerified:status === 'FAILED'});
+      await this.result(id, {confirmNonVerified:status === 'FAILED' || status === 'REVIEW_REQUIRED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
         (expectedListDigest && response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest) ||
