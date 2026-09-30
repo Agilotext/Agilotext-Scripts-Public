@@ -1342,8 +1342,27 @@
       <div class="custom-element titles report-links">
         <a href="#" class="download_wrapper-link_summary_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
       </div>
-      <div class="custom-element titles">
-        <button class="delete-job-button" title="Supprimer" style="background:none; border:none; cursor:pointer; color:#991b1b; font-size:16px; padding:4px;">🗑️</button>
+      <div class="custom-element titles actions-cell">
+        <button type="button" class="agilo-row-share agilo-action-btn" title="Partager la transcription" aria-label="Partager la transcription">
+          <svg class="agilo-ico-share" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="13.5" cy="4.5" r="2.25"/>
+            <circle cx="4.5" cy="9" r="2.25"/>
+            <circle cx="13.5" cy="13.5" r="2.25"/>
+            <path d="M6.5 7.9l4.9-2.4M6.5 10.1l4.9 2.4"/>
+          </svg>
+          <svg class="agilo-ico-check" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="#15803d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none;">
+            <polyline points="2.75 9.25 6.75 14.25 15.25 3.75"/>
+          </svg>
+        </button>
+        <button class="delete-job-button delete-job-button_to-confirm agilo-action-btn" title="Supprimer" aria-label="Supprimer">
+          <svg class="delete-icon" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.25 4.5h13.5"/>
+            <path d="M6.75 4.5V3a1.5 1.5 0 0 1 1.5-1.5h3a1.5 1.5 0 0 1 1.5 1.5v1.5"/>
+            <path d="M14.25 4.5v10.5a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5V4.5"/>
+            <line x1="7.5" y1="8.25" x2="7.5" y2="12.75"/>
+            <line x1="10.5" y1="8.25" x2="10.5" y2="12.75"/>
+          </svg>
+        </button>
       </div>
     </div>
   `;
