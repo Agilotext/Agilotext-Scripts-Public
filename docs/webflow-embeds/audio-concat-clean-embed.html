@@ -1,0 +1,1107 @@
+
+<!-- SortableJS -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+<script>
+/**
+ * Script de fusion audio - Version corrigée avec support Memberstack robuste
+ * 
+ * PROBLÈMES CORRIGÉS :
+ * 1. ✅ Attend que Memberstack soit chargé avant de détecter l'édition/email
+ * 2. ✅ Utilise l'API Memberstack pour récupérer les infos utilisateur
+ * 3. ✅ Fallbacks robustes si Memberstack n'est pas disponible
+ * 4. ✅ Logs de debug pour diagnostiquer les problèmes
+ * 5. ✅ Gestion d'erreurs améliorée
+ * 6. ✅ Support des extensions en majuscules et minuscules (M4A, MP3, etc.)
+ * 7. ✅ Interface responsive pour mobile
+ */
+
+const AGILO_API_BASE = "https://api.agilotext.com/api/v1";
+
+// ⭐ Formats supportés (selon spécifications Java)
+const SUPPORTED_EXTENSIONS = [
+  "m4a", "M4A",
+  "mp3", "MP3",
+  "mp4", "MP4",
+  "mpeg", "MPEG",
+  "mpg", "MPG",
+  "mpga", "MPGA",
+  "ogg", "OGG",
+  "wav", "WAV",
+  "webm", "WEBM"
+];
+
+// ⭐ Helper : Échapper HTML pour sécurité XSS
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function fetchWithTimeout(url, options = {}) {
+  const TIMEOUT = options.timeout || (3 * 60 * 60 * 1000); // 3h
+  if (!navigator.onLine) return Promise.reject({ type: "offline" });
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT);
+
+  return fetch(url, {
+    ...options,
+    signal: ctrl.signal,
+    mode: "cors",
+    credentials: "omit",
+    cache: "no-store"
+  })
+    .then(response => {
+      if (!response.ok) {
+        const status = response.status;
+        if (status === 401 || status === 403) return Promise.reject({ type: "invalidToken" });
+        if (status === 429) return Promise.reject({ type: "tooMuchTraffic" });
+        if (status >= 500) return Promise.reject({ type: "serverError" });
+        return Promise.reject({ type: "httpError", status });
+      }
+      return response;
+    })
+    .finally(() => clearTimeout(timer))
+    .catch(err => {
+      if (err.name === "AbortError") return Promise.reject({ type: "timeout" });
+      if (err.type) return Promise.reject(err);
+      return Promise.reject({ type: "unreachable" });
+    });
+}
+
+/**
+ * ⭐ NOUVEAU : Attendre que Memberstack soit disponible
+ */
+async function waitForMemberstack(maxWait = 10000, interval = 200) {
+  const start = Date.now();
+  
+  while (Date.now() - start < maxWait) {
+    if (window.$memberstackDom && typeof window.$memberstackDom.getCurrentMember === 'function') {
+      console.log('✅ Memberstack détecté');
+      return true;
+    }
+    await new Promise(resolve => setTimeout(resolve, interval));
+  }
+  
+  console.warn('⚠️ Memberstack non détecté après', maxWait, 'ms - utilisation des fallbacks');
+  return false;
+}
+
+/**
+ * ⭐ AMÉLIORÉ : Détecter l'édition via Memberstack (même logique que ready-count)
+ */
+async function detectEdition() {
+  const ms = window.$memberstackDom;
+  
+  // Si Memberstack est disponible, l'utiliser
+  if (ms && typeof ms.getCurrentMember === 'function') {
+    try {
+      const { data: member } = await ms.getCurrentMember({ cache: "reload" });
+      
+      if (member) {
+        const ACTIVE = ["ACTIVE", "TRIALING", "GRACE"];
+        const hasPlan = prefix =>
+          (member.planConnections ?? [])
+            .some(p => ACTIVE.includes(p.status) && p.planId?.startsWith(prefix));
+        
+        const hasAnonymisation = hasPlan("pln_anonymisation");
+        const hasBusiness = hasPlan("pln_business");
+        const hasPro = hasPlan("pln_pro");
+        const hasFree = hasPlan("pln_free");
+        
+        const teams = member.teams ?? { belongsToTeam: false, ownedTeams: [] };
+        const isSeat = teams.belongsToTeam && teams.ownedTeams.length === 0;
+        const isOwner = teams.ownedTeams.length > 0;
+        
+        // Priorités
+        if (isSeat) {
+          console.log('✅ Édition détectée via Memberstack: business (seat)');
+          return 'ent'; // API utilise "ent"
+        }
+        if (isOwner && hasBusiness) {
+          console.log('✅ Édition détectée via Memberstack: business (owner)');
+          return 'ent';
+        }
+        if (hasBusiness) {
+          console.log('✅ Édition détectée via Memberstack: business');
+          return 'ent';
+        }
+        if (hasPro) {
+          console.log('✅ Édition détectée via Memberstack: pro');
+          return 'pro';
+        }
+        if (hasFree) {
+          console.log('✅ Édition détectée via Memberstack: free');
+          return 'free';
+        }
+        if (hasAnonymisation) {
+          console.log('✅ Édition détectée via Memberstack: anonymisation');
+          return 'anonymisation';
+        }
+      }
+    } catch (err) {
+      console.error('❌ Erreur lors de la détection d\'édition via Memberstack:', err);
+    }
+  }
+  
+  // Fallbacks
+  const urlEdition = new URLSearchParams(location.search).get("edition");
+  if (urlEdition && ["free","pro","ent","business"].includes(urlEdition.toLowerCase())) {
+    const ed = urlEdition.toLowerCase();
+    console.log(`✅ Édition détectée via URL: ${ed === "business" ? "ent" : ed}`);
+    return ed === "business" ? "ent" : ed;
+  }
+
+  const msEdition =
+    document.body.dataset?.msPlan ||
+    document.querySelector("[data-ms-plan]")?.dataset?.msPlan ||
+    document.querySelector("[data-ms-content='plan']")?.textContent?.toLowerCase();
+
+  if (msEdition && ["free","pro","ent","business"].includes(msEdition.toLowerCase())) {
+    const ed = msEdition.toLowerCase();
+    console.log(`✅ Édition détectée via DOM: ${ed === "business" ? "ent" : ed}`);
+    return ed === "business" ? "ent" : ed;
+  }
+
+  const stored = localStorage.getItem("agilo:edition");
+  if (stored && ["free","pro","ent"].includes(stored)) {
+    console.log(`✅ Édition détectée via localStorage: ${stored}`);
+    return stored;
+  }
+
+  const path = location.pathname;
+  if (path.includes("/business/") || path.includes("/ent/")) {
+    console.log('✅ Édition détectée via path: ent');
+    return "ent";
+  }
+  if (path.includes("/pro/")) {
+    console.log('✅ Édition détectée via path: pro');
+    return "pro";
+  }
+  if (path.includes("/free/")) {
+    console.log('✅ Édition détectée via path: free');
+    return "free";
+  }
+
+  console.log('🔄 Fallback: édition par défaut = free');
+  return "free";
+}
+
+/**
+ * ⭐ AMÉLIORÉ : Récupérer l'email via Memberstack API
+ */
+async function getUserEmail() {
+  // Méthode 1 : Via Memberstack API (le plus fiable)
+  const ms = window.$memberstackDom;
+  if (ms && typeof ms.getCurrentMember === 'function') {
+    try {
+      const { data: member } = await ms.getCurrentMember({ cache: "reload" });
+      if (member && member.email) {
+        console.log('✅ Email récupéré via Memberstack API:', member.email);
+        return member.email;
+      }
+    } catch (err) {
+      console.warn('⚠️ Erreur lors de la récupération de l\'email via Memberstack:', err);
+    }
+  }
+  
+  // Méthode 2 : Via DOM (fallback)
+  let email =
+    document.querySelector("[name='memberEmail']")?.value ||
+    document.querySelector("[name='memberEmail']")?.getAttribute("src") ||
+    document.querySelector("[name='memberEmail']")?.getAttribute("data-src") ||
+    document.querySelector("[data-ms-member='email']")?.textContent?.trim() ||
+    document.querySelector("[data-ms-member='email']")?.getAttribute("value") ||
+    document.getElementById("memberEmail")?.value;
+
+  if (email) {
+    console.log('✅ Email récupéré via DOM:', email);
+    return email;
+  }
+
+  console.error('❌ Email utilisateur introuvable');
+  return null;
+}
+
+// ----------- Token -----------
+let globalToken = "";
+let tokenRetryCount = 0;
+const MAX_TOKEN_RETRIES = 3;
+
+async function getToken(email, edition, retryCount = 0) {
+  try {
+    const url = `${AGILO_API_BASE}/getToken?username=${encodeURIComponent(email)}&edition=${encodeURIComponent(edition)}`;
+    console.log(`🔑 Tentative de récupération du token (tentative ${retryCount + 1}/${MAX_TOKEN_RETRIES})...`);
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status === "OK") {
+      globalToken = data.token;
+      tokenRetryCount = 0;
+      console.log("✅ Token récupéré avec succès");
+      return data.token;
+    }
+    throw new Error(data.errorMessage || "getToken failed");
+  } catch (err) {
+    console.error(`❌ Erreur getToken (tentative ${retryCount + 1}/${MAX_TOKEN_RETRIES}):`, err);
+    if (retryCount < MAX_TOKEN_RETRIES) {
+      await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+      return getToken(email, edition, retryCount + 1);
+    }
+    throw err;
+  }
+}
+
+// ⭐ INITIALISATION AMÉLIORÉE : Attendre Memberstack
+async function init() {
+  console.log('🚀 Initialisation du script audio-concat...');
+  
+  // Attendre que Memberstack soit chargé
+  await waitForMemberstack();
+  
+  // Détecter l'édition (avec Memberstack si disponible)
+  const edition = await detectEdition();
+  console.log(`🔍 Édition finale: ${edition}`);
+  
+  // Stocker dans localStorage pour les autres scripts
+  localStorage.setItem("agilo:edition", edition);
+  
+  // Récupérer l'email (avec Memberstack si disponible)
+  const email = await getUserEmail();
+  if (!email) {
+    console.error("❌ Email utilisateur introuvable - la fonctionnalité peut ne pas fonctionner");
+    // On continue quand même, l'email sera réessayé plus tard
+  } else {
+    // Récupérer le token de manière anticipée (non bloquant)
+    getToken(email, edition).catch(err => {
+      console.warn('⚠️ Échec de la récupération anticipée du token:', err);
+    });
+  }
+  
+  // Initialiser l'interface
+  initUI(edition, email);
+}
+
+function initUI(edition, email) {
+  // ----------- Références DOM -----------
+  const form = document.querySelector('form[ms-code-audio-concat="form"]');
+  const dropzone = document.getElementById("audioConcatDropzone");
+  const input = document.getElementById("audioConcatInput");
+  const list = document.getElementById("audio-concat-file-list");
+  const submitBtn = document.getElementById("audio-concat-submit");
+  const loadingDiv = document.getElementById("audio-concat-loading");
+  const successDiv = document.getElementById("audio-concat-success");
+  const errorDiv = document.getElementById("audio-concat-error");
+  const downloadBtn = document.getElementById("audio-concat-download");
+  const progressDiv = document.getElementById("audio-concat-progress");
+  const progressBar = document.getElementById("audio-concat-progress-bar");
+  const progressText = document.getElementById("audio-concat-progress-text");
+  const summaryDiv = document.getElementById("audio-concat-summary");
+  const summaryText = document.getElementById("audio-concat-summary-text");
+  const clearAllBtn = document.getElementById("audio-concat-clear-all");
+  const autoDownloadMsg = document.getElementById("audio-concat-auto-download-msg");
+
+  let sortable = null;
+  let uploadedFiles = [];
+  let currentJobId = null;
+  let fusedAudioUrl = null;
+  let statusIntervalId = null;
+
+  // ⭐ Nettoyage au changement de page
+  window.addEventListener("beforeunload", () => {
+    if (statusIntervalId) clearInterval(statusIntervalId);
+    if (fusedAudioUrl && fusedAudioUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(fusedAudioUrl);
+    }
+  });
+
+  // ⭐ Gestion de la visibilité de la page
+  let isPageVisible = !document.hidden;
+  document.addEventListener("visibilitychange", () => {
+    isPageVisible = !document.hidden;
+  });
+
+  // ⭐ NOUVEAU : Gestion de la reconnexion réseau
+  window.addEventListener("online", () => {
+    console.log("✅ Connexion rétablie");
+    if (errorDiv && errorDiv.textContent.includes("hors ligne")) {
+      hideMessages();
+    }
+  });
+
+  window.addEventListener("offline", () => {
+    console.warn("⚠️ Connexion perdue");
+    if (statusIntervalId) {
+      showError("Connexion perdue. Le traitement reprendra automatiquement une fois la connexion rétablie.");
+    }
+  });
+
+  // ----------- UI Helpers -----------
+  function hideMessages() {
+    if (loadingDiv) loadingDiv.style.display = "none";
+    if (successDiv) successDiv.style.display = "none";
+    if (errorDiv) errorDiv.style.display = "none";
+    if (progressDiv) progressDiv.style.display = "none";
+    if (autoDownloadMsg) autoDownloadMsg.style.display = "none";
+  }
+
+  function showError(msg) {
+    hideMessages();
+    if (errorDiv) {
+      errorDiv.textContent = msg;
+      errorDiv.style.display = "flex";
+      errorDiv.setAttribute("role", "alert");
+      errorDiv.setAttribute("aria-live", "polite");
+    }
+    console.error("❌ Erreur:", msg);
+  }
+
+  function showSuccess(msg) {
+    hideMessages();
+    if (successDiv) {
+      successDiv.textContent = msg;
+      successDiv.style.display = "flex";
+      successDiv.setAttribute("role", "status");
+      successDiv.setAttribute("aria-live", "polite");
+    }
+    if (submitBtn) {
+      submitBtn.classList.add("hidden");
+    }
+  }
+
+  function showLoading() {
+    hideMessages();
+    if (loadingDiv) {
+      loadingDiv.style.display = "flex";
+      loadingDiv.textContent = "Envoi des fichiers en cours…";
+    }
+    // Afficher la barre de progression dès le début
+    resetProgress();
+    if (progressDiv && progressBar) {
+      progressDiv.style.display = "block";
+      showProgress(5, "Envoi des fichiers…");
+    }
+  }
+
+  // ⭐ NOUVEAU : Suivre la progression actuelle pour éviter les sauts
+  let currentProgress = 0;
+  
+  function showProgress(p, text) {
+    if (!progressDiv || !progressBar) return;
+    progressDiv.style.display = "block";
+    const bar = progressBar.querySelector("div");
+    if (bar) {
+      // ⭐ AMÉLIORÉ : Progression fluide - ne jamais reculer, avancer progressivement
+      const targetProgress = Math.min(Math.max(p, currentProgress), 100);
+      currentProgress = targetProgress;
+      bar.style.width = targetProgress + "%";
+    }
+    if (progressText) {
+      progressText.textContent = text || (p + "%");
+      progressText.style.textAlign = "center";
+    }
+    // Masquer les autres messages pendant la progression
+    if (loadingDiv) loadingDiv.style.display = "none";
+    if (successDiv) successDiv.style.display = "none";
+    if (errorDiv) errorDiv.style.display = "none";
+  }
+  
+  // ⭐ NOUVEAU : Réinitialiser la progression au début
+  function resetProgress() {
+    currentProgress = 0;
+    if (progressBar) {
+      const bar = progressBar.querySelector("div");
+      if (bar) bar.style.width = "0%";
+    }
+  }
+
+  function formatSize(bytes) {
+    if (!bytes || bytes <= 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes","KB","MB","GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    if (i < 0) return "0 Bytes";
+    if (i >= sizes.length) return (bytes / Math.pow(k, sizes.length - 1)).toFixed(2) + " " + sizes[sizes.length - 1];
+    return (bytes / Math.pow(k, i)).toFixed(2) + " " + sizes[i];
+  }
+
+  function totalSize() {
+    return uploadedFiles.reduce((a,f)=>a+(f.size||0),0);
+  }
+
+  function isDuplicate(file) {
+    return uploadedFiles.some(f => 
+      f.fileName === file.name && f.size === file.size
+    );
+  }
+
+  // ----------- Gestion fichiers -----------
+  /**
+   * ⭐ CORRIGÉ : Accepte les extensions en majuscules et minuscules
+   * Formats supportés : m4a, mp3, mp4, mpeg, mpg, mpga, ogg, wav, webm
+   * ⭐ AMÉLIORÉ : Optimisation de la validation
+   */
+  function acceptFile(file) {
+    if (!file) return false;
+    
+    const fileName = file.name.toLowerCase();
+    
+    // Vérifier l'extension (insensible à la casse, plus efficace)
+    const hasValidExtension = SUPPORTED_EXTENSIONS.some(ext => {
+      const extLower = ext.toLowerCase();
+      return fileName.endsWith('.' + extLower);
+    });
+    
+    // Vérifier le type MIME (fallback si extension non reconnue)
+    const hasValidMimeType = file.type.startsWith("audio/") || file.type.startsWith("video/");
+    
+    // Accepter si extension valide OU type MIME valide
+    const accepted = hasValidExtension || hasValidMimeType;
+    
+    if (!accepted) {
+      console.warn(`❌ Fichier rejeté: ${file.name} (extension: ${file.name.split('.').pop()}, type: ${file.type})`);
+    }
+    
+    return accepted;
+  }
+
+  function addFiles(fileList) {
+    const files = Array.from(fileList);
+    if (!files.length) return;    const rejected = [];
+    const duplicates = [];
+    const added = [];
+
+    for (const file of files) {
+      if (!acceptFile(file)) {
+        rejected.push(file.name);
+        continue;
+      }
+
+      if (isDuplicate(file)) {
+        duplicates.push(file.name);
+        continue;
+      }
+      const id = Date.now() + "-" + Math.random().toString(16).slice(2);
+      uploadedFiles.push({ 
+        id, 
+        file, 
+        fileName: file.name, 
+        size: file.size 
+      });
+      added.push(file.name);    }
+
+    // ⭐ AMÉLIORÉ : Feedback utilisateur plus détaillé
+    if (rejected.length > 0) {
+      console.warn("Fichiers rejetés:", rejected);
+      const rejectedList = rejected.length <= 3 
+        ? rejected.join(", ") 
+        : `${rejected.slice(0, 3).join(", ")} et ${rejected.length - 3} autre(s)`;
+      showError(`${rejected.length} fichier(s) rejeté(s) (format non supporté) : ${rejectedList}. Formats acceptés : M4A, MP3, MP4, MPEG, MPG, MPGA, OGG, WAV, WEBM`);
+      setTimeout(() => hideMessages(), 7000);
+    }
+    if (duplicates.length > 0) {
+      console.warn("Fichiers dupliqués ignorés:", duplicates);
+      // ⭐ NOUVEAU : Notification discrète pour les doublons
+      if (successDiv) {
+        successDiv.textContent = `${duplicates.length} fichier(s) dupliqué(s) ignoré(s)`;
+        successDiv.style.display = "flex";
+        successDiv.style.borderColor = "var(--agilo-warning)";
+        successDiv.style.background = "color-mix(in srgb, var(--agilo-warning) 12%, transparent)";
+        successDiv.style.color = "color-mix(in srgb, var(--agilo-warning) 90%, black)";
+        setTimeout(() => {
+          if (successDiv) successDiv.style.display = "none";
+        }, 3000);
+      }
+    }
+    if (added.length > 0 && !rejected.length) {
+      hideMessages();
+    }
+
+    updateUI();
+  }
+
+  function removeFile(id) {
+    uploadedFiles = uploadedFiles.filter(f => f.id !== id);
+    updateUI();
+  }
+
+  function updateUI() {
+    if (!list) return;
+
+    list.innerHTML = "";
+    
+    // ⭐ NOUVEAU : Afficher/masquer le résumé et le bouton "Effacer tout"
+    if (summaryDiv && summaryText) {
+      if (uploadedFiles.length > 0) {
+        const totalSize = uploadedFiles.reduce((sum, f) => sum + (f.size || 0), 0);
+        const fileCount = uploadedFiles.length;
+        summaryText.textContent = `${fileCount} fichier${fileCount > 1 ? 's' : ''} • ${formatSize(totalSize)}`;
+        summaryDiv.style.display = "block";
+        if (clearAllBtn) clearAllBtn.style.display = "block";
+      } else {
+        summaryDiv.style.display = "none";
+        if (clearAllBtn) clearAllBtn.style.display = "none";
+      }
+    }
+    
+    if (!uploadedFiles.length) {
+      if (sortable) { 
+        sortable.destroy(); 
+        sortable = null; 
+      }
+      if (submitBtn) {
+        submitBtn.classList.add("hidden");
+      }
+      list.removeAttribute("role");
+      return;
+    }
+
+    // ⭐ NOUVEAU : Accessibilité - définir le rôle de liste
+    list.setAttribute("role", "list");
+    list.setAttribute("aria-label", `Liste de ${uploadedFiles.length} fichier${uploadedFiles.length > 1 ? 's' : ''} audio`);
+
+    if (submitBtn) {
+      if (uploadedFiles.length >= 2) {
+        submitBtn.classList.remove("hidden");
+      } else {
+        submitBtn.classList.add("hidden");
+      }
+    }
+
+    uploadedFiles.forEach((f, i) => {
+      const el = document.createElement("div");
+      el.className = "audio-concat-file-item";
+      el.dataset.fileId = f.id;
+      el.dataset.index = i + 1;
+      el.setAttribute("role", "listitem");
+      el.setAttribute("aria-label", `Fichier ${i + 1}: ${f.fileName}`);
+
+      const nameDiv = document.createElement("div");
+      nameDiv.className = "file-name";
+      nameDiv.textContent = f.fileName;
+
+      const sizeDiv = document.createElement("div");
+      sizeDiv.className = "file-size";
+      sizeDiv.textContent = formatSize(f.size);
+
+      const infoDiv = document.createElement("div");
+      infoDiv.appendChild(nameDiv);
+      infoDiv.appendChild(sizeDiv);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "audio-concat-remove-btn";
+      removeBtn.setAttribute("data-file-id", f.id);
+      removeBtn.textContent = "Supprimer";
+      removeBtn.setAttribute("aria-label", `Supprimer ${f.fileName}`);
+      removeBtn.setAttribute("type", "button");
+
+      el.appendChild(infoDiv);
+      el.appendChild(removeBtn);
+      list.appendChild(el);
+    });
+
+    if (uploadedFiles.length > 1 && !sortable) {
+      sortable = Sortable.create(list, {
+        animation: 150,
+        handle: ".audio-concat-file-item",
+        onEnd: () => {
+          const ids = Array.from(list.children).map(el => el.dataset.fileId);
+          uploadedFiles = ids
+            .map(id => uploadedFiles.find(f => f.id === id))
+            .filter(Boolean);
+          updateUI();
+        }
+      });
+    } else if (uploadedFiles.length <= 1 && sortable) {
+      sortable.destroy();
+      sortable = null;
+    }
+
+    list.querySelectorAll(".audio-concat-remove-btn").forEach(btn => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        removeFile(btn.dataset.fileId);
+      };
+    });
+  }
+
+  function buildOrderJson() {
+    const segments = uploadedFiles.map((f, i) => ({ 
+      seq: i + 1, 
+      fileName: f.fileName 
+    }));
+    return JSON.stringify({ segments });
+  }
+
+  // ----------- Drop / Browse handlers -----------
+  if (dropzone && input) {
+    dropzone.onclick = () => input.click();
+
+    dropzone.ondragover = (e) => { 
+      e.preventDefault(); 
+      dropzone.classList.add("is-dragover"); 
+    };
+
+    ["dragleave","dragend","drop"].forEach(ev => {
+      dropzone.addEventListener(ev, e => {
+        if (ev !== "drop") e.preventDefault();
+        dropzone.classList.remove("is-dragover");
+      });
+    });
+
+    dropzone.ondrop = (e) => {
+      e.preventDefault();
+      if (e.dataTransfer?.files) addFiles(e.dataTransfer.files);
+    };
+
+    input.onchange = (e) => {
+      if (e.target.files) addFiles(e.target.files);
+      input.value = "";
+    };
+  }
+
+  // ----------- Envoi pour fusion -----------
+  async function sendForFusion() {
+    if (uploadedFiles.length < 2) {
+      showError("Veuillez ajouter au moins 2 fichiers audio à fusionner.");
+      return;
+    }
+
+    // ⭐ AMÉLIORÉ : Réessayer de récupérer l'email si nécessaire
+    let currentEmail = email || await getUserEmail();
+    if (!currentEmail) {
+      showError("Email utilisateur introuvable. Veuillez rafraîchir la page.");
+      return;
+    }
+
+    // ⭐ AMÉLIORÉ : Réessayer de récupérer l'édition si nécessaire
+    let currentEdition = edition || await detectEdition();
+    if (!currentEdition) {
+      currentEdition = "free"; // Fallback
+    }
+
+    if (!globalToken) {
+      try { 
+        console.log('🔑 Récupération du token...');
+        await getToken(currentEmail, currentEdition); 
+      } catch(e) { 
+        showError("Impossible d'obtenir le token. Veuillez rafraîchir la page."); 
+        return; 
+      }
+    }
+
+    showLoading();
+    if (submitBtn) submitBtn.disabled = true;
+
+    const fd = new FormData();
+    fd.append("username", currentEmail);
+    fd.append("token", globalToken);
+    fd.append("edition", currentEdition);
+    fd.append("concatFilesOrderJson", buildOrderJson());
+
+    uploadedFiles.forEach(f => {
+      if (f.file) {
+        fd.append("audioConcatFiles", f.file, f.fileName);
+      }
+    });
+
+    try {
+      const res = await fetchWithTimeout(`${AGILO_API_BASE}/sendForConcatenation`, {
+        method: "POST",
+        body: fd,
+        timeout: 600000
+      });
+
+      const data = await res.json();
+      const jobId = data.jobIdList?.[0] || data.jobId || null;
+
+      if (data.status === "OK" && jobId) {
+        currentJobId = jobId;
+        // ⭐ AMÉLIORÉ : Masquer le message de chargement et afficher la progression
+        if (loadingDiv) loadingDiv.style.display = "none";
+        resetProgress();
+        showProgress(10, "Fichiers envoyés, fusion en cours…");
+        checkStatus(jobId, currentEmail);
+      } else {
+        const errorMsg = data.errorMessage || data.userErrorMessage || "Erreur lors de la fusion.";
+        handleFusionError(errorMsg);
+      }
+
+    } catch(err) {
+      console.error("Erreur lors de la fusion:", err);
+      if (err.type === "offline") {
+        showError("Vous êtes hors ligne. Vérifiez votre connexion internet.");
+      } else if (err.type === "timeout") {
+        showError("Le traitement prend trop de temps. Veuillez réessayer.");
+      } else if (err.type === "invalidToken") {
+        showError("Votre session a expiré. Veuillez rafraîchir la page.");
+      } else {
+        showError("Erreur lors de la fusion. Veuillez réessayer.");
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  // ----------- Polling statut -----------
+  function checkStatus(jobId, email) {
+    if (!globalToken) {
+      console.error("Token manquant");
+      return;
+    }
+
+    if (statusIntervalId) {
+      clearInterval(statusIntervalId);
+      statusIntervalId = null;
+    }
+
+    const TIMEOUT = 30 * 60 * 1000;
+    const start = Date.now();
+    let count = 0;
+
+    statusIntervalId = setInterval(async () => {
+      if (!isPageVisible) {
+        return;
+      }
+
+      count++;
+      const elapsed = Date.now() - start;
+      
+      if (elapsed > TIMEOUT) {
+        clearInterval(statusIntervalId);
+        statusIntervalId = null;
+        showError("Le traitement prend plus de temps que prévu. Veuillez réessayer plus tard.");
+        return;
+      }
+
+      try {
+        const body = new URLSearchParams({
+          username: email,
+          token: globalToken,
+          jobId,
+          edition
+        }).toString();
+
+        const res = await fetchWithTimeout(`${AGILO_API_BASE}/getConcatStatus`, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body,
+          timeout: 30000
+        });
+
+        const data = await res.json();
+        const status = (data.concatStatus || data.concatenationStatus || "").toUpperCase();
+
+        if (status === "READY") {
+          clearInterval(statusIntervalId);
+          statusIntervalId = null;
+          showProgress(100, "Fusion terminée !");
+          // ⭐ AMÉLIORÉ : Récupérer immédiatement le fichier sans délai
+          receiveAudio(jobId, email);
+        } else if (status === "ON_ERROR") {
+          clearInterval(statusIntervalId);
+          statusIntervalId = null;
+          const errorMsg = data.userErrorMessage || data.errorMessage || "Erreur lors de la fusion.";
+          handleFusionError(errorMsg);
+        } else if (status === "IN_PROGRESS" || status === "PENDING") {
+          // ⭐ AMÉLIORÉ : Utiliser la progression du serveur si disponible, sinon estimation
+          const estimated = Math.min(90, Math.floor((elapsed / TIMEOUT) * 90));
+          const p = typeof data.progress === "number" ? data.progress : estimated;
+          const minutes = Math.floor(elapsed / 60000);
+          const seconds = Math.floor((elapsed % 60000) / 1000);
+          const timeText = minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
+          showProgress(Math.min(95, p), `Fusion en cours… (${timeText})`);
+        } else {
+          // ⭐ NOUVEAU : Afficher une progression minimale pour les autres statuts
+          const estimated = Math.min(90, Math.floor((elapsed / TIMEOUT) * 90));
+          const minutes = Math.floor(elapsed / 60000);
+          const seconds = Math.floor((elapsed % 60000) / 1000);
+          const timeText = minutes > 0 ? `${minutes}min ${seconds}s` : `${seconds}s`;
+          showProgress(Math.min(90, estimated), `Fusion en cours… (${timeText})`);
+        }
+
+      } catch(err) {
+        console.error(`Erreur statut (tentative ${count}):`, err);
+        if (count >= 10) {
+          clearInterval(statusIntervalId);
+          statusIntervalId = null;
+          if (err.type === "offline") {
+            showError("Vous êtes hors ligne. Vérifiez votre connexion internet.");
+          } else if (err.type === "timeout") {
+            showError("Connexion trop lente. Le traitement a été interrompu.");
+          } else {
+            showError("Erreur lors de la vérification du statut.");
+          }
+        }
+      }
+
+    }, 5000);
+  }
+
+  // ----------- Récupération du fichier fusionné -----------
+  async function receiveAudio(jobId, email) {
+    if (!globalToken) {
+      console.error("Token manquant");
+      return;
+    }
+
+    const url = `${AGILO_API_BASE}/receiveAudio?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(globalToken)}&edition=${encodeURIComponent(edition)}`;
+
+    try {
+      const res = await fetchWithTimeout(url, { 
+        method: "GET", 
+        timeout: 120000 
+      });
+
+      const ct = res.headers.get("Content-Type") || "";
+
+      if (ct.includes("application/json")) {
+        const err = await res.json().catch(() => null);
+        const msg = err?.errorMessage || err?.userErrorMessage || "Le fichier fusionné n'est pas encore disponible. Réessayez dans quelques instants.";
+        showError(msg);
+        tryGetJobInfo(jobId, email);
+        return;
+      }
+
+      const blob = await res.blob();
+      
+      if (fusedAudioUrl && fusedAudioUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(fusedAudioUrl);
+      }
+      
+      fusedAudioUrl = URL.createObjectURL(blob);
+
+      // ⭐ NOUVEAU : Déterminer l'extension du fichier
+      const contentType = res.headers.get("Content-Type") || "";
+      let ext = "mp3";
+      if (contentType.includes("m4a")) ext = "m4a";
+      else if (contentType.includes("wav")) ext = "wav";
+      else if (contentType.includes("ogg")) ext = "ogg";
+      const fileName = `audio-fusionne-${Date.now()}.${ext}`;
+
+      // ⭐ NOUVEAU : Télécharger automatiquement le fichier
+      try {
+        const downloadLink = document.createElement("a");
+        downloadLink.href = fusedAudioUrl;
+        downloadLink.download = fileName;
+        downloadLink.style.display = "none";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        console.log("✅ Téléchargement automatique déclenché");
+      } catch (autoDownloadError) {
+        console.warn("⚠️ Téléchargement automatique échoué, le bouton sera disponible:", autoDownloadError);
+      }
+
+      // ⭐ AMÉLIORÉ : Masquer le bouton "Effacer tout" après la fusion
+      if (clearAllBtn) {
+        clearAllBtn.style.display = "none";
+      }
+
+      // ⭐ AMÉLIORÉ : Afficher le bouton télécharger immédiatement (au cas où)
+      if (downloadBtn) {
+        downloadBtn.href = fusedAudioUrl;
+        downloadBtn.download = fileName;
+        downloadBtn.style.display = "inline-flex";
+        // ⭐ NOUVEAU : Centrer le bouton en ajoutant une classe au conteneur
+        const actionsContainer = downloadBtn.closest('.audio-concat-actions');
+        if (actionsContainer) {
+          actionsContainer.classList.add('single-button');
+        }
+      }
+
+      // ⭐ NOUVEAU : Afficher le message de téléchargement automatique
+      if (autoDownloadMsg) {
+        autoDownloadMsg.textContent = "✅ Téléchargement automatique en cours... Si le téléchargement ne démarre pas, cliquez sur le bouton ci-dessous.";
+        autoDownloadMsg.style.display = "block";
+      }
+
+      // ⭐ AMÉLIORÉ : Masquer la barre de progression et afficher le message de succès
+      if (progressDiv) progressDiv.style.display = "none";
+      showSuccess("Fusion terminée ! Le fichier se télécharge automatiquement.");
+
+    } catch(err) {
+      console.error("Erreur receiveAudio:", err);
+      tryGetJobInfo(jobId, email);
+    }
+  }
+
+  // ----------- Fallback info job -----------
+  async function tryGetJobInfo(jobId, email) {
+    if (!globalToken) {
+      showError("Le fichier fusionné n'est pas encore disponible. Réessayez dans quelques instants.");
+      return;
+    }
+
+    try {
+      const body = new URLSearchParams({
+        username: email,
+        token: globalToken,
+        edition,
+        jobId
+      }).toString();
+
+      const res = await fetchWithTimeout(`${AGILO_API_BASE}/getConcatJobsInfo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        timeout: 120000
+      });
+
+      if (!res.ok) {
+        showError("Le fichier fusionné n'est pas encore disponible. Réessayez dans quelques instants.");
+        return;
+      }
+
+      const data = await res.json();
+      const direct = data.audioUrl || data.audio_url || data.url;
+
+      if (data.status === "OK" && direct) {
+        if (fusedAudioUrl && fusedAudioUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(fusedAudioUrl);
+        }
+        
+        fusedAudioUrl = direct;
+
+        // ⭐ NOUVEAU : Télécharger automatiquement le fichier
+        try {
+          const downloadLink = document.createElement("a");
+          downloadLink.href = fusedAudioUrl;
+          downloadLink.download = `audio-fusionne-${Date.now()}.mp3`;
+          downloadLink.style.display = "none";
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          console.log("✅ Téléchargement automatique déclenché (fallback)");
+        } catch (autoDownloadError) {
+          console.warn("⚠️ Téléchargement automatique échoué:", autoDownloadError);
+        }
+
+        // ⭐ AMÉLIORÉ : Masquer le bouton "Effacer tout" après la fusion
+        if (clearAllBtn) {
+          clearAllBtn.style.display = "none";
+        }
+
+        // ⭐ AMÉLIORÉ : Afficher le bouton télécharger immédiatement (au cas où)
+        if (downloadBtn) {
+          downloadBtn.href = fusedAudioUrl;
+          downloadBtn.download = `audio-fusionne-${Date.now()}.mp3`;
+          downloadBtn.style.display = "inline-flex";
+          // ⭐ NOUVEAU : Centrer le bouton en ajoutant une classe au conteneur
+          const actionsContainer = downloadBtn.closest('.audio-concat-actions');
+          if (actionsContainer) {
+            actionsContainer.classList.add('single-button');
+          }
+        }
+
+        // ⭐ NOUVEAU : Afficher le message de téléchargement automatique
+        if (autoDownloadMsg) {
+          autoDownloadMsg.textContent = "✅ Téléchargement automatique en cours... Si le téléchargement ne démarre pas, cliquez sur le bouton ci-dessous.";
+          autoDownloadMsg.style.display = "block";
+        }
+
+        // ⭐ AMÉLIORÉ : Masquer la barre de progression et afficher le message de succès
+        if (progressDiv) progressDiv.style.display = "none";
+        showSuccess("Fusion terminée ! Le fichier se télécharge automatiquement.");
+      } else {
+        showError("Le fichier fusionné n'est pas encore disponible. Réessayez dans quelques instants.");
+      }
+
+    } catch(err) {
+      console.error("Erreur getConcatJobsInfo:", err);
+      showError("Le fichier fusionné n'est pas encore disponible. Réessayez dans quelques instants.");
+    }
+  }
+
+  // ----------- Gestion des erreurs -----------
+  function handleFusionError(errorMessage) {
+    const err = errorMessage || "";
+
+    if (err.includes("duration") || err.includes("N/A") || err.includes("Could not get duration")) {
+      showError("Erreur : Impossible de lire la durée d'un fichier WebM. Ce fichier a probablement été enregistré avec un outil incompatible. Veuillez le convertir en MP3 et réessayer.");
+    } else if (err.includes("error_audio_format_not_supported") || err.includes("error_max_file_size_exceeded")) {
+      showError("Format de fichier non supporté ou fichier trop volumineux.");
+    } else if (err.includes("error_invalid_token")) {
+      showError("Votre session a expiré. Veuillez rafraîchir la page.");
+    } else if (err.includes("error_too_much_traffic")) {
+      showError("Trop de requêtes. Veuillez patienter quelques instants.");
+    } else if (err.includes("error_limit_reached")) {
+      showError("Limite d'utilisation atteinte. Veuillez contacter le support.");
+    } else {
+      showError(err || "Erreur lors de la fusion. Veuillez réessayer.");
+    }
+  }
+
+  // ⭐ NOUVEAU : Fonction pour effacer tous les fichiers
+  function clearAllFiles() {
+    if (uploadedFiles.length === 0) return;
+    
+    if (confirm(`Voulez-vous vraiment supprimer tous les ${uploadedFiles.length} fichier(s) ?`)) {
+      uploadedFiles = [];
+      if (sortable) {
+        sortable.destroy();
+        sortable = null;
+      }
+      updateUI();
+      hideMessages();
+      if (downloadBtn) {
+        downloadBtn.style.display = "none";
+        // ⭐ NOUVEAU : Retirer la classe de centrage
+        const actionsContainer = downloadBtn.closest('.audio-concat-actions');
+        if (actionsContainer) {
+          actionsContainer.classList.remove('single-button');
+        }
+      }
+      if (autoDownloadMsg) autoDownloadMsg.style.display = "none";
+      if (clearAllBtn) clearAllBtn.style.display = "block"; // Réafficher le bouton
+      if (fusedAudioUrl && fusedAudioUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(fusedAudioUrl);
+        fusedAudioUrl = null;
+      }
+      resetProgress();
+    }
+  }
+
+  // ⭐ NOUVEAU : Gestion du bouton "Effacer tout"
+  if (clearAllBtn) {
+    clearAllBtn.onclick = (e) => {
+      e.preventDefault();
+      clearAllFiles();
+    };
+  }
+
+  // ⭐ AMÉLIORÉ : Gestion du clavier pour la dropzone
+  if (dropzone) {
+    dropzone.setAttribute("tabindex", "0");
+    dropzone.setAttribute("role", "button");
+    dropzone.setAttribute("aria-label", "Zone de dépôt de fichiers audio");
+    
+    dropzone.onkeydown = (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (input) input.click();
+      }
+    };
+  }
+
+  // ----------- Events -----------
+  if (form) {
+    form.onsubmit = (e) => { 
+      e.preventDefault(); 
+      sendForFusion(); 
+    };
+  }
+
+  hideMessages();
+}
+
+// ⭐ DÉMARRAGE : Attendre que le DOM soit prêt, puis initialiser
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  // DOM déjà prêt
+  init();
+}
+
+
+</script>
