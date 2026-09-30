@@ -1,10 +1,10 @@
-#agiloshield-v2-staging{--asv2-blue:#205cb7;--asv2-navy:#17304e;--asv2-muted:#5e7188;--asv2-line:#dce5ef;--asv2-surface:#f4f7fb;color:var(--asv2-navy);font:15px/1.5 Inter,system-ui,-apple-system,sans-serif}
+#agiloshield-v2-staging{--asv2-blue:#205cb7;--asv2-navy:#17304e;--asv2-muted:#5e7188;--asv2-line:#dce5ef;--asv2-surface:#f4f7fb;color:var(--asv2-navy);font-family:inherit;font-size:15px;line-height:1.5}
 #agiloshield-v2-staging *{box-sizing:border-box}
-#agiloshield-v2-staging button,#agiloshield-v2-staging input{font:inherit}
+#agiloshield-v2-staging button,#agiloshield-v2-staging input,#agiloshield-v2-staging textarea,#agiloshield-v2-staging select{font:inherit}
 #agiloshield-v2-staging button{cursor:pointer}
 #agiloshield-v2-staging button:disabled,#agiloshield-v2-staging input:disabled{opacity:.55;cursor:not-allowed}
 #agiloshield-v2-staging button:focus-visible,#agiloshield-v2-staging input:focus-visible,#agiloshield-v2-staging [tabindex]:focus-visible{outline:3px solid #f28b35;outline-offset:2px}
-#agiloshield-v2-staging .asv2-shell{max-width:1120px;margin:20px auto 36px;padding:28px;background:#fff;border:1px solid var(--asv2-line);border-radius:20px;box-shadow:0 12px 36px rgba(19,46,84,.08)}
+#agiloshield-v2-staging .asv2-shell{max-width:1120px;margin:20px auto 36px;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none}
 /* Masquer le lanceur du guide général Agilotext sur cette page seulement */
 [data-agilo-tour="start"], [data-agilo-tour], .agilo-tour-launcher, #agilo-tour-start { display: none !important; }
 #agiloshield-v2-staging .asv2-landing-head{margin-bottom:18px}
@@ -315,3 +315,4 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-tour-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 #agiloshield-v2-staging .asv2-tour-controls .asv2-link{margin-left:auto}
 @media(max-width:700px){#agiloshield-v2-staging .asv2-tour-card{top:auto;bottom:16px;left:16px;width:calc(100vw - 32px)}}
+@media(max-width:650px){#agiloshield-v2-staging .asv2-shell{margin:0;padding:0;border-radius:0}}
