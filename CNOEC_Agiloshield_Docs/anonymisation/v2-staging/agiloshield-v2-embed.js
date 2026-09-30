@@ -243,7 +243,7 @@ function updateLastDocCard(entry){
     lastDocStatus.textContent=entry.status==='READY'?'Résultat prêt selon vos réglages':'Vérification nécessaire';
     buttonWithIcon('Télécharger','download','asv2-primary asv2-last-doc-action',lastDocActions,
       ()=>download(entry,entry.status==='READY').catch(showError));
-    if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+    if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
       buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
         ()=>downloadKey(entry).catch(showError));
     buttonWithIcon(entry.status==='READY'?'Consulter':'Vérifier',entry.status==='READY'?'eye':'eye-slash',
@@ -311,7 +311,9 @@ const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
 el('span','AgiloShield · vérification du document','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
-const close=button('×','asv2-close',drawerHead,closeDrawer);close.setAttribute('aria-label','Fermer le document');
+const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
+const drawerDownloads=el('div',null,'asv2-drawer-downloads',drawerHeadActions);
+const close=button('×','asv2-close',drawerHeadActions,closeDrawer);close.setAttribute('aria-label','Fermer le document');
 const drawerNotice=el('div','', 'asv2-drawer-notice',panel);drawerNotice.setAttribute('role','status');
 drawerNotice.setAttribute('aria-live','polite');
 const tabs=el('div',null,'asv2-mobile-tabs',panel);
@@ -723,8 +725,9 @@ function renderHistory(){
       });
     }
     el('td',String(index+1),null,line);
-    const nameCell=el('td',null,'asv2-history-name',line);
-    historyIcon('file',nameCell);el('span',row.fileName||row.filename||'Document',null,nameCell);
+    const nameCell=el('td',null,null,line);
+    const nameContent=el('div',null,'asv2-history-name',nameCell);
+    historyIcon('file',nameContent);el('span',row.fileName||row.filename||'Document',null,nameContent);
     el('td',historyDate(row.createdAt||row.dtCreation),null,line);
     el('td',historySize(row.sizeBytes??row.fileLength),null,line);
     el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',null,line);
@@ -739,7 +742,7 @@ function renderHistory(){
       if(status==='READY'||status==='REVIEW_REQUIRED')
         historyAction(status==='READY'?'Télécharger le résultat':'Télécharger le résultat (non vérifié)','download',controls,
           ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if((status==='READY'||status==='REVIEW_REQUIRED')&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
+      if(status==='READY'&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
         historyAction('Télécharger la clé de la révision','key',controls,
           ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
     }
@@ -757,7 +760,7 @@ function renderHistory(){
     if(status==='READY'||status==='REVIEW_REQUIRED')
       button(status==='READY'?'Télécharger le résultat':'Télécharger (non vérifié)','asv2-secondary',cardActions,
         ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-    if((status==='READY'||status==='REVIEW_REQUIRED')&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
+    if(status==='READY'&&row.processingMode==='PSEUDONYMIZE'&&pseudoReady)
       button('Télécharger la clé','asv2-secondary',cardActions,
         ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
   });
@@ -808,7 +811,7 @@ async function downloadHistoryRow(row){
 }
 async function downloadHistoryKey(row){
   const entry=await entryForHistory(row);
-  if(!isTerminal(entry.status)||entry.status==='FAILED'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
+  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
   await downloadKey(entry);
 }
 async function downloadSelectedZip(){
@@ -996,7 +999,11 @@ async function loadCurrent(entry){
     api.review(entry.jobId).catch(error=>{if(currentStatus!=='FAILED')throw error;return null;}),
     api.regions(entry.jobId).catch(()=>null)]);
   if(review)assertDigest(entry,review);
+  const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
+  if(previousRevision&&String(previousRevision)!==String(entry.revision)){
+    entry.focusId=null;entry.target=null;entry.manualMaskActive=false;
+  }
   entry.review=review;entry.regions=regions;
   entry.error=currentStatus==='FAILED'?job.error?.code||job.errorCode||job.reason||null:null;
   entry.mode=job.processingMode||entry.mode;
@@ -1057,7 +1064,19 @@ function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',
-    entry.revision?'Version actuelle':null].filter(Boolean).join(' · ');
+    entry.revision?'Révision '+entry.revision:null].filter(Boolean).join(' · ');
+  clear(drawerDownloads);
+  if(entry.status==='READY'||entry.status==='REVIEW_REQUIRED'){
+    buttonWithIcon(entry.status==='READY'?'Télécharger le résultat':'Télécharger le résultat non vérifié',
+      'download',entry.status==='READY'?'asv2-primary':'asv2-secondary',drawerDownloads,
+      ()=>download(entry,entry.status==='READY').catch(showError));
+    if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady){
+      buttonWithIcon('Télécharger la clé de cette révision','key','asv2-secondary',drawerDownloads,
+        ()=>downloadKey(entry).catch(showError));
+      el('small','Conservez le résultat et sa clé ensemble, dans un espace privé.',
+        'asv2-key-guidance',drawerDownloads);
+    }
+  }
   drawerMessage(entry.error&&entry.status!=='FAILED'?entry.error:({
     LOCAL:'Original non protégé — des données sensibles peuvent être visibles.',
     UPLOADING:'Envoi du document en cours…',PENDING:copy.status.PENDING,
@@ -1079,6 +1098,9 @@ function renderIssues(entry){
   const review=entry.review;
   if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
+  if(entry.status==='REVIEW_REQUIRED'&&review.canApproveHumanVerification===true)
+    el('p','Une attestation humaine serait possible côté moteur, mais la façade de recette ne la propose pas encore. Le résultat reste non vérifié.',
+      'asv2-geometry-note',issuePane);
 
   const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
   const listProblems=Array.isArray(review.listProblems)?review.listProblems:[];
@@ -1114,22 +1136,76 @@ function renderIssues(entry){
 
   const issuesContent=el('div',null,'asv2-issues-content',issuePane);
 
-  function renderOccurrenceCard(row,parent){
-    if(!row.id)return;
-    const card=el('article',null,'asv2-issue',parent);
-    const top=el('div',null,'asv2-issue-head',card);
-    el('span',labels[row.category||row.semanticType]||'Donnée repérée','asv2-badge',top);
-    if(row.page)el('span','Page '+row.page,'asv2-muted',top);
-    el('strong',row.text||row.surface||'Passage à vérifier',null,card);
-    el('small',({MASK:'À masquer',KEEP:'À conserver',REVIEW:'À vérifier'})[
-      row.action||row.privacyAction]||'À vérifier',null,card);
-    const issueActions=el('div',null,'asv2-issue-actions',card);
-    if(row.page)button('Voir dans le document','asv2-secondary',issueActions,()=>focusOccurrence(entry,row));
-    for(const action of ['KEEP','MASK']){
-      const control=button(copy.reviewAction[action],'asv2-secondary',issueActions,
-        ()=>decide(entry,row.id,action));
-      control.disabled=!review.reviewable;
+  function renderOccurrenceGroups(rows,parent){
+    const groups=new Map();
+    for(const row of rows){
+      if(!row.id)continue;
+      // Group only for display. Review commands always target one occurrence ID.
+      const key=(row.category||row.semanticType||'PII')+'\u0000'+(row.text||row.surface||'');
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(row);
     }
+    const values=[...groups.values()];
+    let visible=0;
+    const more=button('Afficher d’autres passages','asv2-secondary asv2-issues-more',parent,showMore);
+    function showMore(){
+      const next=Math.min(values.length,visible+40);
+      for(;visible<next;visible++)renderGroup(values[visible]);
+      more.hidden=visible>=values.length;
+      if(!more.hidden)more.textContent='Afficher d’autres passages · '+(values.length-visible)+' groupe(s) restant(s)';
+      parent.appendChild(more);
+    }
+    function renderGroup(occurrences){
+      const card=el('div',null,'asv2-issue-compact',parent);
+      const row=occurrences[0],label=labels[row.category||row.semanticType]||'Donnée repérée';
+      const summary=button('', 'asv2-issue-select',card,()=>{
+        detail.hidden=!detail.hidden;
+        summary.setAttribute('aria-expanded',String(!detail.hidden));
+        if(!detail.hidden)showOccurrence();
+      });
+      summary.setAttribute('aria-expanded','false');
+      el('span',label,'asv2-badge',summary);
+      el('span',row.text||row.surface||'Passage à vérifier','asv2-issue-snippet',summary);
+      el('span',occurrences.length+' passage'+(occurrences.length>1?'s':''),'asv2-count',summary);
+      const detail=el('div',null,'asv2-issue-detail',card);detail.hidden=true;
+      let index=0;
+      function showOccurrence(){
+        clear(detail);
+        const current=occurrences[index];
+        const nav=el('div',null,'asv2-issue-detail-nav',detail);
+        el('span','Passage '+(index+1)+' sur '+occurrences.length,null,nav);
+        if(occurrences.length>1){
+          const previous=button('← Précédent','asv2-secondary',nav,()=>{index--;showOccurrence();});
+          previous.disabled=index===0;
+          const next=button('Suivant →','asv2-secondary',nav,()=>{index++;showOccurrence();});
+          next.disabled=index===occurrences.length-1;
+        }
+        el('strong',current.text||current.surface||'Passage à vérifier',null,detail);
+        const source=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
+        if(typeof source==='string'&&Number.isInteger(current.start)&&Number.isInteger(current.end)&&
+          current.start>=0&&current.end>current.start){
+          const start=codePointOffset(source,current.start),end=codePointOffset(source,current.end);
+          if(source.slice(start,end)===(current.text||current.surface)){
+            const before=source.slice(Math.max(0,start-45),start).replace(/\s+/g,' ');
+            const after=source.slice(end,Math.min(source.length,end+45)).replace(/\s+/g,' ');
+            el('p','…'+before+' ['+source.slice(start,end)+'] '+after+'…',
+              'asv2-issue-context',detail);
+          }
+        }
+        el('small',({MASK:'À masquer',KEEP:'À conserver',REVIEW:'À vérifier'})[
+          current.action||current.privacyAction]||'À vérifier',null,detail);
+        const actions=el('div',null,'asv2-issue-actions',detail);
+        const canLocate=current.page||(['txt','csv'].includes(entry.format)&&
+          Number.isInteger(current.start)&&Number.isInteger(current.end)&&current.surfaceId);
+        if(canLocate)button('Voir ce passage','asv2-secondary',actions,()=>focusOccurrence(entry,current));
+        for(const action of ['KEEP','MASK']){
+          const control=button(copy.reviewAction[action],'asv2-secondary',actions,
+            ()=>decide(entry,current.id,action));
+          control.disabled=!review.reviewable;
+        }
+      }
+    }
+    showMore();
   }
 
   function renderIssuesContent(){
@@ -1177,7 +1253,7 @@ function renderIssues(entry){
     });
     if(filteredActionRows.length){
       el('h4',filteredActionRows.length+' décision(s) requise(s)',null,issuesContent);
-      for(const row of filteredActionRows)renderOccurrenceCard(row,issuesContent);
+      renderOccurrenceGroups(filteredActionRows,issuesContent);
     }
 
     // 2. Blocages globaux du document ensuite
@@ -1209,7 +1285,7 @@ function renderIssues(entry){
         el('span',labels[cat]||cat,null,summary);
         el('span',catRows.length+' passage'+(catRows.length>1?'s':''),'asv2-count',summary);
         const groupContent=el('div',null,'asv2-issue-group-content',details);
-        for(const row of catRows)renderOccurrenceCard(row,groupContent);
+        renderOccurrenceGroups(catRows,groupContent);
       }
     }
 
@@ -1258,7 +1334,8 @@ async function apply(entry,revision){
   await pollEntry(entry);
 }
 function focusOccurrence(entry,row){
-  entry.page=Number(row.page);entry.focusId=row.id;entry.previewKind='origin';
+  if(entry.format==='pdf'&&Number.isInteger(Number(row.page)))entry.page=Number(row.page);
+  entry.focusId=row.id;entry.previewKind='origin';
   setMobileTab('doc');renderPreview(entry).catch(showError);
 }
 function pageGeometry(entry,pageNumber,base){
@@ -1282,29 +1359,33 @@ function strictRegions(entry,base){
 async function previewBytes(entry,kind){
   if(kind==='origin'&&entry.file&&!entry.jobId)return {bytes:await entry.file.arrayBuffer(),format:entry.format};
   if(!entry.jobId)throw new Error('Document non déposé');
+  // Python's preview-bytes is explicitly non-certified and does not currently
+  // carry revision/policy headers. Re-read the real job after receiving it;
+  // a revision change invalidates the view instead of showing a stale image.
+  async function current(){
+    const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
+    assertDigest(entry,job);assertDigest(entry,review);
+    if(statusOf(job)!==entry.status||String(job.reviewRevision)!==String(entry.revision)||
+      String(review.revision)!==String(entry.revision))throw new Error('Aperçu périmé');
+  }
   const response=await api.preview(entry.jobId,kind);
   const revision=response.headers.get('X-Agiloshield-Revision');
   if(kind==='anon'&&revision&&String(revision)!==String(entry.revision))throw new Error('Aperçu périmé');
-  if(kind==='anon'&&entry.listDigest&&(
-    response.headers.get('X-Agiloshield-List-Digest')!==entry.listDigest||
-    response.headers.get('X-Agiloshield-Policy-Digest')!==entry.digest||
-    response.headers.get('X-Agiloshield-Status')!==entry.status||
-    response.headers.get('X-Agiloshield-Assurance')!==
-      (entry.status==='READY'?'technical-ready':'non-verified')||
-    String(revision)!==String(entry.revision)))throw new Error('Aperçu non conforme au job courant');
+  if(kind==='anon'){
+    const digest=response.headers.get('X-Agiloshield-Policy-Digest');
+    const listDigest=response.headers.get('X-Agiloshield-List-Digest');
+    const status=response.headers.get('X-Agiloshield-Status');
+    const assurance=response.headers.get('X-Agiloshield-Assurance');
+    if((digest&&digest!==entry.digest)||(listDigest&&listDigest!==entry.listDigest)||
+      (status&&status!==entry.status)||(assurance&&assurance!=='review-preview'&&
+        assurance!=='technical-ready'&&assurance!=='non-verified'))
+      throw new Error('Aperçu non conforme au job courant');
+  }
   const mime=response.headers.get('Content-Type')||'';
   const format=entry.format||(mime.includes('pdf')?'pdf':mime.includes('wordprocessingml')?'docx':
     mime.includes('csv')?'csv':mime.includes('text/plain')?'txt':'');
   const bytes=await response.arrayBuffer();
-  if(kind==='anon'){
-    // The current preview route does not always provide a revision header.
-    // Refuse a response that raced with a new review revision.
-    const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
-    assertDigest(entry,job);assertDigest(entry,review);
-    if(String(job.reviewRevision)!==String(entry.revision)||
-      String(review.revision)!==String(entry.revision)||statusOf(job)!==entry.status)
-      throw new Error('Aperçu périmé : actualisez la révision');
-  }
+  if(kind==='anon')await current();
   return {bytes,format};
 }
 async function renderPreview(entry){
@@ -1315,7 +1396,8 @@ async function renderPreview(entry){
   const kind=entry.previewKind;
   const switcher=el('div',null,'asv2-preview-switch',viewerToolbar);
   const options=[['Original','origin','eye'],['Résultat courant','anon','shield-check']];
-  if(entry.format==='pdf'&&isTerminal(entry.status))options.push(['Comparer côte à côte','compare','split-view']);
+  if(['pdf','txt','csv','docx'].includes(entry.format)&&isTerminal(entry.status))
+    options.push(['Comparer côte à côte','compare','split-view']);
   for(const [label,value,iconName] of options){
     const control=buttonWithIcon(label,iconName,'asv2-secondary'+(value===kind?' is-active':''),switcher,()=>{
       entry.previewKind=value;entry.manualMaskActive=false;renderPreview(entry).catch(showError);
@@ -1326,14 +1408,7 @@ async function renderPreview(entry){
     entry.status==='READY'?'Résultat · prêt selon vos réglages':
       'Résultat · non vérifié, des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
-  const viewerActions=el('div',null,'asv2-viewer-actions',viewerToolbar);
-  if(isTerminal(entry.status)&&entry.status!=='FAILED'){
-    buttonWithIcon('Télécharger le résultat','download','asv2-primary asv2-viewer-download-btn',viewerActions,
-      ()=>download(entry,entry.status==='READY').catch(showError));
-    if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
-      buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-viewer-key-btn',viewerActions,
-        ()=>downloadKey(entry).catch(showError));
-  }
+  // Downloads live beside the file name so they remain visible above the document.
   const loading=el('p','Chargement de l’aperçu…','asv2-loading',viewerBody);
   try{
     if(['xlsx','pptx'].includes(entry.format)){
@@ -1346,7 +1421,7 @@ async function renderPreview(entry){
       if(isTerminal(entry.status)&&entry.status!=='FAILED'){
         buttonWithIcon('Télécharger le résultat ('+entry.format.toUpperCase()+')','download','asv2-primary',cardActions,
           ()=>download(entry,entry.status==='READY').catch(showError));
-        if(entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+        if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
           buttonWithIcon('Télécharger la clé de pseudonymisation','key','asv2-secondary',cardActions,
             ()=>downloadKey(entry).catch(showError));
       } else if(entry.status==='FAILED') {
@@ -1356,8 +1431,9 @@ async function renderPreview(entry){
       }
       return;
     }
-    if(kind==='compare'&&entry.format==='pdf'){
-      await renderPdfCompare(entry,serial);
+    if(kind==='compare'&&['pdf','txt','csv','docx'].includes(entry.format)){
+      if(entry.format==='pdf')await renderPdfCompare(entry,serial);
+      else await renderOtherCompare(entry,serial);
       return;
     }
     const source=await previewBytes(entry,kind);
@@ -1369,8 +1445,14 @@ async function renderPreview(entry){
         'asv2-geometry-note',viewerBody);
       await renderDocx(source.bytes,serial);
     }
-    else if(source.format==='txt')renderText(source.bytes);
-    else if(source.format==='csv')renderCsv(source.bytes);
+    else if(source.format==='txt')renderText(source.bytes,entry,kind);
+    else if(source.format==='csv'){
+      if(kind==='origin'&&entry.focusId){
+        el('p','Vue source CSV : le passage est localisé par ses positions exactes. La cellule visuelle n’est pas encore fournie par l’API.',
+          'asv2-geometry-note',viewerBody);
+        renderText(source.bytes,entry,kind);
+      }else renderCsv(source.bytes);
+    }
     else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
   }catch(error){if(serial===state.previewSerial){clear(viewerBody);el('p',errorText(error),'asv2-error',viewerBody);}}
 }
@@ -1435,6 +1517,35 @@ async function renderPdfCompare(entry,serial){
   }
   await draw();
 }
+async function renderOtherCompare(entry,serial){
+  const [origin,result]=await Promise.all([previewBytes(entry,'origin'),previewBytes(entry,'anon')]);
+  if(serial!==state.previewSerial||state.active!==entry.key)return;
+  clear(viewerBody);
+  if(entry.format==='docx')el('p','Comparaison indicative : la mise en page Word peut différer du fichier final rouvert par la QA. Faites défiler chaque page horizontalement si nécessaire.',
+    'asv2-geometry-note',viewerBody);
+  const compare=el('div',null,'asv2-compare-container asv2-compare-text',viewerBody);
+  const left=el('section',null,'asv2-compare-col',compare);
+  el('h3','Original — données sensibles visibles','asv2-compare-title',left);
+  const leftBody=el('div',null,'asv2-compare-content',left);
+  const right=el('section',null,'asv2-compare-col',compare);
+  el('h3',entry.status==='READY'?'Résultat courant prêt':'Résultat courant non vérifié',
+    'asv2-compare-title',right);
+  const rightBody=el('div',null,'asv2-compare-content',right);
+  if(entry.format==='txt'){
+    renderText(origin.bytes,null,'origin',leftBody);
+    renderText(result.bytes,null,'anon',rightBody);
+  }else if(entry.format==='csv'){
+    renderCsv(origin.bytes,leftBody);
+    renderCsv(result.bytes,rightBody);
+  }else{
+    const cleanups=[];
+    state.previewCleanup=()=>{for(const cleanup of cleanups)cleanup();};
+    await Promise.all([
+      renderDocx(origin.bytes,serial,leftBody,cleanup=>cleanups.push(cleanup)),
+      renderDocx(result.bytes,serial,rightBody,cleanup=>cleanups.push(cleanup))
+    ]);
+  }
+}
 async function renderPdf(entry,bytes,kind,serial){
   if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
@@ -1450,17 +1561,31 @@ async function renderPdf(entry,bytes,kind,serial){
   const zoomLabel=el('span','',null,nav);
   const more=iconButton('magnifier-plus','Zoom avant','asv2-secondary',nav,()=>{entry.zoom=Math.min(2,entry.zoom+.2);draw().catch(showError);});
   const canMask=entry.format==='pdf'&&isTerminal(entry.status)&&entry.status!=='FAILED'&&Boolean(entry.revision);
+  const toolInstruction=el('p','', 'asv2-tool-instruction',viewerBody);
+  function updateToolInstruction(){
+    toolInstruction.textContent=entry.target?
+      'Obligation ciblée : tracez uniquement la région correspondant au passage sélectionné.':
+      entry.manualMaskActive?
+        'Zone libre : sélectionnez d’abord une obligation dans la colonne de gauche pour la résoudre.':'';
+    toolInstruction.hidden=!toolInstruction.textContent;
+  }
   if((kind==='origin'||kind==='anon')&&canMask){
-    buttonWithIcon(entry.manualMaskActive?'Annuler le masquage':'Masquer une zone',
-      'eye-slash',
-      'asv2-secondary asv2-manual-mask-btn'+(entry.manualMaskActive?' is-active':''),nav,()=>{
-        entry.manualMaskActive=!entry.manualMaskActive;
+    const toolActive=Boolean(entry.manualMaskActive||entry.target);
+    const maskButton=buttonWithIcon(toolActive?'Quitter l’outil':'Outil : placer une zone de masquage',
+      'select-area',
+      'asv2-secondary asv2-manual-mask-btn'+(toolActive?' is-active':''),nav,()=>{
+        const activate=!(entry.manualMaskActive||entry.target);
+        entry.manualMaskActive=activate;
         entry.target=null;
-        if(entry.manualMaskActive)drawerMessage('Tracez un rectangle sur le document pour masquer cette zone.','is-warning');
+        maskButton.classList.toggle('is-active',activate);
+        maskButton.querySelector('span').textContent=activate?'Quitter l’outil':'Outil : placer une zone de masquage';
+        if(activate)drawerMessage('Outil actif : tracez une zone sur le PDF puis confirmez. Une zone libre ne résout pas automatiquement une obligation signalée.','is-warning');
         else drawerMessage(null);
+        updateToolInstruction();
         draw().catch(showError);
       });
   }
+  updateToolInstruction();
   const pageBox=el('div',null,'asv2-page-scroll',viewerBody);
   async function draw(){
     if(serial!==state.previewSerial)return;
@@ -1550,7 +1675,7 @@ function bindDrawing(entry,overlay,base,serial,isManualFree=false){
   };
   overlay.onpointercancel=()=>{start=null;ghost?.remove();ghost=null;};
 }
-async function renderDocx(bytes,serial){
+async function renderDocx(bytes,serial,parent=viewerBody,registerCleanup=cleanup=>{state.previewCleanup=cleanup;}){
   if(!config.DOCX_FRAME_URL)throw new Error('Lecteur Word non configuré');
   // jsDelivr serves .html as text/plain. Read the immutable template and mount it
   // as srcdoc, preserving the opaque sandbox origin and its restrictive CSP.
@@ -1565,7 +1690,7 @@ async function renderDocx(bytes,serial){
     scripts++;return 'src="'+new URL(path,frameUrl).href+'"';
   });
   if(scripts!==3||serial!==state.previewSerial)return;
-  const frame=el('iframe',null,'asv2-docx-frame',viewerBody);
+  const frame=el('iframe',null,'asv2-docx-frame',parent);
   frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('title','Aperçu Word isolé');
   frame.referrerPolicy='no-referrer';
   const nonce=crypto.randomUUID();
@@ -1583,15 +1708,41 @@ async function renderDocx(bytes,serial){
     };
     function cleanup(){clearTimeout(timer);window.removeEventListener('message',onMessage);}
     window.addEventListener('message',onMessage);
-    state.previewCleanup=()=>{cleanup();frame.remove();};
+    registerCleanup(()=>{cleanup();frame.remove();});
   });
   frame.srcdoc=html;
   await completion;
 }
-function renderText(bytes){
+function codePointOffset(text,count){
+  let unit=0;
+  for(let point=0;point<count&&unit<text.length;point++)unit+=text.codePointAt(unit)>0xFFFF?2:1;
+  return unit;
+}
+function renderText(bytes,entry=null,kind='anon',parent=viewerBody){
   const text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
-  if(text.length>2_000_000)el('p','Aperçu limité aux deux premiers millions de caractères.','asv2-geometry-note',viewerBody);
-  el('pre',text.slice(0,2_000_000),'asv2-text-preview',viewerBody);
+  const row=kind==='origin'&&entry?.focusId&&String(entry.review?.revision)===String(entry.revision)?
+    entry.review?.occurrences?.find(item=>String(item.id)===String(entry.focusId)):null;
+  const surface=entry?.review?.pages?.find(page=>page.surfaceId===row?.surfaceId);
+  if(row&&surface?.text===text&&Number.isInteger(row.start)&&Number.isInteger(row.end)&&
+    row.start>=0&&row.end>row.start){
+    const start=codePointOffset(text,row.start),end=codePointOffset(text,row.end);
+    if(text.slice(start,end)===row.text){
+      const from=Math.max(0,start-1600),to=Math.min(text.length,end+1600);
+      el('p','Extrait de l’original lié à cette occurrence et à la révision courante.',
+        'asv2-geometry-note',parent);
+      const pre=el('pre',null,'asv2-text-preview',parent);
+      pre.append(document.createTextNode((from?'…\n':'')+text.slice(from,start)));
+      const mark=el('mark',text.slice(start,end),'asv2-focused-text',pre);
+      pre.append(document.createTextNode(text.slice(end,to)+(to<text.length?'\n…':'')));
+      requestAnimationFrame(()=>{if(mark.isConnected)mark.scrollIntoView({block:'center'});});
+      return;
+    }
+  }
+  if(row)el('p','La position de ce passage ne correspond pas aux octets de l’original : aucun surlignage approximatif n’est affiché.',
+    'asv2-geometry-note',parent);
+  if(text.length>2_000_000)el('p','Aperçu limité aux deux premiers millions de caractères.',
+    'asv2-geometry-note',parent);
+  el('pre',text.slice(0,2_000_000),'asv2-text-preview',parent);
 }
 function parseCsv(text,maxRows=300){
   const firstLine=text.split(/\r?\n/,1)[0]||'';
@@ -1610,11 +1761,11 @@ function parseCsv(text,maxRows=300){
   if(row.length||cell)rows.push([...row,cell]);
   return rows;
 }
-function renderCsv(bytes){
+function renderCsv(bytes,parent=viewerBody){
   const text=new TextDecoder('utf-8',{fatal:false}).decode(bytes).replace(/^\uFEFF/,'');
   const rows=parseCsv(text);
-  if(rows.length>=300)el('p','Aperçu limité aux 300 premières lignes.','asv2-geometry-note',viewerBody);
-  const wrap=el('div',null,'asv2-csv-scroll',viewerBody);
+  if(rows.length>=300)el('p','Aperçu limité aux 300 premières lignes.','asv2-geometry-note',parent);
+  const wrap=el('div',null,'asv2-csv-scroll',parent);
   const table=el('table',null,'asv2-csv',wrap);
   for(const cells of rows){const tr=el('tr',null,null,table);
     for(const value of cells.slice(0,80))el('td',value,null,tr);
@@ -1637,6 +1788,8 @@ async function download(entry,certified){
   notify(msg);
 }
 async function downloadKey(entry){
+  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')
+    throw new Error('Clé indisponible pour ce document');
   const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,expectedRevision:entry.revision});
   const blob=await response.blob();

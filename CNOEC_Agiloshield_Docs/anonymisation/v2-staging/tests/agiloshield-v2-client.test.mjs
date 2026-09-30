@@ -14,6 +14,7 @@ assert.deepEqual(frozen,{digest:'first',selectedTypes:['PER'],mode:'ANONYMIZE',
   lists:{anon2InclusionList:['Jean Dupont'],anon2ExclusionList:[]}});
 
 const seen = [];
+let artifactRevision='r2';
 const job = {status:'READY', reviewRevision:'r2', protectionPolicy:{digest:'d1'}};
 const review = {revision:'r2', protectionPolicy:{digest:'d1'}};
 const fetchImpl = async (url, options) => {
@@ -21,7 +22,7 @@ const fetchImpl = async (url, options) => {
   const path = new URL(url).pathname;
   if (path.endsWith('/review')) return new Response(JSON.stringify(review), {status:200});
   if (path.endsWith('/download')) return new Response('file', {status:200, headers:{
-    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-Revision':'r2',
+    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-Revision':artifactRevision,
     'X-Agiloshield-Status':'READY', 'X-Agiloshield-Assurance':'technical-ready'}});
   if (path.endsWith('/pseudonym-key')) return new Response('SYNTHETIC_KEY', {status:200, headers:{
     'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-List-Digest':'list-current',
@@ -68,6 +69,14 @@ await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
 job.processingMode='PSEUDONYMIZE';
 assert.equal(await (await client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
   expectedListDigest:'list-current',expectedRevision:'r2'})).text(),'SYNTHETIC_KEY');
+job.status='REVIEW_REQUIRED';
+await assert.rejects(() => client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
+  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale/);
+job.status='READY';
+artifactRevision='r1';
+await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
+  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale artifact/);
+artifactRevision='r2';
 assert.ok(seen.every(call => !call.url.includes(':8091')));
 const xhrCalls=[];
 const progress=[];

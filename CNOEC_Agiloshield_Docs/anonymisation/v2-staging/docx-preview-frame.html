@@ -8,7 +8,11 @@
     html,body{margin:0;background:#e8eef5;color:#17304e;font:14px/1.4 system-ui,sans-serif}
     #status{padding:14px;text-align:center}
     #docx{overflow:auto;min-height:100vh}
-    #docx .docx-wrapper{background:transparent;padding:18px}
+    /* Word pages retain their own width. Anchor them to the left and let a
+       narrow comparison pane scroll, instead of centering/clipping the page. */
+    #docx .docx-wrapper{display:block;background:transparent;padding:18px;width:max-content;min-width:100%;box-sizing:border-box}
+    #docx .docx-wrapper>section{margin-left:0!important;margin-right:0!important}
+    @media(max-width:600px){#docx{zoom:.5}}
   </style>
 </head>
 <body>
