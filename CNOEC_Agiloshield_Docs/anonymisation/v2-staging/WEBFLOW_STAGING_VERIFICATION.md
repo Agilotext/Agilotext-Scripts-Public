@@ -2,7 +2,7 @@
 
 ## État au 29 septembre 2026
 
-**Assets figés :** `825eadc513ee63bcdd5dcda3565e317d7b3ea6b0` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
+**Assets figés :** `825eadc5b545db41ab7264f35af98ee17fc860e1` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
 
 **Verdict :** interface et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le 29/09/2026, la page publiée a affiché « Accès limité » dans le navigateur disponible. Il n’a donc pas été possible de vérifier la version réellement active ni d’appeler Java sous une session valide. Les essais ci-dessous utilisent une page locale avec transport synthétique. L’historique durable, le ZIP et les documents de l’ancienne version restent cachés tant que leurs capacités ne sont pas effectivement raccordées.
 
@@ -51,7 +51,7 @@ Le bloc utilise uniquement `https://apitest.agilotext.com/api/agiloshield-v2`, l
 | Libellés des trois statuts, actions de revue, erreur serveur sûre, sélection vide visible avant dépôt et dans le résultat | PASS sur mock |
 | Console de la page synthétique | Aucune erreur observée |
 | Bloc épinglé/jsDelivr, `docx-preview` 0.4.1 et JSZip 3.10.2 | PASS local/CDN |
-| JS et CSS servis par jsDelivr au SHA `825eadc513ee63bcdd5dcda3565e317d7b3ea6b0` | SHA-256 identiques aux fichiers du commit : JS `ab86ec4cf1aa2968f23ef69eeb89e21c86f7569e24fb463b5f69c75f596a9396`, CSS `8760de840aa98279876907ec3a84049622823af82e9da242af89bab6b7e8a7bd` |
+| JS et CSS servis par jsDelivr au SHA `825eadc5b545db41ab7264f35af98ee17fc860e1` | SHA-256 identiques aux fichiers du commit : JS `ab86ec4cf1aa2968f23ef69eeb89e21c86f7569e24fb463b5f69c75f596a9396`, CSS `8760de840aa98279876907ec3a84049622823af82e9da242af89bab6b7e8a7bd` |
 | Bloc épinglé chargé dans une page locale avec API synthétique | PASS ; aucune erreur console observée |
 | Tests Node du client et de l’adaptateur auth, vérification syntaxique JS | PASS |
 
