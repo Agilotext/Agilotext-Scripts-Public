@@ -3,8 +3,11 @@
 // ⚠️ Ne pas dupliquer ce fichier en embed inline Webflow si déjà chargé via CDN.
 
 (function () {
-  if (window.__agiloEditorHeader_v5) return;
-  window.__agiloEditorHeader_v5 = true;
+  if (window.__agiloEditorHeader_v10) return;
+  window.__agiloEditorHeader_v10 = true;
+  window.__agiloEditorHeader_v9 = true;
+  window.__agiloEditorHeader_v8 = true;
+  window.__agiloEditorHeader_v7 = true;
 
   const AUDIO_EXPIRED_CODE = 'error_audio_file_expired';
   const AUDIO_EXPIRED_MESSAGE = window.agiloAudioExpiredMessage
@@ -151,6 +154,9 @@
     .agilo-btn--primary{border-color:#174a96;background:#174a96;color:#fff}
     .agilo-toast{position:fixed;left:20px;bottom:20px;z-index:999999;background:#111;color:#fff;padding:9px 14px;border-radius:6px;box-shadow:0 6px 16px rgba(0,0,0,.22);opacity:0;transition:opacity .25s;max-width:92vw}
     .is-disabled{opacity:.6; cursor:not-allowed;}
+    .download_link-options a.download_wrapper-link_investigation_docx{display:flex;flex-direction:row;align-items:center;justify-content:space-between;width:100%;box-sizing:border-box;text-decoration:none}
+    .custom-element.options.is-open{position:relative;z-index:100}
+    .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
   `;
     const st = document.createElement('style'); st.id = 'agilo-dialog-theme'; st.textContent = css; document.head.appendChild(st);
   }
@@ -244,6 +250,8 @@
       folderId: j.folderId != null ? Number(j.folderId) : 0,
       folderName: (j.folderName != null ? String(j.folderName) : '').trim(),
       transcriptStatus: j.transcriptStatus || j.status || '',
+      promptid: j.promptid != null ? j.promptid : j.promptId,
+      promptId: j.promptid != null ? j.promptid : j.promptId,
       userErrorMessage: (j.userErrorMessage != null ? String(j.userErrorMessage) : '').trim(),
       javaException: j.javaException || '',
       javaStackTrace: j.javaStackTrace || j.exceptionStackTrace || ''
@@ -417,7 +425,12 @@
       if (panel) {
         panel.style.display = 'flex';
         panel.style.flexDirection = 'column';
+        panel.style.overflow = 'visible';
+        panel.style.height = 'auto';
+        panel.style.zIndex = '100';
       }
+      box.style.zIndex = '100';
+      box.style.position = box.style.position || 'relative';
 
       const first = box.querySelector('.download_link-options a[href]');
       if (first) first.focus({ preventScroll: true });
@@ -443,7 +456,7 @@
   }
 
   function setDownloadLink(link, href, disabledMsg = '', opts = {}) {
-    if (!link) return;
+    if (!link || isInvestigationPvAnchor(link)) return;
 
     if (link.__clickHandler) {
       link.removeEventListener('click', link.__clickHandler);
@@ -491,7 +504,7 @@
   }
 
   function setLinkVerifying(link, msg = 'Vérification…') {
-    if (!link) return;
+    if (!link || isInvestigationPvAnchor(link)) return;
     link.classList.add('is-verifying');
     link.removeAttribute('download');
     link.setAttribute('href', '#');
@@ -499,7 +512,7 @@
     link.removeAttribute('rel');
     link.removeAttribute('aria-disabled');
     link.title = msg;
-    link.style.cursor = 'progress';
+    link.style.cursor = 'pointer';
     link.style.pointerEvents = 'auto';
   }
 
@@ -519,6 +532,12 @@
 
   const _assetOkCache = new Map();
 
+  function cancelResponseBody(r) {
+    try {
+      if (r && r.body && typeof r.body.cancel === 'function') r.body.cancel();
+    } catch (_) { /* stream déjà lu */ }
+  }
+
   async function verifyAssetOnce(jobId, url, key) {
     if (_assetOkCache.has(key)) return _assetOkCache.get(key);
     let ok = false;
@@ -533,10 +552,12 @@
 
       const cd = r.headers.get('content-disposition') || '';
       const ct = (r.headers.get('content-type') || '').toLowerCase();
+      const binaryOk = /attachment|filename=/i.test(cd)
+        || /(application\/pdf|msword|officedocument|rtf|octet-stream)/.test(ct);
 
-      if (r.ok && (/attachment|filename=/i.test(cd) ||
-          /(application\/pdf|msword|officedocument|rtf)/.test(ct))) {
+      if (r.ok && binaryOk) {
         ok = true;
+        cancelResponseBody(r);
       } else {
         const text = await r.text().catch(() => '');
 
@@ -559,16 +580,14 @@
   }
 
   function guardClick(a, url, jobId, key, failMsg = 'Résumé indisponible.') {
-    if (!a || a.__guarded) return;
+    if (!a || isInvestigationPvAnchor(a) || a.__guarded) return;
     a.__guarded = true;
 
     a.addEventListener('click', async (e) => {
       if (a.getAttribute('href') && !a.hasAttribute('aria-disabled') && !a.classList.contains('is-verifying')) return;
 
       e.preventDefault(); e.stopPropagation();
-      a.style.cursor = 'progress';
       const assetOk = await verifyAssetOnce(jobId, url, key);
-      a.style.cursor = '';
 
       if (assetOk) {
         setDownloadLink(a, url);
@@ -578,6 +597,207 @@
         setDownloadLink(a, '#', failMsg);
       }
     }, { passive: false });
+  }
+
+  function promptIdFromJob(job) {
+    if (!job) return '';
+    return job.promptid != null ? job.promptid : job.promptId;
+  }
+
+  function loadFormatInvestigationPvHelper() {
+    if (window.AgiloFormatInvestigationPv) {
+      return Promise.resolve(window.AgiloFormatInvestigationPv);
+    }
+    return new Promise((resolve) => {
+      let src = '';
+      const tags = document.getElementsByTagName('script');
+      for (let i = 0; i < tags.length; i++) {
+        const s = tags[i].src || '';
+        if (s.indexOf('Code-ed-header.js') !== -1) {
+          src = s.replace(
+            /scripts\/pages\/editor\/Code-ed-header\.js/,
+            'scripts/pages/shared/format-investigation-pv.js'
+          );
+          break;
+        }
+      }
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => resolve(window.AgiloFormatInvestigationPv || null);
+      el.onerror = () => resolve(null);
+      document.head.appendChild(el);
+    });
+  }
+
+  function investigationLinkLabelEl(a) {
+    if (!a) return null;
+    return Array.from(a.querySelectorAll('div')).find((d) =>
+      !d.classList.contains('icon-1x1-medium') && !d.classList.contains('w-embed')
+    ) || null;
+  }
+
+  function isInvestigationPvAnchor(el) {
+    return !!(el && el.classList && el.classList.contains('download_wrapper-link_investigation_docx'));
+  }
+
+  function sanitizeInvestigationAnchor(a) {
+    if (!a) return a;
+    const api = window.AgiloFormatInvestigationPv;
+    a.classList.remove('download_wrapper-link_summary_docx', 'is-verifying', 'is-disabled');
+    a.removeAttribute('aria-disabled');
+    a.removeAttribute('download');
+    a.removeAttribute('data-w-id');
+    a.removeAttribute('target');
+    a.setAttribute('href', '#');
+    a.style.removeProperty('cursor');
+    a.style.removeProperty('pointer-events');
+    a.style.cursor = 'pointer';
+    a.style.pointerEvents = '';
+    a.title = (api && api.LINK_TITLE) || 'Propos tels quels, présentation du modèle';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    return a;
+  }
+
+  function copyInvestigationLayoutFrom(template) {
+    if (!template) return;
+    let st = document.getElementById('agilo-inv-pv-layout');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'agilo-inv-pv-layout';
+      document.head.appendChild(st);
+    }
+    const cs = window.getComputedStyle(template);
+    const pad = cs.padding && cs.padding !== '0px' ? cs.padding : '';
+    const gap = cs.gap && cs.gap !== 'normal' ? cs.gap : '0px';
+    st.textContent = `
+      .download_link-options a.download_wrapper-link_investigation_docx{
+        display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+        width:100%;box-sizing:border-box;text-decoration:none;
+        ${pad ? `padding:${pad};` : ''}gap:${gap};
+      }
+      .custom-element.options.is-open{position:relative;z-index:100}
+      .custom-element.options.is-open .download_link-options{z-index:100;overflow:visible;height:auto}
+    `;
+  }
+
+  function ensureInvestigationPvLink() {
+    const api = window.AgiloFormatInvestigationPv;
+    const cls = (api && api.LINK_CLASS) || 'download_wrapper-link_investigation_docx';
+    let a = document.querySelector('a.' + cls);
+    if (a) {
+      const hasIcon = a.querySelector('.icon-1x1-medium, svg, .w-embed');
+      if (hasIcon) {
+        const template = document.querySelector('a.download_wrapper-link_summary_docx:not(.download_wrapper-link_investigation_docx)');
+        if (template) copyInvestigationLayoutFrom(template);
+        return sanitizeInvestigationAnchor(a);
+      }
+      a.remove();
+      a = null;
+    }
+    const panels = $$('.download_link-options');
+    let host = null;
+    let template = null;
+    panels.forEach((p) => {
+      const sum = p.querySelector('a.download_wrapper-link_summary_docx:not(.download_wrapper-link_investigation_docx)');
+      if (sum) {
+        host = p;
+        template = sum;
+      }
+    });
+    if (!host) host = document.querySelector('.download_link-options');
+    if (!host) return null;
+    if (template) {
+      copyInvestigationLayoutFrom(template);
+      a = template.cloneNode(true);
+      a.classList.add(cls);
+    } else {
+      a = document.createElement('a');
+      a.href = '#';
+      a.className = cls;
+      const label = document.createElement('div');
+      label.textContent = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+      a.appendChild(label);
+    }
+    sanitizeInvestigationAnchor(a);
+    host.appendChild(a);
+    return a;
+  }
+
+  function setInvestigationLinkBusy(a, busy) {
+    if (!a) return;
+    const api = window.AgiloFormatInvestigationPv;
+    const idle = (api && api.LINK_LABEL) || 'PV d’enquête (Word)';
+    const busyLabel = (api && api.LABEL_BUSY) || 'Préparation du Word';
+    const label = investigationLinkLabelEl(a);
+    if (label) label.textContent = busy ? busyLabel : idle;
+    a.setAttribute('aria-busy', busy ? 'true' : 'false');
+    a.style.pointerEvents = busy ? 'none' : '';
+    a.style.cursor = busy ? 'progress' : 'pointer';
+  }
+
+  function bindInvestigationPvClick(a) {
+    if (!a || a.__agiloInvPvBound) return;
+    a.__agiloInvPvBound = true;
+    a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const api = window.AgiloFormatInvestigationPv;
+      if (!api) {
+        toast('Téléchargement indisponible. Rechargez la page.', 3200);
+        return;
+      }
+      const jobKey = String(a.__agiloInvJobId || '');
+      const job = a.__agiloInvJob || {};
+      if (api.isBusy(jobKey)) return;
+      setInvestigationLinkBusy(a, true);
+      try {
+        if (typeof window.agiloSaveNow !== 'function') {
+          toast('Sauvegarde indisponible. Rechargez la page avant de créer le Word.', 4200);
+          return;
+        }
+        let saved;
+        try { saved = await window.agiloSaveNow(); }
+        catch (error) {
+          toast('La sauvegarde a échoué. Le Word n’a pas été créé.', 4200);
+          return;
+        }
+        if (!saved || saved.ok !== true) {
+          toast('La sauvegarde a échoué. Le Word n’a pas été créé.', 4200);
+          return;
+        }
+        const r = await api.downloadInvestigationPv({
+          username: AUTH.email,
+          token: AUTH.token,
+          edition: AUTH.edition,
+          jobId: jobKey,
+          templateId: String(promptIdFromJob(job) || '')
+        });
+        if (!r.ok && !r.busy) toast(r.errorMessage || 'Impossible de préparer le Word.', 4200);
+      } finally {
+        setInvestigationLinkBusy(a, false);
+      }
+    });
+  }
+
+  function updateInvestigationPvLink(jobId, job) {
+    const api = window.AgiloFormatInvestigationPv;
+    const show = !!(api && api.shouldShowInvestigationPvLink(promptIdFromJob(job), job && job.transcriptStatus));
+    let a = document.querySelector('a.download_wrapper-link_investigation_docx');
+    if (!show) {
+      if (a) a.style.display = 'none';
+      return;
+    }
+    a = ensureInvestigationPvLink();
+    if (!a) return;
+    a.style.removeProperty('display');
+    a.__agiloInvJobId = jobId;
+    a.__agiloInvJob = job || {};
+    bindInvestigationPvClick(a);
   }
 
   function updateDownloadLinks(jobId, job) {
@@ -617,12 +837,15 @@
       });
     });
 
+    updateInvestigationPvLink(jobId, job);
+
     const sum = [
       { c: 'html', f: 'html' }, { c: 'rtf', f: 'rtf' }, { c: 'docx', f: 'docx' }, { c: 'doc', f: 'doc' }, { c: 'pdf', f: 'pdf' }, { c: 'txt', f: 'html' }
     ];
     sum.forEach(({ c, f }) => {
       const links = document.querySelectorAll(`.download_link-options a.download_wrapper-link_summary_${c}`);
       links.forEach((a) => {
+        if (isInvestigationPvAnchor(a)) return;
         if (a.closest('.wrapper-message-pro')) return;
 
         if (!isProPlus && (c === 'doc' || c === 'pdf')) {
@@ -852,6 +1075,7 @@
     });
 
     AUTH = await ensureAuth();
+    await loadFormatInvestigationPvHelper();
     const jobId = getJobId();
     if (!jobId) { console.warn('[Header] Aucun jobId'); return; }
 

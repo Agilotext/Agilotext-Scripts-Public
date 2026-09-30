@@ -117,55 +117,45 @@
   }
 
   function getSegmentsFromDom(root){
-    const rows = $$('.ag-seg,[data-seg],.segment,.ag-segment', root);
+    const rows = Array.from(root.querySelectorAll(':scope > .ag-seg'));
     if (!rows.length){
-      if (root.querySelector('.ag-alert, .ag-alert--warn')) return [];
-      const txt = (root.innerText || root.textContent || '').trim();
-      if (!txt) return [];
-      return [{
-        id: 's0',
-        startSec: 0,
-        endSec: 0,
-        speaker: '',
-        text: txt,
-        lang: document.documentElement.lang || ''
-      }];
-    }
-    const out = [];
-    rows.forEach((seg,i)=>{
-      const tBtn   = seg.querySelector('header .time,.time,[data-t]');
-      const stAttr = (seg.dataset.start ?? seg.getAttribute('data-start') ?? (tBtn && (tBtn.dataset.t || tBtn.textContent))) || '0';
-      const enAttr = (seg.dataset.end ?? seg.getAttribute('data-end')) ?? '';
-      const startSec = toSec(stAttr);
-      const endSec   = toSec(enAttr);
-      const spk = (seg.dataset.speaker || (seg.querySelector('header .speaker,.speaker') || {}).textContent || '').trim();
-      const box = seg.querySelector('.ag-seg__text,.text,[data-text]') || seg;
-      const text = visibleTextFromBox(box);
-      out.push({
-        id: `s${i}`,
-        startSec,
-        endSec,
-        speaker: spk,
-        text,
-        lang: seg.getAttribute('lang') || ''
-      });
-    });
-    // Compléter les endSec manquants
-    for (let i=0;i<out.length;i++){
-      if (!out[i].endSec){
-        if (out[i+1]) out[i].endSec = Math.max(out[i].startSec || 0, out[i+1].startSec || 0);
-        else out[i].endSec = (out[i].startSec || 0) + Math.max(1, Math.round((out[i].text||'').length/15));
+      if (root.dataset.mode === 'structured' || (Array.isArray(window._segments) && window._segments.length > 1)) {
+        throw new Error('Segments affichés absents : sauvegarde annulée.');
       }
+      const plain = root.querySelector('.ag-plain');
+      if (!plain) throw new Error('Transcript affiché incomplet : sauvegarde annulée.');
+      return [{ id:'s0', startSec:0, endSec:0, speaker:'', text:visibleTextFromBox(plain), lang:document.documentElement.lang || '' }];
     }
-    return out;
+    const ids = new Set();
+    return rows.map((seg) => {
+      const id = String(seg.dataset.id || '').trim();
+      const startSec = Number(seg.dataset.start);
+      const endSec = Number(seg.dataset.end);
+      const box = seg.querySelector('.ag-seg__text');
+      const speakerEl = seg.querySelector('.speaker');
+      const speaker = String(seg.dataset.speaker || '').trim();
+      const shownSpeaker = String(speakerEl?.textContent || '').trim();
+      if (!id || ids.has(id) || !box || (root.dataset.mode === 'structured' && !speakerEl) || seg.dataset.start == null || seg.dataset.end == null ||
+          !Number.isFinite(startSec) || !Number.isFinite(endSec) || startSec < 0 || endSec < startSec ||
+          (speakerEl && !speakerEl.classList.contains('is-placeholder') && speaker !== shownSpeaker)) {
+        throw new Error('Segment affiché incomplet ou incohérent : sauvegarde annulée.');
+      }
+      ids.add(id);
+      return { id, startSec, endSec, speaker, text:visibleTextFromBox(box), lang:seg.getAttribute('lang') || '' };
+    });
   }
 
   function buildSegments(){
     const root = getTranscriptRoot();
-    if (!root) return [];
-    const fromModel = getSegmentsFromModel();
-    const segs = (fromModel && fromModel.length) ? fromModel : getSegmentsFromDom(root);
-    return segs.filter(s => s && String(s.text||'').trim().length);
+    if (!root) throw new Error('Transcript introuvable : sauvegarde annulée.');
+    const fromDom = getSegmentsFromDom(root);
+    if (!fromDom.length) throw new Error('Transcript vide : sauvegarde annulée.');
+    const oldById = new Map((Array.isArray(window._segments) ? window._segments : []).map(s => [String(s.id), s]));
+    window._segments = fromDom.map(s => ({
+      ...oldById.get(s.id), id:s.id, start:s.startSec, end:s.endSec,
+      speaker:s.speaker, text:s.text, lang:s.lang || oldById.get(s.id)?.lang || ''
+    }));
+    return fromDom;
   }
 
   // ========= Credentials =========
@@ -264,12 +254,16 @@
   // ========= Construction du JSON transcript_status =========
   function buildTranscriptStatusJson(segments, jobId){
     const segMs = segments.map((s, i) => {
-      const startSec = Math.max(0, s.startSec|0);
-      const endSec   = Math.max(startSec, s.endSec|0);
+      const milliStart = Number(s.startSec) * 1000;
+      const milliEnd = Number(s.endSec) * 1000;
+      if (!s.id || !Number.isSafeInteger(milliStart) || !Number.isSafeInteger(milliEnd) ||
+          milliStart < 0 || milliEnd < milliStart) {
+        throw new Error('ID ou horodatage invalide : sauvegarde annulée.');
+      }
       return {
-        id: String(s.id || `s${i}`),
-        milli_start: startSec * 1000,
-        milli_end:   endSec   * 1000,
+        id: String(s.id),
+        milli_start: milliStart,
+        milli_end:   milliEnd,
         speaker: String(s.speaker || ''),
         text: String(s.text || '')
       };

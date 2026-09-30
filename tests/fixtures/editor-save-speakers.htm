@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8"><title>Editor save speaker fixture</title>
+<div id="editorRoot" data-username="test@example.invalid" data-token="fixture-token" data-edition="ent"></div>
+<div role="tablist"><button role="tab" id="tab-transcript" aria-selected="true">Transcription</button></div>
+<button data-action="save-transcript">Sauvegarder</button>
+<div id="transcriptEditor" data-mode="structured"></div>
+<pre id="result">pending</pre>
+<script>
+window.AGILO_EDITION='ent';
+const sends=[];
+window.fetch=async (url, options={})=>{
+  if (!String(url).includes('/updateTranscriptFile')) throw new Error('unexpected request');
+  const body=new URLSearchParams(options.body);
+  sends.push(JSON.parse(body.get('transcriptContent')));
+  return {ok:true,status:200,text:async()=>JSON.stringify({status:'OK'})};
+};
+window.toast=()=>{};
+</script>
+<script src="../../scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js"></script>
+<script>
+const output=document.querySelector('#result');
+function row(id,start,end,speaker,text){
+  const a=document.createElement('article');a.className='ag-seg';
+  Object.assign(a.dataset,{id,start:String(start),end:String(end),speaker});
+  const h=document.createElement('header');const sp=document.createElement('span');sp.className='speaker';sp.textContent=speaker;h.append(sp);
+  const body=document.createElement('div');body.className='ag-seg__text';body.textContent=text;
+  a.append(h,body);return a;
+}
+async function run(){
+  const root=document.querySelector('#transcriptEditor');
+  const items=Array.from({length:7},(_,i)=>({id:'s'+i,start:i,end:i+1,speaker:'Intro',text:'Introduction '+i}));
+  items.push({id:'s7',start:40,end:56,speaker:'Intervenante A',text:'Présentation de Intervenante A'});
+  items.push({id:'s8',start:57,end:63,speaker:'Intervenante B',text:'Présentation de Intervenante B'});
+  items.push({id:'s9',start:63,end:77,speaker:'Intervenante C',text:'Réponse de Intervenante C'});
+  items.forEach(x=>root.append(row(x.id,x.start,x.end,x.speaker,x.text)));
+  window._segments=items.map(x=>({...x}));
+  root.querySelectorAll('.ag-seg').forEach((el,i)=>{if(i<7)el.remove()});
+  const first=await window.agiloSaveNow();
+  const a=sends.at(-1)?.segments||[];
+  if (!first.ok||a.length!==3||a[0].id!=='s7'||a[0].speaker!=='Intervenante A'||a[0].milli_start!==40000||window._segments.length!==3) throw Error('deletion/model mismatch');
+  const firstEl=root.querySelector('.ag-seg');firstEl.dataset.speaker='Intervenante A corrigée';firstEl.querySelector('.speaker').textContent='Intervenante A corrigée';
+  const second=await window.agiloSaveNow();
+  if(!second.ok||sends.at(-1).segments[0].speaker!=='Intervenante A corrigée')throw Error('rename not saved');
+  const split=row('s-new',56,57,'Intervenante A corrigée','Segment découpé');firstEl.after(split);
+  const third=await window.agiloSaveNow();
+  if(!third.ok||sends.at(-1).segments[1].id!=='s-new'||sends.at(-1).segments[1].milli_end!==57000)throw Error('split not preserved');
+  const before=sends.length;split.removeAttribute('data-end');
+  const fourth=await window.agiloSaveNow();
+  if(fourth.ok||sends.length!==before)throw Error('invalid segment was sent');
+  root.replaceChildren();root.dataset.mode='plain';
+  const plain=row('plain-1',0.125,64.5,'','Texte dicté en mode simple sans étiquette de locuteur');
+  plain.querySelector('.speaker').remove();root.append(plain);
+  window._segments=[{id:'plain-1',start:0.125,end:64.5,speaker:'',text:'ancien',confidence:'keep'}];
+  const fifth=await window.agiloSaveNow();
+  if(!fifth.ok||sends.at(-1).segments[0].milli_start!==125||sends.at(-1).segments[0].milli_end!==64500||window._segments[0].confidence!=='keep')throw Error('plain mode or precise timestamps');
+  output.textContent=JSON.stringify({ok:true,saves:sends.length,ids:sends.at(-2).segments.map(s=>s.id),plainId:sends.at(-1).segments[0].id,blockedReason:fourth.error||fourth.reason});
+}
+document.addEventListener('DOMContentLoaded',()=>run().catch(e=>output.textContent=JSON.stringify({ok:false,error:e.message})),{once:true});
+</script>

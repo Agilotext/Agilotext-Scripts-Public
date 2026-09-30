@@ -48,3 +48,6 @@ scripts/relance/
 *~
 
 node_modules/
+
+# Copie de l’incident client : conserver hors du dépôt public
+/_backups_20260930_speaker_fix/

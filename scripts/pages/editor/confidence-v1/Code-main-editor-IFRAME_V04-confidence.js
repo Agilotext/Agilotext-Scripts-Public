@@ -1454,10 +1454,10 @@
     if (!root || !audio || !Array.isArray(window._segments) || !window._segments.length) return;
     const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
     if (k < 0) return;
-    const el = root.children[k];
+    const el = getSegList(root)[k];
     if (!el) return;
     if (k !== _activeSeg) {
-      if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+      if (_activeSeg >= 0) getSegList(root)[_activeSeg]?.classList.remove('is-active');
       _activeSeg = k;
     }
     el.classList.add('is-active');
@@ -1481,20 +1481,37 @@
 
   function syncDomToModel() {
     const root = editors.transcript;
-    if (!root || !Array.isArray(window._segments) || !window._segments.length) return;
-    if (__mode === 'structured') {
-      Array.from(root.querySelectorAll(':scope > .ag-seg')).forEach((segEl, idx) => {
+    if (!root) return false;
+    const rows = Array.from(getSegList(root));
+    if (rows.length) {
+      const oldById = new Map((Array.isArray(window._segments) ? window._segments : []).map(s => [String(s.id), s]));
+      const ids = new Set();
+      const next = [];
+      for (const segEl of rows) {
+        const id = String(segEl.dataset.id || '').trim();
         const box = segEl.querySelector('.ag-seg__text');
-        if (box && window._segments[idx]) {
-          window._segments[idx].text = window.visibleTextFromBox(box);
+        const label = segEl.querySelector('.speaker');
+        const speaker = String(segEl.dataset.speaker || '').trim();
+        const start = Number(segEl.dataset.start);
+        const end = Number(segEl.dataset.end);
+        if (!id || ids.has(id) || !box || (__mode === 'structured' && !label) || segEl.dataset.start == null || segEl.dataset.end == null ||
+            !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start ||
+            (label && !label.classList.contains('is-placeholder') && speaker !== String(label.textContent || '').trim())) {
+          window.__agiloTranscriptModelSyncError = 'Segment affiché incomplet ou incohérent';
+          return false;
         }
-      });
+        ids.add(id);
+        next.push({ ...oldById.get(id), id, start, end, speaker,
+          text:window.visibleTextFromBox(box), lang:segEl.getAttribute('lang') || oldById.get(id)?.lang || '' });
+      }
+      window._segments = next;
     } else {
       const plain = root.querySelector('.ag-plain');
-      if (plain && window._segments[0]) {
-        window._segments[0].text = window.visibleTextFromBox(plain);
-      }
+      if (!plain || !Array.isArray(window._segments) || !window._segments[0]) return false;
+      window._segments[0].text = window.visibleTextFromBox(plain);
     }
+    window.__agiloTranscriptModelSyncError = '';
+    return true;
   }
   window.syncDomToModel = syncDomToModel;
 
@@ -1611,7 +1628,7 @@
   function currentSelectionStatus() {
     const status = selectionStatusForSegments(_selectedSegs, window._segments);
     const root = editors.transcript;
-    if (status.eligible && (!root || status.selected.some(i => !root.children[i] || !root.children[i].classList.contains('ag-seg')))) {
+    if (status.eligible && (!root || status.selected.some(i => !getSegList(root)[i] || !getSegList(root)[i].classList.contains('ag-seg')))) {
       return { ...status, eligible: false, reason: 'La sélection a changé. Recommencez.' };
     }
     return status;
@@ -1625,7 +1642,7 @@
       ...status,
       revision: _selectionRevision,
       refs: status.selected.map(i => window._segments[i]),
-      nodes: status.selected.map(i => root.children[i])
+      nodes: status.selected.map(i => getSegList(root)[i])
     };
   }
 
@@ -1637,7 +1654,7 @@
       && current.selected.length === snapshot.selected.length
       && current.selected.every((i, pos) => i === snapshot.selected[pos]
         && window._segments[i] === snapshot.refs[pos]
-        && root.children[i] === snapshot.nodes[pos]);
+        && getSegList(root)[i] === snapshot.nodes[pos]);
   }
 
   function clearSegSelection() {
@@ -1795,9 +1812,6 @@
     if (!root || __mode !== 'structured') return;
     const segs = getSegList(root);
     segs.forEach((seg, idx) => {
-      if (!seg.dataset.id) {
-        seg.dataset.id = `s${idx}_${Date.now()}`;
-      }
       const head = seg.querySelector('.ag-seg__head');
       if (head && !head.querySelector('.delete-seg-btn')) {
         head.appendChild(buildDeleteBtn());
@@ -1848,7 +1862,7 @@
       const art = document.createElement('article');
       art.className = 'ag-seg';
 
-      art.dataset.id = s.id || `s${i}`;
+      if (s.id != null) art.dataset.id = String(s.id);
       if (Number.isFinite(s.start)) art.dataset.start = String(s.start);
       if (Number.isFinite(s.end)) art.dataset.end = String(s.end);
       art.dataset.speaker = s.speaker || '';
@@ -1977,7 +1991,7 @@
         const node = e.target.closest('.ag-seg__text'); if (!node) return;
         try { _transcriptFollow.disarm(); } catch { }
         const segEl = node.closest('.ag-seg');
-        const idx = Array.prototype.indexOf.call(root.children, segEl);
+        const idx = Array.prototype.indexOf.call(getSegList(root), segEl);
         if (idx > -1 && window._segments[idx]) {
           window._segments[idx].text = window.visibleTextFromBox(node);
           if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
@@ -2204,7 +2218,7 @@
     const root = editors.transcript;
     const segEl = scope?.closest?.('.ag-seg');
     if (!root || !segEl) return;
-    const idx = Array.prototype.indexOf.call(root.children, segEl);
+    const idx = Array.prototype.indexOf.call(getSegList(root), segEl);
     if (idx >= 0) window.AgiloConfidence.markSegmentModified(idx);
   }
 
@@ -2284,13 +2298,13 @@
     } else if (scope === 'empty') {
       window._segments.forEach((s, i) => { if (!String(s.speaker || '').trim()) targets.push(i); });
     }
-    const max = root.children.length;
+    const max = getSegList(root).length;
     const unique = Array.from(new Set(targets)).filter(i => i >= 0 && i < max);
     if (scope === 'selected' && unique.length !== indices.length) return 0;
     unique.forEach(i => {
       (window._segments || (window._segments = []))[i] = (window._segments[i] || {});
       window._segments[i].speaker = newName;
-      const el = root.children[i];
+      const el = getSegList(root)[i];
       if (!el) return;
       el.dataset.speaker = newName;
       const sp = el.querySelector('.speaker');
@@ -2625,7 +2639,7 @@
     if (!box) return null;
     const clone = seg.cloneNode(true);
     clone.classList.remove('is-active', 'is-selected');
-    clone.dataset.id = 's' + Date.now();
+    clone.dataset.id = 's' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const mid = computeMidStart(snapshot.start, snapshot.end);
     box.textContent = snapshot.left;
     const nb = clone.querySelector('.ag-seg__text');
@@ -2646,7 +2660,7 @@
     seg.after(clone);
     try {
       if (Array.isArray(window._segments)) {
-        const idx = Array.prototype.indexOf.call(root.children, seg);
+        const idx = Array.prototype.indexOf.call(getSegList(root), seg);
         const old = window._segments[idx] || {};
         const leftObj = Object.assign({}, old, {
           end: (mid != null ? mid : old.end),
@@ -2667,7 +2681,7 @@
     try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
     applySplitTrimNearCaret();
     try {
-      const leftIdx = Array.prototype.indexOf.call(root.children, seg);
+      const leftIdx = Array.prototype.indexOf.call(getSegList(root), seg);
       if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
         if (leftIdx >= 0) window.AgiloConfidence.markSegmentModified(leftIdx);
         window.AgiloConfidence.markSegmentModified(leftIdx + 1);
@@ -2678,7 +2692,7 @@
   function agiloApplyPlusSpeakerName(clone, newName) {
     const root = editors.transcript;
     if (!root || !clone) return;
-    const idx = Array.prototype.indexOf.call(root.children, clone);
+    const idx = Array.prototype.indexOf.call(getSegList(root), clone);
     if (idx < 0) return;
     pushStoredRoster(getJobIdForRoster(), newName);
     ag_applyRenameScope({ scope: 'one', oldName: '', newName, idx });
@@ -3044,7 +3058,7 @@
   function doRenameFor(segEl, { triggerEl = null, renameAllEmpty = false, keyState = {} } = {}) {
     const root = editors.transcript; if (!root) return;
     try { if (typeof window.syncDomToModel === 'function') window.syncDomToModel(); } catch { }
-    const idx = Array.prototype.indexOf.call(root.children, segEl); if (idx < 0) return;
+    const idx = Array.prototype.indexOf.call(getSegList(root), segEl); if (idx < 0) return;
 
     const oldName = String(segEl.dataset.speaker || '').trim();
     const proposed = oldName || 'Intervenant';
@@ -3144,9 +3158,9 @@
       if (__mode !== 'structured' || !window._segments.length) return;
       const k = resolveActiveSegmentIndex(audio.currentTime || 0, window._segments, _activeSeg);
       if (k !== _activeSeg) {
-        if (_activeSeg >= 0) root.children[_activeSeg]?.classList.remove('is-active');
+        if (_activeSeg >= 0) getSegList(root)[_activeSeg]?.classList.remove('is-active');
         _activeSeg = k;
-        const el = root.children[k];
+        const el = getSegList(root)[k];
         if (el) {
           el.classList.add('is-active');
           scrollToActivePlaybackSegment({ force: false });
