@@ -17,9 +17,10 @@
     '<path d="M6.5 7.9l4.9-2.4M6.5 10.1l4.9 2.4"/>' +
     '</svg>';
 
-  var NUCLEO_CHECK_SVG =
-    '<svg class="agilo-ico-check" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="#15803d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none;">' +
-    '<polyline points="2.75 9.25 6.75 14.25 15.25 3.75"/>' +
+  var NUCLEO_EMAIL_SVG =
+    '<svg class="agilo-ico-email" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="2" y="3.5" width="14" height="11" rx="2"/>' +
+    '<polyline points="3 5.5 9 10 15 5.5"/>' +
     '</svg>';
 
   var CSS_INJECTED = false;
@@ -33,8 +34,8 @@
       '  display: flex !important;' +
       '  align-items: center !important;' +
       '  justify-content: center !important;' +
-      '  gap: 0.5rem !important;' +
-      '  min-width: 4.75rem !important;' +
+      '  gap: 0.375rem !important;' +
+      '  min-width: 6.5rem !important;' +
       '  white-space: nowrap !important;' +
       '  flex-shrink: 0 !important;' +
       '}' +
@@ -56,18 +57,14 @@
       '.agilo-action-btn:hover:not(:disabled) {' +
       '  background-color: #f3f4f6 !important;' +
       '}' +
-      '.agilo-row-share {' +
+      '.agilo-row-share, .agilo-row-email {' +
       '  color: #6b7280 !important;' +
       '}' +
-      '.agilo-row-share:hover:not(:disabled) {' +
+      '.agilo-row-share:hover:not(:disabled), .agilo-row-email:hover:not(:disabled) {' +
       '  color: #174a96 !important;' +
       '  background-color: #eff6ff !important;' +
       '}' +
-      '.agilo-row-share.is-copied {' +
-      '  color: #15803d !important;' +
-      '  background-color: #f0fdf4 !important;' +
-      '}' +
-      '.agilo-row-share:disabled, .agilo-row-share.is-disabled {' +
+      '.agilo-row-share:disabled, .agilo-row-share.is-disabled, .agilo-row-email:disabled, .agilo-row-email.is-disabled {' +
       '  opacity: 0.35 !important;' +
       '  cursor: not-allowed !important;' +
       '  pointer-events: none !important;' +
@@ -164,7 +161,7 @@
       shareBtn = document.createElement('button');
       shareBtn.type = 'button';
       shareBtn.className = 'agilo-row-share agilo-action-btn';
-      shareBtn.innerHTML = NUCLEO_SHARE_SVG + NUCLEO_CHECK_SVG;
+      shareBtn.innerHTML = NUCLEO_SHARE_SVG;
 
       if (deleteBtn) {
         cell.insertBefore(shareBtn, deleteBtn);
@@ -173,16 +170,41 @@
       }
     }
 
-    if (isJobReady(row)) {
+    var emailBtn = cell.querySelector('.agilo-row-email');
+    if (!emailBtn) {
+      emailBtn = document.createElement('button');
+      emailBtn.type = 'button';
+      emailBtn.className = 'agilo-row-email agilo-action-btn';
+      emailBtn.innerHTML = NUCLEO_EMAIL_SVG;
+
+      if (deleteBtn) {
+        cell.insertBefore(emailBtn, deleteBtn);
+      } else {
+        cell.appendChild(emailBtn);
+      }
+    }
+
+    var ready = isJobReady(row);
+    if (ready) {
       shareBtn.disabled = false;
       shareBtn.classList.remove('is-disabled');
-      shareBtn.setAttribute('title', 'Partager la transcription');
-      shareBtn.setAttribute('aria-label', 'Partager la transcription');
+      shareBtn.setAttribute('title', 'Copier le lien et ouvrir la vue partagée');
+      shareBtn.setAttribute('aria-label', 'Copier le lien et ouvrir');
+
+      emailBtn.disabled = false;
+      emailBtn.classList.remove('is-disabled');
+      emailBtn.setAttribute('title', 'Copier le message d’invitation et ouvrir l’e-mail');
+      emailBtn.setAttribute('aria-label', 'Inviter par e-mail');
     } else {
       shareBtn.disabled = true;
       shareBtn.classList.add('is-disabled');
       shareBtn.setAttribute('title', 'Partage disponible lorsque la transcription est prête');
       shareBtn.setAttribute('aria-label', 'Partage indisponible');
+
+      emailBtn.disabled = true;
+      emailBtn.classList.add('is-disabled');
+      emailBtn.setAttribute('title', 'Partage disponible lorsque la transcription est prête');
+      emailBtn.setAttribute('aria-label', 'Partage indisponible');
     }
   }
 
@@ -192,11 +214,37 @@
     document.querySelectorAll('.wrapper-content_item-row[data-job-id]').forEach(injectOnRow);
   }
 
+  var shareUrlCache = {};
+
+  async function getOrFetchShareUrl(jobId, auth) {
+    if (shareUrlCache[jobId]) return shareUrlCache[jobId];
+    var body = new URLSearchParams({
+      username: auth.email,
+      token: auth.token,
+      edition: auth.edition,
+      jobId: String(jobId)
+    });
+    var r = await fetch(API_BASE + '/guestRead/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString()
+    });
+    var j = await r.json().catch(function () { return {}; });
+    if (!r.ok || String(j.status || '').toUpperCase() !== 'OK' || !j.shareUrl) {
+      throw new Error(j.errorMessage || 'Impossible de générer le lien de partage');
+    }
+    var viewUrl = sharePageUrlFromApi(j.shareUrl);
+    if (!viewUrl) throw new Error('Lien de lecture invalide');
+    shareUrlCache[jobId] = viewUrl;
+    return viewUrl;
+  }
+
   document.addEventListener('click', async function (ev) {
     var shareBtn = ev.target && ev.target.closest && ev.target.closest('.agilo-row-share');
+    var emailBtn = ev.target && ev.target.closest && ev.target.closest('.agilo-row-email');
     var dupBtn = ev.target && ev.target.closest && ev.target.closest('.agilo-row-dup');
-    if (!shareBtn && !dupBtn) return;
-    var row = (shareBtn || dupBtn).closest('.wrapper-content_item-row[data-job-id]');
+    if (!shareBtn && !emailBtn && !dupBtn) return;
+    var row = (shareBtn || emailBtn || dupBtn).closest('.wrapper-content_item-row[data-job-id]');
     if (!row) return;
     ev.preventDefault();
     ev.stopPropagation();
@@ -210,51 +258,49 @@
 
     if (shareBtn) {
       if (shareBtn.disabled) return;
-      var icoShare = shareBtn.querySelector('.agilo-ico-share');
-      var icoCheck = shareBtn.querySelector('.agilo-ico-check');
-
       shareBtn.disabled = true;
-      var body = new URLSearchParams({ username: auth.email, token: auth.token, edition: auth.edition, jobId: String(jobId) });
       try {
-        var r = await fetch(API_BASE + '/guestRead/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body.toString()
-        });
-        var j = await r.json().catch(function () { return {}; });
-        if (!r.ok || String(j.status || '').toUpperCase() !== 'OK' || !j.shareUrl) {
-          toast(j.errorMessage || 'Impossible de générer le lien');
-          shareBtn.disabled = false;
-          return;
-        }
-        var viewUrl = sharePageUrlFromApi(j.shareUrl);
-        if (!viewUrl) {
-          toast('Lien de lecture invalide');
-          shareBtn.disabled = false;
-          return;
-        }
-
+        var viewUrl = await getOrFetchShareUrl(jobId, auth);
         if (navigator.clipboard && navigator.clipboard.writeText) {
           await navigator.clipboard.writeText(viewUrl);
         } else {
           window.prompt('Copiez le lien de lecture', viewUrl);
         }
-
-        toast('Lien de lecture copié');
-        shareBtn.classList.add('is-copied');
-        if (icoShare) icoShare.style.display = 'none';
-        if (icoCheck) icoCheck.style.display = 'block';
-
-        setTimeout(function () {
-          shareBtn.classList.remove('is-copied');
-          if (icoShare) icoShare.style.display = 'block';
-          if (icoCheck) icoCheck.style.display = 'none';
-          shareBtn.disabled = false;
-        }, 2000);
-
+        window.open(viewUrl, '_blank');
+        toast('Lien copié & page ouverte');
       } catch (e) {
         toast(e.message || 'Erreur réseau');
+      } finally {
         shareBtn.disabled = false;
+      }
+      return;
+    }
+
+    if (emailBtn) {
+      if (emailBtn.disabled) return;
+      emailBtn.disabled = true;
+      try {
+        var shareUrl = await getOrFetchShareUrl(jobId, auth);
+        var titleEl = row.querySelector('.wrapper-content_item-name, [data-aq="job-name"], .file-name');
+        var audioTitle = (titleEl && (titleEl.value || titleEl.textContent) || 'votre enregistrement').trim();
+        var msgText =
+          'Bonjour,\n\n' +
+          'Voici le lien pour accéder à la transcription de l\'enregistrement "' + audioTitle + '" :\n' +
+          shareUrl + '\n\n' +
+          'Bonne consultation,\n' +
+          'Agilotext';
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(msgText);
+        }
+        var mailtoUrl = 'mailto:?subject=' + encodeURIComponent('Transcription partagée : ' + audioTitle) +
+          '&body=' + encodeURIComponent(msgText);
+        window.location.href = mailtoUrl;
+        toast('Message copié dans le presse-papier & e-mail ouvert');
+      } catch (e2) {
+        toast(e2.message || 'Erreur réseau');
+      } finally {
+        emailBtn.disabled = false;
       }
       return;
     }

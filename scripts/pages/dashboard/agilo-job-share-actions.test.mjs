@@ -7,7 +7,8 @@ test('agilo-job-share-actions syntax and exports', () => {
 
   // Verify Nucleo SVG and classes
   assert.ok(content.includes('agilo-ico-share'), 'Contient la classe agilo-ico-share');
-  assert.ok(content.includes('agilo-ico-check'), 'Contient la classe agilo-ico-check');
+  assert.ok(content.includes('agilo-ico-email'), 'Contient la classe agilo-ico-email');
+  assert.ok(!content.includes('agilo-ico-check'), 'Ne contient plus la fausse icône check');
   assert.ok(content.includes('agilo-actions-cell'), 'Contient la classe agilo-actions-cell');
   assert.ok(content.includes('agilo-action-btn'), 'Contient la classe agilo-action-btn');
 
@@ -21,8 +22,14 @@ test('agilo-job-share-actions syntax and exports', () => {
   // Verify REM dimensions in injected styles
   assert.ok(content.includes('1.875rem'), 'Bouton calibré à 1.875rem');
   assert.ok(content.includes('1.125rem'), 'Icônes calibrées à 1.125rem');
-  assert.ok(content.includes('0.5rem'), 'Gap calibré à 0.5rem');
-  assert.ok(content.includes('4.75rem'), 'Cellule avec min-width de 4.75rem');
+  assert.ok(content.includes('0.375rem'), 'Gap calibré à 0.375rem');
+  assert.ok(content.includes('6.5rem'), 'Cellule avec min-width de 6.5rem');
+
+  // Verify window.open on share click
+  assert.ok(content.includes("window.open(viewUrl, '_blank')"), 'Ouvre la page partagée dans un nouvel onglet');
+
+  // Verify mailto on email click
+  assert.ok(content.includes('mailto:'), 'Génère un lien mailto');
 
   // Verify status guard
   assert.ok(content.includes('isJobReady'), 'Contient la vérification du statut du job');
