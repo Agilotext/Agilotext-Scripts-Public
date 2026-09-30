@@ -1,0 +1,11 @@
+# Inclusions et exclusions — interface de recette
+
+Cette livraison prépare **le visuel uniquement** pendant que Nicolas raccorde la façade Java. La fenêtre s'ouvre depuis « Règles particulières » après le chargement des préférences. Elle affiche deux cartes, les termes individuellement, les compteurs, l'ajout multiligne, le retrait, l'annulation et l'effacement confirmé. La virgule appartient au terme ; seul un retour à la ligne sépare deux termes collés.
+
+Les listes sont mémorisées dans ce navigateur sous une clé dérivée de `accountRef` opaque. Aucune liste Anon2 n'est importée. Sans `accountRef` ou sans stockage disponible, les termes restent en mémoire pendant la page ouverte, avec un avertissement visible. Un changement de compte vide le brouillon avant de charger les listes de l'autre compte. Un job déjà déposé conserve son propre instantané.
+
+**État de connexion :** le bloc Webflow livré fixe `FILE_LISTS_READY: false`. La fenêtre est utilisable, mais les termes ne sont pas envoyés dans `POST /jobs`. Le front affiche « préparation uniquement ». Aucun paramètre d'URL et aucun simple flag ne peut contourner la gate. Pour permettre l'envoi plus tard, il faudra à la fois `FILE_LISTS_READY: true`, le `workerCodeSha` exact attendu dans `FILE_WORKER_CODE_SHA` et `capabilities.listDirectives: true` dans `/preferences`. La création et les états doivent ensuite renvoyer le `listDigest` attendu ; une empreinte absente ou différente bloque la confiance dans la réponse. Ne changer la configuration qu'après le test réel Java → worker.
+
+Les termes ne décident pas eux-mêmes de la privacy dans le navigateur. Une inclusion demande le masquage des occurrences retrouvées, même hors catégorie cochée ; une exclusion en conflit avec un masque requis demande une revue de l'occurrence. Un OCR incertain ou une zone non localisable peut aussi nécessiter une revue.
+
+Vérification locale effectuée le 30 septembre : tests Node du client, de l'auth et des listes ; affichage sur la page synthétique ; collage multiligne, 100 termes, rechargement, capacité absente (`not-sent`), capacité simulée (`sent`) et réponse de création sans `listDigest` (`UNCERTAIN`). **Ces essais ne prouvent pas le raccordement Java ni le comportement privacy du backend.** La validation sur la vraie page Webflow authentifiée reste à faire après publication staging.

@@ -1,5 +1,7 @@
 # AgiloShield — interface guidée de recette
 
+> **Mise à jour du 30 septembre 2026 :** la fenêtre d'inclusion/exclusion a été refaite et le bloc staging actuel la livre en **préparation visuelle seulement** (`FILE_LISTS_READY: false`). Les essais et les flags décrits plus bas constituent l'historique du 29 septembre ; ils ne prouvent pas que Java transmet les listes. Le comportement et la gate actuels sont consignés dans [LISTS_UI_STAGING_2026-09-30.md](LISTS_UI_STAGING_2026-09-30.md). Le bloc à coller et son SHA d'assets sont dans [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html).
+
 ## État au 29 septembre 2026
 
 **Assets figés :** `825eadc5b545db41ab7264f35af98ee17fc860e1` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
