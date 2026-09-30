@@ -1,4 +1,6 @@
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from './agiloshield-v2-client.js';
+import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
+  saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -10,7 +12,10 @@ const defaults = ['ADR','EML','IBA','IDN','PER','TEL','URL'];
 // A Webflow switch alone cannot certify that Java is connected to the file worker.
 let listsReady = false;
 let pseudoReady = false;
-let listSelection = {anon2InclusionList:[],anon2ExclusionList:[]};
+let listSelection = emptyLists();
+let listDraft = emptyLists();
+let listStorePersistent = false;
+let preferencesRequest = 0;
 const listSnapshot = () => ({anon2InclusionList:[...listSelection.anon2InclusionList],
   anon2ExclusionList:[...listSelection.anon2ExclusionList]});
 const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',
@@ -165,9 +170,10 @@ el('p','Choisissez les catégories à protéger. Votre choix sera appliqué aux 
 el('p','Une catégorie décochée peut rester visible. Le résultat est vérifié selon vos réglages.',
   'asv2-policy-note',side);
 const listsButton=button('Règles particulières','asv2-types-button',side,openLists);
+const listsCount=el('span','0 inclusion · 0 exclusion','asv2-count asv2-list-summary',listsButton);
 listsButton.disabled=true;
-listsButton.title='Cette option n’est pas encore disponible sur cette page.';
-const listsHelp=el('p','Cette option sera disponible après son activation sur cette page.',
+listsButton.title='Préparer les listes pour vos prochains documents';
+const listsHelp=el('p','Préparez vos listes ici. Leur envoi attend le raccordement Java.',
   'asv2-muted asv2-side-help',side);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
@@ -206,23 +212,51 @@ const listsDialog=el('section',null,'asv2-policy-dialog',listsModal);
 listsDialog.setAttribute('role','dialog');listsDialog.setAttribute('aria-modal','true');
 listsDialog.setAttribute('aria-labelledby','asv2-lists-title');
 const listsHeader=el('header',null,'asv2-policy-header',listsDialog);
-const listsTitle=el('h2','Listes d’inclusion et d’exclusion',null,listsHeader);
+const listsHeading=el('div',null,null,listsHeader);
+const listsTitle=el('h2','Inclusions et exclusions',null,listsHeading);
 listsTitle.id='asv2-lists-title';
+el('p','Inclure demande de masquer les occurrences retrouvées, même si leur catégorie est décochée. '
+  +'Exclure demande une vérification lorsqu’un terme devrait être masqué.', 'asv2-muted',listsHeading);
+const listsAvailability=el('p','', 'asv2-list-availability',listsDialog);
+listsAvailability.setAttribute('role','status');
 const listsClose=button('×','asv2-close',listsHeader,()=>closeLists());
 listsClose.setAttribute('aria-label','Fermer les listes');
 const listsBody=el('div',null,'asv2-list-fields',listsDialog);
-el('p','Une ligne par terme. Inclusion : masquer cette occurrence même si sa catégorie est décochée. '
-  +'Exclusion : demander une revue si elle contredit un masque.', 'asv2-muted',listsBody);
-const inclusionLabel=el('label','Inclusions',null,listsBody);
-const inclusionInput=el('textarea',null,'asv2-list-input',inclusionLabel);
-inclusionInput.setAttribute('aria-label','Termes à inclure');
-const exclusionLabel=el('label','Exclusions',null,listsBody);
-const exclusionInput=el('textarea',null,'asv2-list-input',exclusionLabel);
-exclusionInput.setAttribute('aria-label','Termes à exclure');
+el('p','La casse et les accents sont ignorés. Une zone OCR mal reconnue ou non localisable '
+  +'peut encore demander une revue. Seuls les prochains documents utilisent ces listes.',
+  'asv2-muted asv2-list-guide',listsBody);
+const listCards={};
+for(const [kind,title,hint,placeholder] of [
+  ['include','Inclusions','Masquer les occurrences retrouvées, même hors des catégories cochées.',
+    'Ajouter un terme à inclure…'],
+  ['exclude','Exclusions','Vérifier les occurrences qui contredisent un masque nécessaire.',
+    'Ajouter un terme à exclure…']]){
+  const card=el('section',null,'asv2-list-card asv2-list-card-'+kind,listsBody);
+  const cardHead=el('div',null,'asv2-list-card-head',card);
+  el('h3',title,null,cardHead);
+  const count=el('span','0 / 100','asv2-count',cardHead);
+  el('p',hint,'asv2-muted',card);
+  const addRow=el('div',null,'asv2-list-add',card);
+  const input=el('textarea',null,'asv2-list-input',addRow);
+  input.rows=1;input.placeholder=placeholder;
+  input.setAttribute('aria-label',placeholder.replace('…',''));
+  input.setAttribute('aria-describedby','asv2-list-error-'+kind);
+  const add=button('Ajouter','asv2-secondary',addRow,()=>addListTerms(kind));
+  const error=el('p','', 'asv2-list-field-error',card);
+  error.id='asv2-list-error-'+kind;error.setAttribute('role','alert');error.hidden=true;
+  const rows=el('ul',null,'asv2-list-terms',card);
+  rows.setAttribute('aria-label',title);
+  listCards[kind]={card,count,input,add,error,rows,title};
+}
+const listsWarning=el('p','', 'asv2-list-warning',listsDialog);
+listsWarning.setAttribute('role','status');listsWarning.hidden=true;
+const listsStorageNote=el('p','Les termes enregistrés restent sur ce navigateur pour ce compte. '
+  +'Évitez cet enregistrement sur un appareil partagé.', 'asv2-list-storage-note',listsDialog);
 const listsError=el('p','', 'asv2-policy-error',listsDialog);listsError.hidden=true;
-const listsActions=el('div',null,'asv2-policy-actions',listsDialog);
+const listsActions=el('div',null,'asv2-policy-actions asv2-list-actions',listsDialog);
+const listsClear=button('Effacer les listes mémorisées','asv2-link',listsActions,clearLists);
 button('Annuler','asv2-secondary',listsActions,()=>closeLists());
-button('Utiliser pour les prochains fichiers','asv2-primary',listsActions,saveLists);
+const listsSave=button('Enregistrer sur ce navigateur','asv2-primary',listsActions,saveLists);
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
@@ -408,29 +442,116 @@ function openTypes(){
   policyClose.focus();
 }
 function openLists(){
-  if(!listsReady||!state.preferencesReady)return;
-  inclusionInput.value=listSelection.anon2InclusionList.join('\n');
-  exclusionInput.value=listSelection.anon2ExclusionList.join('\n');
+  if(!state.preferencesReady)return;
+  modalLastFocus=document.activeElement;
+  listDraft=listSnapshot();
+  for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
+  renderListDraft();
+  listsAvailability.textContent=listsReady?
+    'Listes disponibles pour les prochains dépôts sur cette recette.':
+    'Préparation uniquement : les listes sont mémorisées ici, mais ne sont pas encore transmises aux documents. Le raccordement Java est en cours.';
+  listsAvailability.classList.toggle('is-ready',listsReady);
   listsError.hidden=true;listsModal.hidden=false;document.body.classList.add('asv2-policy-open');
-  inclusionInput.focus();
+  listCards.include.input.focus();
 }
-function closeLists(){listsModal.hidden=true;document.body.classList.remove('asv2-policy-open');listsButton.focus();}
-function listLines(input){
-  const values=input.value.split(/\r?\n/).map(value=>value.trim()).filter(Boolean);
-  if(values.length>100||values.some(value=>value.length>256||/[\x00-\x1f]/.test(value)))
-    throw new Error('Maximum 100 termes par liste, 256 caractères par terme.');
-  const folded=values.map(value=>value.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('fr'));
-  if(new Set(folded).size!==folded.length)throw new Error('Un terme est présent plusieurs fois.');
-  return values;
+function closeLists(force=false){
+  if(!force&&listsDialog.querySelector('.asv2-confirm'))return;
+  if(force)listsDialog.querySelector('.asv2-confirm')?.remove();
+  listsModal.hidden=true;document.body.classList.remove('asv2-policy-open');
+  if(modalLastFocus?.isConnected)modalLastFocus.focus();
 }
-function saveLists(){
-  try{listSelection={anon2InclusionList:listLines(inclusionInput),
-    anon2ExclusionList:listLines(exclusionInput)};closeLists();
-    notify('Listes appliquées uniquement aux prochains documents de cette session.');
-  }catch(error){listsError.textContent=errorText(error);listsError.hidden=false;}
+function listField(kind){return kind==='include'?'anon2InclusionList':'anon2ExclusionList';}
+function updateListSummary(){
+  const included=listSelection.anon2InclusionList.length,excluded=listSelection.anon2ExclusionList.length;
+  listsCount.textContent=included+' inclusion'+(included>1?'s':'')+' · '+
+    excluded+' exclusion'+(excluded>1?'s':'');
+}
+function renderListDraft(){
+  for(const kind of ['include','exclude']){
+    const card=listCards[kind],terms=listDraft[listField(kind)];
+    card.count.textContent=terms.length+' / 100';clear(card.rows);
+    if(!terms.length){el('li',kind==='include'?'Aucun terme à inclure.':'Aucun terme à exclure.',
+      'asv2-list-empty',card.rows);continue;}
+    for(const [index,term] of terms.entries()){
+      const row=el('li',null,'asv2-list-term',card.rows);
+      el('span',term,'asv2-list-term-text',row);
+      const remove=button('Retirer','asv2-link',row,()=>{
+        listDraft[listField(kind)].splice(index,1);renderListDraft();card.input.focus();
+      });
+      remove.setAttribute('aria-label','Retirer « '+term+' » des '+card.title.toLowerCase());
+    }
+  }
+  const included=new Set(listDraft.anon2InclusionList.map(termKey));
+  const conflicts=listDraft.anon2ExclusionList.filter(term=>included.has(termKey(term)));
+  const messages=[];
+  if(conflicts.length)messages.push(conflicts.length+' terme(s) figurent dans les deux listes : '
+    +'une contradiction pourra exiger une vérification du document.');
+  if(!listStorePersistent)messages.push('Ces listes ne peuvent pas être mémorisées sur ce navigateur '
+    +'pour le compte courant ; elles resteront utilisables pendant cette page ouverte.');
+  listsWarning.textContent=messages.join(' ');listsWarning.hidden=!messages.length;
+}
+function addListTerms(kind){
+  const card=listCards[kind],field=listField(kind);
+  try{
+    const updated=addTerms(listDraft[field],card.input.value,kind==='include'?'inclure':'exclure');
+    listDraft[field]=updated;card.input.value='';card.error.hidden=true;renderListDraft();card.input.focus();
+  }catch(error){card.error.textContent=error.message;card.error.hidden=false;card.input.focus();}
+}
+for(const kind of ['include','exclude'])listCards[kind].input.addEventListener('keydown',event=>{
+  if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addListTerms(kind);}
+});
+async function saveLists(){
+  listsError.hidden=true;
+  let next={anon2InclusionList:[...listDraft.anon2InclusionList],
+    anon2ExclusionList:[...listDraft.anon2ExclusionList]};
+  for(const kind of ['include','exclude']){
+    const card=listCards[kind],field=listField(kind);
+    if(!card.input.value.trim())continue;
+    try{next[field]=addTerms(next[field],card.input.value,kind==='include'?'inclure':'exclure');
+      card.error.hidden=true;}
+    catch(error){card.error.textContent=error.message;card.error.hidden=false;card.input.focus();return;}
+  }
+  try{next=validateLists(next);}
+  catch(error){listsError.textContent=error.message;listsError.hidden=false;return;}
+  listsSave.disabled=true;
+  const persisted=await saveStoredLists(state.accountRef,next);
+  listSelection=next;listDraft=listSnapshot();listStorePersistent=persisted;
+  listsSave.textContent=persisted?'Enregistrer sur ce navigateur':'Garder pendant cette page';
+  listsStorageNote.textContent=persisted?
+    'Ces termes restent sur ce navigateur pour ce compte. Évitez un appareil partagé.':
+    'Ces termes restent uniquement pendant cette page ouverte. Ils ne sont pas mémorisés.';
+  updateListSummary();listsSave.disabled=false;closeLists();
+  notify(listsReady?
+    (persisted?'Listes enregistrées pour les prochains documents.':
+      'Listes applicables aux prochains documents pendant cette page ouverte.'):
+    (persisted?'Listes mémorisées ici. Elles ne sont pas encore transmises aux documents.':
+      'Listes gardées pour cette page uniquement. Elles ne sont pas encore transmises aux documents.'),
+    listsReady&&persisted?'':'is-warning');
+}
+async function clearLists(){
+  if(!await confirmAction('Effacer les listes mémorisées pour ce compte sur ce navigateur ? '
+    +'Les documents déjà déposés ne changent pas.'))return;
+  const removed=await clearStoredLists(state.accountRef);
+  if(state.accountRef&&!removed){listsError.textContent='Impossible d’effacer le stockage local. Réessayez.';
+    listsError.hidden=false;return;}
+  listSelection=emptyLists();listDraft=emptyLists();
+  for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
+  renderListDraft();updateListSummary();listsError.hidden=true;
+  notify('Listes effacées pour les prochains documents de ce compte.');
 }
 listsModal.addEventListener('click',event=>{if(event.target===listsModal)closeLists();});
-listsModal.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();closeLists();}});
+listsModal.addEventListener('keydown',event=>{
+  if(event.key==='Escape'){event.preventDefault();
+    const cancel=listsDialog.querySelector('.asv2-confirm button:last-child');
+    if(cancel)cancel.click();else closeLists();return;}
+  if(event.key!=='Tab')return;
+  const items=[...listsDialog.querySelectorAll('button:not([disabled]),textarea:not([disabled])')]
+    .filter(item=>item.getClientRects().length);
+  if(!items.length)return;
+  if(event.shiftKey&&document.activeElement===items[0]){event.preventDefault();items.at(-1).focus();}
+  else if(!event.shiftKey&&document.activeElement===items.at(-1)){
+    event.preventDefault();items[0].focus();}
+});
 function closeTypes(saved){
   if(savingTypes||policyDialog.querySelector('.asv2-confirm'))return;
   if(!saved){const keep=new Set(typesSnapshot);for(const [code,box] of checks)box.checked=keep.has(code);}
@@ -473,7 +594,7 @@ async function saveTypes(){
 function setEnabled(yes){
   state.preferencesReady=yes;fileInput.disabled=!yes;textInput.disabled=!yes;
   typesButton.disabled=!yes;textAdd.disabled=!yes;policySave.disabled=!yes;
-  listsButton.disabled=!yes||!listsReady;
+  listsButton.disabled=!yes;
   pseudoRadio.disabled=!yes||!pseudoReady;
   pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
   if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
@@ -481,9 +602,14 @@ function setEnabled(yes){
   pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes ; conservez la clé de restitution.':
     'Ce mode n’est pas encore disponible sur cette page.';
   listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
-    'Cette option n’est pas encore disponible sur cette page.';
+    'Préparer les listes ; leur envoi attend le raccordement Java';
   listsHelp.textContent=listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
-    'Cette option sera disponible après son activation sur cette page.';
+    'Préparez vos listes ici. Leur envoi aux documents attend le raccordement Java.';
+  listsStorageNote.textContent=listStorePersistent?
+    'Ces termes restent sur ce navigateur pour ce compte. Évitez un appareil partagé.':
+    'Ces termes restent uniquement pendant cette page ouverte. Ils ne sont pas mémorisés.';
+  listsSave.textContent=listStorePersistent?'Enregistrer sur ce navigateur':
+    'Garder pendant cette page';
   mobileSettingsEdit.disabled=!yes;
   for(const box of checks.values())box.disabled=!yes;
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
@@ -503,24 +629,40 @@ function updatePolicySummary(){
   }
 }
 async function loadPreferences(){
+  const request=++preferencesRequest;
   state.currentPolicy=null;listsReady=false;pseudoReady=false;
   setEnabled(false);retry.hidden=true;notify('Chargement des préférences…');
   try{
-    const response=await api.preferences();const types=response?.protectionPolicy?.selectedTypes;
+    const response=await api.preferences();
+    if(request!==preferencesRequest)return;
+    const types=response?.protectionPolicy?.selectedTypes;
     if(!Array.isArray(types)||types.some(code=>!codes.includes(code))||
       typeof response.protectionPolicy.digest!=='string')throw new Error('Préférences serveur invalides');
     state.currentPolicy={...response.protectionPolicy,selectedTypes:[...types]};
-    state.accountRef=typeof response.accountRef==='string'&&response.accountRef?response.accountRef:null;
+    const accountRef=typeof response.accountRef==='string'&&response.accountRef?response.accountRef:null;
+    const sameAccount=state.accountRef===accountRef;
+    const memoryLists=sameAccount?listSnapshot():emptyLists();
+    if(!sameAccount){
+      if(!listsModal.hidden)closeLists(true);
+      listSelection=emptyLists();listDraft=emptyLists();
+      updateListSummary();}
+    state.accountRef=accountRef;
     state.capabilities=response.capabilities||{};
     const urlParams=typeof location!=='undefined'?new URLSearchParams(location.search):new URLSearchParams();
     const forcePseudo=urlParams.has('pseudo')||config.PSEUDONYMIZE_READY===true;
-    const forceLists=urlParams.has('lists')||config.FILE_LISTS_READY===true;
-    const workerMatches=!config.FILE_WORKER_CODE_SHA||
-      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA||forcePseudo||forceLists;
-    listsReady=forceLists||(workerMatches&&state.capabilities.listDirectives===true);
+    const workerMatches=typeof config.FILE_WORKER_CODE_SHA==='string'&&
+      config.FILE_WORKER_CODE_SHA.length>0&&
+      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA;
+    listsReady=config.FILE_LISTS_READY===true&&workerMatches&&
+      state.capabilities.listDirectives===true;
     pseudoReady=forcePseudo||(workerMatches&&
       state.capabilities.processingModes?.includes('PSEUDONYMIZE')&&
       state.capabilities.pseudonymKeyDownload===true);
+    const stored=await loadStoredLists(accountRef);
+    if(request!==preferencesRequest)return;
+    listSelection=stored.persistent?stored.lists:memoryLists;
+    listDraft=listSnapshot();listStorePersistent=stored.persistent;
+    updateListSummary();
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
     updatePolicySummary();setEnabled(true);
     notify(types.length?'Vos réglages sont chargés. Vous pouvez déposer vos documents.':
@@ -887,7 +1029,7 @@ function assertDigest(entry,value){
 }
 async function confirmAction(text){
   return new Promise(resolve=>{
-    const host=!policyModal.hidden?policyDialog:drawer.hidden?shell:panel;
+    const host=!listsModal.hidden?listsDialog:!policyModal.hidden?policyDialog:drawer.hidden?shell:panel;
     const box=el('div',null,'asv2-confirm',host);
     el('p',text,null,box);
     const yes=button('Confirmer','asv2-primary',box,()=>{box.remove();resolve(true);});
@@ -913,7 +1055,7 @@ async function drainQueue(){
         entry.jobId=created.jobId||null;
         if(!entry.jobId||(created?.protectionPolicy?.digest&&created.protectionPolicy.digest!==entry.digest))
           throw new Error('Politique du job différente de la sélection');
-        if(entry.listDigest&&created?.listDigest&&created.listDigest!==entry.listDigest)
+        if(entry.listDigest&&created?.listDigest!==entry.listDigest)
           throw new Error('Listes du job différentes de la sélection');
         if(entry.mode==='PSEUDONYMIZE'&&created?.processingMode&&created.processingMode!==entry.mode)
           throw new Error('Mode de traitement différent de la sélection');

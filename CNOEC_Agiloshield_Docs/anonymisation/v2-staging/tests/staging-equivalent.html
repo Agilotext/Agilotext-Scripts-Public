@@ -69,7 +69,8 @@ window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2'
  HISTORY_V2_PATH:'/history/v2',BULK_ZIP_V2_PATH:'/history/v2/zip',
  MAX_UPLOAD_BYTES:40*1024*1024,
  getAuthHeaders:async()=>({'X-Mock-Actor':'local-test'})};
-const capabilities={workerCodeSha:'6498642a2702cbe5',listDirectives:listsEnabled,
+const capabilities={workerCodeSha:params.has('wrongWorker')?'different-worker':'6498642a2702cbe5',
+ listDirectives:listsEnabled&&!params.has('noListCapability'),
  processingModes:pseudoEnabled?['ANONYMIZE','PSEUDONYMIZE']:['ANONYMIZE'],
  pseudonymKeyDownload:pseudoEnabled,uploadIdempotency:false,
  historyV2:params.has('history'),bulkZipV2:params.has('history'),
@@ -107,7 +108,8 @@ window.fetch=async(url,options={})=>{
   if(location.search.includes('slow=1')&&options.method!=='POST')await new Promise(resolve=>setTimeout(resolve,1500));
   if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:policyDigest(p)};
    sessionStorage.setItem('asv2-mock-preference',JSON.stringify(preference));}
-  return json({protectionPolicy:preference,accountRef,capabilities});
+  return json({protectionPolicy:preference,
+   accountRef:params.has('noAccount')?null:accountRef,capabilities});
  }
  if(path.startsWith('/history/v2?')&&options.method!=='POST')
   return json({items:[...jobs.values()].map(meta).reverse(),nextCursor:null});
@@ -132,6 +134,7 @@ window.fetch=async(url,options={})=>{
    JSON.parse(options.body.get('anon2InclusionList')):null;
   const exclusion=options.body.has('anon2ExclusionList')?
    JSON.parse(options.body.get('anon2ExclusionList')):null;
+  document.body.dataset.lastUploadLists=inclusion&&exclusion?'sent':'not-sent';
   const mode=options.body.get('processingMode')||'ANONYMIZE';
   const id='synthetic-job-'+nextId++;
   const sourceText=/\.txt$/i.test(file.name)?await file.text():'';
@@ -142,7 +145,7 @@ window.fetch=async(url,options={})=>{
    sourceText,createdAt:new Date().toISOString(),sizeBytes:file.size};
   jobs.set(id,job);persistMock();
   if(params.has('lostCreate')&&nextId===2)throw new TypeError('Synthetic response lost after creation');
-  return json(meta(job));
+  return json(params.has('omitListDigest')?{...meta(job),listDigest:undefined}:meta(job));
  }
  const match=/^\/jobs\/([^/?]+)(.*)$/.exec(path);if(!match)return json({error:'NOT_FOUND'},404);
  const job=jobs.get(match[1]);if(!job)return json({error:'NO_JOB'},404);
