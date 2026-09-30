@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from '../agiloshield-v2-client.js';
+import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
+  v2Capabilities, assertCreatedJob } from '../agiloshield-v2-client.js';
 
 assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines'],
   anon2InclusionList:['Jean Dupont','Cœur-de-l’Est']}),
@@ -7,6 +8,28 @@ assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines']
 const mutablePolicy={schemaVersion:1,selectedTypes:['PER'],sensitiveKeepAcknowledged:false,digest:'first'};
 const mutableLists={anon2InclusionList:['Jean Dupont'],anon2ExclusionList:[]};
 const frozen=freezeJobSelection({policy:mutablePolicy,lists:mutableLists,mode:'ANONYMIZE'});
+assert.deepEqual(v2Capabilities({workerCodeSha:'worker-1',listDirectives:true,
+  processingModes:['ANONYMIZE','PSEUDONYMIZE'],pseudonymKeyDownload:true},'worker-1'),
+  {workerMatches:true,lists:true,pseudonymize:true});
+assert.deepEqual(v2Capabilities({workerCodeSha:'worker-1',listDirectives:true,
+  processingModes:['PSEUDONYMIZE'],pseudonymKeyDownload:true},'worker-2'),
+  {workerMatches:false,lists:false,pseudonymize:false});
+assert.equal(v2Capabilities({workerCodeSha:'worker-1'},'worker-1').pseudonymize,false);
+assert.deepEqual(assertCreatedJob({jobId:'job-1',status:'PENDING',
+  protectionPolicy:{digest:'d1'},processingMode:'ANONYMIZE'},
+  {digest:'d1',mode:'ANONYMIZE'}).jobId,'job-1');
+assert.deepEqual(freezeJobSelection({policy:{selectedTypes:[],digest:'empty',
+  sensitiveKeepAcknowledged:true},mode:'ANONYMIZE'}).policy.selectedTypes,[]);
+assert.equal(assertCreatedJob({jobId:'empty-job',status:'PENDING',
+  protectionPolicy:{digest:'empty'},processingMode:'ANONYMIZE'},
+  {digest:'empty',mode:'ANONYMIZE'}).jobId,'empty-job');
+for (const invalid of [
+  {jobId:'job-1',status:'PENDING',processingMode:'ANONYMIZE'},
+  {jobId:'job-1',status:'PENDING',protectionPolicy:{digest:'d1'}},
+  {jobId:'job-1',status:'PENDING',protectionPolicy:{digest:'d1'},processingMode:'PSEUDONYMIZE'},
+  {jobId:'job-1',status:'PENDING',protectionPolicy:{digest:'d1'},processingMode:'ANONYMIZE',listDigest:'old'},
+]) assert.throws(()=>assertCreatedJob(invalid,{digest:'d1',listDigest:'list-current',mode:'ANONYMIZE'}),
+  /Réponse de création incohérente/);
 mutablePolicy.selectedTypes.push('ORG');mutablePolicy.digest='second';
 mutableLists.anon2InclusionList[0]='Alice Martin';
 assert.deepEqual(frozen,{digest:'first',selectedTypes:['PER'],mode:'ANONYMIZE',
@@ -15,8 +38,8 @@ assert.deepEqual(frozen,{digest:'first',selectedTypes:['PER'],mode:'ANONYMIZE',
 
 const seen = [];
 let artifactRevision='r2';
-const job = {status:'READY', reviewRevision:'r2', protectionPolicy:{digest:'d1'}};
-const review = {revision:'r2', protectionPolicy:{digest:'d1'}};
+const job = {status:'READY', assurance:'technical-ready', reviewRevision:'r2', protectionPolicy:{digest:'d1'}};
+const review = {status:'READY', assurance:'technical-ready', revision:'r2', protectionPolicy:{digest:'d1'}};
 const fetchImpl = async (url, options) => {
   seen.push({url, options});
   const path = new URL(url).pathname;
@@ -73,6 +96,10 @@ job.status='REVIEW_REQUIRED';
 await assert.rejects(() => client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
   expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale/);
 job.status='READY';
+job.assurance='non-verified';
+await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
+  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale/);
+job.assurance='technical-ready';
 artifactRevision='r1';
 await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
   expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale artifact/);

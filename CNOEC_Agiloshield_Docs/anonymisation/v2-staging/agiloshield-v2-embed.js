@@ -1,4 +1,5 @@
-import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from './agiloshield-v2-client.js';
+import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
+  v2Capabilities, assertCreatedJob } from './agiloshield-v2-client.js';
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 
@@ -722,16 +723,9 @@ async function loadPreferences(){
       updateListSummary();}
     state.accountRef=accountRef;
     state.capabilities=response.capabilities||{};
-    const urlParams=typeof location!=='undefined'?new URLSearchParams(location.search):new URLSearchParams();
-    const forcePseudo=urlParams.has('pseudo')||config.PSEUDONYMIZE_READY===true;
-    const workerMatches=typeof config.FILE_WORKER_CODE_SHA==='string'&&
-      config.FILE_WORKER_CODE_SHA.length>0&&
-      state.capabilities.workerCodeSha===config.FILE_WORKER_CODE_SHA;
-    listsReady=config.FILE_LISTS_READY===true&&workerMatches&&
-      state.capabilities.listDirectives===true;
-    pseudoReady=forcePseudo||(workerMatches&&
-      state.capabilities.processingModes?.includes('PSEUDONYMIZE')&&
-      state.capabilities.pseudonymKeyDownload===true);
+    const available=v2Capabilities(state.capabilities,config.FILE_WORKER_CODE_SHA);
+    listsReady=config.FILE_LISTS_READY===true&&available.lists;
+    pseudoReady=available.pseudonymize;
     const stored=await loadStoredLists(accountRef);
     if(request!==preferencesRequest)return;
     listSelection=stored.persistent?stored.lists:memoryLists;
@@ -1126,13 +1120,8 @@ async function drainQueue(){
         const created=await api.upload(entry.file,entry.policy,{
           ...(entry.lists||{}),processingMode:entry.mode,onUploadProgress:progress,
           uploadId:state.capabilities.uploadIdempotency===true?entry.uploadId:undefined});
-        entry.jobId=created.jobId||null;
-        if(!entry.jobId||(created?.protectionPolicy?.digest&&created.protectionPolicy.digest!==entry.digest))
-          throw new Error('Politique du job différente de la sélection');
-        if(entry.listDigest&&created?.listDigest!==entry.listDigest)
-          throw new Error('Listes du job différentes de la sélection');
-        if(entry.mode==='PSEUDONYMIZE'&&created?.processingMode&&created.processingMode!==entry.mode)
-          throw new Error('Mode de traitement différent de la sélection');
+        entry.jobId=created?.jobId||null;
+        assertCreatedJob(created,{digest:entry.digest,listDigest:entry.listDigest,mode:entry.mode});
         entry.file=null;entry.lists=null;entry.status=statusOf(created)||'PENDING';
         entry.createdAt=created.createdAt||entry.createdAt;
         entry.sizeBytes=created.sizeBytes||entry.sizeBytes;

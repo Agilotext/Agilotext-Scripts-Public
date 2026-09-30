@@ -20,6 +20,29 @@ export function freezeJobSelection({policy, lists, mode}) {
       anon2ExclusionList:[...lists.anon2ExclusionList]}:null,
   };
 }
+export function v2Capabilities(capabilities, expectedWorkerCodeSha) {
+  const workerMatches = typeof expectedWorkerCodeSha === 'string' &&
+    expectedWorkerCodeSha.length > 0 &&
+    capabilities?.workerCodeSha === expectedWorkerCodeSha;
+  return {
+    workerMatches,
+    lists: workerMatches && capabilities?.listDirectives === true,
+    pseudonymize: workerMatches &&
+      Array.isArray(capabilities?.processingModes) &&
+      capabilities.processingModes.includes('PSEUDONYMIZE') &&
+      capabilities?.pseudonymKeyDownload === true,
+  };
+}
+export function assertCreatedJob(created, {digest, listDigest, mode}) {
+  if (!created?.jobId || created?.protectionPolicy?.digest !== digest ||
+      created?.processingMode !== mode ||
+      (listDigest && created?.listDigest !== listDigest) ||
+      !['PENDING', 'PROCESSING', 'READY', 'REVIEW_REQUIRED', 'FAILED']
+        .includes(created.anonStatus || created.status)) {
+    throw new Error('Réponse de création incohérente avec la sélection du document');
+  }
+  return created;
+}
 export class AgiloShieldV2Client {
   constructor({baseUrl, authHeaders, credentials = 'omit', fetchImpl = (...args) => globalThis.fetch(...args),
     xhrFactory = () => new XMLHttpRequest()}) {
@@ -166,12 +189,14 @@ export class AgiloShieldV2Client {
     expectedListDigest, expectedRevision} = {}) {
     const [job, review] = await Promise.all([this.status(id), this.review(id)]);
     const status = job.anonStatus || job.status;
+    const assurance = certified ? 'technical-ready' : 'non-verified';
     if (job.protectionPolicy?.digest !== expectedDigest ||
         review.protectionPolicy?.digest !== expectedDigest ||
         (expectedListDigest && (job.listDigest !== expectedListDigest ||
           review.listDigest !== expectedListDigest)) ||
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
-        (review.status && review.status !== status) ||
+        review.status !== status ||
+        job.assurance !== assurance || review.assurance !== assurance ||
         (certified && status !== 'READY') ||
         (!certified && !['REVIEW_REQUIRED', 'FAILED'].includes(status))) {
       throw new Error('Stale job state');
@@ -184,8 +209,7 @@ export class AgiloShieldV2Client {
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
         (expectedListDigest && response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest) ||
         response.headers.get('X-Agiloshield-Status') !== status ||
-        response.headers.get('X-Agiloshield-Assurance') !==
-          (certified ? 'technical-ready' : 'non-verified')) {
+        response.headers.get('X-Agiloshield-Assurance') !== assurance) {
       throw new Error('Stale artifact');
     }
     if (kind === 'key' && response.headers.get('X-Agiloshield-Processing-Mode') !== 'PSEUDONYMIZE')
