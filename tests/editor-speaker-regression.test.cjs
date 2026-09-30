@@ -93,3 +93,18 @@ test('real transcript loader preserves milliseconds and does not invent missing 
   assert.equal(rows[0].end, 64.5);
   assert.equal(rows[1].id, null);
 });
+
+test('Word sidecar remains available at the same CDN revision as the header', async () => {
+  const header = fs.readFileSync(path.join(base, 'Code-ed-header.js'), 'utf8');
+  const body = extract(header, '  function loadFormatInvestigationPvHelper() {', '  function investigationLinkLabelEl(');
+  const currentSrc = 'https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@revision/scripts/pages/editor/Code-ed-header.js?v=revision';
+  let loadedSrc = '';
+  const window = {};
+  const document = { getElementsByTagName: () => [{ src: currentSrc }], createElement: () => ({}),
+    head: { appendChild: el => { loadedSrc = el.src; window.AgiloFormatInvestigationPv = {}; el.onload(); } } };
+  const context = { window, document, Promise };
+  vm.runInNewContext(`${body}\nthis.load = loadFormatInvestigationPvHelper;`, context);
+  await context.load();
+  assert.equal(loadedSrc, currentSrc.replace('scripts/pages/editor/Code-ed-header.js', 'scripts/pages/shared/format-investigation-pv.js'));
+  assert.ok(fs.existsSync(path.join(base, '../shared/format-investigation-pv.js')));
+});
