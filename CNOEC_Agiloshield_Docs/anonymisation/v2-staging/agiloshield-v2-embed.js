@@ -46,7 +46,7 @@ const copy = Object.freeze({
 });
 const iconsBase = new URL('./assets/nucleo/', import.meta.url);
 const state = {preferencesReady:false, currentPolicy:null, accountRef:null,
-  capabilities:{}, entries:[], active:null,
+  capabilities:{}, entries:[], active:null, surface:'file',
   running:false, authPaused:false, disposed:false, drawerOpen:false,
   pollRequests:0, pollWaiters:[], autoOpenedBatches:new Set(), historyTab:'v2',
   history:{v2:[],anon2:[],v2Loaded:false,anon2Loaded:false,cursors:{v2:null,anon2:null}},
@@ -126,17 +126,33 @@ el('strong','Traitement de fichier',null,fileTab);
 el('small','PDF, Word, Excel, PowerPoint, TXT, CSV',null,fileTab);
 const textTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('text'));
 el('strong','Traitement de texte',null,textTab);el('small','Saisi ou collé',null,textTab);
-for(const tab of [fileTab,textTab])tab.setAttribute('role','tab');
+const restoreTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('restore'));
+el('strong','Restauration',null,restoreTab);el('small','Fichier pseudonymisé + clé',null,restoreTab);
+for(const tab of [fileTab,textTab,restoreTab])tab.setAttribute('role','tab');
 fileTab.setAttribute('aria-selected','true');textTab.setAttribute('aria-selected','false');
+restoreTab.setAttribute('aria-selected','false');
+fileTab.tabIndex=0;textTab.tabIndex=-1;restoreTab.tabIndex=-1;
+surfaceTabs.addEventListener('keydown',event=>{
+  const tabs=[fileTab,textTab,restoreTab];
+  if(!tabs.includes(event.target)||!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
+  event.preventDefault();
+  const index=tabs.indexOf(event.target);
+  const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:
+    (index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  tabs[next].click();tabs[next].focus();
+});
 const layout=el('div',null,'asv2-layout',form);
 const main=el('div',null,'asv2-main',layout);
 const side=el('aside',null,'asv2-side',layout);side.setAttribute('aria-label','Paramètres');
 const filePane=el('div',null,'asv2-file-pane',main);filePane.setAttribute('role','tabpanel');
 const textPane=el('div',null,'asv2-text-pane',main);textPane.setAttribute('role','tabpanel');textPane.hidden=true;
-fileTab.id='asv2-tab-file';textTab.id='asv2-tab-text';
-filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';
-fileTab.setAttribute('aria-controls',filePane.id);textTab.setAttribute('aria-controls',textPane.id);
-filePane.setAttribute('aria-labelledby',fileTab.id);textPane.setAttribute('aria-labelledby',textTab.id);
+const restorePane=el('div',null,'asv2-restore-pane',main);restorePane.setAttribute('role','tabpanel');
+restorePane.hidden=true;
+fileTab.id='asv2-tab-file';textTab.id='asv2-tab-text';restoreTab.id='asv2-tab-restore';
+filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';restorePane.id='asv2-pane-restore';
+for(const [tab,pane] of [[fileTab,filePane],[textTab,textPane],[restoreTab,restorePane]]){
+  tab.setAttribute('aria-controls',pane.id);pane.setAttribute('aria-labelledby',tab.id);
+}
 el('h3','Traitement de texte',null,textPane);
 el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
   'asv2-muted',textPane);
@@ -148,6 +164,53 @@ const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=
   addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
   textInput.value='';
 });textAdd.disabled=true;
+el('h3','Restaurer un fichier pseudonymisé',null,restorePane);
+el('p','Préparez un fichier et sa clé de correspondance. La restauration sera disponible après le raccordement Java.',
+  'asv2-muted',restorePane);
+const restoreNotice=el('p','Restauration bientôt disponible sur cette recette.',
+  'asv2-restore-notice',restorePane);
+restoreNotice.setAttribute('role','status');
+const restoreInputs=el('div',null,'asv2-restore-inputs',restorePane);
+function restorePicker(title,hint,chooseLabel,accept,valid){
+  const card=el('div',null,'asv2-restore-card',restoreInputs);
+  el('strong',title,'asv2-restore-label',card);
+  const input=el('input',null,'asv2-restore-input',card);
+  input.type='file';input.accept=accept;input.multiple=false;input.hidden=true;
+  el('p',hint,'asv2-muted',card);
+  button(chooseLabel,'asv2-secondary asv2-restore-choose',card,()=>input.click());
+  const selected=el('p','', 'asv2-restore-selected',card);selected.hidden=true;
+  const reset=()=>{
+    input.value='';selected.textContent='';selected.hidden=true;remove.hidden=true;
+  };
+  const remove=button('Retirer','asv2-link',card,reset);remove.hidden=true;
+  input.addEventListener('change',()=>{
+    const file=input.files?.[0];
+    if(!file){selected.textContent='';selected.hidden=true;remove.hidden=true;return;}
+    if(!valid.test(file.name)){
+      input.value='';selected.textContent='Format non pris en charge. Choisissez un autre fichier.';
+      selected.hidden=false;remove.hidden=true;return;
+    }
+    const size=file.size<1024?file.size+' octets':
+      file.size<1024*1024?Math.ceil(file.size/1024)+' Ko':
+      (file.size/1024/1024).toFixed(2)+' Mio';
+    selected.textContent=file.name+' · '+size;
+    selected.hidden=false;remove.hidden=false;
+  });
+  return reset;
+}
+const clearRestoreDocument=restorePicker('Fichier pseudonymisé','TXT, CSV, DOCX, XLSX ou PPTX','Choisir le document',
+  '.txt,.csv,.docx,.xlsx,.pptx',/\.(txt|csv|docx|xlsx|pptx)$/i);
+const clearRestoreKey=restorePicker('Clé de correspondance','Fichier .properties associé au document','Choisir la clé',
+  '.properties',/\.properties$/i);
+el('p','Le fichier restauré contiendra de nouveau des données sensibles. Après édition, '
+  +'il n’est pas certifié identique à l’original.', 'asv2-restore-safety',restorePane);
+const restoreAction=button('Restaurer le fichier','asv2-primary',restorePane);
+// The Java facade has no restore route. Neither URL/config flags nor file selection may enable this action.
+restoreAction.disabled=true;
+restoreAction.setAttribute('aria-describedby','asv2-restore-unavailable');
+restoreNotice.id='asv2-restore-unavailable';
+el('p','PDF : une clé ne reconstruit pas un PDF masqué. Seul l’original encore conservé '
+  +'par le job pourrait être récupéré si Java l’expose.', 'asv2-restore-pdf-note',restorePane);
 el('h3','Mode de traitement',null,side);
 const anonMode=el('label',null,'asv2-mode is-selected',side);
 const anonRadio=el('input',null,null,anonMode);anonRadio.type='radio';anonRadio.name='asv2Mode';anonRadio.checked=true;
@@ -169,8 +232,11 @@ el('p','Choisissez les catégories à protéger. Votre choix sera appliqué aux 
   'asv2-muted asv2-side-help',side);
 el('p','Une catégorie décochée peut rester visible. Le résultat est vérifié selon vos réglages.',
   'asv2-policy-note',side);
-const listsButton=button('Règles particulières','asv2-types-button',side,openLists);
-const listsCount=el('span','0 inclusion · 0 exclusion','asv2-count asv2-list-summary',listsButton);
+const listsButton=button('Listes','asv2-types-button asv2-lists-button',side,openLists);
+const listsCount=el('span',null,'asv2-list-summary',listsButton);
+const inclusionCount=el('span','Incl. 0','asv2-list-count asv2-list-count-include',listsCount);
+const exclusionCount=el('span','Excl. 0','asv2-list-count asv2-list-count-exclude',listsCount);
+listsButton.setAttribute('aria-label','Listes — inclusions : 0 ; exclusions : 0');
 listsButton.disabled=true;
 listsButton.title='Préparer les listes pour vos prochains documents';
 const listsHelp=el('p','Préparez vos listes ici. Leur envoi attend le raccordement Java.',
@@ -215,15 +281,14 @@ const listsHeader=el('header',null,'asv2-policy-header',listsDialog);
 const listsHeading=el('div',null,null,listsHeader);
 const listsTitle=el('h2','Inclusions et exclusions',null,listsHeading);
 listsTitle.id='asv2-lists-title';
-el('p','Inclure demande de masquer les occurrences retrouvées, même si leur catégorie est décochée. '
-  +'Exclure demande une vérification lorsqu’un terme devrait être masqué.', 'asv2-muted',listsHeading);
+el('p','Inclure demande de masquer. Exclure demande une revue si un masque est nécessaire.',
+  'asv2-muted',listsHeading);
 const listsAvailability=el('p','', 'asv2-list-availability',listsDialog);
 listsAvailability.setAttribute('role','status');
 const listsClose=button('×','asv2-close',listsHeader,()=>closeLists());
 listsClose.setAttribute('aria-label','Fermer les listes');
 const listsBody=el('div',null,'asv2-list-fields',listsDialog);
-el('p','La casse et les accents sont ignorés. Une zone OCR mal reconnue ou non localisable '
-  +'peut encore demander une revue. Seuls les prochains documents utilisent ces listes.',
+el('p','La casse et les accents sont ignorés. Seuls les prochains documents utilisent ces listes.',
   'asv2-muted asv2-list-guide',listsBody);
 const listCards={};
 for(const [kind,title,hint,placeholder] of [
@@ -250,8 +315,7 @@ for(const [kind,title,hint,placeholder] of [
 }
 const listsWarning=el('p','', 'asv2-list-warning',listsDialog);
 listsWarning.setAttribute('role','status');listsWarning.hidden=true;
-const listsStorageNote=el('p','Les termes enregistrés restent sur ce navigateur pour ce compte. '
-  +'Évitez cet enregistrement sur un appareil partagé.', 'asv2-list-storage-note',listsDialog);
+const listsStorageNote=el('p','', 'asv2-list-storage-note',listsDialog);
 const listsError=el('p','', 'asv2-policy-error',listsDialog);listsError.hidden=true;
 const listsActions=el('div',null,'asv2-policy-actions asv2-list-actions',listsDialog);
 const listsClear=button('Effacer les listes mémorisées','asv2-link',listsActions,clearLists);
@@ -308,7 +372,7 @@ const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPrefe
 const resumeAuthButton=button('Reprendre après connexion','asv2-secondary',actions,
   ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
 resumeAuthButton.hidden=true;
-el('p','Le premier résultat prêt s’ouvre automatiquement. Chaque document reste accessible ci-dessous.',
+const previewHelp=el('p','Le premier résultat prêt s’ouvre automatiquement. Chaque document reste accessible ci-dessous.',
   'asv2-preview-help',main);
 
 const historySection=el('section',null,'asv2-history',shell);
@@ -431,9 +495,17 @@ function scheduleFirstTour(){
   },1000);
 }
 function setSurface(kind){
-  const file=kind==='file';filePane.hidden=!file;textPane.hidden=file;
-  fileTab.classList.toggle('is-active',file);textTab.classList.toggle('is-active',!file);
-  fileTab.setAttribute('aria-selected',String(file));textTab.setAttribute('aria-selected',String(!file));
+  state.surface=kind;
+  const restore=kind==='restore';
+  for(const [tab,pane,name] of [[fileTab,filePane,'file'],[textTab,textPane,'text'],
+      [restoreTab,restorePane,'restore']]){
+    const selected=kind===name;
+    pane.hidden=!selected;tab.classList.toggle('is-active',selected);
+    tab.setAttribute('aria-selected',String(selected));
+    tab.tabIndex=selected?0:-1;
+  }
+  side.hidden=restore;layout.classList.toggle('is-restore',restore);
+  for(const element of [queueHeading,queue,rejectedList,actions,previewHelp])element.hidden=restore;
 }
 function openTypes(){
   if(!state.preferencesReady)return;
@@ -449,7 +521,7 @@ function openLists(){
   renderListDraft();
   listsAvailability.textContent=listsReady?
     'Listes disponibles pour les prochains dépôts sur cette recette.':
-    'Préparation uniquement : les listes sont mémorisées ici, mais ne sont pas encore transmises aux documents. Le raccordement Java est en cours.';
+    'Préparation uniquement : les listes ne sont pas encore transmises aux documents. Le raccordement Java est en cours.';
   listsAvailability.classList.toggle('is-ready',listsReady);
   listsError.hidden=true;listsModal.hidden=false;document.body.classList.add('asv2-policy-open');
   listCards.include.input.focus();
@@ -463,8 +535,9 @@ function closeLists(force=false){
 function listField(kind){return kind==='include'?'anon2InclusionList':'anon2ExclusionList';}
 function updateListSummary(){
   const included=listSelection.anon2InclusionList.length,excluded=listSelection.anon2ExclusionList.length;
-  listsCount.textContent=included+' inclusion'+(included>1?'s':'')+' · '+
-    excluded+' exclusion'+(excluded>1?'s':'');
+  inclusionCount.textContent='Incl. '+included;
+  exclusionCount.textContent='Excl. '+excluded;
+  listsButton.setAttribute('aria-label','Listes — inclusions : '+included+' ; exclusions : '+excluded);
 }
 function renderListDraft(){
   for(const kind of ['include','exclude']){
@@ -486,8 +559,6 @@ function renderListDraft(){
   const messages=[];
   if(conflicts.length)messages.push(conflicts.length+' terme(s) figurent dans les deux listes : '
     +'une contradiction pourra exiger une vérification du document.');
-  if(!listStorePersistent)messages.push('Ces listes ne peuvent pas être mémorisées sur ce navigateur '
-    +'pour le compte courant ; elles resteront utilisables pendant cette page ouverte.');
   listsWarning.textContent=messages.join(' ');listsWarning.hidden=!messages.length;
 }
 function addListTerms(kind){
@@ -646,6 +717,7 @@ async function loadPreferences(){
     const memoryLists=sameAccount?listSnapshot():emptyLists();
     if(!sameAccount){
       if(!listsModal.hidden)closeLists(true);
+      clearRestoreDocument();clearRestoreKey();
       listSelection=emptyLists();listDraft=emptyLists();
       updateListSummary();}
     state.accountRef=accountRef;
@@ -719,7 +791,7 @@ drop.addEventListener('drop',event=>addFiles(event.dataTransfer?.files||[]));
 function renderQueue(){
   clear(queue);
   const underway=state.entries.filter(entry=>!isTerminal(entry.status));
-  queueHeading.hidden=!underway.length;
+  queueHeading.hidden=state.surface==='restore'||!underway.length;
   for(const entry of underway){
     const line=el('li',null,'asv2-queue-item',queue);
     const details=el('div',null,'asv2-queue-details',line);
@@ -1166,7 +1238,7 @@ async function loadCurrent(entry){
   }
   if((currentStatus==='READY'||currentStatus==='REVIEW_REQUIRED')&&entry.batchId&&!state.autoOpenedBatches.has(entry.batchId)){
     state.autoOpenedBatches.add(entry.batchId);
-    if(!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
+    if(state.surface!=='restore'&&!state.drawerOpen&&policyModal.hidden&&listsModal.hidden&&
         !drop.classList.contains('is-dragging')&&
         !document.activeElement?.matches?.('textarea, input[type="text"], input[type="search"]')&&
         document.visibilityState==='visible')

@@ -104,6 +104,8 @@ function review(job){
 window.fetch=async(url,options={})=>{
  if(!String(url).startsWith(window.AGILOSHIELD_V2_CONFIG.BASE_URL))return nativeFetch(url,options);
  const path=String(url).slice(window.AGILOSHIELD_V2_CONFIG.BASE_URL.length);
+ document.body.dataset.mockApiCalls=String(Number(document.body.dataset.mockApiCalls||0)+1);
+ if(path.includes('restore'))document.body.dataset.mockRestoreCalls=String(Number(document.body.dataset.mockRestoreCalls||0)+1);
  if(path==='/preferences'){
   if(location.search.includes('slow=1')&&options.method!=='POST')await new Promise(resolve=>setTimeout(resolve,1500));
   if(options.method==='POST'){const p=JSON.parse(options.body);preference={...p,digest:policyDigest(p)};

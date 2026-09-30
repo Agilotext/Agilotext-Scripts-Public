@@ -1,6 +1,6 @@
 # Inclusions et exclusions — interface de recette
 
-Cette livraison prépare **le visuel uniquement** pendant que Nicolas raccorde la façade Java. La fenêtre s'ouvre depuis « Règles particulières » après le chargement des préférences. Elle affiche deux cartes, les termes individuellement, les compteurs, l'ajout multiligne, le retrait, l'annulation et l'effacement confirmé. La virgule appartient au terme ; seul un retour à la ligne sépare deux termes collés.
+Cette livraison prépare **le visuel uniquement** pendant que Nicolas raccorde la façade Java. La fenêtre s'ouvre depuis « Listes » après le chargement des préférences. Le bouton affiche « Incl. N » en vert et « Excl. N » en rouge sur une ligne ; les cartes gardent des bordures neutres. La fenêtre affiche les termes individuellement, les compteurs, l'ajout multiligne, le retrait, l'annulation et l'effacement confirmé. La virgule appartient au terme ; seul un retour à la ligne sépare deux termes collés.
 
 Les listes sont mémorisées dans ce navigateur sous une clé dérivée de `accountRef` opaque. Aucune liste Anon2 n'est importée. Sans `accountRef` ou sans stockage disponible, les termes restent en mémoire pendant la page ouverte, avec un avertissement visible. Un changement de compte vide le brouillon avant de charger les listes de l'autre compte. Un job déjà déposé conserve son propre instantané.
 
