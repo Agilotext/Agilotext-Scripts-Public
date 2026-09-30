@@ -25,8 +25,10 @@ test('agilo-job-share-actions syntax and exports', () => {
   assert.ok(content.includes('0.375rem'), 'Gap calibré à 0.375rem');
   assert.ok(content.includes('6.5rem'), 'Cellule avec min-width de 6.5rem');
 
-  // Verify window.open on share click
-  assert.ok(content.includes("window.open(viewUrl, '_blank')"), 'Ouvre la page partagée dans un nouvel onglet');
+  // Verify no window.open on share click (copy-only)
+  assert.ok(!content.includes("window.open(viewUrl"), 'Ne force plus louverture de la page partagée');
+  assert.ok(content.includes('safeCopyText'), 'Utilise la fonction de copie robuste avec fallback');
+  assert.ok(content.includes('Copier le lien de lecture'), 'Infobulle Copier le lien de lecture');
 
   // Verify mailto on email click
   assert.ok(content.includes('mailto:'), 'Génère un lien mailto');

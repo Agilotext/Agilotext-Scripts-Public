@@ -193,8 +193,8 @@
     if (ready) {
       shareBtn.disabled = false;
       shareBtn.classList.remove('is-disabled');
-      shareBtn.setAttribute('title', 'Copier le lien public et ouvrir la vue partagée');
-      shareBtn.setAttribute('aria-label', 'Copier le lien public et ouvrir la vue partagée');
+      shareBtn.setAttribute('title', 'Copier le lien de lecture');
+      shareBtn.setAttribute('aria-label', 'Copier le lien de lecture');
 
       emailBtn.disabled = false;
       emailBtn.classList.remove('is-disabled');
@@ -220,6 +220,34 @@
   }
 
   var shareUrlCache = {};
+
+  async function safeCopyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText && document.hasFocus && document.hasFocus()) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) { /* fallback below */ }
+    }
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '0';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    var ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (_) { ok = false; }
+    ta.remove();
+    if (!ok && window.prompt) {
+      window.prompt('Copiez le texte :', text);
+      return true;
+    }
+    return ok;
+  }
 
   async function getOrFetchShareUrl(jobId, auth) {
     if (shareUrlCache[jobId]) return shareUrlCache[jobId];
@@ -265,41 +293,21 @@
       if (shareBtn.disabled) return;
       shareBtn.disabled = true;
 
-      // Ouvrir l'onglet cible dès le clic pour éviter le blocage de popup du navigateur
-      var newWin = null;
-      try {
-        newWin = window.open('about:blank', '_blank');
-      } catch (_) { /* ignore */ }
-
       try {
         var viewUrl = await getOrFetchShareUrl(jobId, auth);
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(viewUrl);
-        } else {
-          window.prompt('Copiez le lien de lecture', viewUrl);
-        }
+        await safeCopyText(viewUrl);
 
-        // Feedback visuel : bouton vert et toast
+        // Feedback visuel immédiat : bouton vert + toast
         shareBtn.classList.add('is-copied');
-        toast('✓ Lien copié dans le presse-papier !');
-
-        // Courte temporisation pour bien voir la confirmation avant l'ouverture
-        await new Promise(function (resolve) { setTimeout(resolve, 800); });
-
-        if (newWin && !newWin.closed) {
-          newWin.location.href = viewUrl;
-        } else {
-          window.open(viewUrl, '_blank');
-        }
+        toast('✓ Lien de lecture copié dans le presse-papier !');
 
         setTimeout(function () {
           shareBtn.classList.remove('is-copied');
-        }, 1500);
+          shareBtn.disabled = false;
+        }, 2000);
 
       } catch (e) {
-        if (newWin && !newWin.closed) newWin.close();
         toast(e.message || 'Erreur réseau');
-      } finally {
         shareBtn.disabled = false;
       }
       return;
@@ -328,9 +336,7 @@
           'Bonne lecture,\n' +
           signature;
 
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          await navigator.clipboard.writeText(msgText);
-        }
+        await safeCopyText(msgText);
 
         emailBtn.classList.add('is-copied');
         toast('✓ Message copié dans le presse-papier !');
@@ -340,15 +346,15 @@
 
         setTimeout(function () {
           window.location.href = mailtoUrl;
-        }, 400);
+        }, 300);
 
         setTimeout(function () {
           emailBtn.classList.remove('is-copied');
+          emailBtn.disabled = false;
         }, 2000);
 
       } catch (e2) {
         toast(e2.message || 'Erreur réseau');
-      } finally {
         emailBtn.disabled = false;
       }
       return;

@@ -194,9 +194,9 @@
     var info = {};
     try {
       var pack = await Promise.all([
-        fetch(sumUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }),
-        fetch(txtUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }),
-        fetch(infoUrl, { credentials: 'omit', cache: 'no-store' }).then(function (r) { return r.text(); }).catch(function () { return ''; })
+        fetch(sumUrl, { credentials: 'omit' }).then(function (r) { return r.text(); }),
+        fetch(txtUrl, { credentials: 'omit' }).then(function (r) { return r.text(); }),
+        fetch(infoUrl, { credentials: 'omit' }).then(function (r) { return r.text(); }).catch(function () { return ''; })
       ]);
       sumRaw = pack[0];
       txtRaw = pack[1];
@@ -304,8 +304,7 @@
       r = await fetch(API_BASE + path, {
         method: 'GET',
         headers: { Authorization: 'Bearer ' + guestToken },
-        credentials: 'omit',
-        cache: 'no-store'
+        credentials: 'omit'
       });
     } catch (_) {
       return null;
@@ -331,8 +330,7 @@
       r = await fetch(API_BASE + '/guestRead/document', {
         method: 'GET',
         headers: { Accept: 'application/json', Authorization: 'Bearer ' + guestToken },
-        credentials: 'omit',
-        cache: 'no-store'
+        credentials: 'omit'
       });
     } catch (_) {
       return { error: 'network' };
@@ -364,15 +362,6 @@
       pageKicker: j.pageKicker || '',
       guestToken: guestToken
     };
-    if (job.audioAvailable) {
-      var audio = await fetchGuestBlob('audio', guestToken);
-      if (audio && audio.url) {
-        job.audioUrl = audio.url;
-        job.audioAvailable = true;
-      } else {
-        job.audioAvailable = false;
-      }
-    }
     return { job: job };
   }
 
@@ -442,7 +431,7 @@
     if (!url) return { error: 'missing_token' };
     var r;
     try {
-      r = await fetch(url, { method: 'GET', credentials: 'omit', cache: 'no-store' });
+      r = await fetch(url, { method: 'GET', credentials: 'omit' });
     } catch (_) {
       return { error: 'zip_cors' };
     }
@@ -600,6 +589,7 @@
       wrap = document.getElementById('agilo-audio-wrap');
       audio = document.getElementById('agilo-audio');
     }
+    if (wrap) wrap.removeAttribute('data-audio-unavailable');
     stripOwnerJobId(wrap);
     var dl = document.getElementById('agilo-download');
     if (dl) {
@@ -617,6 +607,9 @@
   function hidePlayer(host) {
     if (!host) return;
     host.setAttribute('hidden', '');
+    host.style.display = 'none';
+    var wrap = document.getElementById('agilo-audio-wrap');
+    if (wrap) wrap.dataset.audioUnavailable = 'unavailable';
   }
 
   function syncFollow(job) {
@@ -922,7 +915,7 @@
     }
 
     var useTabs = showTranscript && showSummary;
-    var audioOk = job.audioAvailable !== false && !!job.audioUrl;
+    var audioOk = job.audioAvailable !== false && (!!job.audioUrl || (job.audioAvailable === true && !!job.guestToken));
     var defaultTab = 'summary';
     if (!showSummary && showTranscript) defaultTab = 'transcript';
     if (docType === 'transcript' && showTranscript) defaultTab = 'transcript';
@@ -1087,7 +1080,7 @@
     var vm = resolveShareViewModel(job);
     var guestToken = job.guestToken || '';
     var downloadUrl = guestToken ? '' : downloadUrlFor(token);
-    var audioOk = job.audioAvailable !== false && !!job.audioUrl;
+    var audioOk = job.audioAvailable !== false && (!!job.audioUrl || (job.audioAvailable === true && !!guestToken));
     var transcript = buildTranscriptHtml(job);
     var summary = buildSummaryHtml(job);
     var shell = ensureShareShell(root);
@@ -1144,6 +1137,33 @@
 
     if (audioOk) {
       mountPlayer(shell.host, job.audioUrl);
+      if (!job.audioUrl && guestToken && job.audioAvailable) {
+        var playBtn = document.getElementById('agilo-play');
+        if (playBtn) {
+          playBtn.textContent = '⏳ Chargement audio…';
+          playBtn.disabled = true;
+        }
+        fetchGuestBlob('audio', guestToken).then(function (audioRes) {
+          if (audioRes && audioRes.url) {
+            job.audioUrl = audioRes.url;
+            var audioEl = document.getElementById('agilo-audio');
+            if (audioEl) audioEl.src = audioRes.url;
+            var pb = document.getElementById('agilo-play');
+            if (pb) {
+              pb.textContent = '▶︎ Lire';
+              pb.disabled = false;
+            }
+            syncFollow(job);
+            pingSticky();
+          } else {
+            hidePlayer(shell.host);
+            pingSticky();
+          }
+        }).catch(function () {
+          hidePlayer(shell.host);
+          pingSticky();
+        });
+      }
     } else {
       hidePlayer(shell.host);
     }

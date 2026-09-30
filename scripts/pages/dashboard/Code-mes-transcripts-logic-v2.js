@@ -1343,7 +1343,7 @@
         <a href="#" class="download_wrapper-link_summary_doc" title="Télécharger Compte-rendu" style="font-size:11px; padding:3px 6px; background:#eff6ff; border-radius:4px; text-decoration:none; color:#1e40af; border:1px solid #bfdbfe; font-weight:500;">CR</a>
       </div>
       <div class="custom-element titles actions-cell">
-        <button type="button" class="agilo-row-share agilo-action-btn" title="Copier le lien public et ouvrir la vue partagée" aria-label="Copier le lien public et ouvrir la vue partagée">
+        <button type="button" class="agilo-row-share agilo-action-btn" title="Copier le lien de lecture" aria-label="Copier le lien de lecture">
           <svg class="agilo-ico-share" viewBox="0 0 18 18" width="1.125rem" height="1.125rem" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="13.5" cy="4.5" r="2.25"/>
             <circle cx="4.5" cy="9" r="2.25"/>
