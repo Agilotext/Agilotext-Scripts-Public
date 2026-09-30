@@ -532,12 +532,14 @@ async function clearLists(){
   if(!await confirmAction('Effacer les listes mémorisées pour ce compte sur ce navigateur ? '
     +'Les documents déjà déposés ne changent pas.'))return;
   const removed=await clearStoredLists(state.accountRef);
-  if(state.accountRef&&!removed){listsError.textContent='Impossible d’effacer le stockage local. Réessayez.';
+  if(listStorePersistent&&!removed){listsError.textContent='Impossible d’effacer le stockage local. Réessayez.';
     listsError.hidden=false;return;}
   listSelection=emptyLists();listDraft=emptyLists();
   for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
   renderListDraft();updateListSummary();listsError.hidden=true;
-  notify('Listes effacées pour les prochains documents de ce compte.');
+  notify(removed?'Listes effacées pour les prochains documents de ce compte.':
+    'Listes effacées pour cette page ; le stockage du navigateur reste indisponible.',
+    removed?'':'is-warning');
 }
 listsModal.addEventListener('click',event=>{if(event.target===listsModal)closeLists();});
 listsModal.addEventListener('keydown',event=>{
