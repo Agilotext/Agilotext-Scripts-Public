@@ -1,6 +1,7 @@
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection } from './agiloshield-v2-client.js';
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
+import { TextPreviewController, textPreviewAvailable } from './agiloshield-v2-text-preview.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -154,15 +155,53 @@ for(const [tab,pane] of [[fileTab,filePane],[textTab,textPane],[restoreTab,resto
   tab.setAttribute('aria-controls',pane.id);pane.setAttribute('aria-labelledby',tab.id);
 }
 el('h3','Traitement de texte',null,textPane);
-el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
+const textIntro=el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
   'asv2-muted',textPane);
 const textInput=el('textarea',null,'asv2-text-input',textPane);
 textInput.placeholder='Collez ou saisissez le texte à anonymiser…';
 textInput.setAttribute('aria-label','Texte à anonymiser');
+const textPreview=el('div',null,'asv2-text-live-preview',textPane);
+textPreview.hidden=true;textPreview.setAttribute('aria-live','polite');
+const textPreviewController=new TextPreviewController({
+  request:(payload,signal)=>api.textPreview(payload,signal),
+  snapshot:async()=>{
+    if(!state.preferencesReady||!state.currentPolicy||pseudoRadio.checked)
+      throw new Error('Text preview unavailable');
+    const lists=listsReady?listSnapshot():emptyLists();
+    return {policy:{...state.currentPolicy,selectedTypes:[...state.currentPolicy.selectedTypes]},
+      lists,listDigest:await digestListDirectives(lists)};
+  },
+  render:({state:previewState,response,message})=>{
+    clear(textPreview);
+    if(previewState==='empty'){textPreview.hidden=true;return;}
+    textPreview.hidden=false;
+    if(previewState==='waiting'){el('p','Aperçu en préparation…',null,textPreview);return;}
+    if(previewState==='error'){el('p',message,'asv2-muted',textPreview);return;}
+    el('strong',response.status==='READY'?'Aperçu temporaire · non certifié':
+      response.status==='REVIEW_REQUIRED'?'Aperçu à vérifier':'Aperçu impossible',null,textPreview);
+    const output=el('div',null,'asv2-text-live-content',textPreview);
+    for(const part of response.fragments){
+      const span=el('span',part.text,part.kind==='masked'?'asv2-text-live-masked':null,output);
+      if(part.kind==='masked'&&typeof part.code==='string')span.setAttribute('aria-label',
+        'Passage protégé : '+part.code.replace(/[^A-Z]/g,''));
+    }
+  },
+});
+function updateTextPreviewMode(){
+  const enabled=state.preferencesReady&&state.surface==='text'&&!pseudoRadio.checked&&
+    textPreviewAvailable(config,state.capabilities);
+  textPreviewController.configure(enabled,state.capabilities.textPreview?.maxChars||0);
+  textIntro.textContent=enabled?
+    'Ce texte est envoyé automatiquement pour être protégé pendant la saisie. L’aperçu ne crée pas de document enregistré.':
+    'Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.';
+  if(enabled)textPreviewController.input(textInput.value);
+}
+textInput.addEventListener('input',()=>textPreviewController.input(textInput.value));
 const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=>{
   if(!textInput.value.trim()){notify('Saisissez du texte avant de l’ajouter.','is-warning');return;}
   addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
   textInput.value='';
+  textPreviewController.invalidate();
 });textAdd.disabled=true;
 el('h3','Restaurer un fichier pseudonymisé',null,restorePane);
 el('p','Préparez un fichier et sa clé de correspondance. La restauration sera disponible après le raccordement Java.',
@@ -223,6 +262,7 @@ for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
   anonMode.classList.toggle('is-selected',anonRadio.checked);
   pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
   updatePolicySummary();
+  updateTextPreviewMode();
 });
 el('h3','Paramètres',null,side);
 const typesButton=button('Données à masquer','asv2-types-button',side,openTypes);
@@ -261,12 +301,14 @@ const checks=new Map();
 for(const code of codes){
   const label=el('label',null,'asv2-type',grid);
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
+  box.addEventListener('change',()=>textPreviewController.invalidate());
   el('span',code,'asv2-code',label);el('span',labels[code],null,label);checks.set(code,box);
 }
 const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
   const control=button(caption,'asv2-link',shortcuts,()=>{
     for(const [code,box] of checks) box.checked=values.includes(code);
+    textPreviewController.invalidate();
   });control.disabled=true;
 }
 const policyActions=el('div',null,'asv2-policy-actions',policyDialog);
@@ -506,6 +548,7 @@ function setSurface(kind){
   }
   side.hidden=restore;layout.classList.toggle('is-restore',restore);
   for(const element of [queueHeading,queue,rejectedList,actions,previewHelp])element.hidden=restore;
+  updateTextPreviewMode();
 }
 function openTypes(){
   if(!state.preferencesReady)return;
@@ -592,6 +635,7 @@ async function saveLists(){
     'Ces termes restent sur ce navigateur pour ce compte. Évitez un appareil partagé.':
     'Ces termes restent uniquement pendant cette page ouverte. Ils ne sont pas mémorisés.';
   updateListSummary();listsSave.disabled=false;closeLists();
+  textPreviewController.invalidate();
   notify(listsReady?
     (persisted?'Listes enregistrées pour les prochains documents.':
       'Listes applicables aux prochains documents pendant cette page ouverte.'):
@@ -608,6 +652,7 @@ async function clearLists(){
   listSelection=emptyLists();listDraft=emptyLists();
   for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
   renderListDraft();updateListSummary();listsError.hidden=true;
+  textPreviewController.invalidate();
   notify(removed?'Listes effacées pour les prochains documents de ce compte.':
     'Listes effacées pour cette page ; le stockage du navigateur reste indisponible.',
     removed?'':'is-warning');
@@ -656,6 +701,7 @@ async function saveTypes(){
       JSON.stringify([...saved].sort())!==JSON.stringify([...types].sort()))
       throw new Error('Préférences non enregistrées par la façade');
     state.currentPolicy={...response.protectionPolicy,selectedTypes:[...saved]};
+    textPreviewController.invalidate();
     updatePolicySummary();typesSnapshot=[...types];savingTypes=false;closeTypes(true);
     notify(types.length?'Préférences enregistrées pour les prochains documents.':
       'Aucune catégorie sélectionnée. Les données détectées resteront visibles dans les prochains documents.',
@@ -688,6 +734,7 @@ function setEnabled(yes){
   for(const control of shortcuts.querySelectorAll('button'))control.disabled=!yes;
   drop.classList.toggle('is-disabled',!yes);
   drop.setAttribute('aria-disabled',String(!yes));
+  updateTextPreviewMode();
 }
 function updatePolicySummary(){
   const types=state.currentPolicy?.selectedTypes;
@@ -2025,7 +2072,8 @@ function suppressGeneralTourLauncher(){
 suppressGeneralTourLauncher();
 setInterval(suppressGeneralTourLauncher, 1000);
 
-window.addEventListener('pagehide',()=>{state.disposed=true;state.previewSerial++;state.previewCleanup?.();});
+window.addEventListener('pagehide',()=>{state.disposed=true;state.previewSerial++;state.previewCleanup?.();
+  textPreviewController.invalidate();});
 window.addEventListener('pageshow',event=>{
   if(!event.persisted)return;
   state.disposed=false;

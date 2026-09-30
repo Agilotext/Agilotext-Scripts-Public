@@ -137,6 +137,10 @@
 #agiloshield-v2-staging .asv2-text-pane[hidden],#agiloshield-v2-staging .asv2-file-pane[hidden],#agiloshield-v2-staging .asv2-restore-pane[hidden],#agiloshield-v2-staging .asv2-side[hidden],#agiloshield-v2-staging .asv2-queue[hidden],#agiloshield-v2-staging .asv2-policy-modal[hidden]{display:none!important}
 #agiloshield-v2-staging .asv2-text-pane{padding:18px;border:1px solid var(--asv2-line);border-radius:12px;background:#fafcff}
 #agiloshield-v2-staging .asv2-text-input{display:block;width:100%;min-height:220px;margin:12px 0;resize:vertical;padding:12px;border:1px solid #c9d8e9;border-radius:9px;background:#fff;color:var(--asv2-navy)}
+#agiloshield-v2-staging .asv2-text-live-preview{margin:12px 0;padding:14px;border:1px solid var(--asv2-line);border-radius:9px;background:#fff}
+#agiloshield-v2-staging .asv2-text-live-preview[hidden]{display:none!important}
+#agiloshield-v2-staging .asv2-text-live-content{margin-top:8px;white-space:pre-wrap;overflow-wrap:anywhere}
+#agiloshield-v2-staging .asv2-text-live-masked{padding:1px 3px;background:#e6efff;color:var(--asv2-navy);font-weight:600}
 #agiloshield-v2-staging .asv2-preview-help{color:var(--asv2-muted);font-size:12px}
 #agiloshield-v2-staging .asv2-policy-modal{position:fixed;inset:0;z-index:99993;display:grid;place-items:center;padding:18px;background:rgba(12,32,58,.47)}
 #agiloshield-v2-staging .asv2-policy-dialog{position:relative;display:flex;flex-direction:column;width:min(980px,100%);max-height:min(86dvh,850px);overflow:hidden;border-radius:8px;background:#fff;box-shadow:0 24px 70px rgba(10,30,59,.28)}

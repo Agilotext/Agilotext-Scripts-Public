@@ -31,11 +31,11 @@ export class AgiloShieldV2Client {
     this.fetchImpl = (...args) => fetchImpl(...args);
     this.xhrFactory = xhrFactory;
   }
-  async request(path, {method = 'GET', body, digest, headers = {}} = {}) {
+  async request(path, {method = 'GET', body, digest, headers = {}, signal} = {}) {
     const auth = await this.authHeaders();
     const response = await this.fetchImpl(this.baseUrl + path, {
       method, credentials: this.credentials, cache: 'no-store',
-      headers: {...auth, ...(digest ? {'X-Agiloshield-Policy-Digest': digest} : {}), ...headers}, body,
+      headers: {...auth, ...(digest ? {'X-Agiloshield-Policy-Digest': digest} : {}), ...headers}, body, signal,
     });
     if (!response.ok) {
       let detail; try { detail = await response.json(); } catch (_) { detail = {}; }
@@ -64,6 +64,12 @@ export class AgiloShieldV2Client {
       headers:{'Content-Type':'application/json'}, body:JSON.stringify({jobs})});
   }
   preferences() { return this.json('/preferences'); }
+  // Reserved for a future Java capability. The published Embed never invokes it.
+  textPreview(payload, signal) {
+    if (payload?.processingMode !== 'ANONYMIZE') throw new Error('Text preview supports anonymize only');
+    return this.json('/text/preview', {method:'POST', signal,
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  }
   savePreferences(policy) { return this.json('/preferences', {method:'POST', body:JSON.stringify(policy), headers:{'Content-Type':'application/json'}}); }
   async upload(file, policy, {removeImages, anon2InclusionList, anon2ExclusionList,
     processingMode, onUploadProgress, uploadId} = {}) {

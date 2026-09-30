@@ -33,6 +33,12 @@ const fetchImpl = async (url, options) => {
 };
 const client = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
   authHeaders:async () => ({'X-Agilotext-Token':'USER_ONLY'}), fetchImpl});
+const previewAbort=new AbortController();
+await client.textPreview({processingMode:'ANONYMIZE',text:'Synthetic only'},previewAbort.signal);
+assert.equal(seen.at(-1).url,'https://staging.example/api/text/preview');
+assert.equal(seen.at(-1).options.method,'POST');
+assert.equal(seen.at(-1).options.signal,previewAbort.signal);
+assert.throws(()=>client.textPreview({processingMode:'PSEUDONYMIZE'}),/anonymize only/);
 const response = await client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'});
 assert.equal(await response.text(), 'file');
 await client.upload(new Blob(['synthetic']), {schemaVersion:1,selectedTypes:[]}, {
