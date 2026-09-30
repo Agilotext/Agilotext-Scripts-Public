@@ -37,14 +37,14 @@
   });
 
   // JSON Nico -> UI
-  const msToSec = ms => Math.max(0, Math.floor((+ms || 0) / 1000));
+  const msToSec = ms => Math.max(0, (+ms || 0) / 1000);
   const decodeNL = s => String(s || '')
     .replace(/\\n/g, '\n')
     .replace(/<br\s*\/?>/gi, '\n');
   function mapNicoJsonToSegments(j) {
     const arr = Array.isArray(j?.segments) ? j.segments : [];
     return arr.map((r, i) => ({
-      id: r.id || `s${i}`,
+      id: r.id != null ? String(r.id) : null,
       start: msToSec(r.milli_start),
       end: Number.isFinite(r.milli_end) ? msToSec(r.milli_end) : null,
       speaker: String(r.speaker || '').trim(),

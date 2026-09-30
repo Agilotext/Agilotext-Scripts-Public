@@ -77,3 +77,19 @@ test('real collective rename keeps the visible labels and model aligned', () => 
   assert.deepEqual(model.map(s => s.speaker), ['Intervenante C', 'Intervenante C', 'Intervenante B']);
   assert.deepEqual(rows.map(row => row.dataset.speaker), model.map(s => s.speaker));
 });
+
+
+test('real transcript loader preserves milliseconds and does not invent missing IDs', () => {
+  const source = fs.readFileSync(path.join(base, 'confidence-v1/Code-main-editor-IFRAME_V04-confidence.js'), 'utf8');
+  const body = extract(source, '  const msToSec =', '  function isVisible(');
+  const context = {};
+  vm.runInNewContext(`${body}\nthis.map = mapNicoJsonToSegments;`, context);
+  const rows = context.map({ segments: [
+    { id: 'original-17', milli_start: 125, milli_end: 64500, speaker: 'A', text: 'Texte' },
+    { milli_start: 65000, milli_end: 66000, speaker: 'B', text: 'Autre' }
+  ] });
+  assert.equal(rows[0].id, 'original-17');
+  assert.equal(rows[0].start, 0.125);
+  assert.equal(rows[0].end, 64.5);
+  assert.equal(rows[1].id, null);
+});
