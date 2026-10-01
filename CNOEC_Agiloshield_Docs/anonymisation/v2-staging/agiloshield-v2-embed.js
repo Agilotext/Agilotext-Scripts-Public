@@ -1465,7 +1465,8 @@ function renderIssues(entry){
   if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
   const sourcePages=(review.pages||[]).filter(page=>typeof page.text==='string'&&
-    typeof page.surfaceId==='string'&&page.native===true&&page.text.length<=2_000_000&&
+    typeof page.surfaceId==='string'&&(entry.format==='txt'||page.native===true)&&
+    page.text.length<=2_000_000&&
     (entry.format==='txt'||entry.format==='pdf'));
   if(editorCapabilities.addOccurrence&&review.reviewable&&sourcePages.length){
     const sourceRevision=entry.revision;
@@ -1510,9 +1511,11 @@ function renderIssues(entry){
     mask.disabled=true;
     source.addEventListener('mouseup',()=>{
       exact=exactSourceSelection(source,page.text);
-      mask.disabled=!exact||entry.commandBusy;
-      selectionInfo.textContent=exact?'Passage sélectionné : '+exact.text.slice(0,100):
-        'Sélectionnez du texte pour activer le masquage.';
+      mask.disabled=!exact||exact.text.length>32768||entry.commandBusy;
+      selectionInfo.textContent=exact?.text.length>32768?
+        'Sélection trop longue : choisissez au plus 32 768 caractères.':
+        exact?'Passage sélectionné : '+exact.text.slice(0,100):
+          'Sélectionnez du texte pour activer le masquage.';
     });
     source.addEventListener('keyup',()=>source.dispatchEvent(new Event('mouseup')));
   }
