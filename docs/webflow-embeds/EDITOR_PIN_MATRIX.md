@@ -60,3 +60,7 @@ uniquement `agilo:transcript-saved` pour animer le succès vérifié.
 
 Rollback du composant save : save `@d66ea186019d4a8599ff27c1bbe124ebafedfed4`
 et historique `@57101fff4aff111afcc98cae856fd9f6998fbbd9`.
+
+Recette staging du 01/10/2026 sur le job jetable `1000042442` : sauvegarde
+bouton et `Cmd/Ctrl+S` confirmées HTTP 200, relecture exacte de 481 segments,
+bouton réactivé et libellé `Revenir` actualisé dès le succès vérifié.
