@@ -44,3 +44,19 @@ Scrape : `scripts/dev/compare-editor-pins.sh` (branche `fix/transcript-history-c
 ### Lot C (multi-select + Revenir par onglet)
 
 Branche `fix/editor-multi-select-lotb`. SHA à coller après push (voir fin de fichier).
+
+### Sauvegarde vérifiée — staging 01/10/2026
+
+Branche `codex/editor-save-hardening-20261001`. Le composant `Code-save_transcript`
+Business + Pro et l’historique sont pinés ensemble :
+
+```html
+<script src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@d37e0297065464be1f82e0fd16897e8b457d953b/scripts/pages/editor/Code-save_transcript-CORRIGE-V2.js?v=d37e02970654"></script>
+<script defer src="https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@d37e0297065464be1f82e0fd16897e8b457d953b/scripts/pages/editor/agilo-transcript-history.js?v=d37e02970654"></script>
+```
+
+Le composant `Code-GSAP_Effect_V` ne doit plus créer de `saveHotkey`. Il écoute
+uniquement `agilo:transcript-saved` pour animer le succès vérifié.
+
+Rollback du composant save : save `@d66ea186019d4a8599ff27c1bbe124ebafedfed4`
+et historique `@57101fff4aff111afcc98cae856fd9f6998fbbd9`.
