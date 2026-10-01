@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
-  v2Capabilities, assertCreatedJob } from '../agiloshield-v2-client.js';
+  v2Capabilities, assertCreatedJob, assertPreviewHeaders, currentResultAvailable } from '../agiloshield-v2-client.js';
 
 assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines'],
   anon2InclusionList:['Jean Dupont','Cœur-de-l’Est']}),
@@ -16,13 +16,13 @@ assert.deepEqual(v2Capabilities({workerCodeSha:'worker-1',listDirectives:true,
   {workerMatches:false,lists:false,pseudonymize:false});
 assert.equal(v2Capabilities({workerCodeSha:'worker-1'},'worker-1').pseudonymize,false);
 assert.deepEqual(assertCreatedJob({jobId:'job-1',status:'PENDING',
-  protectionPolicy:{digest:'d1'},processingMode:'ANONYMIZE'},
-  {digest:'d1',mode:'ANONYMIZE'}).jobId,'job-1');
+  protectionPolicy:{digest:'d1'},listDigest:'list-current',processingMode:'ANONYMIZE'},
+  {digest:'d1',listDigest:'list-current',mode:'ANONYMIZE'}).jobId,'job-1');
 assert.deepEqual(freezeJobSelection({policy:{selectedTypes:[],digest:'empty',
   sensitiveKeepAcknowledged:true},mode:'ANONYMIZE'}).policy.selectedTypes,[]);
 assert.equal(assertCreatedJob({jobId:'empty-job',status:'PENDING',
-  protectionPolicy:{digest:'empty'},processingMode:'ANONYMIZE'},
-  {digest:'empty',mode:'ANONYMIZE'}).jobId,'empty-job');
+  protectionPolicy:{digest:'empty'},listDigest:'list-empty',processingMode:'ANONYMIZE'},
+  {digest:'empty',listDigest:'list-empty',mode:'ANONYMIZE'}).jobId,'empty-job');
 for (const invalid of [
   {jobId:'job-1',status:'PENDING',processingMode:'ANONYMIZE'},
   {jobId:'job-1',status:'PENDING',protectionPolicy:{digest:'d1'}},
@@ -38,14 +38,34 @@ assert.deepEqual(frozen,{digest:'first',selectedTypes:['PER'],mode:'ANONYMIZE',
 
 const seen = [];
 let artifactRevision='r2';
-const job = {status:'READY', assurance:'technical-ready', reviewRevision:'r2', protectionPolicy:{digest:'d1'}};
-const review = {status:'READY', assurance:'technical-ready', revision:'r2', protectionPolicy:{digest:'d1'}};
+const job = {status:'READY', workflowState:'RESULT', assurance:'technical-ready',
+  reviewRevision:'r2', protectionPolicy:{digest:'d1'}, listDigest:'list-current',processingMode:'ANONYMIZE'};
+const review = {status:'READY', workflowState:'RESULT', assurance:'technical-ready',
+  revision:'r2', protectionPolicy:{digest:'d1'}, listDigest:'list-current',processingMode:'ANONYMIZE'};
+assert.equal(currentResultAvailable(job,review),true);
+assert.equal(currentResultAvailable({...job,status:'FAILED'},review),false);
+assert.equal(currentResultAvailable({...job,status:'FAILED',resultAvailable:true},
+  {...review,status:'FAILED'}),true);
+assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',resultAvailable:true,
+  workflowState:'DIRTY'}, {...review,status:'REVIEW_REQUIRED'}),false);
+const previewHeaders=new Headers({
+  'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-List-Digest':'list-current',
+  'X-Agiloshield-Revision':'r2','X-Agiloshield-Status':'READY',
+  'X-Agiloshield-Processing-Mode':'ANONYMIZE',
+  'X-Agiloshield-Assurance':'review-preview'});
+const previewResponse={headers:previewHeaders};
+const previewExpected={kind:'anon',digest:'d1',listDigest:'list-current',
+  revision:'r2',status:'READY',mode:'ANONYMIZE'};
+assert.equal(assertPreviewHeaders(previewResponse,previewExpected),previewResponse);
+previewHeaders.delete('X-Agiloshield-List-Digest');
+assert.throws(()=>assertPreviewHeaders(previewResponse,previewExpected),/Aperçu non conforme/);
 const fetchImpl = async (url, options) => {
   seen.push({url, options});
   const path = new URL(url).pathname;
   if (path.endsWith('/review')) return new Response(JSON.stringify(review), {status:200});
   if (path.endsWith('/download')) return new Response('file', {status:200, headers:{
-    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-Revision':artifactRevision,
+    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-List-Digest':'list-current', 'X-Agiloshield-Revision':artifactRevision,
+    'X-Agiloshield-Processing-Mode':job.processingMode,
     'X-Agiloshield-Status':'READY', 'X-Agiloshield-Assurance':'technical-ready'}});
   if (path.endsWith('/pseudonym-key')) return new Response('SYNTHETIC_KEY', {status:200, headers:{
     'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-List-Digest':'list-current',
@@ -56,7 +76,8 @@ const fetchImpl = async (url, options) => {
 };
 const client = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
   authHeaders:async () => ({'X-Agilotext-Token':'USER_ONLY'}), fetchImpl});
-const response = await client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'});
+const response = await client.checkedArtifact(7, {expectedDigest:'d1', expectedListDigest:'list-current',
+  expectedRevision:'r2',expectedMode:'ANONYMIZE'});
 assert.equal(await response.text(), 'file');
 await client.upload(new Blob(['synthetic']), {schemaVersion:1,selectedTypes:[]}, {
   anon2InclusionList:['MOT A'],anon2ExclusionList:[]});
@@ -79,30 +100,30 @@ assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
   occurrenceId:'o1', sourceRevision:'s1', documentId:'doc', reason:'test'});
 assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');
-await client.addManualRegion(7, 'd1', {revision:'r2', page:1, rect:[5,6,15,16]});
-assert.equal(JSON.parse(seen.at(-1).options.body).op, 'ADD_MANUAL_REGION');
-assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, undefined);
-assert.deepEqual(JSON.parse(seen.at(-1).options.body).rect, [5,6,15,16]);
+assert.equal(typeof client.addManualRegion, 'undefined');
 job.reviewRevision = 'r3';
-await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1', expectedRevision:'r2'}), /Stale/);
-job.reviewRevision='r2';
-job.listDigest='list-current';review.listDigest='list-current';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
-  expectedListDigest:'list-older', expectedRevision:'r2'}), /Stale/);
+  expectedListDigest:'list-current', expectedRevision:'r2',expectedMode:'ANONYMIZE'}), /Stale/);
+job.reviewRevision='r2';
+await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
+  expectedListDigest:'list-older', expectedRevision:'r2',expectedMode:'ANONYMIZE'}), /Stale/);
 job.processingMode='PSEUDONYMIZE';
+review.processingMode='PSEUDONYMIZE';
+await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
+  expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'ANONYMIZE'}),/Stale/);
 assert.equal(await (await client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
-  expectedListDigest:'list-current',expectedRevision:'r2'})).text(),'SYNTHETIC_KEY');
+  expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'PSEUDONYMIZE'})).text(),'SYNTHETIC_KEY');
 job.status='REVIEW_REQUIRED';
 await assert.rejects(() => client.checkedArtifact(7,{kind:'key',expectedDigest:'d1',
-  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale/);
+  expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'PSEUDONYMIZE'}),/Stale/);
 job.status='READY';
 job.assurance='non-verified';
 await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
-  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale/);
+  expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'PSEUDONYMIZE'}),/Stale/);
 job.assurance='technical-ready';
 artifactRevision='r1';
 await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
-  expectedListDigest:'list-current',expectedRevision:'r2'}),/Stale artifact/);
+  expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'PSEUDONYMIZE'}),/Stale artifact/);
 artifactRevision='r2';
 assert.ok(seen.every(call => !call.url.includes(':8091')));
 const xhrCalls=[];

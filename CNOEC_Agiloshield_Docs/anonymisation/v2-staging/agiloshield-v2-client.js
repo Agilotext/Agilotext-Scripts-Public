@@ -34,14 +34,37 @@ export function v2Capabilities(capabilities, expectedWorkerCodeSha) {
   };
 }
 export function assertCreatedJob(created, {digest, listDigest, mode}) {
-  if (!created?.jobId || created?.protectionPolicy?.digest !== digest ||
+  if (!digest || !listDigest || !created?.jobId || created?.protectionPolicy?.digest !== digest ||
       created?.processingMode !== mode ||
-      (listDigest && created?.listDigest !== listDigest) ||
+      created?.listDigest !== listDigest ||
       !['PENDING', 'PROCESSING', 'READY', 'REVIEW_REQUIRED', 'FAILED']
         .includes(created.anonStatus || created.status)) {
     throw new Error('Réponse de création incohérente avec la sélection du document');
   }
   return created;
+}
+export function currentResultAvailable(job, review) {
+  const status = job?.anonStatus || job?.status;
+  if (!['READY', 'REVIEW_REQUIRED', 'FAILED'].includes(status) ||
+      job?.workflowState !== 'RESULT' || review?.workflowState !== 'RESULT' ||
+      review?.status !== status || !job?.reviewRevision ||
+      String(review?.revision) !== String(job.reviewRevision)) return false;
+  // A non-verified job may have no current anon/QA artifact. Java must confirm
+  // that both exist before the browser offers their download.
+  return status === 'READY' || job?.resultAvailable === true;
+}
+export function assertPreviewHeaders(response, {kind, digest, listDigest, revision, status, mode}) {
+  const headers = response?.headers;
+  const expectedAssurance = kind === 'origin' ? 'original-unprotected' : 'review-preview';
+  if (!headers || !digest || !listDigest || !revision || !status || !mode ||
+      headers.get('X-Agiloshield-Policy-Digest') !== digest ||
+      headers.get('X-Agiloshield-List-Digest') !== listDigest ||
+      headers.get('X-Agiloshield-Revision') !== String(revision) ||
+      headers.get('X-Agiloshield-Status') !== status ||
+      headers.get('X-Agiloshield-Processing-Mode') !== mode ||
+      headers.get('X-Agiloshield-Assurance') !== expectedAssurance)
+    throw new Error('Aperçu non conforme au job courant');
+  return response;
 }
 export class AgiloShieldV2Client {
   constructor({baseUrl, authHeaders, credentials = 'omit', fetchImpl = (...args) => globalThis.fetch(...args),
@@ -159,12 +182,6 @@ export class AgiloShieldV2Client {
       commandId:crypto.randomUUID(), page, rect, reason, sourceRevision, documentId,
       ...(occurrenceId ? {occurrenceId} : {maskOccurrenceId})});
   }
-  addManualRegion(id, digest, {revision, page, rect, reason = 'ZONE_MASQUEE_MANUELLEMENT'}) {
-    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite) ||
-        rect[0] >= rect[2] || rect[1] >= rect[3]) throw new Error('Invalid PDF rectangle');
-    return this.command(id, digest, {op:'ADD_MANUAL_REGION', revision,
-      commandId:crypto.randomUUID(), page, rect, reason});
-  }
   execute(id, digest, revision) {
     return this.json(this.path(id, '/review/execute'), {method:'POST', digest,
       headers:{'Content-Type':'application/json'}, body:JSON.stringify({revision})});
@@ -186,28 +203,33 @@ export class AgiloShieldV2Client {
   certifiedDownload(id) { return this.request(this.path(id, '/download')); }
   pseudonymKey(id) { return this.request(this.path(id, '/pseudonym-key')); }
   async checkedArtifact(id, {certified = true, kind = 'document', expectedDigest,
-    expectedListDigest, expectedRevision} = {}) {
+    expectedListDigest, expectedRevision, expectedMode} = {}) {
+    if (!expectedDigest || !expectedListDigest || !expectedRevision || !expectedMode)
+      throw new Error('Current job fingerprints required');
     const [job, review] = await Promise.all([this.status(id), this.review(id)]);
     const status = job.anonStatus || job.status;
     const assurance = certified ? 'technical-ready' : 'non-verified';
     if (job.protectionPolicy?.digest !== expectedDigest ||
         review.protectionPolicy?.digest !== expectedDigest ||
-        (expectedListDigest && (job.listDigest !== expectedListDigest ||
-          review.listDigest !== expectedListDigest)) ||
+        job.listDigest !== expectedListDigest || review.listDigest !== expectedListDigest ||
+        job.processingMode !== expectedMode || review.processingMode !== expectedMode ||
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
         review.status !== status ||
+        job.workflowState !== 'RESULT' || review.workflowState !== 'RESULT' ||
         job.assurance !== assurance || review.assurance !== assurance ||
         (certified && status !== 'READY') ||
-        (!certified && !['REVIEW_REQUIRED', 'FAILED'].includes(status))) {
+        (!certified && (!['REVIEW_REQUIRED', 'FAILED'].includes(status) ||
+          job.resultAvailable !== true))) {
       throw new Error('Stale job state');
     }
-    if (kind === 'key' && job.processingMode !== 'PSEUDONYMIZE')
+    if (kind === 'key' && (!certified || expectedMode !== 'PSEUDONYMIZE'))
       throw new Error('Pseudonym key unavailable');
     const response = kind === 'key' ? await this.pseudonymKey(id) : certified ? await this.certifiedDownload(id) :
       await this.result(id, {confirmNonVerified:status === 'FAILED' || status === 'REVIEW_REQUIRED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
-        (expectedListDigest && response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest) ||
+        response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest ||
+        response.headers.get('X-Agiloshield-Processing-Mode') !== expectedMode ||
         response.headers.get('X-Agiloshield-Status') !== status ||
         response.headers.get('X-Agiloshield-Assurance') !== assurance) {
       throw new Error('Stale artifact');

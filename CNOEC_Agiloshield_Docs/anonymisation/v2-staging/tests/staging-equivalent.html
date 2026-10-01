@@ -13,6 +13,7 @@ let preference={schemaVersion:1,selectedTypes:['ADR','EML','IBA','IDN','PER','TE
 try{const saved=JSON.parse(sessionStorage.getItem('asv2-mock-preference')||'null');
  if(saved&&Array.isArray(saved.selectedTypes))preference=saved;}catch(_){}
 const jobs=new Map();let nextId=1;
+const emptyListDigest='7de7181979703742416ddb6b413a2b8e987199bf73a1d765549fbcff1e068187';
 let failAuthOnce=new URLSearchParams(location.search).has('authFirst');
 let accountRef='synthetic-account-1';
 try{
@@ -35,7 +36,7 @@ if(params.has('compareFixtures')){
   if(jobs.has(fixture.id))continue;
   jobs.set(fixture.id,{id:fixture.id,file:{name:fixture.name,type:fixture.type},
    policy:{...preference,digest:preference.digest},status:'READY',target:'READY',
-   listDigest:null,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
+   listDigest:emptyListDigest,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
    sourceText:fixture.text,createdAt:'2026-09-30T10:00:00Z',sizeBytes:fixture.text.length});
  }
  nextId=Math.max(nextId,9003);
@@ -46,7 +47,7 @@ if(params.has('denseReview')&&!jobs.has('synthetic-job-9010')){
  jobs.set('synthetic-job-9010',{id:'synthetic-job-9010',
   file:{name:'370-passages-synthetiques.txt',type:'text/plain'},
   policy:{...preference,digest:preference.digest},status:'REVIEW_REQUIRED',target:'REVIEW_REQUIRED',
-  listDigest:null,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
+  listDigest:emptyListDigest,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
   sourceText:text,createdAt:'2026-09-30T10:00:00Z',sizeBytes:text.length});
  nextId=Math.max(nextId,9011);
 }
@@ -54,9 +55,17 @@ if(params.has('manualFixture')&&!jobs.has('synthetic-job-9020')){
  jobs.set('synthetic-job-9020',{id:'synthetic-job-9020',
   file:{name:'region-liee-synthetique.pdf',type:'application/pdf'},
   policy:{...preference,digest:preference.digest},status:'REVIEW_REQUIRED',target:'REVIEW_REQUIRED',
-  listDigest:null,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:true,
+  listDigest:emptyListDigest,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:true,
   sourceText:'',createdAt:'2026-09-30T10:00:00Z',sizeBytes:1536});
  nextId=Math.max(nextId,9021);
+}
+if(params.has('failedFixture')&&!jobs.has('synthetic-job-9030')){
+ jobs.set('synthetic-job-9030',{id:'synthetic-job-9030',
+  file:{name:'echec-synthetique.txt',type:'text/plain'},
+  policy:{...preference,digest:preference.digest},status:'FAILED',target:'FAILED',
+  listDigest:emptyListDigest,mode:'ANONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
+  sourceText:'Document source synthétique',createdAt:'2026-09-30T10:00:00Z',sizeBytes:26});
+ nextId=Math.max(nextId,9031);
 }
 const listsEnabled=params.has('lists');
 const pseudoEnabled=params.has('pseudo');
@@ -84,6 +93,9 @@ function json(v,status=200){return new Response(JSON.stringify(v),{status,header
 function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.status,status:job.status,
  reviewRevision:job.rev,protectionPolicy:job.policy,listDigest:job.listDigest,
  processingMode:job.mode,createdAt:job.createdAt,sizeBytes:job.sizeBytes,
+ workflowState:['READY','REVIEW_REQUIRED','FAILED'].includes(job.status)?'RESULT':'PROCESSING',
+ resultAvailable:['READY','REVIEW_REQUIRED'].includes(job.status),
+ assurance:job.status==='READY'?'technical-ready':'non-verified',
  qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
 function review(job){
  const source=job.sourceText||'';
@@ -93,6 +105,8 @@ function review(job){
   positions.slice(0,count).map((start,index)=>({id:'synthetic-person-'+(index+1),surfaceId:'text:0',start,end:start+7,
     text:'Florian',page:null,category:'PER',action:'REVIEW',fragments:[]})):null;
  return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED'||job.status==='READY',
+ workflowState:['READY','REVIEW_REQUIRED','FAILED'].includes(job.status)?'RESULT':'PROCESSING',
+ assurance:job.status==='READY'?'technical-ready':'non-verified',
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  listDigest:job.listDigest,processingMode:job.mode,
  occurrences:textOccurrences|| (job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
@@ -174,8 +188,9 @@ window.fetch=async(url,options={})=>{
   return new Response(await response.arrayBuffer(),{headers:{'Content-Type':response.type||'application/octet-stream',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Policy-Digest':job.policy.digest,
    ...(job.listDigest?{'X-Agiloshield-List-Digest':job.listDigest}:{}),
-   'X-Agiloshield-Status':job.status,
-   'X-Agiloshield-Assurance':job.status==='READY'?'technical-ready':'non-verified'}});
+   'X-Agiloshield-Status':job.status,'X-Agiloshield-Processing-Mode':job.mode,
+   'X-Agiloshield-Assurance':new URLSearchParams(tail.split('?')[1]).get('kind')==='anon'?
+    'review-preview':'original-unprotected'}});
  }
  if(tail==='/review/commands'){
   const payload=JSON.parse(options.body);
