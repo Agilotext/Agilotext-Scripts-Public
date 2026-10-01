@@ -1,17 +1,23 @@
 <!doctype html><meta charset="utf-8"><title>Editor save speaker fixture</title>
-<div id="editorRoot" data-username="test@example.invalid" data-token="fixture-token" data-edition="ent"></div>
+<div id="editorRoot" data-username="test@example.invalid" data-token="fixture-token" data-edition="ent" data-job-id="123"></div>
 <div role="tablist"><button role="tab" id="tab-transcript" aria-selected="true">Transcription</button></div>
 <button data-action="save-transcript">Sauvegarder</button>
 <div id="transcriptEditor" data-mode="structured"></div>
 <pre id="result">pending</pre>
 <script>
 window.AGILO_EDITION='ent';
-const sends=[];
+const sends=[];let serverTranscript=null;
 window.fetch=async (url, options={})=>{
-  if (!String(url).includes('/updateTranscriptFile')) throw new Error('unexpected request');
-  const body=new URLSearchParams(options.body);
-  sends.push(JSON.parse(body.get('transcriptContent')));
-  return {ok:true,status:200,text:async()=>JSON.stringify({status:'OK'})};
+  if (String(url).includes('/updateTranscriptFile')) {
+    const body=new URLSearchParams(options.body);
+    serverTranscript=JSON.parse(body.get('transcriptContent'));
+    sends.push(serverTranscript);
+    return {ok:true,status:200,text:async()=>JSON.stringify({status:'OK',jobId:serverTranscript.job_meta.jobId})};
+  }
+  if (String(url).includes('/receiveTextJson')) {
+    return {ok:true,status:200,text:async()=>JSON.stringify(serverTranscript)};
+  }
+  throw new Error('unexpected request');
 };
 window.toast=()=>{};
 </script>
@@ -36,7 +42,7 @@ async function run(){
   root.querySelectorAll('.ag-seg').forEach((el,i)=>{if(i<7)el.remove()});
   const first=await window.agiloSaveNow();
   const a=sends.at(-1)?.segments||[];
-  if (!first.ok||a.length!==3||a[0].id!=='s7'||a[0].speaker!=='Intervenante A'||a[0].milli_start!==40000||window._segments.length!==3) throw Error('deletion/model mismatch');
+  if (!first.ok||a.length!==3||a[0].id!=='s7'||a[0].speaker!=='Intervenante A'||a[0].milli_start!==40000||window._segments.length!==3) throw Error('deletion/model mismatch '+JSON.stringify({first,a,model:window._segments}));
   const firstEl=root.querySelector('.ag-seg');firstEl.dataset.speaker='Intervenante A corrigée';firstEl.querySelector('.speaker').textContent='Intervenante A corrigée';
   const second=await window.agiloSaveNow();
   if(!second.ok||sends.at(-1).segments[0].speaker!=='Intervenante A corrigée')throw Error('rename not saved');
@@ -52,7 +58,11 @@ async function run(){
   window._segments=[{id:'plain-1',start:0.125,end:64.5,speaker:'',text:'ancien',confidence:'keep'}];
   const fifth=await window.agiloSaveNow();
   if(!fifth.ok||sends.at(-1).segments[0].milli_start!==125||sends.at(-1).segments[0].milli_end!==64500||window._segments[0].confidence!=='keep')throw Error('plain mode or precise timestamps');
-  output.textContent=JSON.stringify({ok:true,saves:sends.length,ids:sends.at(-2).segments.map(s=>s.id),plainId:sends.at(-1).segments[0].id,blockedReason:fourth.error||fourth.reason});
+  const concurrentFirstPromise=window.agiloSaveNow();
+  const concurrentSecond=await window.agiloSaveNow();
+  const concurrentFirst=await concurrentFirstPromise;
+  if(!concurrentFirst.ok||concurrentSecond.ok||concurrentSecond.reason!=='already_saving')throw Error('concurrent save was not blocked');
+  output.textContent=JSON.stringify({ok:true,saves:sends.length,ids:sends.at(-3).segments.map(s=>s.id),plainId:sends.at(-1).segments[0].id,blockedReason:fourth.error||fourth.reason,concurrentReason:concurrentSecond.reason});
 }
 document.addEventListener('DOMContentLoaded',()=>run().catch(e=>output.textContent=JSON.stringify({ok:false,error:e.message})),{once:true});
 </script>
