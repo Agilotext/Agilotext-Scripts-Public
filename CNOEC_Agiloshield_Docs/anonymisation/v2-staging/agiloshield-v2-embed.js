@@ -3,6 +3,7 @@ import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
   assertPreviewHeaders } from './agiloshield-v2-client.js';
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
+import { originalPdfLocation } from './agiloshield-v2-location.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -1354,7 +1355,7 @@ async function loadCurrent(entry){
   const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
-    entry.focusId=null;entry.target=null;entry.previewKind='anon';entry.page=1;
+    entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;entry.previewKind='anon';entry.page=1;
     entry.report=null;entry.reportError=null;
   }
   entry.review=review;entry.regions=regions;
@@ -1400,7 +1401,8 @@ function setMobileTab(value){
 }
 function openDrawer(entry,{showOriginal=false}={}){
   if(!entry||!currentAccountEntry(entry))return;state.active=entry.key;
-  entry.previewKind=showOriginal?'origin':'anon';entry.focusId=null;entry.target=null;
+  entry.previewKind=showOriginal?'origin':'anon';entry.focusId=null;
+  entry.pageOnlyLocation=null;entry.target=null;
   try{const key=accountStorageKey(':drawer');if(key)sessionStorage.setItem(key,entry.key);}catch(_){}
   if(!state.drawerOpen){state.lastFocus=document.activeElement;drawer.hidden=false;state.drawerOpen=true;
     requestAnimationFrame(()=>drawer.classList.add('is-open'));document.body.classList.add('asv2-drawer-open');close.focus();}
@@ -1418,7 +1420,7 @@ function closeDrawer(){
 drawer.addEventListener('keydown',event=>{
   if(event.key==='Escape'){event.preventDefault();closeDrawer();return;}
   if(event.key!=='Tab')return;
-  const focusables=[...panel.querySelectorAll('button:not([disabled]),[tabindex]:not([tabindex="-1"])')]
+  const focusables=[...panel.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,a[href],[tabindex]:not([tabindex="-1"])')]
     .filter(item=>!item.hidden&&item.getClientRects().length);
   if(!focusables.length)return;
   if(event.shiftKey&&document.activeElement===focusables[0]){event.preventDefault();focusables.at(-1).focus();}
@@ -1427,9 +1429,10 @@ drawer.addEventListener('keydown',event=>{
 function showError(error){drawerMessage(errorText(error),'is-error');}
 function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
+  const pendingCount=(entry.review?.occurrences||[]).filter(row=>
+    row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
   title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
-    entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',
-    entry.revision?'Révision '+entry.revision:null].filter(Boolean).join(' · ');
+    entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser'].filter(Boolean).join(' · ');
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
     buttonWithIcon(entry.status==='READY'?'Télécharger le résultat':'Télécharger le résultat non vérifié',
@@ -1448,7 +1451,9 @@ function renderDrawer(entry){
     UPLOADING:'Envoi du document en cours…',PENDING:copy.status.PENDING,
     PROCESSING:copy.status.PROCESSING,
     READY:'Prêt selon les réglages choisis pour ce document.',
-    REVIEW_REQUIRED:'À vérifier : des données peuvent rester visibles.',
+    REVIEW_REQUIRED:'À vérifier'+(pendingCount?' · '+pendingCount+
+      ' passage'+(pendingCount>1?'s':'')+' à confirmer':'')+
+      '. Des données peuvent rester visibles.',
     FAILED:'Traitement impossible. Aucun résultat protégé n’est certifié.',
     TIMED_OUT:'Le suivi est interrompu. Le traitement peut encore être en cours.'
   })[entry.status]||safeStatus(entry.status),
@@ -1457,10 +1462,14 @@ function renderDrawer(entry){
   renderIssues(entry);renderFooter(entry);
 }
 function renderIssues(entry){
-  clear(issuePane);el('h3','Passages à vérifier',null,issuePane);
-  el('p','Chaque correction concerne uniquement le passage choisi. Le fichier est vérifié de nouveau ensuite.','asv2-muted',issuePane);
+  clear(issuePane);el('h3','Vérifier le document',null,issuePane);
+  el('p','Conserver laisse ce passage visible. Masquer le protège. Chaque décision vise un seul passage.',
+    'asv2-muted',issuePane);
+  const support=el('details',null,'asv2-review-support',issuePane);
+  el('summary','Réglages et détails techniques',null,support);
   if(Array.isArray(entry.selectedTypes))el('p','Données à masquer : '+policySummary(entry.selectedTypes),
-    'asv2-policy-summary',issuePane);
+    'asv2-policy-summary',support);
+  if(entry.revision)el('p','Révision : '+entry.revision,'asv2-review-revision',support);
   const review=entry.review;
   if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
@@ -1468,9 +1477,11 @@ function renderIssues(entry){
     typeof page.surfaceId==='string'&&(entry.format==='txt'||page.native===true)&&
     page.text.length<=2_000_000&&
     (entry.format==='txt'||entry.format==='pdf'));
+  let addOccurrenceTool=null,approvalBox=null;
   if(editorCapabilities.addOccurrence&&review.reviewable&&sourcePages.length){
     const sourceRevision=entry.revision;
     const tool=el('details',null,'asv2-add-occurrence',issuePane);
+    addOccurrenceTool=tool;
     el('summary','Masquer un passage oublié',null,tool);
     el('p','Sélectionnez le passage dans le texte de l’original ci-dessous. Une nouvelle révision sera créée.',
       'asv2-muted',tool);
@@ -1520,7 +1531,7 @@ function renderIssues(entry){
     source.addEventListener('keyup',()=>source.dispatchEvent(new Event('mouseup')));
   }
   if(entry.status==='REVIEW_REQUIRED'&&editorCapabilities.humanVerification){
-    const approvalBox=el('details',null,'asv2-human-box',issuePane);
+    approvalBox=el('details',null,'asv2-human-box',issuePane);
     if(review.humanVerifiedDeliverable===true&&review.humanVerification){
       approvalBox.open=true;
       el('summary','Attestation humaine',null,approvalBox);
@@ -1560,7 +1571,7 @@ function renderIssues(entry){
       }
       approvalBox.appendChild(approve);
     }else if(Array.isArray(review.humanVerificationBlockers)&&review.humanVerificationBlockers.length){
-      el('summary','Validation humaine indisponible',null,approvalBox);
+      el('summary','Pourquoi la validation humaine est indisponible ?',null,approvalBox);
       el('p','La validation humaine n’est pas disponible : '+
         review.humanVerificationBlockers.length+' condition(s) restent à résoudre.',
         'asv2-muted',approvalBox);
@@ -1584,6 +1595,10 @@ function renderIssues(entry){
     allRows.length?allRows.length+' passage(s) repéré(s)':null
   ].filter(Boolean).join(' · ');
   if(countersText)el('div',countersText,'asv2-issues-counters',controls);
+  if(entry.format==='pdf'&&allRows.some(row=>row.page&&
+      originalPdfLocation(entry,row).kind!=='exact'))
+    el('p','Pour certains passages, seule la page est connue : elle peut être ouverte sans surlignage approximatif.',
+      'asv2-location-help',controls);
 
   const searchInput=el('input',null,'asv2-issues-search',controls);
   searchInput.type='search';
@@ -1664,11 +1679,37 @@ function renderIssues(entry){
         el('small',({MASK:'À masquer',KEEP:'À conserver',REVIEW:'À vérifier'})[
           current.action||current.privacyAction]||'À vérifier',null,detail);
         const actions=el('div',null,'asv2-issue-actions',detail);
-        const canLocate=(entry.format==='pdf'&&current.page&&Array.isArray(current.fragments)&&current.fragments.length)||(['txt','csv'].includes(entry.format)&&
-          Number.isInteger(current.start)&&Number.isInteger(current.end)&&current.surfaceId);
-        if(canLocate)iconButton('eye','Voir ce passage dans l’original — données en clair',
-          'asv2-secondary asv2-locate-action',actions,()=>focusOccurrence(entry,current));
-        else el('small','Localisation exacte indisponible pour cet aperçu.','asv2-muted',detail);
+        const pdfLocation=originalPdfLocation(entry,current);
+        const textSource=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
+        const textExact=['txt','csv'].includes(entry.format)&&typeof textSource==='string'&&
+          Number.isInteger(current.start)&&Number.isInteger(current.end)&&
+          current.start>=0&&current.end>current.start&&
+          textSource.slice(codePointOffset(textSource,current.start),
+            codePointOffset(textSource,current.end))===(current.text||current.surface);
+        if(pdfLocation.kind==='exact'||textExact){
+          const locate=buttonWithIcon('Voir le passage','eye',
+            'asv2-secondary asv2-locate-action',actions,()=>focusOccurrence(entry,current));
+          locate.title='Voir ce passage surligné dans l’original · données en clair';
+          locate.setAttribute('aria-label',locate.title);
+        }else if(pdfLocation.kind==='page'){
+          const locate=buttonWithIcon('Voir la page '+pdfLocation.page,'eye',
+            'asv2-secondary asv2-locate-action',actions,
+            ()=>focusOccurrence(entry,current,{pageOnly:true}));
+          locate.title='Ouvrir la page '+pdfLocation.page+' de l’original · position exacte inconnue';
+          locate.setAttribute('aria-label',locate.title);
+        }else if(entry.format==='pdf'){
+          const locate=buttonWithIcon('Ouvrir l’original','eye',
+            'asv2-secondary asv2-locate-action',actions,
+            ()=>focusOccurrence(entry,current,{pageOnly:true}));
+          locate.title='Ouvrir l’original · aucune page ni position exacte fournie pour ce passage';
+          locate.setAttribute('aria-label',locate.title);
+        }else{
+          const locate=buttonWithIcon('Ouvrir l’original','eye',
+            'asv2-secondary asv2-locate-action',actions,
+            ()=>focusOccurrence(entry,current,{pageOnly:true}));
+          locate.title='Ouvrir l’original · ce passage ne peut pas être surligné avec certitude';
+          locate.setAttribute('aria-label',locate.title);
+        }
         for(const action of ['KEEP','MASK']){
           const control=action==='MASK'?
             buttonWithIcon('Masquer','eye-slash','asv2-secondary',actions,
@@ -1700,6 +1741,7 @@ function renderIssues(entry){
           ' · page '+target.page,null,card);
         const control=buttonWithIcon('Placer une zone de masquage','select-area','asv2-secondary',card,()=>{
           entry.target=target;entry.page=Number(target.page);entry.previewKind='origin';
+          entry.pageOnlyLocation=null;
           setMobileTab('doc');renderPreview(entry).catch(showError);
           drawerMessage('Tracez la zone correspondant uniquement à ce passage.','is-warning');
         });
@@ -1806,6 +1848,8 @@ function renderIssues(entry){
     });
   }
   renderIssuesContent();
+  if(addOccurrenceTool)issuePane.appendChild(addOccurrenceTool);
+  if(approvalBox)issuePane.appendChild(approvalBox);
 }
 function renderFooter(entry){
   clear(drawerFooter);
@@ -1827,7 +1871,8 @@ async function decide(entry,occurrenceId,action){
 }
 async function apply(entry,revision){
   entry.status='PROCESSING';entry.hasCurrentResult=false;
-  entry.focusId=null;entry.target=null;entry.report=null;entry.review=null;entry.regions=null;
+  entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;
+  entry.report=null;entry.review=null;entry.regions=null;
   state.previewSerial++;state.previewCleanup?.();clear(viewerBody);
   renderDrawer(entry);renderQueue();
   try{
@@ -1838,9 +1883,12 @@ async function apply(entry,revision){
     throw error;
   }
 }
-function focusOccurrence(entry,row){
-  if(entry.format==='pdf'&&Number.isInteger(Number(row.page)))entry.page=Number(row.page);
-  entry.focusId=row.id;entry.previewKind='origin';
+function focusOccurrence(entry,row,{pageOnly=false}={}){
+  const location=originalPdfLocation(entry,row);
+  if(entry.format==='pdf'&&location.page)entry.page=location.page;
+  entry.focusId=pageOnly?null:row.id;
+  entry.pageOnlyLocation=pageOnly?(location.page?'page':'unknown'):null;
+  entry.previewKind='origin';
   setMobileTab('doc');renderPreview(entry).catch(showError);
 }
 function pageGeometry(entry,pageNumber,base){
@@ -1855,11 +1903,10 @@ function strictRegions(entry,base){
   // The review ledger binds these fragments to the exact occurrence and current revision.
   // regions.json supplies only the original page geometry; it has no revision field.
   const row=entry.review?.occurrences?.find(item=>String(item.id)===String(entry.focusId));
+  const location=originalPdfLocation(entry,row);
   if(!row||String(entry.review.revision)!==String(entry.revision)||
-    Number(row.page)!==entry.page||!pageGeometry(entry,entry.page,base))return [];
-  return (row.fragments||[]).filter(rect=>Array.isArray(rect)&&rect.length===4&&
-    rect.every(Number.isFinite)&&rect[0]>=0&&rect[1]>=0&&
-    rect[0]<rect[2]&&rect[1]<rect[3]&&rect[2]<=base.width&&rect[3]<=base.height);
+    location.page!==entry.page||!pageGeometry(entry,entry.page,base))return [];
+  return location.fragments;
 }
 async function previewBytes(entry,kind){
   if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
@@ -1917,7 +1964,7 @@ async function renderPreview(entry){
       'À vérifier · des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
   // Downloads live beside the file name so they remain visible above the document.
-  const loading=el('p','Chargement de l’aperçu…','asv2-loading',viewerBody);
+  const loading=el('p','Préparation de l’aperçu…','asv2-loading',viewerBody);
   try{
     if((kind==='anon'||kind==='compare')&&!canPreviewResult(entry)&&
         !['xlsx','pptx'].includes(entry.format)){
@@ -1958,6 +2005,9 @@ async function renderPreview(entry){
     const source=await previewBytes(entry,kind);
     if(serial!==state.previewSerial||state.active!==entry.key)return;
     clear(viewerBody);
+    if(kind==='origin'&&entry.pageOnlyLocation&&entry.format!=='pdf')
+      el('p','Ce passage ne peut pas être situé avec certitude dans cet aperçu. L’original est ouvert sans surlignage.',
+        'asv2-geometry-note',viewerBody);
     if(source.format==='pdf')await renderPdf(entry,source.bytes,kind,serial);
     else if(source.format==='docx'){
       el('p','Cet aperçu Word est indicatif : sa mise en page peut différer du fichier téléchargé.',
@@ -2088,14 +2138,23 @@ async function renderPdf(entry,bytes,kind,serial){
       'Obligation ciblée : tracez uniquement la région correspondant au passage sélectionné.':'';
     toolInstruction.hidden=!toolInstruction.textContent;
   }
-  if(kind==='origin'&&canMask){
-    buttonWithIcon('Zone de masquage active · Annuler','select-area',
-      'asv2-secondary asv2-manual-mask-btn is-active',nav,()=>{
+  if(kind==='origin'&&entry.status==='REVIEW_REQUIRED'&&
+      (entry.target||entry.review?.unresolvedMasks?.length)){
+    buttonWithIcon(entry.target?'Zone de masquage active · Annuler':'Placer une zone de masquage',
+      'select-area','asv2-secondary asv2-manual-mask-btn'+(entry.target?' is-active':''),nav,()=>{
+        if(!entry.target){setMobileTab('issues');
+          drawerMessage('Choisissez d’abord une obligation dans « Vérifier le document ».','is-warning');
+          return;}
         entry.target=null;drawerMessage(null);updateToolInstruction();draw().catch(showError);
       });
   }
   updateToolInstruction();
   const pageBox=el('div',null,'asv2-page-scroll',viewerBody);
+  if(kind==='origin'&&entry.pageOnlyLocation)
+    el('p',entry.pageOnlyLocation==='page'?
+      'Page connue, emplacement exact non fourni : aucun surlignage approximatif.':
+      'La page et la position exacte de ce passage ne sont pas fournies. L’original est ouvert sans surlignage.',
+      'asv2-geometry-note',viewerBody);
   async function draw(){
     if(serial!==state.previewSerial)return;
     clear(pageBox);pageLabel.textContent='Page '+entry.page+' / '+pdf.numPages;
