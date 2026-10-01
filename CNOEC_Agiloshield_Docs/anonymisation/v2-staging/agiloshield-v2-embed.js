@@ -1482,6 +1482,7 @@ function renderIssues(entry){
     const sourceRevision=entry.revision;
     const tool=el('details',null,'asv2-add-occurrence',issuePane);
     addOccurrenceTool=tool;
+    tool.dataset.reviewTool='add-mask';
     el('summary','Masquer un passage oublié',null,tool);
     el('p','Sélectionnez le passage dans le texte de l’original ci-dessous. Une nouvelle révision sera créée.',
       'asv2-muted',tool);
@@ -1532,6 +1533,7 @@ function renderIssues(entry){
   }
   if(entry.status==='REVIEW_REQUIRED'&&editorCapabilities.humanVerification){
     approvalBox=el('details',null,'asv2-human-box',issuePane);
+    approvalBox.dataset.reviewTool='human-approval';
     if(review.humanVerifiedDeliverable===true&&review.humanVerification){
       approvalBox.open=true;
       el('summary','Attestation humaine',null,approvalBox);
@@ -1543,42 +1545,20 @@ function renderIssues(entry){
       buttonWithIcon('Télécharger le document vérifié par une personne','shield-check',
         'asv2-secondary',approvalBox,()=>downloadHumanVerified(entry).catch(showError));
     }else if(review.canApproveHumanVerification===true){
-      el('summary','J’ai vérifié ce document',null,approvalBox);
-      el('p','Cochez chaque contrôle après l’avoir réellement effectué sur la version finale.',
+      el('summary','Valider ma vérification',null,approvalBox);
+      el('p','Confirmez en une seule étape que vous avez contrôlé les données sensibles, les zones visuelles et toutes les pages.',
         'asv2-muted',approvalBox);
-      const checkLabels=[['names','Noms et personnes'],['addresses','Adresses'],
-        ['phones','Téléphones'],['identifiers','Identifiants'],
-        ['logos_images','Logos et images'],['visual_regions','Zones visuelles'],
-        ['original_vs_final_all_pages','Original et résultat, toutes les pages']];
-      const checks={};
       const approve=buttonWithIcon('J’ai vérifié ce document','shield-check',
-        'asv2-primary asv2-human-approval',approvalBox,async()=>{
-          if(approve.disabled)return;
-          approve.disabled=true;
-          try{await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks});
-            await loadCurrent(entry);drawerMessage('Votre vérification a été enregistrée.');}
-          catch(error){if(error?.status===409)await loadCurrent(entry).catch(()=>{});
-            showError(error);approve.disabled=false;}
-        });
-      approve.disabled=true;
-      for(const [name,label] of checkLabels){
-        const line=el('label',null,'asv2-human-check',approvalBox);
-        const input=el('input',null,null,line);input.type='checkbox';
-        checks[name]=false;
-        input.addEventListener('change',()=>{checks[name]=input.checked;
-          approve.disabled=!Object.values(checks).every(Boolean);});
-        el('span',label,null,line);
-      }
-      approvalBox.appendChild(approve);
+        'asv2-primary asv2-human-approval',approvalBox,
+        ()=>approveHumanReview(entry,approve));
     }else if(Array.isArray(review.humanVerificationBlockers)&&review.humanVerificationBlockers.length){
-      el('summary','Pourquoi la validation humaine est indisponible ?',null,approvalBox);
-      el('p','La validation humaine n’est pas disponible : '+
-        review.humanVerificationBlockers.length+' condition(s) restent à résoudre.',
+      el('summary','Valider ma vérification',null,approvalBox);
+      const remaining=(review.occurrences||[]).filter(row=>
+        row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
+      el('p',remaining?
+        'Confirmez encore '+remaining+' passage'+(remaining>1?'s':'')+' ci-dessus, puis validez le document.':
+        'Actualisez la revue pour valider ce document.',
         'asv2-muted',approvalBox);
-      const details=el('details',null,null,approvalBox);
-      el('summary','Voir les conditions',null,details);
-      for(const blocker of review.humanVerificationBlockers)
-        el('p',String(blocker?.message||blocker?.code||blocker),null,details);
     }
   }
 
@@ -1858,6 +1838,52 @@ function renderFooter(entry){
     ()=>loadCurrent(entry).catch(showError));
   drawerFooter.hidden=!drawerFooter.children.length;
 }
+function guideToPendingReview(entry){
+  setMobileTab('issues');
+  const remaining=(entry.review?.occurrences||[]).filter(row=>
+    row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
+  const first=issuePane.querySelector('.asv2-issue-select');
+  if(first){
+    if(first.getAttribute('aria-expanded')!=='true')first.click();
+    first.closest('.asv2-issue-compact')?.classList.add('is-guided');
+    first.scrollIntoView({block:'center',behavior:'smooth'});first.focus();
+    setTimeout(()=>first.closest('.asv2-issue-compact')?.classList.remove('is-guided'),1600);
+  }
+  drawerMessage(remaining?
+    'Confirmez encore '+remaining+' passage'+(remaining>1?'s':'')+', puis validez le document.':
+    'La revue doit être actualisée avant la validation.','is-warning');
+}
+async function approveHumanReview(entry,control){
+  const review=entry.review;
+  if(review?.humanVerifiedDeliverable===true){
+    await downloadHumanVerified(entry);return;
+  }
+  if(review?.canApproveHumanVerification!==true){guideToPendingReview(entry);return;}
+  if(!await confirmAction('Je confirme avoir vérifié les données sensibles, les zones visuelles et toutes les pages du résultat.'))return;
+  control.disabled=true;
+  const checks={names:true,addresses:true,phones:true,identifiers:true,
+    logos_images:true,visual_regions:true,original_vs_final_all_pages:true};
+  try{
+    await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks});
+    await loadCurrent(entry);drawerMessage('Votre vérification a été enregistrée.');
+  }catch(error){
+    if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+    showError(error);control.disabled=false;
+  }
+}
+function openAddMaskTool(entry){
+  const textTool=issuePane.querySelector('[data-review-tool="add-mask"]');
+  if(textTool){
+    setMobileTab('issues');textTool.open=true;
+    textTool.scrollIntoView({block:'start',behavior:'smooth'});
+    textTool.querySelector('summary')?.focus();
+    drawerMessage('Sélectionnez dans l’original le texte à masquer, puis confirmez.');
+    return;
+  }
+  const regionTool=issuePane.querySelector('.asv2-unresolved button');
+  if(regionTool){regionTool.click();return;}
+  drawerMessage('L’ajout d’un masquage n’est pas disponible pour ce format ou cette révision.','is-warning');
+}
 async function decide(entry,occurrenceId,action){
   if(entry.commandBusy)return;
   if(!await confirmAction(copy.reviewAction[action]+' uniquement dans le passage choisi ?'))return;
@@ -1963,6 +1989,30 @@ async function renderPreview(entry){
     entry.status==='READY'?'Prêt selon vos réglages':
       'À vérifier · des données peuvent rester visibles',
     'asv2-preview-label',viewerToolbar);
+  if(entry.status==='REVIEW_REQUIRED'){
+    const quickActions=el('div',null,'asv2-review-toolbar-actions',viewerToolbar);
+    const canAddMask=editorCapabilities.addOccurrence&&Boolean(
+      issuePane.querySelector('[data-review-tool="add-mask"]')||
+      issuePane.querySelector('.asv2-unresolved button'));
+    const addMask=buttonWithIcon('Ajouter un masquage','select-area',
+      'asv2-secondary asv2-add-mask-toolbar',quickActions,()=>openAddMaskTool(entry));
+    addMask.disabled=!canAddMask;
+    addMask.title=canAddMask?'Masquer un passage oublié dans cette révision':
+      'Masquage supplémentaire indisponible pour ce format ou cette révision';
+    if(editorCapabilities.humanVerification){
+      const verified=entry.review?.humanVerifiedDeliverable===true;
+      const reviewer=entry.review?.humanVerification?.reviewer||
+        entry.review?.humanVerification?.reviewerLogin||entry.review?.humanVerification?.author;
+      const validate=buttonWithIcon(verified?(reviewer?'Vérifié par '+reviewer:'Document vérifié'):
+        'Valider ma vérification','shield-check',
+        verified?'asv2-secondary asv2-human-verified':'asv2-primary',quickActions,
+        ()=>approveHumanReview(entry,validate));
+      validate.title=verified?'Télécharger la version vérifiée par une personne':
+        entry.review?.canApproveHumanVerification===true?
+          'Confirmer votre vérification du document':
+          'Afficher les passages restant à confirmer';
+    }
+  }
   // Downloads live beside the file name so they remain visible above the document.
   const loading=el('p','Préparation de l’aperçu…','asv2-loading',viewerBody);
   try{
