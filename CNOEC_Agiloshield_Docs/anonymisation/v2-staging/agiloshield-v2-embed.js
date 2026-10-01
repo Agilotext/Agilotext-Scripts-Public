@@ -47,7 +47,7 @@ const copy = Object.freeze({
   genericError:'Cette action n’a pas abouti. Actualisez le document ou réessayez.',
 });
 const iconsBase = new URL('./assets/nucleo/', import.meta.url);
-const state = {preferencesReady:false, currentPolicy:null, accountRef:null,
+const state = {preferencesReady:false, currentPolicy:null, accountRef:null, accountEpoch:0,
   capabilities:{}, entries:[], active:null, surface:'file',
   running:false, authPaused:false, disposed:false, drawerOpen:false,
   pollRequests:0, pollWaiters:[], autoOpenedBatches:new Set(), historyTab:'v2',
@@ -94,8 +94,12 @@ const statusOf = job => {
 const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
 const isTerminal = status => terminal.has(status);
+const currentAccountEntry = entry => entry?.accountRef===state.accountRef &&
+  entry?.accountEpoch===state.accountEpoch;
+const accountStorageKey = suffix => state.accountRef?
+  storageKey+':'+encodeURIComponent(state.accountRef)+suffix:null;
 const canDownloadResult = entry => Boolean(entry?.hasCurrentResult &&
-  ['READY','REVIEW_REQUIRED','FAILED'].includes(entry.status));
+  ['READY','REVIEW_REQUIRED'].includes(entry.status));
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
 const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par terme.',
   'Un terme est présent plusieurs fois.',
@@ -105,6 +109,7 @@ const errorText = error => location.protocol==='file:'?
   error?.status===401?'Votre session a expiré. Reconnectez-vous, puis reprenez.':
   error?.status===403?'Vous n’avez pas accès à ce document.':
   error?.status===404?'Ce document n’est plus accessible. Actualisez la liste.':
+  error?.code==='RESULT_NOT_AVAILABLE'? 'Le résultat de cette révision n’est pas disponible. Consultez les vérifications avant de réessayer.':
   error?.status===409?'Le document a changé. Actualisez-le avant de continuer.':
   error?.status===413?'Ce fichier dépasse la taille autorisée.':
   localErrors.has(error?.message)?error.message:copy.genericError;
@@ -721,11 +726,17 @@ async function loadPreferences(){
     const sameAccount=state.accountRef===accountRef;
     const memoryLists=sameAccount?listSnapshot():emptyLists();
     if(!sameAccount){
+      state.accountEpoch++;
+      closeDrawer();state.entries=[];state.active=null;
+      state.history={v2:[],anon2:[],v2Loaded:false,anon2Loaded:false,cursors:{v2:null,anon2:null}};
+      state.selectedHistory.clear();state.authPaused=false;resumeAuthButton.hidden=true;
+      renderQueue();renderHistory();
       if(!listsModal.hidden)closeLists(true);
       clearRestoreDocument();clearRestoreKey();
       listSelection=emptyLists();listDraft=emptyLists();
       updateListSummary();}
     state.accountRef=accountRef;
+    try{sessionStorage.removeItem(storageKey);sessionStorage.removeItem('asv2-open-drawer-key');}catch(_){}
     state.capabilities=response.capabilities||{};
     const available=v2Capabilities(state.capabilities,config.FILE_WORKER_CODE_SHA);
     listsReady=config.FILE_LISTS_READY===true&&available.lists;
@@ -763,6 +774,7 @@ function addFiles(files){
     if(accepted>=available){rejections.push(file.name+' : limite de 12 fichiers en cours atteinte');continue;}
     const snapshot=freezeJobSelection({policy:current,lists,mode});
     const entry={key:crypto.randomUUID(),file,name:file.name,format:formatOf(file.name),jobId:null,
+      accountRef:state.accountRef,accountEpoch:state.accountEpoch,
       ...snapshot,listDigest:null,batchId,createdAt:new Date().toISOString(),sizeBytes:file.size,
       uploadId:crypto.randomUUID(),uploadProgress:null,status:'LOCAL',
       revision:null,review:null,regions:null,hasCurrentResult:false,
@@ -982,6 +994,7 @@ function renderHistory(){
   });
 }
 async function loadHistory(more=false){
+  const epoch=state.accountEpoch;
   const source=state.historyTab;
   const enabled=source==='v2'?state.capabilities.historyV2===true:
     state.capabilities.historyAnon2===true;
@@ -990,6 +1003,7 @@ async function loadHistory(more=false){
   const cursor=more?state.history.cursors[source]:null;
   if(more&&!cursor)return;
   const response=await api.listHistory(path,{cursor,limit:50});
+  if(epoch!==state.accountEpoch)return;
   if(!Array.isArray(response?.items))throw new Error('Historique Java invalide');
   const prior=more?state.history[source]:[];
   const merged=new Map(prior.map(row=>[String(row.jobId),row]));
@@ -1003,6 +1017,7 @@ async function entryForHistory(row){
   if(!entry){
     if(!row.protectionPolicy?.digest)throw new Error('Empreinte de politique manquante dans l’historique');
     entry={key:crypto.randomUUID(),file:null,name:row.fileName||row.filename||'Document',
+      accountRef:state.accountRef,accountEpoch:state.accountEpoch,
       format:formatOf(row.fileName||row.filename),jobId:row.jobId,digest:row.protectionPolicy.digest,
       listDigest:row.listDigest||null,mode:row.processingMode||'ANONYMIZE',
       selectedTypes:row.protectionPolicy.selectedTypes||null,status:historyStatus(row),
@@ -1010,9 +1025,10 @@ async function entryForHistory(row){
       revision:row.reviewRevision||null,review:null,regions:null,hasCurrentResult:false,
       previewKind:'anon',page:1,zoom:1,
       target:null,error:null,previewSerial:0};
-    state.entries.push(entry);saveSession();
   }
   const job=await api.status(entry.jobId);assertDigest(entry,job);
+  if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
+  if(!state.entries.includes(entry)){state.entries.push(entry);saveSession();}
   entry.status=statusOf(job);
   if(['PENDING','PROCESSING'].includes(entry.status)){
     renderQueue();pollEntry(entry).catch(error=>{
@@ -1057,31 +1073,35 @@ async function downloadSelectedZip(){
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 function saveSession(){
+  const key=accountStorageKey('');if(!key)return;
   const known=state.entries.filter(entry=>entry.jobId);
   const pending=known.filter(entry=>!isTerminal(entry.status)).slice(-12);
   const slots=recentSessionLimit-pending.length;
   const recent=slots?known.filter(entry=>isTerminal(entry.status)).slice(-slots):[];
-  try{sessionStorage.setItem(storageKey,JSON.stringify([...pending,...recent]
+  try{sessionStorage.setItem(key,JSON.stringify([...pending,...recent]
     .map(entry=>({jobId:entry.jobId,digest:entry.digest,
       listDigest:entry.listDigest||null,mode:entry.mode}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
-  if(!state.preferencesReady)return;
-  let saved=[];try{saved=JSON.parse(sessionStorage.getItem(storageKey)||'[]');}catch(_){return;}
+  const key=accountStorageKey('');if(!state.preferencesReady||!key)return;
+  const epoch=state.accountEpoch;
+  let saved=[];try{saved=JSON.parse(sessionStorage.getItem(key)||'[]');}catch(_){return;}
   if(!Array.isArray(saved))return;
   const savedEntries=saved.slice(-recentSessionLimit);
   let nextSaved=0;
-  async function restoreNext(){while(nextSaved<savedEntries.length){
+  async function restoreNext(){while(nextSaved<savedEntries.length&&epoch===state.accountEpoch){
     const item=savedEntries[nextSaved++];
     if(!item||!item.jobId||!item.digest||state.entries.some(e=>e.jobId===item.jobId))continue;
     const entry={key:crypto.randomUUID(),file:null,name:'Document',format:'',jobId:item.jobId,
+      accountRef:state.accountRef,accountEpoch:epoch,
       digest:item.digest,listDigest:item.listDigest||null,mode:item.mode||null,
       selectedTypes:null,status:'PENDING',revision:null,review:null,regions:null,
       hasCurrentResult:false,previewKind:'anon',page:1,zoom:1,target:null,error:null,previewSerial:0};
-    state.entries.push(entry);
     try{
       const job=await api.status(entry.jobId);assertDigest(entry,job);
+      if(!currentAccountEntry(entry))return;
+      state.entries.push(entry);
       entry.status=statusOf(job);entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
       entry.mode=job.processingMode||entry.mode;
       entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
@@ -1099,7 +1119,7 @@ async function restoreSession(){
 function assertDigest(entry,value){
   if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
   if(!entry.listDigest||value?.listDigest!==entry.listDigest)throw new Error('Empreinte des listes incohérente');
-  if(entry.mode&&value?.processingMode&&value.processingMode!==entry.mode)
+  if(entry.mode&&value?.processingMode!==entry.mode)
     throw new Error('Mode de traitement incohérent');
 }
 async function confirmAction(text){
@@ -1117,7 +1137,7 @@ async function drainQueue(){
   try{
     while(true){
       if(state.authPaused)break;
-      const entry=state.entries.find(item=>item.status==='LOCAL');
+      const entry=state.entries.find(item=>item.status==='LOCAL'&&currentAccountEntry(item));
       if(!entry)break;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
@@ -1127,6 +1147,7 @@ async function drainQueue(){
         const created=await api.upload(entry.file,entry.policy,{
           ...(entry.lists||{}),processingMode:entry.mode,onUploadProgress:progress,
           uploadId:state.capabilities.uploadIdempotency===true?entry.uploadId:undefined});
+        if(!currentAccountEntry(entry))break;
         entry.jobId=created?.jobId||null;
         assertCreatedJob(created,{digest:entry.digest,listDigest:entry.listDigest,mode:entry.mode});
         // Keep the local original available while the worker has no preview yet.
@@ -1137,6 +1158,7 @@ async function drainQueue(){
         pollEntry(entry).catch(error=>{entry.status='TIMED_OUT';entry.error=errorText(error);
           renderQueue();renderDrawer(entry);});
       }catch(error){
+        if(!currentAccountEntry(entry))break;
         if(error?.status===401){
           state.authPaused=true;resumeAuthButton.hidden=false;
           resumeAuthButton.textContent=state.accountRef?'Reprendre après connexion':
@@ -1163,8 +1185,10 @@ async function drainQueue(){
 async function resumeAfterAuth(){
   if(!state.accountRef){location.reload();return;}
   const response=await api.preferences();
-  if(response?.accountRef!==state.accountRef)
+  if(response?.accountRef!==state.accountRef){
+    await loadPreferences();
     throw new Error('Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.');
+  }
   state.authPaused=false;resumeAuthButton.hidden=true;
   for(const entry of state.entries)if(entry.status==='AUTH_REQUIRED'){
     entry.status='LOCAL';entry.error=null;
@@ -1192,10 +1216,11 @@ async function limitedStatus(jobId){
   }
 }
 async function pollEntry(entry){
-  if(entry.polling||!entry.jobId)return;
+  if(entry.polling||!entry.jobId||!currentAccountEntry(entry))return;
   entry.polling=true;
-  try{while(!state.disposed){
+  try{while(!state.disposed&&currentAccountEntry(entry)){
     const job=await limitedStatus(entry.jobId);assertDigest(entry,job);
+    if(!currentAccountEntry(entry))return;
     entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
     if(!isTerminal(entry.status))entry.hasCurrentResult=false;
     renderQueue();renderDrawer(entry);
@@ -1207,16 +1232,22 @@ async function pollEntry(entry){
   }}finally{entry.polling=false;}
 }
 async function loadCurrent(entry){
+  if(!currentAccountEntry(entry))return;
   const job=await api.status(entry.jobId);assertDigest(entry,job);
+  if(!currentAccountEntry(entry))return;
   const currentStatus=statusOf(job);
   const [review,regions]=await Promise.all([
     api.review(entry.jobId).catch(error=>{if(currentStatus!=='FAILED')throw error;return null;}),
     api.regions(entry.jobId).catch(()=>null)]);
   if(review)assertDigest(entry,review);
+  if(!currentAccountEntry(entry))return;
+  if(review&&(String(review.revision)!==String(job.reviewRevision)||
+    review.status!==currentStatus||review.processingMode!==job.processingMode||
+    review.workflowState!==job.workflowState))throw new Error('État de revue périmé');
   const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
-    entry.focusId=null;entry.target=null;
+    entry.focusId=null;entry.target=null;entry.previewKind='origin';
   }
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
@@ -1229,7 +1260,7 @@ async function loadCurrent(entry){
   entry.createdAt=job.createdAt||job.dtCreation||entry.createdAt;
   entry.sizeBytes=job.sizeBytes||job.fileLength||entry.sizeBytes;
   entry.format=formatOf(entry.name)||entry.format;
-  if(entry.previewKind==='origin'&&entry.hasCurrentResult)entry.previewKind='anon';
+  if(entry.previewKind==='origin'&&entry.hasCurrentResult&&currentStatus==='READY')entry.previewKind='anon';
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
   if(isTerminal(currentStatus)&&!entry.announcedComplete){
     entry.announcedComplete=true;
@@ -1252,8 +1283,8 @@ function setMobileTab(value){
   tabDoc.classList.toggle('is-active',value==='doc');tabIssues.classList.toggle('is-active',value==='issues');
 }
 function openDrawer(entry){
-  if(!entry)return;state.active=entry.key;
-  try{sessionStorage.setItem('asv2-open-drawer-key',entry.key);}catch(_){}
+  if(!entry||!currentAccountEntry(entry))return;state.active=entry.key;
+  try{const key=accountStorageKey(':drawer');if(key)sessionStorage.setItem(key,entry.key);}catch(_){}
   if(!state.drawerOpen){state.lastFocus=document.activeElement;drawer.hidden=false;state.drawerOpen=true;
     requestAnimationFrame(()=>drawer.classList.add('is-open'));document.body.classList.add('asv2-drawer-open');close.focus();}
   setMobileTab('doc');renderDrawer(entry);renderPreview(entry).catch(showError);
@@ -1262,7 +1293,7 @@ function closeDrawer(){
   if(!state.drawerOpen)return;state.drawerOpen=false;drawer.classList.remove('is-open');
   document.body.classList.remove('asv2-drawer-open');state.previewSerial++;
   const active=activeEntry();if(active)active.target=null;
-  try{sessionStorage.removeItem('asv2-open-drawer-key');}catch(_){}
+  try{const key=accountStorageKey(':drawer');if(key)sessionStorage.removeItem(key);}catch(_){}
   if(state.previewCleanup)state.previewCleanup();
   setTimeout(()=>{if(!state.drawerOpen)drawer.hidden=true;},260);
   if(state.lastFocus?.isConnected)state.lastFocus.focus();
@@ -1526,8 +1557,9 @@ function renderIssues(entry){
 function renderFooter(entry){
   clear(drawerFooter);
   el('span',entry.status==='READY'?'Prêt selon vos réglages · '+policySummary(entry.selectedTypes):
-    entry.status==='REVIEW_REQUIRED'||entry.status==='FAILED'?
+    entry.status==='REVIEW_REQUIRED'?
       'Résultat non vérifié — des données peuvent rester visibles':
+      entry.status==='FAILED'?'Traitement impossible — aucun résultat proposé':
       'Aucun résultat prêt à télécharger','asv2-footer-status',drawerFooter);
   if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
   if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
@@ -1537,7 +1569,7 @@ function renderFooter(entry){
   if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
     buttonWithIcon('Télécharger la clé de cette révision','key','asv2-secondary',drawerFooter,
       ()=>downloadKey(entry).catch(showError));
-  if(['REVIEW_REQUIRED','FAILED'].includes(entry.status)&&canDownloadResult(entry))
+  if(entry.status==='REVIEW_REQUIRED'&&canDownloadResult(entry))
     button('Télécharger le résultat non vérifié','asv2-secondary',drawerFooter,
     ()=>download(entry,false).catch(showError));
 }
@@ -1576,22 +1608,27 @@ function strictRegions(entry,base){
     rect[0]<rect[2]&&rect[1]<rect[3]&&rect[2]<=base.width&&rect[3]<=base.height);
 }
 async function previewBytes(entry,kind){
+  if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
   if(kind==='origin'&&entry.file&&!entry.revision)return {bytes:await entry.file.arrayBuffer(),format:entry.format};
   if(!entry.jobId)throw new Error('Document non déposé');
   if(kind==='anon'&&!canDownloadResult(entry))throw new Error('Résultat courant indisponible');
   if(!entry.listDigest||!entry.revision)throw new Error('Empreinte ou révision du document manquante');
   const expected={digest:entry.digest,listDigest:entry.listDigest,revision:entry.revision,
-    status:entry.status,mode:entry.mode};
+    status:entry.status,mode:entry.mode,accountEpoch:state.accountEpoch};
   // Java must identify the exact current preview; a subsequent status/review
   // read also catches a revision changed while its bytes were transferred.
   async function current(){
     const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
     assertDigest(entry,job);assertDigest(entry,review);
-    if(entry.revision!==expected.revision||entry.status!==expected.status||
+    if(!currentAccountEntry(entry)||state.accountEpoch!==expected.accountEpoch||
+      entry.revision!==expected.revision||entry.status!==expected.status||entry.mode!==expected.mode||
       statusOf(job)!==expected.status||String(job.reviewRevision)!==String(expected.revision)||
       String(review.revision)!==String(expected.revision)||
+      review.status!==expected.status||job.processingMode!==expected.mode||
+      review.processingMode!==expected.mode||job.workflowState!==review.workflowState||
       (kind==='anon'&&!currentResultAvailable(job,review)))throw new Error('Aperçu périmé');
   }
+  await current();
   const response=assertPreviewHeaders(await api.preview(entry.jobId,kind),{
     kind,...expected});
   const mime=response.headers.get('Content-Type')||'';
@@ -1964,9 +2001,11 @@ function renderCsv(bytes,parent=viewerBody){
   }
 }
 async function download(entry,certified){
+  if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
   if(!canDownloadResult(entry))throw new Error('Le résultat courant n’est pas disponible au téléchargement.');
+  if(!certified&&!await confirmAction('Ce résultat n’est pas vérifié et peut encore contenir des données visibles. Le télécharger quand même ?'))return;
   const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
-    listDigest:entry.listDigest};
+    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
   const response=await api.checkedArtifact(entry.jobId,{certified,expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,
     expectedRevision:entry.revision,expectedMode:entry.mode});
@@ -1984,10 +2023,11 @@ async function download(entry,certified){
   notify(msg);
 }
 async function downloadKey(entry){
+  if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
   if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')
     throw new Error('Clé indisponible pour ce document');
   const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
-    listDigest:entry.listDigest};
+    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
   const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,expectedRevision:entry.revision,expectedMode:entry.mode});
   const blob=await response.blob();
@@ -2000,10 +2040,12 @@ async function downloadKey(entry){
 }
 async function assertDownloadStillCurrent(entry,expected){
   const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);
-  if(entry.status!==expected.status||entry.revision!==expected.revision||
+  if(!currentAccountEntry(entry)||state.accountEpoch!==expected.accountEpoch||
+    entry.status!==expected.status||entry.revision!==expected.revision||entry.mode!==expected.mode||
     job.protectionPolicy?.digest!==expected.digest||review.protectionPolicy?.digest!==expected.digest||
     job.listDigest!==expected.listDigest||review.listDigest!==expected.listDigest||
     statusOf(job)!==expected.status||review.status!==expected.status||
+    job.processingMode!==expected.mode||review.processingMode!==expected.mode||
     String(job.reviewRevision)!==String(expected.revision)||
     String(review.revision)!==String(expected.revision)||!currentResultAvailable(job,review))
     throw new Error('Le document a changé pendant le téléchargement. Actualisez la révision.');
@@ -2029,7 +2071,8 @@ loadPreferences().then(async()=>{
   await restoreSession();
   await loadHistory();
   try{
-    const activeKey=sessionStorage.getItem('asv2-open-drawer-key');
+    const key=accountStorageKey(':drawer');
+    const activeKey=key?sessionStorage.getItem(key):null;
     if(activeKey){
       const entry=state.entries.find(e=>e.key===activeKey);
       if(entry)openDrawer(entry);

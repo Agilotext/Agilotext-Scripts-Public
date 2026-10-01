@@ -45,24 +45,26 @@ export function assertCreatedJob(created, {digest, listDigest, mode}) {
 }
 export function currentResultAvailable(job, review) {
   const status = job?.anonStatus || job?.status;
-  if (!['READY', 'REVIEW_REQUIRED', 'FAILED'].includes(status) ||
+  if (!['READY', 'REVIEW_REQUIRED'].includes(status) ||
       job?.workflowState !== 'RESULT' || review?.workflowState !== 'RESULT' ||
       review?.status !== status || !job?.reviewRevision ||
       String(review?.revision) !== String(job.reviewRevision)) return false;
-  // A non-verified job may have no current anon/QA artifact. Java must confirm
-  // that both exist before the browser offers their download.
-  return status === 'READY' || job?.resultAvailable === true;
+  const assurance = status === 'READY' ? 'technical-ready' : 'non-verified';
+  // REVIEW_REQUIRED is only a candidate: Java verifies anon and QA on GET.
+  return job.assurance === assurance &&
+    (status === 'READY' ? review.deliverable === true : review.previewAvailable === true);
 }
 export function assertPreviewHeaders(response, {kind, digest, listDigest, revision, status, mode}) {
   const headers = response?.headers;
   const expectedAssurance = kind === 'origin' ? 'original-unprotected' : 'review-preview';
   if (!headers || !digest || !listDigest || !revision || !status || !mode ||
       headers.get('X-Agiloshield-Policy-Digest') !== digest ||
-      headers.get('X-Agiloshield-List-Digest') !== listDigest ||
       headers.get('X-Agiloshield-Revision') !== String(revision) ||
       headers.get('X-Agiloshield-Status') !== status ||
       headers.get('X-Agiloshield-Processing-Mode') !== mode ||
-      headers.get('X-Agiloshield-Assurance') !== expectedAssurance)
+      headers.get('X-Agiloshield-Assurance') !== expectedAssurance ||
+      (headers.get('X-Agiloshield-List-Digest') !== null &&
+        headers.get('X-Agiloshield-List-Digest') !== listDigest))
     throw new Error('Aperçu non conforme au job courant');
   return response;
 }
@@ -85,8 +87,8 @@ export class AgiloShieldV2Client {
     });
     if (!response.ok) {
       let detail; try { detail = await response.json(); } catch (_) { detail = {}; }
-      const error = new Error(detail.error || detail.errorMessage || `HTTP_${response.status}`);
-      error.status = response.status; throw error;
+      const error = new Error(detail.errorMessage || detail.error || `HTTP_${response.status}`);
+      error.status = response.status; error.code = detail.error; throw error;
     }
     return response;
   }
@@ -146,8 +148,8 @@ export class AgiloShieldV2Client {
           try { body = JSON.parse(xhr.responseText || '{}'); }
           catch (_) { body = {}; }
           if (xhr.status >= 200 && xhr.status < 300) { resolve(body); return; }
-          const error = new Error(body.error || body.errorMessage || `HTTP_${xhr.status}`);
-          error.status = xhr.status; reject(error);
+          const error = new Error(body.errorMessage || body.error || `HTTP_${xhr.status}`);
+          error.status = xhr.status; error.code = body.error; reject(error);
         };
         xhr.onerror = () => reject(new Error('NETWORK_ERROR'));
         xhr.ontimeout = () => reject(new Error('UPLOAD_TIMEOUT'));
@@ -216,19 +218,21 @@ export class AgiloShieldV2Client {
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
         review.status !== status ||
         job.workflowState !== 'RESULT' || review.workflowState !== 'RESULT' ||
-        job.assurance !== assurance || review.assurance !== assurance ||
+        job.assurance !== assurance ||
+        (certified && review.deliverable !== true) ||
+        (!certified && review.previewAvailable !== true) ||
         (certified && status !== 'READY') ||
-        (!certified && (!['REVIEW_REQUIRED', 'FAILED'].includes(status) ||
-          job.resultAvailable !== true))) {
+        (!certified && status !== 'REVIEW_REQUIRED')) {
       throw new Error('Stale job state');
     }
     if (kind === 'key' && (!certified || expectedMode !== 'PSEUDONYMIZE'))
       throw new Error('Pseudonym key unavailable');
     const response = kind === 'key' ? await this.pseudonymKey(id) : certified ? await this.certifiedDownload(id) :
-      await this.result(id, {confirmNonVerified:status === 'FAILED' || status === 'REVIEW_REQUIRED'});
+      await this.result(id, {confirmNonVerified:status === 'REVIEW_REQUIRED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
-        response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest ||
+        (response.headers.get('X-Agiloshield-List-Digest') !== null &&
+          response.headers.get('X-Agiloshield-List-Digest') !== expectedListDigest) ||
         response.headers.get('X-Agiloshield-Processing-Mode') !== expectedMode ||
         response.headers.get('X-Agiloshield-Status') !== status ||
         response.headers.get('X-Agiloshield-Assurance') !== assurance) {

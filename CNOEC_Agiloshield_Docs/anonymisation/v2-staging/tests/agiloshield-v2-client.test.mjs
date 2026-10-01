@@ -40,12 +40,16 @@ const seen = [];
 let artifactRevision='r2';
 const job = {status:'READY', workflowState:'RESULT', assurance:'technical-ready',
   reviewRevision:'r2', protectionPolicy:{digest:'d1'}, listDigest:'list-current',processingMode:'ANONYMIZE'};
-const review = {status:'READY', workflowState:'RESULT', assurance:'technical-ready',
+const review = {status:'READY', workflowState:'RESULT', deliverable:true,previewAvailable:true,
   revision:'r2', protectionPolicy:{digest:'d1'}, listDigest:'list-current',processingMode:'ANONYMIZE'};
 assert.equal(currentResultAvailable(job,review),true);
 assert.equal(currentResultAvailable({...job,status:'FAILED'},review),false);
 assert.equal(currentResultAvailable({...job,status:'FAILED',resultAvailable:true},
-  {...review,status:'FAILED'}),true);
+  {...review,status:'FAILED'}),false);
+assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',assurance:'non-verified'},
+  {...review,status:'REVIEW_REQUIRED',deliverable:false}),true);
+assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',assurance:'non-verified'},
+  {...review,status:'REVIEW_REQUIRED',deliverable:false,previewAvailable:false}),false);
 assert.equal(currentResultAvailable({...job,status:'REVIEW_REQUIRED',resultAvailable:true,
   workflowState:'DIRTY'}, {...review,status:'REVIEW_REQUIRED'}),false);
 const previewHeaders=new Headers({
@@ -58,13 +62,16 @@ const previewExpected={kind:'anon',digest:'d1',listDigest:'list-current',
   revision:'r2',status:'READY',mode:'ANONYMIZE'};
 assert.equal(assertPreviewHeaders(previewResponse,previewExpected),previewResponse);
 previewHeaders.delete('X-Agiloshield-List-Digest');
+assert.equal(assertPreviewHeaders(previewResponse,previewExpected),previewResponse);
+previewHeaders.set('X-Agiloshield-List-Digest','stale-list');
 assert.throws(()=>assertPreviewHeaders(previewResponse,previewExpected),/Aperçu non conforme/);
+previewHeaders.delete('X-Agiloshield-List-Digest');
 const fetchImpl = async (url, options) => {
   seen.push({url, options});
   const path = new URL(url).pathname;
   if (path.endsWith('/review')) return new Response(JSON.stringify(review), {status:200});
   if (path.endsWith('/download')) return new Response('file', {status:200, headers:{
-    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-List-Digest':'list-current', 'X-Agiloshield-Revision':artifactRevision,
+    'X-Agiloshield-Policy-Digest':'d1', 'X-Agiloshield-Revision':artifactRevision,
     'X-Agiloshield-Processing-Mode':job.processingMode,
     'X-Agiloshield-Status':'READY', 'X-Agiloshield-Assurance':'technical-ready'}});
   if (path.endsWith('/pseudonym-key')) return new Response('SYNTHETIC_KEY', {status:200, headers:{
@@ -79,6 +86,24 @@ const client = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
 const response = await client.checkedArtifact(7, {expectedDigest:'d1', expectedListDigest:'list-current',
   expectedRevision:'r2',expectedMode:'ANONYMIZE'});
 assert.equal(await response.text(), 'file');
+job.status='REVIEW_REQUIRED';job.assurance='non-verified';
+review.status='REVIEW_REQUIRED';review.deliverable=false;
+const nonVerifiedClient = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
+  authHeaders:async () => ({'X-Agilotext-Token':'USER_ONLY'}), fetchImpl:async (url,options) => {
+    const path=new URL(url).pathname;
+    if(path.endsWith('/review'))return new Response(JSON.stringify(review),{status:200});
+    if(path.endsWith('/result')){
+      assert.equal(options.headers['X-Agiloshield-Confirm-Non-Verifie'],'true');
+      return new Response(JSON.stringify({error:'RESULT_NOT_AVAILABLE',errorMessage:'Current result is not available'}),
+        {status:409,headers:{'Content-Type':'application/json'}});
+    }
+    return new Response(JSON.stringify(job),{status:200});
+  }});
+await assert.rejects(()=>nonVerifiedClient.checkedArtifact(7,{certified:false,
+  expectedDigest:'d1',expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'ANONYMIZE'}),
+  error=>error.status===409&&error.code==='RESULT_NOT_AVAILABLE');
+job.status='READY';job.assurance='technical-ready';
+review.status='READY';review.deliverable=true;
 await client.upload(new Blob(['synthetic']), {schemaVersion:1,selectedTypes:[]}, {
   anon2InclusionList:['MOT A'],anon2ExclusionList:[]});
 const form=seen.at(-1).options.body;

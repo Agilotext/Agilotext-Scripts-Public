@@ -94,7 +94,6 @@ function meta(job){return {jobId:job.id,fileName:job.file.name,anonStatus:job.st
  reviewRevision:job.rev,protectionPolicy:job.policy,listDigest:job.listDigest,
  processingMode:job.mode,createdAt:job.createdAt,sizeBytes:job.sizeBytes,
  workflowState:['READY','REVIEW_REQUIRED','FAILED'].includes(job.status)?'RESULT':'PROCESSING',
- resultAvailable:['READY','REVIEW_REQUIRED'].includes(job.status),
  assurance:job.status==='READY'?'technical-ready':'non-verified',
  qaReasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
 function review(job){
@@ -106,7 +105,7 @@ function review(job){
     text:'Florian',page:null,category:'PER',action:'REVIEW',fragments:[]})):null;
  return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED'||job.status==='READY',
  workflowState:['READY','REVIEW_REQUIRED','FAILED'].includes(job.status)?'RESULT':'PROCESSING',
- assurance:job.status==='READY'?'technical-ready':'non-verified',
+ deliverable:job.status==='READY',previewAvailable:['READY','REVIEW_REQUIRED'].includes(job.status),
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  listDigest:job.listDigest,processingMode:job.mode,
  occurrences:textOccurrences|| (job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
@@ -187,7 +186,6 @@ window.fetch=async(url,options={})=>{
   else response=typeof job.file.arrayBuffer==='function'?job.file:new Blob([job.sourceText||'SYNTHETIC ONLY'],{type:job.file.type||'text/plain'});
   return new Response(await response.arrayBuffer(),{headers:{'Content-Type':response.type||'application/octet-stream',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Policy-Digest':job.policy.digest,
-   ...(job.listDigest?{'X-Agiloshield-List-Digest':job.listDigest}:{}),
    'X-Agiloshield-Status':job.status,'X-Agiloshield-Processing-Mode':job.mode,
    'X-Agiloshield-Assurance':new URLSearchParams(tail.split('?')[1]).get('kind')==='anon'?
     'review-preview':'original-unprotected'}});
@@ -214,7 +212,6 @@ window.fetch=async(url,options={})=>{
   return new Response('SYNTHETIC ONLY',{headers:{'Content-Type':'text/plain',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Status':job.status,
    'X-Agiloshield-Policy-Digest':job.policy.digest,
-   ...(job.listDigest?{'X-Agiloshield-List-Digest':job.listDigest}:{}),
    'X-Agiloshield-Processing-Mode':job.mode,
    'X-Agiloshield-Assurance':certified?'technical-ready':'non-verified'}});
  }
