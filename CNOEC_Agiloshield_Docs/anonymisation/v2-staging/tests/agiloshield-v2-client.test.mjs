@@ -8,13 +8,15 @@ assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines']
 const mutablePolicy={schemaVersion:1,selectedTypes:['PER'],sensitiveKeepAcknowledged:false,digest:'first'};
 const mutableLists={anon2InclusionList:['Jean Dupont'],anon2ExclusionList:[]};
 const frozen=freezeJobSelection({policy:mutablePolicy,lists:mutableLists,mode:'ANONYMIZE'});
-assert.deepEqual(v2Capabilities({workerCodeSha:'worker-1',listDirectives:true,
-  processingModes:['ANONYMIZE','PSEUDONYMIZE'],pseudonymKeyDownload:true},'worker-1'),
-  {workerMatches:true,lists:true,pseudonymize:true});
-assert.deepEqual(v2Capabilities({workerCodeSha:'worker-1',listDirectives:true,
-  processingModes:['PSEUDONYMIZE'],pseudonymKeyDownload:true},'worker-2'),
-  {workerMatches:false,lists:false,pseudonymize:false});
-assert.equal(v2Capabilities({workerCodeSha:'worker-1'},'worker-1').pseudonymize,false);
+assert.deepEqual(v2Capabilities({listDirectives:true,
+  processingModes:['ANONYMIZE','PSEUDONYMIZE'],pseudonymKeyDownload:true,
+  addOccurrence:true,qaReport:true,humanVerification:true,pseudonymKeyReviewRequired:true,
+  pseudonymRestore:true}),
+  {lists:true,pseudonymize:true,addOccurrence:true,qaReport:true,humanVerification:true,
+    pseudonymKeyReviewRequired:true,pseudonymRestore:true});
+assert.deepEqual(v2Capabilities({processingModes:['PSEUDONYMIZE']}),
+  {lists:false,pseudonymize:false,addOccurrence:false,qaReport:false,
+    humanVerification:false,pseudonymKeyReviewRequired:false,pseudonymRestore:false});
 assert.deepEqual(assertCreatedJob({jobId:'job-1',status:'PENDING',
   protectionPolicy:{digest:'d1'},listDigest:'list-current',processingMode:'ANONYMIZE'},
   {digest:'d1',listDigest:'list-current',mode:'ANONYMIZE'}).jobId,'job-1');
@@ -125,6 +127,20 @@ assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
   occurrenceId:'o1', sourceRevision:'s1', documentId:'doc', reason:'test'});
 assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');
+await client.addOccurrence(7,'d1',{revision:'r2',surfaceId:'txt:1',start:2,end:5,
+  selectedText:'A😀B'});
+assert.deepEqual(JSON.parse(seen.at(-1).options.body),{
+  op:'ADD_OCCURRENCE',revision:'r2',
+  commandId:JSON.parse(seen.at(-1).options.body).commandId,
+  surfaceId:'txt:1',start:2,end:5,selectedText:'A😀B',action:'MASK',reason:'human_added'});
+assert.throws(()=>client.addOccurrence(7,'d1',{revision:'r2',surfaceId:'txt:1',
+  start:2,end:4,selectedText:'A😀B'}),/Sélection originale invalide/);
+const sevenChecks={names:true,addresses:true,phones:true,identifiers:true,
+  logos_images:true,visual_regions:true,original_vs_final_all_pages:true};
+await client.approveHumanVerification(7,'d1',{revision:'r2',checks:sevenChecks});
+assert.deepEqual(JSON.parse(seen.at(-1).options.body).checks,sevenChecks);
+assert.throws(()=>client.approveHumanVerification(7,'d1',{revision:'r2',
+  checks:{...sevenChecks,names:false}}),/Vérifications humaines incomplètes/);
 assert.equal(typeof client.addManualRegion, 'undefined');
 job.reviewRevision = 'r3';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
@@ -150,6 +166,40 @@ artifactRevision='r1';
 await assert.rejects(() => client.checkedArtifact(7,{expectedDigest:'d1',
   expectedListDigest:'list-current',expectedRevision:'r2',expectedMode:'PSEUDONYMIZE'}),/Stale artifact/);
 artifactRevision='r2';
+job.status='REVIEW_REQUIRED';job.assurance='non-verified';
+review.status='REVIEW_REQUIRED';review.deliverable=false;
+review.humanVerifiedDeliverable=true;review.humanVerification={reviewer:'synthetic-user'};
+const editorCalls=[];
+const editorClient=new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
+  authHeaders:async()=>({'X-Agilotext-Token':'USER_ONLY'}),fetchImpl:async(url,options)=>{
+    editorCalls.push({url,options});const path=new URL(url).pathname;
+    if(path.endsWith('/review'))return new Response(JSON.stringify(review));
+    if(path.endsWith('/pseudonym-key')||path.endsWith('/human-verified-download'))
+      return new Response('SYNTHETIC_ONLY',{headers:{
+        'X-Agiloshield-Policy-Digest':'d1','X-Agiloshield-Revision':'r2',
+        'X-Agiloshield-Status':'REVIEW_REQUIRED',
+        'X-Agiloshield-Processing-Mode':'PSEUDONYMIZE',
+        'X-Agiloshield-Assurance':path.endsWith('/pseudonym-key')?'non-verified':'human-verified'}});
+    if(path.endsWith('/pseudonym/restore/inspect'))return new Response(JSON.stringify({inspectionId:'restore-'+'a'.repeat(32)}));
+    if(path.endsWith('/pseudonym/restore'))return new Response('SYNTHETIC_RESTORE');
+    return new Response(JSON.stringify(job));
+  }});
+assert.equal(await (await editorClient.checkedArtifact(7,{kind:'key',certified:false,
+  expectedDigest:'d1',expectedListDigest:'list-current',expectedRevision:'r2',
+  expectedMode:'PSEUDONYMIZE'})).text(),'SYNTHETIC_ONLY');
+assert.equal(editorCalls.at(-1).options.headers['X-Agiloshield-Confirm-Non-Verifie'],'true');
+assert.equal(await (await editorClient.checkedArtifact(7,{kind:'human',certified:false,
+  expectedDigest:'d1',expectedListDigest:'list-current',expectedRevision:'r2',
+  expectedMode:'PSEUDONYMIZE'})).text(),'SYNTHETIC_ONLY');
+review.humanVerifiedDeliverable=false;
+await assert.rejects(()=>editorClient.checkedArtifact(7,{kind:'human',certified:false,
+  expectedDigest:'d1',expectedListDigest:'list-current',expectedRevision:'r2',
+  expectedMode:'PSEUDONYMIZE'}),/Stale job state/);
+const inspected=await editorClient.inspectRestore(new Blob(['synthetic']),new Blob(['synthetic-key']));
+assert.equal(inspected.inspectionId,'restore-'+'a'.repeat(32));
+assert.equal(editorCalls.at(-1).options.body.get('file').size,9);
+await editorClient.executeRestore(inspected.inspectionId);
+assert.equal(JSON.parse(editorCalls.at(-1).options.body).confirmSensitiveRestore,true);
 assert.ok(seen.every(call => !call.url.includes(':8091')));
 const xhrCalls=[];
 const progress=[];

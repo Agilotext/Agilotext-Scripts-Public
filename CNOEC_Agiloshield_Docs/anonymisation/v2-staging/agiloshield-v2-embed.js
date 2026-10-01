@@ -11,9 +11,9 @@ if (!mount || !config || !/^https:\/\//.test(config.BASE_URL || '') ||
 const api = new AgiloShieldV2Client({baseUrl:config.BASE_URL, authHeaders:config.getAuthHeaders});
 const codes = ['ADR','DAT','EML','IBA','IDN','JOB','LOC','ORG','PER','PII','PRO','TEL','URL'];
 const defaults = ['ADR','EML','IBA','IDN','PER','TEL','URL'];
-// A Webflow switch alone cannot certify that Java is connected to the file worker.
 let listsReady = false;
 let pseudoReady = false;
+let editorCapabilities = {};
 let listSelection = emptyLists();
 let listDraft = emptyLists();
 let listStorePersistent = false;
@@ -101,6 +101,9 @@ const accountStorageKey = suffix => state.accountRef?
   storageKey+':'+encodeURIComponent(state.accountRef)+suffix:null;
 const canDownloadResult = entry => Boolean(entry?.hasCurrentResult &&
   ['READY','REVIEW_REQUIRED'].includes(entry.status));
+const canDownloadKey = entry => Boolean(entry?.mode==='PSEUDONYMIZE'&&pseudoReady&&
+  canDownloadResult(entry)&&(entry.status==='READY'||
+    (entry.status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired)));
 // A review preview is a read-only view; Java independently checks whether a
 // downloadable artifact exists when /result or /download is requested.
 const canPreviewResult = entry => Boolean(entry?.hasCurrentResult &&
@@ -181,7 +184,7 @@ const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=
   textInput.value='';
 });textAdd.disabled=true;
 el('h3','Restaurer un fichier pseudonymisé',null,restorePane);
-el('p','Préparez un fichier et sa clé de correspondance. La restauration sera disponible après le raccordement Java.',
+el('p','Préparez un fichier et sa clé de correspondance. La restauration sera activée après qualification complète.',
   'asv2-muted',restorePane);
 const restoreNotice=el('p','Restauration bientôt disponible sur cette recette.',
   'asv2-restore-notice',restorePane);
@@ -197,9 +200,11 @@ function restorePicker(title,hint,chooseLabel,accept,valid){
   const selected=el('p','', 'asv2-restore-selected',card);selected.hidden=true;
   const reset=()=>{
     input.value='';selected.textContent='';selected.hidden=true;remove.hidden=true;
+    resetRestoreInspection();
   };
   const remove=button('Retirer','asv2-link',card,reset);remove.hidden=true;
   input.addEventListener('change',()=>{
+    resetRestoreInspection();
     const file=input.files?.[0];
     if(!file){selected.textContent='';selected.hidden=true;remove.hidden=true;return;}
     if(!valid.test(file.name)){
@@ -212,6 +217,7 @@ function restorePicker(title,hint,chooseLabel,accept,valid){
     selected.textContent=file.name+' · '+size;
     selected.hidden=false;remove.hidden=false;
   });
+  reset.getFile=()=>input.files?.[0]||null;
   return reset;
 }
 const clearRestoreDocument=restorePicker('Fichier pseudonymisé','TXT, CSV, DOCX, XLSX ou PPTX','Choisir le document',
@@ -220,11 +226,78 @@ const clearRestoreKey=restorePicker('Clé de correspondance','Fichier .propertie
   '.properties',/\.properties$/i);
 el('p','Le fichier restauré contiendra de nouveau des données sensibles. Après édition, '
   +'il n’est pas certifié identique à l’original.', 'asv2-restore-safety',restorePane);
-const restoreAction=button('Restaurer le fichier','asv2-primary',restorePane);
-// The Java facade has no restore route. Neither URL/config flags nor file selection may enable this action.
+const restoreInspection=el('div',null,'asv2-restore-inspection',restorePane);
+restoreInspection.hidden=true;
+const restoreAction=button('Inspecter le fichier et sa clé','asv2-primary',restorePane,
+  ()=>inspectRestore().catch(error=>{restoreNotice.textContent=errorText(error);restoreNotice.classList.add('is-error');}));
+// Enable after the staging restore workflow is qualified end to end.
+const RESTORE_WORKFLOW_QUALIFIED=false;
 restoreAction.disabled=true;
 restoreAction.setAttribute('aria-describedby','asv2-restore-unavailable');
 restoreNotice.id='asv2-restore-unavailable';
+let restoreInspectionId=null;
+let restoreInspectionMeta=null;
+let restoreBusy=false;
+function resetRestoreInspection(){
+  restoreInspectionId=null;restoreInspectionMeta=null;
+  clear(restoreInspection);restoreInspection.hidden=true;
+  updateRestoreAction();
+}
+function updateRestoreAction(){
+  const ready=state.preferencesReady&&editorCapabilities.pseudonymRestore&&
+    RESTORE_WORKFLOW_QUALIFIED&&!restoreBusy;
+  restoreAction.disabled=!ready||(!restoreInspectionId&&
+    (!clearRestoreDocument.getFile()||!clearRestoreKey.getFile()));
+  restoreAction.textContent=restoreInspectionId?'Restaurer le fichier':'Inspecter le fichier et sa clé';
+  restoreNotice.textContent=ready?
+    'Les fichiers seront envoyés à Java pour inspection, puis vous confirmerez la restitution.':
+    'Restauration en attente de qualification sur cette recette.';
+}
+async function inspectRestore(){
+  if(restoreBusy||!RESTORE_WORKFLOW_QUALIFIED||!editorCapabilities.pseudonymRestore)return;
+  const epoch=state.accountEpoch;
+  restoreBusy=true;restoreAction.disabled=true;
+  try{
+    if(!restoreInspectionId){
+      const file=clearRestoreDocument.getFile(),key=clearRestoreKey.getFile();
+      if(!file||!key)throw new Error('Sélectionnez le document et sa clé.');
+      const inspection=await api.inspectRestore(file,key);
+      if(epoch!==state.accountEpoch)return;
+      if(!/^restore-[0-9a-f]{32}$/.test(inspection?.inspectionId||'')||
+          inspection.confirmationRequired!==true||!inspection.sourceRevision)
+        throw new Error('Inspection Java incomplète');
+      restoreInspectionId=inspection.inspectionId;restoreInspectionMeta=inspection;
+      clear(restoreInspection);restoreInspection.hidden=false;
+      el('strong','Inspection terminée',null,restoreInspection);
+      el('p',inspection.inputMatchesPublishedArtifact?
+        'Le fichier correspond à la version pseudonymisée publiée.':
+        'Ce fichier a été modifié depuis la version publiée ; sa restitution ne sera pas certifiée.',
+        null,restoreInspection);
+      const missing=inspection.missingTags||[],unknown=inspection.unrecognizedTags||{};
+      el('p',missing.length+' étiquette(s) absente(s) · '+Object.keys(unknown).length+
+        ' étiquette(s) inconnue(s).',null,restoreInspection);
+      el('p','Le document restitué contiendra de nouveau des données sensibles.',
+        'asv2-restore-safety',restoreInspection);
+      return;
+    }
+    if(!await confirmAction('Restaurer ce document ? Il contiendra de nouveau des données sensibles et ne sera pas certifié identique à l’original.'))return;
+    const expected=restoreInspectionMeta;
+    const response=await api.executeRestore(restoreInspectionId);
+    if(response.headers.get('X-Agiloshield-Assurance')!=='sensitive-non-certified'||
+        response.headers.get('X-Agiloshield-Revision')!==String(expected.sourceRevision)||
+        response.headers.get('X-Agiloshield-Status')!==expected.sourceArtifactStatus)
+      throw new Error('Restitution Java incohérente');
+    const blob=await response.blob();
+    if(epoch!==state.accountEpoch)return;
+    const filename=('restaure-'+clearRestoreDocument.getFile().name)
+      .replace(/[^A-Za-z0-9._-]/g,'_');
+    const url=URL.createObjectURL(blob),link=el('a',null,null,document.body);
+    link.href=url;link.download=filename;link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    clearRestoreDocument();clearRestoreKey();resetRestoreInspection();
+    notify('Fichier sensible restitué. Conservez-le dans un espace privé.');
+  }finally{restoreBusy=false;updateRestoreAction();}
+}
 el('p','PDF : une clé ne reconstruit pas un PDF masqué. Seul l’original encore conservé '
   +'par le job pourrait être récupéré si Java l’expose.', 'asv2-restore-pdf-note',restorePane);
 el('h3','Mode de traitement',null,side);
@@ -255,7 +328,7 @@ const exclusionCount=el('span','Excl. 0','asv2-list-count asv2-list-count-exclud
 listsButton.setAttribute('aria-label','Listes — inclusions : 0 ; exclusions : 0');
 listsButton.disabled=true;
 listsButton.title='Préparer les listes pour vos prochains documents';
-const listsHelp=el('p','Préparez vos listes ici. Leur envoi attend le raccordement Java.',
+const listsHelp=el('p','Ces listes s’appliquent aux prochains documents déposés.',
   'asv2-muted asv2-side-help',side);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
@@ -355,14 +428,14 @@ function updateLastDocCard(entry){
   clear(lastDocActions);
   if(entry.status==='READY'||entry.status==='REVIEW_REQUIRED'){
     lastDocStatus.textContent=entry.status==='READY'?'Résultat prêt selon vos réglages':'Vérification nécessaire';
-    if(canDownloadResult(entry))buttonWithIcon('Télécharger','download',
-      'asv2-primary asv2-last-doc-action',lastDocActions,
+    if(canDownloadResult(entry))buttonWithIcon(entry.status==='READY'?'Télécharger':'Télécharger non vérifié','download',
+      entry.status==='READY'?'asv2-primary asv2-last-doc-action':'asv2-secondary asv2-last-doc-action',lastDocActions,
       ()=>download(entry,entry.status==='READY').catch(showError));
-    if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+    if(canDownloadKey(entry))
       buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
         ()=>downloadKey(entry).catch(showError));
     buttonWithIcon(entry.status==='READY'?'Consulter':'Vérifier',entry.status==='READY'?'eye':'eye-slash',
-      'asv2-secondary asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
+      (entry.status==='REVIEW_REQUIRED'?'asv2-primary':'asv2-secondary')+' asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
   } else {
     lastDocStatus.textContent='Traitement impossible';
     buttonWithIcon('Voir les détails','file','asv2-secondary asv2-last-doc-action',lastDocActions,
@@ -537,8 +610,8 @@ function openLists(){
   for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
   renderListDraft();
   listsAvailability.textContent=listsReady?
-    'Listes disponibles pour les prochains dépôts sur cette recette.':
-    'Préparation uniquement : les listes ne sont pas encore transmises aux documents. Le raccordement Java est en cours.';
+    'Les listes enregistrées seront appliquées aux prochains dépôts.':
+    'Les listes ne sont pas disponibles sur cette recette.';
   listsAvailability.classList.toggle('is-ready',listsReady);
   listsError.hidden=true;listsModal.hidden=false;document.body.classList.add('asv2-policy-open');
   listCards.include.input.focus();
@@ -692,9 +765,10 @@ function setEnabled(yes){
   pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes ; conservez la clé de restitution.':
     'Ce mode n’est pas encore disponible sur cette page.';
   listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
-    'Préparer les listes ; leur envoi attend le raccordement Java';
-  listsHelp.textContent=listsReady?'Une inclusion masque localement ; une exclusion en conflit demande une revue.':
-    'Préparez vos listes ici. Leur envoi aux documents attend le raccordement Java.';
+    'Listes indisponibles sur cette recette';
+  listsHelp.textContent=listsReady?'Une inclusion demande le masquage ; une exclusion en conflit demande une revue.':
+    'Les listes ne sont pas disponibles sur cette recette.';
+  updateRestoreAction();
   listsStorageNote.textContent=listStorePersistent?
     'Ces termes restent sur ce navigateur pour ce compte. Évitez un appareil partagé.':
     'Ces termes restent uniquement pendant cette page ouverte. Ils ne sont pas mémorisés.';
@@ -745,8 +819,9 @@ async function loadPreferences(){
     state.accountRef=accountRef;
     try{sessionStorage.removeItem(storageKey);sessionStorage.removeItem('asv2-open-drawer-key');}catch(_){}
     state.capabilities=response.capabilities||{};
-    const available=v2Capabilities(state.capabilities,config.FILE_WORKER_CODE_SHA);
-    listsReady=config.FILE_LISTS_READY===true&&available.lists;
+    const available=v2Capabilities(state.capabilities);
+    editorCapabilities=available;
+    listsReady=available.lists;
     pseudoReady=available.pseudonymize;
     const stored=await loadStoredLists(accountRef);
     if(request!==preferencesRequest)return;
@@ -983,7 +1058,8 @@ function renderHistory(){
       if(source==='v2'&&row.processingMode==='PSEUDONYMIZE'){
         const keyAction=historyAction('Télécharger la clé de cette révision','key',controls,
           ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
-        keyAction.disabled=status!=='READY'||!pseudoReady;
+        keyAction.disabled=!pseudoReady||!(status==='READY'||
+          (status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired));
         if(keyAction.disabled){
           keyAction.title='Clé indisponible pour cette révision sur la recette.';
           keyAction.setAttribute('aria-label',keyAction.title);
@@ -1011,7 +1087,8 @@ function renderHistory(){
     if(source==='v2'&&row.processingMode==='PSEUDONYMIZE'){
       const keyAction=buttonWithIcon('Télécharger la clé','key','asv2-secondary',cardActions,
         ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
-      keyAction.disabled=status!=='READY'||!pseudoReady;
+      keyAction.disabled=!pseudoReady||!(status==='READY'||
+        (status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired));
       if(keyAction.disabled){
         keyAction.title='Clé indisponible pour cette révision sur la recette.';
         el('small',keyAction.title,'asv2-history-key-note',card);
@@ -1074,7 +1151,7 @@ async function downloadHistoryRow(row){
 }
 async function downloadHistoryKey(row){
   const entry=await entryForHistory(row);
-  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')throw new Error('Clé indisponible');
+  if(!canDownloadKey(entry))throw new Error('Clé indisponible');
   await downloadKey(entry);
 }
 async function downloadSelectedZip(){
@@ -1278,6 +1355,7 @@ async function loadCurrent(entry){
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
     entry.focusId=null;entry.target=null;entry.previewKind='anon';entry.page=1;
+    entry.report=null;entry.reportError=null;
   }
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
@@ -1289,6 +1367,16 @@ async function loadCurrent(entry){
   entry.createdAt=job.createdAt||job.dtCreation||entry.createdAt;
   entry.sizeBytes=job.sizeBytes||job.fileLength||entry.sizeBytes;
   entry.format=formatOf(entry.name)||entry.format;
+  if(editorCapabilities.qaReport&&entry.hasCurrentResult&&entry.revision){
+    try{
+      const report=await api.report(entry.jobId);
+      if(!currentAccountEntry(entry)||entry.revision!==String(report?.revision)||
+        report.status!==entry.status||report.protectionPolicy?.digest!==entry.digest||
+        report.listDigest!==entry.listDigest||report.processingMode!==entry.mode)
+        throw new Error('Rapport QA périmé');
+      entry.report=report;entry.reportError=null;
+    }catch(error){entry.report=null;entry.reportError='Rapport QA indisponible pour cette révision.';}
+  }else{entry.report=null;entry.reportError=null;}
   renderQueue();renderDrawer(entry);if(state.active===entry.key)await renderPreview(entry);
   if(isTerminal(currentStatus)&&!entry.announcedComplete){
     entry.announcedComplete=true;
@@ -1347,8 +1435,9 @@ function renderDrawer(entry){
     buttonWithIcon(entry.status==='READY'?'Télécharger le résultat':'Télécharger le résultat non vérifié',
       'download',entry.status==='READY'?'asv2-primary':'asv2-secondary',drawerDownloads,
       ()=>download(entry,entry.status==='READY').catch(showError));
-    if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady){
-      buttonWithIcon('Télécharger la clé de cette révision','key','asv2-secondary',drawerDownloads,
+    if(canDownloadKey(entry)){
+      buttonWithIcon(entry.status==='READY'?'Télécharger la clé de cette révision':
+        'Télécharger la clé non vérifiée','key','asv2-secondary',drawerDownloads,
         ()=>downloadKey(entry).catch(showError));
       el('small','Conservez le résultat et sa clé ensemble, dans un espace privé.',
         'asv2-key-guidance',drawerDownloads);
@@ -1375,13 +1464,108 @@ function renderIssues(entry){
   const review=entry.review;
   if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
     'asv2-muted',issuePane);return;}
-  if(entry.status==='REVIEW_REQUIRED'){
-    const approval=buttonWithIcon('J’ai vérifié ce document','shield-check',
-      'asv2-secondary asv2-human-approval',issuePane);
-    approval.disabled=true;
-    approval.title='Validation humaine indisponible sur cette recette tant que Java ne la propose pas.';
-    el('p','La validation humaine sera disponible après raccordement de Java. Elle ne changera pas le statut technique du fichier.',
-      'asv2-muted asv2-approval-note',issuePane);
+  const sourcePages=(review.pages||[]).filter(page=>typeof page.text==='string'&&
+    typeof page.surfaceId==='string'&&page.native===true&&page.text.length<=2_000_000&&
+    (entry.format==='txt'||entry.format==='pdf'));
+  if(editorCapabilities.addOccurrence&&review.reviewable&&sourcePages.length){
+    const sourceRevision=entry.revision;
+    const tool=el('details',null,'asv2-add-occurrence',issuePane);
+    el('summary','Masquer un passage oublié',null,tool);
+    el('p','Sélectionnez le passage dans le texte de l’original ci-dessous. Une nouvelle révision sera créée.',
+      'asv2-muted',tool);
+    let page=sourcePages.find(item=>Number(item.page)===Number(entry.page))||sourcePages[0];
+    let exact=null;
+    if(sourcePages.length>1){
+      const pageSelect=el('select',null,'asv2-source-page-select',tool);
+      for(const candidate of sourcePages){const option=el('option','Page '+candidate.page,null,pageSelect);
+        option.value=candidate.surfaceId;}
+      pageSelect.value=page.surfaceId;
+      pageSelect.addEventListener('change',()=>{
+        page=sourcePages.find(item=>item.surfaceId===pageSelect.value)||sourcePages[0];
+        source.textContent=page.text;exact=null;mask.disabled=true;
+      });
+    }
+    const source=el('pre','', 'asv2-original-selection',tool);
+    tool.addEventListener('toggle',()=>{if(tool.open)source.textContent=page.text;
+      else{source.textContent='';exact=null;mask.disabled=true;}});
+    source.setAttribute('aria-label','Texte original sélectionnable');
+    const selectionInfo=el('p','Sélectionnez du texte pour activer le masquage.',
+      'asv2-muted',tool);
+    const mask=buttonWithIcon('Masquer le texte sélectionné','eye-slash',
+      'asv2-secondary',tool,async()=>{
+        const selected=exact;
+        if(!selected){selectionInfo.textContent='Sélection invalide : sélectionnez uniquement dans ce texte original.';return;}
+        if(entry.revision!==sourceRevision){selectionInfo.textContent='Le document a changé. Rechargez la sélection.';return;}
+        if(!await confirmAction('Masquer uniquement « '+selected.text.slice(0,80)+' » dans cette révision ?'))return;
+        mask.disabled=true;entry.commandBusy=true;
+        try{
+          const receipt=await api.addOccurrence(entry.jobId,entry.digest,{revision:sourceRevision,
+            surfaceId:page.surfaceId,...(entry.format==='pdf'?{page:Number(page.page)}:{}),
+            start:selected.start,end:selected.end,selectedText:selected.text});
+          await apply(entry,receipt.revision);
+        }catch(error){if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+          showError(error);mask.disabled=false;}
+        finally{entry.commandBusy=false;}
+      });
+    mask.disabled=true;
+    source.addEventListener('mouseup',()=>{
+      exact=exactSourceSelection(source,page.text);
+      mask.disabled=!exact||entry.commandBusy;
+      selectionInfo.textContent=exact?'Passage sélectionné : '+exact.text.slice(0,100):
+        'Sélectionnez du texte pour activer le masquage.';
+    });
+    source.addEventListener('keyup',()=>source.dispatchEvent(new Event('mouseup')));
+  }
+  if(entry.status==='REVIEW_REQUIRED'&&editorCapabilities.humanVerification){
+    const approvalBox=el('details',null,'asv2-human-box',issuePane);
+    if(review.humanVerifiedDeliverable===true&&review.humanVerification){
+      approvalBox.open=true;
+      el('summary','Attestation humaine',null,approvalBox);
+      const reviewer=review.humanVerification.reviewer||review.humanVerification.reviewerLogin||
+        review.humanVerification.author||'un utilisateur';
+      el('strong','Vérifié par '+reviewer,null,approvalBox);
+      el('p','Cette attestation humaine est distincte du statut technique « Vérification nécessaire ».',
+        'asv2-muted',approvalBox);
+      buttonWithIcon('Télécharger le document vérifié par une personne','shield-check',
+        'asv2-secondary',approvalBox,()=>downloadHumanVerified(entry).catch(showError));
+    }else if(review.canApproveHumanVerification===true){
+      el('summary','J’ai vérifié ce document',null,approvalBox);
+      el('p','Cochez chaque contrôle après l’avoir réellement effectué sur la version finale.',
+        'asv2-muted',approvalBox);
+      const checkLabels=[['names','Noms et personnes'],['addresses','Adresses'],
+        ['phones','Téléphones'],['identifiers','Identifiants'],
+        ['logos_images','Logos et images'],['visual_regions','Zones visuelles'],
+        ['original_vs_final_all_pages','Original et résultat, toutes les pages']];
+      const checks={};
+      const approve=buttonWithIcon('J’ai vérifié ce document','shield-check',
+        'asv2-primary asv2-human-approval',approvalBox,async()=>{
+          if(approve.disabled)return;
+          approve.disabled=true;
+          try{await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks});
+            await loadCurrent(entry);drawerMessage('Votre vérification a été enregistrée.');}
+          catch(error){if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+            showError(error);approve.disabled=false;}
+        });
+      approve.disabled=true;
+      for(const [name,label] of checkLabels){
+        const line=el('label',null,'asv2-human-check',approvalBox);
+        const input=el('input',null,null,line);input.type='checkbox';
+        checks[name]=false;
+        input.addEventListener('change',()=>{checks[name]=input.checked;
+          approve.disabled=!Object.values(checks).every(Boolean);});
+        el('span',label,null,line);
+      }
+      approvalBox.appendChild(approve);
+    }else if(Array.isArray(review.humanVerificationBlockers)&&review.humanVerificationBlockers.length){
+      el('summary','Validation humaine indisponible',null,approvalBox);
+      el('p','La validation humaine n’est pas disponible : '+
+        review.humanVerificationBlockers.length+' condition(s) restent à résoudre.',
+        'asv2-muted',approvalBox);
+      const details=el('details',null,null,approvalBox);
+      el('summary','Voir les conditions',null,details);
+      for(const blocker of review.humanVerificationBlockers)
+        el('p',String(blocker?.message||blocker?.code||blocker),null,details);
+    }
   }
 
   const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
@@ -1486,11 +1670,11 @@ function renderIssues(entry){
           const control=action==='MASK'?
             buttonWithIcon('Masquer','eye-slash','asv2-secondary',actions,
               ()=>decide(entry,current.id,action)):
-            button('Conserver','asv2-secondary',actions,
+            buttonWithIcon('Conserver','shield-check','asv2-secondary',actions,
               ()=>decide(entry,current.id,action));
           control.title=copy.reviewAction[action];
           control.setAttribute('aria-label',copy.reviewAction[action]);
-          control.disabled=!review.reviewable;
+          control.disabled=!review.reviewable||entry.commandBusy;
         }
       }
     }
@@ -1563,6 +1747,21 @@ function renderIssues(entry){
       el('summary','Détails pour le support',null,details);
       el('code',[...new Set(reasonCodes)].join(' · '),null,details);
     }
+    if(entry.report||entry.reportError){
+      const details=el('details',null,'asv2-qa-details',issuesContent);
+      el('summary','Rapport de vérification du fichier',null,details);
+      if(entry.reportError)el('p',entry.reportError,'asv2-muted',details);
+      else{
+        const qaReasons=Array.isArray(entry.report.reasons)?entry.report.reasons:[];
+        el('p',qaReasons.length?qaReasons.length+' point(s) signalé(s) par la vérification du fichier.':
+          'Aucun point supplémentaire signalé par le rapport QA.',null,details);
+        if(qaReasons.length){
+          const support=el('details',null,null,details);
+          el('summary','Codes pour le support',null,support);
+          el('code',qaReasons.map(r=>typeof r==='string'?r:r?.code||'').filter(Boolean).join(' · '),null,support);
+        }
+      }
+    }
 
     // 3. Autres occurrences regroupées par catégorie
     const filteredOtherRows=otherRows.filter(r=>{
@@ -1613,15 +1812,28 @@ function renderFooter(entry){
   drawerFooter.hidden=!drawerFooter.children.length;
 }
 async function decide(entry,occurrenceId,action){
+  if(entry.commandBusy)return;
   if(!await confirmAction(copy.reviewAction[action]+' uniquement dans le passage choisi ?'))return;
+  entry.commandBusy=true;renderIssues(entry);
   try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
-    action,reason:'review_explicit'});await apply(entry,receipt.revision);}catch(error){showError(error);}
+    action,reason:'review_explicit'});await apply(entry,receipt.revision);}catch(error){
+      if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+      showError(error);
+    }
+  finally{entry.commandBusy=false;}
 }
 async function apply(entry,revision){
   entry.status='PROCESSING';entry.hasCurrentResult=false;
-  entry.focusId=null;entry.target=null;renderDrawer(entry);renderQueue();
-  await api.execute(entry.jobId,entry.digest,revision);
-  await pollEntry(entry);
+  entry.focusId=null;entry.target=null;entry.report=null;entry.review=null;entry.regions=null;
+  state.previewSerial++;state.previewCleanup?.();clear(viewerBody);
+  renderDrawer(entry);renderQueue();
+  try{
+    await api.execute(entry.jobId,entry.digest,revision);
+    await pollEntry(entry);
+  }catch(error){
+    await loadCurrent(entry).catch(()=>{});
+    throw error;
+  }
 }
 function focusOccurrence(entry,row){
   if(entry.format==='pdf'&&Number.isInteger(Number(row.page)))entry.page=Number(row.page);
@@ -1723,7 +1935,7 @@ async function renderPreview(entry){
       if(canDownloadResult(entry)){
         buttonWithIcon('Télécharger le résultat ('+entry.format.toUpperCase()+')','download','asv2-primary',cardActions,
           ()=>download(entry,entry.status==='READY').catch(showError));
-        if(entry.status==='READY'&&entry.mode==='PSEUDONYMIZE'&&pseudoReady)
+        if(canDownloadKey(entry))
           buttonWithIcon('Télécharger la clé de pseudonymisation','key','asv2-secondary',cardActions,
             ()=>downloadKey(entry).catch(showError));
       } else if(entry.status==='FAILED') {
@@ -2008,6 +2220,20 @@ function codePointOffset(text,count){
   for(let point=0;point<count&&unit<text.length;point++)unit+=text.codePointAt(unit)>0xFFFF?2:1;
   return unit;
 }
+function exactSourceSelection(element,source){
+  const selection=window.getSelection();
+  if(!selection||selection.rangeCount!==1||selection.isCollapsed)return null;
+  const range=selection.getRangeAt(0);
+  if(!element.contains(range.startContainer)||!element.contains(range.endContainer))return null;
+  const prefix=range.cloneRange();prefix.selectNodeContents(element);
+  prefix.setEnd(range.startContainer,range.startOffset);
+  const start=[...prefix.toString()].length;
+  const selectedText=range.toString();
+  const end=start+[...selectedText].length;
+  if(!selectedText.trim()||source.slice(codePointOffset(source,start),codePointOffset(source,end))!==selectedText)
+    return null;
+  return {start,end,text:selectedText};
+}
 function renderText(bytes,entry=null,kind='anon',parent=viewerBody){
   const text=new TextDecoder('utf-8',{fatal:false}).decode(bytes);
   const row=kind==='origin'&&entry?.focusId&&String(entry.review?.revision)===String(entry.revision)?
@@ -2085,19 +2311,40 @@ async function download(entry,certified){
 }
 async function downloadKey(entry){
   if(!currentAccountEntry(entry))throw new Error('Le compte a changé. Actualisez la page.');
-  if(entry.status!=='READY'||entry.mode!=='PSEUDONYMIZE')
+  if(!canDownloadKey(entry))
     throw new Error('Clé indisponible pour ce document');
+  const certified=entry.status==='READY';
+  if(!certified&&!await confirmAction('Cette clé appartient à un résultat non vérifié pouvant encore contenir des données sensibles. La télécharger quand même ?'))return;
   const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
     listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
-  const response=await api.checkedArtifact(entry.jobId,{kind:'key',expectedDigest:entry.digest,
+  const response=await api.checkedArtifact(entry.jobId,{kind:'key',certified,expectedDigest:entry.digest,
     expectedListDigest:entry.listDigest,expectedRevision:entry.revision,expectedMode:entry.mode});
   const blob=await response.blob();
   await assertDownloadStillCurrent(entry,expected);
   const url=URL.createObjectURL(blob);const link=el('a',null,null,document.body);
-  link.href=url;link.download='cle-pseudonymes-'+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
+  link.href=url;link.download='cle-pseudonymes-'+(certified?'':'NON-VERIFIE-')+String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+
     '-'+String(entry.revision).replace(/[^A-Za-z0-9_-]/g,'')+'.properties';
   link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   drawerMessage('Clé de la révision courante téléchargée. Conservez-la dans un espace privé.');
+}
+async function downloadHumanVerified(entry){
+  if(!currentAccountEntry(entry)||entry.status!=='REVIEW_REQUIRED'||
+      entry.review?.humanVerifiedDeliverable!==true)throw new Error('Attestation indisponible');
+  const expected={status:entry.status,revision:entry.revision,digest:entry.digest,
+    listDigest:entry.listDigest,mode:entry.mode,accountEpoch:state.accountEpoch};
+  const response=await api.checkedArtifact(entry.jobId,{kind:'human',certified:false,
+    expectedDigest:entry.digest,expectedListDigest:entry.listDigest,
+    expectedRevision:entry.revision,expectedMode:entry.mode});
+  const blob=await response.blob();
+  await assertDownloadStillCurrent(entry,expected);
+  const review=await api.review(entry.jobId);
+  if(review.humanVerifiedDeliverable!==true||String(review.revision)!==String(expected.revision))
+    throw new Error('Attestation périmée');
+  const url=URL.createObjectURL(blob),link=el('a',null,null,document.body);
+  link.href=url;link.download='document-verifie-par-une-personne-'+
+    String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+'.'+(entry.format||'bin');
+  link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  drawerMessage('Document vérifié par une personne téléchargé. Le statut technique reste inchangé.');
 }
 async function assertDownloadStillCurrent(entry,expected){
   const [job,review]=await Promise.all([api.status(entry.jobId),api.review(entry.jobId)]);

@@ -24,7 +24,8 @@ try{
 function persistMock(){sessionStorage.setItem('asv2-mock-jobs',JSON.stringify([...jobs.values()].map(job=>({
  id:job.id,fileName:job.file.name,fileType:job.file.type,policy:job.policy,status:job.status,
  target:job.target,rev:job.rev,polls:job.polls,unresolved:job.unresolved,sourceText:job.sourceText,
- listDigest:job.listDigest,mode:job.mode,createdAt:job.createdAt,sizeBytes:job.sizeBytes}))));}
+ listDigest:job.listDigest,mode:job.mode,createdAt:job.createdAt,sizeBytes:job.sizeBytes,
+ human:job.human===true}))));}
 const params=new URLSearchParams(location.search);
 if(params.has('compareFixtures')){
  for(const fixture of [
@@ -86,12 +87,15 @@ window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2'
  HISTORY_V2_PATH:'/history/v2',BULK_ZIP_V2_PATH:'/history/v2/zip',
  MAX_UPLOAD_BYTES:40*1024*1024,
  getAuthHeaders:async()=>({'X-Mock-Actor':'local-test'})};
-const capabilities={workerCodeSha:params.has('wrongWorker')?'different-worker':'6498642a2702cbe5',
+const capabilities={
  listDirectives:listsEnabled&&!params.has('noListCapability'),
  processingModes:pseudoEnabled?['ANONYMIZE','PSEUDONYMIZE']:['ANONYMIZE'],
  pseudonymKeyDownload:pseudoEnabled,uploadIdempotency:false,
  historyV2:params.has('history'),bulkZipV2:params.has('history'),
- maxUploadBytes:40*1024*1024};
+ maxUploadBytes:40*1024*1024,
+ addOccurrence:params.has('newEditor'),qaReport:params.has('newEditor'),
+ humanVerification:params.has('newEditor'),pseudonymKeyReviewRequired:params.has('newEditor'),
+ pseudonymRestore:params.has('newEditor')};
 async function listDigest(inclusion,exclusion){
  const canonical=JSON.stringify({anon2ExclusionList:exclusion,anon2InclusionList:inclusion});
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(canonical));
@@ -117,6 +121,10 @@ function review(job){
    !(params.has('noPreview')&&job.status==='REVIEW_REQUIRED'),
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  listDigest:job.listDigest,processingMode:job.mode,
+ canApproveHumanVerification:params.has('newEditor')&&job.status==='REVIEW_REQUIRED'&&!job.unresolved,
+ humanVerificationBlockers:job.unresolved?['UNRESOLVED_MASK']:[],
+ humanVerifiedDeliverable:job.human===true,
+ humanVerification:job.human?{reviewer:'synthetic-user'}:null,
  occurrences:textOccurrences|| (job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
   category:'EML',action:'MASK',fragments:[[72,94,202,109]]}]:[]),
  pages:job.file.name.endsWith('.txt')?[{page:1,native:true,surfaceId:'text:0',text:source}]:[],
@@ -187,6 +195,17 @@ window.fetch=async(url,options={})=>{
   return json(meta(job));
  }
  if(tail==='/review')return json(review(job));
+ if(tail==='/report')return json({revision:job.rev,status:job.status,
+  protectionPolicy:job.policy,listDigest:job.listDigest,processingMode:job.mode,
+  reasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']});
+ if(tail==='/review/human-verification'){
+  const payload=JSON.parse(options.body);
+  const keys=['names','addresses','phones','identifiers','logos_images','visual_regions','original_vs_final_all_pages'];
+  if(payload.revision!==job.rev)return json({error:'STALE_REVISION'},409);
+  if(job.status!=='REVIEW_REQUIRED'||job.unresolved||keys.some(key=>payload.checks?.[key]!==true))
+   return json({error:'HUMAN_VERIFICATION_BLOCKED'},409);
+  job.human=true;persistMock();return json(review(job));
+ }
  if(tail==='/regions')return json({version:1,sourceFile:job.file.name,pages:[{page:1,rotation:0,
   size:[400,250],occurrences:[{id:'synthetic-email-1',rectangles:[[72,94,202,109]]}]}]});
  if(tail.startsWith('/preview')){
@@ -209,27 +228,36 @@ window.fetch=async(url,options={})=>{
  if(tail==='/review/commands'){
   const payload=JSON.parse(options.body);
   if(payload.revision!==job.rev)return json({error:'STALE_REVISION'},409);
+  if(payload.op==='ADD_OCCURRENCE'){
+   const page=review(job).pages.find(item=>item.surfaceId===payload.surfaceId&&item.native===true);
+   if(!page||Array.from(page.text).slice(payload.start,payload.end).join('')!==payload.selectedText)
+    return json({error:'INVALID_SOURCE_SELECTION'},422);
+  }
   if(payload.op==='ADD_MANUAL_REGION'&&payload.maskOccurrenceId&&payload.maskOccurrenceId!=='synthetic-mask-1')return json({error:'BAD_TARGET'},422);
   if(!payload.op&&payload.occurrenceId!=='synthetic-email-1'&&
      !review(job).occurrences.some(item=>item.id===payload.occurrenceId))
     return json({error:'BAD_OCCURRENCE'},422);
   if(payload.op==='ADD_MANUAL_REGION')job.unresolved=false;
-  job.rev='mock-r2';persistMock();return json({accepted:true,revision:job.rev});
+  job.rev='mock-r2';job.human=false;persistMock();return json({accepted:true,revision:job.rev});
  }
  if(tail==='/review/execute'){
   const payload=JSON.parse(options.body);if(payload.revision!==job.rev)return json({error:'STALE_REVISION'},409);
   job.target=job.unresolved?'REVIEW_REQUIRED':'READY';job.status='PROCESSING';job.polls=0;
   persistMock();return json(meta(job));
  }
- if(tail==='/download'||tail==='/result'||tail==='/pseudonym-key'){
-  const certified=tail==='/download'||tail==='/pseudonym-key';
+ if(tail==='/download'||tail==='/result'||tail==='/pseudonym-key'||tail==='/human-verified-download'){
+  const certified=tail==='/download'||(tail==='/pseudonym-key'&&job.status==='READY');
+  if(tail==='/human-verified-download'&&!job.human)return json({error:'HUMAN_VERIFICATION_BLOCKED'},409);
   if(certified&&job.status!=='READY')return json({error:'NOT_READY'},409);
+  if(job.status==='REVIEW_REQUIRED'&&tail==='/pseudonym-key'&&
+     options.headers?.['X-Agiloshield-Confirm-Non-Verifie']!=='true')return json({error:'CONFIRM_REQUIRED'},409);
   if(tail==='/pseudonym-key'&&job.mode!=='PSEUDONYMIZE')return json({error:'NO_KEY'},404);
   return new Response('SYNTHETIC ONLY',{headers:{'Content-Type':'text/plain',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Status':job.status,
    'X-Agiloshield-Policy-Digest':job.policy.digest,
    'X-Agiloshield-Processing-Mode':job.mode,
-   'X-Agiloshield-Assurance':certified?'technical-ready':'non-verified'}});
+   'X-Agiloshield-Assurance':tail==='/human-verified-download'?'human-verified':
+    certified?'technical-ready':'non-verified'}});
  }
  return json({error:'NOT_FOUND'},404);
 };

@@ -324,3 +324,13 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-tour-controls .asv2-link{margin-left:auto}
 @media(max-width:700px){#agiloshield-v2-staging .asv2-tour-card{top:auto;bottom:16px;left:16px;width:calc(100vw - 32px)}}
 @media(max-width:650px){#agiloshield-v2-staging .asv2-shell{margin:0;padding:0;border-radius:0}}
+#agiloshield-v2-staging .asv2-add-occurrence,#agiloshield-v2-staging .asv2-human-box,#agiloshield-v2-staging .asv2-qa-details{margin:10px 0;padding:10px;border:1px solid var(--asv2-line);border-radius:8px;background:#fff}
+#agiloshield-v2-staging .asv2-add-occurrence summary,#agiloshield-v2-staging .asv2-qa-details summary{cursor:pointer;color:var(--asv2-blue);font-weight:700}
+#agiloshield-v2-staging .asv2-add-occurrence .asv2-muted,#agiloshield-v2-staging .asv2-human-box .asv2-muted{font-size:12px;line-height:1.4}
+#agiloshield-v2-staging .asv2-original-selection{max-height:240px;overflow:auto;padding:12px;border:1px solid var(--asv2-line);border-radius:6px;background:#f7f9fc;color:var(--asv2-navy);font:12px/1.55 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text}
+#agiloshield-v2-staging .asv2-source-page-select{max-width:100%;margin:5px 0;padding:6px;border:1px solid var(--asv2-line);border-radius:6px;background:#fff}
+#agiloshield-v2-staging .asv2-human-box>strong{display:block;margin-bottom:5px}
+#agiloshield-v2-staging .asv2-human-box>summary{cursor:pointer;color:var(--asv2-blue);font-weight:700}
+#agiloshield-v2-staging .asv2-human-check{display:flex;align-items:flex-start;gap:8px;margin:7px 0;font-size:12px;line-height:1.4;cursor:pointer}
+#agiloshield-v2-staging .asv2-human-check input{margin-top:2px;accent-color:var(--asv2-blue)}
+#agiloshield-v2-staging .asv2-human-box .asv2-primary{width:100%;justify-content:center;margin-top:12px}

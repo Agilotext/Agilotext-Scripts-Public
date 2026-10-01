@@ -20,17 +20,18 @@ export function freezeJobSelection({policy, lists, mode}) {
       anon2ExclusionList:[...lists.anon2ExclusionList]}:null,
   };
 }
-export function v2Capabilities(capabilities, expectedWorkerCodeSha) {
-  const workerMatches = typeof expectedWorkerCodeSha === 'string' &&
-    expectedWorkerCodeSha.length > 0 &&
-    capabilities?.workerCodeSha === expectedWorkerCodeSha;
+export function v2Capabilities(capabilities) {
+  // Java 12.0.6 no longer advertises a workerCodeSha. Feature flags describe
+  // the HTTP contract; deployment qualification remains a staging gate.
+  const modes = Array.isArray(capabilities?.processingModes) ? capabilities.processingModes : [];
   return {
-    workerMatches,
-    lists: workerMatches && capabilities?.listDirectives === true,
-    pseudonymize: workerMatches &&
-      Array.isArray(capabilities?.processingModes) &&
-      capabilities.processingModes.includes('PSEUDONYMIZE') &&
-      capabilities?.pseudonymKeyDownload === true,
+    lists: capabilities?.listDirectives === true,
+    pseudonymize: modes.includes('PSEUDONYMIZE') && capabilities?.pseudonymKeyDownload === true,
+    addOccurrence: capabilities?.addOccurrence === true,
+    qaReport: capabilities?.qaReport === true,
+    humanVerification: capabilities?.humanVerification === true,
+    pseudonymKeyReviewRequired: capabilities?.pseudonymKeyReviewRequired === true,
+    pseudonymRestore: capabilities?.pseudonymRestore === true,
   };
 }
 export function assertCreatedJob(created, {digest, listDigest, mode}) {
@@ -184,6 +185,24 @@ export class AgiloShieldV2Client {
       commandId:crypto.randomUUID(), page, rect, reason, sourceRevision, documentId,
       ...(occurrenceId ? {occurrenceId} : {maskOccurrenceId})});
   }
+  addOccurrence(id, digest, {revision, surfaceId, page, start, end, selectedText}) {
+    if (!revision || !surfaceId || !Number.isInteger(start) || !Number.isInteger(end) ||
+        start < 0 || end <= start || !selectedText ||
+        [...selectedText].length !== end - start || (page !== undefined && (!Number.isInteger(page) || page < 1)))
+      throw new Error('Sélection originale invalide');
+    return this.command(id, digest, {op:'ADD_OCCURRENCE',revision,commandId:crypto.randomUUID(),
+      surfaceId,...(page === undefined ? {} : {page}),start,end,selectedText,
+      action:'MASK',reason:'human_added'});
+  }
+  approveHumanVerification(id, digest, {revision, checks}) {
+    const names=['names','addresses','phones','identifiers','logos_images','visual_regions',
+      'original_vs_final_all_pages'];
+    if (!revision || !checks || Object.keys(checks).length !== names.length ||
+        names.some(name=>checks[name]!==true)) throw new Error('Vérifications humaines incomplètes');
+    return this.json(this.path(id, '/review/human-verification'), {method:'POST',digest,
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({revision,commandId:crypto.randomUUID(),checks})});
+  }
   execute(id, digest, revision) {
     return this.json(this.path(id, '/review/execute'), {method:'POST', digest,
       headers:{'Content-Type':'application/json'}, body:JSON.stringify({revision})});
@@ -203,14 +222,31 @@ export class AgiloShieldV2Client {
       {'X-Agiloshield-Confirm-Non-Verifie':'true'} : {}});
   }
   certifiedDownload(id) { return this.request(this.path(id, '/download')); }
-  pseudonymKey(id) { return this.request(this.path(id, '/pseudonym-key')); }
+  pseudonymKey(id, {confirmNonVerified = false} = {}) {
+    return this.request(this.path(id, '/pseudonym-key'), {headers:confirmNonVerified ?
+      {'X-Agiloshield-Confirm-Non-Verifie':'true'} : {}});
+  }
+  humanVerifiedDownload(id) { return this.request(this.path(id, '/human-verified-download')); }
+  inspectRestore(file, key) {
+    if (!file || !key) throw new Error('Document et clé requis');
+    const form=new FormData();form.append('file',file);form.append('key',key);
+    return this.json('/pseudonym/restore/inspect',{method:'POST',body:form});
+  }
+  executeRestore(inspectionId) {
+    if (!/^restore-[0-9a-f]{32}$/.test(inspectionId||'')) throw new Error('Inspection invalide');
+    return this.request('/pseudonym/restore',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({inspectionId,confirmSensitiveRestore:true})});
+  }
   async checkedArtifact(id, {certified = true, kind = 'document', expectedDigest,
     expectedListDigest, expectedRevision, expectedMode} = {}) {
     if (!expectedDigest || !expectedListDigest || !expectedRevision || !expectedMode)
       throw new Error('Current job fingerprints required');
     const [job, review] = await Promise.all([this.status(id), this.review(id)]);
     const status = job.anonStatus || job.status;
-    const assurance = certified ? 'technical-ready' : 'non-verified';
+    const human=kind==='human';
+    const assurance = human ? 'human-verified' : certified ? 'technical-ready' : 'non-verified';
+    const jobAssurance = certified ? 'technical-ready' : 'non-verified';
     if (job.protectionPolicy?.digest !== expectedDigest ||
         review.protectionPolicy?.digest !== expectedDigest ||
         job.listDigest !== expectedListDigest || review.listDigest !== expectedListDigest ||
@@ -218,16 +254,18 @@ export class AgiloShieldV2Client {
         String(review.revision) !== String(expectedRevision) || String(job.reviewRevision) !== String(expectedRevision) ||
         review.status !== status ||
         job.workflowState !== 'RESULT' || review.workflowState !== 'RESULT' ||
-        job.assurance !== assurance ||
+        job.assurance !== jobAssurance ||
         (certified && review.deliverable !== true) ||
         (!certified && review.previewAvailable !== true) ||
         (certified && status !== 'READY') ||
-        (!certified && status !== 'REVIEW_REQUIRED')) {
+        (!certified && status !== 'REVIEW_REQUIRED') ||
+        (human && (review.humanVerifiedDeliverable !== true || !review.humanVerification))) {
       throw new Error('Stale job state');
     }
-    if (kind === 'key' && (!certified || expectedMode !== 'PSEUDONYMIZE'))
+    if (kind === 'key' && expectedMode !== 'PSEUDONYMIZE')
       throw new Error('Pseudonym key unavailable');
-    const response = kind === 'key' ? await this.pseudonymKey(id) : certified ? await this.certifiedDownload(id) :
+    const response = kind === 'key' ? await this.pseudonymKey(id,{confirmNonVerified:!certified}) :
+      human ? await this.humanVerifiedDownload(id) : certified ? await this.certifiedDownload(id) :
       await this.result(id, {confirmNonVerified:status === 'REVIEW_REQUIRED'});
     if (response.headers.get('X-Agiloshield-Policy-Digest') !== expectedDigest ||
         response.headers.get('X-Agiloshield-Revision') !== String(expectedRevision) ||
