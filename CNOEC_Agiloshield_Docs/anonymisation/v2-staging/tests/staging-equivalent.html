@@ -67,6 +67,14 @@ if(params.has('failedFixture')&&!jobs.has('synthetic-job-9030')){
   sourceText:'Document source synthétique',createdAt:'2026-09-30T10:00:00Z',sizeBytes:26});
  nextId=Math.max(nextId,9031);
 }
+if(params.has('pseudoFixture')&&!jobs.has('synthetic-job-9040')){
+ jobs.set('synthetic-job-9040',{id:'synthetic-job-9040',
+  file:{name:'pseudo-synthetique.txt',type:'text/plain'},
+  policy:{...preference,digest:preference.digest},status:'READY',target:'READY',
+  listDigest:emptyListDigest,mode:'PSEUDONYMIZE',rev:'mock-r1',polls:2,unresolved:false,
+  sourceText:'Florian confirme ce passage.',createdAt:'2026-09-30T10:00:00Z',sizeBytes:28});
+ nextId=Math.max(nextId,9041);
+}
 const listsEnabled=params.has('lists');
 const pseudoEnabled=params.has('pseudo');
 window.AGILOSHIELD_V2_CONFIG={BASE_URL:'https://mock.invalid/api/agiloshield-v2',
@@ -105,7 +113,8 @@ function review(job){
     text:'Florian',page:null,category:'PER',action:'REVIEW',fragments:[]})):null;
  return {revision:job.rev,status:job.status,reviewable:job.status==='REVIEW_REQUIRED'||job.status==='READY',
  workflowState:['READY','REVIEW_REQUIRED','FAILED'].includes(job.status)?'RESULT':'PROCESSING',
- deliverable:job.status==='READY',previewAvailable:['READY','REVIEW_REQUIRED'].includes(job.status),
+ deliverable:job.status==='READY',previewAvailable:['READY','REVIEW_REQUIRED'].includes(job.status)&&
+   !(params.has('noPreview')&&job.status==='REVIEW_REQUIRED'),
  sourceRevision:'synthetic-source-1',documentId:'synthetic-document-1',protectionPolicy:job.policy,
  listDigest:job.listDigest,processingMode:job.mode,
  occurrences:textOccurrences|| (job.status==='REVIEW_REQUIRED'?[{id:'synthetic-email-1',text:'contact@example.test',page:1,
@@ -113,7 +122,8 @@ function review(job){
  pages:job.file.name.endsWith('.txt')?[{page:1,native:true,surfaceId:'text:0',text:source}]:[],
  unresolvedMasks:job.status==='REVIEW_REQUIRED'&&job.file.name.endsWith('.pdf')&&job.unresolved?
   [{maskOccurrenceId:'synthetic-mask-1',page:1,category:'PER'}]:[],
- reasons:job.status==='READY'?[]:['SYNTHETIC_REVIEW']};}
+ reasons:job.status==='READY'?[]:params.has('repeatReasons')?
+   ['SYNTHETIC_A','SYNTHETIC_B','SYNTHETIC_B']:['SYNTHETIC_REVIEW']};}
 window.fetch=async(url,options={})=>{
  if(!String(url).startsWith(window.AGILOSHIELD_V2_CONFIG.BASE_URL))return nativeFetch(url,options);
  const path=String(url).slice(window.AGILOSHIELD_V2_CONFIG.BASE_URL.length);
@@ -180,10 +190,16 @@ window.fetch=async(url,options={})=>{
  if(tail==='/regions')return json({version:1,sourceFile:job.file.name,pages:[{page:1,rotation:0,
   size:[400,250],occurrences:[{id:'synthetic-email-1',rectangles:[[72,94,202,109]]}]}]});
  if(tail.startsWith('/preview')){
+  const kind=new URLSearchParams(tail.split('?')[1]).get('kind');
+  if(kind==='anon'&&params.has('noPreview')&&job.status==='REVIEW_REQUIRED')
+   return json({error:'RESULT_NOT_AVAILABLE'},409);
   let response;
   if(job.file.name.endsWith('.pdf'))response=await nativeFetch('./review-linked.pdf');
   else if(job.file.name.endsWith('.docx'))response=await nativeFetch('./ready-synthetic.docx');
-  else response=typeof job.file.arrayBuffer==='function'?job.file:new Blob([job.sourceText||'SYNTHETIC ONLY'],{type:job.file.type||'text/plain'});
+  else response=kind==='anon'&&job.file.name.endsWith('.txt')?
+   new Blob([(job.sourceText||'SYNTHETIC ONLY').replaceAll('Florian','[MASQUÉ]')],
+     {type:'text/plain'}):
+   typeof job.file.arrayBuffer==='function'?job.file:new Blob([job.sourceText||'SYNTHETIC ONLY'],{type:job.file.type||'text/plain'});
   return new Response(await response.arrayBuffer(),{headers:{'Content-Type':response.type||'application/octet-stream',
    'X-Agiloshield-Revision':job.rev,'X-Agiloshield-Policy-Digest':job.policy.digest,
    'X-Agiloshield-Status':job.status,'X-Agiloshield-Processing-Mode':job.mode,
