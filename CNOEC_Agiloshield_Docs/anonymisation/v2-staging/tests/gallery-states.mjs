@@ -14,7 +14,6 @@ export const STATES = [
   { id: 'modal-types', label: 'Fenêtre Données à masquer', query: '', click: /Données à masquer/ },
   { id: 'modal-lists', label: 'Fenêtre Listes', query: 'lists', click: /^Listes/ },
   { id: 'tab-text', label: 'Onglet texte', query: '', click: /Traitement de texte|^Texte/ },
-  { id: 'tab-restore', label: 'Onglet restauration', query: 'pseudo', click: /Restauration/ },
 ];
 
 // Reproduit le contexte Webflow : police Poppins et variables Base du site.
