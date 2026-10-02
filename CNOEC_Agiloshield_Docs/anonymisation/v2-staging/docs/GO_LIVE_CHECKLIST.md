@@ -4,7 +4,7 @@ Statut : brouillon, à compléter à l'étape Live 0.
 
 ## Tests de fin (staging, compte de test)
 
-- [ ] **Pseudonymisation sans PDF (demande Nico, 02/10)** : en mode Pseudonymiser, la ligne de formats indique « PDF non pris en charge », le sélecteur de fichiers n'affiche pas les PDF, et un PDF glissé est refusé avec « les PDF ne peuvent pas être pseudonymisés. Choisissez Anonymiser pour ce fichier. ». Aucun appel serveur pour ce fichier. Repasser en Anonymiser réaccepte le PDF.
+- [ ] **PDF en Pseudonymiser** : le sélecteur accepte les PDF comme en Anonymiser, la ligne de formats les cite, et un PDF glissé part au serveur (le front ne le refuse plus).
 - [ ] PDF anonymisé prêt, téléchargé.
 - [ ] PDF à vérifier : décisions passage par passage, zone masquée à la main, validation.
 - [ ] Texte collé.

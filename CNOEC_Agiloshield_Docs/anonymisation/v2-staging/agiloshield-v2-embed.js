@@ -409,10 +409,8 @@ el('span','Déposez vos documents ici','asv2-drop-title',drop);
 el('span','ou cliquez pour les choisir · 12 fichiers maximum','asv2-drop-subtitle',drop);
 const dropTypes=el('span','PDF, Word, Excel, PowerPoint, TXT, CSV','asv2-drop-types',drop);
 function updateModeFormats(){
-  const pseudo=pseudoRadio.checked;
-  dropTypes.textContent=pseudo?'Word, Excel, PowerPoint, TXT, CSV · PDF non pris en charge en pseudonymisation':
-    'PDF, Word, Excel, PowerPoint, TXT, CSV';
-  fileInput.accept=pseudo?'.docx,.xlsx,.pptx,.txt,.csv':'.pdf,.docx,.xlsx,.pptx,.txt,.csv';
+  dropTypes.textContent='PDF, Word, Excel, PowerPoint, TXT, CSV';
+  fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';
 }
 if(typeof config.TRUST_LINE==='string'&&config.TRUST_LINE.trim()){
   const trust=el('p',null,'asv2-trust',filePane);svgIcon('shield-check',trust,16);
@@ -846,8 +844,6 @@ function addFiles(files){
   let accepted=0;const rejections=[];clear(rejectedList);
   for(const file of additions){
     if(!supported.test(file.name)){rejections.push(file.name+' : format non pris en charge');continue;}
-    if(mode==='PSEUDONYMIZE'&&formatOf(file.name)==='pdf'){
-      rejections.push(file.name+' : les PDF ne peuvent pas être pseudonymisés. Choisissez Anonymiser pour ce fichier.');continue;}
     if(maxBytes&&file.size>maxBytes){rejections.push(file.name+' : taille supérieure à la limite de recette');continue;}
     if(accepted>=available){rejections.push(file.name+' : limite de 12 fichiers en cours atteinte');continue;}
     const snapshot=freezeJobSelection({policy:current,lists,mode});
