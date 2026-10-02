@@ -1074,13 +1074,13 @@ function renderHistory(){
     (state.selectedHistory.size?' · '+state.selectedHistory.size:'');
   clear(historyTable);
   const head=el('thead',null,null,historyTable),heading=el('tr',null,null,head);
-  for(const label of [...(zipReady?['']:[]),'N°','Fichier','Date','Taille','Mode','Statut','Actions']){
+  for(const label of [...(zipReady?['']:[]),'Fichier','Date','Statut','Actions']){
     const th=el('th',label,null,heading);th.scope='col';
   }
   const body=el('tbody',null,null,historyTable);
   if(!rows.length){const line=el('tr',null,null,body);
     const cell=el('td','Aucun document terminé pour le moment.',null,line);
-    cell.colSpan=zipReady?8:7;cell.className='asv2-history-empty';
+    cell.colSpan=zipReady?5:4;cell.className='asv2-history-empty';
     clear(historyCards);el('p','Vos résultats apparaîtront ici dès que leur traitement sera terminé.',
       'asv2-muted',historyCards);return;}
   clear(historyCards);
@@ -1099,19 +1099,19 @@ function renderHistory(){
         zipHistoryButton.textContent='Télécharger la sélection (.zip) · '+state.selectedHistory.size;
       });
     }
-    el('td',String(index+1),null,line);
     const nameCell=el('td',null,null,line);
     const nameContent=el('div',null,'asv2-history-name',nameCell);
     historyIcon('file',nameContent);
     const nameCol=el('div',null,'asv2-history-name-col',nameContent);
     el('span',row.fileName||row.filename||'Document','asv2-history-file-label',nameCol);
-    if(row.jobId)el('small','#'+row.jobId,'asv2-history-job-id',nameCol);
+    el('small',[
+      historySize(row.sizeBytes??row.fileLength),
+      row.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'
+    ].filter(value=>value&&value!=='—').join(' · '),'asv2-history-file-meta',nameCol);
     if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
       historyAction('Voir l’original — données en clair','eye',nameContent,
         ()=>openHistoryOriginal(row).catch(error=>notify(errorText(error),'is-error')));
     el('td',historyDate(row.createdAt||row.dtCreation),null,line);
-    el('td',historySize(row.sizeBytes??row.fileLength),null,line);
-    el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',null,line);
     const statusCell=el('td',null,null,line);
     el('span',safeStatus(status),
       'asv2-status asv2-status-'+status.toLowerCase(),statusCell);
@@ -1144,7 +1144,8 @@ function renderHistory(){
     el('strong',row.fileName||row.filename||'Document',null,cardTop);
     el('span',safeStatus(status),'asv2-status asv2-status-'+status.toLowerCase(),card);
     el('small',historyDate(row.createdAt||row.dtCreation)+' · '+
-      historySize(row.sizeBytes??row.fileLength),null,card);
+      historySize(row.sizeBytes??row.fileLength)+' · '+
+      (row.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'),null,card);
     const cardActions=el('div',null,'asv2-history-card-actions',card);
     button(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
       'Vérifier le document':'Voir ce qui s’est passé','asv2-primary',cardActions,
