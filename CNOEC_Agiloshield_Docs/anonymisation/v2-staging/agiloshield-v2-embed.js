@@ -470,18 +470,16 @@ const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dial
 panel.setAttribute('aria-labelledby','asv2-drawer-title');
 const drawerHead=el('header',null,'asv2-drawer-head',panel);
 const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
-el('span','AgiloShield · vérification du document','asv2-overline',drawerHeading);
+el('span','AgiloShield','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
 const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
 const drawerDownloads=el('div',null,'asv2-drawer-downloads',drawerHeadActions);
-const drawerRemove=buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn asv2-drawer-remove',drawerHeadActions,()=>{
+const drawerRemove=iconButton('trash','Retirer ce document de cet écran','asv2-drawer-icon asv2-remove-btn',drawerHeadActions,()=>{
   const cur=state.entries.find(e=>e.key===state.active);
   if(cur)removeEntryFromSession(cur);
   else closeDrawer();
 });
-drawerRemove.title='Retirer ce document de cet écran';
-drawerRemove.setAttribute('aria-label','Retirer ce document de cet écran');
 const close=button('×','asv2-close',drawerHeadActions,closeDrawer);close.setAttribute('aria-label','Fermer le document');
 const drawerNotice=el('div','', 'asv2-drawer-notice',panel);drawerNotice.setAttribute('role','status');
 drawerNotice.setAttribute('aria-live','polite');
@@ -1060,7 +1058,7 @@ function renderHistory(){
         ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
       if(status==='READY'||(status==='REVIEW_REQUIRED'&&
           state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry))))
-        historyAction(status==='READY'?'Télécharger le résultat':'Télécharger le résultat (non vérifié)','download',controls,
+        historyAction(status==='READY'?'Télécharger le résultat':'Télécharger','download',controls,
           ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
       if(source==='v2'&&row.processingMode==='PSEUDONYMIZE'){
         const keyAction=historyAction('Télécharger la clé de cette révision','key',controls,
@@ -1089,7 +1087,7 @@ function renderHistory(){
       ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
     if(status==='READY'||(status==='REVIEW_REQUIRED'&&
         state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry))))
-      button(status==='READY'?'Télécharger le résultat':'Télécharger (non vérifié)','asv2-secondary',cardActions,
+      button(status==='READY'?'Télécharger le résultat':'Télécharger','asv2-secondary',cardActions,
         ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
     if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
       buttonWithIcon('Voir l’original · données en clair','eye','asv2-secondary',cardActions,
@@ -1488,31 +1486,31 @@ function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   const pendingCount=(entry.review?.occurrences||[]).filter(row=>
     row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-  title.textContent=entry.name;meta.textContent=[entry.jobId?'Job #'+entry.jobId:null,entry.format.toUpperCase()||'Document',
-    entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser'].filter(Boolean).join(' · ');
+  title.textContent=entry.name;
+  meta.textContent=[entry.format.toUpperCase()||'Document',
+    entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'].filter(Boolean).join(' · ');
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
-    buttonWithIcon(entry.status==='READY'?'Télécharger le résultat':'Télécharger le résultat non vérifié',
-      'download',entry.status==='READY'?'asv2-primary':'asv2-secondary',drawerDownloads,
+    const downloadControl=iconButton('download','Télécharger',
+      'asv2-drawer-icon'+(entry.status==='READY'?' is-primary':''),drawerDownloads,
       ()=>download(entry,entry.status==='READY').catch(showError));
+    downloadControl.title=entry.status==='READY'?'Télécharger':'Télécharger — une confirmation sera demandée';
     if(canDownloadKey(entry)){
-      buttonWithIcon(entry.status==='READY'?'Télécharger la clé de cette révision':
-        'Télécharger la clé non vérifiée','key','asv2-secondary',drawerDownloads,
+      const keyControl=iconButton('key','Télécharger la clé','asv2-drawer-icon',drawerDownloads,
         ()=>downloadKey(entry).catch(showError));
-      el('small','Conservez le résultat et sa clé ensemble, dans un espace privé.',
-        'asv2-key-guidance',drawerDownloads);
+      keyControl.title='Télécharger la clé de pseudonymisation';
     }
   }
-  drawerMessage(entry.status==='FAILED'?(entry.error?'Traitement impossible : '+entry.error:'Traitement impossible. Aucun résultat protégé n’est certifié.'):({
-    LOCAL:'Original non protégé — des données sensibles peuvent être visibles.',
-    UPLOADING:'Envoi du document en cours…',PENDING:copy.status.PENDING,
-    PROCESSING:copy.status.PROCESSING,
-    READY:'Prêt selon les réglages choisis pour ce document.',
-    REVIEW_REQUIRED:'À vérifier'+(pendingCount?' · '+pendingCount+
-      ' passage'+(pendingCount>1?'s':'')+' à confirmer':'')+
-      '. Des données peuvent rester visibles.',
-    TIMED_OUT:'Le suivi est interrompu. Le traitement peut encore être en cours.'
-  })[entry.status]||(entry.error||safeStatus(entry.status)),
+  const message=entry.status==='FAILED'?'Traitement impossible':
+    entry.status==='READY'?'Prêt':
+    entry.status==='REVIEW_REQUIRED'?
+      ('Vérification nécessaire'+(pendingCount?' · '+pendingCount+' décision'+(pendingCount>1?'s':''):''):
+    entry.status==='PROCESSING'?'Protection en cours':
+    entry.status==='PENDING'?'En attente':
+    entry.status==='UPLOADING'?'Envoi en cours':
+    entry.status==='TIMED_OUT'?'Suivi interrompu':
+    safeStatus(entry.status);
+  drawerMessage(message,
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
   renderIssues(entry);renderFooter(entry);
