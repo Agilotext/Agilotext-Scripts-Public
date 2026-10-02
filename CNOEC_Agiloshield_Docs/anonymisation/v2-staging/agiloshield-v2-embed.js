@@ -469,10 +469,13 @@ const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);ba
 const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
 panel.setAttribute('aria-labelledby','asv2-drawer-title');
 const drawerHead=el('header',null,'asv2-drawer-head',panel);
+const close=button('×','asv2-close',drawerHead,()=>closeDrawer());close.setAttribute('aria-label','Fermer le document');
 const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
 el('span','AgiloShield','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
+const drawerStatus=el('span',null,null,drawerHeading);
+const reviewTools=el('div',null,'asv2-review-tools',drawerHead);
 const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
 const drawerDownloads=el('div',null,'asv2-drawer-downloads',drawerHeadActions);
 const drawerRemove=iconButton('trash','Retirer ce document de cet écran','asv2-drawer-icon asv2-remove-btn',drawerHeadActions,()=>{
@@ -480,25 +483,28 @@ const drawerRemove=iconButton('trash','Retirer ce document de cet écran','asv2-
   if(cur)removeEntryFromSession(cur);
   else closeDrawer();
 });
-const close=button('×','asv2-close',drawerHeadActions,closeDrawer);close.setAttribute('aria-label','Fermer le document');
 const drawerNotice=el('div','', 'asv2-drawer-notice',panel);drawerNotice.setAttribute('role','status');
 drawerNotice.setAttribute('aria-live','polite');
 const tabs=el('div',null,'asv2-mobile-tabs',panel);
 const tabDoc=button('Document','asv2-tab is-active',tabs,()=>setMobileTab('doc'));
 const tabIssues=button('Vérification','asv2-tab',tabs,()=>setMobileTab('issues'));
 const workspace=el('div',null,'asv2-workspace is-doc',panel);
-const issuePane=el('section',null,'asv2-issues',workspace);issuePane.setAttribute('aria-label','Détections et problèmes');
 const viewerPane=el('section',null,'asv2-viewer',workspace);viewerPane.setAttribute('aria-label','Aperçu du document');
 const viewerToolbar=el('div',null,'asv2-viewer-toolbar',viewerPane);
 const viewerBody=el('div',null,'asv2-viewer-body',viewerPane);
-const drawerFooter=el('footer',null,'asv2-drawer-footer',panel);
+const issuePane=el('section',null,'asv2-issues',workspace);issuePane.setAttribute('aria-label','Détections et problèmes');
+const drawerFooter=el('footer',null,'asv2-drawer-footer',issuePane);
 
 function notify(text,kind='') {
   clearTimeout(noticeTimer);notice.textContent=text||'';notice.className='asv2-notice '+kind;
   notice.hidden=!text;
   if(text&&!kind)noticeTimer=setTimeout(()=>{notice.hidden=true;},6000);
 }
-function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
+function drawerMessage(text,kind='') {
+  drawerNotice.textContent=text||'';
+  drawerNotice.className='asv2-drawer-notice '+(kind||'');
+  drawerNotice.hidden=!text;
+}
 form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 const tourSteps=[
@@ -1474,6 +1480,15 @@ function closeDrawer(){
 }
 drawer.addEventListener('keydown',event=>{
   if(event.key==='Escape'){event.preventDefault();closeDrawer();return;}
+  const typing=event.target?.closest?.('input,textarea,select,[contenteditable="true"]');
+  const confirming=panel.querySelector('.asv2-confirm');
+  if(!typing&&!confirming&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
+    const letter=event.key.length===1?event.key.toLowerCase():'';
+    if(letter==='j'||letter==='k'||letter==='m'||letter==='v'){
+      const current=activeEntry();
+      if(current&&state.drawerOpen){event.preventDefault();handleReviewShortcut(current,letter);return;}
+    }
+  }
   if(event.key!=='Tab')return;
   const focusables=[...panel.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),summary,a[href],[tabindex]:not([tabindex="-1"])')]
     .filter(item=>!item.hidden&&item.getClientRects().length);
@@ -1502,13 +1517,101 @@ function copyDiagnosticTrace(entry){
     prompt('Copiez ce diagnostic technique :',payload);
   }
 }
+function remainingReviewWork(entry){
+  const review=entry.review||{};
+  const rows=(review.occurrences||[]).filter(r=>r.action==='REVIEW'||r.privacyAction==='REVIEW');
+  const unresolved=(review.unresolvedMasks||[]).filter(t=>t.maskOccurrenceId&&t.page);
+  const problems=Array.isArray(review.listProblems)?review.listProblems:[];
+  return {rows,unresolved,problems,count:rows.length+unresolved.length+problems.length};
+}
+function reviewQueue(entry){
+  const {rows,unresolved,problems}=remainingReviewWork(entry);
+  return [
+    ...unresolved.map(target=>({kind:'unresolved',target})),
+    ...problems.map(problem=>({kind:'problem',problem})),
+    ...rows.map(row=>({kind:'row',row}))
+  ];
+}
+function reviewProgress(entry){
+  const work=remainingReviewWork(entry);
+  const stamp=String(entry.jobId||'')+':'+String(entry.revision||'');
+  if(entry.reviewStamp!==stamp){
+    entry.reviewStamp=stamp;entry.reviewTotal=work.count;entry.reviewFocusIndex=0;entry.reviewVisibleCount=20;
+  }
+  if(work.count>(entry.reviewTotal||0))entry.reviewTotal=work.count;
+  const total=entry.reviewTotal||work.count;
+  const remaining=work.count;
+  return {done:Math.max(0,total-remaining),total,remaining,work};
+}
+function occurrenceContext(entry,current){
+  const source=entry.review?.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
+  if(typeof source!=='string'||!Number.isInteger(current.start)||!Number.isInteger(current.end)||
+    current.start<0||current.end<=current.start)return null;
+  const cpStart=codePointOffset(source,current.start),cpEnd=codePointOffset(source,current.end);
+  const hit=source.slice(cpStart,cpEnd);
+  if(hit!==(current.text||current.surface))return null;
+  return {
+    before:source.slice(Math.max(0,cpStart-45),cpStart).replace(/\s+/g,' '),
+    hit,
+    after:source.slice(cpEnd,Math.min(source.length,cpEnd+45)).replace(/\s+/g,' ')
+  };
+}
+function addPassLocate(parent,entry,current){
+  const pdfLocation=originalPdfLocation(entry,current);
+  const textSource=entry.review?.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
+  const textExact=['txt','csv'].includes(entry.format)&&typeof textSource==='string'&&
+    Number.isInteger(current.start)&&Number.isInteger(current.end)&&
+    current.start>=0&&current.end>current.start&&
+    textSource.slice(codePointOffset(textSource,current.start),
+      codePointOffset(textSource,current.end))===(current.text||current.surface);
+  if(pdfLocation.kind==='exact'||textExact){
+    iconButton('eye','Voir dans le document','asv2-issue-locate-icon',parent,()=>focusOccurrence(entry,current));
+  }else if(pdfLocation.kind==='page'){
+    iconButton('eye','Ouvrir la page '+pdfLocation.page,'asv2-issue-locate-icon',parent,
+      ()=>focusOccurrence(entry,current,{pageOnly:true}));
+  }
+}
+function renderShortcutHelp(parent){
+  const row=el('div',null,'asv2-kbd',parent);
+  for(const [keys,label] of [[['J','K'],'suivant'],[['M'],'masquer'],[['V'],'laisser visible'],[['Échap'],'fermer']]){
+    const span=el('span',null,null,row);
+    for(const key of keys){el('kbd',key,null,span);span.append(' ');}
+    span.append(label);
+  }
+}
+function handleReviewShortcut(entry,key){
+  const queue=reviewQueue(entry);
+  if(!queue.length)return;
+  if(typeof entry.reviewFocusIndex!=='number')entry.reviewFocusIndex=0;
+  if(key==='j'||key==='k'){
+    entry.reviewFocusIndex=key==='j'?
+      Math.min(entry.reviewFocusIndex+1,queue.length-1):
+      Math.max(entry.reviewFocusIndex-1,0);
+    if(entry.reviewFocusIndex>=(entry.reviewVisibleCount||20))
+      entry.reviewVisibleCount=entry.reviewFocusIndex+1;
+    renderIssues(entry);renderFooter(entry);
+    const item=queue[entry.reviewFocusIndex];
+    if(item?.kind==='row')focusOccurrence(entry,item.row);
+    return;
+  }
+  const item=queue[entry.reviewFocusIndex];
+  if(!item||entry.commandBusy)return;
+  if(key==='m'){
+    if(item.kind==='row')decide(entry,item.row.id,'MASK');
+    else if(item.kind==='problem'&&item.problem.occurrenceId)decide(entry,item.problem.occurrenceId,'MASK');
+  }
+  if(key==='v'){
+    if(item.kind==='row')decide(entry,item.row.id,'KEEP');
+    else if(item.kind==='problem'&&item.problem.occurrenceId)decide(entry,item.problem.occurrenceId,'KEEP');
+  }
+}
 function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
-  const pendingCount=(entry.review?.occurrences||[]).filter(row=>
-    row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
   title.textContent=entry.name;
   meta.textContent=[entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'].filter(Boolean).join(' · ');
+  clear(drawerStatus);
+  statusPill(entry.status,drawerStatus);
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
     const downloadControl=iconButton('download','Télécharger',
@@ -1521,23 +1624,24 @@ function renderDrawer(entry){
       keyControl.title='Télécharger la clé de pseudonymisation';
     }
   }
-  const message=entry.status==='REVIEW_REQUIRED'&&pendingCount?
-    safeStatus(entry.status)+' · '+copy.review.decisions(pendingCount):safeStatus(entry.status);
-  drawerMessage(message,
+  if(entry.status==='REVIEW_REQUIRED')drawerMessage('');
+  else drawerMessage(safeStatus(entry.status),
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
-    entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
+    entry.status==='TIMED_OUT'?'is-warning':'');
   renderIssues(entry);renderFooter(entry);
 }
 function renderIssues(entry){
-  clear(issuePane);
+  const footer=drawerFooter;
+  issuePane.replaceChildren();
+  issuePane.appendChild(footer);
   if(entry.status==='FAILED'){
     const errBox=el('div',null,'asv2-issue asv2-error-box',issuePane);
     el('strong','Ce document n’a pas pu être traité',null,errBox);
-    el('p',entry.error||copy.errors.failed,
-      'asv2-error-detail',errBox);
+    el('p',entry.error||copy.errors.failed,'asv2-error-detail',errBox);
     const actions=el('div',null,'asv2-error-actions',errBox);
     buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn',actions,
       ()=>removeEntryFromSession(entry));
+    issuePane.appendChild(footer);
     return;
   }
   if(entry.status==='UNCERTAIN'){
@@ -1548,6 +1652,7 @@ function renderIssues(entry){
     const actions=el('div',null,'asv2-error-actions',errBox);
     buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn',actions,
       ()=>removeEntryFromSession(entry));
+    issuePane.appendChild(footer);
     return;
   }
   const review=entry.review;
@@ -1556,162 +1661,43 @@ function renderIssues(entry){
     el('strong',entry.jobId?'Analyse en cours':'Aucun document sélectionné',null,empty);
     el('p',entry.jobId?'La vérification apparaîtra dès que le résultat sera disponible.':
       'Ouvrez un document pour afficher sa vérification.','asv2-muted',empty);
+    issuePane.appendChild(footer);
     return;
   }
 
-  const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
-  const listProblems=Array.isArray(review.listProblems)?review.listProblems:[];
-  const allRows=Array.isArray(review.occurrences)?review.occurrences:[];
-  const actionRequiredRows=allRows.filter(r=>r.action==='REVIEW'||r.privacyAction==='REVIEW');
-  const otherRows=allRows.filter(r=>r.action!=='REVIEW'&&r.privacyAction!=='REVIEW');
+  const progress=reviewProgress(entry);
+  const queue=reviewQueue(entry);
+  if(typeof entry.reviewFocusIndex!=='number')entry.reviewFocusIndex=0;
+  if(entry.reviewFocusIndex>=queue.length)entry.reviewFocusIndex=Math.max(0,queue.length-1);
+  const visibleLimit=Math.max(entry.reviewVisibleCount||20, (entry.reviewFocusIndex||0)+1);
 
   const reviewSummary=el('div',null,'asv2-review-summary',issuePane);
-  const requiredCount=actionRequiredRows.length+unresolved.length+listProblems.length;
-  el('h3',requiredCount?
-    requiredCount+' élément'+(requiredCount>1?'s':'')+' à vérifier':
-    'Vérification du document',null,reviewSummary);
-  el('p',requiredCount?
-    'Ouvrez un élément puis choisissez l’action adaptée.':
-    'Aucune décision manuelle n’est en attente.','asv2-muted',reviewSummary);
-  const controls=el('div',null,'asv2-issues-controls',issuePane);
-  const countersText=[
-    unresolved.length?copy.review.toPlace(unresolved.length):null,
-    listProblems.length?copy.review.listConflicts(listProblems.length):null,
-    allRows.length?copy.review.found(allRows.length):null
-  ].filter(Boolean).join(' · ');
-  if(countersText)el('div',countersText,'asv2-issues-counters',controls);
-  if(entry.format==='pdf'&&allRows.some(row=>row.page&&
-      originalPdfLocation(entry,row).kind!=='exact'))
-    el('p','Pour certains passages, seule la page est connue : elle peut être ouverte sans surlignage approximatif.',
-      'asv2-location-help',controls);
-
-  const searchInput=el('input',null,'asv2-issues-search',controls);
-  searchInput.type='search';
-  searchInput.placeholder='Rechercher un passage…';
-  searchInput.value=entry.issueSearchQuery||'';
-
-  const pagesSet=new Set();
-  for(const r of allRows)if(r.page)pagesSet.add(Number(r.page));
-  for(const u of unresolved)if(u.page)pagesSet.add(Number(u.page));
-  let pageSelect=null;
-  if(pagesSet.size>1){
-    pageSelect=el('select',null,'asv2-issues-page-filter',controls);
-    const allOpt=el('option','Toutes les pages',null,pageSelect);allOpt.value='all';
-    for(const p of [...pagesSet].sort((a,b)=>a-b)){
-      const opt=el('option','Page '+p,null,pageSelect);opt.value=String(p);
-    }
-    pageSelect.value=entry.issuePageFilter||'all';
+  el('h3',progress.remaining?copy.review.toCheck(progress.remaining):copy.review.readyToValidate,null,reviewSummary);
+  if(progress.total){
+    const row=el('div',null,'asv2-review-progress',reviewSummary);
+    el('span',copy.review.progress(progress.done,progress.total),null,row);
+    const bar=el('span',null,'asv2-review-progress-bar',row);
+    const fill=el('i',null,null,bar);
+    fill.style.width=(progress.total?Math.round(100*progress.done/progress.total):0)+'%';
   }
 
   const issuesContent=el('div',null,'asv2-issues-content',issuePane);
 
-  function renderOccurrenceGroups(rows,parent){
-    const groups=new Map();
-    for(const row of rows){
-      if(!row.id)continue;
-      // Group only for display. Review commands always target one occurrence ID.
-      const key=(row.category||row.semanticType||'PII')+'\u0000'+(row.text||row.surface||'');
-      if(!groups.has(key))groups.set(key,[]);
-      groups.get(key).push(row);
-    }
-    const values=[...groups.values()];
-    let visible=0;
-    const more=button('Afficher d’autres passages','asv2-secondary asv2-issues-more',parent,showMore);
-    function showMore(){
-      const next=Math.min(values.length,visible+40);
-      for(;visible<next;visible++)renderGroup(values[visible]);
-      more.hidden=visible>=values.length;
-      if(!more.hidden)more.textContent='Afficher d’autres passages · '+copy.review.moreGroups(values.length-visible);
-      parent.appendChild(more);
-    }
-    function renderGroup(occurrences){
-      const card=el('div',null,'asv2-issue-compact',parent);
-      const row=occurrences[0],label=labels[row.category||row.semanticType]||'Donnée repérée';
-      const summary=button('', 'asv2-issue-select',card,()=>{
-        detail.hidden=!detail.hidden;
-        summary.setAttribute('aria-expanded',String(!detail.hidden));
-        if(!detail.hidden)showOccurrence();
-      });
-      summary.setAttribute('aria-expanded','false');
-      el('span',label,'asv2-badge',summary);
-      el('span',row.text||row.surface||'Passage à vérifier','asv2-issue-snippet',summary);
-      el('span',occurrences.length+' passage'+(occurrences.length>1?'s':''),'asv2-count',summary);
-      const detail=el('div',null,'asv2-issue-detail',card);detail.hidden=true;
-      let index=0;
-      function showOccurrence(){
-        clear(detail);
-        const current=occurrences[index];
-        if(occurrences.length>1){
-          const nav=el('div',null,'asv2-issue-detail-nav',detail);
-          const previous=iconButton('arrow-left','Passage précédent','asv2-secondary',nav,()=>{index--;showOccurrence();});
-          previous.disabled=index===0;
-          el('span',(index+1)+' / '+occurrences.length,'asv2-issue-position',nav);
-          const next=iconButton('arrow-right','Passage suivant','asv2-secondary',nav,()=>{index++;showOccurrence();});
-          next.disabled=index===occurrences.length-1;
-        }
-        const top=el('div',null,'asv2-issue-detail-top',detail);
-        el('strong',current.text||current.surface||'Passage à vérifier',null,top);
-        const pdfLocation=originalPdfLocation(entry,current);
-        const textSource=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
-        const textExact=['txt','csv'].includes(entry.format)&&typeof textSource==='string'&&
-          Number.isInteger(current.start)&&Number.isInteger(current.end)&&
-          current.start>=0&&current.end>current.start&&
-          textSource.slice(codePointOffset(textSource,current.start),
-            codePointOffset(textSource,current.end))===(current.text||current.surface);
-        if(pdfLocation.kind==='exact'||textExact){
-          const locate=iconButton('eye','Voir dans le document','asv2-issue-locate-icon',top,
-            ()=>focusOccurrence(entry,current));
-          locate.title='Voir dans le document';
-        }else if(pdfLocation.kind==='page'){
-          const locate=iconButton('eye','Ouvrir la page '+pdfLocation.page,'asv2-issue-locate-icon',top,
-            ()=>focusOccurrence(entry,current,{pageOnly:true}));
-          locate.title='Ouvrir la page '+pdfLocation.page;
-        }
-        const source=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
-        if(typeof source==='string'&&Number.isInteger(current.start)&&Number.isInteger(current.end)&&
-          current.start>=0&&current.end>current.start){
-          const cpStart=codePointOffset(source,current.start),cpEnd=codePointOffset(source,current.end);
-          if(source.slice(cpStart,cpEnd)===(current.text||current.surface)){
-            const before=source.slice(Math.max(0,cpStart-45),cpStart).replace(/\s+/g,' ');
-            const after=source.slice(cpEnd,Math.min(source.length,cpEnd+45)).replace(/\s+/g,' ');
-            el('p','…'+before+' ['+source.slice(cpStart,cpEnd)+'] '+after+'…',
-              'asv2-issue-context',detail);
-          }
-        }
-        const stateLabel=({MASK:'Masqué',KEEP:'Conservé',REVIEW:'À vérifier'})[
-          current.action||current.privacyAction]||'À vérifier';
-        el('small',stateLabel,'asv2-issue-state',detail);
-        const actions=el('div',null,'asv2-issue-actions',detail);
-        for(const action of ['KEEP','MASK']){
-          const control=action==='MASK'?
-            buttonWithIcon('Masquer','eye-slash','asv2-secondary asv2-action-mask',actions,
-              ()=>decide(entry,current.id,action)):
-            buttonWithIcon('Conserver','eye','asv2-secondary asv2-action-keep',actions,
-              ()=>decide(entry,current.id,action));
-          control.title=copy.reviewAction[action]+' (ce passage uniquement)';
-          control.setAttribute('aria-label',control.title);
-          control.disabled=!review.reviewable||entry.commandBusy;
-        }
-      }
-    }
-    showMore();
-  }
-
-  function renderIssuesContent(){
-    clear(issuesContent);
-    const q=(entry.issueSearchQuery||'').toLowerCase();
-    const pf=entry.issuePageFilter||'all';
-
-    // 1. Problèmes demandant action en premier
-    const filteredUnresolved=unresolved.filter(u=>pf==='all'||String(u.page)===pf);
-    if(filteredUnresolved.length){
-      el('h4',pf==='all'?copy.review.toCheck(filteredUnresolved.length):copy.review.toCheckOnPage(filteredUnresolved.length,pf),null,issuesContent);
-      for(const target of filteredUnresolved){
-        if(!target.maskOccurrenceId||!target.page)continue;
-        const card=el('article',null,'asv2-issue asv2-unresolved',issuesContent);
-        el('strong',(labels[target.category||target.semanticType]||'Donnée à masquer')+
-          ' · page '+target.page,null,card);
-        const control=buttonWithIcon('Placer une zone de masquage','select-area','asv2-secondary',card,()=>{
+  function renderPass(item,index){
+    const open=index===entry.reviewFocusIndex;
+    const card=el('article',null,'asv2-pass'+(open?' is-open':''),issuesContent);
+    const top=el('div',null,'asv2-pass-top',card);
+    const stateIcon=el('span',null,'asv2-pass-state',top);
+    svgIcon(open?'circle-warning':'circle-info',stateIcon,18);
+    const what=el('div',null,'asv2-pass-what',top);
+    if(item.kind==='unresolved'){
+      const target=item.target;
+      const label=labels[target.category||target.semanticType]||'Donnée à masquer';
+      el('strong',label,null,what);
+      el('small','Page '+target.page+' · à placer',null,what);
+      if(open){
+        const actions=el('div',null,'asv2-pass-actions',card);
+        const control=buttonWithIcon('Placer une zone de masquage','select-area','asv2-secondary',actions,()=>{
           entry.target=target;entry.page=Number(target.page);
           if(entry.previewKind==='compare')entry.previewKind='anon';
           entry.pageOnlyLocation=null;
@@ -1719,120 +1705,141 @@ function renderIssues(entry){
           drawerMessage('Tracez la zone correspondant uniquement à ce passage.','is-warning');
         });
         control.disabled=!review.reviewable||entry.format!=='pdf';
-      }
+      }else card.addEventListener('click',event=>{
+        if(event.target.closest('button'))return;
+        entry.reviewFocusIndex=index;renderIssues(entry);renderFooter(entry);
+      });
+      return;
     }
-
-    if(listProblems.length){
-      el('h4',copy.review.listConflicts(listProblems.length),null,issuesContent);
-      for(const problem of listProblems){
-        const card=el('article',null,'asv2-issue',issuesContent);
-        el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
-          'Une règle de conservation contredit un masquage nécessaire':
-          'Un passage demandé n’a pas été localisé avec certitude',null,card);
-        if(problem.occurrenceId&&review.reviewable){
-          const actions=el('div',null,'asv2-issue-actions',card);
-          for(const action of ['KEEP','MASK'])button(copy.reviewAction[action],'asv2-secondary',actions,
+    if(item.kind==='problem'){
+      const problem=item.problem;
+      el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
+        'Une règle de conservation contredit un masquage nécessaire':
+        'Un passage demandé n’a pas été localisé avec certitude',null,what);
+      el('small','Liste',null,what);
+      if(open&&problem.occurrenceId&&review.reviewable){
+        const actions=el('div',null,'asv2-pass-actions',card);
+        for(const action of ['MASK','KEEP']){
+          const control=button(copy.reviewAction[action],
+            action==='MASK'?'asv2-primary asv2-action-mask':'asv2-secondary asv2-action-keep',actions,
             ()=>decide(entry,problem.occurrenceId,action));
-        }else el('small','La correction de ce format n’est pas disponible ici. Ajustez les règles et déposez un nouveau fichier.',null,card);
+          control.disabled=entry.commandBusy;
+        }
+      }else if(open) el('small','La correction de ce format n’est pas disponible ici. Ajustez les règles et déposez un nouveau fichier.',null,card);
+      else card.addEventListener('click',event=>{
+        if(event.target.closest('button'))return;
+        entry.reviewFocusIndex=index;renderIssues(entry);renderFooter(entry);
+      });
+      return;
+    }
+    const current=item.row;
+    const label=labels[current.category||current.semanticType]||'Donnée repérée';
+    el('strong',current.text||current.surface||'Passage à vérifier',null,what);
+    el('small',[label,current.page?'page '+current.page:null].filter(Boolean).join(' · '),null,what);
+    addPassLocate(top,entry,current);
+    if(open){
+      const ctx=occurrenceContext(entry,current);
+      const quote=el('p',null,'asv2-pass-quote',card);
+      if(ctx){
+        quote.append(document.createTextNode((ctx.before?'…'+ctx.before+' ':'')));
+        el('mark',ctx.hit,null,quote);
+        quote.append(document.createTextNode((ctx.after?' '+ctx.after+'…':'')));
+      }else quote.textContent=current.text||current.surface||'Passage à vérifier';
+      const actions=el('div',null,'asv2-pass-actions',card);
+      for(const action of ['MASK','KEEP']){
+        const control=action==='MASK'?
+          buttonWithIcon(copy.reviewAction.MASK,'eye-slash','asv2-primary asv2-action-mask',actions,
+            ()=>decide(entry,current.id,action)):
+          buttonWithIcon(copy.reviewAction.KEEP,'eye','asv2-secondary asv2-action-keep',actions,
+            ()=>decide(entry,current.id,action));
+        control.title=copy.reviewAction[action]+' (ce passage uniquement)';
+        control.setAttribute('aria-label',control.title);
+        control.disabled=!review.reviewable||entry.commandBusy;
       }
-    }
-
-    const filteredActionRows=actionRequiredRows.filter(r=>{
-      if(pf!=='all'&&String(r.page)!==pf)return false;
-      if(q&&!(r.text||r.surface||'').toLowerCase().includes(q))return false;
-      return true;
-    });
-    if(filteredActionRows.length){
-      el('h4',copy.review.decisions(filteredActionRows.length),null,issuesContent);
-      renderOccurrenceGroups(filteredActionRows,issuesContent);
-    }
-
-    // Technical QA/reason codes are intentionally not exposed in the end-user UI.
-    const rawReasons=review.qaReasons||review.reasons||[];
-    const hiddenTechnicalSignals=rawReasons.length+
-      (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
-    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&
-        hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
-      const note=el('div',null,'asv2-review-safety-note',issuesContent);
-      el('strong','Vérification finale nécessaire',null,note);
-      el('p','Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.',
-        'asv2-muted',note);
-    }
-
-    // 3. Autres occurrences regroupées par catégorie
-    const filteredOtherRows=otherRows.filter(r=>{
-      if(pf!=='all'&&String(r.page)!==pf)return false;
-      if(q&&!(r.text||r.surface||'').toLowerCase().includes(q))return false;
-      return true;
-    });
-    if(filteredOtherRows.length){
-      const groups=new Map();
-      for(const row of filteredOtherRows){
-        const cat=row.category||row.semanticType||'PII';
-        if(!groups.has(cat))groups.set(cat,[]);
-        groups.get(cat).push(row);
-      }
-      el('h4','Autres données détectées ('+filteredOtherRows.length+')',null,issuesContent);
-      for(const [cat,catRows] of groups.entries()){
-        const details=el('details',null,'asv2-issue-group',issuesContent);
-        const summary=el('summary',null,null,details);
-        el('span',labels[cat]||cat,null,summary);
-        el('span',catRows.length+' passage'+(catRows.length>1?'s':''),'asv2-count',summary);
-        const groupContent=el('div',null,'asv2-issue-group-content',details);
-        renderOccurrenceGroups(catRows,groupContent);
-      }
-    }
-
-    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&!filteredOtherRows.length&&!hiddenTechnicalSignals){
-      el('p','Aucune correction interactive disponible ou aucun passage ne correspond aux filtres.','asv2-muted',issuesContent);
-    }
-  }
-
-  searchInput.addEventListener('input',()=>{
-    entry.issueSearchQuery=searchInput.value.toLowerCase().trim();
-    renderIssuesContent();
-  });
-  if(pageSelect){
-    pageSelect.addEventListener('change',()=>{
-      entry.issuePageFilter=pageSelect.value;
-      renderIssuesContent();
+    }else card.addEventListener('click',event=>{
+      if(event.target.closest('button'))return;
+      entry.reviewFocusIndex=index;renderIssues(entry);renderFooter(entry);
+      focusOccurrence(entry,current);
     });
   }
-  renderIssuesContent();
+
+  const shown=queue.slice(0,visibleLimit);
+  shown.forEach((item,index)=>renderPass(item,index));
+  if(queue.length>visibleLimit){
+    const more=button('Afficher d’autres passages · '+copy.review.moreGroups(queue.length-visibleLimit),
+      'asv2-secondary asv2-issues-more',issuesContent,()=>{
+        entry.reviewVisibleCount=visibleLimit+20;renderIssues(entry);
+      });
+  }
+
+  const rawReasons=review.qaReasons||review.reasons||[];
+  const hiddenTechnicalSignals=rawReasons.length+
+    (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
+  if(!progress.remaining&&hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
+    const note=el('div',null,'asv2-review-safety-note',issuesContent);
+    el('strong','Vérification finale nécessaire',null,note);
+    el('p','Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.',
+      'asv2-muted',note);
+  }
+
+  const allRows=Array.isArray(review.occurrences)?review.occurrences:[];
+  const masked=allRows.filter(r=>(r.action||r.privacyAction)==='MASK');
+  if(masked.length){
+    const others=button('', 'asv2-others',issuesContent,()=>{body.hidden=!body.hidden;});
+    el('span',copy.review.othersMasked,null,others);
+    el('span',String(masked.length),null,others);
+    const body=el('div',null,'asv2-others-body',issuesContent);body.hidden=true;
+    for(const row of masked.slice(0,40)){
+      el('p',(row.text||row.surface||'Passage')+' · '+(labels[row.category||row.semanticType]||''),
+        'asv2-muted',body);
+    }
+    if(masked.length>40)el('p','+ '+(masked.length-40)+' autres','asv2-muted',body);
+  }
+
+  if(!queue.length&&!masked.length&&!hiddenTechnicalSignals){
+    el('p','Aucune correction interactive disponible.','asv2-muted',issuesContent);
+  }
+  issuePane.appendChild(footer);
 }
 function renderFooter(entry){
   clear(drawerFooter);
   if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
   if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
     ()=>loadCurrent(entry).catch(showError));
+  if(entry.status==='REVIEW_REQUIRED'){
+    const progress=reviewProgress(entry);
+    const safety=el('p',null,'asv2-review-safety',drawerFooter);
+    svgIcon('shield-check',safety,18);
+    el('span',copy.review.safetyLine,null,safety);
+    if(editorCapabilities.humanVerification){
+      const verified=entry.review?.humanVerifiedDeliverable===true;
+      const validate=buttonWithIcon(verified?'Vérifié':copy.review.validate,'shield-check','asv2-primary',drawerFooter,
+        ()=>approveHumanReview(entry,validate));
+      validate.disabled=!verified && (progress.remaining>0 ||
+        entry.review?.canApproveHumanVerification!==true || entry.commandBusy);
+    }
+    renderShortcutHelp(drawerFooter);
+  }
   drawerFooter.hidden=!drawerFooter.children.length;
 }
 function guideToPendingReview(entry){
   setMobileTab('issues');
-  const review=entry.review||{};
-  const remaining=(review.occurrences||[]).filter(row=>
-    row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-  const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks.length:0;
-  const conflicts=Array.isArray(review.listProblems)?review.listProblems.length:0;
-  if(remaining){
-    const first=issuePane.querySelector('.asv2-issue-select');
-    if(first){
-      if(first.getAttribute('aria-expanded')!=='true')first.click();
-      first.closest('.asv2-issue-compact')?.classList.add('is-guided');
-      first.scrollIntoView({block:'center',behavior:'smooth'});first.focus();
-      setTimeout(()=>first.closest('.asv2-issue-compact')?.classList.remove('is-guided'),1400);
-    }
-    drawerMessage('Il reste '+remaining+' décision'+(remaining>1?'s':'')+' à confirmer.','is-warning');
+  const progress=reviewProgress(entry);
+  const first=issuePane.querySelector('.asv2-pass.is-open');
+  if(first){
+    first.scrollIntoView({block:'center',behavior:'smooth'});
+    first.querySelector('button')?.focus();
+  }
+  if(progress.work.rows.length){
+    drawerMessage('Il reste '+progress.work.rows.length+' décision'+(progress.work.rows.length>1?'s':'')+' à confirmer.','is-warning');
     return;
   }
-  if(unresolved){
-    const region=issuePane.querySelector('.asv2-unresolved button');
-    if(region){region.scrollIntoView({block:'center',behavior:'smooth'});region.focus();}
-    drawerMessage('Il reste '+unresolved+' zone'+(unresolved>1?'s':'')+' à placer.','is-warning');
+  if(progress.work.unresolved.length){
+    drawerMessage('Il reste '+progress.work.unresolved.length+' zone'+(progress.work.unresolved.length>1?'s':'')+' à placer.','is-warning');
     return;
   }
-  if(conflicts){
-    drawerMessage('Il reste '+conflicts+' règle'+(conflicts>1?'s':'')+' à vérifier.','is-warning');
+  if(progress.work.problems.length){
+    drawerMessage('Il reste '+progress.work.problems.length+' règle'+(progress.work.problems.length>1?'s':'')+' à vérifier.','is-warning');
     return;
   }
   drawerMessage('Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.','is-warning');
@@ -1963,9 +1970,9 @@ async function renderPreview(entry){
   const serial=++state.previewSerial;
   state.previewFocus=null;
   if(state.previewCleanup){state.previewCleanup();state.previewCleanup=null;}
-  clear(viewerToolbar);clear(viewerBody);
+  clear(viewerToolbar);clear(viewerBody);clear(reviewTools);
   const kind=entry.previewKind;
-  const switcher=el('div',null,'asv2-preview-switch',viewerToolbar);
+  const switcher=el('div',null,'asv2-preview-switch',reviewTools);
   const options=[['Original','origin','eye'],
     [entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé','anon','shield-check']];
   if(['pdf','txt','csv','docx'].includes(entry.format)&&canPreviewResult(entry))
@@ -1977,44 +1984,22 @@ async function renderPreview(entry){
     control.setAttribute('aria-pressed',String(value===kind));
     control.disabled=(value==='anon'||value==='compare')&&!canPreviewResult(entry);
   }
-  const hasMaskHighlights=(entry.review?.occurrences||[]).some(row=>
-    (row.action||row.privacyAction)==='MASK');
-  el('span',kind==='origin'?
-      (hasMaskHighlights?'Original · zones bleues = masquées':'Original · données visibles'):
-    kind==='compare'?'Comparer':
-    !canPreviewResult(entry)?'Aperçu indisponible':
-    entry.status==='READY'?'Prêt':'À vérifier',
-    'asv2-preview-label',viewerToolbar);
-  if(entry.status==='REVIEW_REQUIRED'){
-    const quickActions=el('div',null,'asv2-review-toolbar-actions',viewerToolbar);
-    if(entry.format==='pdf'){
-      const maskZone=buttonWithIcon('Masquer une zone','select-area',
-        'asv2-secondary asv2-manual-mask-btn'+(entry.manualMaskActive?' is-active':''),quickActions,()=>{
-          entry.manualMaskActive=!entry.manualMaskActive;
-          entry.target=null;
-          if(entry.manualMaskActive){
-            if(entry.previewKind==='compare')entry.previewKind='anon';
-            setMobileTab('doc');
-            renderPreview(entry).catch(showError);
-            drawerMessage('Tracez la zone à masquer directement sur le document affiché.','is-info');
-          }else{
-            drawerMessage(null);
-            renderPreview(entry).catch(showError);
-          }
-        });
-      maskZone.title='Tracer une zone rectangulaire à masquer sur ce PDF';
-    }
-    if(editorCapabilities.humanVerification){
-      const verified=entry.review?.humanVerifiedDeliverable===true;
-      const reviewer=entry.review?.humanVerification?.reviewer||
-        entry.review?.humanVerification?.reviewerLogin||entry.review?.humanVerification?.author;
-      const validate=buttonWithIcon(verified?'Vérifié':'Valider','shield-check',
-        verified?'asv2-secondary asv2-human-verified':'asv2-primary',quickActions,
-        ()=>approveHumanReview(entry,validate));
-      validate.title=verified?
-        (reviewer?'Vérifié par '+reviewer+', télécharger':'Télécharger la version vérifiée'):
-        'Valider ce document';
-    }
+  if(entry.format==='pdf'&&entry.status==='REVIEW_REQUIRED'){
+    const maskZone=buttonWithIcon('Masquer une zone','select-area',
+      'asv2-secondary asv2-manual-mask-btn'+(entry.manualMaskActive?' is-active':''),reviewTools,()=>{
+        entry.manualMaskActive=!entry.manualMaskActive;
+        entry.target=null;
+        if(entry.manualMaskActive){
+          if(entry.previewKind==='compare')entry.previewKind='anon';
+          setMobileTab('doc');
+          renderPreview(entry).catch(showError);
+          drawerMessage('Tracez la zone à masquer directement sur le document affiché.','is-info');
+        }else{
+          drawerMessage('');
+          renderPreview(entry).catch(showError);
+        }
+      });
+    maskZone.title='Tracer une zone rectangulaire à masquer sur ce PDF';
   }
   // Downloads live beside the file name so they remain visible above the document.
   const loading=el('p','Préparation de l’aperçu…','asv2-loading',viewerBody);

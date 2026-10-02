@@ -34,6 +34,12 @@ export const COPY = Object.freeze({
     targetInstruction: 'Tracez un rectangle autour du passage sélectionné.',
     zoneInstruction: 'Tracez un rectangle sur le document pour masquer cette zone.',
     regionUnknown: 'L’emplacement exact de ce passage n’est pas connu sur cet aperçu.',
+    progress: (done, total) => done + ' sur ' + total + ' vérifié' + (total > 1 ? 's' : ''),
+    validate: 'Valider ce document',
+    othersMasked: 'Autres données masquées',
+    safetyLine: 'Vous validez le document après avoir vérifié chaque passage.',
+    shortcuts: 'J suivant · K précédent · M masquer · V laisser visible · Échap fermer',
+    readyToValidate: 'Document prêt à valider',
   },
   errors: {
     generic: 'Un problème est survenu.',
