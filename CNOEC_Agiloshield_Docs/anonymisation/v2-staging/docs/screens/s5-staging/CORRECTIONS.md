@@ -55,7 +55,33 @@ Il manque 3 points : restauration réelle (Nicolas), et l’accessibilité du ra
 
 Captures : `docs/screens/s6-accueil/apres-0260723a-staging.png` (staging, compte Harriet) et `docs/screens/s6-accueil/apres-local/` (harnais synthétique, desktop 1312 et mobile 390 : accueil, tutoriel, réglages, termes, texte collé). Axe : 0 serious/critical hors voile du tutoriel.
 
+## Refonte visuelle et validation en un clic (pin `a72e10ba`, staging webflow.io)
+
+Avant (captures Florian 18:15 à 18:18) : aide « ? Comment ça marche » perdue, texte collé décalé, catégories sans icône, section Termes trop haute avec un bouton centré, « Modifier » trop petit. En revue : barre Original coupée à gauche, icône Original absente, cartes de passages qui débordent, encadrés superposés, bouton Valider grisé tant qu’un passage reste.
+
+Après :
+
+- Base CSS : racine `text-align:left`, 60 sélecteurs en double fusionnés (`tests/css-merge.mjs`), media queries en fin de fichier, garde-fou anti-doublon dans `css-tokens.check.mjs`. Icônes Nucleo en SVG inline (fin des icônes manquantes).
+- Accueil : aide en pilule bleu clair, barre unique « Coller du texte » à gauche, puce réglages (icône, résumé, « Modifier » taille normale) à droite, carte « Texte à protéger » pleine largeur.
+- Réglages : une icône par catégorie, compteur « N sur 13 », grille compacte, ligne « Autre chose à masquer ? » avec « Ajouter un terme ».
+- Revue : colonne et cartes en `minmax(0,1fr)`, titre sur 2 lignes, extrait sur 3 lignes, « Masquer » et « Laisser visible » sur 2 colonnes égales, barre d’outils sans débordement, icône Original visible active ou non. Pied : une ligne d’état, le bouton, les raccourcis en discret.
+- Valider en un clic : bouton toujours actif (sauf envoi en cours). Rien à vérifier : validation directe sans fenêtre. Passages restants : fenêtre centrée « Tout masquer et valider », « Tout laisser visible et valider », « Revoir les passages », puis une décision par passage avec « Décision 3 sur 12 » et « Arrêter ». Zones PDF à placer ou conflits de listes : la fenêtre le dit et propose seulement « Revoir ».
+- Aperçu PDF : indicateur « Affichage du PDF… » et délai maximal de 25 s avec message clair, au lieu d’un écran vide.
+
+Vérification staging (Harriet, pin `a72e10ba`) :
+
+- Accueil et réglages conformes aux captures locales.
+- PDF `facture-fictive-smoke.pdf` : Original et Anonymisé s’affichent. « Valider ce document » sans passage restant valide directement (« Document validé. »).
+- TXT `cr-smoke.txt` (1 passage) : la fenêtre s’ouvre, « Tout masquer et valider » applique la décision (« Décision 1 sur 1 »). Le serveur refuse ensuite la validation avec `artifact_inconsistent` sur la nouvelle révision (job `1000040878`). Côté backend : un message clair s’affiche désormais à la place du conseil « Masquer une zone ».
+- L’écran PDF vide de Florian n’a pas été reproduit sur un PDF Harriet. Cause probable : le débordement de mise en page (contenu poussé hors champ), corrigé ici. Le job Bauer reste lié au 422.
+
+Captures : `docs/screens/s7-refonte/` (desktop et mobile 390 : empty, modal-types, modal-lists, tab-text, review-dense, review-pdf, review-validate-confirm).
+
+Brouillon Nico : `DEMANDES_NICO/2026-10-02_agiloshield-v2-decision-groupee/` (commande groupée, une seule révision). Gate : réponse binaire sur le fil 422, puis `OK envoi Nico décision groupée`.
+
 ## Non 20/20 produit tant que
+
+- Validation après décision sur TXT refusée par le serveur (`artifact_inconsistent`).
 
 - Le 422 PDF Bauer n’est pas corrigé.
 - `PSEUDO_KEY_INVALID`, restore PDF irréversible, `historyV2` session-only, `TRUST_LINE` Nico.

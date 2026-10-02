@@ -57,6 +57,8 @@ export const COPY = Object.freeze({
       blockedRules: n => plural(n, 'règle de liste à vérifier avant validation', 'règles de liste à vérifier avant validation'),
       progress: (done, total) => 'Décision ' + done + ' sur ' + total,
       slow: 'AgiloShield applique une décision par passage : comptez quelques minutes pour un long document.',
+      serverArtifact: 'Vos décisions sont appliquées, mais le serveur ne confirme pas encore le fichier protégé. Rouvrez le document dans un instant, puis validez.',
+      serverBlocked: 'Vos décisions sont appliquées, mais le serveur refuse encore la validation. Rouvrez le document, puis réessayez.',
       stop: 'Arrêter',
       stopped: 'Arrêté. Les décisions déjà appliquées sont conservées.',
     },

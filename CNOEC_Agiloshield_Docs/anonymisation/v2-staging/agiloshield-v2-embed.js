@@ -1921,7 +1921,15 @@ function guideToPendingReview(entry){
     drawerMessage('Il reste '+progress.work.problems.length+' règle'+(progress.work.problems.length>1?'s':'')+' à vérifier.','is-warning');
     return;
   }
-  drawerMessage('Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.','is-warning');
+  const blockers=Array.isArray(entry.review?.humanVerificationBlockers)?entry.review.humanVerificationBlockers:[];
+  if(blockers.length){
+    drawerMessage(blockers.includes('artifact_inconsistent')?copy.review.batch.serverArtifact:
+      copy.review.batch.serverBlocked,'is-warning');
+    return;
+  }
+  drawerMessage(entry.format==='pdf'?
+    'Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.':
+    'Vérifiez l’aperçu, puis validez.','is-warning');
 }
 function reviewModal(build){
   const overlay=el('div',null,'asv2-validate-overlay',panel);
