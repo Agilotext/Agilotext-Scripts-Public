@@ -4,6 +4,7 @@ import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 import { originalPdfLocation } from './agiloshield-v2-location.js';
+import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -30,23 +31,7 @@ const recentSessionLimit = 50;
 const tourKey = 'agiloshield-first-visit-guide-v1';
 const terminal = new Set(['READY','REVIEW_REQUIRED','FAILED']);
 const active = new Set(['LOCAL','UPLOADING','PENDING','PROCESSING','UNCERTAIN','AUTH_REQUIRED','TIMED_OUT']);
-const copy = Object.freeze({
-  brand:'AgiloShield',testBadge:'Version en test',
-  heading:'Protégez vos documents avant de les utiliser avec l’IA',
-  intro:'Choisissez les données à masquer, déposez vos fichiers et vérifiez chaque résultat.',
-  historySession:'Documents de cette session',historyDurable:'Mes documents',
-  historyOld:'Documents de l’ancienne version',
-  status:{LOCAL:'À envoyer',UPLOADING:'Envoi en cours',PENDING:'Fichier reçu, en attente',
-    PROCESSING:'Protection en cours',READY:'Résultat prêt selon vos réglages',
-    REVIEW_REQUIRED:'Vérification nécessaire',FAILED:'Traitement impossible',
-    AUTH_REQUIRED:'Connexion requise',TIMED_OUT:'Suivi interrompu',
-    UNCERTAIN:'Envoi à vérifier',ERROR:'Action impossible'},
-  reviewAction:{KEEP:'Conserver ce passage',MASK:'Masquer ce passage'},
-  issueReason:{FIRST_ROW_PER_REVIEW:'La première ligne demande une vérification.',
-    LIST_EXCLUSION_REVIEW:'Une règle particulière contredit un masquage nécessaire.',
-    LIST_INCLUSION_UNLOCATED:'Un passage à masquer n’a pas été localisé avec certitude.'},
-  genericError:'Un problème est survenu.',
-});
+const copy = COPY;
 const iconsBase = new URL('./assets/nucleo/', import.meta.url);
 const state = {preferencesReady:false, currentPolicy:null, accountRef:null, accountEpoch:0,
   capabilities:{}, entries:[], active:null, surface:'file',
@@ -123,11 +108,11 @@ const errorText = error => location.protocol==='file:'?
   error?.code==='RESULT_NOT_AVAILABLE'? 'Le résultat de cette révision n’est pas disponible. Consultez les vérifications avant de réessayer.':
   error?.status===409?'Le document a changé. Actualisez-le avant de continuer.':
   error?.status===413?'Ce fichier dépasse la taille autorisée.':
-  localErrors.has(error?.message)?error.message:copy.genericError;
+  localErrors.has(error?.message)||LOCAL_MESSAGES.has(error?.message)?error.message:copy.errors.generic;
 const policySummary = types => Array.isArray(types)?types.length?
   types.length+' catégorie'+(types.length>1?'s':'')+' sur 13 · '+
     types.map(code=>labels[code]||code).join(', '):
-  'Aucune catégorie sélectionnée — les données détectées seront conservées.':
+  'Aucune catégorie sélectionnée : les données détectées resteront visibles.':
   'Sélection en cours de chargement';
 const safeStatus = status => copy.status[status]||copy.status.ERROR;
 
@@ -275,8 +260,8 @@ async function inspectRestore(){
         'Ce fichier a été modifié depuis la version publiée ; sa restitution ne sera pas certifiée.',
         null,restoreInspection);
       const missing=inspection.missingTags||[],unknown=inspection.unrecognizedTags||{};
-      el('p',missing.length+' étiquette(s) absente(s) · '+Object.keys(unknown).length+
-        ' étiquette(s) inconnue(s).',null,restoreInspection);
+      el('p',plural(missing.length,'étiquette absente','étiquettes absentes')+' · '+
+        plural(Object.keys(unknown).length,'étiquette inconnue','étiquettes inconnues')+'.',null,restoreInspection);
       el('p','Le document restitué contiendra de nouveau des données sensibles.',
         'asv2-restore-safety',restoreInspection);
       return;
@@ -325,7 +310,7 @@ const listsButton=button('Listes','asv2-types-button asv2-lists-button',side,ope
 const listsCount=el('span',null,'asv2-list-summary',listsButton);
 const inclusionCount=el('span','Incl. 0','asv2-list-count asv2-list-count-include',listsCount);
 const exclusionCount=el('span','Excl. 0','asv2-list-count asv2-list-count-exclude',listsCount);
-listsButton.setAttribute('aria-label','Listes — inclusions : 0 ; exclusions : 0');
+listsButton.setAttribute('aria-label','Listes, inclusions : 0 ; exclusions : 0');
 listsButton.disabled=true;
 listsButton.title='Préparer les listes pour vos prochains documents';
 const listsHelp=el('p','Ces listes s’appliquent aux prochains documents déposés.',
@@ -436,7 +421,7 @@ const retry=button('Réessayer','asv2-secondary',actions,loadPreferences);retry.
 const resumeAuthButton=button('Se reconnecter','asv2-secondary',actions,
   ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
 resumeAuthButton.hidden=true;
-const previewHelp=el('p','Chaque document reste accessible dans l’historique.',
+const previewHelp=el('p',copy.historySessionOnly,
   'asv2-preview-help',main);previewHelp.hidden=true;
 
 const historySection=el('section',null,'asv2-history',shell);
@@ -450,7 +435,7 @@ const anon2HistoryTab=button(copy.historyOld,'asv2-history-tab',historyTabs,()=>
 historyTabs.hidden=true;anon2HistoryTab.hidden=true;
 for(const tab of [v2HistoryTab,anon2HistoryTab])tab.setAttribute('role','tab');
 v2HistoryTab.setAttribute('aria-selected','true');anon2HistoryTab.setAttribute('aria-selected','false');
-const historyHint=el('p','Les documents de vos visites précédentes ne sont pas encore disponibles ici.',
+const historyHint=el('p',copy.historySessionOnly,
   'asv2-history-hint',historySection);
 const historyActions=el('div',null,'asv2-history-actions',historySection);
 const refreshHistoryButton=button('Actualiser','asv2-secondary',historyActions,()=>loadHistory().catch(error=>{
@@ -606,7 +591,7 @@ function updateListSummary(){
   const included=listSelection.anon2InclusionList.length,excluded=listSelection.anon2ExclusionList.length;
   inclusionCount.textContent='Incl. '+included;
   exclusionCount.textContent='Excl. '+excluded;
-  listsButton.setAttribute('aria-label','Listes — inclusions : '+included+' ; exclusions : '+excluded);
+  listsButton.setAttribute('aria-label','Listes, inclusions : '+included+' ; exclusions : '+excluded);
 }
 function renderListDraft(){
   for(const kind of ['include','exclude']){
@@ -626,7 +611,7 @@ function renderListDraft(){
   const included=new Set(listDraft.anon2InclusionList.map(termKey));
   const conflicts=listDraft.anon2ExclusionList.filter(term=>included.has(termKey(term)));
   const messages=[];
-  if(conflicts.length)messages.push(conflicts.length+' terme(s) figurent dans les deux listes : '
+  if(conflicts.length)messages.push(plural(conflicts.length,'terme figure','termes figurent')+' dans les deux listes : '
     +'une contradiction pourra exiger une vérification du document.');
   listsWarning.textContent=messages.join(' ');listsWarning.hidden=!messages.length;
 }
@@ -763,12 +748,12 @@ function updatePolicySummary(){
   const types=state.currentPolicy?.selectedTypes;
   typeCount.textContent=Array.isArray(types)?types.length?
     types.length+'/13':
-    '0/13 — aucune catégorie sélectionnée':'…';
+    '0/13, aucune catégorie sélectionnée':'…';
   mobileSettingsText.textContent='Mode : '+(pseudoRadio.checked?'Pseudonymiser':'Anonymiser')+
     ' · Données à masquer : '+policySummary(types);
   emptyPolicyWarning.hidden=!Array.isArray(types)||types.length>0;
   if(!emptyPolicyWarning.hidden){
-    emptyPolicyWarning.textContent='0/13 — aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.';
+    emptyPolicyWarning.textContent='0/13, aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.';
   }
 }
 async function loadPreferences(){
@@ -848,8 +833,8 @@ function addFiles(files){
     accepted++;
   }
   for(const reason of rejections)el('li',reason,null,rejectedList);
-  if(rejections.length)notify(rejections.length+' fichier(s) refusé(s) ; consultez le détail sous la file.','is-warning');
-  else if(accepted)notify(accepted+' fichier(s) ajouté(s) à la file.');
+  if(rejections.length)notify(plural(rejections.length,'fichier refusé','fichiers refusés')+'. Le détail est affiché sous la liste.','is-warning');
+  else if(accepted)notify(plural(accepted,'fichier ajouté','fichiers ajoutés')+'.');
   renderQueue();drainQueue().catch(error=>notify(errorText(error),'is-error'));
   fileInput.value='';
 }
@@ -998,8 +983,7 @@ function renderHistory(){
   historyCount.textContent=rows.length+' document'+(rows.length!==1?'s':'')+
     (ready?' · '+ready+' prêt'+(ready!==1?'s':''):'');
   historyHint.textContent=source==='v2'&&!serverReady?
-    'Les documents de vos visites précédentes ne sont pas encore disponibles ici.':
-    'Retrouvez les documents accessibles à votre compte.';
+    copy.historySessionOnly:copy.historyServer;
   refreshHistoryButton.hidden=!serverReady;
   moreHistoryButton.hidden=!serverReady||!state.history.cursors[source];
   const zipReady=source==='v2'&&state.capabilities.bulkZipV2===true&&
@@ -1044,7 +1028,7 @@ function renderHistory(){
     el('span',row.fileName||row.filename||'Document','asv2-history-file-label',nameCol);
     if(row.jobId)el('small','#'+row.jobId,'asv2-history-job-id',nameCol);
     if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
-      historyAction('Voir l’original — données en clair','eye',nameContent,
+      historyAction('Voir l’original (données en clair)','eye',nameContent,
         ()=>openHistoryOriginal(row).catch(error=>notify(errorText(error),'is-error')));
     el('td',historyDate(row.createdAt||row.dtCreation),null,line);
     el('td',historySize(row.sizeBytes??row.fileLength),null,line);
@@ -1358,7 +1342,7 @@ async function pollEntry(entry){
   }}finally{entry.polling=false;}
 }
 function extractJobError(job, jobId){
-  const prefix = jobId ? 'Job #' + jobId + ' : ' : '';
+  const prefix = jobId ? '[' + jobId + '] ' : '';
   if(!job)return prefix + 'Échec du traitement côté serveur';
   if(typeof job.error==='string')return prefix + job.error;
   if(typeof job.errorMessage==='string')return prefix + job.errorMessage;
@@ -1382,7 +1366,7 @@ async function loadCurrent(entry){
   if(!currentAccountEntry(entry))return;
   if(review&&(String(review.revision)!==String(job.reviewRevision)||
     review.status!==currentStatus||review.processingMode!==job.processingMode||
-    review.workflowState!==job.workflowState))throw new Error('État de revue périmé');
+    review.workflowState!==job.workflowState))throw new Error(copy.errors.reviewStale);
   const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
@@ -1392,10 +1376,10 @@ async function loadCurrent(entry){
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
   if(isTerminal(currentStatus)){entry.file=null;if(currentStatus==='FAILED')entry.pendingMask=null;}
-  entry.error=currentStatus==='FAILED'?extractJobError(job,entry.jobId):null;
+  entry.error=currentStatus==='FAILED'?jobErrorMessage(job):null;
   if(currentStatus==='FAILED'){
     console.error('[AgiloShield V2] Le traitement du document a échoué côté serveur :', {
-      jobId:entry.jobId, name:entry.name, status:currentStatus, error:entry.error, rawJob:job
+      jobId:entry.jobId, name:entry.name, status:currentStatus, error:extractJobError(job,entry.jobId), rawJob:job
     });
   }
   entry.mode=job.processingMode||entry.mode;
@@ -1410,7 +1394,7 @@ async function loadCurrent(entry){
       if(!currentAccountEntry(entry)||entry.revision!==String(report?.revision)||
         report.status!==entry.status||report.protectionPolicy?.digest!==entry.digest||
         report.listDigest!==entry.listDigest||report.processingMode!==entry.mode)
-        throw new Error('Rapport QA périmé');
+        throw new Error('stale QA report');
       entry.report=report;entry.reportError=null;
     }catch(error){entry.report=null;entry.reportError='Rapport QA indisponible pour cette révision.';}
   }else{entry.report=null;entry.reportError=null;}
@@ -1495,22 +1479,15 @@ function renderDrawer(entry){
     const downloadControl=iconButton('download','Télécharger',
       'asv2-drawer-icon'+(entry.status==='READY'?' is-primary':''),drawerDownloads,
       ()=>download(entry,entry.status==='READY').catch(showError));
-    downloadControl.title=entry.status==='READY'?'Télécharger':'Télécharger — une confirmation sera demandée';
+    downloadControl.title=entry.status==='READY'?'Télécharger':'Télécharger (une confirmation sera demandée)';
     if(canDownloadKey(entry)){
       const keyControl=iconButton('key','Télécharger la clé','asv2-drawer-icon',drawerDownloads,
         ()=>downloadKey(entry).catch(showError));
       keyControl.title='Télécharger la clé de pseudonymisation';
     }
   }
-  const message=entry.status==='FAILED'?'Traitement impossible':
-    entry.status==='READY'?'Prêt':
-    entry.status==='REVIEW_REQUIRED'?
-      ('Vérification nécessaire'+(pendingCount?' · '+pendingCount+' décision'+(pendingCount>1?'s':''):'')):
-    entry.status==='PROCESSING'?'Protection en cours':
-    entry.status==='PENDING'?'En attente':
-    entry.status==='UPLOADING'?'Envoi en cours':
-    entry.status==='TIMED_OUT'?'Suivi interrompu':
-    safeStatus(entry.status);
+  const message=entry.status==='REVIEW_REQUIRED'&&pendingCount?
+    safeStatus(entry.status)+' · '+copy.review.decisions(pendingCount):safeStatus(entry.status);
   drawerMessage(message,
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
@@ -1520,8 +1497,8 @@ function renderIssues(entry){
   clear(issuePane);
   if(entry.status==='FAILED'){
     const errBox=el('div',null,'asv2-issue asv2-error-box',issuePane);
-    el('strong','Traitement impossible',null,errBox);
-    el('p','Le document n’a pas pu être traité. Retirez-le puis réessayez.',
+    el('strong','Ce document n’a pas pu être traité',null,errBox);
+    el('p',entry.error||copy.errors.failed,
       'asv2-error-detail',errBox);
     const actions=el('div',null,'asv2-error-actions',errBox);
     buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn',actions,
@@ -1563,9 +1540,9 @@ function renderIssues(entry){
     'Aucune décision manuelle n’est en attente.','asv2-muted',reviewSummary);
   const controls=el('div',null,'asv2-issues-controls',issuePane);
   const countersText=[
-    unresolved.length?unresolved.length+' obligation(s) à localiser':null,
-    listProblems.length?listProblems.length+' conflit(s)':null,
-    allRows.length?allRows.length+' passage(s) repéré(s)':null
+    unresolved.length?copy.review.toPlace(unresolved.length):null,
+    listProblems.length?copy.review.listConflicts(listProblems.length):null,
+    allRows.length?copy.review.found(allRows.length):null
   ].filter(Boolean).join(' · ');
   if(countersText)el('div',countersText,'asv2-issues-counters',controls);
   if(entry.format==='pdf'&&allRows.some(row=>row.page&&
@@ -1609,7 +1586,7 @@ function renderIssues(entry){
       const next=Math.min(values.length,visible+40);
       for(;visible<next;visible++)renderGroup(values[visible]);
       more.hidden=visible>=values.length;
-      if(!more.hidden)more.textContent='Afficher d’autres passages · '+(values.length-visible)+' groupe(s) restant(s)';
+      if(!more.hidden)more.textContent='Afficher d’autres passages · '+copy.review.moreGroups(values.length-visible);
       parent.appendChild(more);
     }
     function renderGroup(occurrences){
@@ -1676,7 +1653,7 @@ function renderIssues(entry){
               ()=>decide(entry,current.id,action)):
             buttonWithIcon('Conserver','eye','asv2-secondary asv2-action-keep',actions,
               ()=>decide(entry,current.id,action));
-          control.title=copy.reviewAction[action]+' — uniquement ce passage';
+          control.title=copy.reviewAction[action]+' (ce passage uniquement)';
           control.setAttribute('aria-label',control.title);
           control.disabled=!review.reviewable||entry.commandBusy;
         }
@@ -1693,7 +1670,7 @@ function renderIssues(entry){
     // 1. Problèmes demandant action en premier
     const filteredUnresolved=unresolved.filter(u=>pf==='all'||String(u.page)===pf);
     if(filteredUnresolved.length){
-      el('h4',filteredUnresolved.length+' obligation(s) sans région vérifiée',null,issuesContent);
+      el('h4',pf==='all'?copy.review.toCheck(filteredUnresolved.length):copy.review.toCheckOnPage(filteredUnresolved.length,pf),null,issuesContent);
       for(const target of filteredUnresolved){
         if(!target.maskOccurrenceId||!target.page)continue;
         const card=el('article',null,'asv2-issue asv2-unresolved',issuesContent);
@@ -1711,7 +1688,7 @@ function renderIssues(entry){
     }
 
     if(listProblems.length){
-      el('h4',listProblems.length+' conflit(s) de listes à vérifier',null,issuesContent);
+      el('h4',copy.review.listConflicts(listProblems.length),null,issuesContent);
       for(const problem of listProblems){
         const card=el('article',null,'asv2-issue',issuesContent);
         el('strong',problem.reason==='LIST_EXCLUSION_REVIEW'?
@@ -1731,7 +1708,7 @@ function renderIssues(entry){
       return true;
     });
     if(filteredActionRows.length){
-      el('h4',filteredActionRows.length+' décision(s) requise(s)',null,issuesContent);
+      el('h4',copy.review.decisions(filteredActionRows.length),null,issuesContent);
       renderOccurrenceGroups(filteredActionRows,issuesContent);
     }
 
@@ -1934,7 +1911,7 @@ async function previewBytes(entry,kind){
       String(review.revision)!==String(expected.revision)||
       review.status!==expected.status||job.processingMode!==expected.mode||
       review.processingMode!==expected.mode||job.workflowState!==review.workflowState||
-      (kind==='anon'&&!currentResultAvailable(job,review)))throw new Error('Aperçu périmé');
+      (kind==='anon'&&!currentResultAvailable(job,review)))throw new Error(copy.errors.previewStale);
   }
   await current();
   const response=assertPreviewHeaders(await api.preview(entry.jobId,kind),{
@@ -2000,7 +1977,7 @@ async function renderPreview(entry){
         verified?'asv2-secondary asv2-human-verified':'asv2-primary',quickActions,
         ()=>approveHumanReview(entry,validate));
       validate.title=verified?
-        (reviewer?'Vérifié par '+reviewer+' — télécharger':'Télécharger la version vérifiée'):
+        (reviewer?'Vérifié par '+reviewer+', télécharger':'Télécharger la version vérifiée'):
         'Valider ce document';
     }
   }
@@ -2010,7 +1987,7 @@ async function renderPreview(entry){
     if((kind==='anon'||kind==='compare')&&!canPreviewResult(entry)&&
         !['xlsx','pptx'].includes(entry.format)){
       clear(viewerBody);
-      el('p',entry.status==='FAILED'?(entry.error?'Échec du traitement : '+entry.error:'Le traitement a échoué. Aucun résultat protégé n’est disponible.'):
+      el('p',entry.status==='FAILED'?(entry.error?entry.error:'Le traitement a échoué. Aucun résultat protégé n’est disponible.'):
         isTerminal(entry.status)?'Aperçu du résultat indisponible pour cette révision. Vous pouvez ouvrir l’original volontairement.':
           'Le résultat protégé apparaîtra ici après le traitement.',
         'asv2-preview-unavailable',viewerBody);
@@ -2109,7 +2086,7 @@ async function renderPdfCompare(entry,serial){
 
   const compareContainer=el('div',null,'asv2-compare-container asv2-page-scroll',viewerBody);
   const colOrig=el('div',null,'asv2-compare-col',compareContainer);
-  el('span','Original — données sensibles visibles','asv2-compare-title',colOrig);
+  el('span','Original, données visibles','asv2-compare-title',colOrig);
   const wrapOrig=el('div',null,'asv2-page',colOrig);
 
   const colAnon=el('div',null,'asv2-compare-col',compareContainer);
@@ -2154,7 +2131,7 @@ async function renderOtherCompare(entry,serial){
     'asv2-geometry-note',viewerBody);
   const compare=el('div',null,'asv2-compare-container asv2-compare-text',viewerBody);
   const left=el('section',null,'asv2-compare-col',compare);
-  el('h3','Original — données sensibles visibles','asv2-compare-title',left);
+  el('h3','Original, données visibles','asv2-compare-title',left);
   const leftBody=el('div',null,'asv2-compare-content',left);
   const right=el('section',null,'asv2-compare-col',compare);
   el('h3',protectedVersionLabel(entry),
@@ -2194,9 +2171,9 @@ async function renderPdf(entry,bytes,kind,serial){
   const toolInstruction=el('p','', 'asv2-tool-instruction',viewerBody);
   function updateToolInstruction(){
     toolInstruction.textContent=entry.target?
-      'Obligation ciblée : tracez uniquement la région correspondant au passage sélectionné.':
+      copy.review.targetInstruction:
       entry.manualMaskActive?
-      'Masquage d’une zone : tracez un rectangle sur le document pour masquer cette zone.':'';
+      copy.review.zoneInstruction:'';
     toolInstruction.hidden=!toolInstruction.textContent;
   }
   if(kind==='origin'&&entry.status==='REVIEW_REQUIRED'){
@@ -2288,7 +2265,7 @@ async function renderPdf(entry,bytes,kind,serial){
         pageBox.scrollTop+=mark.top-box.top-pageBox.clientHeight/2+mark.height/2;
         pageBox.scrollLeft+=mark.left-box.left-pageBox.clientWidth/2+mark.width/2;
       });
-      if(!regions.length)el('p','La région exacte de cette occurrence n’est pas vérifiée pour cet aperçu.',
+      if(!regions.length)el('p',copy.review.regionUnknown,
         'asv2-geometry-note',pageBox);
     }
     const canDraw=canMask&&((entry.target&&Number(entry.target.page)===entry.page)||entry.manualMaskActive);
@@ -2372,7 +2349,7 @@ async function renderDocx(bytes,serial,parent=viewerBody,registerCleanup=cleanup
   frame.referrerPolicy='no-referrer';
   const nonce=crypto.randomUUID();
   const completion=new Promise((resolve,reject)=>{
-    const timer=setTimeout(()=>{cleanup();reject(new Error('Délai de rendu Word dépassé'));},20000);
+    const timer=setTimeout(()=>{cleanup();reject(new Error(copy.errors.wordTimeout));},20000);
     const onMessage=event=>{
       if(event.source!==frame.contentWindow||serial!==state.previewSerial)return;
       if(event.data?.type==='AGILOSHIELD_DOCX_READY'){
@@ -2514,7 +2491,7 @@ async function downloadHumanVerified(entry){
   await assertDownloadStillCurrent(entry,expected);
   const review=await api.review(entry.jobId);
   if(review.humanVerifiedDeliverable!==true||String(review.revision)!==String(expected.revision))
-    throw new Error('Attestation périmée');
+    throw new Error(copy.errors.approvalStale);
   const url=URL.createObjectURL(blob),link=el('a',null,null,document.body);
   link.href=url;link.download='document-verifie-par-une-personne-'+
     String(entry.jobId).replace(/[^A-Za-z0-9_-]/g,'')+'.'+(entry.format||'bin');
