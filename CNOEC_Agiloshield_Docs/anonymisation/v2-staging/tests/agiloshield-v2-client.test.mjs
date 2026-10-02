@@ -124,6 +124,10 @@ await assert.rejects(() => client.upload(new Blob(['synthetic']), {}, {
   anon2InclusionList:[]}), /Both V2 list arrays/);
 await client.decide(7, 'd1', {revision:'r2', occurrenceId:'o1', action:'KEEP', reason:'test'});
 assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
+assert.equal(seen.at(-1).options.headers['If-Match'], 'r2');
+await client.execute(7, 'd1', 'r3');
+assert.equal(seen.at(-1).options.headers['If-Match'], 'r3');
+assert.equal(JSON.parse(seen.at(-1).options.body).revision, 'r3');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],
   occurrenceId:'o1', sourceRevision:'s1', documentId:'doc', reason:'test'});
 assert.equal(JSON.parse(seen.at(-1).options.body).occurrenceId, 'o1');

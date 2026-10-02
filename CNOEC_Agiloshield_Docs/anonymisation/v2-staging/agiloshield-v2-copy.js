@@ -66,6 +66,8 @@ const SERVER_ERRORS = Object.freeze({
   EMPTY_FILE: 'Ce fichier est vide.',
   CORRUPTED_FILE: 'Ce fichier semble endommagé. Ouvrez-le puis enregistrez-le à nouveau.',
   OCR_REQUIRED: 'Ce PDF est une image scannée sans texte. Il ne peut pas encore être protégé.',
+  COMMAND_INVALID: 'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.',
+  JOB_FORBIDDEN: 'Vous n’avez pas accès à ce document.',
   ENGINE_FAILED: 'Le document n’a pas pu être traité. Retirez-le puis réessayez.',
   ENGINE_TIMEOUT: 'Le traitement a pris trop de temps. Réessayez avec un fichier plus petit.',
 });

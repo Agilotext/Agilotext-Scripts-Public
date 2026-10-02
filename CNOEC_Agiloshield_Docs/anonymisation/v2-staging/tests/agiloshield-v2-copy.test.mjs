@@ -12,7 +12,8 @@ assert.equal(jobErrorMessage({ error: 'Job #12 : PSEUDO_KEY_INVALID' }),
   'La pseudonymisation de ce fichier a échoué. Réessayez ou choisissez Anonymiser.');
 assert.equal(jobErrorMessage({ error: { code: 'QUOTA_EXCEEDED' } }),
   'Vous avez atteint la limite de documents de votre offre.');
-assert.equal(jobErrorMessage({ error: 'SOMETHING_UNKNOWN' }), COPY.errors.failed);
+assert.equal(jobErrorMessage({ errorCode: 'COMMAND_INVALID' }),
+  'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.');
 assert.equal(jobErrorMessage(null), COPY.errors.failed);
 assert.equal(plural(1, 'passage', 'passages'), '1 passage');
 assert.equal(plural(2, 'passage', 'passages'), '2 passages');

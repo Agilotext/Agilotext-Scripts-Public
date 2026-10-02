@@ -37,7 +37,7 @@
 #agiloshield-v2-staging [hidden]{display:none!important}
 #agiloshield-v2-staging .asv2-sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 #agiloshield-v2-staging .asv2-icon{display:inline-flex;flex:none;line-height:0}
-#agiloshield-v2-staging .asv2-icon svg{display:block}
+#agiloshield-v2-staging .asv2-icon svg{display:block;width:1em;height:1em}
 
 /* Main screen: settle, drop, documents. */
 #agiloshield-v2-staging .asv2-shell{max-width:1040px;margin:32px auto 48px;padding:0 24px}
@@ -197,7 +197,7 @@
 #agiloshield-v2-staging .asv2-type{display:flex;align-items:center;gap:8px;min-height:45px;padding:8px 11px;border:1px solid var(--asv2-line);border-radius:var(--asv2-r-md);background:var(--asv2-white);cursor:pointer}
 #agiloshield-v2-staging .asv2-type:hover{border-color:var(--asv2-blue-line);background:var(--asv2-white)}
 #agiloshield-v2-staging .asv2-type input{accent-color:var(--asv2-blue);margin:0}
-#agiloshield-v2-staging .asv2-code{min-width:36px;text-align:center;padding:1px 5px;border-radius:var(--asv2-r-lg);background:var(--asv2-blue-tint);color:var(--asv2-blue);font-size:11px;font-weight:800}
+#agiloshield-v2-staging .asv2-code{display:none}
 #agiloshield-v2-staging .asv2-shortcuts{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 18px}
 #agiloshield-v2-staging .asv2-link{border:0;background:none;color:var(--asv2-blue);font-weight:700;text-decoration:underline;padding:5px 0}
 
@@ -292,7 +292,7 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-close:hover{background:var(--asv2-blue-tint);color:var(--asv2-ink)}
 #agiloshield-v2-staging .asv2-drawer-notice{margin:8px 16px 0;padding:7px 12px;flex:none;font-weight:650}
 #agiloshield-v2-staging .asv2-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,360px);gap:0;flex:1;min-height:0;border-top:1px solid var(--asv2-line)}
-#agiloshield-v2-staging .asv2-issues{overflow:auto;padding:0;background:var(--asv2-white);display:flex;flex-direction:column;min-height:0;box-shadow:inset 1px 0 0 var(--asv2-line)}
+#agiloshield-v2-staging .asv2-issues{overflow:hidden;padding:0;background:var(--asv2-white);display:flex;flex-direction:column;min-height:0;box-shadow:inset 1px 0 0 var(--asv2-line)}
 #agiloshield-v2-staging .asv2-issues>h3{margin-bottom:8px}
 #agiloshield-v2-staging .asv2-issues>.asv2-muted{font-size:12px}
 #agiloshield-v2-staging .asv2-issues-controls{display:flex;flex-direction:column;gap:8px;margin:10px 0}

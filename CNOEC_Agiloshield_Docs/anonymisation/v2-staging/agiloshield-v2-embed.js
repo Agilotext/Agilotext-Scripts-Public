@@ -104,7 +104,8 @@ const protectedVersionLabel = entry => entry.mode==='PSEUDONYMIZE'?
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
 const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par terme.',
   'Un terme est présent plusieurs fois.',
-  'Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.']);
+  'Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.',
+  'Réponse de masquage incomplète']);
 const errorText = error => location.protocol==='file:'?
   'Ouvrez la page de test publiée : une copie locale ne peut pas utiliser votre connexion.':
   error?.status===401?'Votre session a expiré. Reconnectez-vous, puis reprenez.':
@@ -113,6 +114,9 @@ const errorText = error => location.protocol==='file:'?
   error?.code==='RESULT_NOT_AVAILABLE'? 'Le résultat de cette révision n’est pas disponible. Consultez les vérifications avant de réessayer.':
   error?.status===409?'Le document a changé. Actualisez-le avant de continuer.':
   error?.status===413?'Ce fichier dépasse la taille autorisée.':
+  error?.code==='COMMAND_INVALID'||error?.status===422?
+    'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.':
+  error?.code==='JOB_FORBIDDEN'?'Vous n’avez pas accès à ce document.':
   localErrors.has(error?.message)||LOCAL_MESSAGES.has(error?.message)?error.message:copy.errors.generic;
 const policySummary = types => Array.isArray(types)?types.length?
   types.length+' catégorie'+(types.length>1?'s':'')+' sur 13 · '+
@@ -187,6 +191,7 @@ function restorePicker(title,hint,chooseLabel,accept,valid){
   el('strong',title,'asv2-restore-label',card);
   const input=el('input',null,'asv2-restore-input',card);
   input.type='file';input.accept=accept;input.multiple=false;input.hidden=true;
+  input.setAttribute('aria-label',title);
   el('p',hint,'asv2-muted',card);
   button(chooseLabel,'asv2-secondary asv2-restore-choose',card,()=>input.click());
   const selected=el('p','', 'asv2-restore-selected',card);selected.hidden=true;
@@ -342,7 +347,7 @@ const checks=new Map();
 for(const code of codes){
   const label=el('label',null,'asv2-type',grid);
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
-  el('span',code,'asv2-code',label);el('span',labels[code],null,label);checks.set(code,box);
+  el('span',labels[code],null,label);checks.set(code,box);
 }
 const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
@@ -420,6 +425,7 @@ if(typeof config.TRUST_LINE==='string'&&config.TRUST_LINE.trim()){
 function updateLastDocCard(){ /* Intentionally no-op: one source of truth is enough. */ }
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
+fileInput.setAttribute('aria-label','Choisir des documents');
 const mobileSettings=el('div',null,'asv2-mobile-settings',null);
 const mobileSettingsText=el('p','Chargement de vos réglages…',null,mobileSettings);
 const mobileSettingsEdit=button('Modifier','asv2-secondary',mobileSettings,openTypes);
@@ -490,7 +496,9 @@ const workspace=el('div',null,'asv2-workspace is-doc',panel);
 const viewerPane=el('section',null,'asv2-viewer',workspace);viewerPane.setAttribute('aria-label','Aperçu du document');
 const viewerToolbar=el('div',null,'asv2-viewer-toolbar',viewerPane);
 const viewerBody=el('div',null,'asv2-viewer-body',viewerPane);
+viewerBody.setAttribute('tabindex','0');
 const issuePane=el('section',null,'asv2-issues',workspace);issuePane.setAttribute('aria-label','Détections et problèmes');
+issuePane.setAttribute('tabindex','0');
 const drawerFooter=el('footer',null,'asv2-drawer-footer',issuePane);
 
 function notify(text,kind='') {
@@ -1678,6 +1686,9 @@ function renderIssues(entry){
   }
 
   const issuesContent=el('div',null,'asv2-issues-content',issuePane);
+  issuesContent.setAttribute('tabindex','0');
+  issuesContent.setAttribute('role','region');
+  issuesContent.setAttribute('aria-label','Passages à vérifier');
 
   function renderPass(item,index){
     const open=index===entry.reviewFocusIndex;
@@ -1876,8 +1887,10 @@ async function decide(entry,occurrenceId,action){
   if(!await confirmAction(copy.reviewAction[action]+' uniquement dans le passage choisi ?'))return;
   entry.commandBusy=true;renderIssues(entry);
   try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
-    action,reason:'review_explicit'});await apply(entry,receipt.revision);}catch(error){
-      if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+    action,reason:'review_explicit'});
+    if(!receipt?.revision)throw new Error('Réponse de masquage incomplète');
+    await apply(entry,receipt.revision);}catch(error){
+      if(error?.status===409||error?.status===422)await loadCurrent(entry).catch(()=>{});
       showError(error);
     }
   finally{entry.commandBusy=false;}

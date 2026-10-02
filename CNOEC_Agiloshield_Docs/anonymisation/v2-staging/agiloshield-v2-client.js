@@ -89,7 +89,9 @@ export class AgiloShieldV2Client {
     if (!response.ok) {
       let detail; try { detail = await response.json(); } catch (_) { detail = {}; }
       const error = new Error(detail.errorMessage || detail.error || `HTTP_${response.status}`);
-      error.status = response.status; error.code = detail.error; throw error;
+      error.status = response.status; error.code = detail.error;
+      console.error('[AgiloShield V2]', method, path, response.status, detail.error || '', detail.errorMessage || '');
+      throw error;
     }
     return response;
   }
@@ -170,8 +172,10 @@ export class AgiloShieldV2Client {
   }
   async command(id, digest, payload) {
     if (!digest) throw new Error('Current policy digest required');
+    if (!payload?.revision) throw new Error('Current revision required');
     return this.json(this.path(id, '/review/commands'), {method:'POST', digest,
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      headers:{'Content-Type':'application/json','If-Match':String(payload.revision)},
+      body:JSON.stringify(payload)});
   }
   decide(id, digest, {revision, occurrenceId, action, reason}) {
     if (!['KEEP', 'MASK'].includes(action)) throw new Error('Invalid decision');
@@ -210,8 +214,10 @@ export class AgiloShieldV2Client {
       body:JSON.stringify({revision,commandId:crypto.randomUUID(),checks})});
   }
   execute(id, digest, revision) {
+    if (!revision) throw new Error('Current revision required');
     return this.json(this.path(id, '/review/execute'), {method:'POST', digest,
-      headers:{'Content-Type':'application/json'}, body:JSON.stringify({revision})});
+      headers:{'Content-Type':'application/json','If-Match':String(revision)},
+      body:JSON.stringify({revision})});
   }
   async poll(id, {intervalMs = 1200, timeoutMs = 180000} = {}) {
     const end = Date.now() + timeoutMs;

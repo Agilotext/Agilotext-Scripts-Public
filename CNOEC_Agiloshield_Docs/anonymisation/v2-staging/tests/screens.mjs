@@ -48,6 +48,7 @@ for (const state of STATES) {
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e.message || e)));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    page.on('response', (r) => { if (r.status() === 404) errors.push('404 ' + r.url().split('/').slice(-3).join('/')); });
     await page.goto(base + (state.query ? '?' + state.query : ''), { waitUntil: 'load' });
     await page.addStyleTag({ content: WEBFLOW_SHIM });
     await page.waitForTimeout(1800);
