@@ -56,22 +56,11 @@ jobs:
           grep -q "previewFocus" agiloshield-v2-embed.js
           grep -q "target.removed=true" agiloshield-v2-embed.js
           grep -q "Un problème est survenu." agiloshield-v2-embed.js
-      - name: CSS integrity and Webflow tokens
+      - name: CSS tokens (no lateral border, no stray hex, radius from tokens)
+        run: node tests/css-tokens.check.mjs
+      - name: No hard-coded colors in JS inline styles
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          css=Path("agiloshield-v2.css").read_text(encoding="utf-8")
-          assert css.count("{")==css.count("}"), "Unbalanced CSS braces"
-          for token in [
-              "--agilo-primary",
-              "--agilo-primary-hover",
-              "--agilo-radius",
-              ".asv2-drawer-icon",
-              ".asv2-queue-remove",
-              ".asv2-mask-marker",
-              ".asv2-review-summary",
-              ".asv2-issue-locate-icon",
-          ]:
-              assert token in css, token
-          print("targeted UI CSS: PASS")
-          PY
+          ! grep -nE "style=[^>]*#[0-9a-fA-F]{3,6}\b" agiloshield-v2-embed.js
+      - name: Synthetic harness never shipped to Webflow
+        run: |
+          ! grep -nE "staging-equivalent|gallery-states|mock-client" WEBFLOW_STAGING_COPY_PASTE.html
