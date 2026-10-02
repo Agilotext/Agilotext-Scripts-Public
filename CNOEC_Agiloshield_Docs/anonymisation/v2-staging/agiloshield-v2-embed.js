@@ -2199,7 +2199,15 @@ async function renderPdf(entry,bytes,kind,serial){
       'Masquage d’une zone : tracez un rectangle sur le document pour masquer cette zone.':'';
     toolInstruction.hidden=!toolInstruction.textContent;
   }
-  updateToolInstruction();
+  if(kind==='origin'&&entry.status==='REVIEW_REQUIRED'){
+    const maskActive=Boolean(entry.target||entry.manualMaskActive);
+    buttonWithIcon(maskActive?'Zone de masquage active · Annuler':'Masquer une zone',
+      'select-area','asv2-secondary asv2-manual-mask-btn'+(maskActive?' is-active':''),nav,()=>{
+        if(maskActive){
+          entry.target=null;
+          entry.manualMaskActive=false;
+          drawerMessage(null);
+          updateToolInstruction();
           draw().catch(showError);
         }else{
           entry.manualMaskActive=true;
