@@ -41,6 +41,20 @@ Compte : Harriet `anon@test.com` (Pro, Memberstack Test). Page : `https://agilot
 
 Cible : 17/20. Une décision (le mode), une action (déposer). Texte, réglages et restauration deviennent secondaires. Maquette : `docs/screens/s6-accueil/`.
 
+## Accueil simplifié : 17/20 (pin `0260723a`, staging webflow.io)
+
+| Critère | Note | Constat |
+|---|---|---|
+| Hiérarchie | 4/5 | Un seul contrôle avant le dépôt : le mode. Texte et réglages passent sous la zone, en liens. |
+| Mots | 4/5 | Phrase sous le mode (définitif / réversible, PDF sans retour). « Listes » devient « Termes ». Ligne « 13 catégories masquées · aucun terme · Modifier ». |
+| Restauration | 2/3 | Panneau seul supprimé de l’accueil. Lien « J’ai un fichier pseudonymisé et sa clé » et entrée « Restaurer avec la clé » dans le menu du document, tous deux derrière le flag (backend non qualifié). |
+| Visuel | 4/4 | Aide en lien texte « ? Comment ça marche », plus de double cercle. Pendant le chargement, le mode respire au lieu d’être grisé. Accueil aligné à gauche dans Webflow (le parent centrait le texte). |
+| Acquis | 3/3 | Inchangés. |
+
+Il manque 3 points : restauration réelle (Nicolas), et l’accessibilité du radio Pseudonymiser qui lit encore une phrase d’aide longue.
+
+Captures : `docs/screens/s6-accueil/apres-0260723a-staging.png` (staging, compte Harriet) et `docs/screens/s6-accueil/apres-local/` (harnais synthétique, desktop 1312 et mobile 390 : accueil, tutoriel, réglages, termes, texte collé). Axe : 0 serious/critical hors voile du tutoriel.
+
 ## Non 20/20 produit tant que
 
 - Le 422 PDF Bauer n’est pas corrigé.
