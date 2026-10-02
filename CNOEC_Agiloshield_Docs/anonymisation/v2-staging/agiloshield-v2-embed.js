@@ -2360,9 +2360,6 @@ async function renderPdfCompare(entry,serial){
     await pageA.render({canvasContext:ctxA,viewport:viewportA}).promise;
   }
   await draw();
-  if(serial===state.previewSerial&&state.active===entry.key){
-    state.previewFocus={entryKey:entry.key,kind,run:draw};
-  }
 }
 async function renderOtherCompare(entry,serial){
   const [origin,result]=await Promise.all([previewBytes(entry,'origin'),previewBytes(entry,'anon')]);
@@ -2484,6 +2481,9 @@ async function renderPdf(entry,bytes,kind,serial){
     }
   }
   await draw();
+  if(serial===state.previewSerial&&state.active===entry.key){
+    state.previewFocus={entryKey:entry.key,kind,run:draw};
+  }
 }
 function bindDrawing(entry,overlay,base,serial){
   overlay.classList.add('is-drawing');let start=null,ghost=null;
