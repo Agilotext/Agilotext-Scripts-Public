@@ -40,7 +40,7 @@
 #agiloshield-v2-staging .asv2-icon svg{display:block;width:1em;height:1em}
 
 /* Main screen: settle, drop, documents. */
-#agiloshield-v2-staging .asv2-shell{max-width:1040px;margin:32px auto 48px;padding:0 24px}
+#agiloshield-v2-staging .asv2-shell{max-width:1040px;margin:32px auto 48px;padding:0 24px;text-align:left}
 #agiloshield-v2-staging .asv2-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}
 #agiloshield-v2-staging h1.asv2-main-title{margin:0 0 8px;font-size:clamp(26px,2.6vw,34px);line-height:1.15;font-weight:700;letter-spacing:-.025em;color:var(--asv2-ink)}
 #agiloshield-v2-staging .asv2-landing-intro{margin:0;max-width:640px;color:var(--asv2-muted);font-size:15px;line-height:1.55}
