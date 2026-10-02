@@ -1545,131 +1545,13 @@ function renderIssues(entry){
       ()=>removeEntryFromSession(entry));
     return;
   }
-  el('p','Conserver laisse ce passage visible. Masquer le protège. Chaque décision vise un seul passage.',
-    'asv2-muted',issuePane);
-  const support=el('details',null,'asv2-review-support',issuePane);
-  el('summary','Réglages et détails techniques',null,support);
-  if(Array.isArray(entry.selectedTypes))el('p','Données à masquer : '+policySummary(entry.selectedTypes),
-    'asv2-policy-summary',support);
-  if(entry.revision)el('p','Révision : '+entry.revision,'asv2-review-revision',support);
   const review=entry.review;
-  if(!review){el('p',entry.jobId?'Les passages à vérifier apparaîtront après le traitement.':'Déposez le fichier pour voir les passages repérés.',
-    'asv2-muted',issuePane);return;}
-  const sourcePages=(review.pages||[]).filter(page=>typeof page.text==='string'&&
-    typeof page.surfaceId==='string'&&(entry.format==='txt'||page.native===true)&&
-    page.text.length<=2_000_000&&
-    (entry.format==='txt'||entry.format==='pdf'));
-  let addOccurrenceTool=null,approvalBox=null;
-  if(editorCapabilities.addOccurrence&&review.reviewable&&sourcePages.length){
-    const sourceRevision=entry.revision;
-    const tool=el('details',null,'asv2-add-occurrence',issuePane);
-    addOccurrenceTool=tool;
-    tool.dataset.reviewTool='add-mask';
-    el('summary','Masquer un passage oublié',null,tool);
-    el('p','Sélectionnez le passage dans le texte de l’original ci-dessous. Une nouvelle révision sera créée.',
-      'asv2-muted',tool);
-    let page=sourcePages.find(item=>Number(item.page)===Number(entry.page))||sourcePages[0];
-    let exact=null;
-    if(sourcePages.length>1){
-      const pageSelect=el('select',null,'asv2-source-page-select',tool);
-      for(const candidate of sourcePages){const option=el('option','Page '+candidate.page,null,pageSelect);
-        option.value=candidate.surfaceId;}
-      pageSelect.value=page.surfaceId;
-      pageSelect.addEventListener('change',()=>{
-        page=sourcePages.find(item=>item.surfaceId===pageSelect.value)||sourcePages[0];
-        source.textContent=page.text;exact=null;mask.disabled=true;
-        if(drawShortcut){drawShortcut.remove();drawShortcut=null;}
-      });
-    }
-    const source=el('pre','', 'asv2-original-selection',tool);
-    tool.addEventListener('toggle',()=>{if(tool.open)source.textContent=page.text;
-      else{source.textContent='';exact=null;mask.disabled=true;if(drawShortcut){drawShortcut.remove();drawShortcut=null;}}});
-    source.setAttribute('aria-label','Texte original sélectionnable');
-    const selectionInfo=el('p','Sélectionnez du texte pour activer le masquage.',
-      'asv2-muted',tool);
-    const mask=buttonWithIcon('Masquer le texte sélectionné','eye-slash',
-      'asv2-secondary',tool,async()=>{
-        const selected=exact;
-        if(!selected){selectionInfo.textContent='Sélection invalide : sélectionnez uniquement dans ce texte original.';return;}
-        if(entry.revision!==sourceRevision){selectionInfo.textContent='Le document a changé. Rechargez la sélection.';return;}
-        if(!await confirmAction('Masquer uniquement « '+selected.text.slice(0,80)+' » dans cette révision ?'))return;
-        mask.disabled=true;entry.commandBusy=true;
-        try{
-          entry.pendingMask={page:Number(page.page)||1,text:selected.text,kind:'text'};
-          const receipt=await api.addOccurrence(entry.jobId,entry.digest,{revision:sourceRevision,
-            surfaceId:page.surfaceId,...(entry.format==='pdf'?{page:Number(page.page)}:{}),
-            start:selected.start,end:selected.end,selectedText:selected.text});
-          await apply(entry,receipt.revision);
-        }catch(error){
-          entry.pendingMask=null;
-          if(error?.status===409)await loadCurrent(entry).catch(()=>{});
-          showError(error);mask.disabled=false;}
-        finally{entry.commandBusy=false;}
-      });
-    mask.disabled=true;
-    function countOccurrences(text,query){
-      if(!query||!text)return 0;
-      let count=0,pos=0;
-      while((pos=text.indexOf(query,pos))!==-1){count++;pos+=query.length;}
-      return count;
-    }
-    let drawShortcut=null;
-    source.addEventListener('mouseup',()=>{
-      exact=exactSourceSelection(source,page.text);
-      const occurrences=exact?countOccurrences(page.text,exact.text):0;
-      const isAmbiguous=entry.format==='pdf'&&occurrences>1;
-      mask.disabled=!exact||exact.text.length>32768||entry.commandBusy||isAmbiguous;
-      if(isAmbiguous){
-        selectionInfo.textContent='Ce passage apparaît '+occurrences+' fois sur cette page. Pour éviter toute ambiguïté, utilisez l’outil « Masquer une zone » ci-dessous.';
-        if(!drawShortcut){
-          drawShortcut=buttonWithIcon('Tracer la zone sur le document','select-area','asv2-secondary asv2-draw-shortcut-btn',tool,()=>{
-            entry.manualMaskActive=true;
-            entry.previewKind='origin';
-            if(Number(page.page))entry.page=Number(page.page);
-            setMobileTab('doc');
-            renderPreview(entry).catch(showError);
-            drawerMessage('Tracez la zone rectangulaire à masquer sur cette page.','is-info');
-          });
-        }
-      }else{
-        if(drawShortcut){drawShortcut.remove();drawShortcut=null;}
-        selectionInfo.textContent=exact?.text.length>32768?
-          'Sélection trop longue : choisissez au plus 32 768 caractères.':
-          exact?'Passage sélectionné : '+exact.text.slice(0,100):
-            'Sélectionnez du texte pour activer le masquage.';
-      }
-    });
-    source.addEventListener('keyup',()=>source.dispatchEvent(new Event('mouseup')));
-  }
-  if(entry.status==='REVIEW_REQUIRED'&&editorCapabilities.humanVerification){
-    approvalBox=el('details',null,'asv2-human-box',issuePane);
-    approvalBox.dataset.reviewTool='human-approval';
-    if(review.humanVerifiedDeliverable===true&&review.humanVerification){
-      approvalBox.open=true;
-      el('summary','Attestation humaine',null,approvalBox);
-      const reviewer=review.humanVerification.reviewer||review.humanVerification.reviewerLogin||
-        review.humanVerification.author||'un utilisateur';
-      el('strong','Vérifié par '+reviewer,null,approvalBox);
-      el('p','Cette attestation humaine est distincte du statut technique « Vérification nécessaire ».',
-        'asv2-muted',approvalBox);
-      buttonWithIcon('Télécharger le document vérifié par une personne','shield-check',
-        'asv2-secondary',approvalBox,()=>downloadHumanVerified(entry).catch(showError));
-    }else if(review.canApproveHumanVerification===true){
-      el('summary','Valider ma vérification',null,approvalBox);
-      el('p','Confirmez en une seule étape que vous avez contrôlé les données sensibles, les zones visuelles et toutes les pages.',
-        'asv2-muted',approvalBox);
-      const approve=buttonWithIcon('J’ai vérifié ce document','shield-check',
-        'asv2-primary asv2-human-approval',approvalBox,
-        ()=>approveHumanReview(entry,approve));
-    }else if(Array.isArray(review.humanVerificationBlockers)&&review.humanVerificationBlockers.length){
-      el('summary','Valider ma vérification',null,approvalBox);
-      const remaining=(review.occurrences||[]).filter(row=>
-        row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-      el('p',remaining?
-        'Confirmez encore '+remaining+' passage'+(remaining>1?'s':'')+' ci-dessus, puis validez le document.':
-        'Actualisez la revue pour valider ce document.',
-        'asv2-muted',approvalBox);
-    }
+  if(!review){
+    const empty=el('div',null,'asv2-review-empty',issuePane);
+    el('strong',entry.jobId?'Analyse en cours':'Aucun document sélectionné',null,empty);
+    el('p',entry.jobId?'La vérification apparaîtra dès que le résultat sera disponible.':
+      'Ouvrez un document pour afficher sa vérification.','asv2-muted',empty);
+    return;
   }
 
   const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks:[];
@@ -1678,6 +1560,14 @@ function renderIssues(entry){
   const actionRequiredRows=allRows.filter(r=>r.action==='REVIEW'||r.privacyAction==='REVIEW');
   const otherRows=allRows.filter(r=>r.action!=='REVIEW'&&r.privacyAction!=='REVIEW');
 
+  const reviewSummary=el('div',null,'asv2-review-summary',issuePane);
+  const requiredCount=actionRequiredRows.length+unresolved.length+listProblems.length;
+  el('h3',requiredCount?
+    requiredCount+' élément'+(requiredCount>1?'s':'')+' à vérifier':
+    'Vérification du document',null,reviewSummary);
+  el('p',requiredCount?
+    'Ouvrez un élément puis choisissez l’action adaptée.':
+    'Aucune décision manuelle n’est en attente.','asv2-muted',reviewSummary);
   const controls=el('div',null,'asv2-issues-controls',issuePane);
   const countersText=[
     unresolved.length?unresolved.length+' obligation(s) à localiser':null,
@@ -1864,38 +1754,16 @@ function renderIssues(entry){
       renderOccurrenceGroups(filteredActionRows,issuesContent);
     }
 
-    // 2. Blocages globaux du document ensuite
+    // Technical QA/reason codes are intentionally not exposed in the end-user UI.
     const rawReasons=review.qaReasons||review.reasons||[];
-    const reasonCodes=rawReasons.map(r=>typeof r==='string'?r:r?.code).filter(Boolean);
-    const reasons=new Map();
-    for(const code of reasonCodes){
-      const label=copy.issueReason[code]||'Un autre point du document demande une vérification.';
-      if(!reasons.has(label))reasons.set(label,[]);
-      reasons.get(label).push(code);
-    }
-    if(reasons.size){
-      el('h4','Vérifications globales',null,issuesContent);
-      const reasonBox=el('div',null,'asv2-reasons',issuesContent);
-      for(const [label,sourceCodes] of reasons)
-        el('p',label+(sourceCodes.length>1?' · '+sourceCodes.length+' contrôles':''),null,reasonBox);
-      const details=el('details',null,'asv2-reason-details',reasonBox);
-      el('summary','Détails pour le support',null,details);
-      el('code',[...new Set(reasonCodes)].join(' · '),null,details);
-    }
-    if(entry.report||entry.reportError){
-      const details=el('details',null,'asv2-qa-details',issuesContent);
-      el('summary','Rapport de vérification du fichier',null,details);
-      if(entry.reportError)el('p',entry.reportError,'asv2-muted',details);
-      else{
-        const qaReasons=Array.isArray(entry.report.reasons)?entry.report.reasons:[];
-        el('p',qaReasons.length?qaReasons.length+' point(s) signalé(s) par la vérification du fichier.':
-          'Aucun point supplémentaire signalé par le rapport QA.',null,details);
-        if(qaReasons.length){
-          const support=el('details',null,null,details);
-          el('summary','Codes pour le support',null,support);
-          el('code',qaReasons.map(r=>typeof r==='string'?r:r?.code||'').filter(Boolean).join(' · '),null,support);
-        }
-      }
+    const hiddenTechnicalSignals=rawReasons.length+
+      (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
+    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&
+        hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
+      const note=el('div',null,'asv2-review-safety-note',issuesContent);
+      el('strong','Vérification finale nécessaire',null,note);
+      el('p','Le document contient encore un point de sécurité à contrôler avant validation.',
+        'asv2-muted',note);
     }
 
     // 3. Autres occurrences regroupées par catégorie
@@ -1922,7 +1790,7 @@ function renderIssues(entry){
       }
     }
 
-    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&!filteredOtherRows.length&&!reasons.size){
+    if(!filteredUnresolved.length&&!listProblems.length&&!filteredActionRows.length&&!filteredOtherRows.length&&!hiddenTechnicalSignals){
       el('p','Aucune correction interactive disponible ou aucun passage ne correspond aux filtres.','asv2-muted',issuesContent);
     }
   }
@@ -1938,8 +1806,6 @@ function renderIssues(entry){
     });
   }
   renderIssuesContent();
-  if(addOccurrenceTool)issuePane.appendChild(addOccurrenceTool);
-  if(approvalBox)issuePane.appendChild(approvalBox);
 }
 function renderFooter(entry){
   clear(drawerFooter);
