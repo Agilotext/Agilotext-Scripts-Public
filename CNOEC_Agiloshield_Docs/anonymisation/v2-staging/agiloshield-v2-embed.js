@@ -304,7 +304,7 @@ const pseudoHelp=el('small','Ce mode n’est pas encore disponible sur cette pag
 for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
   anonMode.classList.toggle('is-selected',anonRadio.checked);
   pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
-  updatePolicySummary();
+  updateModeFormats();updatePolicySummary();
 });
 const typesButton=button('', 'asv2-types-button',side,openTypes);
 svgIcon('eye-slash',typesButton,16);el('span','Données à masquer',null,typesButton);
@@ -407,7 +407,13 @@ drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 svgIcon('cloud-upload',drop,28,'asv2-drop-icon');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
 el('span','ou cliquez pour les choisir · 12 fichiers maximum','asv2-drop-subtitle',drop);
-el('span','PDF, Word, Excel, PowerPoint, TXT, CSV','asv2-drop-types',drop);
+const dropTypes=el('span','PDF, Word, Excel, PowerPoint, TXT, CSV','asv2-drop-types',drop);
+function updateModeFormats(){
+  const pseudo=pseudoRadio.checked;
+  dropTypes.textContent=pseudo?'Word, Excel, PowerPoint, TXT, CSV · PDF non pris en charge en pseudonymisation':
+    'PDF, Word, Excel, PowerPoint, TXT, CSV';
+  fileInput.accept=pseudo?'.docx,.xlsx,.pptx,.txt,.csv':'.pdf,.docx,.xlsx,.pptx,.txt,.csv';
+}
 if(typeof config.TRUST_LINE==='string'&&config.TRUST_LINE.trim()){
   const trust=el('p',null,'asv2-trust',filePane);svgIcon('shield-check',trust,16);
   el('span',config.TRUST_LINE.trim(),null,trust);
@@ -423,8 +429,8 @@ mobileSettingsEdit.disabled=true;
 const emptyPolicyWarning=el('p','Aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.',
   'asv2-empty-policy-warning',filePane);
 emptyPolicyWarning.hidden=true;filePane.insertBefore(emptyPolicyWarning,drop);
-const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Fichiers en cours');
-const queueHeading=el('h3','Fichiers en cours','asv2-queue-heading',main);
+const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Documents en cours');
+const queueHeading=el('h3','En cours','asv2-queue-heading asv2-sr-only',main);
 main.insertBefore(queueHeading,queue);
 const rejectedList=el('ul',null,'asv2-rejections',main);rejectedList.setAttribute('aria-label','Fichiers refusés');
 const actions=el('div',null,'asv2-form-actions',main);actions.hidden=true;
@@ -455,10 +461,8 @@ const zipHistoryButton=button('Télécharger la sélection (.zip)','asv2-seconda
   ()=>downloadSelectedZip().catch(error=>notify(errorText(error),'is-error')));
 const moreHistoryButton=button('Charger plus','asv2-secondary',historyActions,
   ()=>loadHistory(true).catch(error=>{historyHint.textContent=errorText(error);renderHistory();}));
-const historyTableWrap=el('div',null,'asv2-history-wrap',historySection);
-const historyTable=el('table',null,'asv2-history-table',historyTableWrap);
-historyTable.setAttribute('aria-label','Documents traités');
-const historyCards=el('div',null,'asv2-history-cards',historySection);
+const historyList=el('div',null,'asv2-doc-list',historySection);
+historyList.setAttribute('role','list');historyList.setAttribute('aria-label','Documents traités');
 
 const drawer=el('div',null,'asv2-drawer',mount);drawer.hidden=true;
 const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);backdrop.setAttribute('aria-label','Fermer la revue');
@@ -742,6 +746,7 @@ function setEnabled(yes){
   pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
   if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
     anonMode.classList.add('is-selected');pseudoMode.classList.remove('is-selected');}
+  updateModeFormats();
   pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes. Conservez la clé pour les restituer.':
     'Ce mode n’est pas encore disponible sur cette page.';
   pseudoMode.title=pseudoHelp.textContent;
@@ -835,6 +840,8 @@ function addFiles(files){
   let accepted=0;const rejections=[];clear(rejectedList);
   for(const file of additions){
     if(!supported.test(file.name)){rejections.push(file.name+' : format non pris en charge');continue;}
+    if(mode==='PSEUDONYMIZE'&&formatOf(file.name)==='pdf'){
+      rejections.push(file.name+' : les PDF ne peuvent pas être pseudonymisés. Choisissez Anonymiser pour ce fichier.');continue;}
     if(maxBytes&&file.size>maxBytes){rejections.push(file.name+' : taille supérieure à la limite de recette');continue;}
     if(accepted>=available){rejections.push(file.name+' : limite de 12 fichiers en cours atteinte');continue;}
     const snapshot=freezeJobSelection({policy:current,lists,mode});
@@ -863,18 +870,67 @@ for(const name of ['dragleave','drop'])drop.addEventListener(name,event=>{
   event.preventDefault();drop.classList.remove('is-dragging');
 });
 drop.addEventListener('drop',event=>addFiles(event.dataTransfer?.files||[]));
+const statusTone = status => status==='READY'?'ok':status==='REVIEW_REQUIRED'?'warn':
+  ['FAILED','ERROR'].includes(status)?'err':['AUTH_REQUIRED','TIMED_OUT','UNCERTAIN'].includes(status)?'warn':'busy';
+function statusPill(status,parent,text){
+  const pill=el('span',null,'asv2-pill asv2-pill-'+statusTone(status),parent);
+  el('span',null,'asv2-pill-dot',pill);el('span',text||safeStatus(status),null,pill);
+  return pill;
+}
+let openMenu=null;let historyDeferred=false;
+function closeDocMenu(){
+  if(!openMenu)return;
+  openMenu.menu.hidden=true;openMenu.toggle.setAttribute('aria-expanded','false');openMenu=null;
+  if(historyDeferred){historyDeferred=false;scheduleHistoryRender();}
+}
+document.addEventListener('click',event=>{if(openMenu&&!openMenu.wrap.contains(event.target))closeDocMenu();});
+document.addEventListener('keydown',event=>{
+  if(event.key!=='Escape'||!openMenu)return;
+  const toggle=openMenu.toggle;closeDocMenu();toggle.focus();
+});
+function docMenu(parent,items,label){
+  const wrap=el('div',null,'asv2-menu',parent);
+  const toggle=button('', 'asv2-menu-toggle',wrap);svgIcon('dots',toggle,18);
+  toggle.setAttribute('aria-label',label);toggle.title=label;
+  toggle.setAttribute('aria-haspopup','menu');toggle.setAttribute('aria-expanded','false');
+  const menu=el('div',null,'asv2-menu-list',wrap);menu.setAttribute('role','menu');menu.hidden=true;
+  for(const item of items){
+    if(item==='separator'){el('div',null,'asv2-menu-separator',menu).setAttribute('role','separator');continue;}
+    const control=button('', 'asv2-menu-item'+(item.danger?' is-danger':''),menu,()=>{closeDocMenu();item.run();});
+    control.setAttribute('role','menuitem');svgIcon(item.icon,control,16);el('span',item.label,null,control);
+    control.disabled=!!item.disabled;if(item.title)control.title=item.title;
+  }
+  toggle.addEventListener('click',event=>{
+    event.stopPropagation();
+    const wasOpen=openMenu?.wrap===wrap;closeDocMenu();if(wasOpen)return;
+    menu.hidden=false;toggle.setAttribute('aria-expanded','true');openMenu={wrap,menu,toggle};
+    menu.querySelector('button:not(:disabled)')?.focus();
+  });
+  menu.addEventListener('keydown',event=>{
+    if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+    event.preventDefault();
+    const options=[...menu.querySelectorAll('button:not(:disabled)')];
+    const index=options.indexOf(document.activeElement);
+    const next=event.key==='Home'?0:event.key==='End'?options.length-1:
+      (index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;
+    options[next]?.focus();
+  });
+  return wrap;
+}
+function copyReference(jobId){
+  const done=()=>notify('Référence copiée. Donnez-la au support si vous le contactez.');
+  if(!navigator.clipboard?.writeText){notify('Copie impossible sur ce navigateur.','is-warning');return;}
+  navigator.clipboard.writeText(String(jobId)).then(done,()=>notify('Copie impossible sur ce navigateur.','is-warning'));
+}
 function renderQueue(){
   clear(queue);
   const underway=state.entries.filter(entry=>!isTerminal(entry.status)&&entry.removed!==true);
   queueHeading.hidden=state.surface==='restore'||!underway.length;
   for(const entry of underway){
-    const line=el('li',null,'asv2-queue-item',queue);
-    const details=el('div',null,'asv2-queue-details',line);
-    const titleRow=el('div',null,'asv2-queue-name-row',details);
-    el('strong',entry.name,'asv2-queue-name',titleRow);
-    const statusText=entry.status==='UPLOADING'&&entry.uploadProgress!==null?
-      'Envoi '+entry.uploadProgress+' %':safeStatus(entry.status);
-    el('span',statusText,'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
+    const line=el('li',null,'asv2-doc asv2-queue-item is-'+entry.status.toLowerCase(),queue);
+    svgIcon('file',line,18,'asv2-icon asv2-doc-icon');
+    const details=el('div',null,'asv2-doc-info asv2-queue-details',line);
+    el('span',entry.name,'asv2-doc-name asv2-queue-name',details).title=entry.name;
     if(entry.status==='UPLOADING'){
       const track=el('div',null,'asv2-upload-track',details);
       track.setAttribute('role','progressbar');track.setAttribute('aria-label','Envoi de '+entry.name);
@@ -884,14 +940,19 @@ function renderQueue(){
       if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
     }else if(['PENDING','PROCESSING'].includes(entry.status)){
       el('div',null,'asv2-processing-line',details);
+    }else if(!entry.error){
+      el('span',historySize(entry.sizeBytes??entry.file?.size),'asv2-doc-meta',details);
     }
-    if(entry.error)el('small',entry.error,'asv2-queue-error',details);
+    if(entry.error)el('span',entry.error,'asv2-doc-meta asv2-queue-error',details);
     if(entry.status==='AUTH_REQUIRED'){
       const reconnect=button('Se reconnecter','asv2-link asv2-queue-reconnect',details,
         ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
       reconnect.title='Rétablir votre session puis reprendre les fichiers non envoyés';
     }
-    const remove=iconButton('trash','Retirer ce document de cet écran','asv2-queue-remove',line,
+    statusPill(entry.status,line,entry.status==='UPLOADING'&&entry.uploadProgress!==null?
+      'Envoi '+entry.uploadProgress+' %':null);
+    const acts=el('div',null,'asv2-doc-actions',line);
+    const remove=iconButton('trash','Retirer ce document de cet écran','asv2-queue-remove',acts,
       ()=>removeEntryFromSession(entry));
     remove.classList.add('asv2-remove-btn');
   }
@@ -964,12 +1025,6 @@ function historyStatus(row){return statusOf(row)||'PENDING';}
 function historyIcon(name,parent){
   return nucleoIcon(name,parent,'asv2-nucleo-icon');
 }
-function historyAction(label,iconName,parent,handler){
-  const control=button('', 'asv2-history-icon-button',parent,handler);
-  control.setAttribute('aria-label',label);control.title=label;
-  historyIcon(iconName,control);
-  return control;
-}
 function historyDate(value){
   const date=new Date(value||'');
   return Number.isNaN(date.getTime())?'—':new Intl.DateTimeFormat('fr-FR',
@@ -981,6 +1036,7 @@ function historySize(value){
     (size/1024/1024>=1?(size/1024/1024).toFixed(1)+' Mio':(size/1024).toFixed(1)+' Kio')):'—';
 }
 function renderHistory(){
+  if(openMenu){historyDeferred=true;return;}
   const source=state.historyTab;
   const serverReady=source==='v2'?state.capabilities.historyV2===true:
     state.capabilities.historyAnon2===true;
@@ -995,8 +1051,9 @@ function renderHistory(){
     .map(row=>String(row.jobId)));
   for(const id of state.selectedHistory)if(!availableIds.has(id))state.selectedHistory.delete(id);
   const ready=rows.filter(row=>historyStatus(row)==='READY').length;
-  historyCount.textContent=rows.length+' document'+(rows.length!==1?'s':'')+
-    (ready?' · '+ready+' prêt'+(ready!==1?'s':''):'');
+  historyCount.textContent=rows.length?plural(rows.length,'document','documents')+
+    (ready?' · '+plural(ready,'prêt','prêts'):''):'';
+  historyCount.hidden=!rows.length;
   historyHint.textContent=source==='v2'&&!serverReady?
     copy.historySessionOnly:copy.historyServer;
   refreshHistoryButton.hidden=!serverReady;
@@ -1008,26 +1065,23 @@ function renderHistory(){
   zipHistoryButton.title=zipReady?'Télécharger les résultats prêts sélectionnés':'';
   zipHistoryButton.textContent='Télécharger la sélection (.zip)'+
     (state.selectedHistory.size?' · '+state.selectedHistory.size:'');
-  clear(historyTable);
-  const head=el('thead',null,null,historyTable),heading=el('tr',null,null,head);
-  for(const label of [...(zipReady?['']:[]),'N°','Fichier','Date','Taille','Mode','Statut','Actions']){
-    const th=el('th',label,null,heading);th.scope='col';
+  clear(historyList);
+  historyList.classList.toggle('is-selectable',zipReady);
+  if(!rows.length){
+    const empty=el('div',null,'asv2-doc-empty',historyList);empty.setAttribute('role','listitem');
+    svgIcon('file',empty,20);
+    el('p','Vos documents traités apparaîtront ici.',null,empty);
+    return;
   }
-  const body=el('tbody',null,null,historyTable);
-  if(!rows.length){const line=el('tr',null,null,body);
-    const cell=el('td','Aucun document terminé pour le moment.',null,line);
-    cell.colSpan=zipReady?8:7;cell.className='asv2-history-empty';
-    clear(historyCards);el('p','Vos résultats apparaîtront ici dès que leur traitement sera terminé.',
-      'asv2-muted',historyCards);return;}
-  clear(historyCards);
-  rows.forEach((row,index)=>{
-    const line=el('tr',null,null,body),status=historyStatus(row);
-    const selectable=source==='v2'&&status==='READY'&&zipReady&&!!row.jobId;
+  for(const row of rows){
+    const status=historyStatus(row),name=row.fileName||row.filename||'Document';
+    const v2=source==='v2'&&!!row.jobId;
+    const item=el('div',null,'asv2-doc is-'+status.toLowerCase(),historyList);item.setAttribute('role','listitem');
     if(zipReady){
-      const selectCell=el('td',null,null,line);
-      const box=el('input',null,null,selectCell);
+      const selectable=v2&&status==='READY';
+      const box=el('input',null,'asv2-doc-select',item);
       box.type='checkbox';box.disabled=!selectable;box.checked=state.selectedHistory.has(String(row.jobId));
-      box.setAttribute('aria-label','Sélectionner '+(row.fileName||row.filename||row.jobId));
+      box.setAttribute('aria-label','Sélectionner '+name);
       box.addEventListener('change',()=>{
         if(box.checked)state.selectedHistory.add(String(row.jobId));
         else state.selectedHistory.delete(String(row.jobId));
@@ -1035,76 +1089,42 @@ function renderHistory(){
         zipHistoryButton.textContent='Télécharger la sélection (.zip) · '+state.selectedHistory.size;
       });
     }
-    el('td',String(index+1),null,line);
-    const nameCell=el('td',null,null,line);
-    const nameContent=el('div',null,'asv2-history-name',nameCell);
-    historyIcon('file',nameContent);
-    const nameCol=el('div',null,'asv2-history-name-col',nameContent);
-    el('span',row.fileName||row.filename||'Document','asv2-history-file-label',nameCol);
-    if(row.jobId)el('small','#'+row.jobId,'asv2-history-job-id',nameCol);
-    if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
-      historyAction('Voir l’original (données en clair)','eye',nameContent,
-        ()=>openHistoryOriginal(row).catch(error=>notify(errorText(error),'is-error')));
-    el('td',historyDate(row.createdAt||row.dtCreation),null,line);
-    el('td',historySize(row.sizeBytes??row.fileLength),null,line);
-    el('td',row.processingMode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser',null,line);
-    const statusCell=el('td',null,null,line);
-    el('span',safeStatus(status),
-      'asv2-status asv2-status-'+status.toLowerCase(),statusCell);
-    const controls=el('td',null,'asv2-history-controls',line);
-    if(source==='v2'&&row.jobId){
-      historyAction(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
-        'Vérifier le document':'Voir ce qui s’est passé','eye',controls,
-        ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if(status==='READY'||(status==='REVIEW_REQUIRED'&&
-          state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry))))
-        historyAction(status==='READY'?'Télécharger le résultat':'Télécharger','download',controls,
-          ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-      if(source==='v2'&&row.processingMode==='PSEUDONYMIZE'){
-        const keyAction=historyAction('Télécharger la clé de cette révision','key',controls,
-          ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
-        keyAction.disabled=!pseudoReady||!(status==='READY'||
-          (status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired));
-        if(keyAction.disabled){
-          keyAction.title='Clé indisponible pour cette révision sur la recette.';
-          keyAction.setAttribute('aria-label',keyAction.title);
-        }
-      }
-      const removeAction=historyAction('Retirer de cet écran','trash',controls,
-        ()=>removeEntryFromSession(row));
-      removeAction.classList.add('asv2-remove-btn');
-    }
-    const card=el('article',null,'asv2-history-card',historyCards);
-    const cardTop=el('div',null,'asv2-history-card-top',card);
-    historyIcon('file',cardTop);
-    el('strong',row.fileName||row.filename||'Document',null,cardTop);
-    el('span',safeStatus(status),'asv2-status asv2-status-'+status.toLowerCase(),card);
-    el('small',historyDate(row.createdAt||row.dtCreation)+' · '+
-      historySize(row.sizeBytes??row.fileLength),null,card);
-    const cardActions=el('div',null,'asv2-history-card-actions',card);
-    button(status==='READY'?'Voir le résultat':status==='REVIEW_REQUIRED'?
-      'Vérifier le document':'Voir ce qui s’est passé','asv2-primary',cardActions,
-      ()=>openHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-    if(status==='READY'||(status==='REVIEW_REQUIRED'&&
-        state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry))))
-      button(status==='READY'?'Télécharger le résultat':'Télécharger','asv2-secondary',cardActions,
-        ()=>downloadHistoryRow(row).catch(error=>notify(errorText(error),'is-error')));
-    if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
-      buttonWithIcon('Voir l’original · données en clair','eye','asv2-secondary',cardActions,
-        ()=>openHistoryOriginal(row).catch(error=>notify(errorText(error),'is-error')));
-    if(source==='v2'&&row.processingMode==='PSEUDONYMIZE'){
-      const keyAction=buttonWithIcon('Télécharger la clé','key','asv2-secondary',cardActions,
-        ()=>downloadHistoryKey(row).catch(error=>notify(errorText(error),'is-error')));
-      keyAction.disabled=!pseudoReady||!(status==='READY'||
+    svgIcon('file',item,18,'asv2-icon asv2-doc-icon');
+    const info=el('div',null,'asv2-doc-info',item);
+    el('span',name,'asv2-doc-name',info).title=name;
+    el('span',[historySize(row.sizeBytes??row.fileLength),
+      row.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé',
+      historyDate(row.createdAt||row.dtCreation)].join(' · '),'asv2-doc-meta',info);
+    statusPill(status,item);
+    const acts=el('div',null,'asv2-doc-actions',item);
+    if(!v2)continue;
+    const fail=error=>notify(errorText(error),'is-error');
+    const open=()=>openHistoryRow(row).catch(fail);
+    const canDownload=status==='READY'||(status==='REVIEW_REQUIRED'&&
+      state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry)));
+    if(status==='READY')
+      buttonWithIcon('Télécharger','download','asv2-primary asv2-doc-primary',acts,
+        ()=>downloadHistoryRow(row).catch(fail));
+    else if(status==='REVIEW_REQUIRED')
+      buttonWithIcon('Vérifier','eye','asv2-primary asv2-doc-primary',acts,open);
+    else button('Voir le détail','asv2-secondary asv2-doc-primary',acts,open);
+    const items=[];
+    if(status==='READY')items.push({label:'Voir le résultat',icon:'eye',run:open});
+    if(status==='REVIEW_REQUIRED'&&canDownload)
+      items.push({label:'Télécharger sans finir la vérification',icon:'download',run:()=>downloadHistoryRow(row).catch(fail)});
+    if(['READY','REVIEW_REQUIRED'].includes(status))
+      items.push({label:'Voir l’original (données en clair)',icon:'eye-slash',run:()=>openHistoryOriginal(row).catch(fail)});
+    if(row.processingMode==='PSEUDONYMIZE'){
+      const keyReady=pseudoReady&&(status==='READY'||
         (status==='REVIEW_REQUIRED'&&editorCapabilities.pseudonymKeyReviewRequired));
-      if(keyAction.disabled){
-        keyAction.title='Clé indisponible pour cette révision sur la recette.';
-        el('small',keyAction.title,'asv2-history-key-note',card);
-      }
+      items.push({label:'Télécharger la clé',icon:'key',disabled:!keyReady,
+        title:keyReady?'':'La clé n’est pas encore disponible pour ce document.',
+        run:()=>downloadHistoryKey(row).catch(fail)});
     }
-    buttonWithIcon('Retirer de cet écran','trash','asv2-secondary asv2-remove-btn',cardActions,
-      ()=>removeEntryFromSession(row));
-  });
+    items.push({label:'Copier la référence support',icon:'circle-info',run:()=>copyReference(row.jobId)});
+    items.push('separator',{label:'Retirer de cet écran',icon:'trash',danger:true,run:()=>removeEntryFromSession(row)});
+    docMenu(acts,items,'Plus d’actions pour '+name);
+  }
 }
 async function loadHistory(more=false){
   const epoch=state.accountEpoch;

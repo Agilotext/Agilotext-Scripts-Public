@@ -58,6 +58,8 @@ jobs:
           grep -q "asv2-mask-marker" agiloshield-v2-embed.js
           grep -q "previewFocus" agiloshield-v2-embed.js
           grep -q "target.removed=true" agiloshield-v2-embed.js
+          grep -q "les PDF ne peuvent pas être pseudonymisés" agiloshield-v2-embed.js
+          grep -q "mode===.PSEUDONYMIZE.&&formatOf(file.name)===.pdf." agiloshield-v2-embed.js
           grep -q "Un problème est survenu." agiloshield-v2-copy.js
       - name: CSS tokens (no lateral border, no stray hex, radius from tokens)
         run: node tests/css-tokens.check.mjs
