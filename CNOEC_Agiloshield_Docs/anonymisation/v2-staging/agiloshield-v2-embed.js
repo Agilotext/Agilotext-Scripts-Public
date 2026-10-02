@@ -1257,7 +1257,8 @@ async function restoreSession(){
 }
 function assertDigest(entry,value){
   if(!entry.digest||value?.protectionPolicy?.digest!==entry.digest)throw new Error('Empreinte de politique incohérente');
-  if(!entry.listDigest||value?.listDigest!==entry.listDigest)throw new Error('Empreinte des listes incohérente');
+  if(!entry.listDigest&&value?.listDigest){entry.listDigest=value.listDigest;}
+  else if(!entry.listDigest||value?.listDigest!==entry.listDigest)throw new Error('Empreinte des listes incohérente');
   if(entry.mode&&value?.processingMode!==entry.mode)
     throw new Error('Mode de traitement incohérent');
 }
@@ -1280,7 +1281,7 @@ async function drainQueue(){
       if(!entry)break;
       entry.status='UPLOADING';renderQueue();renderDrawer(entry);
       try{
-        entry.listDigest=entry.lists?await digestListDirectives(entry.lists):null;
+        entry.listDigest=entry.lists?await digestListDirectives(entry.lists):await digestListDirectives(emptyLists());
         const progress=config.UPLOAD_PROGRESS===false||typeof XMLHttpRequest==='undefined'?undefined:
           (loaded,total)=>{entry.uploadProgress=Math.min(100,Math.round(loaded/total*100));renderQueue();};
         const created=await api.upload(entry.file,entry.policy,{
@@ -1376,16 +1377,16 @@ async function pollEntry(entry){
   }}finally{entry.polling=false;}
 }
 function extractJobError(job){
-  if(!job)return null;
+  if(!job)return 'Échec du traitement côté serveur';
   if(typeof job.error==='string')return job.error;
   if(typeof job.errorMessage==='string')return job.errorMessage;
   if(typeof job.message==='string')return job.message;
   if(typeof job.reason==='string')return job.reason;
   if(typeof job.errorCode==='string')return job.errorCode;
   if(job.error&&typeof job.error==='object'){
-    return job.error.message||job.error.code||job.error.detail||JSON.stringify(job.error);
+    return job.error.code||job.error.message||job.error.detail||JSON.stringify(job.error);
   }
-  return null;
+  return 'ENGINE_FAILED';
 }
 async function loadCurrent(entry){
   if(!currentAccountEntry(entry))return;
