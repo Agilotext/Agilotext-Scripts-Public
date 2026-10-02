@@ -3,7 +3,11 @@ name: AgiloShield V2 targeted UI fixes
 on:
   push:
     branches:
-      - codex/agiloshield-v2-targeted-fixes-20261002
+      - release/agiloshield-v2
+      - 'asv2/**'
+  pull_request:
+    branches:
+      - release/agiloshield-v2
   workflow_dispatch:
 
 permissions:
