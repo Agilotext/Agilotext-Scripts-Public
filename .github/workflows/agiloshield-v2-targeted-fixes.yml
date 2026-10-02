@@ -1,0 +1,70 @@
+name: AgiloShield V2 targeted UI fixes
+
+on:
+  push:
+    branches:
+      - codex/agiloshield-v2-targeted-fixes-20261002
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: CNOEC_Agiloshield_Docs/anonymisation/v2-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check agiloshield-v2-embed.js
+          node --check agiloshield-v2-client.js
+          node --check agiloshield-v2-lists.js
+          node --check agiloshield-v2-location.js
+          node --check agiloshield-v2-auth.js
+      - name: Existing front contract tests
+        run: |
+          node tests/agiloshield-v2-client.test.mjs
+          node tests/agiloshield-v2-lists.test.mjs
+          node tests/agiloshield-v2-location.test.mjs
+          node tests/agiloshield-v2-auth.test.mjs
+      - name: Targeted UX invariants
+        run: |
+          ! grep -q "Ajouter un masquage" agiloshield-v2-embed.js
+          ! grep -q "Masquer un passage oublié" agiloshield-v2-embed.js
+          ! grep -q "Codes pour le support" agiloshield-v2-embed.js
+          ! grep -q "Détails pour le support" agiloshield-v2-embed.js
+          ! grep -q "Rapport de vérification du fichier" agiloshield-v2-embed.js
+          ! grep -q "Réessayer le chargement" agiloshield-v2-embed.js
+          ! grep -q "Reprendre après connexion" agiloshield-v2-embed.js
+          ! grep -q "Télécharger le résultat non vérifié" agiloshield-v2-embed.js
+          grep -q "Masquer une zone" agiloshield-v2-embed.js
+          grep -q "asv2-mask-marker" agiloshield-v2-embed.js
+          grep -q "previewFocus" agiloshield-v2-embed.js
+          grep -q "target.removed=true" agiloshield-v2-embed.js
+          grep -q "Un problème est survenu." agiloshield-v2-embed.js
+      - name: CSS integrity and Webflow tokens
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          css=Path("agiloshield-v2.css").read_text(encoding="utf-8")
+          assert css.count("{")==css.count("}"), "Unbalanced CSS braces"
+          for token in [
+              "--agilo-primary",
+              "--agilo-primary-hover",
+              "--agilo-radius",
+              ".asv2-drawer-icon",
+              ".asv2-queue-remove",
+              ".asv2-mask-marker",
+              ".asv2-review-summary",
+              ".asv2-issue-locate-icon",
+          ]:
+              assert token in css, token
+          print("targeted UI CSS: PASS")
+          PY
