@@ -1505,7 +1505,7 @@ function renderDrawer(entry){
   const message=entry.status==='FAILED'?'Traitement impossible':
     entry.status==='READY'?'Prêt':
     entry.status==='REVIEW_REQUIRED'?
-      ('Vérification nécessaire'+(pendingCount?' · '+pendingCount+' décision'+(pendingCount>1?'s':''):''):
+      ('Vérification nécessaire'+(pendingCount?' · '+pendingCount+' décision'+(pendingCount>1?'s':''):'')):
     entry.status==='PROCESSING'?'Protection en cours':
     entry.status==='PENDING'?'En attente':
     entry.status==='UPLOADING'?'Envoi en cours':
