@@ -802,6 +802,7 @@ async function loadPreferences(){
     editorCapabilities=available;
     listsReady=available.lists;
     pseudoReady=available.pseudonymize;
+    if(!pseudoReady)console.warn('[AgiloShield V2] Pseudonymisation indisponible : capacités Java reçues',state.capabilities);
     const stored=await loadStoredLists(accountRef);
     if(request!==preferencesRequest)return;
     listSelection=stored.persistent?stored.lists:memoryLists;
@@ -1742,7 +1743,7 @@ function renderIssues(entry){
         hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
       const note=el('div',null,'asv2-review-safety-note',issuesContent);
       el('strong','Vérification finale nécessaire',null,note);
-      el('p','Le document contient encore un point de sécurité à contrôler avant validation.',
+      el('p','Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.',
         'asv2-muted',note);
     }
 
@@ -1822,7 +1823,7 @@ function guideToPendingReview(entry){
     drawerMessage('Il reste '+conflicts+' règle'+(conflicts>1?'s':'')+' à vérifier.','is-warning');
     return;
   }
-  drawerMessage('Ce document contient encore un point de sécurité qui bloque sa validation.','is-warning');
+  drawerMessage('Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.','is-warning');
 }
 async function approveHumanReview(entry,control){
   let review=entry.review;
@@ -2112,7 +2113,7 @@ async function renderPdfCompare(entry,serial){
   const wrapOrig=el('div',null,'asv2-page',colOrig);
 
   const colAnon=el('div',null,'asv2-compare-col',compareContainer);
-  el('span',protectedVersionLabel(entry)+(entry.status==='READY'?' · prête':' · non vérifiée'),
+  el('span',protectedVersionLabel(entry),
     'asv2-compare-title',colAnon);
   const wrapAnon=el('div',null,'asv2-page',colAnon);
 
@@ -2156,7 +2157,7 @@ async function renderOtherCompare(entry,serial){
   el('h3','Original — données sensibles visibles','asv2-compare-title',left);
   const leftBody=el('div',null,'asv2-compare-content',left);
   const right=el('section',null,'asv2-compare-col',compare);
-  el('h3',protectedVersionLabel(entry)+(entry.status==='READY'?' · prête':' · non vérifiée'),
+  el('h3',protectedVersionLabel(entry),
     'asv2-compare-title',right);
   const rightBody=el('div',null,'asv2-compare-content',right);
   if(entry.format==='txt'){
