@@ -55,7 +55,7 @@ Il manque 3 points : restauration réelle (Nicolas), et l’accessibilité du ra
 
 Captures : `docs/screens/s6-accueil/apres-0260723a-staging.png` (staging, compte Harriet) et `docs/screens/s6-accueil/apres-local/` (harnais synthétique, desktop 1312 et mobile 390 : accueil, tutoriel, réglages, termes, texte collé). Axe : 0 serious/critical hors voile du tutoriel.
 
-## Refonte visuelle et validation en un clic (pin `a72e10ba`, staging webflow.io)
+## Refonte visuelle et validation en un clic (pin `7e902731`, staging webflow.io)
 
 Avant (captures Florian 18:15 à 18:18) : aide « ? Comment ça marche » perdue, texte collé décalé, catégories sans icône, section Termes trop haute avec un bouton centré, « Modifier » trop petit. En revue : barre Original coupée à gauche, icône Original absente, cartes de passages qui débordent, encadrés superposés, bouton Valider grisé tant qu’un passage reste.
 
@@ -68,7 +68,7 @@ Après :
 - Valider en un clic : bouton toujours actif (sauf envoi en cours). Rien à vérifier : validation directe sans fenêtre. Passages restants : fenêtre centrée « Tout masquer et valider », « Tout laisser visible et valider », « Revoir les passages », puis une décision par passage avec « Décision 3 sur 12 » et « Arrêter ». Zones PDF à placer ou conflits de listes : la fenêtre le dit et propose seulement « Revoir ».
 - Aperçu PDF : indicateur « Affichage du PDF… » et délai maximal de 25 s avec message clair, au lieu d’un écran vide.
 
-Vérification staging (Harriet, pin `a72e10ba`) :
+Vérification staging (Harriet, pin `a72e10ba`, puis `7e902731` pour le message serveur) :
 
 - Accueil et réglages conformes aux captures locales.
 - PDF `facture-fictive-smoke.pdf` : Original et Anonymisé s’affichent. « Valider ce document » sans passage restant valide directement (« Document validé. »).
