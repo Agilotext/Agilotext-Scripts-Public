@@ -1804,49 +1804,64 @@ function renderFooter(entry){
 }
 function guideToPendingReview(entry){
   setMobileTab('issues');
-  const remaining=(entry.review?.occurrences||[]).filter(row=>
+  const review=entry.review||{};
+  const remaining=(review.occurrences||[]).filter(row=>
     row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-  const first=issuePane.querySelector('.asv2-issue-select');
-  if(first){
-    if(first.getAttribute('aria-expanded')!=='true')first.click();
-    first.closest('.asv2-issue-compact')?.classList.add('is-guided');
-    first.scrollIntoView({block:'center',behavior:'smooth'});first.focus();
-    setTimeout(()=>first.closest('.asv2-issue-compact')?.classList.remove('is-guided'),1600);
+  const unresolved=Array.isArray(review.unresolvedMasks)?review.unresolvedMasks.length:0;
+  const conflicts=Array.isArray(review.listProblems)?review.listProblems.length:0;
+  if(remaining){
+    const first=issuePane.querySelector('.asv2-issue-select');
+    if(first){
+      if(first.getAttribute('aria-expanded')!=='true')first.click();
+      first.closest('.asv2-issue-compact')?.classList.add('is-guided');
+      first.scrollIntoView({block:'center',behavior:'smooth'});first.focus();
+      setTimeout(()=>first.closest('.asv2-issue-compact')?.classList.remove('is-guided'),1400);
+    }
+    drawerMessage('Il reste '+remaining+' décision'+(remaining>1?'s':'')+' à confirmer.','is-warning');
+    return;
   }
-  drawerMessage(remaining?
-    'Confirmez encore '+remaining+' passage'+(remaining>1?'s':'')+', puis validez le document.':
-    'La revue doit être actualisée avant la validation.','is-warning');
+  if(unresolved){
+    const region=issuePane.querySelector('.asv2-unresolved button');
+    if(region){region.scrollIntoView({block:'center',behavior:'smooth'});region.focus();}
+    drawerMessage('Il reste '+unresolved+' zone'+(unresolved>1?'s':'')+' à placer.','is-warning');
+    return;
+  }
+  if(conflicts){
+    drawerMessage('Il reste '+conflicts+' règle'+(conflicts>1?'s':'')+' à vérifier.','is-warning');
+    return;
+  }
+  drawerMessage('Ce document contient encore un point de sécurité qui bloque sa validation.','is-warning');
 }
 async function approveHumanReview(entry,control){
-  const review=entry.review;
+  let review=entry.review;
   if(review?.humanVerifiedDeliverable===true){
     await downloadHumanVerified(entry);return;
   }
-  if(review?.canApproveHumanVerification!==true){guideToPendingReview(entry);return;}
-  if(!await confirmAction('Je confirme avoir vérifié les données sensibles, les zones visuelles et toutes les pages du résultat.'))return;
+  if(review?.canApproveHumanVerification!==true){
+    await loadCurrent(entry).catch(()=>{});
+    review=entry.review;
+    if(review?.humanVerifiedDeliverable===true){
+      await downloadHumanVerified(entry);return;
+    }
+    if(review?.canApproveHumanVerification!==true){
+      guideToPendingReview(entry);return;
+    }
+  }
+  if(!await confirmAction('Valider votre vérification de ce document ?'))return;
   control.disabled=true;
   const checks={names:true,addresses:true,phones:true,identifiers:true,
     logos_images:true,visual_regions:true,original_vs_final_all_pages:true};
   try{
     await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks});
-    await loadCurrent(entry);drawerMessage('Votre vérification a été enregistrée.');
+    await loadCurrent(entry);
+    drawerMessage('Document validé.');
   }catch(error){
-    if(error?.status===409)await loadCurrent(entry).catch(()=>{});
-    showError(error);control.disabled=false;
+    if(error?.status===409){
+      await loadCurrent(entry).catch(()=>{});
+      guideToPendingReview(entry);
+    }else showError(error);
+    control.disabled=false;
   }
-}
-function openAddMaskTool(entry){
-  const textTool=issuePane.querySelector('[data-review-tool="add-mask"]');
-  if(textTool){
-    setMobileTab('issues');textTool.open=true;
-    textTool.scrollIntoView({block:'start',behavior:'smooth'});
-    textTool.querySelector('summary')?.focus();
-    drawerMessage('Sélectionnez dans l’original le texte à masquer, puis confirmez.');
-    return;
-  }
-  const regionTool=issuePane.querySelector('.asv2-unresolved button');
-  if(regionTool){regionTool.click();return;}
-  drawerMessage('L’ajout d’un masquage n’est pas disponible pour ce format ou cette révision.','is-warning');
 }
 async function decide(entry,occurrenceId,action){
   if(entry.commandBusy)return;
@@ -1982,26 +1997,16 @@ async function renderPreview(entry){
         });
       maskZone.title='Tracer une zone rectangulaire à masquer sur ce PDF';
     }
-    const canAddMask=editorCapabilities.addOccurrence&&Boolean(
-      issuePane.querySelector('[data-review-tool="add-mask"]')||
-      issuePane.querySelector('.asv2-unresolved button'));
-    const addMask=buttonWithIcon('Ajouter un masquage','select-area',
-      'asv2-secondary asv2-add-mask-toolbar',quickActions,()=>openAddMaskTool(entry));
-    addMask.disabled=!canAddMask;
-    addMask.title=canAddMask?'Masquer un passage oublié dans cette révision':
-      'Masquage supplémentaire indisponible pour ce format ou cette révision';
     if(editorCapabilities.humanVerification){
       const verified=entry.review?.humanVerifiedDeliverable===true;
       const reviewer=entry.review?.humanVerification?.reviewer||
         entry.review?.humanVerification?.reviewerLogin||entry.review?.humanVerification?.author;
-      const validate=buttonWithIcon(verified?(reviewer?'Vérifié par '+reviewer:'Document vérifié'):
-        'Valider ma vérification','shield-check',
+      const validate=buttonWithIcon(verified?'Vérifié':'Valider','shield-check',
         verified?'asv2-secondary asv2-human-verified':'asv2-primary',quickActions,
         ()=>approveHumanReview(entry,validate));
-      validate.title=verified?'Télécharger la version vérifiée par une personne':
-        entry.review?.canApproveHumanVerification===true?
-          'Confirmer votre vérification du document':
-          'Afficher les passages restant à confirmer';
+      validate.title=verified?
+        (reviewer?'Vérifié par '+reviewer+' — télécharger':'Télécharger la version vérifiée'):
+        'Valider ce document';
     }
   }
   // Downloads live beside the file name so they remain visible above the document.
