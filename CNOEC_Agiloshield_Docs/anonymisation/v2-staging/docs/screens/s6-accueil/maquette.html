@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Maquette accueil AgiloShield V2 (s6)</title>
+<link rel="stylesheet" href="../../../agiloshield-v2.css">
+<style>
+body{margin:0;background:#f8f9fa;font-family:Inter,system-ui,sans-serif}
+.frames{display:grid;grid-template-columns:1fr 1fr;gap:24px;padding:24px}
+.frame{background:#fff;border-radius:12px;box-shadow:0 1px 3px #0001;overflow:hidden}
+.frame h2{margin:0;padding:12px 16px;font-size:13px;color:#525252;border-bottom:1px solid #eee}
+.frame img{display:block;width:100%}
+.mobile{max-width:390px}
+@media(max-width:900px){.frames{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="frames">
+  <section class="frame"><h2>Avant (pin 98491032)</h2><img src="avant-98491032.png" alt="Accueil avant"></section>
+  <section class="frame"><h2>Après (cible 17/20)</h2>
+    <div id="agiloshield-v2-staging"><section class="asv2-shell">
+      <header class="asv2-landing-head">
+        <div class="asv2-landing-text">
+          <h1 class="asv2-main-title">Protégez vos documents avant de les utiliser avec l’IA</h1>
+          <p class="asv2-landing-intro">Choisissez le mode, déposez vos fichiers et vérifiez chaque résultat.</p>
+        </div>
+        <button class="asv2-help-link" type="button"><span class="asv2-help-glyph">?</span> Comment ça marche</button>
+      </header>
+      <aside class="asv2-side">
+        <div class="asv2-mode-group" role="radiogroup" aria-label="Mode de traitement">
+          <label class="asv2-mode"><input type="radio" name="m">Anonymiser</label>
+          <label class="asv2-mode is-selected"><input type="radio" name="m" checked>Pseudonymiser</label>
+        </div>
+        <p class="asv2-mode-hint">Étiquettes réversibles avec une clé (Word, Excel, PowerPoint, TXT, CSV). Les PDF sont masqués sans retour possible.</p>
+      </aside>
+      <div class="asv2-drop">
+        <span class="asv2-drop-title">Déposez vos documents ici</span>
+        <span class="asv2-drop-subtitle">ou cliquez pour les choisir · 12 fichiers maximum</span>
+        <span class="asv2-drop-types">PDF, Word, Excel, PowerPoint, TXT, CSV</span>
+      </div>
+      <div class="asv2-secondary-row">
+        <button class="asv2-link" type="button">ou collez du texte</button>
+        <p class="asv2-settings-row"><span>13 catégories masquées · aucun terme</span> <button class="asv2-link" type="button">Modifier</button></p>
+      </div>
+    </section></div>
+  </section>
+  <section class="frame mobile"><h2>Après, mobile 390</h2>
+    <div id="agiloshield-v2-staging"><section class="asv2-shell">
+      <h1 class="asv2-main-title">Protégez vos documents avant de les utiliser avec l’IA</h1>
+      <button class="asv2-help-link" type="button"><span class="asv2-help-glyph">?</span> Comment ça marche</button>
+      <aside class="asv2-side"><div class="asv2-mode-group"><label class="asv2-mode is-selected">Anonymiser</label><label class="asv2-mode">Pseudonymiser</label></div>
+      <p class="asv2-mode-hint">Masque définitif.</p></aside>
+      <div class="asv2-drop"><span class="asv2-drop-title">Déposez vos documents</span></div>
+      <div class="asv2-secondary-row"><button class="asv2-link" type="button">ou collez du texte</button>
+      <p class="asv2-settings-row"><span>13 catégories masquées · aucun terme</span> <button class="asv2-link" type="button">Modifier</button></p></div>
+    </section></div>
+  </section>
+</div>
+</body>
+</html>

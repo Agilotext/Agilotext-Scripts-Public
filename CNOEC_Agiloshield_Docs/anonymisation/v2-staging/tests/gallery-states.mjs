@@ -1,5 +1,5 @@
 // États de la galerie : chaque entrée ouvre tests/staging-equivalent.html (transport synthétique, aucun appel Java ou Python).
-// click : libellé ou aria-label du bouton à actionner après chargement.
+// click : libellé du bouton (ou liste de libellés, dans l'ordre) à actionner après chargement.
 export const STATES = [
   { id: 'empty', label: 'Accueil vide', query: '' },
   { id: 'tour', label: 'Guide première visite', query: '', tour: true },
@@ -11,9 +11,9 @@ export const STATES = [
   { id: 'review-pdf', label: 'Revue PDF, passages à placer', query: 'history&manualFixture&newEditor', open: true },
   { id: 'ready-open', label: 'Document prêt ouvert', query: 'history&compareFixtures&newEditor', open: true },
   { id: 'no-account', label: 'Session absente', query: 'noAccount' },
-  { id: 'modal-types', label: 'Fenêtre Données à masquer', query: '', click: /Données à masquer/ },
-  { id: 'modal-lists', label: 'Fenêtre Listes', query: 'lists', click: /^Listes/ },
-  { id: 'tab-text', label: 'Onglet texte', query: '', click: /Traitement de texte|^Texte/ },
+  { id: 'modal-types', label: 'Réglages (catégories et termes)', query: 'lists', click: /^Modifier$/ },
+  { id: 'modal-lists', label: 'Fenêtre Termes', query: 'lists', click: [/^Modifier$/, /Gérer les termes/] },
+  { id: 'tab-text', label: 'Texte collé', query: '', click: /ou collez du texte/ },
 ];
 
 // Reproduit le contexte Webflow : police Poppins et variables Base du site.

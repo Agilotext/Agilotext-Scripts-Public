@@ -130,9 +130,9 @@ const head=el('header',null,'asv2-landing-head',shell);
 const headText=el('div',null,'asv2-landing-text',head);
 el('h1',copy.heading,'asv2-main-title',headText);
 el('p',copy.intro,'asv2-landing-intro',headText);
-const tourReplay=button('', 'asv2-help-button',head,()=>startTour(true));
-svgIcon('circle-question',tourReplay,20);
-tourReplay.setAttribute('aria-label','Comment ça marche ?');tourReplay.title='Comment ça marche ?';
+const tourReplay=button('', 'asv2-help-link',head,()=>startTour(true));
+el('span','?','asv2-help-glyph',tourReplay).setAttribute('aria-hidden','true');
+el('span','Comment ça marche',null,tourReplay);
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);let noticeTimer=null;
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
 const form=el('form',null,'asv2-form',shell);
@@ -157,6 +157,7 @@ surfaceTabs.addEventListener('keydown',event=>{
     (index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
   tabs[next].click();tabs[next].focus();
 });
+surfaceTabs.remove();
 const layout=el('div',null,'asv2-layout',form);
 const main=el('div',null,'asv2-main',layout);
 const side=el('aside',null,'asv2-side',layout);side.setAttribute('aria-label','Paramètres');
@@ -169,16 +170,18 @@ filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';restorePane.id='asv2-p
 for(const [tab,pane] of [[fileTab,filePane],[textTab,textPane],[restoreTab,restorePane]]){
   tab.setAttribute('aria-controls',pane.id);pane.setAttribute('aria-labelledby',tab.id);
 }
+const textHead=el('div',null,'asv2-text-head',textPane);
 el('p','Le texte est traité comme un fichier TXT, avec la même vérification.',
-  'asv2-pane-hint',textPane);
+  'asv2-pane-hint',textHead);
 const textInput=el('textarea',null,'asv2-text-input',textPane);
 textInput.placeholder='Collez ou saisissez le texte à anonymiser…';
-textInput.setAttribute('aria-label','Texte à anonymiser');
+textInput.setAttribute('aria-label','Texte à protéger');
 const textAdd=button('Protéger ce texte','asv2-primary asv2-text-submit',textPane,()=>{
   if(!textInput.value.trim()){notify('Saisissez du texte avant de l’ajouter.','is-warning');return;}
   addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
   textInput.value='';
 });textAdd.disabled=true;
+button('Revenir au dépôt','asv2-link asv2-restore-back',restorePane,()=>setSurface('file'));
 el('h3','Restaurer un fichier pseudonymisé',null,restorePane);
 el('p','Préparez un fichier et sa clé de correspondance. La restauration sera activée après qualification complète.',
   'asv2-muted',restorePane);
@@ -302,14 +305,23 @@ modeGroup.setAttribute('role','radiogroup');modeGroup.setAttribute('aria-label',
 const anonMode=el('label',null,'asv2-mode is-selected',modeGroup);
 const anonRadio=el('input',null,null,anonMode);anonRadio.type='radio';anonRadio.name='asv2Mode';anonRadio.checked=true;
 el('span','Anonymiser','asv2-mode-title',anonMode);
-const pseudoMode=el('label',null,'asv2-mode is-unavailable',modeGroup);
+const pseudoMode=el('label',null,'asv2-mode',modeGroup);
 const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
 pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
-const pseudoHelp=el('small','Ce mode n’est pas encore disponible sur cette page.','asv2-sr-only',pseudoMode);
+const pseudoHelp=el('small','','asv2-sr-only',pseudoMode);
+modeGroup.classList.add('is-loading');
+const modeHint=el('p',copy.mode.loading,'asv2-mode-hint',side);
+modeHint.setAttribute('aria-live','polite');
+function updateModeHint(){
+  modeHint.textContent=!state.preferencesReady?copy.mode.loading:
+    pseudoRadio.checked?copy.mode.pseudo:copy.mode.anon;
+  textInput.placeholder=pseudoRadio.checked?
+    'Collez ou saisissez le texte à pseudonymiser…':'Collez ou saisissez le texte à anonymiser…';
+}
 for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
   anonMode.classList.toggle('is-selected',anonRadio.checked);
   pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
-  updateModeFormats();updatePolicySummary();
+  updateModeFormats();updatePolicySummary();updateModeHint();
 });
 const typesButton=button('', 'asv2-types-button',side,openTypes);
 svgIcon('eye-slash',typesButton,16);el('span','Données à masquer',null,typesButton);
@@ -317,15 +329,16 @@ const typeCount=el('span','…','asv2-count',typesButton);
 typesButton.disabled=true;
 typesButton.title='Une catégorie décochée peut rester visible dans le résultat.';
 const listsButton=button('', 'asv2-types-button asv2-lists-button',side,openLists);
-svgIcon('text',listsButton,16);el('span','Listes',null,listsButton);
+svgIcon('text',listsButton,16);el('span','Termes',null,listsButton);
 const listsCount=el('span',null,'asv2-list-summary',listsButton);listsCount.hidden=true;
 const inclusionCount=el('span','', 'asv2-count',listsCount);
 const exclusionCount=el('span','', 'asv2-count',listsCount);
-listsButton.setAttribute('aria-label','Listes, inclusions : 0 ; exclusions : 0');
+listsButton.setAttribute('aria-label','Termes, à masquer : 0 ; à garder : 0');
 listsButton.disabled=true;
-listsButton.title='Préparer les listes pour vos prochains documents';
+listsButton.title='Préparer les termes pour vos prochains documents';
 const listsHelp=el('p','Ces listes s’appliquent aux prochains documents déposés.','asv2-sr-only',side);
 listsButton.setAttribute('aria-describedby','asv2-lists-help');listsHelp.id='asv2-lists-help';
+typesButton.hidden=true;listsButton.hidden=true;
 form.insertBefore(side,layout);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
@@ -349,7 +362,14 @@ for(const code of codes){
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
   el('span',labels[code],null,label);checks.set(code,box);
 }
+const termsSection=el('section',null,'asv2-policy asv2-terms-section',policyDialog);
+const termsHead=el('div',null,'asv2-section-head',termsSection);
+el('h3','Termes',null,termsHead);
+const termsSummary=el('p','Aucun terme.','asv2-muted',termsSection);
+button('Gérer les termes','asv2-secondary',termsSection,()=>{closeTypes(false);openLists();});
+termsSection.hidden=true;
 const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
+policyDialog.insertBefore(shortcuts,termsSection);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
   const control=button(caption,'asv2-link',shortcuts,()=>{
     for(const [code,box] of checks) box.checked=values.includes(code);
@@ -365,23 +385,23 @@ listsDialog.setAttribute('role','dialog');listsDialog.setAttribute('aria-modal',
 listsDialog.setAttribute('aria-labelledby','asv2-lists-title');
 const listsHeader=el('header',null,'asv2-policy-header',listsDialog);
 const listsHeading=el('div',null,null,listsHeader);
-const listsTitle=el('h2','Inclusions et exclusions',null,listsHeading);
+const listsTitle=el('h2','Termes à toujours masquer ou garder',null,listsHeading);
 listsTitle.id='asv2-lists-title';
-el('p','Inclure demande de masquer. Exclure demande une revue si un masque est nécessaire.',
+el('p','Un terme à masquer l’est toujours. Un terme à garder demande une vérification si un masque est nécessaire.',
   'asv2-muted',listsHeading);
 const listsAvailability=el('p','', 'asv2-list-availability',listsDialog);
 listsAvailability.setAttribute('role','status');
 const listsClose=button('×','asv2-close',listsHeader,()=>closeLists());
-listsClose.setAttribute('aria-label','Fermer les listes');
+listsClose.setAttribute('aria-label','Fermer les termes');
 const listsBody=el('div',null,'asv2-list-fields',listsDialog);
-el('p','La casse et les accents sont ignorés. Seuls les prochains documents utilisent ces listes.',
+el('p','La casse et les accents sont ignorés. Seuls les prochains documents utilisent ces termes.',
   'asv2-muted asv2-list-guide',listsBody);
 const listCards={};
 for(const [kind,title,hint,placeholder] of [
-  ['include','Inclusions','Masquer les occurrences retrouvées, même hors des catégories cochées.',
-    'Ajouter un terme à inclure…'],
-  ['exclude','Exclusions','Vérifier les occurrences qui contredisent un masque nécessaire.',
-    'Ajouter un terme à exclure…']]){
+  ['include','Toujours masquer','Masqué partout, même hors des catégories cochées.',
+    'Ajouter un terme à masquer…'],
+  ['exclude','Garder visible','Reste visible, sauf conflit avec un masque nécessaire (vérification demandée).',
+    'Ajouter un terme à garder…']]){
   const card=el('section',null,'asv2-list-card asv2-list-card-'+kind,listsBody);
   const cardHead=el('div',null,'asv2-list-card-head',card);
   el('h3',title,null,cardHead);
@@ -404,7 +424,7 @@ listsWarning.setAttribute('role','status');listsWarning.hidden=true;
 const listsStorageNote=el('p','', 'asv2-list-storage-note',listsDialog);
 const listsError=el('p','', 'asv2-policy-error',listsDialog);listsError.hidden=true;
 const listsActions=el('div',null,'asv2-policy-actions asv2-list-actions',listsDialog);
-const listsClear=button('Effacer les listes mémorisées','asv2-link',listsActions,clearLists);
+const listsClear=button('Effacer les termes mémorisés','asv2-link',listsActions,clearLists);
 button('Annuler','asv2-secondary',listsActions,()=>closeLists());
 const listsSave=button('Enregistrer sur ce navigateur','asv2-primary',listsActions,saveLists);
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
@@ -417,6 +437,17 @@ function updateModeFormats(){
   dropTypes.textContent='PDF, Word, Excel, PowerPoint, TXT, CSV';
   fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';
 }
+const secondaryRow=el('div',null,'asv2-secondary-row',filePane);
+const pasteLink=button('ou collez du texte','asv2-link asv2-paste-link',secondaryRow,
+  ()=>setSurface(state.surface==='text'?'file':'text'));
+const restoreLink=button('J’ai un fichier pseudonymisé et sa clé','asv2-link',secondaryRow,()=>openRestore());
+restoreLink.hidden=!RESTORE_WORKFLOW_QUALIFIED&&config.SHOW_RESTORE!==true;
+const settingsRow=el('p',null,'asv2-settings-row',secondaryRow);
+const settingsText=el('span','Chargement de vos réglages…',null,settingsRow);
+const settingsEdit=button('Modifier','asv2-link',settingsRow,openTypes);
+settingsEdit.setAttribute('aria-label','Modifier les données à masquer et les termes');
+settingsEdit.disabled=true;
+function openRestore(){setSurface('restore');restorePane.scrollIntoView({block:'start',behavior:'auto'});}
 if(typeof config.TRUST_LINE==='string'&&config.TRUST_LINE.trim()){
   const trust=el('p',null,'asv2-trust',filePane);svgIcon('shield-check',trust,16);
   el('span',config.TRUST_LINE.trim(),null,trust);
@@ -514,8 +545,8 @@ function drawerMessage(text,kind='') {
 form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 const tourSteps=[
-  {target:side,title:'1. Réglez une fois',body:'Choisissez le mode et les données à masquer. Vos réglages sont gardés pour les prochains fichiers.'},
-  {target:drop,title:'2. Déposez',body:'Jusqu’à 12 fichiers à la fois. Le traitement démarre tout seul.'},
+  {target:side,title:'1. Choisissez le mode',body:'Anonymiser masque pour de bon. Pseudonymiser remplace par des étiquettes, réversibles avec la clé. Les données à masquer se règlent sous la zone de dépôt, avec « Modifier ».'},
+  {target:drop,title:'2. Déposez',body:'Jusqu’à 12 fichiers à la fois. Le traitement démarre tout seul. Pour un simple extrait, utilisez « ou collez du texte ».'},
   {target:historyHead,title:'3. Vérifiez et téléchargez',body:'Un document prêt se télécharge. Un document à vérifier s’ouvre en grand pour décider passage par passage.'},
 ];
 let tourIndex=-1;let tourLastFocus=null;let firstTourTimer=null;let guideDoneInMemory=false;
@@ -582,15 +613,12 @@ function scheduleFirstTour(){
 function setSurface(kind){
   state.surface=kind;
   const restore=kind==='restore';
-  for(const [tab,pane,name] of [[fileTab,filePane,'file'],[textTab,textPane,'text'],
-      [restoreTab,restorePane,'restore']]){
-    const selected=kind===name;
-    pane.hidden=!selected;tab.classList.toggle('is-active',selected);
-    tab.setAttribute('aria-selected',String(selected));
-    tab.tabIndex=selected?0:-1;
-  }
+  filePane.hidden=restore;textPane.hidden=kind!=='text';restorePane.hidden=!restore;
+  pasteLink.textContent=kind==='text'?'Fermer le texte':'ou collez du texte';
+  pasteLink.setAttribute('aria-expanded',String(kind==='text'));
+  if(kind==='text')textInput.focus();
   side.hidden=restore;layout.classList.toggle('is-restore',restore);
-  for(const element of [queueHeading,queue,rejectedList,actions,previewHelp])element.hidden=restore;
+  for(const element of [queueHeading,queue,rejectedList,actions])element.hidden=restore;
 }
 function openTypes(){
   if(!state.preferencesReady)return;
@@ -605,8 +633,8 @@ function openLists(){
   for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
   renderListDraft();
   listsAvailability.textContent=listsReady?
-    'Les listes enregistrées seront appliquées aux prochains dépôts.':
-    'Les listes ne sont pas disponibles sur cette recette.';
+    'Les termes enregistrés seront appliqués aux prochains dépôts.':
+    'Les termes ne sont pas disponibles sur cette recette.';
   listsAvailability.classList.toggle('is-ready',listsReady);
   listsError.hidden=true;listsModal.hidden=false;document.body.classList.add('asv2-policy-open');
   listCards.include.input.focus();
@@ -623,13 +651,14 @@ function updateListSummary(){
   inclusionCount.textContent=included+' inclus';inclusionCount.hidden=!included;
   exclusionCount.textContent=excluded+' exclus';exclusionCount.hidden=!excluded;
   listsCount.hidden=!included&&!excluded;
-  listsButton.setAttribute('aria-label','Listes, inclusions : '+included+' ; exclusions : '+excluded);
+  listsButton.setAttribute('aria-label','Termes, à masquer : '+included+' ; à garder : '+excluded);
+  updatePolicySummary();
 }
 function renderListDraft(){
   for(const kind of ['include','exclude']){
     const card=listCards[kind],terms=listDraft[listField(kind)];
     card.count.textContent=terms.length+' / 100';clear(card.rows);
-    if(!terms.length){el('li',kind==='include'?'Aucun terme à inclure.':'Aucun terme à exclure.',
+    if(!terms.length){el('li',kind==='include'?'Aucun terme à masquer.':'Aucun terme à garder.',
       'asv2-list-empty',card.rows);continue;}
     for(const [index,term] of terms.entries()){
       const row=el('li',null,'asv2-list-term',card.rows);
@@ -679,14 +708,14 @@ async function saveLists(){
     'Ces termes restent uniquement pendant cette page ouverte. Ils ne sont pas mémorisés.';
   updateListSummary();listsSave.disabled=false;closeLists();
   notify(listsReady?
-    (persisted?'Listes enregistrées pour les prochains documents.':
-      'Listes applicables aux prochains documents pendant cette page ouverte.'):
-    (persisted?'Listes mémorisées ici. Elles ne sont pas encore transmises aux documents.':
-      'Listes gardées pour cette page uniquement. Elles ne sont pas encore transmises aux documents.'),
+    (persisted?'Termes enregistrés pour les prochains documents.':
+      'Termes appliqués aux prochains documents pendant cette page ouverte.'):
+    (persisted?'Termes mémorisés ici. Ils ne sont pas encore transmis aux documents.':
+      'Termes gardés pour cette page uniquement. Ils ne sont pas encore transmis aux documents.'),
     listsReady&&persisted?'':'is-warning');
 }
 async function clearLists(){
-  if(!await confirmAction('Effacer les listes mémorisées pour ce compte sur ce navigateur ? '
+  if(!await confirmAction('Effacer les termes mémorisés pour ce compte sur ce navigateur ? '
     +'Les documents déjà déposés ne changent pas.'))return;
   const removed=await clearStoredLists(state.accountRef);
   if(listStorePersistent&&!removed){listsError.textContent='Impossible d’effacer le stockage local. Réessayez.';
@@ -694,8 +723,8 @@ async function clearLists(){
   listSelection=emptyLists();listDraft=emptyLists();
   for(const card of Object.values(listCards)){card.input.value='';card.error.hidden=true;}
   renderListDraft();updateListSummary();listsError.hidden=true;
-  notify(removed?'Listes effacées pour les prochains documents de ce compte.':
-    'Listes effacées pour cette page ; le stockage du navigateur reste indisponible.',
+  notify(removed?'Termes effacés pour les prochains documents de ce compte.':
+    'Termes effacés pour cette page ; le stockage du navigateur reste indisponible.',
     removed?'':'is-warning');
 }
 listsModal.addEventListener('click',event=>{if(event.target===listsModal)closeLists();});
@@ -753,19 +782,21 @@ async function saveTypes(){
 function setEnabled(yes){
   state.preferencesReady=yes;fileInput.disabled=!yes;textInput.disabled=!yes;
   typesButton.disabled=!yes;textAdd.disabled=!yes;policySave.disabled=!yes;
-  listsButton.disabled=!yes;
+  listsButton.disabled=!yes;settingsEdit.disabled=!yes;
   pseudoRadio.disabled=!yes||!pseudoReady;
-  pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
+  pseudoMode.classList.toggle('is-unavailable',yes&&!pseudoReady);
+  modeGroup.classList.toggle('is-loading',!yes);
+  termsSection.hidden=!listsReady;
   if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
     anonMode.classList.add('is-selected');pseudoMode.classList.remove('is-selected');}
-  updateModeFormats();
-  pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes. Conservez la clé pour les restituer.':
+  updateModeFormats();updateModeHint();updatePolicySummary();
+  pseudoHelp.textContent=pseudoReady||!yes?'Les passages protégés reçoivent des étiquettes. Conservez la clé pour les restituer.':
     'Ce mode n’est pas encore disponible sur cette page.';
   pseudoMode.title=pseudoHelp.textContent;
   listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
-    'Listes indisponibles sur cette recette';
+    'Termes indisponibles sur cette recette';
   listsHelp.textContent=listsReady?'Une inclusion force le masquage. Une exclusion en conflit demande une vérification.':
-    'Les listes ne sont pas disponibles sur cette recette.';
+    'Les termes ne sont pas disponibles sur cette recette.';
   updateRestoreAction();
   listsStorageNote.textContent=listStorePersistent?
     'Ces termes restent sur ce navigateur pour ce compte. Évitez un appareil partagé.':
@@ -781,6 +812,14 @@ function setEnabled(yes){
 function updatePolicySummary(){
   const types=state.currentPolicy?.selectedTypes;
   typeCount.textContent=Array.isArray(types)?types.length+'/13':'…';
+  const included=listSelection.anon2InclusionList.length,excluded=listSelection.anon2ExclusionList.length;
+  const terms=included+excluded;
+  const termsText=terms?plural(terms,'terme','termes'):'aucun terme';
+  termsSummary.textContent=terms?plural(included,'terme à masquer','termes à masquer')+' · '+
+    plural(excluded,'terme à garder','termes à garder'):'Aucun terme.';
+  settingsText.textContent=!Array.isArray(types)?'Chargement de vos réglages…':
+    (types.length?plural(types.length,'catégorie masquée','catégories masquées'):'Aucune catégorie masquée')+
+    (listsReady?' · '+termsText:'');
   mobileSettingsText.textContent='Mode : '+(pseudoRadio.checked?'Pseudonymiser':'Anonymiser')+
     ' · Données à masquer : '+policySummary(types);
   emptyPolicyWarning.hidden=!Array.isArray(types)||types.length>0;
@@ -1130,6 +1169,8 @@ function renderHistory(){
       items.push({label:'Télécharger la clé',icon:'key',disabled:!keyReady,
         title:keyReady?'':'La clé n’est pas encore disponible pour ce document.',
         run:()=>downloadHistoryKey(row).catch(fail)});
+      if((RESTORE_WORKFLOW_QUALIFIED||config.SHOW_RESTORE===true)&&!/\.pdf$/i.test(String(name||'')))
+        items.push({label:'Restaurer avec la clé',icon:'key',run:()=>openRestore()});
     }
     items.push({label:'Copier la référence support',icon:'circle-info',run:()=>copyReference(row.jobId)});
     items.push('separator',{label:'Retirer de cet écran',icon:'trash',danger:true,run:()=>removeEntryFromSession(row)});

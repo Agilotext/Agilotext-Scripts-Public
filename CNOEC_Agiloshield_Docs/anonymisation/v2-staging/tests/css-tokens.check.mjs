@@ -28,9 +28,13 @@ if (badRadii.length) errors.push(`Radius not from tokens: ${[...new Set(badRadii
 
 if (/transition\s*:\s*all\b/.test(css)) errors.push('transition:all is forbidden, list properties');
 
-for (const required of ['--color--blue', '--agilo-primary', '.asv2-drawer-icon', '.asv2-queue-remove', '.asv2-mask-marker', '.asv2-review-summary', '.asv2-issue-locate-icon', '.asv2-text-hit']) {
+for (const required of ['--color--blue', '--agilo-primary', '.asv2-drawer-icon', '.asv2-queue-remove', '.asv2-mask-marker', '.asv2-review-summary', '.asv2-issue-locate-icon', '.asv2-text-hit', '.asv2-help-link', '.asv2-settings-row', '.asv2-mode-hint']) {
   if (!css.includes(required)) errors.push(`Missing ${required}`);
 }
+
+if (/\.asv2-help-button/.test(css)) errors.push('Old bordered round help button still styled');
+if (!/\.asv2-help-link\{[^}]*border:0/.test(css)) errors.push('Help link must not draw a border');
+if (/\.asv2-surface-tabs\{display:flex\}/.test(css)) errors.push('Surface tabs must not come back on mobile');
 
 if (errors.length) {
   console.error(errors.join('\n'));

@@ -6,7 +6,12 @@ export const plural = (count, one, many) => count + ' ' + (count > 1 ? many : on
 export const COPY = Object.freeze({
   brand: 'AgiloShield', testBadge: 'Version en test',
   heading: 'Protégez vos documents avant de les utiliser avec l’IA',
-  intro: 'Choisissez les données à masquer, déposez vos fichiers et vérifiez chaque résultat.',
+  intro: 'Choisissez le mode, déposez vos fichiers et vérifiez chaque résultat.',
+  mode: {
+    loading: 'Chargement de vos réglages…',
+    anon: 'Masque définitif : les données retirées ne reviennent pas.',
+    pseudo: 'Étiquettes réversibles avec une clé (Word, Excel, PowerPoint, TXT, CSV). Les PDF sont masqués sans retour possible.',
+  },
   historySession: 'Documents de cette session', historyDurable: 'Mes documents',
   historyOld: 'Documents de l’ancienne version',
   historySessionOnly: 'Cette liste couvre votre session en cours. Téléchargez vos résultats avant de fermer la page.',

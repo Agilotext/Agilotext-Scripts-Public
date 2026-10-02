@@ -44,8 +44,10 @@
 #agiloshield-v2-staging .asv2-landing-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:24px}
 #agiloshield-v2-staging h1.asv2-main-title{margin:0 0 8px;font-size:clamp(26px,2.6vw,34px);line-height:1.15;font-weight:700;letter-spacing:-.025em;color:var(--asv2-ink)}
 #agiloshield-v2-staging .asv2-landing-intro{margin:0;max-width:640px;color:var(--asv2-muted);font-size:15px;line-height:1.55}
-#agiloshield-v2-staging .asv2-help-button{display:inline-grid;place-items:center;flex:none;width:40px;height:40px;padding:0;border:1px solid var(--asv2-line);border-radius:var(--asv2-r-pill);background:var(--asv2-white);color:var(--asv2-muted);transition:color var(--asv2-dur) var(--asv2-ease),border-color var(--asv2-dur) var(--asv2-ease),background-color var(--asv2-dur) var(--asv2-ease)}
-#agiloshield-v2-staging .asv2-help-button:hover{color:var(--asv2-blue);border-color:var(--asv2-blue-line);background:var(--asv2-blue-soft)}
+#agiloshield-v2-staging .asv2-help-link{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:32px;padding:0 4px;border:0;background:none;color:var(--asv2-muted);font-size:13px;font-weight:600;white-space:nowrap;transition:color var(--asv2-dur) var(--asv2-ease)}
+#agiloshield-v2-staging .asv2-help-link:hover{color:var(--asv2-blue)}
+#agiloshield-v2-staging .asv2-help-glyph{font-size:15px;font-weight:700;line-height:1;color:var(--asv2-blue)}
+#agiloshield-v2-staging .asv2-help-link:focus-visible{outline:2px solid var(--asv2-blue);outline-offset:2px;border-radius:var(--asv2-r-sm)}
 #agiloshield-v2-staging .asv2-notice{margin:0 0 16px;padding:10px 14px;border-radius:var(--asv2-r-md);background:var(--asv2-blue-soft);color:var(--asv2-blue);font-size:13px}
 #agiloshield-v2-staging .asv2-notice[hidden]{display:none!important}
 #agiloshield-v2-staging .asv2-notice.is-warning{background:var(--asv2-warn-soft);color:var(--asv2-warn-ink)}
@@ -63,6 +65,20 @@
 #agiloshield-v2-staging .asv2-mode input[type=radio]{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:inherit}
 #agiloshield-v2-staging .asv2-mode.is-selected{background:var(--asv2-white);color:var(--asv2-ink);box-shadow:var(--asv2-shadow-sm)}
 #agiloshield-v2-staging .asv2-mode.is-unavailable{opacity:.5;cursor:not-allowed}
+#agiloshield-v2-staging .asv2-mode-group.is-loading .asv2-mode{cursor:progress}
+#agiloshield-v2-staging .asv2-mode-group.is-loading{animation:asv2-breathe 1.6s var(--asv2-ease) infinite alternate}
+#agiloshield-v2-staging .asv2-mode-hint{flex-basis:100%;margin:2px 0 0;color:var(--asv2-muted);font-size:13px;line-height:1.45}
+#agiloshield-v2-staging .asv2-secondary-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 16px;margin:10px 2px 0;font-size:13px}
+#agiloshield-v2-staging .asv2-secondary-row .asv2-link{font-weight:600;text-decoration:none}
+#agiloshield-v2-staging .asv2-secondary-row .asv2-link:hover{text-decoration:underline}
+#agiloshield-v2-staging .asv2-settings-row{display:inline-flex;align-items:center;gap:8px;margin:0 0 0 auto;color:var(--asv2-muted)}
+#agiloshield-v2-staging .asv2-text-pane:not([hidden]){margin-top:12px}
+#agiloshield-v2-staging .asv2-text-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+#agiloshield-v2-staging .asv2-restore-back{display:inline-block;margin-bottom:8px}
+#agiloshield-v2-staging .asv2-terms-section{border-top:1px solid var(--asv2-line)}
+#agiloshield-v2-staging .asv2-terms-section .asv2-muted{margin:0 0 10px}
+@media(max-width:650px){#agiloshield-v2-staging .asv2-settings-row{margin-left:0}}
+@media(prefers-reduced-motion:reduce){#agiloshield-v2-staging .asv2-mode-group.is-loading{animation:none}}
 #agiloshield-v2-staging .asv2-mode:has(input:focus-visible){outline:2px solid var(--asv2-blue);outline-offset:2px}
 #agiloshield-v2-staging .asv2-types-button{display:inline-flex;align-items:center;gap:8px;min-height:38px;padding:0 12px;border:1px solid var(--asv2-line);border-radius:var(--asv2-r-md);background:var(--asv2-white);color:var(--asv2-ink);font-size:13px;font-weight:600;transition:border-color var(--asv2-dur) var(--asv2-ease),background-color var(--asv2-dur) var(--asv2-ease)}
 #agiloshield-v2-staging .asv2-types-button:hover:not(:disabled){border-color:var(--asv2-blue-line);background:var(--asv2-blue-soft)}
@@ -165,8 +181,7 @@
 }
 @media(max-width:650px){
   #agiloshield-v2-staging .asv2-shell{margin:16px auto 32px;padding:0 16px}
-  #agiloshield-v2-staging .asv2-surface-tabs{display:flex}
-  #agiloshield-v2-staging .asv2-surface-tab{flex:1;justify-content:center}
+  #agiloshield-v2-staging .asv2-landing-head{flex-direction:column;gap:8px}
   #agiloshield-v2-staging .asv2-drop{min-height:180px;padding:24px 16px}
 }
 @media(prefers-reduced-motion:reduce){
