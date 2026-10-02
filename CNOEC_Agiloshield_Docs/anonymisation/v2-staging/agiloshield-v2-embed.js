@@ -24,6 +24,14 @@ const listSnapshot = () => ({anon2InclusionList:[...listSelection.anon2Inclusion
 const labels = {ADR:'Adresse',DAT:'Date',EML:'Email',IBA:'IBAN',IDN:'Identifiant',JOB:'Intitulé de poste',
   LOC:'Lieu',ORG:'Organisation',PER:'Personne',PII:'Donnée personnelle générique',PRO:'Profession',
   TEL:'Téléphone',URL:'URL'};
+const descriptions = {
+  ADR:'Adresse postale ou voie',DAT:'Date pouvant identifier une situation',EML:'Adresse e-mail',
+  IBA:'Coordonnées bancaires IBAN',IDN:'Identifiant, référence ou numéro personnel',
+  JOB:'Fonction ou intitulé de poste',LOC:'Ville, lieu ou zone géographique',
+  ORG:'Entreprise, organisme ou structure',PER:'Nom ou identité d’une personne',
+  PII:'Autre donnée personnelle détectée',PRO:'Profession ou activité',
+  TEL:'Numéro de téléphone',URL:'Adresse web ou lien identifiable'
+};
 const supported = /\.(pdf|docx|xlsx|pptx|txt|csv)$/i;
 const storageKey = 'agiloshield-v2-staging-session-jobs';
 const recentSessionLimit = 50;
@@ -54,7 +62,7 @@ const state = {preferencesReady:false, currentPolicy:null, accountRef:null, acco
   pollRequests:0, pollWaiters:[], autoOpenedBatches:new Set(), historyTab:'v2',
   history:{v2:[],anon2:[],v2Loaded:false,anon2Loaded:false,cursors:{v2:null,anon2:null}},
   selectedHistory:new Set(),
-  lastFocus:null, previewSerial:0, previewCleanup:null};
+  lastFocus:null, previewSerial:0, previewCleanup:null, previewFocus:null};
 const el = (tag,text,klass,parent) => {
   const out=document.createElement(tag);
   if(text!==null && text!==undefined) out.textContent=String(text);
@@ -111,6 +119,7 @@ const canPreviewResult = entry => Boolean(entry?.hasCurrentResult &&
   ['pdf','txt','csv','docx'].includes(entry.format));
 const protectedVersionLabel = entry => entry.mode==='PSEUDONYMIZE'?
   'Version pseudonymisée':'Version anonymisée';
+const protectedVersionShortLabel = entry => entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé';
 const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
 const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par terme.',
   'Un terme est présent plusieurs fois.',
@@ -130,11 +139,17 @@ const policySummary = types => Array.isArray(types)?types.length?
   'Aucune catégorie sélectionnée — les données détectées seront conservées.':
   'Sélection en cours de chargement';
 const safeStatus = status => copy.status[status]||copy.status.ERROR;
+const entityTone = code => ({
+  PER:'person',EML:'email',ORG:'company',PRO:'company',JOB:'company',
+  ADR:'location',LOC:'location',DAT:'date',TEL:'contact',URL:'contact',
+  IBA:'identifier',IDN:'identifier',PII:'generic'
+})[code]||'generic';
 
 const shell=el('section',null,'asv2-shell',mount);
 const head=el('header',null,'asv2-landing-head',shell);
+el('span','AgiloShield','asv2-product-kicker',head);
 el('h1',copy.heading,'asv2-main-title',head);
-el('p',copy.intro,null,head);
+el('p',copy.intro,'asv2-landing-intro',head);
 const tourReplay=button('Comment ça marche ?','asv2-link asv2-tour-replay',head,()=>startTour(true));
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
@@ -350,7 +365,11 @@ const checks=new Map();
 for(const code of codes){
   const label=el('label',null,'asv2-type',grid);
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
-  el('span',code,'asv2-code',label);el('span',labels[code],null,label);checks.set(code,box);
+  const typeCopy=el('span',null,'asv2-type-copy',label);
+  el('span',labels[code],'asv2-type-name',typeCopy);
+  el('small',descriptions[code]||'Donnée détectée','asv2-type-help',typeCopy);
+  el('span',code,'asv2-code',label);
+  checks.set(code,box);
 }
 const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
@@ -412,33 +431,50 @@ button('Annuler','asv2-secondary',listsActions,()=>closeLists());
 const listsSave=button('Enregistrer sur ce navigateur','asv2-primary',listsActions,saveLists);
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
+const dropVisual=el('span',null,'asv2-drop-visual',drop);
+nucleoIcon('file',dropVisual,'asv2-drop-icon');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
-el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv2-drop-subtitle',drop);
-el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
+el('span','Glissez-déposez vos fichiers ou cliquez pour les sélectionner','asv2-drop-subtitle',drop);
+el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV · 40 Mio max par fichier','asv2-drop-types',drop);
 const lastDocCard=el('div',null,'asv2-last-doc',filePane);lastDocCard.hidden=true;
+const lastDocVisual=el('div',null,'asv2-last-doc-visual',lastDocCard);
+historyIcon('file',lastDocVisual);
 const lastDocInfo=el('div',null,'asv2-last-doc-info',lastDocCard);
 const lastDocHead=el('div',null,'asv2-last-doc-head',lastDocInfo);
 el('span','Dernier document','asv2-last-doc-badge',lastDocHead);
 const lastDocName=el('strong','','asv2-last-doc-name',lastDocHead);
-const lastDocStatus=el('span','','asv2-last-doc-status',lastDocInfo);
+const lastDocMeta=el('span','','asv2-last-doc-meta',lastDocInfo);
+const lastDocStatus=el('span','','asv2-status asv2-last-doc-status',lastDocInfo);
 const lastDocActions=el('div',null,'asv2-last-doc-actions',lastDocCard);
 function updateLastDocCard(entry){
   if(!entry||!isTerminal(entry.status))return;
   lastDocName.textContent=entry.name;
+  lastDocMeta.textContent=[
+    entry.format?entry.format.toUpperCase():null,
+    historySize(entry.sizeBytes),
+    entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé'
+  ].filter(value=>value&&value!=='—').join(' · ');
+  lastDocStatus.textContent=safeStatus(entry.status);
+  lastDocStatus.className='asv2-status asv2-last-doc-status asv2-status-'+String(entry.status).toLowerCase();
   clear(lastDocActions);
-  if(entry.status==='READY'||entry.status==='REVIEW_REQUIRED'){
-    lastDocStatus.textContent=entry.status==='READY'?'Résultat prêt selon vos réglages':'Vérification nécessaire';
-    if(canDownloadResult(entry))buttonWithIcon(entry.status==='READY'?'Télécharger':'Télécharger non vérifié','download',
-      entry.status==='READY'?'asv2-primary asv2-last-doc-action':'asv2-secondary asv2-last-doc-action',lastDocActions,
-      ()=>download(entry,entry.status==='READY').catch(showError));
+  if(entry.status==='READY'){
+    if(canDownloadResult(entry))buttonWithIcon('Télécharger','download',
+      'asv2-primary asv2-last-doc-action',lastDocActions,
+      ()=>download(entry,true).catch(showError));
+    buttonWithIcon('Consulter','eye','asv2-secondary asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
     if(canDownloadKey(entry))
-      buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
+      buttonWithIcon('Clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
         ()=>downloadKey(entry).catch(showError));
-    buttonWithIcon(entry.status==='READY'?'Consulter':'Vérifier',entry.status==='READY'?'eye':'eye-slash',
-      (entry.status==='REVIEW_REQUIRED'?'asv2-primary':'asv2-secondary')+' asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
-  } else {
-    lastDocStatus.textContent='Traitement impossible';
-    buttonWithIcon('Voir les détails','file','asv2-secondary asv2-last-doc-action',lastDocActions,
+  }else if(entry.status==='REVIEW_REQUIRED'){
+    buttonWithIcon('Vérifier le document','eye','asv2-primary asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
+    if(canDownloadResult(entry))buttonWithIcon('Télécharger non vérifié','download',
+      'asv2-secondary asv2-last-doc-action asv2-low-priority',lastDocActions,
+      ()=>download(entry,false).catch(showError));
+    if(canDownloadKey(entry))
+      buttonWithIcon('Clé','key','asv2-secondary asv2-last-doc-action asv2-low-priority',lastDocActions,
+        ()=>downloadKey(entry).catch(showError));
+  }else{
+    buttonWithIcon('Comprendre l’échec','file','asv2-secondary asv2-last-doc-action',lastDocActions,
       ()=>openDrawer(entry));
   }
   lastDocCard.hidden=false;
@@ -496,8 +532,10 @@ const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dial
 panel.setAttribute('aria-labelledby','asv2-drawer-title');
 const drawerHead=el('header',null,'asv2-drawer-head',panel);
 const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
-el('span','AgiloShield · vérification du document','asv2-overline',drawerHeading);
-const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
+el('span','AgiloShield · espace de vérification','asv2-overline',drawerHeading);
+const drawerTitleRow=el('div',null,'asv2-drawer-title-row',drawerHeading);
+const title=el('h2','Document','asv2-drawer-title',drawerTitleRow);title.id='asv2-drawer-title';
+const drawerStatus=el('span','', 'asv2-status asv2-drawer-status',drawerTitleRow);
 const meta=el('p','', 'asv2-meta',drawerHeading);
 const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
 const drawerDownloads=el('div',null,'asv2-drawer-downloads',drawerHeadActions);
@@ -1518,8 +1556,12 @@ function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   const pendingCount=(entry.review?.occurrences||[]).filter(row=>
     row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-  title.textContent=entry.name;meta.textContent=[entry.jobId?'Job #'+entry.jobId:null,entry.format.toUpperCase()||'Document',
-    entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser'].filter(Boolean).join(' · ');
+  title.textContent=entry.name;
+  drawerStatus.textContent=safeStatus(entry.status);
+  drawerStatus.className='asv2-status asv2-drawer-status asv2-status-'+String(entry.status||'').toLowerCase();
+  meta.textContent=[entry.format.toUpperCase()||'Document',
+    entry.mode==='PSEUDONYMIZE'?'Pseudonymisation':'Anonymisation',
+    entry.revision?'Révision courante':null].filter(Boolean).join(' · ');
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
     buttonWithIcon(entry.status==='READY'?'Télécharger le résultat':'Télécharger le résultat non vérifié',
