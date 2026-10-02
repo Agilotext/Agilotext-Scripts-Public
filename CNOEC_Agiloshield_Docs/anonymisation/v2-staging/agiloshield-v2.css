@@ -658,3 +658,339 @@ body.asv2-drawer-open{overflow:hidden}
   #agiloshield-v2-staging .asv2-primary,
   #agiloshield-v2-staging .asv2-secondary{transition:none!important}
 }
+
+
+/* === TARGETED USER FEEDBACK — 2026-10-02 ===
+   Uses the Webflow/Agilotext design tokens when they exist. */
+#agiloshield-v2-staging{
+  --asv2-blue:var(--agilo-primary,var(--color--blue,#174a96));
+  --asv2-navy:var(--agilo-text,#17304e);
+  --asv2-brand-hover:var(--agilo-primary-hover,#123f82);
+  --asv2-control-radius:var(--agilo-radius,.5rem);
+}
+#agiloshield-v2-staging .asv2-primary,
+#agiloshield-v2-staging .asv2-secondary,
+#agiloshield-v2-staging .asv2-type,
+#agiloshield-v2-staging .asv2-mode,
+#agiloshield-v2-staging .asv2-types-button,
+#agiloshield-v2-staging .asv2-drop,
+#agiloshield-v2-staging .asv2-history-wrap,
+#agiloshield-v2-staging .asv2-policy-dialog,
+#agiloshield-v2-staging .asv2-issue,
+#agiloshield-v2-staging .asv2-issue-compact,
+#agiloshield-v2-staging .asv2-issue-group{
+  border-radius:var(--asv2-control-radius);
+}
+#agiloshield-v2-staging .asv2-primary{
+  background:var(--asv2-blue);
+  border-color:var(--asv2-blue);
+}
+#agiloshield-v2-staging .asv2-primary:hover:not(:disabled){
+  background:var(--asv2-brand-hover);
+  border-color:var(--asv2-brand-hover);
+}
+
+/* Dashboard queue: no global recovery row, one clear removable item. */
+#agiloshield-v2-staging .asv2-form-actions[hidden],
+#agiloshield-v2-staging .asv2-preview-help[hidden]{display:none!important}
+#agiloshield-v2-staging .asv2-queue-heading{
+  margin:28px 0 12px!important;
+  font-size:18px;
+  text-align:left;
+}
+#agiloshield-v2-staging .asv2-queue-item{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:10px;
+  padding:12px 12px 12px 14px;
+  border-color:rgba(23,74,150,.16);
+  background:#fff;
+}
+#agiloshield-v2-staging .asv2-queue-details{gap:6px}
+#agiloshield-v2-staging .asv2-queue-name{font-size:14px}
+#agiloshield-v2-staging .asv2-queue-error{
+  max-width:720px;
+  color:#a52a25;
+  font-size:11.5px;
+}
+#agiloshield-v2-staging .asv2-queue-remove{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  height:34px;
+  min-height:34px;
+  padding:0;
+  border:0;
+  border-radius:var(--asv2-control-radius);
+  background:transparent;
+  color:#718096;
+}
+#agiloshield-v2-staging .asv2-queue-remove:hover{
+  background:rgba(0,0,0,.045);
+  color:#a32626;
+}
+#agiloshield-v2-staging .asv2-queue-reconnect{
+  align-self:flex-start;
+  padding:0;
+  font-size:12px;
+}
+
+/* Drawer header: icon actions, no pill/button clutter. */
+#agiloshield-v2-staging .asv2-drawer-head{
+  min-height:68px;
+  padding:12px 18px;
+  align-items:center;
+}
+#agiloshield-v2-staging .asv2-overline{
+  color:#6b7f95;
+  font-size:10px;
+  letter-spacing:.08em;
+}
+#agiloshield-v2-staging .asv2-drawer-title{
+  margin:1px 0 2px;
+  font-size:19px;
+  line-height:1.25;
+}
+#agiloshield-v2-staging .asv2-meta{
+  margin:0;
+  color:#708096;
+  font-size:11px;
+}
+#agiloshield-v2-staging .asv2-drawer-head-actions,
+#agiloshield-v2-staging .asv2-drawer-downloads{
+  align-items:center;
+  gap:4px;
+}
+#agiloshield-v2-staging .asv2-drawer-icon,
+#agiloshield-v2-staging .asv2-close{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:36px;
+  height:36px;
+  min-height:36px;
+  padding:0;
+  border:0;
+  border-radius:var(--asv2-control-radius);
+  background:transparent;
+  color:#536b84;
+}
+#agiloshield-v2-staging .asv2-drawer-icon:hover,
+#agiloshield-v2-staging .asv2-close:hover{
+  background:rgba(23,74,150,.07);
+  color:var(--asv2-blue);
+}
+#agiloshield-v2-staging .asv2-drawer-icon.is-primary{
+  background:rgba(23,74,150,.09);
+  color:var(--asv2-blue);
+}
+#agiloshield-v2-staging .asv2-drawer-icon .asv2-btn-icon{width:18px;height:18px}
+#agiloshield-v2-staging .asv2-close{font-size:22px}
+
+/* Review hierarchy */
+#agiloshield-v2-staging .asv2-issues{
+  padding:14px;
+  background:#fbfcfe;
+}
+#agiloshield-v2-staging .asv2-review-summary{
+  margin:0 0 12px;
+  padding:10px 2px 12px;
+  border-bottom:1px solid rgba(23,74,150,.12);
+}
+#agiloshield-v2-staging .asv2-review-summary h3{
+  margin:0;
+  font-size:15px;
+  line-height:1.3;
+}
+#agiloshield-v2-staging .asv2-review-summary p{
+  margin:4px 0 0;
+  color:#6b7c90;
+  font-size:11.5px;
+  line-height:1.45;
+}
+#agiloshield-v2-staging .asv2-review-empty{
+  padding:14px;
+  background:#fff;
+  border:1px solid rgba(23,74,150,.12);
+  border-radius:var(--asv2-control-radius);
+}
+#agiloshield-v2-staging .asv2-review-safety-note{
+  margin:10px 0;
+  padding:10px 11px;
+  border-left:3px solid #d29a35;
+  background:#fff9ed;
+  color:#664a16;
+  font-size:11.5px;
+}
+#agiloshield-v2-staging .asv2-review-safety-note p{margin:3px 0 0}
+
+/* Occurrence card: compact, two decisions, one icon to locate. */
+#agiloshield-v2-staging .asv2-issue-compact{
+  margin:6px 0;
+  border-color:rgba(23,74,150,.13);
+  box-shadow:none;
+}
+#agiloshield-v2-staging .asv2-issue-select{
+  min-height:40px;
+  gap:7px;
+  padding:7px 9px;
+}
+#agiloshield-v2-staging .asv2-issue-select:hover,
+#agiloshield-v2-staging .asv2-issue-select[aria-expanded="true"]{
+  background:rgba(23,74,150,.055);
+}
+#agiloshield-v2-staging .asv2-badge{
+  padding:2px 6px;
+  border-radius:var(--asv2-control-radius);
+  font-size:10.5px;
+}
+#agiloshield-v2-staging .asv2-count{
+  padding:2px 7px;
+  font-size:10.5px;
+}
+#agiloshield-v2-staging .asv2-issue-detail{
+  padding:10px;
+  background:#fff;
+}
+#agiloshield-v2-staging .asv2-issue-detail-top{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+#agiloshield-v2-staging .asv2-issue-detail-top strong{
+  min-width:0;
+  flex:1;
+}
+#agiloshield-v2-staging .asv2-issue-locate-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:30px;
+  height:30px;
+  min-height:30px;
+  padding:0;
+  border:0;
+  border-radius:var(--asv2-control-radius);
+  background:rgba(23,74,150,.06);
+  color:var(--asv2-blue);
+}
+#agiloshield-v2-staging .asv2-issue-locate-icon:hover{background:rgba(23,74,150,.12)}
+#agiloshield-v2-staging .asv2-issue-context{
+  margin:8px 0;
+  padding:8px 9px;
+  border:0;
+  background:#f5f7fa;
+  font-size:11.5px;
+  line-height:1.45;
+}
+#agiloshield-v2-staging .asv2-issue-state{
+  color:#708096;
+  font-size:10.5px;
+}
+#agiloshield-v2-staging .asv2-issue-detail .asv2-issue-actions{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:9px;
+}
+#agiloshield-v2-staging .asv2-issue-detail .asv2-issue-actions button{
+  min-height:34px;
+  padding:0 9px;
+  border-color:rgba(23,74,150,.18);
+  background:#fff;
+}
+#agiloshield-v2-staging .asv2-action-mask{
+  background:rgba(23,74,150,.06)!important;
+  color:var(--asv2-blue);
+}
+#agiloshield-v2-staging .asv2-issue-detail-nav{
+  justify-content:flex-end;
+  margin:0 0 7px;
+}
+#agiloshield-v2-staging .asv2-issue-position{
+  min-width:38px;
+  text-align:center;
+  color:#718096;
+  font-size:11px;
+}
+
+/* Viewer controls */
+#agiloshield-v2-staging .asv2-preview-switch{
+  padding:3px;
+  gap:2px;
+  border-radius:var(--asv2-control-radius);
+  background:#eef2f6;
+}
+#agiloshield-v2-staging .asv2-preview-switch button{
+  min-height:32px;
+  padding:0 10px;
+  border:0;
+  border-radius:calc(var(--asv2-control-radius) - 2px);
+  background:transparent;
+  color:#5e7188;
+  box-shadow:none;
+}
+#agiloshield-v2-staging .asv2-preview-switch button.is-active{
+  background:#fff;
+  color:var(--asv2-blue);
+  box-shadow:0 1px 4px rgba(23,48,78,.12);
+}
+#agiloshield-v2-staging .asv2-review-toolbar-actions{gap:5px}
+#agiloshield-v2-staging .asv2-review-toolbar-actions button{
+  min-height:34px;
+  padding:0 10px;
+  border-radius:var(--asv2-control-radius);
+}
+#agiloshield-v2-staging .asv2-manual-mask-btn{
+  margin-left:0;
+  border-color:rgba(23,74,150,.18);
+}
+#agiloshield-v2-staging .asv2-manual-mask-btn.is-active{
+  background:rgba(23,74,150,.09);
+  color:var(--asv2-blue);
+  border-color:rgba(23,74,150,.28);
+}
+
+/* Marvin-like visual cue on the original: text remains visible under the highlight. */
+#agiloshield-v2-staging .asv2-mask-marker{
+  position:absolute;
+  pointer-events:none;
+  border:1.5px solid rgba(23,74,150,.58);
+  border-radius:3px;
+  background:rgba(56,124,213,.16);
+  box-shadow:0 0 0 1px rgba(255,255,255,.36) inset;
+}
+#agiloshield-v2-staging .asv2-region-marker{
+  border:2px solid #d07a28;
+  border-radius:3px;
+  background:rgba(245,158,41,.14);
+}
+
+/* No technical/support boxes in the user path. */
+#agiloshield-v2-staging .asv2-review-support,
+#agiloshield-v2-staging .asv2-reason-details,
+#agiloshield-v2-staging .asv2-qa-details,
+#agiloshield-v2-staging .asv2-job-badge,
+#agiloshield-v2-staging .asv2-key-guidance{display:none!important}
+
+@media(max-width:700px){
+  #agiloshield-v2-staging .asv2-queue-item{
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+  #agiloshield-v2-staging .asv2-queue-item>.asv2-status{
+    grid-column:1;
+    justify-self:start;
+  }
+  #agiloshield-v2-staging .asv2-queue-remove{
+    grid-column:2;
+    grid-row:1/3;
+  }
+  #agiloshield-v2-staging .asv2-drawer-head-actions{
+    width:auto;
+    margin-left:auto;
+    flex-direction:row;
+  }
+}
