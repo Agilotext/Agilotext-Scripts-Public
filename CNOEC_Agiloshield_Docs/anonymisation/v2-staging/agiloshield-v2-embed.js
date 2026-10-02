@@ -894,7 +894,9 @@ function renderQueue(){
   for(const entry of underway){
     const line=el('li',null,'asv2-queue-item',queue);
     const details=el('div',null,'asv2-queue-details',line);
-    el('strong',entry.name,'asv2-queue-name',details);
+    const titleRow=el('div',null,'asv2-queue-name-row',details);
+    el('strong',entry.name,'asv2-queue-name',titleRow);
+    if(entry.jobId)el('span','#'+entry.jobId,'asv2-job-badge',titleRow);
     const statusText=entry.status==='UPLOADING'&&entry.uploadProgress!==null?
       'Envoi '+entry.uploadProgress+' %':safeStatus(entry.status);
     el('span',statusText,
@@ -1062,8 +1064,10 @@ function renderHistory(){
     el('td',String(index+1),null,line);
     const nameCell=el('td',null,null,line);
     const nameContent=el('div',null,'asv2-history-name',nameCell);
-    historyIcon('file',nameContent);el('span',row.fileName||row.filename||'Document',
-      'asv2-history-file-label',nameContent);
+    historyIcon('file',nameContent);
+    const nameCol=el('div',null,'asv2-history-name-col',nameContent);
+    el('span',row.fileName||row.filename||'Document','asv2-history-file-label',nameCol);
+    if(row.jobId)el('small','#'+row.jobId,'asv2-history-job-id',nameCol);
     if(source==='v2'&&row.jobId&&['READY','REVIEW_REQUIRED'].includes(status))
       historyAction('Voir l’original — données en clair','eye',nameContent,
         ()=>openHistoryOriginal(row).catch(error=>notify(errorText(error),'is-error')));
@@ -1309,6 +1313,14 @@ async function drainQueue(){
           renderQueue();notify(entry.error,'is-warning');break;
         }
         entry.lists=null;
+        let parisTime='';
+        try{parisTime=new Intl.DateTimeFormat('fr-FR',{dateStyle:'short',timeStyle:'medium',timeZone:'Europe/Paris'}).format(new Date());}catch(_){parisTime=new Date().toISOString();}
+        entry.diagnosticTrace={
+          parisTime,
+          httpStatus:error?.status||'Réseau / Inconnu',
+          errorBody:error?.message||errorText(error),
+          jobId:entry.jobId||null
+        };
         entry.status=entry.jobId||!error.status||error.status>=500?'UNCERTAIN':'ERROR';
         entry.error=entry.status==='UNCERTAIN'?
           'Le fichier a peut-être été reçu. Vérifiez son état avant de le déposer à nouveau.':errorText(error);
@@ -1376,17 +1388,18 @@ async function pollEntry(entry){
     await new Promise(resolve=>setTimeout(resolve,interval));
   }}finally{entry.polling=false;}
 }
-function extractJobError(job){
-  if(!job)return 'Échec du traitement côté serveur';
-  if(typeof job.error==='string')return job.error;
-  if(typeof job.errorMessage==='string')return job.errorMessage;
-  if(typeof job.message==='string')return job.message;
-  if(typeof job.reason==='string')return job.reason;
-  if(typeof job.errorCode==='string')return job.errorCode;
+function extractJobError(job, jobId){
+  const prefix = jobId ? 'Job #' + jobId + ' : ' : '';
+  if(!job)return prefix + 'Échec du traitement côté serveur';
+  if(typeof job.error==='string')return prefix + job.error;
+  if(typeof job.errorMessage==='string')return prefix + job.errorMessage;
+  if(typeof job.message==='string')return prefix + job.message;
+  if(typeof job.reason==='string')return prefix + job.reason;
+  if(typeof job.errorCode==='string')return prefix + job.errorCode;
   if(job.error&&typeof job.error==='object'){
-    return job.error.code||job.error.message||job.error.detail||JSON.stringify(job.error);
+    return prefix + (job.error.code||job.error.message||job.error.detail||JSON.stringify(job.error));
   }
-  return 'ENGINE_FAILED';
+  return prefix + 'ENGINE_FAILED';
 }
 async function loadCurrent(entry){
   if(!currentAccountEntry(entry))return;
@@ -1405,12 +1418,12 @@ async function loadCurrent(entry){
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
     entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;entry.previewKind='anon';entry.page=1;
-    entry.report=null;entry.reportError=null;
+    entry.report=null;entry.reportError=null;entry.pendingMask=null;
   }
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
-  if(isTerminal(currentStatus))entry.file=null;
-  entry.error=currentStatus==='FAILED'?extractJobError(job):null;
+  if(isTerminal(currentStatus)){entry.file=null;if(currentStatus==='FAILED')entry.pendingMask=null;}
+  entry.error=currentStatus==='FAILED'?extractJobError(job,entry.jobId):null;
   if(currentStatus==='FAILED'){
     console.error('[AgiloShield V2] Le traitement du document a échoué côté serveur :', {
       jobId:entry.jobId, name:entry.name, status:currentStatus, error:entry.error, rawJob:job
@@ -1481,11 +1494,31 @@ drawer.addEventListener('keydown',event=>{
   else if(!event.shiftKey&&document.activeElement===focusables.at(-1)){event.preventDefault();focusables[0].focus();}
 });
 function showError(error){drawerMessage(errorText(error),'is-error');}
+function copyDiagnosticTrace(entry){
+  const trace=entry?.diagnosticTrace||{};
+  const lines=[
+    '=== DIAGNOSTIC AGILOSHIELD V2 (STAGING) ===',
+    'Fichier : '+(entry?.name||'N/A'),
+    'Job ID : '+(entry?.jobId||trace.jobId||'Non attribué'),
+    'Heure de Paris : '+(trace.parisTime||new Date().toISOString()),
+    'Statut HTTP : '+(trace.httpStatus||'N/A'),
+    'Détail erreur : '+(trace.errorBody||entry?.error||'N/A'),
+    'Mode : '+(entry?.mode||'ANONYMIZE'),
+    'Statut UI : '+(entry?.status||'N/A')
+  ];
+  const payload=lines.join('\n');
+  if(navigator?.clipboard?.writeText){
+    navigator.clipboard.writeText(payload).then(()=>notify('Diagnostic copié dans le presse-papier !'))
+      .catch(()=>prompt('Copiez ce diagnostic technique :',payload));
+  }else{
+    prompt('Copiez ce diagnostic technique :',payload);
+  }
+}
 function renderDrawer(entry){
   if(state.active!==entry.key||!state.drawerOpen)return;
   const pendingCount=(entry.review?.occurrences||[]).filter(row=>
     row.action==='REVIEW'||row.privacyAction==='REVIEW').length;
-  title.textContent=entry.name;meta.textContent=[entry.format.toUpperCase()||'Document',
+  title.textContent=entry.name;meta.textContent=[entry.jobId?'Job #'+entry.jobId:null,entry.format.toUpperCase()||'Document',
     entry.mode==='PSEUDONYMIZE'?'Pseudonymiser':'Anonymiser'].filter(Boolean).join(' · ');
   clear(drawerDownloads);
   if(canDownloadResult(entry)){
@@ -1523,7 +1556,24 @@ function renderIssues(entry){
       'Erreur retournée par le moteur d’analyse : '+entry.error:
       'Le moteur de masquage n’a pas pu certifier ce document. Réessayez ou déposez un format alternatif.',
       'asv2-error-detail',errBox);
-    buttonWithIcon('Retirer ce document','trash','asv2-secondary asv2-remove-btn',errBox,
+    if(entry.jobId)el('p','Identifiant du job côté serveur : #'+entry.jobId,'asv2-job-ref',errBox);
+    const actions=el('div',null,'asv2-error-actions',errBox);
+    buttonWithIcon('Retirer ce document','trash','asv2-secondary asv2-remove-btn',actions,
+      ()=>removeEntryFromSession(entry));
+    buttonWithIcon('Copier le diagnostic technique','clipboard','asv2-link asv2-copy-diag-btn',actions,
+      ()=>copyDiagnosticTrace(entry));
+    return;
+  }
+  if(entry.status==='UNCERTAIN'){
+    const errBox=el('div',null,'asv2-issue asv2-warning-box',issuePane);
+    el('strong','Envoi à vérifier',null,errBox);
+    el('p',entry.error||'Le fichier a peut-être été reçu. Vérifiez son état avant de le déposer à nouveau.',
+      'asv2-error-detail',errBox);
+    if(entry.jobId)el('p','Identifiant du job côté serveur : #'+entry.jobId,'asv2-job-ref',errBox);
+    const actions=el('div',null,'asv2-error-actions',errBox);
+    buttonWithIcon('Copier la trace pour Nicolas','clipboard','asv2-secondary asv2-copy-diag-btn',actions,
+      ()=>copyDiagnosticTrace(entry));
+    buttonWithIcon('Retirer','trash','asv2-link asv2-remove-btn',actions,
       ()=>removeEntryFromSession(entry));
     return;
   }
@@ -1577,11 +1627,14 @@ function renderIssues(entry){
         if(!await confirmAction('Masquer uniquement « '+selected.text.slice(0,80)+' » dans cette révision ?'))return;
         mask.disabled=true;entry.commandBusy=true;
         try{
+          entry.pendingMask={page:Number(page.page)||1,text:selected.text,kind:'text'};
           const receipt=await api.addOccurrence(entry.jobId,entry.digest,{revision:sourceRevision,
             surfaceId:page.surfaceId,...(entry.format==='pdf'?{page:Number(page.page)}:{}),
             start:selected.start,end:selected.end,selectedText:selected.text});
           await apply(entry,receipt.revision);
-        }catch(error){if(error?.status===409)await loadCurrent(entry).catch(()=>{});
+        }catch(error){
+          entry.pendingMask=null;
+          if(error?.status===409)await loadCurrent(entry).catch(()=>{});
           showError(error);mask.disabled=false;}
         finally{entry.commandBusy=false;}
       });
@@ -2361,9 +2414,18 @@ async function renderPdf(entry,bytes,kind,serial){
     const context=canvas.getContext('2d');context.setTransform(pixelRatio,0,0,pixelRatio,0,0);
     await page.render({canvasContext:context,viewport}).promise;
     if(serial!==state.previewSerial)return;
-    const shouldOverlay=kind==='origin'&&Boolean(entry.focusId||entry.target||entry.manualMaskActive);
+    const shouldOverlay=Boolean(entry.pendingMask)||(kind==='origin'&&Boolean(entry.focusId||entry.target||entry.manualMaskActive));
     if(!shouldOverlay)return;
     const overlay=el('div',null,'asv2-page-overlay',wrap);
+    if(entry.pendingMask&&Number(entry.pendingMask.page)===Number(entry.page)&&Array.isArray(entry.pendingMask.rect)){
+      const pRect=entry.pendingMask.rect;
+      const pendingMarker=el('div',null,'asv2-pending-mask',overlay);
+      pendingMarker.style.left=(pRect[0]/base.width*100)+'%';
+      pendingMarker.style.top=(pRect[1]/base.height*100)+'%';
+      pendingMarker.style.width=((pRect[2]-pRect[0])/base.width*100)+'%';
+      pendingMarker.style.height=((pRect[3]-pRect[1])/base.height*100)+'%';
+      el('span','Application du masque…','asv2-pending-mask-label',pendingMarker);
+    }
     if(kind==='origin'&&entry.focusId){
       const regions=(page.rotate||0)===0?strictRegions(entry,base):[];
       let firstMarker=null;
@@ -2419,21 +2481,25 @@ function bindDrawing(entry,overlay,base,serial){
     const target=entry.target;
     if(target){
       if(!await confirmAction('Masquer uniquement la zone tracée pour ce passage, puis vérifier à nouveau le document ?'))return;
+      const roundedRect=rect.map(value=>Math.round(value*100)/100);
       try{
+        entry.pendingMask={page:Number(entry.page),rect:roundedRect,kind:'linked'};
         const receipt=await api.addLinkedRegion(entry.jobId,entry.digest,{revision:entry.revision,
-          page:entry.page,rect:rect.map(value=>Math.round(value*100)/100),
+          page:entry.page,rect:roundedRect,
           maskOccurrenceId:target.maskOccurrenceId,sourceRevision:entry.review.sourceRevision,
           documentId:entry.review.documentId,reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
         entry.target=null;await apply(entry,receipt.revision);
-      }catch(error){showError(error);}
+      }catch(error){entry.pendingMask=null;showError(error);}
     }else if(entry.manualMaskActive){
       if(!await confirmAction('Masquer définitivement la zone tracée sur cette page et mettre à jour le document ?'))return;
+      const roundedRect=rect.map(value=>Math.round(value*100)/100);
       try{
+        entry.pendingMask={page:Number(entry.page),rect:roundedRect,kind:'manual'};
         const receipt=await api.addManualRegion(entry.jobId,entry.digest,{revision:entry.revision,
-          page:Number(entry.page),rect:rect.map(value=>Math.round(value*100)/100),
+          page:Number(entry.page),rect:roundedRect,
           reason:'ZONE_MASQUEE_MANUELLEMENT'});
         entry.manualMaskActive=false;await apply(entry,receipt.revision);
-      }catch(error){showError(error);}
+      }catch(error){entry.pendingMask=null;showError(error);}
     }
   };
   overlay.onpointercancel=()=>{start=null;ghost?.remove();ghost=null;};
