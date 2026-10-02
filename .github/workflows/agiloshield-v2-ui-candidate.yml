@@ -1,0 +1,43 @@
+name: AgiloShield V2 UI candidate
+
+on:
+  push:
+    branches:
+      - codex/agiloshield-v2-product-ui-20261002
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: CNOEC_Agiloshield_Docs/anonymisation/v2-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: |
+          node --check agiloshield-v2-embed.js
+          node --check agiloshield-v2-client.js
+          node --check agiloshield-v2-lists.js
+          node --check agiloshield-v2-location.js
+          node --check agiloshield-v2-auth.js
+      - name: Reference contract tests
+        run: |
+          node tests/agiloshield-v2-client.test.mjs
+          node tests/agiloshield-v2-lists.test.mjs
+          node tests/agiloshield-v2-location.test.mjs
+          node tests/agiloshield-v2-auth.test.mjs
+      - name: Product UI invariants
+        run: |
+          ! grep -q "Ajouter un masquage" agiloshield-v2-embed.js
+          ! grep -q "Voir le passage" agiloshield-v2-embed.js
+          ! grep -q "Valider ma vérification" agiloshield-v2-embed.js
+          grep -q "Masquer une zone" agiloshield-v2-embed.js
+          grep -q "Aucune conversion automatique REVIEW" docs/AGILOSHIELD_V2_UI_CHANGELOG.md
