@@ -96,8 +96,8 @@ const statusOf = job => {
 const activeEntry = () => state.entries.find(entry=>entry.key===state.active);
 const selected = () => codes.filter(code=>checks.get(code).checked);
 const isTerminal = status => terminal.has(status);
-const currentAccountEntry = entry => entry?.accountRef===state.accountRef &&
-  entry?.accountEpoch===state.accountEpoch;
+const currentAccountEntry = entry => entry?.removed!==true &&
+  entry?.accountRef===state.accountRef && entry?.accountEpoch===state.accountEpoch;
 const accountStorageKey = suffix => state.accountRef?
   storageKey+':'+encodeURIComponent(state.accountRef)+suffix:null;
 const canDownloadResult = entry => Boolean(entry?.hasCurrentResult &&
@@ -415,34 +415,8 @@ drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
 el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv2-drop-subtitle',drop);
 el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
-const lastDocCard=el('div',null,'asv2-last-doc',filePane);lastDocCard.hidden=true;
-const lastDocInfo=el('div',null,'asv2-last-doc-info',lastDocCard);
-const lastDocHead=el('div',null,'asv2-last-doc-head',lastDocInfo);
-el('span','Dernier document','asv2-last-doc-badge',lastDocHead);
-const lastDocName=el('strong','','asv2-last-doc-name',lastDocHead);
-const lastDocStatus=el('span','','asv2-last-doc-status',lastDocInfo);
-const lastDocActions=el('div',null,'asv2-last-doc-actions',lastDocCard);
-function updateLastDocCard(entry){
-  if(!entry||!isTerminal(entry.status))return;
-  lastDocName.textContent=entry.name;
-  clear(lastDocActions);
-  if(entry.status==='READY'||entry.status==='REVIEW_REQUIRED'){
-    lastDocStatus.textContent=entry.status==='READY'?'Résultat prêt selon vos réglages':'Vérification nécessaire';
-    if(canDownloadResult(entry))buttonWithIcon(entry.status==='READY'?'Télécharger':'Télécharger non vérifié','download',
-      entry.status==='READY'?'asv2-primary asv2-last-doc-action':'asv2-secondary asv2-last-doc-action',lastDocActions,
-      ()=>download(entry,entry.status==='READY').catch(showError));
-    if(canDownloadKey(entry))
-      buttonWithIcon('Télécharger la clé','key','asv2-secondary asv2-last-doc-action',lastDocActions,
-        ()=>downloadKey(entry).catch(showError));
-    buttonWithIcon(entry.status==='READY'?'Consulter':'Vérifier',entry.status==='READY'?'eye':'eye-slash',
-      (entry.status==='REVIEW_REQUIRED'?'asv2-primary':'asv2-secondary')+' asv2-last-doc-action',lastDocActions,()=>openDrawer(entry));
-  } else {
-    lastDocStatus.textContent='Traitement impossible';
-    buttonWithIcon('Voir les détails','file','asv2-secondary asv2-last-doc-action',lastDocActions,
-      ()=>openDrawer(entry));
-  }
-  lastDocCard.hidden=false;
-}
+// The former “Dernier document” card duplicated the history and review drawer.
+function updateLastDocCard(){ /* Intentionally no-op: one source of truth is enough. */ }
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
 const mobileSettings=el('div',null,'asv2-mobile-settings',filePane);
@@ -457,13 +431,13 @@ const queue=el('ul',null,'asv2-queue',main);queue.setAttribute('aria-label','Fic
 const queueHeading=el('h3','Fichiers en cours','asv2-queue-heading',main);
 main.insertBefore(queueHeading,queue);
 const rejectedList=el('ul',null,'asv2-rejections',main);rejectedList.setAttribute('aria-label','Fichiers refusés');
-const actions=el('div',null,'asv2-form-actions',main);
-const retry=button('Réessayer le chargement','asv2-secondary',actions,loadPreferences);retry.hidden=true;
-const resumeAuthButton=button('Reprendre après connexion','asv2-secondary',actions,
+const actions=el('div',null,'asv2-form-actions',main);actions.hidden=true;
+const retry=button('Réessayer','asv2-secondary',actions,loadPreferences);retry.hidden=true;
+const resumeAuthButton=button('Se reconnecter','asv2-secondary',actions,
   ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
 resumeAuthButton.hidden=true;
-const previewHelp=el('p','Le premier résultat prêt s’ouvre automatiquement. Chaque document reste accessible ci-dessous.',
-  'asv2-preview-help',main);
+const previewHelp=el('p','Chaque document reste accessible dans l’historique.',
+  'asv2-preview-help',main);previewHelp.hidden=true;
 
 const historySection=el('section',null,'asv2-history',shell);
 const historyHead=el('div',null,'asv2-history-head',historySection);
@@ -840,7 +814,10 @@ async function loadPreferences(){
     notify(types.length?'Vos réglages sont chargés. Vous pouvez déposer vos documents.':
       'Aucune catégorie sélectionnée. Les données détectées resteront visibles.');
     scheduleFirstTour();
-  }catch(error){retry.hidden=false;notify(errorText(error),'is-error');}
+  }catch(error){
+    retry.hidden=true;
+    notify('Impossible de charger vos réglages. Rechargez la page puis réessayez.','is-error');
+  }
 }
 function addFiles(files){
   if(!state.preferencesReady||!state.currentPolicy)return;
@@ -889,18 +866,16 @@ for(const name of ['dragleave','drop'])drop.addEventListener(name,event=>{
 drop.addEventListener('drop',event=>addFiles(event.dataTransfer?.files||[]));
 function renderQueue(){
   clear(queue);
-  const underway=state.entries.filter(entry=>!isTerminal(entry.status));
+  const underway=state.entries.filter(entry=>!isTerminal(entry.status)&&entry.removed!==true);
   queueHeading.hidden=state.surface==='restore'||!underway.length;
   for(const entry of underway){
     const line=el('li',null,'asv2-queue-item',queue);
     const details=el('div',null,'asv2-queue-details',line);
     const titleRow=el('div',null,'asv2-queue-name-row',details);
     el('strong',entry.name,'asv2-queue-name',titleRow);
-    if(entry.jobId)el('span','#'+entry.jobId,'asv2-job-badge',titleRow);
     const statusText=entry.status==='UPLOADING'&&entry.uploadProgress!==null?
       'Envoi '+entry.uploadProgress+' %':safeStatus(entry.status);
-    el('span',statusText,
-      'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
+    el('span',statusText,'asv2-status asv2-status-'+entry.status.toLowerCase(),line);
     if(entry.status==='UPLOADING'){
       const track=el('div',null,'asv2-upload-track',details);
       track.setAttribute('role','progressbar');track.setAttribute('aria-label','Envoi de '+entry.name);
@@ -908,18 +883,18 @@ function renderQueue(){
         track.setAttribute('aria-valuemax','100');track.setAttribute('aria-valuenow',String(entry.uploadProgress));}
       const fill=el('div',null,'asv2-upload-fill'+(entry.uploadProgress===null?' is-indeterminate':''),track);
       if(entry.uploadProgress!==null)fill.style.width=entry.uploadProgress+'%';
-    }else if(['PENDING','PROCESSING'].includes(entry.status))
+    }else if(['PENDING','PROCESSING'].includes(entry.status)){
       el('div',null,'asv2-processing-line',details);
-    if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary asv2-queue-action',line,
-      ()=>pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();}));
-    if(entry.status==='AUTH_REQUIRED')button(state.accountRef?'Reprendre après connexion':
-      'Recharger et redéposer','asv2-secondary asv2-queue-action',line,
-      ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
+    }
     if(entry.error)el('small',entry.error,'asv2-queue-error',details);
-    if(entry.status==='LOCAL')button('Retirer','asv2-link',line,()=>{
-      state.entries=state.entries.filter(item=>item!==entry);renderQueue();
-    });
-    else if(['TIMED_OUT','FAILED','AUTH_REQUIRED'].includes(entry.status))button('Retirer','asv2-link',line,()=>removeEntryFromSession(entry));
+    if(entry.status==='AUTH_REQUIRED'){
+      const reconnect=button('Se reconnecter','asv2-link asv2-queue-reconnect',details,
+        ()=>resumeAfterAuth().catch(error=>notify(errorText(error),'is-error')));
+      reconnect.title='Rétablir votre session puis reprendre les fichiers non envoyés';
+    }
+    const remove=iconButton('trash','Retirer ce document de cet écran','asv2-queue-remove',line,
+      ()=>removeEntryFromSession(entry));
+    remove.classList.add('asv2-remove-btn');
   }
   scheduleHistoryRender();
 }
@@ -940,6 +915,7 @@ function setHistoryTab(source){
 }
 function removeEntryFromSession(target){
   if(!target)return;
+  target.removed=true;
   const jobId=String(target.jobId||'');
   const key=target.key;
   if(state.active&&(state.active===key||(jobId&&state.entries.find(e=>e.key===state.active&&String(e.jobId)===jobId)))){
@@ -1304,13 +1280,9 @@ async function drainQueue(){
       }catch(error){
         if(!currentAccountEntry(entry))break;
         if(error?.status===401){
-          state.authPaused=true;resumeAuthButton.hidden=false;
-          resumeAuthButton.textContent=state.accountRef?'Reprendre après connexion':
-            'Recharger puis redéposer les fichiers non envoyés';
-          entry.status='AUTH_REQUIRED';entry.error=state.accountRef?
-            'Session expirée. Reconnectez-vous puis reprenez la file.':
-            'Session expirée. Compte non vérifiable : rechargez puis redéposez les fichiers non envoyés.';
-          renderQueue();notify(entry.error,'is-warning');break;
+          state.authPaused=true;resumeAuthButton.hidden=true;
+          entry.status='AUTH_REQUIRED';entry.error='Votre session a expiré.';
+          renderQueue();notify('Votre session a expiré. Reconnectez-vous puis utilisez « Se reconnecter » sur le document.','is-warning');break;
         }
         entry.lists=null;
         let parisTime='';
@@ -1356,10 +1328,8 @@ async function limitedStatus(jobId){
   try{return await api.status(jobId);}
   catch(error){
     if(error?.status===401&&!state.authPaused){state.authPaused=true;
-      resumeAuthButton.hidden=false;
-      resumeAuthButton.textContent=state.accountRef?'Reprendre après connexion':
-        'Recharger puis redéposer les fichiers non envoyés';
-      notify('Session expirée. Reconnectez-vous puis reprenez la file.','is-warning');}
+      resumeAuthButton.hidden=true;
+      notify('Votre session a expiré. Reconnectez-vous pour poursuivre.','is-warning');}
     throw error;
   }
   finally{
