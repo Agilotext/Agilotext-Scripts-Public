@@ -363,3 +363,298 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-warning-box{border-color:#ffeeba;background:#fffdf5;padding:16px;border-radius:8px}
 #agiloshield-v2-staging .asv2-warning-box strong{color:#856404}
 #agiloshield-v2-staging .asv2-error-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+
+
+/* === SAFE UI BASELINE — 2026-10-02 ===
+   Conservative CSS-only polish. No DOM, JS, API or workflow semantics changed. */
+#agiloshield-v2-staging{
+  --as-safe-control:38px;
+  --as-safe-radius:10px;
+  --as-safe-border:#d9e3ee;
+  --as-safe-surface:#f8fafc;
+  --as-safe-text:#17304e;
+  --as-safe-muted:#66798f;
+  --as-safe-blue:#205cb7;
+}
+
+/* Consistent controls */
+#agiloshield-v2-staging .asv2-primary,
+#agiloshield-v2-staging .asv2-secondary{
+  min-height:var(--as-safe-control);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  padding:0 13px;
+  border-radius:var(--as-safe-radius);
+  line-height:1;
+}
+#agiloshield-v2-staging .asv2-btn-with-icon{align-items:center}
+#agiloshield-v2-staging .asv2-btn-icon{width:16px;height:16px}
+#agiloshield-v2-staging .asv2-icon-only-btn{
+  width:34px;height:34px;min-height:34px;padding:0;border-radius:9px
+}
+
+/* Main page hierarchy: keep original structure, make spacing intentional */
+#agiloshield-v2-staging .asv2-shell{max-width:1140px;margin:28px auto 42px}
+#agiloshield-v2-staging .asv2-landing-head{margin-bottom:20px}
+#agiloshield-v2-staging h1.asv2-main-title{
+  font-size:clamp(26px,2.4vw,34px);
+  letter-spacing:-.025em;
+  line-height:1.14;
+}
+#agiloshield-v2-staging .asv2-landing-head>p{
+  max-width:720px;
+  line-height:1.6;
+}
+#agiloshield-v2-staging .asv2-surface-tabs{
+  gap:8px;
+  margin:18px 0 20px;
+}
+#agiloshield-v2-staging .asv2-surface-tab{
+  min-height:60px;
+  padding:10px 13px;
+  border-radius:11px;
+}
+#agiloshield-v2-staging .asv2-surface-tab.is-active{
+  box-shadow:inset 0 -2px var(--asv2-blue),0 1px 4px rgba(23,48,78,.05)
+}
+
+/* Dropzone: cleaner without changing any behavior */
+#agiloshield-v2-staging .asv2-drop{
+  min-height:172px;
+  padding:22px;
+  border-width:1.5px;
+  border-radius:14px;
+  background:#f7faff;
+}
+#agiloshield-v2-staging .asv2-drop-title{font-size:17px}
+#agiloshield-v2-staging .asv2-drop-subtitle{margin-top:3px;font-size:13px}
+#agiloshield-v2-staging .asv2-drop-types{
+  margin-top:9px;
+  color:#607994;
+  letter-spacing:.01em;
+}
+
+/* Side panel: calm and aligned */
+#agiloshield-v2-staging .asv2-layout{gap:22px}
+#agiloshield-v2-staging .asv2-side{
+  padding:18px;
+  border-color:var(--as-safe-border);
+  border-radius:12px;
+  background:#fafbfd;
+}
+#agiloshield-v2-staging .asv2-mode,
+#agiloshield-v2-staging .asv2-types-button{
+  border-color:var(--as-safe-border);
+  border-radius:10px;
+}
+#agiloshield-v2-staging .asv2-types-button{min-height:42px;padding:0 12px}
+
+/* Last document: fix alignment only, keep all original actions and semantics */
+#agiloshield-v2-staging .asv2-last-doc{
+  align-items:center;
+  gap:14px;
+  padding:13px 15px;
+  border-color:#d4e1ef;
+  border-radius:12px;
+  background:#fbfdff;
+}
+#agiloshield-v2-staging .asv2-last-doc-info{gap:4px}
+#agiloshield-v2-staging .asv2-last-doc-head{
+  min-width:0;
+  align-items:center;
+}
+#agiloshield-v2-staging .asv2-last-doc-name{font-size:13px;line-height:1.35}
+#agiloshield-v2-staging .asv2-last-doc-badge{line-height:1.35}
+#agiloshield-v2-staging .asv2-last-doc-status{line-height:1.35}
+#agiloshield-v2-staging .asv2-last-doc-actions{
+  align-items:center;
+  gap:7px;
+}
+#agiloshield-v2-staging .asv2-last-doc-action{
+  min-height:36px;
+  padding:0 11px;
+}
+
+/* History: calmer table, unchanged columns/actions */
+#agiloshield-v2-staging .asv2-history{margin-top:36px;padding-top:24px}
+#agiloshield-v2-staging .asv2-history-head h3{
+  font-size:19px;
+  letter-spacing:-.015em;
+}
+#agiloshield-v2-staging .asv2-history-wrap{
+  border-color:var(--as-safe-border);
+  border-radius:12px;
+}
+#agiloshield-v2-staging .asv2-history-table th{
+  padding:10px 11px;
+  background:#f7f9fc;
+  color:#607187;
+  font-size:10.5px;
+  letter-spacing:.055em;
+}
+#agiloshield-v2-staging .asv2-history-table td{
+  padding:11px;
+  border-top-color:#e9eef4;
+}
+#agiloshield-v2-staging .asv2-history-icon-button{
+  width:34px;height:34px;
+  border-color:var(--as-safe-border);
+  border-radius:9px;
+}
+
+/* Modal: visual alignment only */
+#agiloshield-v2-staging .asv2-policy-dialog{
+  border-radius:12px;
+}
+#agiloshield-v2-staging .asv2-policy-header{
+  padding:22px 24px 14px;
+}
+#agiloshield-v2-staging .asv2-policy{padding:16px 24px}
+#agiloshield-v2-staging .asv2-policy-actions{
+  padding:12px 24px 20px;
+}
+#agiloshield-v2-staging .asv2-type{
+  min-height:48px;
+  border-radius:9px;
+}
+
+/* Review workspace: preserve logic, improve hierarchy and alignment */
+#agiloshield-v2-staging .asv2-drawer-head{
+  min-height:72px;
+  align-items:center;
+  padding:14px 20px;
+}
+#agiloshield-v2-staging .asv2-drawer-heading{min-width:0}
+#agiloshield-v2-staging .asv2-drawer-title{
+  margin:2px 0;
+  font-size:20px;
+  line-height:1.25;
+}
+#agiloshield-v2-staging .asv2-drawer-head-actions{
+  align-items:center;
+  gap:8px;
+}
+#agiloshield-v2-staging .asv2-drawer-downloads{
+  align-items:center;
+  gap:7px;
+}
+#agiloshield-v2-staging .asv2-drawer-downloads button{
+  min-height:36px;
+  padding:0 10px;
+}
+#agiloshield-v2-staging .asv2-close{
+  width:36px;height:36px;border-radius:9px;
+}
+#agiloshield-v2-staging .asv2-drawer-notice{
+  margin:7px 14px 0;
+  padding:8px 11px;
+}
+#agiloshield-v2-staging .asv2-workspace{
+  grid-template-columns:minmax(310px,360px) minmax(0,1fr);
+}
+#agiloshield-v2-staging .asv2-issues{
+  padding:16px;
+  background:#f9fbfd;
+}
+#agiloshield-v2-staging .asv2-issues-controls{gap:7px}
+#agiloshield-v2-staging .asv2-issues-search,
+#agiloshield-v2-staging .asv2-issues-page-filter{
+  min-height:36px;
+  border-color:var(--as-safe-border);
+  border-radius:9px;
+}
+#agiloshield-v2-staging .asv2-issue-compact{
+  border-color:#dfe6ee;
+  border-radius:9px;
+}
+#agiloshield-v2-staging .asv2-issue-select{
+  min-height:42px;
+  padding:8px 9px;
+}
+#agiloshield-v2-staging .asv2-issue-detail{
+  padding:10px;
+}
+#agiloshield-v2-staging .asv2-issue-detail .asv2-issue-actions button{
+  min-height:34px;
+  padding:0 8px;
+}
+#agiloshield-v2-staging .asv2-viewer-toolbar{
+  min-height:52px;
+  padding:8px 14px;
+}
+#agiloshield-v2-staging .asv2-preview-switch{
+  gap:3px;
+  padding:3px;
+  border-radius:9px;
+}
+#agiloshield-v2-staging .asv2-preview-switch button{
+  min-height:32px;
+  padding:0 10px;
+}
+#agiloshield-v2-staging .asv2-review-toolbar-actions button{
+  min-height:34px;
+  padding:0 10px;
+}
+#agiloshield-v2-staging .asv2-pdf-nav{
+  gap:7px;
+  margin-bottom:10px;
+}
+#agiloshield-v2-staging .asv2-page{
+  box-shadow:0 5px 18px rgba(18,35,58,.14);
+}
+
+/* Prevent the active manual mask from looking like a destructive/error action */
+#agiloshield-v2-staging .asv2-manual-mask-btn.is-active{
+  background:#e9f2ff;
+  color:#174f93;
+  border-color:#87a9d1;
+}
+#agiloshield-v2-staging .asv2-manual-mask-btn.is-active:hover{
+  background:#dfeeff;
+  color:#174f93;
+  border-color:#7198c7;
+}
+
+/* Responsive fixes: no structural changes */
+@media(max-width:900px){
+  #agiloshield-v2-staging .asv2-workspace{
+    grid-template-columns:minmax(270px,320px) minmax(0,1fr);
+  }
+}
+@media(max-width:700px){
+  #agiloshield-v2-staging .asv2-shell{margin:14px 10px 28px}
+  #agiloshield-v2-staging .asv2-layout{gap:14px}
+  #agiloshield-v2-staging .asv2-last-doc{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+  #agiloshield-v2-staging .asv2-last-doc-actions{
+    width:100%;
+  }
+  #agiloshield-v2-staging .asv2-last-doc-actions button{
+    flex:1 1 150px;
+  }
+  #agiloshield-v2-staging .asv2-drawer-head{
+    align-items:flex-start;
+  }
+  #agiloshield-v2-staging .asv2-viewer-toolbar{
+    gap:8px;
+  }
+}
+@media(max-width:650px){
+  #agiloshield-v2-staging .asv2-mobile-tabs{
+    gap:6px;
+    padding:7px 10px;
+    background:#fff;
+  }
+  #agiloshield-v2-staging .asv2-tab{
+    min-height:38px;
+    flex:1;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  #agiloshield-v2-staging .asv2-primary,
+  #agiloshield-v2-staging .asv2-secondary{transition:none!important}
+}
