@@ -5,6 +5,7 @@ import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
 import { originalPdfLocation } from './agiloshield-v2-location.js';
 import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
+import { iconSvg } from './agiloshield-v2-icons.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
 const config = window.AGILOSHIELD_V2_CONFIG;
@@ -66,6 +67,10 @@ const buttonWithIcon = (text,iconName,klass,parent,handler) => {
   if(handler)btn.addEventListener('click',handler);
   return btn;
 };
+const svgIcon = (name,parent,size=18,klass='asv2-icon') => {
+  const span=el('span',null,klass,parent);span.innerHTML=iconSvg(name,size);
+  span.setAttribute('aria-hidden','true');return span;
+};
 const iconButton = (iconName,label,klass,parent,handler) => {
   const btn=el('button',null,(klass||'')+' asv2-icon-only-btn',parent);
   btn.type='button';
@@ -118,27 +123,29 @@ const safeStatus = status => copy.status[status]||copy.status.ERROR;
 
 const shell=el('section',null,'asv2-shell',mount);
 const head=el('header',null,'asv2-landing-head',shell);
-el('h1',copy.heading,'asv2-main-title',head);
-el('p',copy.intro,null,head);
-const tourReplay=button('Comment ça marche ?','asv2-link asv2-tour-replay',head,()=>startTour(true));
-const notice=el('div','Chargement des préférences…','asv2-notice',shell);
+const headText=el('div',null,'asv2-landing-text',head);
+el('h1',copy.heading,'asv2-main-title',headText);
+el('p',copy.intro,'asv2-landing-intro',headText);
+const tourReplay=button('', 'asv2-help-button',head,()=>startTour(true));
+svgIcon('circle-question',tourReplay,20);
+tourReplay.setAttribute('aria-label','Comment ça marche ?');tourReplay.title='Comment ça marche ?';
+const notice=el('div','Chargement des préférences…','asv2-notice',shell);let noticeTimer=null;
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
 const form=el('form',null,'asv2-form',shell);
 const surfaceTabs=el('div',null,'asv2-surface-tabs',form);
 surfaceTabs.setAttribute('role','tablist');surfaceTabs.setAttribute('aria-label','Modes de traitement');
 const fileTab=button('', 'asv2-surface-tab is-active',surfaceTabs,()=>setSurface('file'));
-el('strong','Traitement de fichier',null,fileTab);
-el('small','PDF, Word, Excel, PowerPoint, TXT, CSV',null,fileTab);
+svgIcon('file',fileTab,16);el('span','Fichiers',null,fileTab);
 const textTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('text'));
-el('strong','Traitement de texte',null,textTab);el('small','Saisi ou collé',null,textTab);
+svgIcon('text',textTab,16);el('span','Texte',null,textTab);
 const restoreTab=button('', 'asv2-surface-tab',surfaceTabs,()=>setSurface('restore'));
-el('strong','Restauration',null,restoreTab);el('small','Fichier pseudonymisé + clé',null,restoreTab);
+svgIcon('key',restoreTab,16);el('span','Restauration',null,restoreTab);
 for(const tab of [fileTab,textTab,restoreTab])tab.setAttribute('role','tab');
 fileTab.setAttribute('aria-selected','true');textTab.setAttribute('aria-selected','false');
 restoreTab.setAttribute('aria-selected','false');
 fileTab.tabIndex=0;textTab.tabIndex=-1;restoreTab.tabIndex=-1;
 surfaceTabs.addEventListener('keydown',event=>{
-  const tabs=[fileTab,textTab,restoreTab];
+  const tabs=[fileTab,textTab,restoreTab].filter(tab=>!tab.hidden);
   if(!tabs.includes(event.target)||!['ArrowRight','ArrowLeft','Home','End'].includes(event.key))return;
   event.preventDefault();
   const index=tabs.indexOf(event.target);
@@ -158,13 +165,12 @@ filePane.id='asv2-pane-file';textPane.id='asv2-pane-text';restorePane.id='asv2-p
 for(const [tab,pane] of [[fileTab,filePane],[textTab,textPane],[restoreTab,restorePane]]){
   tab.setAttribute('aria-controls',pane.id);pane.setAttribute('aria-labelledby',tab.id);
 }
-el('h3','Traitement de texte',null,textPane);
-el('p','Ce texte sera envoyé comme fichier TXT et suivra le même parcours de revue.',
-  'asv2-muted',textPane);
+el('p','Le texte est traité comme un fichier TXT, avec la même vérification.',
+  'asv2-pane-hint',textPane);
 const textInput=el('textarea',null,'asv2-text-input',textPane);
 textInput.placeholder='Collez ou saisissez le texte à anonymiser…';
 textInput.setAttribute('aria-label','Texte à anonymiser');
-const textAdd=button('Ajouter ce texte à la file','asv2-secondary',textPane,()=>{
+const textAdd=button('Protéger ce texte','asv2-primary asv2-text-submit',textPane,()=>{
   if(!textInput.value.trim()){notify('Saisissez du texte avant de l’ajouter.','is-warning');return;}
   addFiles([new File([textInput.value],`texte-${Date.now()}.txt`,{type:'text/plain;charset=utf-8'})]);
   textInput.value='';
@@ -218,6 +224,7 @@ const restoreAction=button('Inspecter le fichier et sa clé','asv2-primary',rest
   ()=>inspectRestore().catch(error=>{restoreNotice.textContent=errorText(error);restoreNotice.classList.add('is-error');}));
 // Enable after the staging restore workflow is qualified end to end.
 const RESTORE_WORKFLOW_QUALIFIED=false;
+restoreTab.hidden=!RESTORE_WORKFLOW_QUALIFIED&&config.SHOW_RESTORE!==true;
 restoreAction.disabled=true;
 restoreAction.setAttribute('aria-describedby','asv2-restore-unavailable');
 restoreNotice.id='asv2-restore-unavailable';
@@ -285,36 +292,36 @@ async function inspectRestore(){
   }finally{restoreBusy=false;updateRestoreAction();}
 }
 el('p','La restauration par clé s’applique aux fichiers Word, Excel, PowerPoint, texte et CSV. Le masquage des fichiers PDF est définitif.', 'asv2-restore-pdf-note',restorePane);
-el('h3','Mode de traitement',null,side);
-const anonMode=el('label',null,'asv2-mode is-selected',side);
+const modeGroup=el('div',null,'asv2-mode-group',side);
+modeGroup.setAttribute('role','radiogroup');modeGroup.setAttribute('aria-label','Mode de traitement');
+const anonMode=el('label',null,'asv2-mode is-selected',modeGroup);
 const anonRadio=el('input',null,null,anonMode);anonRadio.type='radio';anonRadio.name='asv2Mode';anonRadio.checked=true;
 el('span','Anonymiser','asv2-mode-title',anonMode);
-const pseudoMode=el('label',null,'asv2-mode is-unavailable',side);
+const pseudoMode=el('label',null,'asv2-mode is-unavailable',modeGroup);
 const pseudoRadio=el('input',null,null,pseudoMode);pseudoRadio.type='radio';pseudoRadio.name='asv2Mode';
 pseudoRadio.disabled=true;el('span','Pseudonymiser','asv2-mode-title',pseudoMode);
-const pseudoHelp=el('small','Ce mode n’est pas encore disponible sur cette page.',null,pseudoMode);
+const pseudoHelp=el('small','Ce mode n’est pas encore disponible sur cette page.','asv2-sr-only',pseudoMode);
 for(const radio of [anonRadio,pseudoRadio])radio.addEventListener('change',()=>{
   anonMode.classList.toggle('is-selected',anonRadio.checked);
   pseudoMode.classList.toggle('is-selected',pseudoRadio.checked);
   updatePolicySummary();
 });
-el('h3','Paramètres',null,side);
-const typesButton=button('Données à masquer','asv2-types-button',side,openTypes);
+const typesButton=button('', 'asv2-types-button',side,openTypes);
+svgIcon('eye-slash',typesButton,16);el('span','Données à masquer',null,typesButton);
 const typeCount=el('span','…','asv2-count',typesButton);
 typesButton.disabled=true;
-el('p','Choisissez les catégories à protéger. Votre choix sera appliqué aux prochains fichiers.',
-  'asv2-muted asv2-side-help',side);
-el('p','Une catégorie décochée peut rester visible. Le résultat est vérifié selon vos réglages.',
-  'asv2-policy-note',side);
-const listsButton=button('Listes','asv2-types-button asv2-lists-button',side,openLists);
-const listsCount=el('span',null,'asv2-list-summary',listsButton);
-const inclusionCount=el('span','Incl. 0','asv2-list-count asv2-list-count-include',listsCount);
-const exclusionCount=el('span','Excl. 0','asv2-list-count asv2-list-count-exclude',listsCount);
+typesButton.title='Une catégorie décochée peut rester visible dans le résultat.';
+const listsButton=button('', 'asv2-types-button asv2-lists-button',side,openLists);
+svgIcon('text',listsButton,16);el('span','Listes',null,listsButton);
+const listsCount=el('span',null,'asv2-list-summary',listsButton);listsCount.hidden=true;
+const inclusionCount=el('span','', 'asv2-count',listsCount);
+const exclusionCount=el('span','', 'asv2-count',listsCount);
 listsButton.setAttribute('aria-label','Listes, inclusions : 0 ; exclusions : 0');
 listsButton.disabled=true;
 listsButton.title='Préparer les listes pour vos prochains documents';
-const listsHelp=el('p','Ces listes s’appliquent aux prochains documents déposés.',
-  'asv2-muted asv2-side-help',side);
+const listsHelp=el('p','Ces listes s’appliquent aux prochains documents déposés.','asv2-sr-only',side);
+listsButton.setAttribute('aria-describedby','asv2-lists-help');listsHelp.id='asv2-lists-help';
+form.insertBefore(side,layout);
 const policyModal=el('div',null,'asv2-policy-modal',mount);policyModal.hidden=true;
 const policyDialog=el('section',null,'asv2-policy-dialog',policyModal);
 policyDialog.setAttribute('role','dialog');policyDialog.setAttribute('aria-modal','true');
@@ -397,18 +404,22 @@ button('Annuler','asv2-secondary',listsActions,()=>closeLists());
 const listsSave=button('Enregistrer sur ce navigateur','asv2-primary',listsActions,saveLists);
 const drop=el('div',null,'asv2-drop',filePane);drop.tabIndex=0;drop.setAttribute('role','button');
 drop.setAttribute('aria-label','Choisir ou déposer jusqu’à 12 documents');
+svgIcon('cloud-upload',drop,28,'asv2-drop-icon');
 el('span','Déposez vos documents ici','asv2-drop-title',drop);
-el('span','Le traitement démarre au dépôt · 12 fichiers actifs maximum','asv2-drop-subtitle',drop);
-el('span','PDF · DOCX · XLSX · PPTX · TXT · CSV','asv2-drop-types',drop);
+el('span','ou cliquez pour les choisir · 12 fichiers maximum','asv2-drop-subtitle',drop);
+el('span','PDF, Word, Excel, PowerPoint, TXT, CSV','asv2-drop-types',drop);
+if(typeof config.TRUST_LINE==='string'&&config.TRUST_LINE.trim()){
+  const trust=el('p',null,'asv2-trust',filePane);svgIcon('shield-check',trust,16);
+  el('span',config.TRUST_LINE.trim(),null,trust);
+}
 // The former “Dernier document” card duplicated the history and review drawer.
 function updateLastDocCard(){ /* Intentionally no-op: one source of truth is enough. */ }
 const fileInput=el('input',null,'asv2-file-input',form);fileInput.type='file';fileInput.multiple=true;
 fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';fileInput.disabled=true;
-const mobileSettings=el('div',null,'asv2-mobile-settings',filePane);
+const mobileSettings=el('div',null,'asv2-mobile-settings',null);
 const mobileSettingsText=el('p','Chargement de vos réglages…',null,mobileSettings);
 const mobileSettingsEdit=button('Modifier','asv2-secondary',mobileSettings,openTypes);
 mobileSettingsEdit.disabled=true;
-filePane.insertBefore(mobileSettings,drop);
 const emptyPolicyWarning=el('p','Aucune catégorie sélectionnée : les données détectées resteront visibles dans les prochains fichiers.',
   'asv2-empty-policy-warning',filePane);
 emptyPolicyWarning.hidden=true;filePane.insertBefore(emptyPolicyWarning,drop);
@@ -478,14 +489,18 @@ const viewerToolbar=el('div',null,'asv2-viewer-toolbar',viewerPane);
 const viewerBody=el('div',null,'asv2-viewer-body',viewerPane);
 const drawerFooter=el('footer',null,'asv2-drawer-footer',panel);
 
-function notify(text,kind='') {notice.textContent=text;notice.className='asv2-notice '+kind;}
+function notify(text,kind='') {
+  clearTimeout(noticeTimer);notice.textContent=text||'';notice.className='asv2-notice '+kind;
+  notice.hidden=!text;
+  if(text&&!kind)noticeTimer=setTimeout(()=>{notice.hidden=true;},6000);
+}
 function drawerMessage(text,kind='') {drawerNotice.textContent=text;drawerNotice.className='asv2-drawer-notice '+kind;}
 form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 const tourSteps=[
-  {target:typesButton,title:'Choisissez quoi masquer',body:'Sélectionnez les données à protéger parmi 13 catégories. Les catégories laissées de côté peuvent rester visibles.'},
-  {target:drop,title:'Déposez vos fichiers',body:'Ajoutez jusqu’à 12 fichiers. Chaque fichier garde les réglages choisis au moment du dépôt.'},
-  {target:historyHead,title:'Consultez et corrigez',body:'Ouvrez chaque résultat, vérifiez les passages signalés et téléchargez le fichier prêt selon vos réglages.'},
+  {target:side,title:'1. Réglez une fois',body:'Choisissez le mode et les données à masquer. Vos réglages sont gardés pour les prochains fichiers.'},
+  {target:drop,title:'2. Déposez',body:'Jusqu’à 12 fichiers à la fois. Le traitement démarre tout seul.'},
+  {target:historyHead,title:'3. Vérifiez et téléchargez',body:'Un document prêt se télécharge. Un document à vérifier s’ouvre en grand pour décider passage par passage.'},
 ];
 let tourIndex=-1;let tourLastFocus=null;let firstTourTimer=null;let guideDoneInMemory=false;
 const tour=el('div',null,'asv2-tour',mount);tour.hidden=true;
@@ -510,7 +525,7 @@ function showTourStep(index){
   tourIndex=index;const step=tourSteps[index];
   step.target.classList.add('asv2-tour-target');
   step.target.scrollIntoView({block:'center',behavior:'auto'});
-  tourCount.textContent='Étape '+(index+1)+' sur '+tourSteps.length;
+  tourCount.textContent=(index+1)+' sur '+tourSteps.length;
   tourTitle.textContent=step.title;tourBody.textContent=step.body;
   tourPrev.hidden=index===0;tourNext.textContent=index===tourSteps.length-1?'Terminer':'Suivant';
   const rect=step.target.getBoundingClientRect();
@@ -589,8 +604,9 @@ function closeLists(force=false){
 function listField(kind){return kind==='include'?'anon2InclusionList':'anon2ExclusionList';}
 function updateListSummary(){
   const included=listSelection.anon2InclusionList.length,excluded=listSelection.anon2ExclusionList.length;
-  inclusionCount.textContent='Incl. '+included;
-  exclusionCount.textContent='Excl. '+excluded;
+  inclusionCount.textContent=included+' inclus';inclusionCount.hidden=!included;
+  exclusionCount.textContent=excluded+' exclus';exclusionCount.hidden=!excluded;
+  listsCount.hidden=!included&&!excluded;
   listsButton.setAttribute('aria-label','Listes, inclusions : '+included+' ; exclusions : '+excluded);
 }
 function renderListDraft(){
@@ -726,11 +742,12 @@ function setEnabled(yes){
   pseudoMode.classList.toggle('is-unavailable',pseudoRadio.disabled);
   if(pseudoRadio.disabled&&pseudoRadio.checked){anonRadio.checked=true;pseudoRadio.checked=false;
     anonMode.classList.add('is-selected');pseudoMode.classList.remove('is-selected');}
-  pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes ; conservez la clé de restitution.':
+  pseudoHelp.textContent=pseudoReady?'Les passages protégés reçoivent des étiquettes. Conservez la clé pour les restituer.':
     'Ce mode n’est pas encore disponible sur cette page.';
+  pseudoMode.title=pseudoHelp.textContent;
   listsButton.title=listsReady?'Choisir les termes pour les prochains documents':
     'Listes indisponibles sur cette recette';
-  listsHelp.textContent=listsReady?'Une inclusion demande le masquage ; une exclusion en conflit demande une revue.':
+  listsHelp.textContent=listsReady?'Une inclusion force le masquage. Une exclusion en conflit demande une vérification.':
     'Les listes ne sont pas disponibles sur cette recette.';
   updateRestoreAction();
   listsStorageNote.textContent=listStorePersistent?
@@ -746,9 +763,7 @@ function setEnabled(yes){
 }
 function updatePolicySummary(){
   const types=state.currentPolicy?.selectedTypes;
-  typeCount.textContent=Array.isArray(types)?types.length?
-    types.length+'/13':
-    '0/13, aucune catégorie sélectionnée':'…';
+  typeCount.textContent=Array.isArray(types)?types.length+'/13':'…';
   mobileSettingsText.textContent='Mode : '+(pseudoRadio.checked?'Pseudonymiser':'Anonymiser')+
     ' · Données à masquer : '+policySummary(types);
   emptyPolicyWarning.hidden=!Array.isArray(types)||types.length>0;
@@ -759,7 +774,7 @@ function updatePolicySummary(){
 async function loadPreferences(){
   const request=++preferencesRequest;
   state.currentPolicy=null;listsReady=false;pseudoReady=false;
-  setEnabled(false);retry.hidden=true;notify('Chargement des préférences…');
+  setEnabled(false);retry.hidden=true;notify('');drop.classList.add('is-loading');
   try{
     const response=await api.preferences();
     if(request!==preferencesRequest)return;
@@ -794,12 +809,12 @@ async function loadPreferences(){
     listDraft=listSnapshot();listStorePersistent=stored.persistent;
     updateListSummary();
     const set=new Set(types);for(const [code,box] of checks)box.checked=set.has(code);
-    updatePolicySummary();setEnabled(true);
-    notify(types.length?'Vos réglages sont chargés. Vous pouvez déposer vos documents.':
-      'Aucune catégorie sélectionnée. Les données détectées resteront visibles.');
+    updatePolicySummary();setEnabled(true);drop.classList.remove('is-loading');
+    notify('');
     scheduleFirstTour();
   }catch(error){
     retry.hidden=true;
+    drop.classList.remove('is-loading');
     notify('Impossible de charger vos réglages. Rechargez la page puis réessayez.','is-error');
   }
 }
