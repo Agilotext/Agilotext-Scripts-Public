@@ -26,14 +26,32 @@ const radiusPart = /^(0|50%|inherit|var\(--asv2-r-(sm|md|lg|pill)\))$/;
 const badRadii = radii.filter(v => !v.split(/\s+/).every(part => radiusPart.test(part)));
 if (badRadii.length) errors.push(`Radius not from tokens: ${[...new Set(badRadii)].join(', ')}`);
 
+
+{
+  let depth = 0, start = 0;
+  const seen = new Map();
+  for (let i = 0; i < css.length; i++) {
+    if (css.startsWith('/*', i)) { i = css.indexOf('*/', i + 2) + 1; if (!depth) start = i + 1; continue; }
+    if (css[i] === '{') {
+      if (!depth) {
+        const selector = css.slice(start, i).trim().replace(/\s+/g, ' ');
+        if (!selector.startsWith('@')) seen.set(selector, (seen.get(selector) || 0) + 1);
+      }
+      depth++;
+    } else if (css[i] === '}') { depth--; if (!depth) start = i + 1; }
+  }
+  const dup = [...seen].filter(([selector, count]) => count > 1 && selector !== '#agiloshield-v2-staging');
+  if (dup.length) errors.push(`Duplicate top-level selectors (run tests/css-merge.mjs): ${dup.map(([s]) => s).slice(0, 5).join(' | ')}`);
+}
+
 if (/transition\s*:\s*all\b/.test(css)) errors.push('transition:all is forbidden, list properties');
 
-for (const required of ['--color--blue', '--agilo-primary', '.asv2-drawer-icon', '.asv2-queue-remove', '.asv2-mask-marker', '.asv2-review-summary', '.asv2-issue-locate-icon', '.asv2-text-hit', '.asv2-help-link', '.asv2-settings-row', '.asv2-mode-hint']) {
+for (const required of ['--color--blue', '--agilo-primary', '.asv2-drawer-icon', '.asv2-queue-remove', '.asv2-mask-marker', '.asv2-review-summary', '.asv2-issue-locate-icon', '.asv2-text-hit', '.asv2-help-pill', '.asv2-settings-row', '.asv2-mode-hint']) {
   if (!css.includes(required)) errors.push(`Missing ${required}`);
 }
 
 if (/\.asv2-help-button/.test(css)) errors.push('Old bordered round help button still styled');
-if (!/\.asv2-help-link\{[^}]*border:0/.test(css)) errors.push('Help link must not draw a border');
+if (!/\.asv2-help-pill\{[^}]*border:0/.test(css)) errors.push('Help pill must not draw a round border around the icon');
 if (/\.asv2-surface-tabs\{display:flex\}/.test(css)) errors.push('Surface tabs must not come back on mobile');
 
 if (errors.length) {

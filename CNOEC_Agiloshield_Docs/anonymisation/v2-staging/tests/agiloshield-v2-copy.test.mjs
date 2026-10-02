@@ -39,11 +39,19 @@ assert.ok(embed.includes("event.key.toLowerCase()==='z'"), 'cmd-z shortcut prese
 assert.ok(embed.includes('highlightPdfText'), 'text locate highlight present');
 assert.ok(COPY.review.shortcuts.includes('⌘Z'), 'shortcut legend includes undo');
 assert.ok(embed.includes('surfaceTabs.remove()'), 'Fichiers/Texte tablist removed from the page');
-assert.ok(embed.includes("'ou collez du texte'"), 'paste text link present');
+assert.ok(embed.includes("'Coller du texte'"), 'paste text button present');
 assert.ok(embed.includes('typesButton.hidden=true;listsButton.hidden=true'), 'one settings entry, not two buttons');
 assert.ok(!/'Listes'|'Listes,/.test(embed), 'no « Listes » label left');
 assert.ok(!embed.includes("'asv2-help-button'"), 'help button without double circle');
 assert.ok(!/hors PDF/.test(COPY.mode.pseudo), 'pseudo hint does not say PDF is refused');
 assert.ok(/PDF/.test(COPY.mode.pseudo), 'pseudo hint explains PDF is not reversible');
 assert.ok(embed.includes("'Restaurer avec la clé'"), 'restore entry in document menu');
+assert.equal(COPY.review.batch.maskAll, 'Tout masquer et valider');
+assert.equal(COPY.review.batch.keepAll, 'Tout laisser visible et valider');
+assert.equal(COPY.review.batch.title(3), '3 passages n’ont pas été vérifiés');
+assert.equal(COPY.review.batch.progress(3, 12), 'Décision 3 sur 12');
+assert.equal(COPY.review.batch.blockedZones(2), '2 zones à placer avant validation');
+assert.ok(embed.includes('validate.disabled=!verified&&(Boolean(entry.commandBusy)||Boolean(entry.batchRunning))'),
+  'validate stays clickable while passages remain');
+assert.ok(!embed.includes("confirmAction('Valider votre vérification de ce document ?')"), 'no confirm when all is verified');
 console.log('copy: PASS');

@@ -29,6 +29,23 @@ const ICONS = {
   'magnifier-minus': 'outline/filtering-sorting/18px_magnifier-minus.svg',
   'arrow-left': 'outline/arrows/18px_arrow-left.svg',
   'arrow-right': 'outline/arrows/18px_arrow-right.svg',
+  house: 'outline/home-buildings/18px_house.svg',
+  calendar: 'outline/time/18px_calendar.svg',
+  envelope: 'outline/communication/18px_envelope.svg',
+  'credit-card': 'outline/shopping/18px_credit-card.svg',
+  'id-badge': 'outline/users/18px_id-badge.svg',
+  suitcase: 'outline/business-finance/18px_suitcase.svg',
+  'suitcase-user': 'outline/business-finance/18px_suitcase-user.svg',
+  'map-pin': 'outline/maps-location/18px_map-pin.svg',
+  building: 'outline/home-buildings/18px_apartment-building.svg',
+  user: 'outline/users/18px_user.svg',
+  fingerprint: 'outline/security/18px_fingerprint.svg',
+  phone: 'outline/technology-devices/18px_phone.svg',
+  link: 'outline/editing/18px_link.svg',
+  sliders: 'outline/ui-layout/18px_sliders.svg',
+  tag: 'outline/bookmarks-favorites/18px_tag.svg',
+  pen: 'outline/communication/18px_pen-2.svg',
+  plus: 'outline/ui-layout/18px_plus.svg',
 };
 
 const out = {};

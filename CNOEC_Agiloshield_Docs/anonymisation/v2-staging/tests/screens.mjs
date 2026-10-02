@@ -38,6 +38,7 @@ const base = `http://127.0.0.1:${server.address().port}/tests/staging-equivalent
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 await mkdir(outDir, { recursive: true });
 const report = [];
+const styles = {};
 
 for (const state of STATES) {
   if (only && !only.test(state.id)) continue;
@@ -70,10 +71,26 @@ for (const state of STATES) {
         } else errors.push('open target absent');
       }
     }
-    for (const target of [].concat(state.click || [])) {
+    for (const item of [].concat(state.click || [])) {
+      const target = item?.optional || item;
       const btn = page.locator('#agiloshield-v2-staging button:visible').filter({ hasText: target }).first();
       if (await btn.count()) { await btn.click({ timeout: 5000 }).catch((e) => errors.push('click: ' + e.message.split('\n')[0])); await page.waitForTimeout(500); }
-      else errors.push('click target absent: ' + target);
+      else if (!item?.optional) errors.push('click target absent: ' + target);
+    }
+    if (process.env.ASV2_STYLES) {
+      styles[`${state.id}-${vp}`] = await page.evaluate(() => {
+        const props = ['display', 'position', 'width', 'height', 'margin', 'padding', 'gap', 'border', 'border-radius',
+          'background-color', 'color', 'font-size', 'font-weight', 'line-height', 'text-align', 'flex', 'grid-template-columns',
+          'grid-template-areas', 'align-items', 'justify-content', 'overflow', 'white-space', 'box-shadow', 'opacity', 'min-height'];
+        const out = {};
+        const walk = (node, path) => {
+          const cs = getComputedStyle(node);
+          out[path] = props.map((p) => cs.getPropertyValue(p)).join('|');
+          [...node.children].forEach((child, i) => walk(child, path + '>' + child.tagName + (child.className && typeof child.className === 'string' ? '.' + child.className.trim().split(/\s+/)[0] : '') + ':' + i));
+        };
+        walk(document.getElementById('agiloshield-v2-staging'), 'root');
+        return out;
+      });
     }
     await page.screenshot({ path: join(outDir, `${state.id}-${vp}.png`), fullPage: true });
     let violations = [];
@@ -89,6 +106,7 @@ for (const state of STATES) {
 }
 await browser.close();
 server.close();
+if (process.env.ASV2_STYLES) await writeFile(process.env.ASV2_STYLES, JSON.stringify(styles));
 
 const lines = [`# Captures ${label}`, '', '| État | Vue | Erreurs | axe serious/critical | Débordement |', '|---|---|---|---|---|'];
 for (const r of report) lines.push(`| ${r.state} | ${r.vp} | ${r.errors.length ? r.errors.join('<br>').slice(0, 200) : '0'} | ${r.axe.join(', ') || '0'} | ${r.overflow ? 'oui' : 'non'} |`);

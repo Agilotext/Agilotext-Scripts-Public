@@ -33,7 +33,6 @@ const tourKey = 'agiloshield-first-visit-guide-v1';
 const terminal = new Set(['READY','REVIEW_REQUIRED','FAILED']);
 const active = new Set(['LOCAL','UPLOADING','PENDING','PROCESSING','UNCERTAIN','AUTH_REQUIRED','TIMED_OUT']);
 const copy = COPY;
-const iconsBase = new URL('./assets/nucleo/', import.meta.url);
 const state = {preferencesReady:false, currentPolicy:null, accountRef:null, accountEpoch:0,
   capabilities:{}, entries:[], active:null, surface:'file',
   running:false, authPaused:false, disposed:false, drawerOpen:false,
@@ -53,9 +52,8 @@ const button = (text,klass,parent,handler) => {
   const out=el('button',text,klass,parent);out.type='button';if(handler)out.addEventListener('click',handler);return out;
 };
 const nucleoIcon = (name,parent,klass='asv2-btn-icon') => {
-  const icon=el('span',null,klass+' asv2-icon-mask',parent);
-  const source='url("'+new URL(name+'.svg',iconsBase).href+'")';
-  icon.style.maskImage=source;icon.style.webkitMaskImage=source;
+  const icon=el('span',null,klass,parent);
+  icon.innerHTML=iconSvg(name,16);
   icon.setAttribute('aria-hidden','true');
   return icon;
 };
@@ -105,7 +103,8 @@ const formatOf = name => (supported.exec(name||'')?.[1]||'').toLowerCase();
 const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par terme.',
   'Un terme est présent plusieurs fois.',
   'Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.',
-  'Réponse de masquage incomplète']);
+  'Réponse de masquage incomplète',
+  'L’aperçu PDF met trop de temps à s’afficher. Réessayez, ou téléchargez le fichier.']);
 const errorText = error => location.protocol==='file:'?
   'Ouvrez la page de test publiée : une copie locale ne peut pas utiliser votre connexion.':
   error?.status===401?'Votre session a expiré. Reconnectez-vous, puis reprenez.':
@@ -130,9 +129,7 @@ const head=el('header',null,'asv2-landing-head',shell);
 const headText=el('div',null,'asv2-landing-text',head);
 el('h1',copy.heading,'asv2-main-title',headText);
 el('p',copy.intro,'asv2-landing-intro',headText);
-const tourReplay=button('', 'asv2-help-link',head,()=>startTour(true));
-el('span','?','asv2-help-glyph',tourReplay).setAttribute('aria-hidden','true');
-el('span','Comment ça marche',null,tourReplay);
+const tourReplay=buttonWithIcon('Comment ça marche','circle-question','asv2-help-pill',head,()=>startTour(true));
 const notice=el('div','Chargement des préférences…','asv2-notice',shell);let noticeTimer=null;
 notice.setAttribute('role','status');notice.setAttribute('aria-live','polite');
 const form=el('form',null,'asv2-form',shell);
@@ -171,7 +168,8 @@ for(const [tab,pane] of [[fileTab,filePane],[textTab,textPane],[restoreTab,resto
   tab.setAttribute('aria-controls',pane.id);pane.setAttribute('aria-labelledby',tab.id);
 }
 const textHead=el('div',null,'asv2-text-head',textPane);
-el('p','Le texte est traité comme un fichier TXT, avec la même vérification.',
+el('h3','Texte à protéger','asv2-text-title',textHead);
+el('p','Traité comme un fichier TXT, avec la même vérification.',
   'asv2-pane-hint',textHead);
 const textInput=el('textarea',null,'asv2-text-input',textPane);
 textInput.placeholder='Collez ou saisissez le texte à anonymiser…';
@@ -353,26 +351,38 @@ const policyClose=button('×','asv2-close',policyHeader,()=>closeTypes(false));
 policyClose.setAttribute('aria-label','Fermer les types de données');
 const policy=el('section',null,'asv2-policy',policyDialog);
 const policyHead=el('div',null,'asv2-section-head',policy);
-el('h3','Données à masquer',null,policyHead);
-el('span','13 catégories','asv2-count',policyHead);
+el('h3','Catégories détectées',null,policyHead);
+const policyCount=el('span','13 catégories','asv2-count',policyHead);
 const grid=el('div',null,'asv2-grid',policy);
 const checks=new Map();
+const typeIcons={ADR:'house',DAT:'calendar',EML:'envelope',IBA:'credit-card',IDN:'id-badge',JOB:'suitcase',
+  LOC:'map-pin',ORG:'building',PER:'user',PII:'fingerprint',PRO:'suitcase-user',TEL:'phone',URL:'link'};
+function updatePolicyCount(){
+  const count=[...checks.values()].filter(box=>box.checked).length;
+  policyCount.textContent=count+' sur '+codes.length;
+}
 for(const code of codes){
   const label=el('label',null,'asv2-type',grid);
   const box=el('input',null,null,label);box.type='checkbox';box.disabled=true;box.dataset.code=code;
+  svgIcon(typeIcons[code],label,16,'asv2-icon asv2-type-icon');
   el('span',labels[code],null,label);checks.set(code,box);
+  box.addEventListener('change',updatePolicyCount);
 }
-const termsSection=el('section',null,'asv2-policy asv2-terms-section',policyDialog);
-const termsHead=el('div',null,'asv2-section-head',termsSection);
-el('h3','Termes',null,termsHead);
-const termsSummary=el('p','Aucun terme.','asv2-muted',termsSection);
-button('Gérer les termes','asv2-secondary',termsSection,()=>{closeTypes(false);openLists();});
+const termsSection=el('section',null,'asv2-terms-section',policyDialog);
+svgIcon('tag',termsSection,18,'asv2-icon asv2-terms-icon');
+const termsBody=el('div',null,'asv2-terms-text',termsSection);
+el('strong','Autre chose à masquer ?',null,termsBody);
+const termsSummary=el('span','Aucun terme pour l’instant.','asv2-muted',termsBody);
+el('span','Un nom de client, de projet ou de lieu absent des catégories : ajoutez-le en terme à toujours masquer.',
+  'asv2-terms-help',termsBody);
+const termsAdd=buttonWithIcon('Ajouter un terme','plus','asv2-secondary asv2-terms-add',termsSection,()=>{closeTypes(false);openLists();});
 termsSection.hidden=true;
 const shortcuts=el('div',null,'asv2-shortcuts',policyDialog);
 policyDialog.insertBefore(shortcuts,termsSection);
 for(const [caption,values] of [['Paramètres par défaut',defaults],['Tout sélectionner',codes],['Tout désélectionner',[]]]){
   const control=button(caption,'asv2-link',shortcuts,()=>{
     for(const [code,box] of checks) box.checked=values.includes(code);
+    updatePolicyCount();
   });control.disabled=true;
 }
 const policyActions=el('div',null,'asv2-policy-actions',policyDialog);
@@ -438,13 +448,16 @@ function updateModeFormats(){
   fileInput.accept='.pdf,.docx,.xlsx,.pptx,.txt,.csv';
 }
 const secondaryRow=el('div',null,'asv2-secondary-row',filePane);
-const pasteLink=button('ou collez du texte','asv2-link asv2-paste-link',secondaryRow,
+const secondaryLeft=el('div',null,'asv2-secondary-left',secondaryRow);
+const pasteLink=buttonWithIcon('Coller du texte','text','asv2-secondary asv2-paste-link',secondaryLeft,
   ()=>setSurface(state.surface==='text'?'file':'text'));
-const restoreLink=button('J’ai un fichier pseudonymisé et sa clé','asv2-link',secondaryRow,()=>openRestore());
+const pasteLabel=pasteLink.querySelector('span:last-child');
+const restoreLink=buttonWithIcon('Restaurer avec une clé','key','asv2-secondary',secondaryLeft,()=>openRestore());
 restoreLink.hidden=!RESTORE_WORKFLOW_QUALIFIED&&config.SHOW_RESTORE!==true;
-const settingsRow=el('p',null,'asv2-settings-row',secondaryRow);
-const settingsText=el('span','Chargement de vos réglages…',null,settingsRow);
-const settingsEdit=button('Modifier','asv2-link',settingsRow,openTypes);
+const settingsRow=el('div',null,'asv2-settings-row',secondaryRow);
+svgIcon('sliders',settingsRow,16,'asv2-icon asv2-settings-icon');
+const settingsText=el('span','Chargement de vos réglages…','asv2-settings-text',settingsRow);
+const settingsEdit=buttonWithIcon('Modifier','pen','asv2-secondary asv2-settings-edit',settingsRow,openTypes);
 settingsEdit.setAttribute('aria-label','Modifier les données à masquer et les termes');
 settingsEdit.disabled=true;
 function openRestore(){setSurface('restore');restorePane.scrollIntoView({block:'start',behavior:'auto'});}
@@ -546,7 +559,7 @@ form.addEventListener('submit',event=>event.preventDefault());
 let typesSnapshot=[];let modalLastFocus=null;let savingTypes=false;
 const tourSteps=[
   {target:side,title:'1. Choisissez le mode',body:'Anonymiser masque pour de bon. Pseudonymiser remplace par des étiquettes, réversibles avec la clé. Les données à masquer se règlent sous la zone de dépôt, avec « Modifier ».'},
-  {target:drop,title:'2. Déposez',body:'Jusqu’à 12 fichiers à la fois. Le traitement démarre tout seul. Pour un simple extrait, utilisez « ou collez du texte ».'},
+  {target:drop,title:'2. Déposez',body:'Jusqu’à 12 fichiers à la fois. Le traitement démarre tout seul. Pour un simple extrait, utilisez « Coller du texte ».'},
   {target:historyHead,title:'3. Vérifiez et téléchargez',body:'Un document prêt se télécharge. Un document à vérifier s’ouvre en grand pour décider passage par passage.'},
 ];
 let tourIndex=-1;let tourLastFocus=null;let firstTourTimer=null;let guideDoneInMemory=false;
@@ -614,7 +627,8 @@ function setSurface(kind){
   state.surface=kind;
   const restore=kind==='restore';
   filePane.hidden=restore;textPane.hidden=kind!=='text';restorePane.hidden=!restore;
-  pasteLink.textContent=kind==='text'?'Fermer le texte':'ou collez du texte';
+  pasteLabel.textContent=kind==='text'?'Fermer le texte':'Coller du texte';
+  pasteLink.classList.toggle('is-active',kind==='text');
   pasteLink.setAttribute('aria-expanded',String(kind==='text'));
   if(kind==='text')textInput.focus();
   side.hidden=restore;layout.classList.toggle('is-restore',restore);
@@ -624,7 +638,7 @@ function openTypes(){
   if(!state.preferencesReady)return;
   typesSnapshot=selected();modalLastFocus=document.activeElement;
   policyError.hidden=true;policyModal.hidden=false;document.body.classList.add('asv2-policy-open');
-  policyClose.focus();
+  updatePolicyCount();policyClose.focus();
 }
 function openLists(){
   if(!state.preferencesReady)return;
@@ -816,7 +830,8 @@ function updatePolicySummary(){
   const terms=included+excluded;
   const termsText=terms?plural(terms,'terme','termes'):'aucun terme';
   termsSummary.textContent=terms?plural(included,'terme à masquer','termes à masquer')+' · '+
-    plural(excluded,'terme à garder','termes à garder'):'Aucun terme.';
+    plural(excluded,'terme à garder','termes à garder'):'Aucun terme pour l’instant.';
+  termsAdd.lastChild.textContent=terms?'Gérer les termes':'Ajouter un terme';
   settingsText.textContent=!Array.isArray(types)?'Chargement de vos réglages…':
     (types.length?plural(types.length,'catégorie masquée','catégories masquées'):'Aucune catégorie masquée')+
     (listsReady?' · '+termsText:'');
@@ -1869,16 +1884,18 @@ function renderFooter(entry){
   if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
     ()=>loadCurrent(entry).catch(showError));
   if(entry.status==='REVIEW_REQUIRED'){
-    const progress=reviewProgress(entry);
+    const work=remainingReviewWork(entry);
     const safety=el('p',null,'asv2-review-safety',drawerFooter);
     svgIcon('shield-check',safety,18);
-    el('span',copy.review.safetyLine,null,safety);
+    el('span',work.rows.length?copy.review.pendingLine(work.rows.length):
+      work.unresolved.length?copy.review.batch.blockedZones(work.unresolved.length)+'.':
+      work.problems.length?copy.review.batch.blockedRules(work.problems.length)+'.':
+      copy.review.safetyLine,null,safety);
     if(editorCapabilities.humanVerification){
       const verified=entry.review?.humanVerifiedDeliverable===true;
       const validate=buttonWithIcon(verified?'Vérifié':copy.review.validate,'shield-check','asv2-primary',drawerFooter,
-        ()=>approveHumanReview(entry,validate));
-      validate.disabled=!verified && (progress.remaining>0 ||
-        entry.review?.canApproveHumanVerification!==true || entry.commandBusy);
+        ()=>approveHumanReview(entry,validate).catch(showError));
+      validate.disabled=!verified&&(Boolean(entry.commandBusy)||Boolean(entry.batchRunning));
     }
     renderShortcutHelp(drawerFooter);
   }
@@ -1906,10 +1923,96 @@ function guideToPendingReview(entry){
   }
   drawerMessage('Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.','is-warning');
 }
+function reviewModal(build){
+  const overlay=el('div',null,'asv2-validate-overlay',panel);
+  const box=el('div',null,'asv2-validate-dialog',overlay);
+  box.setAttribute('role','alertdialog');box.setAttribute('aria-modal','true');
+  const close=()=>{overlay.remove();document.removeEventListener('keydown',onKey,true);};
+  function onKey(event){if(event.key==='Escape'&&overlay.dataset.closable!=='false'){event.stopPropagation();overlay.dispatchEvent(new CustomEvent('asv2-dismiss'));}}
+  document.addEventListener('keydown',onKey,true);
+  build(box,close,overlay);
+  return {overlay,box,close};
+}
+function askBatchDecision(entry,work){
+  return new Promise(resolve=>{
+    reviewModal((box,close,overlay)=>{
+      const done=value=>{close();resolve(value);};
+      overlay.addEventListener('asv2-dismiss',()=>done('REVIEW'));
+      const blocked=work.unresolved.length+work.problems.length;
+      const icon=el('span',null,'asv2-validate-icon',box);icon.innerHTML=iconSvg(blocked?'circle-warning':'shield-check',22);
+      const titleId='asv2-validate-title';
+      const title=el('h3',blocked?copy.review.batch.blockedTitle:copy.review.batch.title(work.rows.length),null,box);
+      title.id=titleId;box.setAttribute('aria-labelledby',titleId);
+      if(blocked){
+        const list=el('ul',null,'asv2-validate-list',box);
+        if(work.unresolved.length)el('li',copy.review.batch.blockedZones(work.unresolved.length),null,list);
+        if(work.problems.length)el('li',copy.review.batch.blockedRules(work.problems.length),null,list);
+        if(work.rows.length)el('li',copy.review.toCheck(work.rows.length),null,list);
+      }else{
+        el('p',copy.review.batch.body,null,box);
+        if(work.rows.length>20)el('p',copy.review.batch.slow,'asv2-validate-note',box);
+      }
+      const actions=el('div',null,'asv2-validate-actions',box);
+      if(!blocked){
+        const mask=buttonWithIcon(copy.review.batch.maskAll,'shield-check','asv2-primary',actions,()=>done('MASK'));
+        buttonWithIcon(copy.review.batch.keepAll,'eye','asv2-secondary',actions,()=>done('KEEP'));
+        mask.focus();
+      }
+      const back=button(copy.review.batch.back,'asv2-secondary asv2-validate-back',actions,()=>done('REVIEW'));
+      if(blocked)back.focus();
+    });
+  });
+}
+async function applyBatchDecision(entry,action){
+  const total=remainingReviewWork(entry).rows.length;
+  let stopped=false,failed=false,done=0;
+  const modal=reviewModal((box,close,overlay)=>{
+    overlay.dataset.closable='false';
+    el('h3',action==='MASK'?copy.review.batch.maskAll:copy.review.batch.keepAll,null,box);
+    const label=el('p',copy.review.batch.progress(0,total),'asv2-validate-progress-label',box);
+    label.setAttribute('aria-live','polite');
+    const bar=el('div',null,'asv2-validate-progress',box);
+    const fill=el('span',null,null,bar);
+    const actions=el('div',null,'asv2-validate-actions',box);
+    const stop=buttonWithIcon(copy.review.batch.stop,'xmark','asv2-secondary',actions,()=>{
+      stopped=true;stop.disabled=true;
+    });
+    box.update=()=>{label.textContent=copy.review.batch.progress(Math.min(done+1,total),total);
+      fill.style.width=Math.round(done/Math.max(total,1)*100)+'%';};
+  });
+  entry.batchRunning=true;renderFooter(entry);
+  try{
+    for(let guard=0;guard<total+2&&!stopped;guard++){
+      const row=remainingReviewWork(entry).rows[0];
+      if(!row||entry.status!=='REVIEW_REQUIRED')break;
+      modal.box.update();
+      const before=entry.revision;
+      await decide(entry,row.id,action);
+      if(entry.revision===before){failed=true;break;}
+      done++;
+    }
+  }finally{
+    entry.batchRunning=false;modal.close();renderFooter(entry);
+  }
+  if(failed)return false;
+  if(stopped){drawerMessage(copy.review.batch.stopped,'is-info');return false;}
+  return true;
+}
 async function approveHumanReview(entry,control){
+  if(entry.commandBusy||entry.batchRunning)return;
   let review=entry.review;
   if(review?.humanVerifiedDeliverable===true){
     await downloadHumanVerified(entry);return;
+  }
+  let work=remainingReviewWork(entry);
+  if(work.count){
+    const choice=await askBatchDecision(entry,work);
+    if(choice==='REVIEW'){guideToPendingReview(entry);return;}
+    if(!await applyBatchDecision(entry,choice))return;
+    await loadCurrent(entry).catch(()=>{});
+    review=entry.review;
+    work=remainingReviewWork(entry);
+    if(work.count){guideToPendingReview(entry);return;}
   }
   if(review?.canApproveHumanVerification!==true){
     await loadCurrent(entry).catch(()=>{});
@@ -1921,8 +2024,7 @@ async function approveHumanReview(entry,control){
       guideToPendingReview(entry);return;
     }
   }
-  if(!await confirmAction('Valider votre vérification de ce document ?'))return;
-  control.disabled=true;
+  if(control?.isConnected)control.disabled=true;
   const checks={names:true,addresses:true,phones:true,identifiers:true,
     logos_images:true,visual_regions:true,original_vs_final_all_pages:true};
   try{
@@ -1934,7 +2036,7 @@ async function approveHumanReview(entry,control){
       await loadCurrent(entry).catch(()=>{});
       guideToPendingReview(entry);
     }else showError(error);
-    control.disabled=false;
+    if(control?.isConnected)control.disabled=false;
   }
 }
 async function undoLastReview(entry){
@@ -2131,7 +2233,10 @@ async function renderPreview(entry){
     if(kind==='origin'&&entry.pageOnlyLocation&&entry.format!=='pdf')
       el('p','Ce passage ne peut pas être situé avec certitude dans cet aperçu. L’original est ouvert sans surlignage.',
         'asv2-geometry-note',viewerBody);
-    if(source.format==='pdf')await renderPdf(entry,source.bytes,kind,serial);
+    if(source.format==='pdf'){
+      el('p','Affichage du PDF…','asv2-loading asv2-pdf-loading',viewerBody);
+      await renderPdf(entry,source.bytes,kind,serial);
+    }
     else if(source.format==='docx'){
       el('p','Cet aperçu Word est indicatif : sa mise en page peut différer du fichier téléchargé.',
         'asv2-geometry-note',viewerBody);
@@ -2146,7 +2251,7 @@ async function renderPreview(entry){
       }else renderCsv(source.bytes);
     }
     else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
-  }catch(error){if(serial===state.previewSerial){if(!viewerBody.children.length)el('p',errorText(error),'asv2-error',viewerBody);else drawerMessage(errorText(error),'is-error');}}
+  }catch(error){if(serial===state.previewSerial){viewerBody.querySelectorAll('.asv2-loading').forEach(node=>node.remove());if(!viewerBody.children.length)el('p',errorText(error),'asv2-error',viewerBody);else drawerMessage(errorText(error),'is-error');}}
 }
 async function renderPdfCompare(entry,serial){
   if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
@@ -2260,9 +2365,15 @@ async function renderOtherCompare(entry,serial){
 async function renderPdf(entry,bytes,kind,serial){
   if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
-  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(bytes),enableScripting:false}).promise;
+  const task=window.pdfjsLib.getDocument({data:new Uint8Array(bytes),enableScripting:false});
+  let timer=null;
+  const pdf=await Promise.race([task.promise,new Promise((_,reject)=>{
+    timer=setTimeout(()=>{task.destroy();reject(new Error('L’aperçu PDF met trop de temps à s’afficher. Réessayez, ou téléchargez le fichier.'));},25000);
+  })]).finally(()=>clearTimeout(timer));
   if(serial!==state.previewSerial){pdf.destroy();return;}
   state.previewCleanup=()=>pdf.destroy();
+  viewerBody.querySelector('.asv2-pdf-loading')?.remove();
+  if(!pdf.numPages){el('p','Ce PDF ne contient aucune page affichable.','asv2-preview-unavailable',viewerBody);return;}
   entry.page=Math.min(Math.max(1,entry.page),pdf.numPages);
   const nav=el('div',null,'asv2-pdf-nav',viewerBody);
   const prev=iconButton('arrow-left','Page précédente','asv2-secondary',nav,()=>{entry.page--;draw().catch(showError);});
