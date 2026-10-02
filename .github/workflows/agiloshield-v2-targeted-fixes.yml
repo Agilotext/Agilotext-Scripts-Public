@@ -33,6 +33,8 @@ jobs:
           node --check agiloshield-v2-lists.js
           node --check agiloshield-v2-location.js
           node --check agiloshield-v2-auth.js
+          node --check agiloshield-v2-copy.js
+          node --check agiloshield-v2-icons.js
           grep -q "buttonWithIcon(maskActive" agiloshield-v2-embed.js
       - name: Existing front contract tests
         run: |
@@ -40,6 +42,7 @@ jobs:
           node tests/agiloshield-v2-lists.test.mjs
           node tests/agiloshield-v2-location.test.mjs
           node tests/agiloshield-v2-auth.test.mjs
+          node tests/agiloshield-v2-copy.test.mjs
       - name: Targeted UX invariants
         run: |
           ! grep -q "Ajouter un masquage" agiloshield-v2-embed.js
@@ -55,7 +58,7 @@ jobs:
           grep -q "asv2-mask-marker" agiloshield-v2-embed.js
           grep -q "previewFocus" agiloshield-v2-embed.js
           grep -q "target.removed=true" agiloshield-v2-embed.js
-          grep -q "Un problème est survenu." agiloshield-v2-embed.js
+          grep -q "Un problème est survenu." agiloshield-v2-copy.js
       - name: CSS tokens (no lateral border, no stray hex, radius from tokens)
         run: node tests/css-tokens.check.mjs
       - name: No hard-coded colors in JS inline styles

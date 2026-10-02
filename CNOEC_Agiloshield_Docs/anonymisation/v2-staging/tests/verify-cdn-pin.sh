@@ -1,18 +1,24 @@
 #!/bin/sh
-# Compare Git blob, raw GitHub and jsDelivr for one immutable pin.
+# Compare Git blob, raw GitHub and jsDelivr for every file served by one immutable pin.
 # Usage: tests/verify-cdn-pin.sh <full-sha>
 set -eu
 SHA="${1:?commit sha required}"
-FILE="CNOEC_Agiloshield_Docs/anonymisation/v2-staging/agiloshield-v2-embed.js"
+DIR="CNOEC_Agiloshield_Docs/anonymisation/v2-staging"
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/../../../.." && pwd)
 cd "$ROOT"
-git show "${SHA}:${FILE}" > /tmp/agsh-git-embed.js
-curl -fsSL "https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/${SHA}/${FILE}" -o /tmp/agsh-raw-embed.js
-curl -fsSL "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${SHA}/${FILE}" -o /tmp/agsh-jsd-embed.js
-node --check /tmp/agsh-git-embed.js
-node --check /tmp/agsh-raw-embed.js
-node --check /tmp/agsh-jsd-embed.js
-cmp /tmp/agsh-git-embed.js /tmp/agsh-raw-embed.js
-cmp /tmp/agsh-git-embed.js /tmp/agsh-jsd-embed.js
-shasum -a 256 /tmp/agsh-git-embed.js /tmp/agsh-raw-embed.js /tmp/agsh-jsd-embed.js
+TMP=$(mktemp -d)
+for NAME in agiloshield-v2-embed.js agiloshield-v2-client.js agiloshield-v2-lists.js \
+  agiloshield-v2-location.js agiloshield-v2-auth.js agiloshield-v2-copy.js \
+  agiloshield-v2-icons.js agiloshield-v2.css; do
+  FILE="${DIR}/${NAME}"
+  git cat-file -e "${SHA}:${FILE}" 2>/dev/null || continue
+  git show "${SHA}:${FILE}" > "$TMP/git"
+  curl -fsSL "https://raw.githubusercontent.com/Agilotext/Agilotext-Scripts-Public/${SHA}/${FILE}" -o "$TMP/raw"
+  curl -fsSL "https://cdn.jsdelivr.net/gh/Agilotext/Agilotext-Scripts-Public@${SHA}/${FILE}" -o "$TMP/jsd"
+  case "$NAME" in *.js) cp "$TMP/jsd" "$TMP/check.mjs"; node --check "$TMP/check.mjs";; esac
+  cmp "$TMP/git" "$TMP/raw"
+  cmp "$TMP/git" "$TMP/jsd"
+  echo "ok ${NAME} $(shasum -a 256 "$TMP/git" | cut -c1-16)"
+done
+rm -rf "$TMP"
 echo "CDN pin ${SHA}: identical and parseable"
