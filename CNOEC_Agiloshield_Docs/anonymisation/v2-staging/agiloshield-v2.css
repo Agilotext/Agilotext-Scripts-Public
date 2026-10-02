@@ -279,14 +279,16 @@ body.asv2-policy-open .main-wrapper,body.asv2-drawer-open .main-wrapper,body.asv
 #agiloshield-v2-staging .asv2-panel{position:absolute;inset:0;width:100vw;height:100dvh;display:flex;flex-direction:column;background:var(--asv2-white);box-shadow:none;transform:translateX(100%);transition:transform .25s;overflow:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
 #agiloshield-v2-staging .asv2-drawer.is-open .asv2-panel{transform:translateX(0)}
 body.asv2-drawer-open{overflow:hidden}
-#agiloshield-v2-staging .asv2-drawer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:16px 22px;background:var(--asv2-white);border-bottom:1px solid var(--asv2-line);flex:none}
-#agiloshield-v2-staging .asv2-drawer-heading{min-width:0;flex:1}
-#agiloshield-v2-staging .asv2-drawer-head-actions{display:flex;align-items:flex-start;gap:12px;flex:none}
-#agiloshield-v2-staging .asv2-drawer-downloads{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;max-width:min(60vw,680px)}
+#agiloshield-v2-staging .asv2-drawer-head{display:grid;grid-template-columns:minmax(0,1fr) auto auto 40px;align-items:center;gap:8px 10px;padding:10px 14px;background:var(--asv2-white);border-bottom:1px solid var(--asv2-line);flex:none}
+#agiloshield-v2-staging .asv2-drawer-heading{min-width:0;grid-column:1}
+#agiloshield-v2-staging .asv2-review-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;justify-content:flex-end}
+#agiloshield-v2-staging .asv2-drawer-head-actions{display:flex;align-items:center;gap:6px;flex:none}
+#agiloshield-v2-staging .asv2-drawer-downloads{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:nowrap}
 #agiloshield-v2-staging .asv2-drawer-downloads button{font-size:12px;padding:7px 10px}
+#agiloshield-v2-staging .asv2-close{grid-column:4;justify-self:end}
 #agiloshield-v2-staging .asv2-key-guidance{flex-basis:100%;text-align:right;color:var(--asv2-muted);font-size:11px}
 #agiloshield-v2-staging .asv2-overline{display:block;color:var(--asv2-blue);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-#agiloshield-v2-staging .asv2-drawer-title{font-size:21px;margin:3px 0;overflow-wrap:anywhere}
+#agiloshield-v2-staging .asv2-drawer-title{font-size:16px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #agiloshield-v2-staging .asv2-meta{font-size:12px;color:var(--asv2-muted);margin:0}
 #agiloshield-v2-staging .asv2-close{display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:var(--asv2-r-md);background:var(--asv2-blue-tint);color:var(--asv2-ink);font-size:24px;width:38px;height:38px;line-height:1;transition:background .15s,color .15s}
 #agiloshield-v2-staging .asv2-close:hover{background:var(--asv2-blue-tint);color:var(--asv2-ink)}
@@ -963,4 +965,78 @@ body.asv2-drawer-open{overflow:hidden}
 #agiloshield-v2-staging .asv2-viewer-toolbar:empty{display:none}
 @media(prefers-reduced-motion:reduce){
   #agiloshield-v2-staging .asv2-review-progress-bar i{transition:none}
+}
+
+/* Header: title on its row, tools below, close pinned top-right. */
+#agiloshield-v2-staging .asv2-drawer-head{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto auto 40px;
+  grid-template-areas:
+    "title title title close"
+    "tools tools actions close";
+  align-items:center;
+  gap:8px 10px;
+  padding:10px 14px;
+  min-height:0;
+  justify-content:stretch;
+}
+#agiloshield-v2-staging .asv2-drawer-heading{
+  grid-area:title;
+  max-width:none;
+  flex:none;
+  min-width:0;
+}
+#agiloshield-v2-staging .asv2-drawer-title{
+  font-size:15px;
+  font-weight:600;
+  margin:0;
+  line-height:1.3;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#agiloshield-v2-staging .asv2-meta{
+  display:inline;
+  margin:0 8px 0 0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#agiloshield-v2-staging .asv2-drawer-status{display:inline-flex;vertical-align:middle}
+#agiloshield-v2-staging .asv2-review-tools{
+  grid-area:tools;
+  margin-left:0;
+  justify-content:flex-start;
+  flex-wrap:wrap;
+}
+#agiloshield-v2-staging .asv2-drawer-head-actions{
+  grid-area:actions;
+  width:auto;
+  margin-left:0;
+  flex-direction:row;
+}
+#agiloshield-v2-staging .asv2-close{
+  grid-area:close;
+  grid-column:auto;
+  justify-self:end;
+  align-self:start;
+}
+#agiloshield-v2-staging .asv2-text-hit{
+  position:absolute;
+  pointer-events:none;
+  border-radius:var(--asv2-r-sm);
+  background:color-mix(in srgb,var(--asv2-warn) 38%,transparent);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--asv2-warn) 70%,transparent);
+}
+@media(max-width:700px){
+  #agiloshield-v2-staging .asv2-drawer-head{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 40px;
+    grid-template-areas:
+      "title close"
+      "tools tools"
+      "actions actions";
+    align-items:center;
+  }
+  #agiloshield-v2-staging .asv2-drawer-heading{max-width:none}
 }

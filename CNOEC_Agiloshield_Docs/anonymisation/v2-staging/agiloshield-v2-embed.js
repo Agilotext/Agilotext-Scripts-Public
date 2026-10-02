@@ -473,12 +473,11 @@ const backdrop=button('Fermer le panneau','asv2-backdrop',drawer,closeDrawer);ba
 const panel=el('aside',null,'asv2-panel',drawer);panel.setAttribute('role','dialog');panel.setAttribute('aria-modal','true');
 panel.setAttribute('aria-labelledby','asv2-drawer-title');
 const drawerHead=el('header',null,'asv2-drawer-head',panel);
-const close=button('×','asv2-close',drawerHead,()=>closeDrawer());close.setAttribute('aria-label','Fermer le document');
 const drawerHeading=el('div',null,'asv2-drawer-heading',drawerHead);
 el('span','AgiloShield','asv2-overline',drawerHeading);
 const title=el('h2','Document','asv2-drawer-title',drawerHeading);title.id='asv2-drawer-title';
 const meta=el('p','', 'asv2-meta',drawerHeading);
-const drawerStatus=el('span',null,null,drawerHeading);
+const drawerStatus=el('span',null,'asv2-drawer-status',drawerHeading);
 const reviewTools=el('div',null,'asv2-review-tools',drawerHead);
 const drawerHeadActions=el('div',null,'asv2-drawer-head-actions',drawerHead);
 const drawerDownloads=el('div',null,'asv2-drawer-downloads',drawerHeadActions);
@@ -487,6 +486,7 @@ const drawerRemove=iconButton('trash','Retirer ce document de cet écran','asv2-
   if(cur)removeEntryFromSession(cur);
   else closeDrawer();
 });
+const close=button('×','asv2-close',drawerHead,()=>closeDrawer());close.setAttribute('aria-label','Fermer le document');
 const drawerNotice=el('div','', 'asv2-drawer-notice',panel);drawerNotice.setAttribute('role','status');
 drawerNotice.setAttribute('aria-live','polite');
 const tabs=el('div',null,'asv2-mobile-tabs',panel);
@@ -1483,13 +1483,26 @@ function closeDrawer(){
   if(state.lastFocus?.isConnected)state.lastFocus.focus();
 }
 drawer.addEventListener('keydown',event=>{
-  if(event.key==='Escape'){event.preventDefault();closeDrawer();return;}
+  const current=activeEntry();
+  if(event.key==='Escape'){
+    event.preventDefault();
+    if(current&&(current.manualMaskActive||current.target)){
+      current.manualMaskActive=false;current.target=null;
+      drawerMessage('');renderPreview(current).catch(showError);
+      return;
+    }
+    closeDrawer();return;
+  }
+  if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){
+    event.preventDefault();
+    if(current&&state.drawerOpen)undoLastReview(current).catch(showError);
+    return;
+  }
   const typing=event.target?.closest?.('input,textarea,select,[contenteditable="true"]');
   const confirming=panel.querySelector('.asv2-confirm');
   if(!typing&&!confirming&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
     const letter=event.key.length===1?event.key.toLowerCase():'';
     if(letter==='j'||letter==='k'||letter==='m'||letter==='v'){
-      const current=activeEntry();
       if(current&&state.drawerOpen){event.preventDefault();handleReviewShortcut(current,letter);return;}
     }
   }
@@ -1577,7 +1590,7 @@ function addPassLocate(parent,entry,current){
 }
 function renderShortcutHelp(parent){
   const row=el('div',null,'asv2-kbd',parent);
-  for(const [keys,label] of [[['J','K'],'suivant'],[['M'],'masquer'],[['V'],'laisser visible'],[['Échap'],'fermer']]){
+  for(const [keys,label] of [[['J','K'],'suivant'],[['M'],'masquer'],[['V'],'laisser visible'],[['⌘Z'],'annuler'],[['Échap'],'fermer']]){
     const span=el('span',null,null,row);
     for(const key of keys){el('kbd',key,null,span);span.append(' ');}
     span.append(label);
@@ -1628,8 +1641,9 @@ function renderDrawer(entry){
       keyControl.title='Télécharger la clé de pseudonymisation';
     }
   }
-  if(entry.status==='REVIEW_REQUIRED')drawerMessage('');
-  else drawerMessage(safeStatus(entry.status),
+  if(entry.status==='REVIEW_REQUIRED'){
+    if(!drawerNotice.classList.contains('is-error'))drawerMessage('');
+  }else drawerMessage(safeStatus(entry.status),
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='TIMED_OUT'?'is-warning':'');
   renderIssues(entry);renderFooter(entry);
@@ -1882,20 +1896,39 @@ async function approveHumanReview(entry,control){
     control.disabled=false;
   }
 }
-async function decide(entry,occurrenceId,action){
+async function undoLastReview(entry){
+  if(!entry||entry.commandBusy)return;
+  const last=(entry.undoStack||[]).pop();
+  if(!last){notify('Rien à annuler.');return;}
+  if(last.kind==='decide'&&last.occurrenceId){
+    const opposite=last.action==='MASK'?'KEEP':'MASK';
+    await decide(entry,last.occurrenceId,opposite,{fromUndo:true});
+    return;
+  }
+  notify('L’annulation d’une zone tracée n’est pas encore disponible.');
+}
+async function decide(entry,occurrenceId,action,{fromUndo=false}={}){
   if(entry.commandBusy)return;
-  if(!await confirmAction(copy.reviewAction[action]+' uniquement dans le passage choisi ?'))return;
   entry.commandBusy=true;renderIssues(entry);
   try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
-    action,reason:'review_explicit'});
+    action,reason:fromUndo?'review_undo':'review_explicit'});
     if(!receipt?.revision)throw new Error('Réponse de masquage incomplète');
-    await apply(entry,receipt.revision);}catch(error){
+    await apply(entry,receipt.revision);
+    if(!fromUndo){
+      entry.undoStack=entry.undoStack||[];
+      entry.undoStack.push({kind:'decide',occurrenceId,action});
+    }
+  }catch(error){
       if(error?.status===409||error?.status===422)await loadCurrent(entry).catch(()=>{});
       showError(error);
     }
   finally{entry.commandBusy=false;}
 }
 async function apply(entry,revision){
+  const restore={
+    manualMaskActive:entry.manualMaskActive,target:entry.target,focusId:entry.focusId,
+    pageOnlyLocation:entry.pageOnlyLocation,locateNeedle:entry.locateNeedle,previewKind:entry.previewKind
+  };
   entry.status='PROCESSING';entry.hasCurrentResult=false;
   entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;
   entry.manualMaskActive=false;
@@ -1907,6 +1940,7 @@ async function apply(entry,revision){
     await pollEntry(entry);
   }catch(error){
     await loadCurrent(entry).catch(()=>{});
+    Object.assign(entry,restore);
     throw error;
   }finally{
     entry.commandBusy=false;
@@ -1917,11 +1951,12 @@ function focusOccurrence(entry,row,{pageOnly=false}={}){
   const location=originalPdfLocation(entry,row);
   const previousKind=entry.previewKind;
   if(entry.format==='pdf'&&location.page)entry.page=location.page;
-  entry.focusId=pageOnly?null:row.id;
-  entry.pageOnlyLocation=pageOnly?(location.page?'page':'unknown'):null;
-  entry.previewKind='origin';
+  entry.focusId=row.id;
+  entry.locateNeedle=String(row.text||row.surface||'').trim();
+  entry.pageOnlyLocation=(pageOnly||location.kind!=='exact')?(location.page?'page':'unknown'):null;
+  if(entry.previewKind!=='origin')entry.previewKind='origin';
   setMobileTab('doc');
-  const fast=entry.format==='pdf'&&previousKind==='origin'&&!pageOnly&&
+  const fast=entry.format==='pdf'&&previousKind==='origin'&&
     state.previewFocus?.entryKey===entry.key&&state.previewFocus?.kind==='origin';
   if(fast)state.previewFocus.run().catch(showError);
   else renderPreview(entry).catch(showError);
@@ -1999,7 +2034,7 @@ async function renderPreview(entry){
         entry.manualMaskActive=!entry.manualMaskActive;
         entry.target=null;
         if(entry.manualMaskActive){
-          if(entry.previewKind==='compare')entry.previewKind='anon';
+          entry.previewKind='origin';
           setMobileTab('doc');
           renderPreview(entry).catch(showError);
           drawerMessage('Tracez la zone à masquer directement sur le document affiché.','is-info');
@@ -2205,30 +2240,13 @@ async function renderPdf(entry,bytes,kind,serial){
       copy.review.zoneInstruction:'';
     toolInstruction.hidden=!toolInstruction.textContent;
   }
-  if(kind==='origin'&&entry.status==='REVIEW_REQUIRED'){
-    const maskActive=Boolean(entry.target||entry.manualMaskActive);
-    buttonWithIcon(maskActive?'Zone de masquage active · Annuler':'Masquer une zone',
-      'select-area','asv2-secondary asv2-manual-mask-btn'+(maskActive?' is-active':''),nav,()=>{
-        if(maskActive){
-          entry.target=null;
-          entry.manualMaskActive=false;
-          drawerMessage(null);
-          updateToolInstruction();
-          draw().catch(showError);
-        }else{
-          entry.manualMaskActive=true;
-          drawerMessage('Tracez la zone rectangulaire à masquer sur cette page.','is-info');
-          updateToolInstruction();
-          draw().catch(showError);
-        }
-      });
-  }
+  if(kind==='origin'&&entry.status==='REVIEW_REQUIRED') updateToolInstruction();
   updateToolInstruction();
   const pageBox=el('div',null,'asv2-page-scroll',viewerBody);
   if(kind==='origin'&&entry.pageOnlyLocation)
     el('p',entry.pageOnlyLocation==='page'?
-      'Page connue, emplacement exact non fourni : aucun surlignage approximatif.':
-      'La page et la position exacte de ce passage ne sont pas fournies. L’original est ouvert sans surlignage.',
+      'Page connue. Les mots du passage sont surlignés dans le texte.':
+      'La page et la position exacte de ce passage ne sont pas fournies. L’original est ouvert.',
       'asv2-geometry-note',viewerBody);
   async function draw(){
     if(serial!==state.previewSerial)return;
@@ -2251,7 +2269,7 @@ async function renderPdf(entry,bytes,kind,serial){
     const maskRows=kind==='origin'?(entry.review?.occurrences||[]).filter(row=>
       (row.action||row.privacyAction)==='MASK'&&originalPdfLocation(entry,row).kind==='exact'&&
       originalPdfLocation(entry,row).page===entry.page):[];
-    const shouldOverlay=Boolean(entry.pendingMask)||Boolean(entry.focusId||entry.target||entry.manualMaskActive)||
+    const shouldOverlay=Boolean(entry.pendingMask)||Boolean(entry.focusId||entry.locateNeedle||entry.target||entry.manualMaskActive)||
       maskRows.length>0;
     if(!shouldOverlay)return;
     const overlay=el('div',null,'asv2-page-overlay',wrap);
@@ -2294,8 +2312,16 @@ async function renderPdf(entry,bytes,kind,serial){
         pageBox.scrollTop+=mark.top-box.top-pageBox.clientHeight/2+mark.height/2;
         pageBox.scrollLeft+=mark.left-box.left-pageBox.clientWidth/2+mark.width/2;
       });
-      if(!regions.length)el('p',copy.review.regionUnknown,
-        'asv2-geometry-note',pageBox);
+      if(!regions.length){
+        const needle=entry.locateNeedle||entry.review?.occurrences?.find(item=>String(item.id)===String(entry.focusId))?.text||'';
+        const textHit=await highlightPdfText(page,viewport,overlay,needle);
+        if(textHit)requestAnimationFrame(()=>{
+          if(serial!==state.previewSerial||!textHit.isConnected)return;
+          const box=pageBox.getBoundingClientRect(),mark=textHit.getBoundingClientRect();
+          pageBox.scrollTop+=mark.top-box.top-pageBox.clientHeight/2+mark.height/2;
+        });
+        else el('p',copy.review.regionUnknown,'asv2-geometry-note',pageBox);
+      }
     }
     const canDraw=canMask&&((entry.target&&Number(entry.target.page)===entry.page)||entry.manualMaskActive);
     if(canDraw){
@@ -2308,6 +2334,30 @@ async function renderPdf(entry,bytes,kind,serial){
   if(serial===state.previewSerial&&state.active===entry.key){
     state.previewFocus={entryKey:entry.key,kind,run:draw};
   }
+}
+async function highlightPdfText(page,viewport,overlay,needle){
+  const n=String(needle||'').trim().toLowerCase();
+  if(!n||n.length<3)return null;
+  const tokens=n.split(/\s+/).filter(token=>token.length>=3);
+  if(!tokens.length)return null;
+  let content; try{content=await page.getTextContent();}catch(_){return null;}
+  const transform=window.pdfjsLib?.Util?.transform;
+  if(typeof transform!=='function')return null;
+  let first=null;
+  for(const item of content.items||[]){
+    const str=String(item.str||'').trim().toLowerCase();
+    if(str.length<3||!tokens.some(token=>str===token||str.includes(token)||token.includes(str)))continue;
+    const tx=transform(viewport.transform,item.transform);
+    const marker=el('div',null,'asv2-text-hit',overlay);
+    const height=Math.hypot(tx[2],tx[3])||12;
+    const width=(Number(item.width)||0)*viewport.scale||Math.max(str.length*height*0.5,8);
+    marker.style.left=tx[4]+'px';
+    marker.style.top=(tx[5]-height)+'px';
+    marker.style.width=width+'px';
+    marker.style.height=height+'px';
+    first=first||marker;
+  }
+  return first;
 }
 function bindDrawing(entry,overlay,base,serial){
   overlay.classList.add('is-drawing');let start=null,ghost=null;
@@ -2332,10 +2382,11 @@ function bindDrawing(entry,overlay,base,serial){
       Math.max(start[0],end[0]),Math.max(start[1],end[1])];
     start=null;ghost?.remove();ghost=null;
     if(rect[2]-rect[0]<4||rect[3]-rect[1]<4)return;
+    if(entry.commandBusy)return;
     const target=entry.target;
     if(target){
-      if(!await confirmAction('Masquer uniquement la zone tracée pour ce passage, puis vérifier à nouveau le document ?'))return;
       const roundedRect=rect.map(value=>Math.round(value*100)/100);
+      entry.commandBusy=true;
       try{
         entry.pendingMask={page:Number(entry.page),rect:roundedRect,kind:'linked'};
         const receipt=await api.addLinkedRegion(entry.jobId,entry.digest,{revision:entry.revision,
@@ -2344,16 +2395,21 @@ function bindDrawing(entry,overlay,base,serial){
           documentId:entry.review.documentId,reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
         entry.target=null;await apply(entry,receipt.revision);
       }catch(error){entry.pendingMask=null;showError(error);}
+      finally{entry.commandBusy=false;}
     }else if(entry.manualMaskActive){
-      if(!await confirmAction('Masquer définitivement la zone tracée sur cette page et mettre à jour le document ?'))return;
       const roundedRect=rect.map(value=>Math.round(value*100)/100);
+      entry.commandBusy=true;
       try{
         entry.pendingMask={page:Number(entry.page),rect:roundedRect,kind:'manual'};
         const receipt=await api.addManualRegion(entry.jobId,entry.digest,{revision:entry.revision,
           page:Number(entry.page),rect:roundedRect,
           reason:'ZONE_MASQUEE_MANUELLEMENT'});
-        entry.manualMaskActive=false;await apply(entry,receipt.revision);
+        entry.manualMaskActive=false;
+        await apply(entry,receipt.revision);
+        entry.undoStack=entry.undoStack||[];
+        entry.undoStack.push({kind:'region'});
       }catch(error){entry.pendingMask=null;showError(error);}
+      finally{entry.commandBusy=false;}
     }
   };
   overlay.onpointercancel=()=>{start=null;ghost?.remove();ghost=null;};

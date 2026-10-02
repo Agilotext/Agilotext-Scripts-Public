@@ -38,7 +38,7 @@ export const COPY = Object.freeze({
     validate: 'Valider ce document',
     othersMasked: 'Autres données masquées',
     safetyLine: 'Vous validez le document après avoir vérifié chaque passage.',
-    shortcuts: 'J suivant · K précédent · M masquer · V laisser visible · Échap fermer',
+    shortcuts: 'J suivant · K précédent · M masquer · V laisser visible · ⌘Z annuler · Échap fermer',
     readyToValidate: 'Document prêt à valider',
   },
   errors: {

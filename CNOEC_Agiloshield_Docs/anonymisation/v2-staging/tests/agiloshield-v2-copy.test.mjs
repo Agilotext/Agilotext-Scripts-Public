@@ -32,4 +32,10 @@ for (const text of strings) {
   assert.ok(!text.includes('—'), 'em dash in UI text: ' + text);
   assert.ok(!/Job #/.test(text), 'job id shown to users: ' + text);
 }
+const embed = fs.readFileSync(path.join(root, 'agiloshield-v2-embed.js'), 'utf8');
+assert.ok(!embed.includes('Masquer définitivement la zone tracée'), 'zone confirm popup removed');
+assert.ok(embed.includes('undoLastReview'), 'undo helper present');
+assert.ok(embed.includes("event.key.toLowerCase()==='z'"), 'cmd-z shortcut present');
+assert.ok(embed.includes('highlightPdfText'), 'text locate highlight present');
+assert.ok(COPY.review.shortcuts.includes('⌘Z'), 'shortcut legend includes undo');
 console.log('copy: PASS');
