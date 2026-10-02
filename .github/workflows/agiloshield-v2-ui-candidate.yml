@@ -41,3 +41,20 @@ jobs:
           ! grep -q "Valider ma vérification" agiloshield-v2-embed.js
           grep -q "Masquer une zone" agiloshield-v2-embed.js
           grep -q "Aucune conversion automatique REVIEW" docs/AGILOSHIELD_V2_UI_CHANGELOG.md
+      - name: CSS integrity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          css=Path("agiloshield-v2.css").read_text(encoding="utf-8")
+          assert css.count("{")==css.count("}"), "Unbalanced CSS braces"
+          for selector in [
+              ".asv2-review-summary",
+              ".asv2-drawer-title-row",
+              ".asv2-drop-visual",
+              ".asv2-region-marker[data-entity",
+              "@media(max-width:760px)",
+              "@media(prefers-reduced-motion:reduce)",
+          ]:
+              assert selector in css, f"Missing critical selector: {selector}"
+          print("CSS integrity: PASS")
+          PY
