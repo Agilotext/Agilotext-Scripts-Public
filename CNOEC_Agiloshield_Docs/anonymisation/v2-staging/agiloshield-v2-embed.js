@@ -1375,6 +1375,18 @@ async function pollEntry(entry){
     await new Promise(resolve=>setTimeout(resolve,interval));
   }}finally{entry.polling=false;}
 }
+function extractJobError(job){
+  if(!job)return null;
+  if(typeof job.error==='string')return job.error;
+  if(typeof job.errorMessage==='string')return job.errorMessage;
+  if(typeof job.message==='string')return job.message;
+  if(typeof job.reason==='string')return job.reason;
+  if(typeof job.errorCode==='string')return job.errorCode;
+  if(job.error&&typeof job.error==='object'){
+    return job.error.message||job.error.code||job.error.detail||JSON.stringify(job.error);
+  }
+  return null;
+}
 async function loadCurrent(entry){
   if(!currentAccountEntry(entry))return;
   const job=await api.status(entry.jobId);assertDigest(entry,job);
@@ -1397,7 +1409,12 @@ async function loadCurrent(entry){
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
   if(isTerminal(currentStatus))entry.file=null;
-  entry.error=currentStatus==='FAILED'?job.error?.code||job.errorCode||job.reason||null:null;
+  entry.error=currentStatus==='FAILED'?extractJobError(job):null;
+  if(currentStatus==='FAILED'){
+    console.error('[AgiloShield V2] Le traitement du document a échoué côté serveur :', {
+      jobId:entry.jobId, name:entry.name, status:currentStatus, error:entry.error, rawJob:job
+    });
+  }
   entry.mode=job.processingMode||entry.mode;
   entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
   entry.name=job.fileName||job.filename||job.originalFilename||entry.name;
@@ -1482,7 +1499,7 @@ function renderDrawer(entry){
         'asv2-key-guidance',drawerDownloads);
     }
   }
-  drawerMessage(entry.error&&entry.status!=='FAILED'?entry.error:({
+  drawerMessage(entry.status==='FAILED'?(entry.error?'Traitement impossible : '+entry.error:'Traitement impossible. Aucun résultat protégé n’est certifié.'):({
     LOCAL:'Original non protégé — des données sensibles peuvent être visibles.',
     UPLOADING:'Envoi du document en cours…',PENDING:copy.status.PENDING,
     PROCESSING:copy.status.PROCESSING,
@@ -1490,15 +1507,25 @@ function renderDrawer(entry){
     REVIEW_REQUIRED:'À vérifier'+(pendingCount?' · '+pendingCount+
       ' passage'+(pendingCount>1?'s':'')+' à confirmer':'')+
       '. Des données peuvent rester visibles.',
-    FAILED:'Traitement impossible. Aucun résultat protégé n’est certifié.',
     TIMED_OUT:'Le suivi est interrompu. Le traitement peut encore être en cours.'
-  })[entry.status]||safeStatus(entry.status),
+  })[entry.status]||(entry.error||safeStatus(entry.status)),
     entry.status==='FAILED'||entry.status==='ERROR'?'is-error':
     entry.status==='REVIEW_REQUIRED'||entry.status==='TIMED_OUT'?'is-warning':'');
   renderIssues(entry);renderFooter(entry);
 }
 function renderIssues(entry){
   clear(issuePane);el('h3','Vérifier le document',null,issuePane);
+  if(entry.status==='FAILED'){
+    const errBox=el('div',null,'asv2-issue asv2-error-box',issuePane);
+    el('strong','Échec du traitement serveur',null,errBox);
+    el('p',entry.error?
+      'Erreur retournée par le moteur d’analyse : '+entry.error:
+      'Le moteur de masquage n’a pas pu certifier ce document. Réessayez ou déposez un format alternatif.',
+      'asv2-error-detail',errBox);
+    buttonWithIcon('Retirer ce document','trash','asv2-secondary asv2-remove-btn',errBox,
+      ()=>removeEntryFromSession(entry));
+    return;
+  }
   el('p','Conserver laisse ce passage visible. Masquer le protège. Chaque décision vise un seul passage.',
     'asv2-muted',issuePane);
   const support=el('details',null,'asv2-review-support',issuePane);
@@ -2101,7 +2128,7 @@ async function renderPreview(entry){
     if((kind==='anon'||kind==='compare')&&!canPreviewResult(entry)&&
         !['xlsx','pptx'].includes(entry.format)){
       clear(viewerBody);
-      el('p',entry.status==='FAILED'?'Le traitement a échoué. Aucun résultat protégé n’est disponible.':
+      el('p',entry.status==='FAILED'?(entry.error?'Échec du traitement : '+entry.error:'Le traitement a échoué. Aucun résultat protégé n’est disponible.'):
         isTerminal(entry.status)?'Aperçu du résultat indisponible pour cette révision. Vous pouvez ouvrir l’original volontairement.':
           'Le résultat protégé apparaîtra ici après le traitement.',
         'asv2-preview-unavailable',viewerBody);
