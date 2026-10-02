@@ -23,11 +23,13 @@ jobs:
           node-version: '22'
       - name: JavaScript syntax
         run: |
+          set -euo pipefail
           node --check agiloshield-v2-embed.js
           node --check agiloshield-v2-client.js
           node --check agiloshield-v2-lists.js
           node --check agiloshield-v2-location.js
           node --check agiloshield-v2-auth.js
+          grep -q "buttonWithIcon(maskActive" agiloshield-v2-embed.js
       - name: Existing front contract tests
         run: |
           node tests/agiloshield-v2-client.test.mjs
@@ -45,6 +47,7 @@ jobs:
           ! grep -q "Reprendre après connexion" agiloshield-v2-embed.js
           ! grep -q "Télécharger le résultat non vérifié" agiloshield-v2-embed.js
           grep -q "Masquer une zone" agiloshield-v2-embed.js
+          grep -q "buttonWithIcon(maskActive" agiloshield-v2-embed.js
           grep -q "asv2-mask-marker" agiloshield-v2-embed.js
           grep -q "previewFocus" agiloshield-v2-embed.js
           grep -q "target.removed=true" agiloshield-v2-embed.js
