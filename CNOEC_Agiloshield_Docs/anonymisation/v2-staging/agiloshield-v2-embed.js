@@ -45,7 +45,7 @@ const copy = Object.freeze({
   issueReason:{FIRST_ROW_PER_REVIEW:'La première ligne demande une vérification.',
     LIST_EXCLUSION_REVIEW:'Une règle particulière contredit un masquage nécessaire.',
     LIST_INCLUSION_UNLOCATED:'Un passage à masquer n’a pas été localisé avec certitude.'},
-  genericError:'Cette action n’a pas abouti. Actualisez le document ou réessayez.',
+  genericError:'Un problème est survenu.',
 });
 const iconsBase = new URL('./assets/nucleo/', import.meta.url);
 const state = {preferencesReady:false, currentPolicy:null, accountRef:null, accountEpoch:0,
@@ -1516,32 +1516,24 @@ function renderDrawer(entry){
   renderIssues(entry);renderFooter(entry);
 }
 function renderIssues(entry){
-  clear(issuePane);el('h3','Vérifier le document',null,issuePane);
+  clear(issuePane);
   if(entry.status==='FAILED'){
     const errBox=el('div',null,'asv2-issue asv2-error-box',issuePane);
-    el('strong','Échec du traitement serveur',null,errBox);
-    el('p',entry.error?
-      'Erreur retournée par le moteur d’analyse : '+entry.error:
-      'Le moteur de masquage n’a pas pu certifier ce document. Réessayez ou déposez un format alternatif.',
+    el('strong','Traitement impossible',null,errBox);
+    el('p','Le document n’a pas pu être traité. Retirez-le puis réessayez.',
       'asv2-error-detail',errBox);
-    if(entry.jobId)el('p','Identifiant du job côté serveur : #'+entry.jobId,'asv2-job-ref',errBox);
     const actions=el('div',null,'asv2-error-actions',errBox);
-    buttonWithIcon('Retirer ce document','trash','asv2-secondary asv2-remove-btn',actions,
+    buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn',actions,
       ()=>removeEntryFromSession(entry));
-    buttonWithIcon('Copier le diagnostic technique','clipboard','asv2-link asv2-copy-diag-btn',actions,
-      ()=>copyDiagnosticTrace(entry));
     return;
   }
   if(entry.status==='UNCERTAIN'){
     const errBox=el('div',null,'asv2-issue asv2-warning-box',issuePane);
-    el('strong','Envoi à vérifier',null,errBox);
-    el('p',entry.error||'Le fichier a peut-être été reçu. Vérifiez son état avant de le déposer à nouveau.',
+    el('strong','Traitement à vérifier',null,errBox);
+    el('p','Le statut de ce document n’est pas confirmé. Vous pouvez le retirer de cet écran et réessayer.',
       'asv2-error-detail',errBox);
-    if(entry.jobId)el('p','Identifiant du job côté serveur : #'+entry.jobId,'asv2-job-ref',errBox);
     const actions=el('div',null,'asv2-error-actions',errBox);
-    buttonWithIcon('Copier la trace pour Nicolas','clipboard','asv2-secondary asv2-copy-diag-btn',actions,
-      ()=>copyDiagnosticTrace(entry));
-    buttonWithIcon('Retirer','trash','asv2-link asv2-remove-btn',actions,
+    buttonWithIcon('Retirer','trash','asv2-secondary asv2-remove-btn',actions,
       ()=>removeEntryFromSession(entry));
     return;
   }
@@ -1961,8 +1953,8 @@ async function renderPreview(entry){
   clear(viewerToolbar);clear(viewerBody);
   const kind=entry.previewKind;
   const switcher=el('div',null,'asv2-preview-switch',viewerToolbar);
-  const options=[['Original · données en clair','origin','eye'],
-    [protectedVersionLabel(entry),'anon','shield-check']];
+  const options=[['Original','origin','eye'],
+    [entry.mode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé','anon','shield-check']];
   if(['pdf','txt','csv','docx'].includes(entry.format)&&canPreviewResult(entry))
     options.push(['Comparer','compare','split-view']);
   for(const [label,value,iconName] of options){
@@ -1972,11 +1964,13 @@ async function renderPreview(entry){
     control.setAttribute('aria-pressed',String(value===kind));
     control.disabled=(value==='anon'||value==='compare')&&!canPreviewResult(entry);
   }
-  el('span',kind==='origin'?'Original — données sensibles visibles':
-    kind==='compare'?'Original et '+protectedVersionLabel(entry).toLowerCase():
-    !canPreviewResult(entry)?'Aperçu du résultat indisponible':
-    entry.status==='READY'?'Prêt selon vos réglages':
-      'À vérifier · des données peuvent rester visibles',
+  const hasMaskHighlights=(entry.review?.occurrences||[]).some(row=>
+    (row.action||row.privacyAction)==='MASK');
+  el('span',kind==='origin'?
+      (hasMaskHighlights?'Original · zones bleues = masquées':'Original · données visibles'):
+    kind==='compare'?'Comparer':
+    !canPreviewResult(entry)?'Aperçu indisponible':
+    entry.status==='READY'?'Prêt':'À vérifier',
     'asv2-preview-label',viewerToolbar);
   if(entry.status==='REVIEW_REQUIRED'){
     const quickActions=el('div',null,'asv2-review-toolbar-actions',viewerToolbar);
