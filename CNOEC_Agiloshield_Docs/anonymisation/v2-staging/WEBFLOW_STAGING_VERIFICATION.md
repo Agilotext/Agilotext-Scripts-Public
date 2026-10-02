@@ -1,16 +1,15 @@
 # AgiloShield — interface guidée de recette
 
-> **Mise à jour du 30 septembre 2026 :** la fenêtre d'inclusion/exclusion a été refaite et le bloc staging actuel la livre en **préparation visuelle seulement** (`FILE_LISTS_READY: false`). Les essais et les flags décrits plus bas constituent l'historique du 29 septembre ; ils ne prouvent pas que Java transmet les listes. Le comportement et la gate actuels sont consignés dans [LISTS_UI_STAGING_2026-09-30.md](LISTS_UI_STAGING_2026-09-30.md). Le bloc à coller et son SHA d'assets sont dans [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html).
-
-## État au 29 septembre 2026
-
-**Assets figés :** `825eadc5b545db41ab7264f35af98ee17fc860e1` sur la branche `codex/agiloshield-v2-reliable-review-20260929`. Aucun changement du moteur Python, de Java, de la politique, des modèles ou des writers. Aucun merge ni déploiement live.
-
-**Verdict :** interface et bloc CDN prêts pour mise à jour staging ; `WEBFLOW_V2_STAGING_VISUAL_AND_E2E_PASSED` **non prononcé**. Le 29/09/2026, la page publiée a affiché « Accès limité » dans le navigateur disponible. Il n’a donc pas été possible de vérifier la version réellement active ni d’appeler Java sous une session valide. Les essais ci-dessous utilisent une page locale avec transport synthétique. L’historique durable, le ZIP et les documents de l’ancienne version restent cachés tant que leurs capacités ne sont pas effectivement raccordées.
+> **Mise à jour du 2 octobre 2026 (Commit `462007e57fc5798d7704f6e7bc2c10d3202326e5`) :**  
+> 1. **Confidentialité & Nettoyage de la stack :** Élimination totale des mentions internes (« Java », « worker », « Tomcat », « le job ») de l’interface, notamment sur l'onglet Restauration.  
+> 2. **Fiabilisation masquage PDF & Retour Nicolas (`BAIL_COMMERCIAL.pdf`) :** Réintégration de `ADD_MANUAL_REGION` pour le tracé rectangle libre déterministe ; détection de l'ambiguïté textuelle (terme présent > 1 fois sur la page) avec alerte et raccourci immédiat vers le tracé rectangle.  
+> 3. **Suppression de session (« Retirer de cet écran ») :** Bouton avec icône Nucleo corbeille `trash.svg` dans la liste des documents, les cartes mobiles et l'en-tête du tiroir pour évacuer proprement les fichiers bloqués ou en échec.  
+> 4. **Résilience d'affichage :** Rendu non-destructif de l'aperçu et de la liste de révision pour éviter l'écran blanc en cas d'erreur de comparaison ; gestion de l'état `DIRTY` lors du polling.  
+> 5. **Rollback immédiat :** [WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html](WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html) épinglé à `0dfb04f3a5d951ad4486975e1ec997d31520938c`.
 
 ## Remplacement dans Webflow
 
-Dans l’Embed principal Anonymiser, remplacer **tout** l’ancien bloc par [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Si la page contient encore `<form id="agfForm">`, remplacer cet Embed entier. Vérifier qu’un second Embed ne charge pas Lottie et `agiloshield-embed-anonymisation-anon2-beta.js` à côté du nouveau parcours ; le vider si présent. Le retour immédiat au front précédent se fait avec [WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html](WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html) (épinglé à `f61988bb1fb14aa3abce26b7a0dcc64b0fd76047`). Le retour historique antérieur reste dans [WEBFLOW_STAGING_ROLLBACK.html](WEBFLOW_STAGING_ROLLBACK.html). Ne modifier aucun autre Embed du dashboard.
+Dans l’Embed principal Anonymiser, remplacer **tout** l’ancien bloc par [WEBFLOW_STAGING_COPY_PASTE.html](WEBFLOW_STAGING_COPY_PASTE.html). Le retour immédiat au front précédent se fait avec [WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html](WEBFLOW_STAGING_ROLLBACK_PREVIOUS_V2.html) (épinglé à `0dfb04f3a5d951ad4486975e1ec997d31520938c`).
 
 Le bloc utilise uniquement `https://apitest.agilotext.com/api/agiloshield-v2`, l’auth utilisateur Agilotext/Memberstack et des assets jsDelivr épinglés au commit ci-dessus. Le port explicite `:9443` de l’ancien bloc expire depuis un client externe ; le HTTPS standard répond `401` sans authentification et autorise l’origine Webflow staging lors du précontrôle CORS. Cela ne prouve pas encore le parcours authentifié. Il ne contient aucun HMAC Python, secret interservice ou token codé en dur. Le navigateur ne contacte jamais `127.0.0.1:8091`. Les formats affichés sont PDF, DOCX, XLSX, PPTX, TXT et CSV. Les 13 cases sont dans la fenêtre « Données à masquer » ; un texte saisi suit le traitement TXT. « Pseudonymiser » reste désactivé et la navigation « Restaurer » est cachée tant que ces capacités ne sont pas prouvées.
 
