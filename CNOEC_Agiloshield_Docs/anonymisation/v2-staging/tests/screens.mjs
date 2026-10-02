@@ -52,7 +52,7 @@ for (const state of STATES) {
     await page.addStyleTag({ content: WEBFLOW_SHIM });
     await page.waitForTimeout(1800);
     if (state.open) {
-      const open = page.locator('.asv2-history-controls button:visible, .asv2-history-card button:visible').first();
+      const open = page.locator('.asv2-doc-primary:visible').first();
       if (await open.count()) { await open.click({ timeout: 5000 }).catch((e) => errors.push('open: ' + e.message.split('\n')[0])); await page.waitForTimeout(2500); }
       else errors.push('open target absent');
     }

@@ -22,7 +22,8 @@ if (/border-left\s*:\s*\d|border-left-(width|color)\s*:|border-inline-start\s*:/
 }
 
 const radii = [...css.matchAll(/border-radius\s*:\s*([^;}]+)/g)].map(m => m[1].trim());
-const badRadii = radii.filter(v => !/^(0|50%|inherit|var\(--asv2-r-(sm|md|lg|pill)\))$/.test(v));
+const radiusPart = /^(0|50%|inherit|var\(--asv2-r-(sm|md|lg|pill)\))$/;
+const badRadii = radii.filter(v => !v.split(/\s+/).every(part => radiusPart.test(part)));
 if (badRadii.length) errors.push(`Radius not from tokens: ${[...new Set(badRadii)].join(', ')}`);
 
 if (/transition\s*:\s*all\b/.test(css)) errors.push('transition:all is forbidden, list properties');
