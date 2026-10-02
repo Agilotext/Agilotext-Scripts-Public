@@ -66,6 +66,10 @@
 #agiloshield-v2-staging .asv2-history-controls{white-space:nowrap}
 #agiloshield-v2-staging .asv2-history-icon-button{display:inline-grid;place-items:center;flex:none;width:33px;height:33px;margin-right:5px;border:1px solid var(--asv2-line);border-radius:8px;background:#fff;color:var(--asv2-navy)}
 #agiloshield-v2-staging .asv2-history-icon-button:hover{border-color:#91b9ef;background:#eef5ff}
+#agiloshield-v2-staging .asv2-remove-btn{color:#718096}
+#agiloshield-v2-staging .asv2-remove-btn:hover{border-color:#e53e3e;background:#fff5f5;color:#c53030}
+#agiloshield-v2-staging .asv2-drawer-remove{margin-right:8px}
+#agiloshield-v2-staging .asv2-draw-shortcut-btn{margin-top:8px;font-size:12px}
 #agiloshield-v2-staging .asv2-nucleo-icon{display:block;width:18px;height:18px;flex:none}
 #agiloshield-v2-staging .asv2-history-empty{text-align:center;color:var(--asv2-muted);padding:26px!important}
 #agiloshield-v2-staging .asv2-history-cards{display:none}

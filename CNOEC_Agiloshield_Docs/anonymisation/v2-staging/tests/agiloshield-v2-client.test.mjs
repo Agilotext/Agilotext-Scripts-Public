@@ -113,7 +113,7 @@ assert.deepEqual(JSON.parse(form.get('anon2InclusionList')), ['MOT A']);
 assert.deepEqual(JSON.parse(form.get('anon2ExclusionList')), []);
 await client.listHistory('/history/v2',{cursor:'page-2',limit:12});
 assert.equal(new URL(seen.at(-1).url).searchParams.get('cursor'),'page-2');
-assert.throws(()=>client.listHistory('https://external.test/jobs'),/Invalid Java history route/);
+assert.throws(()=>client.listHistory('https://external.test/jobs'),/Invalid history route/);
 await client.downloadZip('/history/v2/zip',[
   {jobId:'1',revision:'r1',policyDigest:'d1'},
   {jobId:'2',revision:'r2',policyDigest:'d2'}]);
@@ -141,7 +141,12 @@ await client.approveHumanVerification(7,'d1',{revision:'r2',checks:sevenChecks})
 assert.deepEqual(JSON.parse(seen.at(-1).options.body).checks,sevenChecks);
 assert.throws(()=>client.approveHumanVerification(7,'d1',{revision:'r2',
   checks:{...sevenChecks,names:false}}),/Vérifications humaines incomplètes/);
-assert.equal(typeof client.addManualRegion, 'undefined');
+await client.addManualRegion(7,'d1',{revision:'r2',page:1,rect:[10,20,100,200]});
+assert.deepEqual(JSON.parse(seen.at(-1).options.body),{
+  op:'ADD_MANUAL_REGION',revision:'r2',
+  commandId:JSON.parse(seen.at(-1).options.body).commandId,
+  page:1,rect:[10,20,100,200],reason:'ZONE_MASQUEE_MANUELLEMENT'});
+assert.throws(()=>client.addManualRegion(7,'d1',{revision:'r2',page:1,rect:[100,20,10,200]}),/Invalid PDF rectangle/);
 job.reviewRevision = 'r3';
 await assert.rejects(() => client.checkedArtifact(7, {expectedDigest:'d1',
   expectedListDigest:'list-current', expectedRevision:'r2',expectedMode:'ANONYMIZE'}), /Stale/);

@@ -97,7 +97,7 @@ export class AgiloShieldV2Client {
   json(path, options) { return this.request(path, options).then(r => r.json()); }
   historyRoute(path) {
     if (typeof path !== 'string' || !/^\/[a-z0-9/_-]+$/i.test(path) ||
-        path.includes('//') || path.includes('..')) throw new Error('Invalid Java history route');
+        path.includes('//') || path.includes('..')) throw new Error('Invalid history route');
     return path;
   }
   listHistory(path, {cursor, limit = 50} = {}) {
@@ -184,6 +184,12 @@ export class AgiloShieldV2Client {
     return this.command(id, digest, {op:'ADD_MANUAL_REGION', revision,
       commandId:crypto.randomUUID(), page, rect, reason, sourceRevision, documentId,
       ...(occurrenceId ? {occurrenceId} : {maskOccurrenceId})});
+  }
+  addManualRegion(id, digest, {revision, page, rect, reason = 'ZONE_MASQUEE_MANUELLEMENT'}) {
+    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite) ||
+        rect[0] >= rect[2] || rect[1] >= rect[3]) throw new Error('Invalid PDF rectangle');
+    return this.command(id, digest, {op:'ADD_MANUAL_REGION', revision,
+      commandId:crypto.randomUUID(), page, rect, reason});
   }
   addOccurrence(id, digest, {revision, surfaceId, page, start, end, selectedText}) {
     if (!revision || !surfaceId || !Number.isInteger(start) || !Number.isInteger(end) ||
