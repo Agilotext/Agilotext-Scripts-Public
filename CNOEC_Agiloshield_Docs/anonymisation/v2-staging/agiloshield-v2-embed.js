@@ -1636,29 +1636,16 @@ function renderIssues(entry){
       function showOccurrence(){
         clear(detail);
         const current=occurrences[index];
-        const nav=el('div',null,'asv2-issue-detail-nav',detail);
-        el('span','Passage '+(index+1)+' sur '+occurrences.length,null,nav);
         if(occurrences.length>1){
-          const previous=button('← Précédent','asv2-secondary',nav,()=>{index--;showOccurrence();});
+          const nav=el('div',null,'asv2-issue-detail-nav',detail);
+          const previous=iconButton('arrow-left','Passage précédent','asv2-secondary',nav,()=>{index--;showOccurrence();});
           previous.disabled=index===0;
-          const next=button('Suivant →','asv2-secondary',nav,()=>{index++;showOccurrence();});
+          el('span',(index+1)+' / '+occurrences.length,'asv2-issue-position',nav);
+          const next=iconButton('arrow-right','Passage suivant','asv2-secondary',nav,()=>{index++;showOccurrence();});
           next.disabled=index===occurrences.length-1;
         }
-        el('strong',current.text||current.surface||'Passage à vérifier',null,detail);
-        const source=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
-        if(typeof source==='string'&&Number.isInteger(current.start)&&Number.isInteger(current.end)&&
-          current.start>=0&&current.end>current.start){
-          const start=codePointOffset(source,current.start),end=codePointOffset(source,current.end);
-          if(source.slice(start,end)===(current.text||current.surface)){
-            const before=source.slice(Math.max(0,start-45),start).replace(/\s+/g,' ');
-            const after=source.slice(end,Math.min(source.length,end+45)).replace(/\s+/g,' ');
-            el('p','…'+before+' ['+source.slice(start,end)+'] '+after+'…',
-              'asv2-issue-context',detail);
-          }
-        }
-        el('small',({MASK:'À masquer',KEEP:'À conserver',REVIEW:'À vérifier'})[
-          current.action||current.privacyAction]||'À vérifier',null,detail);
-        const actions=el('div',null,'asv2-issue-actions',detail);
+        const top=el('div',null,'asv2-issue-detail-top',detail);
+        el('strong',current.text||current.surface||'Passage à vérifier',null,top);
         const pdfLocation=originalPdfLocation(entry,current);
         const textSource=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
         const textExact=['txt','csv'].includes(entry.format)&&typeof textSource==='string'&&
@@ -1667,37 +1654,37 @@ function renderIssues(entry){
           textSource.slice(codePointOffset(textSource,current.start),
             codePointOffset(textSource,current.end))===(current.text||current.surface);
         if(pdfLocation.kind==='exact'||textExact){
-          const locate=buttonWithIcon('Voir le passage','eye',
-            'asv2-secondary asv2-locate-action',actions,()=>focusOccurrence(entry,current));
-          locate.title='Voir ce passage surligné dans l’original · données en clair';
-          locate.setAttribute('aria-label',locate.title);
+          const locate=iconButton('eye','Voir dans le document','asv2-issue-locate-icon',top,
+            ()=>focusOccurrence(entry,current));
+          locate.title='Voir dans le document';
         }else if(pdfLocation.kind==='page'){
-          const locate=buttonWithIcon('Voir la page '+pdfLocation.page,'eye',
-            'asv2-secondary asv2-locate-action',actions,
+          const locate=iconButton('eye','Ouvrir la page '+pdfLocation.page,'asv2-issue-locate-icon',top,
             ()=>focusOccurrence(entry,current,{pageOnly:true}));
-          locate.title='Ouvrir la page '+pdfLocation.page+' de l’original · position exacte inconnue';
-          locate.setAttribute('aria-label',locate.title);
-        }else if(entry.format==='pdf'){
-          const locate=buttonWithIcon('Ouvrir l’original','eye',
-            'asv2-secondary asv2-locate-action',actions,
-            ()=>focusOccurrence(entry,current,{pageOnly:true}));
-          locate.title='Ouvrir l’original · aucune page ni position exacte fournie pour ce passage';
-          locate.setAttribute('aria-label',locate.title);
-        }else{
-          const locate=buttonWithIcon('Ouvrir l’original','eye',
-            'asv2-secondary asv2-locate-action',actions,
-            ()=>focusOccurrence(entry,current,{pageOnly:true}));
-          locate.title='Ouvrir l’original · ce passage ne peut pas être surligné avec certitude';
-          locate.setAttribute('aria-label',locate.title);
+          locate.title='Ouvrir la page '+pdfLocation.page;
         }
+        const source=review.pages?.find(page=>page.surfaceId===current.surfaceId)?.text;
+        if(typeof source==='string'&&Number.isInteger(current.start)&&Number.isInteger(current.end)&&
+          current.start>=0&&current.end>current.start){
+          const cpStart=codePointOffset(source,current.start),cpEnd=codePointOffset(source,current.end);
+          if(source.slice(cpStart,cpEnd)===(current.text||current.surface)){
+            const before=source.slice(Math.max(0,cpStart-45),cpStart).replace(/\s+/g,' ');
+            const after=source.slice(cpEnd,Math.min(source.length,cpEnd+45)).replace(/\s+/g,' ');
+            el('p','…'+before+' ['+source.slice(cpStart,cpEnd)+'] '+after+'…',
+              'asv2-issue-context',detail);
+          }
+        }
+        const stateLabel=({MASK:'Masqué',KEEP:'Conservé',REVIEW:'À vérifier'})[
+          current.action||current.privacyAction]||'À vérifier';
+        el('small',stateLabel,'asv2-issue-state',detail);
+        const actions=el('div',null,'asv2-issue-actions',detail);
         for(const action of ['KEEP','MASK']){
           const control=action==='MASK'?
-            buttonWithIcon('Masquer','eye-slash','asv2-secondary',actions,
+            buttonWithIcon('Masquer','eye-slash','asv2-secondary asv2-action-mask',actions,
               ()=>decide(entry,current.id,action)):
-            buttonWithIcon('Conserver','shield-check','asv2-secondary',actions,
+            buttonWithIcon('Conserver','eye','asv2-secondary asv2-action-keep',actions,
               ()=>decide(entry,current.id,action));
-          control.title=copy.reviewAction[action];
-          control.setAttribute('aria-label',copy.reviewAction[action]);
+          control.title=copy.reviewAction[action]+' — uniquement ce passage';
+          control.setAttribute('aria-label',control.title);
           control.disabled=!review.reviewable||entry.commandBusy;
         }
       }
