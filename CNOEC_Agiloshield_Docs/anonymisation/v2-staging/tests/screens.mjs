@@ -52,9 +52,22 @@ for (const state of STATES) {
     await page.addStyleTag({ content: WEBFLOW_SHIM });
     await page.waitForTimeout(1800);
     if (state.open) {
-      const open = page.locator('.asv2-doc-primary:visible').first();
-      if (await open.count()) { await open.click({ timeout: 5000 }).catch((e) => errors.push('open: ' + e.message.split('\n')[0])); await page.waitForTimeout(2500); }
-      else errors.push('open target absent');
+      const reviewOpen = page.locator('#agiloshield-v2-staging .asv2-doc-primary:visible').filter({ hasText: /Vérifier|Voir le détail/ }).first();
+      if (await reviewOpen.count()) {
+        await reviewOpen.click({ timeout: 5000 }).catch((e) => errors.push('open: ' + e.message.split('\n')[0]));
+        await page.waitForTimeout(2500);
+      } else {
+        const menu = page.locator('#agiloshield-v2-staging .asv2-menu-toggle:visible').first();
+        if (await menu.count()) {
+          await menu.click({ timeout: 5000 }).catch((e) => errors.push('open-menu: ' + e.message.split('\n')[0]));
+          await page.waitForTimeout(200);
+          const see = page.locator('#agiloshield-v2-staging .asv2-menu-item:visible').filter({ hasText: /Voir le résultat/ }).first();
+          if (await see.count()) {
+            await see.click({ timeout: 5000 }).catch((e) => errors.push('open: ' + e.message.split('\n')[0]));
+            await page.waitForTimeout(2500);
+          } else errors.push('open target absent');
+        } else errors.push('open target absent');
+      }
     }
     if (state.click) {
       const btn = page.locator('#agiloshield-v2-staging button').filter({ hasText: state.click }).first();
