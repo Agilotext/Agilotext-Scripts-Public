@@ -124,6 +124,17 @@ await assert.rejects(() => client.upload(new Blob(['synthetic']), {}, {
   anon2InclusionList:[]}), /Both V2 list arrays/);
 await client.decide(7, 'd1', {revision:'r2', occurrenceId:'o1', action:'KEEP', reason:'test'});
 assert.equal(seen.at(-1).options.headers['X-Agiloshield-Policy-Digest'], 'd1');
+await client.decideAll(7, 'd1', {revision:'r2', action:'MASK'});
+const batchBody=JSON.parse(seen.at(-1).options.body);
+assert.equal(batchBody.op, 'DECIDE_ALL_REVIEW');
+assert.equal(batchBody.action, 'MASK');
+assert.equal(batchBody.reason, 'review_batch');
+assert.equal(batchBody.revision, 'r2');
+assert.equal(typeof batchBody.commandId, 'string');
+assert.ok(batchBody.commandId.length>8);
+await client.decideAll(7, 'd1', {revision:'r2', action:'KEEP'});
+assert.notEqual(JSON.parse(seen.at(-1).options.body).commandId, batchBody.commandId);
+assert.throws(()=>client.decideAll(7,'d1',{revision:'r2',action:'DROP'}),/Invalid decision/);
 await client.execute(7, 'd1', 'r3');
 assert.equal(JSON.parse(seen.at(-1).options.body).revision, 'r3');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],

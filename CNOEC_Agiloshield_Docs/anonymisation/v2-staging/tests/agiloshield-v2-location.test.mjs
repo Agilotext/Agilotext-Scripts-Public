@@ -20,3 +20,8 @@ assert.equal(originalPdfLocation({ ...entry, regions: { pages: [{ page: 2, size:
 assert.equal(originalPdfLocation({ ...entry, regions: { pages: [{ page: 2, size: [400, 250],
   occurrences: [{ id: 'occ-1', rectangles: [[72, 94, 202, 109]] },
     { id: 'occ-1', rectangles: [[150, 94, 202, 109]] }] }] } }, row).kind, 'page');
+assert.deepEqual(originalPdfLocation(entry, { id: 'logo-1', page: 2, fragments: [10, 20, 80, 60] }).fragments,
+  [[10, 20, 80, 60]]);
+assert.equal(originalPdfLocation(entry, { id: 'logo-1', page: 2, fragments: [[10, 20, 80, 60]] }).kind, 'exact');
+assert.equal(originalPdfLocation(entry, { id: 'occ-1', page: 2, fragments: { x: 1 } }).kind, 'page');
+assert.deepEqual(originalPdfLocation(entry, { id: 'occ-1', page: 2, fragments: { x: 1 } }).fragments, []);

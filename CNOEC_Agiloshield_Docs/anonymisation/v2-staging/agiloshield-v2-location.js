@@ -1,3 +1,11 @@
+function normalizeFragments(value) {
+  if (value == null) return null;
+  if (Array.isArray(value) && value.length === 4 && value.every(item => typeof item === 'number'))
+    return [value];
+  if (Array.isArray(value) && value.every(item => Array.isArray(item))) return value;
+  return [];
+}
+
 // Resolve only identifiers supplied by the review and original-region contracts.
 // A page-only result is useful navigation, never a claim that a word was located.
 export function originalPdfLocation(entry, row) {
@@ -22,11 +30,11 @@ export function originalPdfLocation(entry, row) {
       Number(sourcePage.rotation || 0) !== 0)
     return { kind: 'page', page, fragments: [] };
 
-  let fragments = row?.fragments;
-  if (!Array.isArray(fragments) || !fragments.length) {
-    // Do not choose between ambiguous identifiers, and never search by text.
-    fragments = matched && Number(matched.source.page) === page ? matched.item.rectangles : [];
-  }
+  const supplied = normalizeFragments(row?.fragments);
+  // A present but unusable shape stays on the page. Do not invent a rectangle.
+  let fragments = supplied === null
+    ? (matched && Number(matched.source.page) === page ? matched.item.rectangles : [])
+    : supplied;
   const valid = (fragments || []).filter(rect => Array.isArray(rect) && rect.length === 4 &&
     rect.every(Number.isFinite) && rect[0] >= 0 && rect[1] >= 0 &&
     rect[0] < rect[2] && rect[1] < rect[3] &&

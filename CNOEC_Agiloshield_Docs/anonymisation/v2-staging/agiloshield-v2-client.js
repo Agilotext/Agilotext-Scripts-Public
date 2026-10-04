@@ -90,6 +90,8 @@ export class AgiloShieldV2Client {
       let detail; try { detail = await response.json(); } catch (_) { detail = {}; }
       const error = new Error(detail.errorMessage || detail.error || `HTTP_${response.status}`);
       error.status = response.status; error.code = detail.error || detail.errorCode || detail.code;
+      if (detail.revision != null) error.revision = detail.revision;
+      if (detail.appliedCount != null) error.appliedCount = detail.appliedCount;
       console.error('[AgiloShield V2]', method, path, response.status, detail.error || '', detail.errorMessage || '');
       throw error;
     }
@@ -179,6 +181,11 @@ export class AgiloShieldV2Client {
   decide(id, digest, {revision, occurrenceId, action, reason}) {
     if (!['KEEP', 'MASK'].includes(action)) throw new Error('Invalid decision');
     return this.command(id, digest, {revision, commandId:crypto.randomUUID(), occurrenceId, action, reason});
+  }
+  decideAll(id, digest, {revision, action, reason = 'review_batch'}) {
+    if (!['KEEP', 'MASK'].includes(action)) throw new Error('Invalid decision');
+    return this.command(id, digest, {revision, commandId:crypto.randomUUID(),
+      op:'DECIDE_ALL_REVIEW', action, reason});
   }
   addLinkedRegion(id, digest, {revision, page, rect, occurrenceId, maskOccurrenceId, sourceRevision, documentId, reason}) {
     if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite) ||
