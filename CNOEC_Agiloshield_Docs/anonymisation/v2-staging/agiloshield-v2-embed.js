@@ -3,7 +3,8 @@ import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
   assertPreviewHeaders } from './agiloshield-v2-client.js';
 import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
   saveStoredLists, clearStoredLists } from './agiloshield-v2-lists.js';
-import { originalPdfLocation } from './agiloshield-v2-location.js';
+import { originalPdfLocation, regionRectangles } from './agiloshield-v2-location.js';
+import { rectsOnPage, normalizeSearch } from './agiloshield-v2-autotrace.js';
 import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
 import { iconSvg } from './agiloshield-v2-icons.js';
 
@@ -1878,19 +1879,22 @@ function renderIssues(entry){
       el('small',copy.review.severalPlaces,null,what);
       if(open){
         const actions=el('div',null,'asv2-pass-actions',card);
-        const control=buttonWithIcon(copy.review.traceZone,'select-area','asv2-secondary',actions,()=>{
-          startPlaceTrace(entry,target);
-        });
-        control.disabled=!review.reviewable||entry.format!=='pdf';
         const keepId=target.occurrenceId||target.maskOccurrenceId||target.id;
+        const mask=buttonWithIcon(copy.review.batch.maskThese,'eye-slash','asv2-primary',actions,()=>{
+          maskFoundPlaces(entry,target,keepId).catch(showError);
+        });
+        mask.disabled=!review.reviewable||entry.format!=='pdf'||entry.commandBusy||!keepId;
         if(keepId){
           const keep=buttonWithIcon(copy.reviewAction.KEEP,'eye','asv2-secondary asv2-action-keep',actions,
             ()=>decide(entry,keepId,'KEEP'));
           keep.disabled=!review.reviewable||entry.commandBusy;
         }
+        const trace=button(copy.review.traceZone,'asv2-link',actions,()=>startPlaceTrace(entry,target));
+        trace.disabled=!review.reviewable||entry.format!=='pdf'||entry.commandBusy;
       }else card.addEventListener('click',event=>{
         if(event.target.closest('button'))return;
         entry.reviewFocusIndex=index;renderIssues(entry);renderFooter(entry);
+        revealPassage(entry,target);
       });
       return;
     }
@@ -1922,17 +1926,21 @@ function renderIssues(entry){
       el('small',copy.review.severalPlaces,null,what);
       if(open){
         const actions=el('div',null,'asv2-pass-actions',card);
-        const place=buttonWithIcon(copy.review.traceZone,'select-area','asv2-secondary',actions,()=>{
-          startPlaceTrace(entry,{occurrenceId:current.id,id:current.id,page,
-            category:current.category||current.semanticType});
+        const target={occurrenceId:current.id,id:current.id,page,
+          category:current.category||current.semanticType,text:current.text||current.surface};
+        const mask=buttonWithIcon(copy.review.batch.maskThese,'eye-slash','asv2-primary',actions,()=>{
+          maskFoundPlaces(entry,target,current.id).catch(showError);
         });
-        place.disabled=!review.reviewable||entry.format!=='pdf'||entry.commandBusy;
+        mask.disabled=!review.reviewable||entry.format!=='pdf'||entry.commandBusy;
         const keep=buttonWithIcon(copy.reviewAction.KEEP,'eye','asv2-secondary asv2-action-keep',actions,
           ()=>decide(entry,current.id,'KEEP'));
         keep.disabled=!review.reviewable||entry.commandBusy;
+        const place=button(copy.review.traceZone,'asv2-link',actions,()=>startPlaceTrace(entry,target));
+        place.disabled=!review.reviewable||entry.format!=='pdf'||entry.commandBusy;
       }else card.addEventListener('click',event=>{
         if(event.target.closest('button'))return;
         entry.reviewFocusIndex=index;renderIssues(entry);renderFooter(entry);
+        revealPassage(entry,current);
       });
       return;
     }
@@ -2109,10 +2117,11 @@ function askBatchDecision(entry,work){
       }
       const actions=el('div',null,'asv2-validate-actions',box);
       if(onlyPlace){
-        const trace=buttonWithIcon(copy.review.traceZone,'select-area','asv2-primary',actions,()=>done('TRACE'));
+        const mask=buttonWithIcon(copy.review.batch.maskThese,'eye-slash','asv2-primary',actions,()=>done('MASK'));
         const keepCount=placeRows.length||work.unresolved.length;
         buttonWithIcon(keepCount>1?copy.review.batch.keepAll:copy.reviewAction.KEEP,'eye','asv2-secondary',actions,()=>done('KEEP'));
-        trace.focus();
+        button(copy.review.traceZone,'asv2-link',actions,()=>done('TRACE'));
+        mask.focus();
       }else if(!blocked){
         const mask=buttonWithIcon(copy.review.batch.maskAll,'shield-check','asv2-primary',actions,()=>done('MASK'));
         buttonWithIcon(copy.review.batch.keepAll,'eye','asv2-secondary',actions,()=>done('KEEP'));
@@ -2122,6 +2131,112 @@ function askBatchDecision(entry,work){
       if(blocked)back.focus();
     });
   });
+}
+function passageRow(entry,occurrenceId,fallback){
+  const id=String(occurrenceId||fallback?.id||fallback?.occurrenceId||fallback?.maskOccurrenceId||'');
+  const row=reviewOccurrences(entry.review||{}).find(item=>String(item.id)===id);
+  if(row)return row;
+  return {id,text:fallback?.text||fallback?.surface||'',page:fallback?.page,
+    fragments:fallback?.fragments,category:fallback?.category||fallback?.semanticType};
+}
+async function cachedOriginPdf(entry){
+  if(entry.originPdf&&entry.originPdfJob===String(entry.jobId))return entry.originPdf;
+  if(entry.originPdf?.destroy)entry.originPdf.destroy();
+  entry.originPdf=null;
+  const source=await previewBytes(entry,'origin');
+  if(source.format!=='pdf')throw new Error('PDF original indisponible');
+  if(!window.pdfjsLib)throw new Error('PDF.js indisponible');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc=config.PDF_WORKER_URL;
+  const pdf=await window.pdfjsLib.getDocument({data:new Uint8Array(source.bytes),enableScripting:false}).promise;
+  entry.originPdf=pdf;entry.originPdfJob=String(entry.jobId);
+  return pdf;
+}
+async function passageBoxes(entry,row){
+  const known=regionRectangles(entry,row);
+  if(known.length>10)return {ok:false,reason:'tooMany',rects:[]};
+  if(known.length)return {ok:true,rects:known};
+  const text=row?.text||row?.surface||'';
+  if(normalizeSearch(text).replace(/[^0-9a-z]/g,'').length<3)return {ok:false,reason:'short',rects:[]};
+  let pdf;
+  try{pdf=await cachedOriginPdf(entry);}catch(_){return {ok:false,reason:'none',rects:[]};}
+  const hinted=Number(row?.page);
+  const order=[];
+  if(Number.isInteger(hinted)&&hinted>=1&&hinted<=pdf.numPages)order.push(hinted);
+  for(let page=1;page<=pdf.numPages;page++)if(!order.includes(page))order.push(page);
+  const rects=[];
+  for(const pageNumber of order){
+    const page=await pdf.getPage(pageNumber);
+    if((page.rotate||0)!==0)continue;
+    const viewport=page.getViewport({scale:1});
+    let content;try{content=await page.getTextContent();}catch(_){continue;}
+    const hit=rectsOnPage(content.items||[],viewport.transform,[viewport.width,viewport.height],text);
+    if(hit.reason==='tooMany')return {ok:false,reason:'tooMany',rects:[]};
+    for(const rect of hit.rects||[])rects.push({page:pageNumber,rect});
+    if(rects.length>10)return {ok:false,reason:'tooMany',rects:[]};
+  }
+  return rects.length?{ok:true,rects}:{ok:false,reason:'none',rects:[]};
+}
+async function settleSkippedZone(entry,action,zone,revision){
+  const occurrenceId=zone.occurrenceId||zone.id;
+  const row=passageRow(entry,occurrenceId,zone);
+  entry.revision=revision||entry.revision;
+  if(action==='KEEP'){
+    try{
+      const receipt=await postDecision(entry,occurrenceId,'KEEP','review_batch');
+      noteDecision(entry,occurrenceId,'KEEP',receipt.revision);
+      return {revision:receipt.revision,changed:true,traced:0,forced:false,left:false};
+    }catch(error){
+      if(!needsLinkedRegion(error)&&!conflictsWithKeptMask(error))throw error;
+    }
+  }
+  const found=await passageBoxes(entry,row);
+  if(!found.ok)return {revision:entry.revision,changed:false,traced:0,forced:false,left:true};
+  const reason=row.category==='ORG'?'human_confirmed_private_org':'human_added';
+  const decision=await postDecision(entry,occurrenceId,'MASK',reason);
+  noteDecision(entry,occurrenceId,'MASK',decision.revision);
+  let next=decision.revision;
+  for(const box of found.rects){
+    const region=await api.addLinkedRegion(entry.jobId,entry.digest,{
+      revision:next,page:box.page,rect:box.rect,occurrenceId,
+      sourceRevision:entry.review?.sourceRevision,documentId:entry.review?.documentId,reason});
+    if(!region?.revision)throw new Error('Réponse de masquage incomplète');
+    next=region.revision;entry.revision=next;
+  }
+  entry.highlightRects=found.rects;entry.page=found.rects[0].page;entry.previewKind='origin';
+  return {revision:next,changed:true,traced:found.rects.length,forced:action==='KEEP',left:false};
+}
+async function maskFoundPlaces(entry,target,occurrenceId){
+  if(!occurrenceId||entry.commandBusy)return;
+  const row=passageRow(entry,occurrenceId,target);
+  const found=await passageBoxes(entry,row);
+  if(!found.ok){
+    markPlace(entry,occurrenceId);startPlaceTrace(entry,target);
+    drawerMessage(copy.review.batch.stillManual(1),'is-info');return;
+  }
+  entry.commandBusy=true;renderIssues(entry);
+  try{
+    const settled=await settleSkippedZone(entry,'MASK',{occurrenceId,...row},entry.revision);
+    if(settled.left||!settled.revision){
+      startPlaceTrace(entry,target);
+      drawerMessage(copy.review.batch.stillManual(1),'is-info');return;
+    }
+    await apply(entry,settled.revision);
+    drawerMessage(copy.review.batch.autoPlaced(settled.traced),'is-info');
+  }catch(error){await handleReviewError(entry,error,occurrenceId);}
+  finally{entry.commandBusy=false;renderIssues(entry);}
+}
+function revealPassage(entry,row){
+  const current=passageRow(entry,row?.id||row?.occurrenceId||row?.maskOccurrenceId,row);
+  entry.focusId=current.id;
+  entry.locateNeedle=String(current.text||current.surface||'').trim();
+  entry.previewKind='origin';
+  if(Number(current.page)>=1)entry.page=Number(current.page);
+  setMobileTab('doc');
+  passageBoxes(entry,current).then(found=>{
+    if(state.active!==entry.key)return;
+    if(found.ok){entry.highlightRects=found.rects;entry.page=found.rects[0].page;}
+    renderPreview(entry).catch(showError);
+  }).catch(showError);
 }
 async function applyBatchDecision(entry,action){
   releaseTrace(entry);
@@ -2134,9 +2249,10 @@ async function applyBatchDecision(entry,action){
   });
   entry.batchRunning=true;entry.commandBusy=true;renderFooter(entry);
   try{
+    if(entry.format==='pdf')await cachedOriginPdf(entry).catch(()=>{});
     const receipt=await api.decideAll(entry.jobId,entry.digest,{revision:entry.revision,action});
     modal.close();
-    return await finishGroupedDecision(entry,receipt);
+    return await finishGroupedDecision(entry,receipt,action);
   }catch(error){
     modal.close();
     if(batchOpUnsupported(error,before)){handedOff=true;return applyStackedBatch(entry,action);}
@@ -2146,22 +2262,36 @@ async function applyBatchDecision(entry,action){
     if(!handedOff){entry.batchRunning=false;entry.commandBusy=false;renderFooter(entry);}
   }
 }
-async function finishGroupedDecision(entry,receipt){
+async function finishGroupedDecision(entry,receipt,action){
   const applied=Number(receipt?.appliedCount)||0;
   const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
-  if(applied>0){
-    if(!receipt?.revision)throw new Error('Réponse de masquage incomplète');
-    await apply(entry,receipt.revision);
-  }else await loadCurrent(entry).catch(()=>{});
+  if(receipt?.revision)entry.revision=receipt.revision;
   const zones=skipped.filter(item=>skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'&&item.occurrenceId);
-  for(const zone of zones)markPlace(entry,zone.occurrenceId);
-  if(zones.length){
+  let revision=entry.revision;
+  let traced=0,forced=0,changed=applied>0;
+  const left=[];
+  for(const zone of zones){
+    const settled=await settleSkippedZone(entry,action,zone,revision);
+    if(settled.revision)revision=settled.revision;
+    if(settled.traced)traced+=settled.traced;
+    if(settled.forced)forced+=1;
+    if(settled.changed)changed=true;
+    if(settled.left)left.push(zone);
+  }
+  if(changed&&revision)await apply(entry,revision);
+  else if(!zones.length)await loadCurrent(entry).catch(()=>{});
+  if(left.length){
+    for(const zone of left)markPlace(entry,zone.occurrenceId);
     renderIssues(entry);
-    drawerMessage(copy.review.batch.placeLeft(zones.length),'is-info');
-  }else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))
+    drawerMessage(copy.review.batch.stillManual(left.length),'is-info');
+    return false;
+  }
+  if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
+  else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
+  else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))
     drawerMessage(copy.review.batch.skippedConflict,'is-warning');
-  if(skipped.length||remainingReviewWork(entry).count)return false;
-  return applied>0;
+  if(remainingReviewWork(entry).count)return false;
+  return applied>0||traced>0||action==='KEEP';
 }
 async function reloadReviewError(entry,error){
   if(error?.status===409||error?.code==='REVIEW_RESULT_PENDING')
@@ -2174,6 +2304,7 @@ async function applyStackedBatch(entry,action){
   let lastRevision=null,pendingError=null;
   const skipped=[];
   const placed=[];
+  let traced=0,forced=0;
   const modal=reviewModal((box,close,overlay)=>{
     overlay.dataset.closable='false';
     el('h3',action==='MASK'?copy.review.batch.maskAll:copy.review.batch.keepAll,null,box);
@@ -2195,7 +2326,15 @@ async function applyStackedBatch(entry,action){
       if(!row||entry.status!=='REVIEW_REQUIRED')break;
       modal.box.update();
       const outcome=await stackDecision(entry,row.id,action,'review_batch');
-      if(outcome?.needsZone){markPlace(entry,row.id);placed.push(String(row.id));skipped.push(String(row.id));continue;}
+      if(outcome?.needsZone){
+        const settled=await settleSkippedZone(entry,action,{occurrenceId:row.id},entry.revision);
+        if(settled.revision)lastRevision=settled.revision;
+        if(settled.traced)traced+=settled.traced;
+        if(settled.forced)forced+=1;
+        if(settled.left){markPlace(entry,row.id);placed.push(String(row.id));}
+        skipped.push(String(row.id));
+        continue;
+      }
       if(outcome?.skipped){skipped.push(String(row.id));continue;}
       lastRevision=outcome.revision;
       done++;
@@ -2218,8 +2357,9 @@ async function applyStackedBatch(entry,action){
   if(skipped.some(id=>!placed.includes(id)))drawerMessage(copy.review.batch.skippedConflict,'is-warning');
   if(placed.length){
     renderIssues(entry);
-    drawerMessage(copy.review.batch.placeLeft(placed.length),'is-info');
-  }
+    drawerMessage(copy.review.batch.stillManual(placed.length),'is-info');
+  }else if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
+  else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
   return Boolean(lastRevision)&&!remainingReviewWork(entry).count;
 }
 async function stackDecision(entry,occurrenceId,action,reason){
@@ -2683,7 +2823,7 @@ async function renderPdf(entry,bytes,kind,serial){
       (row.action||row.privacyAction)==='MASK'&&originalPdfLocation(entry,row).kind==='exact'&&
       originalPdfLocation(entry,row).page===entry.page):[];
     const shouldOverlay=Boolean(entry.pendingMask)||Boolean(entry.focusId||entry.locateNeedle||entry.target||entry.manualMaskActive)||
-      maskRows.length>0;
+      maskRows.length>0||(entry.highlightRects||[]).some(hit=>Number(hit.page)===Number(entry.page));
     if(!shouldOverlay)return;
     const overlay=el('div',null,'asv2-page-overlay',wrap);
     if(kind==='origin'&&(page.rotate||0)===0&&pageGeometry(entry,entry.page,base)){
@@ -2697,6 +2837,18 @@ async function renderPdf(entry,bytes,kind,serial){
           marker.style.width=((rect[2]-rect[0])/base.width*100)+'%';
           marker.style.height=((rect[3]-rect[1])/base.height*100)+'%';
         }
+      }
+    }
+    if((page.rotate||0)===0){
+      for(const hit of entry.highlightRects||[]){
+        if(Number(hit.page)!==Number(entry.page)||!Array.isArray(hit.rect))continue;
+        const marker=el('div',null,'asv2-region-marker',overlay);
+        marker.title='Endroit trouvé automatiquement';
+        const rect=hit.rect;
+        marker.style.left=(rect[0]/base.width*100)+'%';
+        marker.style.top=(rect[1]/base.height*100)+'%';
+        marker.style.width=((rect[2]-rect[0])/base.width*100)+'%';
+        marker.style.height=((rect[3]-rect[1])/base.height*100)+'%';
       }
     }
     if(entry.pendingMask&&Number(entry.pendingMask.page)===Number(entry.page)&&Array.isArray(entry.pendingMask.rect)){

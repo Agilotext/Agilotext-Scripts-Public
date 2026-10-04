@@ -42,3 +42,36 @@ export function originalPdfLocation(entry, row) {
   return valid.length ? { kind: 'exact', page, fragments: valid } :
     { kind: 'page', page, fragments: [] };
 }
+
+// Every rectangle the server already tied to this passage, including repeats.
+// A single ambiguous match stays unresolved for navigation; the list is for automatic masking.
+export function regionRectangles(entry, row) {
+  if (entry?.format !== 'pdf' || row?.id == null) return [];
+  const wanted = String(row.id);
+  const out = [];
+  const accept = (page, rect, size) => Array.isArray(rect) && rect.length === 4 &&
+    rect.every(Number.isFinite) && rect[0] >= 0 && rect[1] >= 0 &&
+    rect[0] < rect[2] && rect[1] < rect[3] &&
+    (!size || (rect[2] <= size[0] && rect[3] <= size[1]));
+  for (const source of entry?.regions?.pages || []) {
+    if (Number(source.rotation || 0) !== 0) continue;
+    const size = source.size;
+    if (!Array.isArray(size) || size.length !== 2 ||
+        !size.every(value => Number.isFinite(value) && value > 0)) continue;
+    const page = Number(source.page);
+    if (!Number.isSafeInteger(page) || page < 1) continue;
+    for (const item of source.occurrences || []) {
+      if (![item?.id, item?.maskOccurrenceId, item?.originalId].some(id =>
+        id != null && String(id) === wanted)) continue;
+      for (const rect of normalizeFragments(item?.rectangles) || []) {
+        if (accept(page, rect, size)) out.push({ page, rect });
+      }
+    }
+  }
+  if (!out.length && Number.isSafeInteger(Number(row.page)) && Number(row.page) >= 1) {
+    for (const rect of normalizeFragments(row.fragments) || []) {
+      if (accept(Number(row.page), rect, null)) out.push({ page: Number(row.page), rect });
+    }
+  }
+  return out;
+}

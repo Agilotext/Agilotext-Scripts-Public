@@ -68,6 +68,12 @@ export const COPY = Object.freeze({
       stoppedEmpty: 'Arrêté. Aucune décision n’a été envoyée.',
       placeLeft: n => plural(n, 'passage n’a pas de position unique. Tracez sa zone ou laissez-le visible.',
         'passages n’ont pas de position unique. Tracez leur zone ou laissez-les visibles.'),
+      maskThese: 'Masquer ces endroits',
+      autoPlaced: n => plural(n, 'endroit masqué automatiquement.', 'endroits masqués automatiquement.'),
+      forcedMask: n => plural(n, 'passage doit rester masqué. Il a été masqué automatiquement.',
+        'passages doivent rester masqués. Ils ont été masqués automatiquement.'),
+      stillManual: n => plural(n, 'passage n’a pas pu être placé. Tracez sa zone ou laissez-le visible.',
+        'passages n’ont pas pu être placés. Tracez leur zone ou laissez-les visibles.'),
     },
   },
   errors: {
