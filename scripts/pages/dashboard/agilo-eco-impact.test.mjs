@@ -28,6 +28,16 @@ assert(ok.attestationUrl.indexOf("https://") === 0, "attestation seulement si UR
 assert(eco.readImpact({ status: "OK", numberOfLiters: 1, attestationUrl: "note.pdf" }).attestationUrl === "", "pas d'URL relative");
 assert(eco.equivalenceLabel(0.2) === "≈ 1 verre (25 cl)", "verre 25 cl");
 assert(eco.equivalenceLabel(0.5) === "≈ 1 gourde (50 cl)", "gourde 50 cl");
+assert(eco.equivalenceLabel(2.4) === "≈ 5 gourdes (50 cl)", "2,4 L = 5 gourdes");
+const preview = eco.resolveDisplayedImpact(null, "agilotext-test.webflow.io");
+assert(preview && preview.liters === 2.4 && preview.preview === true, "aperçu si JSON vide sur le site test");
+const previewZero = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 0 }, "agilotext-test.webflow.io");
+assert(previewZero && previewZero.liters === 2.4 && previewZero.preview === true, "aperçu si 0 L sur le site test");
+assert(eco.resolveDisplayedImpact(null, "www.agilotext.com") == null, "www sans litres reste masqué");
+const real = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 8.9 }, "agilotext-test.webflow.io");
+assert(real && real.liters === 8.9 && real.preview === false, "un chiffre positif gagne sur l'aperçu");
+assert(src.includes("Aperçu, en attendant la mesure"), "mention aperçu dans la modale");
+assert(src.includes(">RSE<"), "pastille RSE conservée");
 assert(eco.equivalenceLabel(9) === "≈ 1 pack (9 L)", "pack 9 L");
 assert(eco.equivalenceLabel(12) === "", "au-delà du pack : litres seuls");
 assert(eco.glassLevel(9) === 100, "verre plein à 9 L");

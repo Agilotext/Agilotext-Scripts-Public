@@ -9,7 +9,8 @@
    - GET jeton invalide : { status:"KO", errorMessage:"invalid_token" }
    Succès non observé (getToken interdit hors navigateur, jeton prod refusé).
    readImpact n'accepte que status OK + numberOfLiters (même forme que
-   numberOfMinutes). Autre forme : le bloc est retiré, aucun chiffre d'exemple.
+   numberOfMinutes). Sur agilotext-test.webflow.io, un corps vide, un KO
+   ou 0 L affiche un aperçu 2,4 L. Sur www, le bloc est retiré.
    ================================================================ */
 (function agiloEcoImpact() {
   "use strict";
@@ -43,6 +44,24 @@
       co2Grams: co2,
       attestationUrl: url
     };
+  }
+
+  function previewImpact(hostname) {
+    if (hostname !== "agilotext-test.webflow.io") return null;
+    return { liters: 2.4, co2Grams: null, attestationUrl: "", preview: true };
+  }
+
+  function resolveDisplayedImpact(json, hostname) {
+    var impact = readImpact(json);
+    if (impact && impact.liters > 0) {
+      return {
+        liters: impact.liters,
+        co2Grams: impact.co2Grams,
+        attestationUrl: impact.attestationUrl,
+        preview: false
+      };
+    }
+    return previewImpact(hostname);
   }
 
   function equivalenceLabel(liters) {
@@ -86,6 +105,8 @@
   window.AgiloEcoImpact = {
     apiBaseForHost: apiBaseForHost,
     readImpact: readImpact,
+    previewImpact: previewImpact,
+    resolveDisplayedImpact: resolveDisplayedImpact,
     equivalenceLabel: equivalenceLabel,
     glassLevel: glassLevel,
     formatLiters: formatLiters,
@@ -171,6 +192,7 @@
       "background:#dbeafe;color:#1d4ed8;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase}",
       ".agilo-eco-card h2{margin:0;font:800 20px/1.25 system-ui,sans-serif;color:#0f172a}",
       ".agilo-eco-month{margin:6px 0 0;color:#64748b;font:500 12px/1.3 system-ui,sans-serif}",
+      ".agilo-eco-preview{margin:8px 0 0;color:#1d4ed8;font:600 12px/1.3 system-ui,sans-serif}",
       ".agilo-eco-glass{position:relative;width:9rem;height:12rem;margin:18px auto 0;overflow:hidden;",
       "border:4px solid #cbd5e1;border-radius:0 0 1.6rem 1.6rem;background:linear-gradient(#fff,#f0f9ff)}",
       ".agilo-eco-liquid{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(#38bdf8,#0284c7)}",
@@ -212,6 +234,7 @@
       + '<p class="agilo-eco-kicker">Eau du mois</p>'
       + '<h2 id="agilo-eco-title">Votre verre d\'eau Agilotext</h2>'
       + '<p class="agilo-eco-month" data-agilo-eco="month"></p>'
+      + '<p class="agilo-eco-preview" data-agilo-eco="preview" hidden>Aperçu, en attendant la mesure</p>'
       + '<div class="agilo-eco-glass" aria-hidden="true"><div class="agilo-eco-liquid" data-agilo-eco="level"></div></div>'
       + '<p class="agilo-eco-liters"><span data-agilo-eco="modal-liters"></span> <span>L d\'eau</span></p>'
       + '<p class="agilo-eco-eq" data-agilo-eco="modal-eq" hidden></p>'
@@ -244,6 +267,8 @@
     var eqEl = mounted.btn.querySelector('[data-agilo-eco="eq"]');
     eqEl.textContent = eq;
     mounted.modal.querySelector('[data-agilo-eco="month"]').textContent = month;
+    var previewEl = mounted.modal.querySelector('[data-agilo-eco="preview"]');
+    if (previewEl) previewEl.hidden = !impact.preview;
     mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatLiters(impact.liters);
     var level = mounted.modal.querySelector('[data-agilo-eco="level"]');
     level.style.height = glassLevel(impact.liters) + "%";
@@ -289,23 +314,21 @@
       + "&token=" + encodeURIComponent(token)
       + "&edition=" + encodeURIComponent(getEdition());
     var url = apiBaseForHost(location.hostname) + "/getEnvironmentalImpactForMonth?" + qs;
-    fetch(url, { method: "GET", credentials: "omit" })
-      .then(function (res) { return res.json(); })
-      .then(function (json) {
-        var impact = readImpact(json);
-        if (!impact || !mounted) {
-          removeBlock(mounted && mounted.btn);
-          removeBlock(mounted && mounted.modal);
-          mounted = null;
-          return;
-        }
-        paint(impact);
-      })
-      .catch(function () {
-        removeBlock(mounted && mounted.btn);
-        removeBlock(mounted && mounted.modal);
+    function applyFetched(json) {
+      if (!mounted) return;
+      var impact = resolveDisplayedImpact(json, location.hostname);
+      if (!impact) {
+        removeBlock(mounted.btn);
+        removeBlock(mounted.modal);
         mounted = null;
-      });
+        return;
+      }
+      paint(impact);
+    }
+    fetch(url, { method: "GET", credentials: "omit" })
+      .then(function (res) { return res.json().catch(function () { return null; }); })
+      .then(applyFetched)
+      .catch(function () { applyFetched(null); });
   }
 
   function tryMount() {

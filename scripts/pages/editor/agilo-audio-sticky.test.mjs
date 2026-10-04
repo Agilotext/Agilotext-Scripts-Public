@@ -307,6 +307,47 @@ assert(AS.canOfferDeleteAudio({ path: '/app/free/editor', token: 't', jobId: '9'
 assert(src.includes('auth/share'), 'garde auth/share dans la source');
 assert(src.includes('function placeDeleteControl'), 'placement poubelle');
 assert(src.includes('placeDeleteControl(btn)'), 'poubelle replacée avec Suivre');
+assert(src.includes('viewBox="0 0 18 18"'), 'poubelle Nucleo 18');
+assert(src.includes('stroke-width="1.5"'), 'poubelle en trait');
+assert(src.includes("className = 'agilo-btn agilo-audio-file-act'"), 'carré .agilo-btn');
+assert(src.includes('agilo-audio-file-acts'), 'groupe télécharger + supprimer');
+assert(src.includes('function restoreDownloadHome'), 'restauration du lien');
+assert(!src.includes('fill="currentColor"'), 'plus de poubelle remplie');
+
+function nodeListHost(id) {
+  return {
+    id: id,
+    className: '',
+    childNodes: [],
+    get firstChild() { return this.childNodes[0] || null; },
+    insertBefore(node, next) {
+      if (node.parentNode && node.parentNode.removeChild) node.parentNode.removeChild(node);
+      node.parentNode = this;
+      if (next && this.childNodes.indexOf(next) >= 0) this.childNodes.splice(this.childNodes.indexOf(next), 0, node);
+      else this.childNodes.push(node);
+      return node;
+    },
+    appendChild(node) { return this.insertBefore(node, null); },
+    removeChild(node) {
+      var i = this.childNodes.indexOf(node);
+      if (i >= 0) this.childNodes.splice(i, 1);
+      if (node.parentNode === this) node.parentNode = null;
+      return node;
+    }
+  };
+}
+const dlHome = nodeListHost('player');
+const dlNext = { id: 'volume', parentNode: dlHome };
+const dl = { id: 'agilo-download', parentNode: dlHome, nextSibling: dlNext };
+dlHome.childNodes.push(dl, dlNext);
+AS.captureDownloadHome(dl);
+const dlGroup = nodeListHost('acts');
+dlGroup.className = 'agilo-audio-file-acts';
+dlGroup.appendChild(dl);
+assert(dl.parentNode === dlGroup, 'lien déplacé dans le groupe');
+assert(AS.restoreDownloadHome(dl) === true, 'lien rendu si poubelle cachée');
+assert(dl.parentNode === dlHome, 'lien revenu à sa place');
+assert(dlHome.childNodes[0] === dl && dlHome.childNodes[1] === dlNext, 'ordre d\'origine conservé');
 assert(src.includes('apiDeleteAudioJob'), 'endpoint delete audio');
 assert(src.includes("code: 'audio_deleted'"), 'événement audio supprimé');
 assert(src.includes('La transcription reste.'), 'copie confirmation');

@@ -54,6 +54,36 @@
     return { mode: 'none', host: null, before: null, after: null };
   }
 
+  function parentIsFileActs(node) {
+    if (!node) return false;
+    if (node.classList && typeof node.classList.contains === 'function' && node.classList.contains('agilo-audio-file-acts')) return true;
+    return String(node.className || '').indexOf('agilo-audio-file-acts') !== -1;
+  }
+
+  function captureDownloadHome(dl) {
+    if (!dl || dl.__agiloDownloadHome) return dl || null;
+    if (!dl.parentNode || parentIsFileActs(dl.parentNode)) return dl;
+    dl.__agiloDownloadHome = { parent: dl.parentNode || null, next: dl.nextSibling || null };
+    return dl;
+  }
+
+  function restoreDownloadHome(dl) {
+    if (!dl || !dl.__agiloDownloadHome) return false;
+    var home = dl.__agiloDownloadHome;
+    var parent = home.parent;
+    if (!parent) return false;
+    var next = home.next;
+    if (next && next.parentNode === parent && typeof parent.insertBefore === 'function') {
+      parent.insertBefore(dl, next);
+      return dl.parentNode === parent;
+    }
+    if (typeof parent.appendChild === 'function') {
+      parent.appendChild(dl);
+      return dl.parentNode === parent;
+    }
+    return false;
+  }
+
   function computeAudioRowState(opts) {
     opts = opts || {};
     var wrapIntersecting = !!opts.wrapIntersecting;
@@ -186,6 +216,8 @@
     computeChromeDockFloatingBox: computeChromeDockFloatingBox,
     getChromeDockState: getChromeDockState,
     resolveFollowHost: resolveFollowHost,
+    captureDownloadHome: captureDownloadHome,
+    restoreDownloadHome: restoreDownloadHome,
     apiBaseForHost: apiBaseForHost,
     canOfferDeleteAudio: canOfferDeleteAudio,
     DOCK_ID: DOCK_ID,
@@ -271,8 +303,13 @@
       '.agilo-audio-sticky__follow-label{display:inline}',
       '.agilo-audio-sticky__time{min-width:4.5rem;font-size:10px}',
       '}',
-      '#agilo-audio-delete{display:inline-flex;align-items:center;justify-content:center;padding:0 .45rem}',
-      '#agilo-audio-delete svg{display:block;width:14px;height:14px}',
+      '.agilo-audio-file-acts{display:inline-flex;align-items:center;gap:6px;margin-left:.75rem;flex:0 0 auto}',
+      '.agilo-audio-delete-anchor{position:relative;display:inline-flex;flex:0 0 auto}',
+      '#agilo-audio-delete.agilo-btn,.agilo-audio-file-acts>#agilo-download{box-sizing:border-box;padding:0;',
+      'width:2.4rem;min-width:2.4rem;height:2.4rem;aspect-ratio:1}',
+      '@media (max-width:560px){#agilo-audio-delete.agilo-btn,.agilo-audio-file-acts>#agilo-download{',
+      'width:2.75rem;min-width:2.75rem;height:2.75rem}}',
+      '#agilo-audio-delete svg,.agilo-audio-file-acts>#agilo-download svg{display:block;width:18px;height:18px}',
       '#agilo-audio-delete:disabled{opacity:.55;cursor:default}',
       '#agilo-audio-delete-panel{position:absolute;z-index:30;top:calc(100% + 6px);right:0;width:16rem;',
       'display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;padding:8px 10px;',
@@ -508,13 +545,24 @@
   }
 
   function trashIconSvg() {
-    return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" aria-hidden="true">'
+      + '<path d="M3.25 5.25H14.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+      + '<path d="M7.15 5.2V4.15C7.15 3.6 7.6 3.15 8.15 3.15H9.85C10.4 3.15 10.85 3.6 10.85 4.15V5.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/>'
+      + '<path d="M4.9 5.25L5.55 14.15C5.62 15.05 6.37 15.75 7.27 15.75H10.73C11.63 15.75 12.38 15.05 12.45 14.15L13.1 5.25" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+      + '<path d="M7.75 8.15V12.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+      + '<path d="M10.25 8.15V12.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+      + '</svg>';
   }
 
   var deleteInFlight = false;
+  var fileActsEl = null;
+  var deleteAnchorEl = null;
 
   function ensureDeletePanel() {
     var panel = document.getElementById(DELETE_PANEL_ID);
+    if (!panel && deleteAnchorEl && typeof deleteAnchorEl.querySelector === 'function') {
+      panel = deleteAnchorEl.querySelector('#' + DELETE_PANEL_ID);
+    }
     if (panel) return panel;
     panel = document.createElement('div');
     panel.id = DELETE_PANEL_ID;
@@ -648,11 +696,14 @@
 
   function ensureDeleteAudioBtn() {
     var btn = document.getElementById(DELETE_BTN_ID);
+    if (!btn && deleteAnchorEl && typeof deleteAnchorEl.querySelector === 'function') {
+      btn = deleteAnchorEl.querySelector('#' + DELETE_BTN_ID);
+    }
     if (!btn) {
       btn = document.createElement('button');
       btn.type = 'button';
       btn.id = DELETE_BTN_ID;
-      btn.className = 'agilo-audio-sticky__btn';
+      btn.className = 'agilo-btn agilo-audio-file-act';
       btn.setAttribute('data-act', 'delete');
       btn.setAttribute('aria-label', 'Supprimer le fichier audio');
       btn.innerHTML = trashIconSvg();
@@ -671,27 +722,57 @@
     return btn;
   }
 
+  function ensureDeleteAnchor() {
+    if (deleteAnchorEl && deleteAnchorEl.ownerDocument) return deleteAnchorEl;
+    var found = document.getElementById('agilo-audio-delete-anchor');
+    if (found) {
+      deleteAnchorEl = found;
+      return found;
+    }
+    var anchor = document.createElement('span');
+    anchor.id = 'agilo-audio-delete-anchor';
+    anchor.className = 'agilo-audio-delete-anchor';
+    deleteAnchorEl = anchor;
+    return anchor;
+  }
+
+  function ensureFileActs() {
+    if (fileActsEl) return fileActsEl;
+    var found = document.querySelector('.agilo-audio-file-acts');
+    if (found) {
+      fileActsEl = found;
+      return found;
+    }
+    var group = document.createElement('span');
+    group.className = 'agilo-audio-file-acts';
+    fileActsEl = group;
+    return group;
+  }
+
   function placeDeleteControl(followBtn) {
     var btn = ensureDeleteAudioBtn();
     var panel = ensureDeletePanel();
+    var anchor = ensureDeleteAnchor();
+    var group = ensureFileActs();
+    var dl = document.getElementById('agilo-download');
+    if (dl) captureDownloadHome(dl);
     if (!currentDeleteOffer() || !followBtn || !followBtn.parentNode) {
-      if (btn.parentNode) btn.parentNode.removeChild(btn);
-      if (panel.parentNode) panel.parentNode.removeChild(panel);
+      if (dl) restoreDownloadHome(dl);
+      if (group.parentNode) group.parentNode.removeChild(group);
       return;
     }
-    var host = followBtn.parentNode;
-    if (host && host.style && host.id !== 'ag-editor-chrome-dock' && !String(host.className || '').includes('agilo-audio-sticky')) {
-      if (!host.style.position) host.style.position = 'relative';
-    }
-    if (btn.previousElementSibling !== followBtn) {
-      if (typeof followBtn.insertAdjacentElement === 'function') followBtn.insertAdjacentElement('afterend', btn);
-      else if (followBtn.nextSibling) host.insertBefore(btn, followBtn.nextSibling);
-      else host.appendChild(btn);
-    }
-    if (panel.parentNode !== host || panel.previousElementSibling !== btn) {
+    if (btn.parentNode !== anchor) anchor.appendChild(btn);
+    if (panel.parentNode !== anchor || panel.previousElementSibling !== btn) {
       if (typeof btn.insertAdjacentElement === 'function') btn.insertAdjacentElement('afterend', panel);
-      else if (btn.nextSibling) host.insertBefore(panel, btn.nextSibling);
-      else host.appendChild(panel);
+      else anchor.appendChild(panel);
+    }
+    if (dl && dl.parentNode !== group) group.insertBefore(dl, group.firstChild || null);
+    if (anchor.parentNode !== group) group.appendChild(anchor);
+    if (dl && dl.parentNode === group && group.firstChild !== dl) group.insertBefore(dl, anchor);
+    if (group.previousElementSibling !== followBtn) {
+      if (typeof followBtn.insertAdjacentElement === 'function') followBtn.insertAdjacentElement('afterend', group);
+      else if (followBtn.nextSibling) followBtn.parentNode.insertBefore(group, followBtn.nextSibling);
+      else followBtn.parentNode.appendChild(group);
     }
   }
 
