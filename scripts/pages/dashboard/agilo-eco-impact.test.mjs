@@ -36,8 +36,13 @@ assert(previewZero && previewZero.liters === 2.4 && previewZero.preview === true
 assert(eco.resolveDisplayedImpact(null, "www.agilotext.com") == null, "www sans litres reste masqué");
 const real = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 8.9 }, "agilotext-test.webflow.io");
 assert(real && real.liters === 8.9 && real.preview === false, "un chiffre positif gagne sur l'aperçu");
-assert(src.includes("Aperçu, en attendant la mesure"), "mention aperçu dans la modale");
-assert(src.includes(">RSE<"), "pastille RSE conservée");
+assert(src.includes("Aperçu. La mesure réelle n’est pas encore là."), "mention aperçu dans la modale");
+assert(!src.includes(">RSE<"), "plus de pastille RSE");
+assert(src.includes('viewBox="0 0 18 18"'), "goutte Nucleo 18");
+assert(src.includes("stroke-width=\"1.5\""), "goutte en trait");
+assert(src.includes("stopPropagation"), "le clic ne remonte pas aux minutes");
+assert(src.includes("Empreinte eau du mois"), "libellé accessible");
+assert(src.includes("z-index:120"), "modale au-dessus de la sidebar");
 assert(eco.equivalenceLabel(9) === "≈ 1 pack (9 L)", "pack 9 L");
 assert(eco.equivalenceLabel(12) === "", "au-delà du pack : litres seuls");
 assert(eco.glassLevel(9) === 100, "verre plein à 9 L");

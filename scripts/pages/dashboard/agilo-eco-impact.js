@@ -168,41 +168,83 @@
     return "";
   }
 
+  var DROP_PATH = "M9 1.75C9 1.75 14.4 7.6 14.4 11.15C14.4 14.15 11.98 16.25 9 16.25C6.02 16.25 3.6 14.15 3.6 11.15C3.6 7.6 9 1.75 9 1.75Z";
+
+  function dropSvg(clipId, levelAttr) {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" fill="none" aria-hidden="true">'
+      + '<defs><clipPath id="' + clipId + '"><path d="' + DROP_PATH + '"/></clipPath></defs>'
+      + '<path d="' + DROP_PATH + '" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>'
+      + '<g clip-path="url(#' + clipId + ')">'
+      + '<rect class="agilo-eco-drop-fill" data-agilo-eco="' + levelAttr + '" x="0" y="18" width="18" height="0"></rect>'
+      + '</g></svg>';
+  }
+
+  function motionOk() {
+    try {
+      return !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (e) {
+      return true;
+    }
+  }
+
+  function applyLevel(rect, pct) {
+    if (!rect) return;
+    var p = Math.max(0, Math.min(100, Number(pct) || 0));
+    var h = 18 * p / 100;
+    rect.setAttribute("data-level", String(p));
+    rect.setAttribute("height", String(h));
+    rect.setAttribute("y", String(18 - h));
+  }
+
+  function revealLevel(rect) {
+    if (!rect) return;
+    var p = rect.getAttribute("data-level") || "0";
+    if (!motionOk()) {
+      applyLevel(rect, p);
+      return;
+    }
+    rect.setAttribute("height", "0");
+    rect.setAttribute("y", "18");
+    window.requestAnimationFrame(function () {
+      window.requestAnimationFrame(function () { applyLevel(rect, p); });
+    });
+  }
+
   function injectCss() {
     if (document.getElementById("agilo-eco-impact-css")) return;
     var s = document.createElement("style");
     s.id = "agilo-eco-impact-css";
     s.textContent = [
-      ".agilo-eco-btn{display:block;width:100%;margin:10px 0 0;padding:8px 10px;text-align:left;",
-      "border:1px solid #dbeafe;border-radius:12px;background:#eff6ff;color:#1e3a8a;cursor:pointer;",
-      "font:600 12px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial}",
-      ".agilo-eco-btn:hover{background:#dbeafe}",
-      ".agilo-eco-btn__row{display:flex;align-items:center;justify-content:space-between;gap:8px}",
-      ".agilo-eco-btn__eq{display:block;margin-top:4px;font-weight:500;color:#1d4ed8}",
-      ".agilo-eco-chip{font:700 9px/1 system-ui,sans-serif;letter-spacing:.04em;color:#1d4ed8;",
-      "background:#dbeafe;border-radius:999px;padding:3px 6px}",
-      ".agilo-eco-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;",
-      "padding:16px;background:rgba(15,23,42,.55)}",
+      ".agilo-eco-btn{display:inline-flex;align-items:center;align-self:flex-start;gap:6px;",
+      "width:auto;max-width:100%;margin:8px 0 0;padding:2px 0;border:0;background:transparent;",
+      "color:#174a96;cursor:pointer;font:600 13px/1.2 system-ui,-apple-system,Segoe UI,Roboto,Arial}",
+      ".agilo-eco-btn svg{display:block;width:16px;height:16px;flex:0 0 auto}",
+      ".agilo-eco-drop-fill{fill:#7dd3fc;transition:fill 160ms ease,height 700ms ease-out,y 700ms ease-out}",
+      ".agilo-eco-btn:hover .agilo-eco-drop-fill{fill:#0284c7}",
+      ".agilo-eco-btn:focus-visible{outline:2px solid #174a96;outline-offset:2px}",
+      ".agilo-eco-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;",
+      "padding:16px;background:rgba(15,23,42,.45)}",
       ".agilo-eco-modal[hidden]{display:none}",
-      ".agilo-eco-card{position:relative;width:min(28rem,100%);background:#fff;border-radius:24px;",
-      "padding:24px 20px 20px;box-shadow:0 18px 50px rgba(15,23,42,.2);text-align:center}",
+      ".agilo-eco-card{position:relative;width:min(22rem,100%);background:#fff;border-radius:16px;",
+      "padding:20px;text-align:left;box-shadow:0 18px 50px rgba(15,23,42,.16);color:#0f172a;",
+      "animation:agilo-eco-in 180ms ease}",
+      "@keyframes agilo-eco-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}",
       ".agilo-eco-close{position:absolute;top:12px;right:12px;width:2rem;height:2rem;border:0;border-radius:999px;",
       "background:#f1f5f9;color:#334155;cursor:pointer;font:700 14px/1 system-ui,sans-serif}",
-      ".agilo-eco-kicker{display:inline-block;margin:0 0 8px;padding:4px 10px;border-radius:999px;",
-      "background:#dbeafe;color:#1d4ed8;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase}",
-      ".agilo-eco-card h2{margin:0;font:800 20px/1.25 system-ui,sans-serif;color:#0f172a}",
-      ".agilo-eco-month{margin:6px 0 0;color:#64748b;font:500 12px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-preview{margin:8px 0 0;color:#1d4ed8;font:600 12px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-glass{position:relative;width:9rem;height:12rem;margin:18px auto 0;overflow:hidden;",
-      "border:4px solid #cbd5e1;border-radius:0 0 1.6rem 1.6rem;background:linear-gradient(#fff,#f0f9ff)}",
-      ".agilo-eco-liquid{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(#38bdf8,#0284c7)}",
-      ".agilo-eco-liters{margin:14px 0 0;font:800 28px/1.1 system-ui,sans-serif;color:#0f172a}",
-      ".agilo-eco-liters span{font:700 14px/1.2 system-ui,sans-serif;color:#64748b}",
-      ".agilo-eco-eq{display:inline-block;margin-top:8px;padding:4px 10px;border-radius:999px;",
-      "background:#eff6ff;border:1px solid #dbeafe;color:#1d4ed8;font:600 12px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-co2{margin:10px 0 0;color:#475569;font:500 12px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-attest{display:inline-block;margin-top:14px;color:#1d4ed8;font:600 12px/1.3 system-ui,sans-serif}",
-      "@media (prefers-reduced-motion:reduce){.agilo-eco-liquid{transition:none}}"
+      ".agilo-eco-close:focus-visible{outline:2px solid #174a96;outline-offset:2px}",
+      ".agilo-eco-month{margin:0;padding-right:2rem;color:#64748b;font:500 12px/1.3 system-ui,sans-serif}",
+      ".agilo-eco-hero{display:flex;align-items:center;gap:16px;margin-top:14px}",
+      ".agilo-eco-hero svg{display:block;width:72px;height:72px;flex:0 0 auto;color:#174a96}",
+      ".agilo-eco-figure{margin:0;font:800 32px/1 system-ui,sans-serif;color:#174a96}",
+      ".agilo-eco-figure span[data-agilo-eco='unit']{font:700 14px/1.2 system-ui,sans-serif;color:#64748b}",
+      ".agilo-eco-for{margin:4px 0 0;color:#334155;font:500 13px/1.3 system-ui,sans-serif}",
+      ".agilo-eco-eq{margin:12px 0 0;color:#334155;font:600 13px/1.35 system-ui,sans-serif}",
+      ".agilo-eco-scope,.agilo-eco-preview,.agilo-eco-co2{margin:8px 0 0;color:#64748b;font:500 12px/1.35 system-ui,sans-serif}",
+      ".agilo-eco-attest{display:inline-block;margin-top:14px;color:#174a96;font:600 12px/1.3 system-ui,sans-serif}",
+      "@media (prefers-reduced-motion:reduce){",
+      ".agilo-eco-drop-fill,.agilo-eco-modal{transition:none}",
+      ".agilo-eco-card{animation:none}",
+      "}"
     ].join("");
     document.head.appendChild(s);
   }
@@ -219,8 +261,8 @@
     btn.type = "button";
     btn.className = "agilo-eco-btn";
     btn.setAttribute("data-agilo-eco", "button");
-    btn.innerHTML = '<span class="agilo-eco-btn__row"><span data-agilo-eco="liters">…</span><span class="agilo-eco-chip">RSE</span></span>'
-      + '<span class="agilo-eco-btn__eq" data-agilo-eco="eq"></span>';
+    btn.innerHTML = dropSvg("agilo-eco-drop-chip", "chip-level")
+      + '<span data-agilo-eco="liters">…</span>';
     var label = flat.querySelector('[data-aq="minutes-label"]');
     if (label && label.parentNode) label.insertAdjacentElement("afterend", btn);
     else flat.appendChild(btn);
@@ -231,47 +273,72 @@
     modal.setAttribute("data-agilo-eco", "modal");
     modal.innerHTML = '<div class="agilo-eco-card" role="dialog" aria-modal="true" aria-labelledby="agilo-eco-title">'
       + '<button type="button" class="agilo-eco-close" data-agilo-eco="close" aria-label="Fermer">×</button>'
-      + '<p class="agilo-eco-kicker">Eau du mois</p>'
-      + '<h2 id="agilo-eco-title">Votre verre d\'eau Agilotext</h2>'
       + '<p class="agilo-eco-month" data-agilo-eco="month"></p>'
-      + '<p class="agilo-eco-preview" data-agilo-eco="preview" hidden>Aperçu, en attendant la mesure</p>'
-      + '<div class="agilo-eco-glass" aria-hidden="true"><div class="agilo-eco-liquid" data-agilo-eco="level"></div></div>'
-      + '<p class="agilo-eco-liters"><span data-agilo-eco="modal-liters"></span> <span>L d\'eau</span></p>'
+      + '<div class="agilo-eco-hero">'
+      + dropSvg("agilo-eco-drop-modal", "level")
+      + '<div><p class="agilo-eco-figure" id="agilo-eco-title"><span data-agilo-eco="modal-liters"></span> <span data-agilo-eco="unit">L</span></p>'
+      + '<p class="agilo-eco-for">pour vos transcriptions</p></div>'
+      + '</div>'
       + '<p class="agilo-eco-eq" data-agilo-eco="modal-eq" hidden></p>'
+      + '<p class="agilo-eco-scope">Mois calendaire en cours, comme vos minutes.</p>'
+      + '<p class="agilo-eco-preview" data-agilo-eco="preview" hidden>Aperçu. La mesure réelle n’est pas encore là.</p>'
       + '<p class="agilo-eco-co2" data-agilo-eco="co2" hidden></p>'
       + '<a class="agilo-eco-attest" data-agilo-eco="attest" hidden target="_blank" rel="noopener">Télécharger l\'attestation</a>'
       + '</div>';
     document.body.appendChild(modal);
 
-    function close() { modal.hidden = true; }
-    btn.addEventListener("click", function () {
+    function close() {
+      modal.hidden = true;
+      if (btn && typeof btn.focus === "function") btn.focus();
+    }
+    function openModal() {
       if (!mounted || !mounted.impact) return;
+      var wasHidden = modal.hidden;
       modal.hidden = false;
+      if (wasHidden) revealLevel(modal.querySelector('[data-agilo-eco="level"]'));
+    }
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      openModal();
+    });
+    btn.addEventListener("keydown", function (e) {
+      e.stopPropagation();
+      if (e.key === "Enter" || e.key === " " || e.code === "Space") {
+        e.preventDefault();
+        openModal();
+      }
     });
     modal.addEventListener("click", function (e) {
+      e.stopPropagation();
       if (e.target === modal) close();
     });
-    modal.querySelector('[data-agilo-eco="close"]').addEventListener("click", close);
+    modal.querySelector('[data-agilo-eco="close"]').addEventListener("click", function (e) {
+      e.stopPropagation();
+      close();
+    });
     document.addEventListener("keydown", function (e) {
-      if (e.key === "Escape" && !modal.hidden) close();
+      if (e.key === "Escape" && !modal.hidden) {
+        e.stopPropagation();
+        close();
+      }
     });
     return { btn: btn, modal: modal, flat: flat, impact: null };
   }
 
   function paint(impact) {
     if (!mounted) return;
-    var litersText = formatLiters(impact.liters) + " L d'eau";
+    var formatted = formatLiters(impact.liters);
     var eq = equivalenceLabel(impact.liters);
     var month = currentMonthLabelFr(new Date());
-    mounted.btn.querySelector('[data-agilo-eco="liters"]').textContent = litersText;
-    var eqEl = mounted.btn.querySelector('[data-agilo-eco="eq"]');
-    eqEl.textContent = eq;
+    var pct = glassLevel(impact.liters);
+    mounted.btn.querySelector('[data-agilo-eco="liters"]').textContent = formatted + " L";
+    mounted.btn.setAttribute("aria-label", "Empreinte eau du mois, " + formatted + " litres");
+    applyLevel(mounted.btn.querySelector('[data-agilo-eco="chip-level"]'), pct);
     mounted.modal.querySelector('[data-agilo-eco="month"]').textContent = month;
     var previewEl = mounted.modal.querySelector('[data-agilo-eco="preview"]');
     if (previewEl) previewEl.hidden = !impact.preview;
-    mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatLiters(impact.liters);
-    var level = mounted.modal.querySelector('[data-agilo-eco="level"]');
-    level.style.height = glassLevel(impact.liters) + "%";
+    mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatted;
+    applyLevel(mounted.modal.querySelector('[data-agilo-eco="level"]'), pct);
     var modalEq = mounted.modal.querySelector('[data-agilo-eco="modal-eq"]');
     modalEq.hidden = !eq;
     modalEq.textContent = eq;
