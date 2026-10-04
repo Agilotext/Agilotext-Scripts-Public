@@ -23,6 +23,23 @@
   var FOLLOW_BTN_ID = 'agilo-transcript-follow';
   var FOLLOW_HINT_ID = 'agilo-transcript-follow-hint';
   var FOLLOW_HINT_TEXT = 'L\'écran descend avec l\'audio. Si vous scrollez ou vous corrigez le texte, ça s\'arrête. Cliquez sur Suivre pour reprendre.';
+  var DELETE_BTN_ID = 'agilo-audio-delete';
+  var DELETE_PANEL_ID = 'agilo-audio-delete-panel';
+
+  function apiBaseForHost(hostname) {
+    if (hostname === 'agilotext-test.webflow.io') return 'https://apitest.agilotext.com/api/v1';
+    return 'https://api.agilotext.com/api/v1';
+  }
+
+  function canOfferDeleteAudio(opts) {
+    opts = opts || {};
+    var path = String(opts.path || '');
+    if (path.indexOf('/auth/share') !== -1) return false;
+    if (!opts.token) return false;
+    if (!opts.jobId) return false;
+    if (opts.audioUnavailable) return false;
+    return true;
+  }
 
   function resolveFollowHost(opts) {
     opts = opts || {};
@@ -170,10 +187,14 @@
     computeChromeDockFloatingBox: computeChromeDockFloatingBox,
     getChromeDockState: getChromeDockState,
     resolveFollowHost: resolveFollowHost,
+    apiBaseForHost: apiBaseForHost,
+    canOfferDeleteAudio: canOfferDeleteAudio,
     DOCK_ID: DOCK_ID,
     ROW_ID: ROW_ID,
     FOLLOW_BTN_ID: FOLLOW_BTN_ID,
     FOLLOW_HINT_ID: FOLLOW_HINT_ID,
+    DELETE_BTN_ID: DELETE_BTN_ID,
+    DELETE_PANEL_ID: DELETE_PANEL_ID,
     IO_ROOT_MARGIN: IO_ROOT_MARGIN,
     IO_SHOW_RATIO: IO_SHOW_RATIO
   };
@@ -212,7 +233,7 @@
       '.ag-editor-chrome-dock-sentinel{display:block;height:1px;margin:0;padding:0;pointer-events:none}',
       '.ag-editor-audio-row{display:none;box-sizing:border-box;width:100%;max-width:100%;margin:0}',
       '.ag-editor-audio-row.is-open{display:block;padding:4px 0 8px}',
-      '.agilo-audio-sticky{display:none;align-items:center;gap:8px;flex-wrap:nowrap;',
+      '.agilo-audio-sticky{display:none;align-items:center;gap:8px;flex-wrap:nowrap;position:relative;',
       'box-sizing:border-box;padding:6px 10px;width:100%;max-width:100%;',
       'background:#fff;border:1px solid rgba(23,74,150,.18);border-radius:8px;',
       'font:500 13px/1.3 system-ui,-apple-system,Segoe UI,Roboto,Arial;color:#262626}',
@@ -251,6 +272,20 @@
       '.agilo-audio-sticky__follow-label{display:inline}',
       '.agilo-audio-sticky__time{min-width:4.5rem;font-size:10px}',
       '}',
+      '#agilo-audio-delete{display:inline-flex;align-items:center;justify-content:center;padding:0 .45rem}',
+      '#agilo-audio-delete svg{display:block;width:14px;height:14px}',
+      '#agilo-audio-delete:disabled{opacity:.55;cursor:default}',
+      '#agilo-audio-delete-panel{position:absolute;z-index:30;top:calc(100% + 6px);right:0;width:16rem;',
+      'display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;padding:8px 10px;',
+      'background:#fff;border:1px solid rgba(23,74,150,.18);border-radius:8px;',
+      'box-shadow:0 10px 26px rgba(15,23,42,.16)}',
+      '#agilo-audio-delete-panel[hidden]{display:none}',
+      '#agilo-audio-delete-panel p{margin:0;flex:1 1 12rem;font:500 12px/1.35 system-ui,sans-serif;color:#262626}',
+      '#agilo-audio-delete-panel button{height:2rem;padding:0 .7rem;border-radius:6px;border:1px solid rgba(52,58,64,.18);',
+      'background:#fff;color:#174a96;cursor:pointer;font:600 12px/1 inherit}',
+      '#agilo-audio-delete-panel button[data-del="confirm"]{background:#9f1239;border-color:#9f1239;color:#fff}',
+      '#agilo-audio-delete-panel button:disabled{opacity:.55;cursor:default}',
+      '#agilo-audio-delete-panel .agilo-audio-delete-error{flex:1 1 100%;color:#9f1239}',
       '@media (prefers-reduced-motion:reduce){',
       '.ag-editor-audio-row,.agilo-audio-sticky,.ag-editor-chrome-dock{transition:none}',
       '}'
@@ -401,6 +436,266 @@
     return btn;
   }
 
+  function readMemberEmail() {
+    var byName = document.querySelector('[name="memberEmail"]');
+    if (byName && byName.value) return byName.value.trim();
+    var byId = document.getElementById('memberEmail');
+    if (byId && byId.value) return byId.value.trim();
+    var byText = document.querySelector('[data-ms-member="email"]');
+    if (byText) {
+      var txt = (byText.value || byText.getAttribute('src') || byText.textContent || '').trim();
+      if (txt) return txt;
+    }
+    var fromWindow = (window.memberEmail || '').trim();
+    if (fromWindow) return fromWindow;
+    try { return (localStorage.getItem('agilo:username') || '').trim(); } catch (e) { return ''; }
+  }
+
+  function readMemberToken() {
+    var fromWindow = '';
+    if (typeof window.globalToken === 'string') fromWindow = window.globalToken.trim();
+    else if (window.globalToken) fromWindow = String(window.globalToken).trim();
+    if (fromWindow) return fromWindow;
+    try {
+      if (typeof globalToken !== 'undefined' && globalToken) return String(globalToken).trim();
+    } catch (e) {}
+    return '';
+  }
+
+  function normalizeEdition(v) {
+    var s = String(v || '').trim().toLowerCase();
+    if (s === 'ent' || s === 'enterprise' || s === 'entreprise' || s === 'business' || s === 'team' || s === 'biz') return 'ent';
+    if (s.indexOf('pro') === 0) return 'pro';
+    if (s.indexOf('free') === 0 || s === 'gratuit') return 'free';
+    return s || 'pro';
+  }
+
+  function readEdition() {
+    var path = (location && location.pathname) || '';
+    if (/\/app\/business(\/|$)/i.test(path)) return 'ent';
+    var editorRoot = document.getElementById('editorRoot');
+    if (editorRoot && editorRoot.dataset && editorRoot.dataset.edition) return normalizeEdition(editorRoot.dataset.edition);
+    var editionBadge = document.getElementById('edition');
+    if (editionBadge && editionBadge.textContent) return normalizeEdition(editionBadge.textContent);
+    try {
+      var p = new URLSearchParams(location.search || '');
+      if (p.get('edition')) return normalizeEdition(p.get('edition'));
+      return normalizeEdition(localStorage.getItem('agilo:edition') || 'pro');
+    } catch (e) {
+      return 'pro';
+    }
+  }
+
+  function readJobId() {
+    try {
+      var p = new URLSearchParams(location.search || '');
+      if (p.get('jobId')) return p.get('jobId');
+    } catch (e) {}
+    var wrap = getWrap();
+    if (wrap && wrap.dataset && wrap.dataset.jobId) return wrap.dataset.jobId;
+    var editorRoot = document.getElementById('editorRoot');
+    if (editorRoot && editorRoot.dataset && editorRoot.dataset.jobId) return editorRoot.dataset.jobId;
+    return '';
+  }
+
+  function currentDeleteOffer() {
+    var wrap = getWrap();
+    return canOfferDeleteAudio({
+      path: (location && location.pathname) || '',
+      token: readMemberToken(),
+      jobId: readJobId(),
+      audioUnavailable: !!(wrap && wrap.dataset && wrap.dataset.audioUnavailable)
+    });
+  }
+
+  function trashIconSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z"/></svg>';
+  }
+
+  var deleteInFlight = false;
+
+  function ensureDeletePanel() {
+    var panel = document.getElementById(DELETE_PANEL_ID);
+    if (panel) return panel;
+    panel = document.createElement('div');
+    panel.id = DELETE_PANEL_ID;
+    panel.hidden = true;
+    panel.setAttribute('role', 'group');
+    panel.setAttribute('aria-label', 'Confirmer la suppression du fichier audio');
+    panel.innerHTML = '<p>Supprimer le fichier audio ? La transcription reste.</p>'
+      + '<button type="button" data-del="cancel">Annuler</button>'
+      + '<button type="button" data-del="confirm">Supprimer</button>'
+      + '<p class="agilo-audio-delete-error" hidden></p>';
+    panel.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var t = e.target && e.target.closest ? e.target.closest('[data-del]') : null;
+      if (!t) return;
+      if (t.getAttribute('data-del') === 'cancel') closeDeletePanel();
+      else submitDeleteAudio();
+    });
+    return panel;
+  }
+
+  function closeDeletePanel() {
+    var panel = document.getElementById(DELETE_PANEL_ID);
+    if (!panel) return;
+    panel.hidden = true;
+    var err = panel.querySelector('.agilo-audio-delete-error');
+    if (err) {
+      err.hidden = true;
+      err.textContent = '';
+    }
+  }
+
+  function openDeletePanel() {
+    var panel = ensureDeletePanel();
+    var btn = document.getElementById(DELETE_BTN_ID);
+    if (btn && btn.parentNode && panel.previousElementSibling !== btn) {
+      btn.insertAdjacentElement('afterend', panel);
+    }
+    panel.hidden = false;
+  }
+
+  function showDeleteError(message) {
+    var panel = ensureDeletePanel();
+    panel.hidden = false;
+    var err = panel.querySelector('.agilo-audio-delete-error');
+    if (!err) return;
+    err.hidden = false;
+    err.textContent = message || 'Suppression impossible.';
+  }
+
+  function setDeleteBusy(busy) {
+    var btn = document.getElementById(DELETE_BTN_ID);
+    var panel = document.getElementById(DELETE_PANEL_ID);
+    if (btn) btn.disabled = !!busy;
+    if (!panel) return;
+    var nodes = panel.querySelectorAll('button');
+    for (var i = 0; i < nodes.length; i++) nodes[i].disabled = !!busy;
+  }
+
+  function applyDeletedAudio(jobId) {
+    var audio = getAudio();
+    if (audio) {
+      try { audio.pause(); } catch (e) {}
+      try {
+        var src = audio.currentSrc || audio.src || '';
+        if (String(src).indexOf('blob:') === 0 && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+          URL.revokeObjectURL(src);
+        }
+      } catch (e2) {}
+      try {
+        audio.removeAttribute('src');
+        if (typeof audio.load === 'function') audio.load();
+      } catch (e3) {}
+    }
+    var wrap = getWrap();
+    if (wrap && wrap.dataset) wrap.dataset.audioUnavailable = 'audio_deleted';
+    try {
+      window.dispatchEvent(new CustomEvent('agilo:audioUnavailable', {
+        detail: {
+          jobId: jobId,
+          code: 'audio_deleted',
+          message: 'Le fichier audio a été supprimé.'
+        }
+      }));
+    } catch (e4) {}
+    var dl = document.getElementById('agilo-download');
+    if (dl) {
+      dl.style.display = 'none';
+      dl.removeAttribute('href');
+    }
+    closeDeletePanel();
+    placeFollowControl();
+  }
+
+  function submitDeleteAudio() {
+    if (deleteInFlight) return;
+    if (!currentDeleteOffer()) return;
+    var jobId = readJobId();
+    var email = readMemberEmail();
+    var token = readMemberToken();
+    if (!email || !token || !jobId) {
+      showDeleteError('Session incomplète. Rechargez la page.');
+      return;
+    }
+    deleteInFlight = true;
+    setDeleteBusy(true);
+    var url = apiBaseForHost(location.hostname)
+      + '/apiDeleteAudioJob?username=' + encodeURIComponent(email)
+      + '&token=' + encodeURIComponent(token)
+      + '&edition=' + encodeURIComponent(readEdition())
+      + '&jobId=' + encodeURIComponent(jobId);
+    fetch(url, { method: 'GET', credentials: 'omit' })
+      .then(function (res) {
+        return res.json().catch(function () { return { status: 'KO', errorMessage: 'Réponse illisible' }; });
+      })
+      .then(function (data) {
+        if (data && data.status === 'OK') {
+          applyDeletedAudio(jobId);
+          return;
+        }
+        var msg = (data && (data.errorMessage || data.message)) || 'Suppression impossible.';
+        showDeleteError(msg);
+      })
+      .catch(function () {
+        showDeleteError('Suppression impossible. L\'audio est toujours là.');
+      })
+      .then(function () {
+        deleteInFlight = false;
+        setDeleteBusy(false);
+      });
+  }
+
+  function ensureDeleteAudioBtn() {
+    var btn = document.getElementById(DELETE_BTN_ID);
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = DELETE_BTN_ID;
+      btn.className = 'agilo-audio-sticky__btn';
+      btn.setAttribute('data-act', 'delete');
+      btn.setAttribute('aria-label', 'Supprimer le fichier audio');
+      btn.innerHTML = trashIconSvg();
+    }
+    if (!btn.__agiloDeleteBound) {
+      btn.__agiloDeleteBound = true;
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (deleteInFlight) return;
+        var panel = document.getElementById(DELETE_PANEL_ID);
+        if (panel && !panel.hidden) closeDeletePanel();
+        else openDeletePanel();
+      });
+    }
+    return btn;
+  }
+
+  function placeDeleteControl(followBtn) {
+    var btn = ensureDeleteAudioBtn();
+    var panel = ensureDeletePanel();
+    if (!currentDeleteOffer() || !followBtn || !followBtn.parentNode) {
+      if (btn.parentNode) btn.parentNode.removeChild(btn);
+      if (panel.parentNode) panel.parentNode.removeChild(panel);
+      return;
+    }
+    var host = followBtn.parentNode;
+    if (host && host.style && host.id !== 'ag-editor-chrome-dock' && !String(host.className || '').includes('agilo-audio-sticky')) {
+      if (!host.style.position) host.style.position = 'relative';
+    }
+    if (btn.previousElementSibling !== followBtn) {
+      if (typeof followBtn.insertAdjacentElement === 'function') followBtn.insertAdjacentElement('afterend', btn);
+      else if (followBtn.nextSibling) host.insertBefore(btn, followBtn.nextSibling);
+      else host.appendChild(btn);
+    }
+    if (panel.parentNode !== host || panel.previousElementSibling !== btn) {
+      if (typeof btn.insertAdjacentElement === 'function') btn.insertAdjacentElement('afterend', panel);
+      else if (btn.nextSibling) host.insertBefore(panel, btn.nextSibling);
+      else host.appendChild(panel);
+    }
+  }
+
   function placeFollowControl() {
     injectCss();
     var btn = ensureFollowBtn();
@@ -424,6 +719,7 @@
         placed.after.insertAdjacentElement('afterend', btn);
       }
       syncFollow();
+      placeDeleteControl(btn);
       return btn;
     }
     var before = placed.before;
@@ -433,6 +729,7 @@
       else placed.host.appendChild(btn);
     }
     syncFollow();
+    placeDeleteControl(btn);
     return btn;
   }
 
@@ -539,6 +836,7 @@
       var btn = e.target.closest('[data-act]');
       if (!btn || btn.getAttribute('data-act') === 'track') return;
       var act = btn.getAttribute('data-act');
+      if (act === 'delete') return;
       if (act === 'play') proxyClick('agilo-play');
       else if (act === 'back') proxyClick('agilo-skip-back');
       else if (act === 'fwd') proxyClick('agilo-skip-fwd');

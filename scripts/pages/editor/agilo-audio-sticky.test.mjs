@@ -297,4 +297,22 @@ assert(dockFallback.host === dockHost, 'host = dock');
 const noneHost = AS.resolveFollowHost({ rowOpen: false });
 assert(noneHost.mode === 'none', 'aucun hôte sans bar/speed/dock');
 
+assert(AS.DELETE_BTN_ID === 'agilo-audio-delete', 'DELETE_BTN_ID');
+assert(typeof AS.canOfferDeleteAudio === 'function', 'canOfferDeleteAudio');
+assert(AS.canOfferDeleteAudio({ path: '/auth/share', token: 't', jobId: '1' }) === false, 'pas de poubelle sur /auth/share');
+assert(AS.canOfferDeleteAudio({ path: '/app/business/editor', token: '', jobId: '1' }) === false, 'pas de poubelle sans token');
+assert(AS.canOfferDeleteAudio({ path: '/app/pro/editor', token: 't', jobId: '' }) === false, 'pas de poubelle sans job');
+assert(AS.canOfferDeleteAudio({ path: '/app/pro/editor', token: 't', jobId: '9', audioUnavailable: true }) === false, 'pas de poubelle si audio déjà indisponible');
+assert(AS.canOfferDeleteAudio({ path: '/app/free/editor', token: 't', jobId: '9' }) === true, 'poubelle éditeur membre');
+assert(src.includes('auth/share'), 'garde auth/share dans la source');
+assert(src.includes('function placeDeleteControl'), 'placement poubelle');
+assert(src.includes('placeDeleteControl(btn)'), 'poubelle replacée avec Suivre');
+assert(src.includes('apiDeleteAudioJob'), 'endpoint delete audio');
+assert(src.includes("code: 'audio_deleted'"), 'événement audio supprimé');
+assert(src.includes('La transcription reste.'), 'copie confirmation');
+assert(!src.includes('window.confirm'), 'pas de confirm natif');
+assert(!src.includes('conservation 30'), 'pas le message de purge offre');
+assert(AS.apiBaseForHost('agilotext-test.webflow.io') === 'https://apitest.agilotext.com/api/v1', 'delete apitest sur le site test');
+assert(AS.apiBaseForHost('www.agilotext.com') === 'https://api.agilotext.com/api/v1', 'delete prod ailleurs');
+
 console.log('agilo-audio-sticky.test.mjs OK');
