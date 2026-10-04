@@ -2,7 +2,8 @@
    AGILOTEXT - Eau du mois sous la jauge minutes
    Cible : .agilo-quotas-flat (tableaux de bord Free, Pro, Business)
    Charge : après agilo-quotas-widget
-   Sonde 2026-10-04 (apitest, Origin agilotext-test.webflow.io) :
+   Sonde 2026-10-04 : le clone apitest répond en JSON, l'API live renvoie un corps vide.
+   Les appels partent quand même vers api.agilotext.com (compte live BauerWebPro).
    - CORS Access-Control-Allow-Origin: *
    - GET sans auth : { status, errorMessage } "username_and_token_required"
    - GET jeton invalide : { status:"KO", errorMessage:"invalid_token" }
@@ -18,8 +19,7 @@
   var GOURDE_L = 0.5;
   var VERRE_L = 0.25;
 
-  function apiBaseForHost(hostname) {
-    if (hostname === "agilotext-test.webflow.io") return "https://apitest.agilotext.com/api/v1";
+  function apiBaseForHost() {
     return "https://api.agilotext.com/api/v1";
   }
 

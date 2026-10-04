@@ -312,7 +312,7 @@ assert(src.includes("code: 'audio_deleted'"), 'événement audio supprimé');
 assert(src.includes('La transcription reste.'), 'copie confirmation');
 assert(!src.includes('window.confirm'), 'pas de confirm natif');
 assert(!src.includes('conservation 30'), 'pas le message de purge offre');
-assert(AS.apiBaseForHost('agilotext-test.webflow.io') === 'https://apitest.agilotext.com/api/v1', 'delete apitest sur le site test');
-assert(AS.apiBaseForHost('www.agilotext.com') === 'https://api.agilotext.com/api/v1', 'delete prod ailleurs');
+assert(AS.apiBaseForHost('agilotext-test.webflow.io') === 'https://api.agilotext.com/api/v1', 'delete API live sur le site test');
+assert(AS.apiBaseForHost('www.agilotext.com') === 'https://api.agilotext.com/api/v1', 'delete API live');
 
 console.log('agilo-audio-sticky.test.mjs OK');

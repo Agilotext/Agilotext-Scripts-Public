@@ -26,8 +26,7 @@
   var DELETE_BTN_ID = 'agilo-audio-delete';
   var DELETE_PANEL_ID = 'agilo-audio-delete-panel';
 
-  function apiBaseForHost(hostname) {
-    if (hostname === 'agilotext-test.webflow.io') return 'https://apitest.agilotext.com/api/v1';
+  function apiBaseForHost() {
     return 'https://api.agilotext.com/api/v1';
   }
 
