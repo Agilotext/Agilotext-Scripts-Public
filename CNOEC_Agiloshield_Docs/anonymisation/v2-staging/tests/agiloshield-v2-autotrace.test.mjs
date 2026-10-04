@@ -45,7 +45,10 @@ assert.equal(rectsOnPage([glyph(10, 700, 20, 'Ly')], viewport, [600, pageHeight]
 
 const many = [];
 for (let index = 0; index < 11; index++) many.push(glyph(10 + index * 30, 700, 24, 'SHOP'));
-assert.equal(rectsOnPage(many, viewport, [2000, pageHeight], 'SHOP').reason, 'tooMany');
+const manyHit = rectsOnPage(many, viewport, [2000, pageHeight], 'SHOP');
+assert.equal(manyHit.ok, true);
+assert.equal(manyHit.rects.length, 11);
+assert.notEqual(manyHit.reason, 'tooMany');
 
 const turned = [0, -1, 1, 0, 0, 0];
 const turnedRect = itemViewportRect(glyph(100, 700, 40, 'SHOP'), turned);

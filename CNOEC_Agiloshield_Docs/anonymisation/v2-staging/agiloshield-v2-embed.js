@@ -1423,7 +1423,7 @@ async function limitedStatus(jobId){
     state.pollWaiters.shift()?.();
   }
 }
-async function pollEntry(entry,{intervalMs,expectRevision}={}){
+async function pollEntry(entry,{intervalMs,expectRevision,untilPublished}={}){
   if(entry.polling||!entry.jobId||!currentAccountEntry(entry))return;
   entry.polling=true;
   const deadline=expectRevision?Date.now()+180000:0;
@@ -1432,15 +1432,23 @@ async function pollEntry(entry,{intervalMs,expectRevision}={}){
     if(!currentAccountEntry(entry))return;
     entry.status=statusOf(job);entry.selectedTypes=job.protectionPolicy?.selectedTypes||entry.selectedTypes;
     const revisionReady=!expectRevision||String(job.reviewRevision)===String(expectRevision);
+    const published=!untilPublished||(revisionReady&&job.workflowState!=='DIRTY');
     if(!isTerminal(entry.status))entry.hasCurrentResult=false;
     renderQueue();renderDrawer(entry);
     const failed=entry.status==='FAILED'||entry.status==='ERROR';
-    if(failed||(isTerminal(entry.status)&&revisionReady)){
+    if(failed||(untilPublished&&entry.status==='READY')||(isTerminal(entry.status)&&revisionReady&&published)){
       entry.applying=false;await loadCurrent(entry);return;
     }
     if(deadline&&Date.now()>deadline){
       entry.applying=false;await loadCurrent(entry).catch(()=>{});
+      if(untilPublished&&entry.status==='READY')return;
       throw new Error(copy.errors.maskFailed);
+    }
+    if(untilPublished&&isTerminal(entry.status)&&(job.workflowState==='DIRTY'||entry.status==='READY'||!revisionReady)){
+      const interval=document.visibilityState==='hidden'?Math.max(15000,config.POLL_MS||5000):
+        Math.max(1000,intervalMs||config.POLL_MS||5000);
+      await new Promise(resolve=>setTimeout(resolve,interval));
+      continue;
     }
     if(!expectRevision&&job.workflowState==='DIRTY'){
       entry.applying=false;
@@ -1493,12 +1501,13 @@ async function loadCurrent(entry,{retryStale=true}={}){
   entry.staleReview=false;
   const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
-  if(previousRevision&&String(previousRevision)!==String(entry.revision)){
-    entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;entry.previewKind='anon';entry.page=1;
-    entry.report=null;entry.reportError=null;entry.pendingMask=null;
-  }
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
+  if(previousRevision&&String(previousRevision)!==String(entry.revision)){
+    entry.focusId=null;entry.pageOnlyLocation=null;entry.target=null;
+    entry.previewKind=entry.hasCurrentResult?'anon':'origin';entry.page=1;
+    entry.report=null;entry.reportError=null;entry.pendingMask=null;
+  }
   if(isTerminal(currentStatus)){entry.file=null;if(currentStatus==='FAILED')entry.pendingMask=null;}
   entry.error=currentStatus==='FAILED'?jobErrorMessage(job):null;
   if(currentStatus==='FAILED'){
@@ -2152,35 +2161,31 @@ async function cachedOriginPdf(entry){
   return pdf;
 }
 async function passageBoxes(entry,row){
+  const pageNumber=Number(row?.page);
   const known=regionRectangles(entry,row);
-  if(known.length>10)return {ok:false,reason:'tooMany',rects:[]};
-  if(known.length)return {ok:true,rects:known};
+  const located=Number.isInteger(pageNumber)&&pageNumber>=1
+    ?known.filter(box=>box.page===pageNumber):known;
+  if(located.length)return {ok:true,rects:located};
+  if(!Number.isInteger(pageNumber)||pageNumber<1)return {ok:false,reason:'none',rects:[]};
   const text=row?.text||row?.surface||'';
   if(normalizeSearch(text).replace(/[^0-9a-z]/g,'').length<3)return {ok:false,reason:'short',rects:[]};
   let pdf;
   try{pdf=await cachedOriginPdf(entry);}catch(_){return {ok:false,reason:'none',rects:[]};}
-  const hinted=Number(row?.page);
-  const order=[];
-  if(Number.isInteger(hinted)&&hinted>=1&&hinted<=pdf.numPages)order.push(hinted);
-  for(let page=1;page<=pdf.numPages;page++)if(!order.includes(page))order.push(page);
-  const rects=[];
-  for(const pageNumber of order){
-    const page=await pdf.getPage(pageNumber);
-    if((page.rotate||0)!==0)continue;
-    const viewport=page.getViewport({scale:1});
-    let content;try{content=await page.getTextContent();}catch(_){continue;}
-    const hit=rectsOnPage(content.items||[],viewport.transform,[viewport.width,viewport.height],text);
-    if(hit.reason==='tooMany')return {ok:false,reason:'tooMany',rects:[]};
-    for(const rect of hit.rects||[])rects.push({page:pageNumber,rect});
-    if(rects.length>10)return {ok:false,reason:'tooMany',rects:[]};
-  }
-  return rects.length?{ok:true,rects}:{ok:false,reason:'none',rects:[]};
+  if(pageNumber>pdf.numPages)return {ok:false,reason:'none',rects:[]};
+  const page=await pdf.getPage(pageNumber);
+  if((page.rotate||0)!==0)return {ok:false,reason:'none',rects:[]};
+  const viewport=page.getViewport({scale:1});
+  let content;try{content=await page.getTextContent();}catch(_){return {ok:false,reason:'none',rects:[]};}
+  const hit=rectsOnPage(content.items||[],viewport.transform,[viewport.width,viewport.height],text);
+  if(!hit.ok)return {ok:false,reason:hit.reason||'none',rects:[]};
+  return {ok:true,rects:hit.rects.map(rect=>({page:pageNumber,rect}))};
 }
 async function settleSkippedZone(entry,action,zone,revision){
   const occurrenceId=zone.occurrenceId||zone.id;
   const row=passageRow(entry,occurrenceId,zone);
   entry.revision=revision||entry.revision;
-  if(action==='KEEP'){
+  const mandatory=skipCode(zone)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT';
+  if(action==='KEEP'&&!mandatory){
     try{
       const receipt=await postDecision(entry,occurrenceId,'KEEP','review_batch');
       noteDecision(entry,occurrenceId,'KEEP',receipt.revision);
@@ -2203,7 +2208,7 @@ async function settleSkippedZone(entry,action,zone,revision){
     next=region.revision;entry.revision=next;
   }
   entry.highlightRects=found.rects;entry.page=found.rects[0].page;entry.previewKind='origin';
-  return {revision:next,changed:true,traced:found.rects.length,forced:action==='KEEP',left:false};
+  return {revision:next,changed:true,traced:found.rects.length,forced:action==='KEEP'||mandatory,left:false};
 }
 async function maskFoundPlaces(entry,target,occurrenceId){
   if(!occurrenceId||entry.commandBusy)return;
@@ -2266,7 +2271,7 @@ async function finishGroupedDecision(entry,receipt,action){
   const applied=Number(receipt?.appliedCount)||0;
   const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
   if(receipt?.revision)entry.revision=receipt.revision;
-  const zones=skipped.filter(item=>skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'&&item.occurrenceId);
+  const zones=skipped.filter(item=>(skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'||skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT')&&item.occurrenceId);
   let revision=entry.revision;
   let traced=0,forced=0,changed=applied>0;
   const left=[];
@@ -2278,18 +2283,20 @@ async function finishGroupedDecision(entry,receipt,action){
     if(settled.changed)changed=true;
     if(settled.left)left.push(zone);
   }
-  if(changed&&revision)await apply(entry,revision);
-  else if(!zones.length)await loadCurrent(entry).catch(()=>{});
   if(left.length){
     for(const zone of left)markPlace(entry,zone.occurrenceId);
+    await loadCurrent(entry).catch(()=>{});
     renderIssues(entry);
     drawerMessage(copy.review.batch.stillManual(left.length),'is-info');
     return false;
   }
+  if(changed&&revision)await apply(entry,revision,{untilPublished:true});
+  else if(!zones.length)await loadCurrent(entry).catch(()=>{});
   if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
   else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
   else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))
     drawerMessage(copy.review.batch.skippedConflict,'is-warning');
+  if(entry.status==='READY')return true;
   if(remainingReviewWork(entry).count)return false;
   return applied>0||traced>0||action==='KEEP';
 }
@@ -2327,7 +2334,8 @@ async function applyStackedBatch(entry,action){
       modal.box.update();
       const outcome=await stackDecision(entry,row.id,action,'review_batch');
       if(outcome?.needsZone){
-        const settled=await settleSkippedZone(entry,action,{occurrenceId:row.id},entry.revision);
+        const settled=await settleSkippedZone(entry,outcome.mandatory?'MASK':action,
+          {occurrenceId:row.id,reason:outcome.mandatory?'KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT':undefined},entry.revision);
         if(settled.revision)lastRevision=settled.revision;
         if(settled.traced)traced+=settled.traced;
         if(settled.forced)forced+=1;
@@ -2345,8 +2353,8 @@ async function applyStackedBatch(entry,action){
   }finally{
     entry.batchRunning=false;entry.commandBusy=false;modal.close();renderFooter(entry);
   }
-  if(pendingError?.status!==409&&lastRevision){
-    try{await apply(entry,lastRevision);}
+  if(pendingError?.status!==409&&lastRevision&&!placed.length){
+    try{await apply(entry,lastRevision,{untilPublished:true});}
     catch(error){showError(error);return false;}
   }
   if(failed){if(pendingError)showError(pendingError);return false;}
@@ -2358,8 +2366,10 @@ async function applyStackedBatch(entry,action){
   if(placed.length){
     renderIssues(entry);
     drawerMessage(copy.review.batch.stillManual(placed.length),'is-info');
+    return false;
   }else if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
   else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
+  if(entry.status==='READY')return true;
   return Boolean(lastRevision)&&!remainingReviewWork(entry).count;
 }
 async function stackDecision(entry,occurrenceId,action,reason){
@@ -2368,8 +2378,8 @@ async function stackDecision(entry,occurrenceId,action,reason){
     noteDecision(entry,occurrenceId,action,receipt.revision);
     return receipt;
   }catch(error){
+    if(conflictsWithKeptMask(error))return {needsZone:true,mandatory:true};
     if(needsLinkedRegion(error))return {needsZone:true};
-    if(conflictsWithKeptMask(error))return {skipped:true};
     throw error;
   }
 }
@@ -2394,6 +2404,7 @@ async function approveHumanReview(entry,control){
     if(!await applyBatchDecision(entry,choice))return;
     await loadCurrent(entry).catch(()=>{});
     review=entry.review;
+    if(entry.status==='READY'){drawerMessage('Document validé.');return;}
     work=remainingReviewWork(entry);
     if(work.count){guideToPendingReview(entry);return;}
   }
@@ -2468,7 +2479,7 @@ async function decide(entry,occurrenceId,action,{fromUndo=false,applyNow=true}={
     }
   finally{entry.commandBusy=false;}
 }
-async function apply(entry,revision){
+async function apply(entry,revision,options){
   const restore={
     manualMaskActive:entry.manualMaskActive,target:entry.target,focusId:entry.focusId,
     pageOnlyLocation:entry.pageOnlyLocation,locateNeedle:entry.locateNeedle,previewKind:entry.previewKind
@@ -2479,7 +2490,7 @@ async function apply(entry,revision){
   renderDrawer(entry);renderQueue();
   try{
     await api.execute(entry.jobId,entry.digest,revision);
-    await pollEntry(entry,{intervalMs:1000,expectRevision:revision});
+    await pollEntry(entry,{intervalMs:1000,expectRevision:revision,untilPublished:options?.untilPublished===true});
   }catch(error){
     entry.applying=false;
     await loadCurrent(entry).catch(()=>{});
@@ -2652,7 +2663,14 @@ async function renderPreview(entry){
       }else renderCsv(source.bytes);
     }
     else el('p','Aperçu indisponible pour ce format.','asv2-muted',viewerBody);
-  }catch(error){if(serial===state.previewSerial){viewerBody.querySelectorAll('.asv2-loading').forEach(node=>node.remove());if(!viewerBody.children.length)el('p',errorText(error),'asv2-error',viewerBody);else drawerMessage(errorText(error),'is-error');}}
+  }catch(error){
+    if(serial===state.previewSerial&&kind==='anon'&&(error?.status===502||/MISSING_OBJECT/i.test(String(error?.code||'')+String(error?.message||'')))){
+      entry.previewKind='origin';
+      await renderPreview(entry);
+      return;
+    }
+    if(serial===state.previewSerial){viewerBody.querySelectorAll('.asv2-loading').forEach(node=>node.remove());if(!viewerBody.children.length)el('p',errorText(error),'asv2-error',viewerBody);else drawerMessage(errorText(error),'is-error');}
+  }
 }
 async function renderPdfCompare(entry,serial){
   if(!window.pdfjsLib)throw new Error('PDF.js indisponible');

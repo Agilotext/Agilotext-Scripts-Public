@@ -91,4 +91,11 @@ assert.ok(maskAt>0 && regionAt>maskAt && applyAt>regionAt, 'MASK, then linked zo
 assert.ok(embed.includes('occurrenceId:target.occurrenceId||target.id||target.maskOccurrenceId') ||
   embed.includes('const occurrenceId=target.occurrenceId||target.id||target.maskOccurrenceId'),
   'linked zone sends occurrenceId');
+const batchApply = embed.indexOf('if(changed&&revision)await apply(entry,revision,{untilPublished:true})');
+const unplaced = embed.lastIndexOf('if(left.length){', batchApply);
+assert.ok(batchApply > 0 && unplaced > 0 && unplaced < batchApply, 'unplaced mask blocks execute');
+assert.ok(embed.includes('untilPublished:options?.untilPublished===true'), 'batch waits for the published file');
+assert.ok(embed.includes("if(entry.status==='READY'){drawerMessage('Document validé.');return;}"),
+  'a ready result skips human attestation');
+assert.ok(!embed.includes('known.length>10') && !embed.includes('rects.length>10'), 'page search has no cap of ten');
 console.log('copy: PASS');

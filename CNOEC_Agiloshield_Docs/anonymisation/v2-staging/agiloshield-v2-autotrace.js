@@ -101,7 +101,6 @@ export function rectsOnPage(items, viewportTransform, pageSize, needle) {
     }
     for (const group of groups) rects.push(unionRect(group.rects));
     from = at + Math.max(1, wanted.length);
-    if (rects.length > 10) return { ok: false, reason: 'tooMany', rects: [] };
   }
   return rects.length ? { ok: true, rects } : { ok: false, reason: 'none', rects: [] };
 }
