@@ -105,16 +105,24 @@ const localErrors = new Set(['Maximum 100 termes par liste, 256 caractères par 
   'Le compte a changé. Rechargez la page et redéposez les fichiers non envoyés.',
   'Réponse de masquage incomplète',
   'L’aperçu PDF met trop de temps à s’afficher. Réessayez, ou téléchargez le fichier.']);
+const needsLinkedRegion = error => error?.code==='NEW_MASK_REQUIRES_LINKED_REGION' ||
+  String(error?.message||'').includes('NEW_MASK_REQUIRES_LINKED_REGION');
+const apiSentence = error => {
+  const message=String(error?.message||'').trim();
+  if(!message||/^HTTP_\d+$/.test(message)||/^[A-Z0-9_]+$/.test(message))return '';
+  return message;
+};
 const errorText = error => location.protocol==='file:'?
   'Ouvrez la page de test publiée : une copie locale ne peut pas utiliser votre connexion.':
   error?.status===401?'Votre session a expiré. Reconnectez-vous, puis reprenez.':
   error?.status===403?'Vous n’avez pas accès à ce document.':
   error?.status===404?'Ce document n’est plus accessible. Actualisez la liste.':
   error?.code==='RESULT_NOT_AVAILABLE'? 'Le résultat de cette révision n’est pas disponible. Consultez les vérifications avant de réessayer.':
+  needsLinkedRegion(error)?copy.errors.needsZone:
+  error?.status===409&&(error?.code==='COMMAND_ROLLED_BACK'||error?.code==='STALE_REVISION')?copy.errors.rolledBack:
   error?.status===409?'Le document a changé. Actualisez-le avant de continuer.':
   error?.status===413?'Ce fichier dépasse la taille autorisée.':
-  error?.code==='COMMAND_INVALID'||error?.status===422?
-    'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.':
+  error?.code==='COMMAND_INVALID'||error?.status===422?(apiSentence(error)||copy.errors.maskFailed):
   error?.code==='JOB_FORBIDDEN'?'Vous n’avez pas accès à ce document.':
   localErrors.has(error?.message)||LOCAL_MESSAGES.has(error?.message)?error.message:copy.errors.generic;
 const policySummary = types => Array.isArray(types)?types.length?
@@ -1995,7 +2003,8 @@ async function applyBatchDecision(entry,action){
       if(!row||entry.status!=='REVIEW_REQUIRED')break;
       modal.box.update();
       const before=entry.revision;
-      await decide(entry,row.id,action);
+      const outcome=await decide(entry,row.id,action);
+      if(outcome?.needsZone){failed=true;break;}
       if(entry.revision===before){failed=true;break;}
       done++;
     }
@@ -2058,20 +2067,54 @@ async function undoLastReview(entry){
   }
   notify('L’annulation d’une zone tracée n’est pas encore disponible.');
 }
-async function decide(entry,occurrenceId,action,{fromUndo=false}={}){
-  if(entry.commandBusy)return;
+async function postDecision(entry,occurrenceId,action,reason){
+  const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
+    action,reason});
+  if(!receipt?.revision)throw new Error('Réponse de masquage incomplète');
+  return receipt;
+}
+function armLinkedZone(entry,occurrenceId){
+  const review=entry.review||{};
+  const row=(review.occurrences||[]).find(item=>String(item.id)===String(occurrenceId));
+  const unresolved=(review.unresolvedMasks||[]).find(item=>
+    String(item.occurrenceId)===String(occurrenceId)||String(item.maskOccurrenceId)===String(occurrenceId));
+  const source=row||unresolved||{};
+  const page=Number(source.page)||entry.page;
+  entry.target={
+    occurrenceId:source.occurrenceId||source.id||occurrenceId,
+    id:source.id||occurrenceId,
+    maskOccurrenceId:source.maskOccurrenceId,
+    page,category:source.category||source.semanticType
+  };
+  entry.manualMaskActive=false;
+  if(page)entry.page=page;
+  entry.previewKind='origin';
+  setMobileTab('doc');
+  drawerMessage(copy.errors.needsZone,'is-warning');
+  renderPreview(entry).catch(showError);
+}
+async function handleReviewError(entry,error,occurrenceId){
+  if(error?.status===409||error?.status===422)await loadCurrent(entry).catch(()=>{});
+  if(needsLinkedRegion(error)&&occurrenceId){
+    armLinkedZone(entry,occurrenceId);
+    return {needsZone:true};
+  }
+  showError(error);
+  return null;
+}
+async function decide(entry,occurrenceId,action,{fromUndo=false,applyNow=true}={}){
+  if(entry.commandBusy)return null;
   entry.commandBusy=true;renderIssues(entry);
-  try{const receipt=await api.decide(entry.jobId,entry.digest,{revision:entry.revision,occurrenceId,
-    action,reason:fromUndo?'review_undo':'review_explicit'});
-    if(!receipt?.revision)throw new Error('Réponse de masquage incomplète');
+  try{const receipt=await postDecision(entry,occurrenceId,action,fromUndo?'review_undo':'review_explicit');
+    if(!applyNow)return receipt;
     await apply(entry,receipt.revision);
     if(!fromUndo){
       entry.undoStack=entry.undoStack||[];
       entry.undoStack.push({kind:'decide',occurrenceId,action});
     }
+    return receipt;
   }catch(error){
-      if(error?.status===409||error?.status===422)await loadCurrent(entry).catch(()=>{});
-      showError(error);
+      return handleReviewError(entry,error,occurrenceId);
     }
   finally{entry.commandBusy=false;}
 }
@@ -2546,15 +2589,22 @@ function bindDrawing(entry,overlay,base,serial){
     const target=entry.target;
     if(target){
       const roundedRect=rect.map(value=>Math.round(value*100)/100);
+      const occurrenceId=target.occurrenceId||target.id||target.maskOccurrenceId;
       entry.commandBusy=true;
       try{
         entry.pendingMask={page:Number(entry.page),rect:roundedRect,kind:'linked'};
-        const receipt=await api.addLinkedRegion(entry.jobId,entry.digest,{revision:entry.revision,
-          page:entry.page,rect:roundedRect,
-          maskOccurrenceId:target.maskOccurrenceId,sourceRevision:entry.review.sourceRevision,
-          documentId:entry.review.documentId,reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
-        entry.target=null;await apply(entry,receipt.revision);
-      }catch(error){entry.pendingMask=null;showError(error);}
+        const maskReceipt=await postDecision(entry,occurrenceId,'MASK',
+          target.category==='ORG'?'human_confirmed_private_org':'human_added');
+        const regionReceipt=await api.addLinkedRegion(entry.jobId,entry.digest,{
+          revision:maskReceipt.revision,page:entry.page,rect:roundedRect,occurrenceId,
+          sourceRevision:entry.review.sourceRevision,documentId:entry.review.documentId,
+          reason:target.category==='ORG'?'human_confirmed_private_org':'human_added'});
+        entry.target=null;
+        await apply(entry,regionReceipt.revision);
+      }catch(error){
+        entry.pendingMask=null;
+        await handleReviewError(entry,error,occurrenceId);
+      }
       finally{entry.commandBusy=false;}
     }else if(entry.manualMaskActive){
       const roundedRect=rect.map(value=>Math.round(value*100)/100);

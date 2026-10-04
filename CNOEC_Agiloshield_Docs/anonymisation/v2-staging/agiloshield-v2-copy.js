@@ -70,6 +70,9 @@ export const COPY = Object.freeze({
     previewStale: 'L’aperçu n’est plus à jour. Rouvrez le document.',
     approvalStale: 'Le document a changé depuis votre validation. Vérifiez-le à nouveau.',
     wordTimeout: 'L’aperçu Word met trop de temps à s’afficher. Téléchargez le fichier pour le consulter.',
+    needsZone: 'Ce passage n’a pas de position unique. Tracez sa zone sur le document, puis le masquage sera appliqué.',
+    rolledBack: 'Le document a été remis à l’état précédent. Reprenez le passage.',
+    maskFailed: 'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.',
   },
 });
 

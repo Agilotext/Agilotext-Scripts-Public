@@ -54,4 +54,14 @@ assert.equal(COPY.review.batch.blockedZones(2), '2 zones à placer avant validat
 assert.ok(embed.includes('validate.disabled=!verified&&(Boolean(entry.commandBusy)||Boolean(entry.batchRunning))'),
   'validate stays clickable while passages remain');
 assert.ok(!embed.includes("confirmAction('Valider votre vérification de ce document ?')"), 'no confirm when all is verified');
+assert.equal(COPY.errors.needsZone, 'Ce passage n’a pas de position unique. Tracez sa zone sur le document, puis le masquage sera appliqué.');
+assert.equal(COPY.errors.rolledBack, 'Le document a été remis à l’état précédent. Reprenez le passage.');
+assert.ok(embed.includes('outcome?.needsZone'), 'batch stops when a passage needs a linked zone');
+const maskAt = embed.indexOf('const maskReceipt=await postDecision');
+const regionAt = embed.indexOf('revision:maskReceipt.revision');
+const applyAt = embed.indexOf('await apply(entry,regionReceipt.revision)');
+assert.ok(maskAt>0 && regionAt>maskAt && applyAt>regionAt, 'MASK, then linked zone, then one execute');
+assert.ok(embed.includes('occurrenceId:target.occurrenceId||target.id||target.maskOccurrenceId') ||
+  embed.includes('const occurrenceId=target.occurrenceId||target.id||target.maskOccurrenceId'),
+  'linked zone sends occurrenceId');
 console.log('copy: PASS');
