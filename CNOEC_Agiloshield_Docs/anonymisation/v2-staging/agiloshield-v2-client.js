@@ -1,4 +1,5 @@
 /* Reference transport only. Browser -> authenticated Java HTTPS facade; no Python HMAC. */
+import { restoreErrorMessage, COPY } from './agiloshield-v2-copy.js';
 export async function digestListDirectives({anon2InclusionList, anon2ExclusionList}) {
   if (!Array.isArray(anon2InclusionList) || !Array.isArray(anon2ExclusionList))
     throw new Error('Both V2 list arrays are required');
@@ -20,6 +21,14 @@ export function freezeJobSelection({policy, lists, mode}) {
       anon2ExclusionList:[...lists.anon2ExclusionList]}:null,
   };
 }
+export function defaultRestoreUrl(baseUrl) {
+  const trimmed = String(baseUrl || '').replace(/\/$/, '');
+  if (/\/agiloshield-v2$/.test(trimmed))
+    return trimmed.replace(/\/agiloshield-v2$/, '/v1/reconcileAnon2Text');
+  const origin = trimmed.match(/^(https:\/\/[^/]+\/api)(?:\/.*)?$/);
+  return origin ? origin[1] + '/v1/reconcileAnon2Text' : trimmed + '/v1/reconcileAnon2Text';
+}
+
 export function v2Capabilities(capabilities) {
   // Java 12.0.6 no longer advertises a workerCodeSha. Feature flags describe
   // the HTTP contract; deployment qualification remains a staging gate.
@@ -70,11 +79,13 @@ export function assertPreviewHeaders(response, {kind, digest, listDigest, revisi
   return response;
 }
 export class AgiloShieldV2Client {
-  constructor({baseUrl, authHeaders, credentials = 'omit', fetchImpl = (...args) => globalThis.fetch(...args),
+  constructor({baseUrl, authHeaders, restoreUrl, credentials = 'omit', fetchImpl = (...args) => globalThis.fetch(...args),
     xhrFactory = () => new XMLHttpRequest()}) {
     if (!/^https:\/\//.test(baseUrl)) throw new Error('HTTPS staging baseUrl required');
     if (typeof authHeaders !== 'function') throw new Error('authHeaders callback required');
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.restoreUrl = restoreUrl || defaultRestoreUrl(this.baseUrl);
+    if (!/^https:\/\//.test(this.restoreUrl)) throw new Error('HTTPS restore URL required');
     this.authHeaders = authHeaders;
     this.credentials = credentials;
     this.fetchImpl = (...args) => fetchImpl(...args);
@@ -244,6 +255,38 @@ export class AgiloShieldV2Client {
       {'X-Agiloshield-Confirm-Non-Verifie':'true'} : {}});
   }
   humanVerifiedDownload(id) { return this.request(this.path(id, '/human-verified-download')); }
+  async reconcile(files, keys) {
+    const docs = Array.from(files || []), props = Array.from(keys || []);
+    if (!docs.length || !props.length) throw new Error(COPY.errors.restoreMissing);
+    const auth = await this.authHeaders();
+    const username = auth['X-Agilotext-Username'], token = auth['X-Agilotext-Token'],
+      edition = auth['X-Agilotext-Edition'];
+    if (!username || !token || !edition) throw new Error('Session Agilotext introuvable');
+    const form = new FormData();
+    form.append('username', username);
+    form.append('token', token);
+    form.append('edition', edition);
+    for (const file of docs) form.append('anonFile', file, file.name);
+    for (const file of props) form.append('propertiesFile', file, file.name);
+    const response = await this.fetchImpl(this.restoreUrl, {method:'POST', body:form,
+      credentials:this.credentials, cache:'no-store'});
+    const type = (response.headers.get('Content-Type') || '').toLowerCase();
+    const textual = type.includes('json') || type.includes('text/plain') || type.includes('text/json');
+    if (!response.ok || textual) {
+      const raw = await response.text();
+      let message = raw;
+      try { const body = JSON.parse(raw); message = body.errorMessage || body.error || raw; } catch (_) {}
+      const error = new Error(restoreErrorMessage(message));
+      error.status = response.status || 400;
+      error.code = 'RESTORE_FAILED';
+      throw error;
+    }
+    if (docs.length > 1) {
+      const head = new Uint8Array(await response.clone().arrayBuffer()).subarray(0, 2);
+      if (head[0] !== 0x50 || head[1] !== 0x4b) throw new Error(COPY.errors.restoreZip);
+    }
+    return response;
+  }
   inspectRestore(file, key) {
     if (!file || !key) throw new Error('Document et clé requis');
     const form=new FormData();form.append('file',file);form.append('key',key);

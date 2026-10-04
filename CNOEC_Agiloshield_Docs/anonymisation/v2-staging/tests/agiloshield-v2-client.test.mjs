@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { AgiloShieldV2Client, digestListDirectives, freezeJobSelection,
-  v2Capabilities, assertCreatedJob, assertPreviewHeaders, currentResultAvailable } from '../agiloshield-v2-client.js';
+  v2Capabilities, assertCreatedJob, assertPreviewHeaders, currentResultAvailable,
+  defaultRestoreUrl } from '../agiloshield-v2-client.js';
 
 assert.equal(await digestListDirectives({anon2ExclusionList:['École des mines'],
   anon2InclusionList:['Jean Dupont','Cœur-de-l’Est']}),
@@ -81,6 +82,14 @@ const fetchImpl = async (url, options) => {
     'X-Agiloshield-Revision':'r2','X-Agiloshield-Status':'READY',
     'X-Agiloshield-Assurance':'technical-ready','X-Agiloshield-Processing-Mode':'PSEUDONYMIZE'}});
   if (path.endsWith('/review/commands')) return new Response(JSON.stringify({revision:'r3'}), {status:200});
+  if (path.endsWith('/reconcileAnon2Text')) {
+    const count = options.body.getAll('anonFile').length;
+    if (count > 1) return new Response('not-a-zip', {status:200,
+      headers:{'Content-Type':'application/octet-stream'}});
+    return new Response('RESTORED', {status:200, headers:{
+      'Content-Type':'application/pdf',
+      'Content-Disposition':'attachment; filename="restaure-secret.pdf"'}});
+  }
   return new Response(JSON.stringify(job), {status:200});
 };
 const client = new AgiloShieldV2Client({baseUrl:'https://staging.example/api',
@@ -135,6 +144,23 @@ assert.ok(batchBody.commandId.length>8);
 await client.decideAll(7, 'd1', {revision:'r2', action:'KEEP'});
 assert.notEqual(JSON.parse(seen.at(-1).options.body).commandId, batchBody.commandId);
 assert.throws(()=>client.decideAll(7,'d1',{revision:'r2',action:'DROP'}),/Invalid decision/);
+assert.equal(defaultRestoreUrl('https://apitest.agilotext.com/api/agiloshield-v2'),
+  'https://apitest.agilotext.com/api/v1/reconcileAnon2Text');
+const pdf=new File(['%PDF'],'secret.pdf',{type:'application/pdf'});
+const key=new File(['a=b'],'secret.properties',{type:'text/plain'});
+const reconcileClient=new AgiloShieldV2Client({
+  baseUrl:'https://apitest.agilotext.com/api/agiloshield-v2',
+  authHeaders:async()=>({'X-Agilotext-Username':'anon@test.com',
+    'X-Agilotext-Token':'TOKEN','X-Agilotext-Edition':'ent'}),
+  fetchImpl});
+const restored=await reconcileClient.reconcile([pdf],[key]);
+assert.equal(await restored.text(),'RESTORED');
+const reconcileForm=seen.at(-1).options.body;
+assert.equal(reconcileForm.get('anonFile').name,'secret.pdf');
+assert.equal(reconcileForm.get('propertiesFile').name,'secret.properties');
+assert.equal(reconcileForm.get('username'),'anon@test.com');
+assert.equal(new URL(seen.at(-1).url).pathname,'/api/v1/reconcileAnon2Text');
+await assert.rejects(()=>reconcileClient.reconcile([pdf,pdf],[key,key]),/archive/);
 await client.execute(7, 'd1', 'r3');
 assert.equal(JSON.parse(seen.at(-1).options.body).revision, 'r3');
 await client.addLinkedRegion(7, 'd1', {revision:'r2', page:1, rect:[1,2,3,4],

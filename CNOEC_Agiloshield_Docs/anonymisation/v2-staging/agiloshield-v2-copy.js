@@ -10,7 +10,7 @@ export const COPY = Object.freeze({
   mode: {
     loading: 'Chargement de vos réglages…',
     anon: 'Masque définitif : les données retirées ne reviennent pas.',
-    pseudo: 'Étiquettes réversibles avec une clé (Word, Excel, PowerPoint, TXT, CSV). Les PDF sont masqués sans retour possible.',
+    pseudo: 'Étiquettes réversibles avec la clé, pour tous les formats, PDF compris.',
   },
   historySession: 'Documents de cette session', historyDurable: 'Mes documents',
   historyOld: 'Documents de l’ancienne version',
@@ -42,6 +42,8 @@ export const COPY = Object.freeze({
     progress: (done, total) => done + ' sur ' + total + ' vérifié' + (total > 1 ? 's' : ''),
     validate: 'Valider ce document',
     applying: 'Application en cours.',
+    severalPlaces: 'Ce passage apparaît à plusieurs endroits.',
+    traceZone: 'Tracer la zone',
     othersMasked: 'Autres données masquées',
     safetyLine: 'Vous validez le document après avoir vérifié chaque passage.',
     shortcuts: 'J suivant · K précédent · M masquer · V laisser visible · ⌘Z annuler · Échap fermer',
@@ -62,9 +64,10 @@ export const COPY = Object.freeze({
       serverArtifact: 'Vos décisions sont appliquées, mais le serveur ne confirme pas encore le fichier protégé. Rouvrez le document dans un instant, puis validez.',
       serverBlocked: 'Vos décisions sont appliquées, mais le serveur refuse encore la validation. Rouvrez le document, puis réessayez.',
       stop: 'Arrêter',
-      stopped: 'Arrêté. Les décisions déjà choisies sont appliquées en une fois.',
+      stopped: 'Arrêté. Les décisions déjà envoyées sont appliquées. Les passages sans position restent à traiter.',
       stoppedEmpty: 'Arrêté. Aucune décision n’a été envoyée.',
-      finishTrace: 'Terminez le tracé en cours avant cette action.',
+      placeLeft: n => plural(n, 'passage n’a pas de position unique. Tracez sa zone ou laissez-le visible.',
+        'passages n’ont pas de position unique. Tracez leur zone ou laissez-les visibles.'),
     },
   },
   errors: {
@@ -78,8 +81,24 @@ export const COPY = Object.freeze({
     rolledBack: 'Le document a été remis à l’état précédent. Reprenez le passage.',
     pendingDecision: 'Une décision attend encore d’être appliquée. Le document est rechargé.',
     maskFailed: 'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.',
+    restoreMissing: 'Chaque document doit avoir sa clé .properties.',
+    restoreUnused: 'Une clé ne correspond à aucun document.',
+    restoreAmbiguous: 'Plusieurs clés pourraient correspondre au même document. Déposez une clé par document.',
+    restoreFormat: 'Formats acceptés pour la restauration : PDF, Word, Excel, PowerPoint, TXT ou CSV.',
+    restoreFailed: 'La restauration a échoué. Vérifiez le document et sa clé.',
+    restoreZip: 'La restauration a répondu, mais le fichier reçu n’est pas une archive.',
   },
 });
+
+export function restoreErrorMessage(raw) {
+  const text = String(raw || '');
+  if (text.includes('error_anon2_reconcile_missing_matching_properties')) return COPY.errors.restoreMissing;
+  if (text.includes('error_anon2_reconcile_unused_properties')) return COPY.errors.restoreUnused;
+  if (text.includes('error_anon2_reconcile_ambiguous_properties')) return COPY.errors.restoreAmbiguous;
+  if (text.includes('error_anon2_reconcile_supports_')) return COPY.errors.restoreFormat;
+  for (const value of Object.values(COPY.errors)) if (value === text) return text;
+  return COPY.errors.restoreFailed;
+}
 
 const SERVER_ERRORS = Object.freeze({
   PSEUDO_KEY_INVALID: 'La pseudonymisation de ce fichier a échoué. Réessayez ou choisissez Anonymiser.',
