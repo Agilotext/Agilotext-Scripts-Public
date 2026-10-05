@@ -29,14 +29,17 @@ assert(eco.readImpact({ status: "OK", numberOfLiters: 1, attestationUrl: "note.p
 assert(eco.equivalenceLabel(0.2) === "≈ 1 verre (25 cl)", "verre 25 cl");
 assert(eco.equivalenceLabel(0.5) === "≈ 1 gourde (50 cl)", "gourde 50 cl");
 assert(eco.equivalenceLabel(2.4) === "≈ 5 gourdes (50 cl)", "2,4 L = 5 gourdes");
-const preview = eco.resolveDisplayedImpact(null, "agilotext-test.webflow.io");
-assert(preview && preview.liters === 2.4 && preview.preview === true, "aperçu si JSON vide sur le site test");
-const previewZero = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 0 }, "agilotext-test.webflow.io");
-assert(previewZero && previewZero.liters === 2.4 && previewZero.preview === true, "aperçu si 0 L sur le site test");
-assert(eco.resolveDisplayedImpact(null, "www.agilotext.com") == null, "www sans litres reste masqué");
-const real = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 8.9 }, "agilotext-test.webflow.io");
-assert(real && real.liters === 8.9 && real.preview === false, "un chiffre positif gagne sur l'aperçu");
-assert(src.includes("Aperçu. La mesure réelle n’est pas encore là."), "mention aperçu dans la modale");
+["www.agilotext.com", "agilotext.com", "agilotext-test.webflow.io"].forEach(function (host) {
+  assert(eco.resolveDisplayedImpact(null, host) == null, "JSON vide masqué sur " + host);
+  assert(eco.resolveDisplayedImpact({ status: "KO", errorMessage: "invalid_token" }, host) == null, "KO masqué sur " + host);
+  assert(eco.resolveDisplayedImpact({ status: "OK" }, host) == null, "litres absents masqués sur " + host);
+  assert(eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 0 }, host) == null, "0 L masqué sur " + host);
+});
+const real = eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 8.9 }, "www.agilotext.com");
+assert(real && real.liters === 8.9 && real.preview === false, "un chiffre positif s'affiche sans aperçu");
+assert(eco.resolveDisplayedImpact({ status: "OK", numberOfLiters: 8.9 }, "agilotext-test.webflow.io").liters === 8.9, "le site test n'a plus de 2,4 L");
+assert(!src.includes("Aperçu. La mesure réelle"), "plus de mention d'aperçu");
+assert(!src.includes("previewImpact"), "plus d'aperçu 2,4 L");
 assert(!src.includes(">RSE<"), "plus de pastille RSE");
 assert(src.includes('viewBox="0 0 18 18"'), "goutte Nucleo 18");
 assert(src.includes("stroke-width=\"1.5\""), "goutte en trait");

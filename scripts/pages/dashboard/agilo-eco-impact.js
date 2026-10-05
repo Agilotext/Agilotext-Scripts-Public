@@ -2,15 +2,10 @@
    AGILOTEXT - Eau du mois sous la jauge minutes
    Cible : .agilo-quotas-flat (tableaux de bord Free, Pro, Business)
    Charge : après agilo-quotas-widget
-   Sonde 2026-10-04 : le clone apitest répond en JSON, l'API live renvoie un corps vide.
-   Les appels partent quand même vers api.agilotext.com (compte live BauerWebPro).
-   - CORS Access-Control-Allow-Origin: *
-   - GET sans auth : { status, errorMessage } "username_and_token_required"
-   - GET jeton invalide : { status:"KO", errorMessage:"invalid_token" }
-   Succès non observé (getToken interdit hors navigateur, jeton prod refusé).
-   readImpact n'accepte que status OK + numberOfLiters (même forme que
-   numberOfMinutes). Sur agilotext-test.webflow.io, un corps vide, un KO
-   ou 0 L affiche un aperçu 2,4 L. Sur www, le bloc est retiré.
+   API live : https://api.agilotext.com/api/v1 (www, apex, site de test).
+   Sonde 2026-10-05 sans jeton : HTTP 400, status KO, username_and_token_required.
+   readImpact n'accepte que status OK + numberOfLiters > 0 (même forme que
+   numberOfMinutes). Corps vide, KO ou 0 L : le bloc est retiré, partout.
    ================================================================ */
 (function agiloEcoImpact() {
   "use strict";
@@ -46,22 +41,15 @@
     };
   }
 
-  function previewImpact(hostname) {
-    if (hostname !== "agilotext-test.webflow.io") return null;
-    return { liters: 2.4, co2Grams: null, attestationUrl: "", preview: true };
-  }
-
-  function resolveDisplayedImpact(json, hostname) {
+  function resolveDisplayedImpact(json) {
     var impact = readImpact(json);
-    if (impact && impact.liters > 0) {
-      return {
-        liters: impact.liters,
-        co2Grams: impact.co2Grams,
-        attestationUrl: impact.attestationUrl,
-        preview: false
-      };
-    }
-    return previewImpact(hostname);
+    if (!impact || !(impact.liters > 0)) return null;
+    return {
+      liters: impact.liters,
+      co2Grams: impact.co2Grams,
+      attestationUrl: impact.attestationUrl,
+      preview: false
+    };
   }
 
   function equivalenceLabel(liters) {
@@ -105,7 +93,6 @@
   window.AgiloEcoImpact = {
     apiBaseForHost: apiBaseForHost,
     readImpact: readImpact,
-    previewImpact: previewImpact,
     resolveDisplayedImpact: resolveDisplayedImpact,
     equivalenceLabel: equivalenceLabel,
     glassLevel: glassLevel,
@@ -239,7 +226,7 @@
       ".agilo-eco-figure span[data-agilo-eco='unit']{font:700 14px/1.2 system-ui,sans-serif;color:#64748b}",
       ".agilo-eco-for{margin:4px 0 0;color:#334155;font:500 13px/1.3 system-ui,sans-serif}",
       ".agilo-eco-eq{margin:12px 0 0;color:#334155;font:600 13px/1.35 system-ui,sans-serif}",
-      ".agilo-eco-scope,.agilo-eco-preview,.agilo-eco-co2{margin:8px 0 0;color:#64748b;font:500 12px/1.35 system-ui,sans-serif}",
+      ".agilo-eco-scope,.agilo-eco-co2{margin:8px 0 0;color:#64748b;font:500 12px/1.35 system-ui,sans-serif}",
       ".agilo-eco-attest{display:inline-block;margin-top:14px;color:#174a96;font:600 12px/1.3 system-ui,sans-serif}",
       "@media (prefers-reduced-motion:reduce){",
       ".agilo-eco-drop-fill,.agilo-eco-modal{transition:none}",
@@ -281,7 +268,6 @@
       + '</div>'
       + '<p class="agilo-eco-eq" data-agilo-eco="modal-eq" hidden></p>'
       + '<p class="agilo-eco-scope">Mois calendaire en cours, comme vos minutes.</p>'
-      + '<p class="agilo-eco-preview" data-agilo-eco="preview" hidden>Aperçu. La mesure réelle n’est pas encore là.</p>'
       + '<p class="agilo-eco-co2" data-agilo-eco="co2" hidden></p>'
       + '<a class="agilo-eco-attest" data-agilo-eco="attest" hidden target="_blank" rel="noopener">Télécharger l\'attestation</a>'
       + '</div>';
@@ -335,8 +321,6 @@
     mounted.btn.setAttribute("aria-label", "Empreinte eau du mois, " + formatted + " litres");
     applyLevel(mounted.btn.querySelector('[data-agilo-eco="chip-level"]'), pct);
     mounted.modal.querySelector('[data-agilo-eco="month"]').textContent = month;
-    var previewEl = mounted.modal.querySelector('[data-agilo-eco="preview"]');
-    if (previewEl) previewEl.hidden = !impact.preview;
     mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatted;
     applyLevel(mounted.modal.querySelector('[data-agilo-eco="level"]'), pct);
     var modalEq = mounted.modal.querySelector('[data-agilo-eco="modal-eq"]');
