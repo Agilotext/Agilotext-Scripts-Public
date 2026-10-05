@@ -77,11 +77,15 @@ export const COPY = Object.freeze({
       nothingApplied: 'Le serveur n’a rien appliqué. Le document n’est pas validé.',
       notReady: 'Le document reste à vérifier. Il n’est pas prêt.',
       pendingStuck: 'Une décision est en attente. Déposez un fichier neuf.',
+      heldByServer: 'Le serveur garde ce document à vérifier. Il n’est pas prêt.',
+      downloadBlocked: 'Le téléchargement automatique n’a pas démarré. Utilisez le bouton Télécharger.',
     },
   },
   errors: {
     generic: 'Un problème est survenu.',
     failed: 'Le document n’a pas pu être traité. Retirez-le puis réessayez.',
+    engineFailed: 'Le traitement a échoué. Déposez le fichier à nouveau ou contactez-nous.',
+    leakFailed: 'Le traitement a échoué : des données qui devaient être masquées restent lisibles. Déposer le même fichier à nouveau donnera le même résultat.',
     reviewStale: 'Le document a changé, relancez la vérification.',
     previewStale: 'L’aperçu n’est plus à jour. Rouvrez le document.',
     approvalStale: 'Le document a changé depuis votre validation. Vérifiez-le à nouveau.',
@@ -127,7 +131,7 @@ const SERVER_ERRORS = Object.freeze({
   OCR_REQUIRED: 'Ce PDF est une image scannée sans texte. Il ne peut pas encore être protégé.',
   COMMAND_INVALID: 'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.',
   JOB_FORBIDDEN: 'Vous n’avez pas accès à ce document.',
-  ENGINE_FAILED: 'Le document n’a pas pu être traité. Retirez-le puis réessayez.',
+  ENGINE_FAILED: 'Le traitement a échoué. Déposez le fichier à nouveau ou contactez-nous.',
   ENGINE_TIMEOUT: 'Le traitement a pris trop de temps. Réessayez avec un fichier plus petit.',
 });
 
@@ -143,6 +147,12 @@ const errorCodeOf = job => {
 };
 
 export function jobErrorMessage(job) {
+  if (!job) return COPY.errors.failed;
+  const reasons = [
+    ...(Array.isArray(job.reasons) ? job.reasons : []),
+    ...(Array.isArray(job.qaReasons) ? job.qaReasons : []),
+  ];
+  if (reasons.some(item => String(item).startsWith('mask_leak'))) return COPY.errors.leakFailed;
   const code = errorCodeOf(job);
   return (code && SERVER_ERRORS[code]) || COPY.errors.failed;
 }

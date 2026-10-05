@@ -1191,6 +1191,11 @@ function renderHistory(){
       items.push({label:'Restaurer avec la clé',icon:'key',run:()=>openRestore()});
     }
     items.push({label:'Copier la référence support',icon:'circle-info',run:()=>copyReference(row.jobId)});
+    const sessionEntry=state.entries.find(item=>String(item.jobId)===String(row.jobId));
+    if(status==='REVIEW_REQUIRED'&&(row.humanVerifiedDeliverable===true||
+      sessionEntry?.review?.humanVerifiedDeliverable===true))
+      items.push({label:'Télécharger la copie vérifiée par une personne',icon:'shield-check',
+        run:()=>downloadHistoryHuman(row).catch(fail)});
     items.push('separator',{label:'Retirer de cet écran',icon:'trash',danger:true,run:()=>removeEntryFromSession(row)});
     docMenu(acts,items,'Plus d’actions pour '+name);
   }
@@ -1252,6 +1257,10 @@ async function downloadHistoryKey(row){
   const entry=await entryForHistory(row);
   if(!canDownloadKey(entry))throw new Error('Clé indisponible');
   await downloadKey(entry);
+}
+async function downloadHistoryHuman(row){
+  const entry=await entryForHistory(row);
+  await downloadHumanVerified(entry);
 }
 async function downloadSelectedZip(){
   if(state.historyTab!=='v2'||state.capabilities.bulkZipV2!==true||!config.BULK_ZIP_V2_PATH)
@@ -1765,7 +1774,26 @@ function renderShortcutHelp(parent){
     span.append(label);
   }
 }
+function maskedPassageRows(entry){
+  return reviewOccurrences(entry.review||{}).filter(row=>(row.action||row.privacyAction)==='MASK');
+}
 function handleReviewShortcut(entry,key){
+  if(entry.othersOpen&&(key==='j'||key==='k')){
+    const masked=maskedPassageRows(entry);
+    if(masked.length){
+      if(typeof entry.othersFocusIndex!=='number')entry.othersFocusIndex=0;
+      entry.othersFocusIndex=key==='j'?
+        Math.min(entry.othersFocusIndex+1,masked.length-1):
+        Math.max(entry.othersFocusIndex-1,0);
+      const row=masked[entry.othersFocusIndex];
+      entry.reopenId=row.id;
+      if(entry.othersFocusIndex>=(entry.othersVisibleCount||40))
+        entry.othersVisibleCount=entry.othersFocusIndex+1;
+      renderIssues(entry);renderFooter(entry);
+      focusOccurrence(entry,row);
+      return;
+    }
+  }
   const queue=reviewQueue(entry);
   if(!queue.length)return;
   if(typeof entry.reviewFocusIndex!=='number')entry.reviewFocusIndex=0;
@@ -1998,21 +2026,26 @@ function renderIssues(entry){
     (Array.isArray(entry.report?.reasons)?entry.report.reasons.length:0);
   if(!progress.remaining&&hiddenTechnicalSignals&&review.canApproveHumanVerification===false){
     const note=el('div',null,'asv2-review-safety-note',issuesContent);
-    el('strong','Vérification finale nécessaire',null,note);
-    el('p','Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.',
-      'asv2-muted',note);
+    el('strong','Document non prêt',null,note);
+    el('p',copy.review.batch.heldByServer,'asv2-muted',note);
   }
 
   const allRows=reviewOccurrences(review);
   const masked=allRows.filter(r=>(r.action||r.privacyAction)==='MASK');
   if(masked.length){
-    const others=button('', 'asv2-others',issuesContent,()=>{body.hidden=!body.hidden;});
+    const others=button('', 'asv2-others',issuesContent,()=>{
+      entry.othersOpen=!entry.othersOpen;renderIssues(entry);
+    });
     el('span',copy.review.othersMasked,null,others);
     el('span',String(masked.length),null,others);
-    const body=el('div',null,'asv2-others-body',issuesContent);body.hidden=true;
-    for(const row of masked.slice(0,40)){
+    const body=el('div',null,'asv2-others-body',issuesContent);
+    body.hidden=!entry.othersOpen;
+    const othersLimit=entry.othersVisibleCount||40;
+    masked.slice(0,othersLimit).forEach((row,index)=>{
       const open=String(entry.reopenId)===String(row.id);
       const line=button('', 'asv2-others-line'+(open?' is-open':''),body,()=>{
+        entry.othersOpen=true;
+        entry.othersFocusIndex=index;
         entry.reopenId=open?null:row.id;
         if(!open)focusOccurrence(entry,row);
         renderIssues(entry);
@@ -2027,8 +2060,18 @@ function renderIssues(entry){
           control.disabled=entry.commandBusy;
         }
       }
+    });
+    if(masked.length>othersLimit){
+      button('Afficher la suite','asv2-secondary asv2-issues-more',body,()=>{
+        entry.othersOpen=true;
+        entry.othersVisibleCount=othersLimit+40;
+        renderIssues(entry);
+      });
     }
-    if(masked.length>40)el('p','+ '+(masked.length-40)+' autres','asv2-muted',body);
+    if(entry.othersOpen&&entry.reopenId){
+      const openLine=body.querySelector('.asv2-others-line.is-open');
+      if(openLine)requestAnimationFrame(()=>{if(openLine.isConnected)openLine.scrollIntoView({block:'nearest'});});
+    }
   }
 
   if(!queue.length&&!masked.length&&!hiddenTechnicalSignals){
@@ -2050,10 +2093,9 @@ function renderFooter(entry){
       work.problems.length?copy.review.batch.blockedRules(work.problems.length)+'.':
       copy.review.safetyLine,null,safety);
     if(editorCapabilities.humanVerification){
-      const verified=entry.review?.humanVerifiedDeliverable===true;
-      const validate=buttonWithIcon(verified?'Vérifié':copy.review.validate,'shield-check','asv2-primary',drawerFooter,
+      const validate=buttonWithIcon(copy.review.validate,'shield-check','asv2-primary',drawerFooter,
         ()=>approveHumanReview(entry,validate).catch(showError));
-      validate.disabled=!verified&&(Boolean(entry.commandBusy)||Boolean(entry.batchRunning));
+      validate.disabled=Boolean(entry.commandBusy)||Boolean(entry.batchRunning);
     }
     renderShortcutHelp(drawerFooter);
   }
@@ -2085,9 +2127,7 @@ function guideToPendingReview(entry){
       copy.review.batch.serverBlocked,'is-warning');
     return;
   }
-  drawerMessage(entry.format==='pdf'?
-    'Vérifiez l’aperçu. Si une donnée reste visible, utilisez « Masquer une zone », puis validez.':
-    'Vérifiez l’aperçu, puis validez.','is-warning');
+  drawerMessage(copy.review.batch.heldByServer,'is-warning');
 }
 function reviewModal(build){
   const overlay=el('div',null,'asv2-validate-overlay',panel);
@@ -2411,53 +2451,33 @@ async function stackDecision(entry,occurrenceId,action,reason){
     throw error;
   }
 }
+async function deliverReady(entry){
+  drawerMessage('Document validé.');
+  try{await download(entry,true);}
+  catch(_){drawerMessage(copy.review.batch.downloadBlocked,'is-warning');}
+}
 async function approveHumanReview(entry,control){
   if(entry.commandBusy||entry.batchRunning)return;
-  let review=entry.review;
-  if(review?.humanVerifiedDeliverable===true){
-    await downloadHumanVerified(entry);return;
-  }
-  let work=remainingReviewWork(entry);
-  if(work.count){
-    const choice=await askBatchDecision(entry,work);
-    if(choice==='REVIEW'){guideToPendingReview(entry);return;}
-    if(choice==='TRACE'){
-      const row=work.rows.find(item=>passageNeedsPlace(entry,item))||work.rows[0];
-      const unresolved=work.unresolved[0];
-      if(row)startPlaceTrace(entry,{occurrenceId:row.id,id:row.id,page:Number(row.page)||entry.page,
-        category:row.category||row.semanticType});
-      else if(unresolved)startPlaceTrace(entry,unresolved);
-      return;
-    }
-    if(!await applyBatchDecision(entry,choice))return;
-    await loadCurrent(entry).catch(()=>{});
-    review=entry.review;
-    if(entry.status==='READY'){drawerMessage('Document validé.');return;}
-    drawerMessage(copy.review.batch.notReady,'is-warning');
+  if(entry.status==='READY'){await deliverReady(entry);return;}
+  const work=remainingReviewWork(entry);
+  const choice=await askBatchDecision(entry,work);
+  if(choice==='REVIEW'){guideToPendingReview(entry);return;}
+  if(choice==='TRACE'){
+    const row=work.rows.find(item=>passageNeedsPlace(entry,item))||work.rows[0];
+    const unresolved=work.unresolved[0];
+    if(row)startPlaceTrace(entry,{occurrenceId:row.id,id:row.id,page:Number(row.page)||entry.page,
+      category:row.category||row.semanticType});
+    else if(unresolved)startPlaceTrace(entry,unresolved);
     return;
   }
-  if(review?.canApproveHumanVerification!==true){
-    await loadCurrent(entry).catch(()=>{});
-    review=entry.review;
-    if(review?.humanVerifiedDeliverable===true){
-      await downloadHumanVerified(entry);return;
-    }
-    if(review?.canApproveHumanVerification!==true){
-      guideToPendingReview(entry);return;
-    }
-  }
+  if(choice!=='MASK'&&choice!=='KEEP')return;
   if(control?.isConnected)control.disabled=true;
-  const checks={names:true,addresses:true,phones:true,identifiers:true,
-    logos_images:true,visual_regions:true,original_vs_final_all_pages:true};
   try{
-    await api.approveHumanVerification(entry.jobId,entry.digest,{revision:entry.revision,checks});
-    await loadCurrent(entry);
-    drawerMessage('Document validé.');
-  }catch(error){
-    if(error?.status===409){
-      await loadCurrent(entry).catch(()=>{});
-      guideToPendingReview(entry);
-    }else showError(error);
+    if(!await applyBatchDecision(entry,choice))return;
+    if(entry.status!=='READY')await loadCurrent(entry).catch(()=>{});
+    if(entry.status==='READY'){await deliverReady(entry);return;}
+    drawerMessage(copy.review.batch.notReady,'is-warning');
+  }finally{
     if(control?.isConnected)control.disabled=false;
   }
 }
@@ -2529,6 +2549,29 @@ async function apply(entry,revision,options){
     entry.commandBusy=false;
     renderIssues(entry);
   }
+}
+function openPassageFromPreview(entry,row){
+  if(!row?.id||entry.target||entry.manualMaskActive)return;
+  const id=String(row.id);
+  const queue=reviewQueue(entry);
+  const reviewIndex=queue.findIndex(item=>item.kind==='row'&&String(item.row?.id)===id);
+  if(reviewIndex>=0){
+    entry.reviewFocusIndex=reviewIndex;
+    renderIssues(entry);renderFooter(entry);
+    focusOccurrence(entry,row);
+    setMobileTab('issues');
+    return;
+  }
+  const masked=maskedPassageRows(entry);
+  const maskedIndex=masked.findIndex(item=>String(item.id)===id);
+  if(maskedIndex<0)return;
+  entry.othersOpen=true;
+  entry.reopenId=row.id;
+  entry.othersFocusIndex=maskedIndex;
+  if(maskedIndex>=(entry.othersVisibleCount||40))entry.othersVisibleCount=maskedIndex+1;
+  renderIssues(entry);renderFooter(entry);
+  focusOccurrence(entry,row);
+  setMobileTab('issues');
 }
 function focusOccurrence(entry,row,{pageOnly=false}={}){
   const location=originalPdfLocation(entry,row);
@@ -2865,7 +2908,7 @@ async function renderPdf(entry,bytes,kind,serial){
     const context=canvas.getContext('2d');context.setTransform(pixelRatio,0,0,pixelRatio,0,0);
     await page.render({canvasContext:context,viewport}).promise;
     if(serial!==state.previewSerial)return;
-    const maskRows=kind==='origin'?(entry.review?.occurrences||[]).filter(row=>
+    const maskRows=kind==='origin'?reviewOccurrences(entry.review||{}).filter(row=>
       (row.action||row.privacyAction)==='MASK'&&originalPdfLocation(entry,row).kind==='exact'&&
       originalPdfLocation(entry,row).page===entry.page):[];
     const shouldOverlay=Boolean(entry.pendingMask)||Boolean(entry.focusId||entry.locateNeedle||entry.target||entry.manualMaskActive)||
@@ -2876,12 +2919,18 @@ async function renderPdf(entry,bytes,kind,serial){
       for(const row of maskRows){
         const location=originalPdfLocation(entry,row);
         for(const rect of location.fragments){
-          const marker=el('div',null,'asv2-mask-marker',overlay);
-          marker.title='Masqué dans le résultat';
+          const marker=el('div',null,'asv2-mask-marker is-hit',overlay);
+          marker.title='Masqué. Cliquez pour choisir.';
+          marker.dataset.occurrenceId=String(row.id);
           marker.style.left=(rect[0]/base.width*100)+'%';
           marker.style.top=(rect[1]/base.height*100)+'%';
           marker.style.width=((rect[2]-rect[0])/base.width*100)+'%';
           marker.style.height=((rect[3]-rect[1])/base.height*100)+'%';
+          marker.addEventListener('click',event=>{
+            event.stopPropagation();
+            event.preventDefault();
+            openPassageFromPreview(entry,row);
+          });
         }
       }
     }

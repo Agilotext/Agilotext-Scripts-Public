@@ -55,7 +55,7 @@ assert.equal(COPY.review.applying, 'Application en cours.');
 assert.equal(COPY.review.batch.slow, 'Les décisions partent d’abord. Le document est mis à jour une seule fois à la fin.');
 assert.equal(COPY.review.batch.skippedConflict, 'Certains passages restent à vérifier : une décision inverse existe déjà sur le même texte.');
 assert.equal(COPY.review.batch.blockedZones(2), '2 zones à placer avant validation');
-assert.ok(embed.includes('validate.disabled=!verified&&(Boolean(entry.commandBusy)||Boolean(entry.batchRunning))'),
+assert.ok(embed.includes('validate.disabled=Boolean(entry.commandBusy)||Boolean(entry.batchRunning)'),
   'validate stays clickable while passages remain');
 assert.ok(!embed.includes("confirmAction('Valider votre vérification de ce document ?')"), 'no confirm when all is verified');
 assert.equal(COPY.errors.needsZone, 'Ce passage n’a pas de position unique. Tracez sa zone sur le document, puis le masquage sera appliqué.');
@@ -95,8 +95,17 @@ const batchApply = embed.indexOf('if(changed&&revision)await apply(entry,revisio
 const unplaced = embed.lastIndexOf('if(left.length){', batchApply);
 assert.ok(batchApply > 0 && unplaced > 0 && unplaced < batchApply, 'unplaced mask blocks execute');
 assert.ok(embed.includes('untilPublished:options?.untilPublished===true'), 'batch waits for the published file');
-assert.ok(embed.includes("if(entry.status==='READY'){drawerMessage('Document validé.');return;}"),
-  'a ready result skips human attestation');
+assert.ok(embed.includes('async function deliverReady'), 'a ready document downloads itself');
+assert.ok(embed.includes('await download(entry,true)'), 'a ready result downloads without a second confirmation');
+assert.ok(embed.includes('copy.review.batch.heldByServer'), 'the final banner says the server holds the document');
+assert.ok(!embed.includes('Vérification finale nécessaire'), 'the old final banner is gone');
+assert.ok(!embed.includes('Si une donnée reste visible'), 'the banner no longer asks to draw a zone');
+assert.ok(embed.includes('dataset.occurrenceId'), 'a preview marker keeps its passage id');
+assert.ok(embed.includes('entry.othersOpen'), 'the masked list stays open');
+assert.equal(COPY.review.batch.heldByServer, 'Le serveur garde ce document à vérifier. Il n’est pas prêt.');
+assert.equal(COPY.errors.engineFailed, 'Le traitement a échoué. Déposez le fichier à nouveau ou contactez-nous.');
+assert.equal(jobErrorMessage({reasons:['mask_leak:13'],status:'FAILED'}), COPY.errors.leakFailed);
+assert.equal(jobErrorMessage({errorCode:'ENGINE_FAILED'}), COPY.errors.engineFailed);
 assert.ok(!embed.includes('known.length>10') && !embed.includes('rects.length>10'), 'page search has no cap of ten');
 const keptStart = embed.indexOf('async function finishKeptBatch');
 const keptEnd = embed.indexOf('async function finishGroupedDecision');

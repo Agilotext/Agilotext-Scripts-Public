@@ -614,6 +614,9 @@ body.asv2-drawer-open{overflow:hidden}
   background:color-mix(in srgb,var(--asv2-blue) 16%,transparent);
   box-shadow:0 0 0 1px color-mix(in srgb,var(--asv2-white) 36%,transparent) inset;
 }
+#agiloshield-v2-staging .asv2-mask-marker.is-hit{pointer-events:auto;cursor:pointer}
+#agiloshield-v2-staging .asv2-mask-marker.is-hit:hover{outline:2px solid var(--asv2-blue)}
+#agiloshield-v2-staging .asv2-page-overlay.is-drawing .asv2-mask-marker{pointer-events:none;cursor:crosshair}
 #agiloshield-v2-staging .asv2-region-marker{position:absolute;pointer-events:none;border:2px solid var(--asv2-warn);border-radius:var(--asv2-r-sm);background:color-mix(in srgb,var(--asv2-warn) 14%,transparent)}
 
 /* No technical/support boxes in the user path. */
