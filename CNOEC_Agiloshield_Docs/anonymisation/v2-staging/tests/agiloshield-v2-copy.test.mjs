@@ -98,4 +98,11 @@ assert.ok(embed.includes('untilPublished:options?.untilPublished===true'), 'batc
 assert.ok(embed.includes("if(entry.status==='READY'){drawerMessage('Document validé.');return;}"),
   'a ready result skips human attestation');
 assert.ok(!embed.includes('known.length>10') && !embed.includes('rects.length>10'), 'page search has no cap of ten');
+const keptStart = embed.indexOf('async function finishKeptBatch');
+const keptEnd = embed.indexOf('async function finishGroupedDecision');
+assert.ok(keptStart > 0 && keptEnd > keptStart, 'KEEP batch is separate');
+assert.ok(!embed.slice(keptStart, keptEnd).includes('settleSkippedZone'),
+  'KEEP batch does not send a follow-up command');
+assert.equal(COPY.review.batch.nothingApplied, 'Le serveur n’a rien appliqué. Le document n’est pas validé.');
+assert.equal(COPY.errors.regionRefused, 'Le serveur a refusé la zone. Le document n’est pas validé.');
 console.log('copy: PASS');

@@ -74,6 +74,9 @@ export const COPY = Object.freeze({
         'passages doivent rester masqués. Ils ont été masqués automatiquement.'),
       stillManual: n => plural(n, 'passage n’a pas pu être placé. Tracez sa zone ou laissez-le visible.',
         'passages n’ont pas pu être placés. Tracez leur zone ou laissez-les visibles.'),
+      nothingApplied: 'Le serveur n’a rien appliqué. Le document n’est pas validé.',
+      notReady: 'Le document reste à vérifier. Il n’est pas prêt.',
+      pendingStuck: 'Une décision est en attente. Déposez un fichier neuf.',
     },
   },
   errors: {
@@ -86,6 +89,7 @@ export const COPY = Object.freeze({
     needsZone: 'Ce passage n’a pas de position unique. Tracez sa zone sur le document, puis le masquage sera appliqué.',
     rolledBack: 'Le document a été remis à l’état précédent. Reprenez le passage.',
     pendingDecision: 'Une décision attend encore d’être appliquée. Le document est rechargé.',
+    regionRefused: 'Le serveur a refusé la zone. Le document n’est pas validé.',
     maskFailed: 'Le masquage n’a pas pu être appliqué. Le document n’a pas changé. Réessayez.',
     restoreMissing: 'Chaque document doit avoir sa clé .properties.',
     restoreUnused: 'Une clé ne correspond à aucun document.',
