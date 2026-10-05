@@ -2313,8 +2313,8 @@ async function applyBatchDecision(entry,action){
     if(!handedOff){entry.batchRunning=false;entry.commandBusy=false;renderFooter(entry);}
   }
 }
-async function finishKeptBatch(entry,applied){
-  if(!(applied>0)||!entry.revision){
+async function finishKeptBatch(entry){
+  if(!entry.revision){
     drawerMessage(copy.review.batch.nothingApplied,'is-warning');
     return false;
   }
@@ -2325,13 +2325,12 @@ async function finishKeptBatch(entry,applied){
   return false;
 }
 async function finishGroupedDecision(entry,receipt,action){
-  const applied=Number(receipt?.appliedCount)||0;
   const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
   if(receipt?.revision)entry.revision=receipt.revision;
-  if(action==='KEEP')return finishKeptBatch(entry,applied);
+  if(action==='KEEP')return finishKeptBatch(entry);
   const zones=skipped.filter(item=>(skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'||skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT')&&item.occurrenceId);
   let revision=entry.revision;
-  let traced=0,forced=0,changed=applied>0;
+  let traced=0,forced=0;
   const left=[];
   for(const zone of zones){
     let settled;
@@ -2346,7 +2345,6 @@ async function finishGroupedDecision(entry,receipt,action){
     if(settled.revision)revision=settled.revision;
     if(settled.traced)traced+=settled.traced;
     if(settled.forced)forced+=1;
-    if(settled.changed)changed=true;
     if(settled.left)left.push(zone);
   }
   if(left.length){
@@ -2356,8 +2354,8 @@ async function finishGroupedDecision(entry,receipt,action){
     drawerMessage(copy.review.batch.stillManual(left.length),'is-info');
     return false;
   }
-  if(changed&&revision)await apply(entry,revision,{untilPublished:true});
-  else if(!zones.length)await loadCurrent(entry).catch(()=>{});
+  if(revision)await apply(entry,revision,{untilPublished:true});
+  else await loadCurrent(entry).catch(()=>{});
   if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
   else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
   else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))

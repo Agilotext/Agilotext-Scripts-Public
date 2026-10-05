@@ -91,7 +91,7 @@ assert.ok(maskAt>0 && regionAt>maskAt && applyAt>regionAt, 'MASK, then linked zo
 assert.ok(embed.includes('occurrenceId:target.occurrenceId||target.id||target.maskOccurrenceId') ||
   embed.includes('const occurrenceId=target.occurrenceId||target.id||target.maskOccurrenceId'),
   'linked zone sends occurrenceId');
-const batchApply = embed.indexOf('if(changed&&revision)await apply(entry,revision,{untilPublished:true})');
+const batchApply = embed.indexOf('if(revision)await apply(entry,revision,{untilPublished:true})');
 const unplaced = embed.lastIndexOf('if(left.length){', batchApply);
 assert.ok(batchApply > 0 && unplaced > 0 && unplaced < batchApply, 'unplaced mask blocks execute');
 assert.ok(embed.includes('untilPublished:options?.untilPublished===true'), 'batch waits for the published file');
