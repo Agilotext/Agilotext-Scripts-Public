@@ -63,4 +63,13 @@ const entry = {
 };
 assert.equal(regionRectangles(entry, { id: 'a', page: 1 }).length, 2);
 
+const fragment = rectsOnPage([glyph(10, 700, 90, 'Jeanmartin')], viewport, [600, pageHeight], 'Martin');
+assert.equal(fragment.ok, false, 'a fragment inside another word is not a hit');
+
+const phrase = rectsOnPage([glyph(10, 700, 180, 'Bonjour Martin ici')], viewport, [600, pageHeight], 'Martin');
+assert.equal(phrase.ok, true, 'a whole word inside a line is a hit');
+const phraseWidth = phrase.rects[0][2] - phrase.rects[0][0];
+assert.ok(phraseWidth < 80, 'the box does not cover the whole line: ' + phraseWidth);
+assert.ok(phraseWidth > 20, 'the box still covers the word: ' + phraseWidth);
+
 console.log('autotrace: PASS');

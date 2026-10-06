@@ -52,6 +52,9 @@ export const COPY = Object.freeze({
     batch: {
       title: n => plural(n, 'passage n’a pas été vérifié', 'passages n’ont pas été vérifiés'),
       body: 'Choisissez ce qu’AgiloShield applique à ces passages avant de valider le document.',
+      keepHint: 'Tout laisser visible : les passages déjà masqués le restent. Seuls ceux encore à vérifier restent visibles.',
+      maskHint: 'Tout masquer : on masque les passages repérés. Sans zone déjà connue, rien n’est deviné.',
+      mustStayMasked: n => plural(n, 'passage doit rester masqué.', 'passages doivent rester masqués.'),
       maskAll: 'Tout masquer et valider',
       keepAll: 'Tout laisser visible et valider',
       back: 'Revoir les passages',

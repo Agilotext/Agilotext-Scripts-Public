@@ -17,13 +17,20 @@ assert.equal(canCloseAfterBatch({...open, action: 'KEEP', hasRevision: false}), 
 assert.equal(canCloseAfterBatch({...open, action: 'OTHER'}), false, 'an unknown choice does not close');
 
 const embed = fs.readFileSync(path.join(root, 'agiloshield-v2-embed.js'), 'utf8');
-assert.ok(embed.includes('validatedByUser'), 'the session remembers the user validation');
-assert.ok(embed.includes('skipConfirm'), 'the chosen download skips the second question');
-assert.ok(embed.includes("drawerMessage('Document validé.')"), 'the closed review says the document is validated');
+assert.ok(!embed.includes('validatedByUser'), 'the page does not invent a local Prêt');
+assert.ok(!embed.includes('markUserValidated'), 'a batch does not mark the document ready');
+assert.ok(!embed.includes('skipConfirm:true'), 'a non verified download still asks');
 const keptStart = embed.indexOf('async function finishKeptBatch');
 const keptEnd = embed.indexOf('async function finishGroupedDecision');
-assert.ok(embed.slice(keptStart, keptEnd).includes('markUserValidated'), 'KEEP batch can close');
-assert.ok(embed.slice(embed.indexOf('async function finishGroupedDecision'),
-  embed.indexOf('async function reloadReviewError')).includes('markUserValidated'), 'MASK batch can close');
+assert.ok(embed.slice(keptStart, keptEnd).includes('notReady'), 'KEEP waits for the server');
+const grouped = embed.slice(keptEnd, embed.indexOf('async function reloadReviewError'));
+assert.ok(grouped.includes('notReady'), 'MASK waits for the server');
+assert.ok(grouped.includes('mustStayMasked'), 'a mandatory passage stays masked and is said so');
+const settle = embed.slice(embed.indexOf('async function settleSkippedZone'),
+  embed.indexOf('async function maskFoundPlaces'));
+const keepBranch = settle.slice(0, settle.indexOf('const found=await passageBoxes'));
+assert.ok(!keepBranch.includes("'MASK'"), 'leave visible never sends MASK');
+assert.ok(settle.includes('passageBoxes(entry,row)'), 'a mask uses a known zone, not a search');
+assert.ok(embed.includes('passageBoxes(entry,current,{search:true})'), 'search only highlights');
 
 console.log('close: PASS');

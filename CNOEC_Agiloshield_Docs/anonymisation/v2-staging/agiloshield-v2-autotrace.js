@@ -82,22 +82,37 @@ export function rectsOnPage(items, viewportTransform, pageSize, needle) {
     corpus += piece.text;
     spans.push({ start, end: corpus.length, rect: piece.rect });
   }
+  const wordChar = ch => !!ch && /[0-9a-z]/i.test(ch);
+  const clipSpan = (span, at, end) => {
+    const length = Math.max(1, span.end - span.start);
+    const fromRatio = Math.max(0, at - span.start) / length;
+    const toRatio = Math.min(length, end - span.start) / length;
+    const width = span.rect[2] - span.rect[0];
+    const rect = [
+      round(span.rect[0] + width * fromRatio), span.rect[1],
+      round(span.rect[0] + width * toRatio), span.rect[3]
+    ];
+    return rect[2] > rect[0] + 0.2 ? rect : null;
+  };
   const rects = [];
   let from = 0;
   while (from <= corpus.length) {
     const at = corpus.indexOf(wanted, from);
     if (at < 0) break;
     const end = at + wanted.length;
+    if (wordChar(corpus[at - 1]) || wordChar(corpus[end])) { from = at + 1; continue; }
     const hit = spans.filter(span => span.end > at && span.start < end);
     const groups = [];
     for (const span of hit) {
-      const mid = (span.rect[1] + span.rect[3]) / 2;
-      const height = Math.max(span.rect[3] - span.rect[1], 8);
+      const rect = clipSpan(span, at, end);
+      if (!rect) continue;
+      const mid = (rect[1] + rect[3]) / 2;
+      const height = Math.max(rect[3] - rect[1], 8);
       const last = groups[groups.length - 1];
       if (last && Math.abs(mid - last.mid) <= height) {
-        last.rects.push(span.rect);
+        last.rects.push(rect);
         last.mid = (last.mid + mid) / 2;
-      } else groups.push({ mid, rects: [span.rect] });
+      } else groups.push({ mid, rects: [rect] });
     }
     for (const group of groups) rects.push(unionRect(group.rects));
     from = at + Math.max(1, wanted.length);

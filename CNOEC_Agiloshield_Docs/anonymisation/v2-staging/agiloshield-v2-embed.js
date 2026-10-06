@@ -6,7 +6,6 @@ import { emptyLists, addTerms, validateLists, termKey, loadStoredLists,
 import { originalPdfLocation, regionRectangles } from './agiloshield-v2-location.js';
 import { rectsOnPage, normalizeSearch } from './agiloshield-v2-autotrace.js';
 import { COPY, LOCAL_MESSAGES, jobErrorMessage, plural } from './agiloshield-v2-copy.js';
-import { canCloseAfterBatch } from './agiloshield-v2-close.js';
 import { iconSvg } from './agiloshield-v2-icons.js';
 
 const mount = document.getElementById('agiloshield-v2-staging');
@@ -1119,7 +1118,7 @@ function renderHistory(){
   const availableIds=new Set(rows.filter(row=>historyStatus(row)==='READY')
     .map(row=>String(row.jobId)));
   for(const id of state.selectedHistory)if(!availableIds.has(id))state.selectedHistory.delete(id);
-  const ready=rows.filter(row=>historyStatus(row)==='READY'||sessionValidated(row.jobId)).length;
+  const ready=rows.filter(row=>historyStatus(row)==='READY').length;
   historyCount.textContent=rows.length?plural(rows.length,'document','documents')+
     (ready?' · '+plural(ready,'prêt','prêts'):''):'';
   historyCount.hidden=!rows.length;
@@ -1144,8 +1143,7 @@ function renderHistory(){
   }
   for(const row of rows){
     const status=historyStatus(row),name=row.fileName||row.filename||'Document';
-    const validated=sessionValidated(row.jobId);
-    const shown=validated?'READY':status;
+    const shown=status;
     const v2=source==='v2'&&!!row.jobId;
     const item=el('div',null,'asv2-doc is-'+shown.toLowerCase(),historyList);item.setAttribute('role','listitem');
     if(zipReady){
@@ -1166,14 +1164,14 @@ function renderHistory(){
     el('span',[historySize(row.sizeBytes??row.fileLength),
       row.processingMode==='PSEUDONYMIZE'?'Pseudonymisé':'Anonymisé',
       historyDate(row.createdAt||row.dtCreation)].join(' · '),'asv2-doc-meta',info);
-    statusPill(shown,item,validated?'Prêt':null);
+    statusPill(shown,item);
     const acts=el('div',null,'asv2-doc-actions',item);
     if(!v2)continue;
     const fail=error=>notify(errorText(error),'is-error');
     const open=()=>openHistoryRow(row).catch(fail);
-    const canDownload=status==='READY'||validated||(status==='REVIEW_REQUIRED'&&
+    const canDownload=status==='READY'||(status==='REVIEW_REQUIRED'&&
       state.entries.some(entry=>String(entry.jobId)===String(row.jobId)&&canDownloadResult(entry)));
-    if(status==='READY'||validated)
+    if(status==='READY')
       buttonWithIcon('Télécharger','download','asv2-primary asv2-doc-primary',acts,
         ()=>downloadHistoryRow(row).catch(fail));
     else if(status==='REVIEW_REQUIRED')
@@ -1181,7 +1179,7 @@ function renderHistory(){
     else button('Voir le détail','asv2-secondary asv2-doc-primary',acts,open);
     const items=[];
     if(status==='READY')items.push({label:'Voir le résultat',icon:'eye',run:open});
-    if(status==='REVIEW_REQUIRED'&&canDownload&&!validated)
+    if(status==='REVIEW_REQUIRED'&&canDownload)
       items.push({label:'Télécharger sans finir la vérification',icon:'download',run:()=>downloadHistoryRow(row).catch(fail)});
     if(['READY','REVIEW_REQUIRED'].includes(status))
       items.push({label:'Voir l’original (données en clair)',icon:'eye-slash',run:()=>openHistoryOriginal(row).catch(fail)});
@@ -1254,7 +1252,7 @@ async function openHistoryOriginal(row){
 async function downloadHistoryRow(row){
   const entry=await entryForHistory(row);
   if(!canDownloadResult(entry))throw new Error('Le résultat courant n’est pas disponible au téléchargement.');
-  await download(entry,entry.status==='READY',{skipConfirm:entry.validatedByUser===true});
+  await download(entry,entry.status==='READY');
 }
 async function downloadHistoryKey(row){
   const entry=await entryForHistory(row);
@@ -1298,9 +1296,7 @@ function saveSession(){
   const recent=slots?known.filter(entry=>isTerminal(entry.status)).slice(-slots):[];
   try{sessionStorage.setItem(key,JSON.stringify([...pending,...recent]
     .map(entry=>({jobId:entry.jobId,digest:entry.digest,
-      listDigest:entry.listDigest||null,mode:entry.mode,
-      validatedByUser:entry.validatedByUser===true,
-      validatedRevision:entry.validatedByUser?entry.validatedRevision||entry.revision:null}))));}
+      listDigest:entry.listDigest||null,mode:entry.mode}))));}
   catch(_){/* Session recovery is optional when storage is unavailable. */}
 }
 async function restoreSession(){
@@ -1327,9 +1323,6 @@ async function restoreSession(){
       entry.format=formatOf(entry.name);entry.selectedTypes=job.protectionPolicy?.selectedTypes||null;
       if(isTerminal(entry.status))await loadCurrent(entry);
       else pollEntry(entry).catch(error=>{entry.error=errorText(error);renderQueue();});
-      if(item.validatedByUser&&String(entry.revision)===String(item.validatedRevision)){
-        entry.validatedByUser=true;entry.validatedRevision=entry.revision;
-      }
     }catch(error){
       if([403,404].includes(error?.status))state.entries=state.entries.filter(candidate=>candidate!==entry);
       else{entry.status='ERROR';entry.error=errorText(error);}
@@ -1519,8 +1512,6 @@ async function loadCurrent(entry,{retryStale=true}={}){
   entry.staleReview=false;
   const previousRevision=entry.revision;
   entry.status=currentStatus;entry.revision=review?.revision||job.reviewRevision||null;
-  if(entry.validatedByUser&&String(entry.validatedRevision)!==String(entry.revision))
-    entry.validatedByUser=false;
   entry.review=review;entry.regions=regions;
   entry.hasCurrentResult=currentResultAvailable(job,review);
   if(previousRevision&&String(previousRevision)!==String(entry.revision)){
@@ -1729,22 +1720,6 @@ function remainingReviewWork(entry){
   const problems=Array.isArray(review.listProblems)?review.listProblems:[];
   return {rows,unresolved,problems,count:rows.length+unresolved.length+problems.length};
 }
-function sessionValidated(jobId){
-  return state.entries.some(entry=>String(entry.jobId)===String(jobId)&&entry.validatedByUser===true);
-}
-function closeFacts(entry,action,left){
-  const work=remainingReviewWork(entry);
-  const placeRows=work.rows.filter(row=>passageNeedsPlace(entry,row)).length;
-  return {action,left:left+placeRows,problems:work.problems.length,
-    unresolved:work.unresolved.length,reviewRows:work.rows.length,hasRevision:Boolean(entry.revision)};
-}
-function markUserValidated(entry){
-  entry.validatedByUser=true;
-  entry.validatedRevision=entry.revision;
-  saveSession();
-  renderQueue();
-  renderHistory();
-}
 function reviewQueue(entry){
   const {rows,unresolved,problems}=remainingReviewWork(entry);
   return [
@@ -1915,8 +1890,7 @@ function renderIssues(entry){
   const visibleLimit=Math.max(entry.reviewVisibleCount||20, (entry.reviewFocusIndex||0)+1);
 
   const reviewSummary=el('div',null,'asv2-review-summary',issuePane);
-  el('h3',entry.validatedByUser?'Document validé.':
-    progress.remaining?copy.review.toCheck(progress.remaining):copy.review.readyToValidate,null,reviewSummary);
+  el('h3',progress.remaining?copy.review.toCheck(progress.remaining):copy.review.readyToValidate,null,reviewSummary);
   if(progress.total){
     const row=el('div',null,'asv2-review-progress',reviewSummary);
     el('span',copy.review.progress(progress.done,progress.total),null,row);
@@ -2111,13 +2085,7 @@ function renderFooter(entry){
   if(entry.status==='TIMED_OUT')button('Reprendre le suivi','asv2-secondary',drawerFooter,()=>pollEntry(entry).catch(showError));
   if(entry.status==='ERROR'&&entry.jobId)button('Actualiser le document','asv2-secondary',drawerFooter,
     ()=>loadCurrent(entry).catch(showError));
-  if(entry.validatedByUser&&entry.status==='REVIEW_REQUIRED'){
-    const safety=el('p',null,'asv2-review-safety',drawerFooter);
-    svgIcon('shield-check',safety,18);
-    el('span','Document validé.',null,safety);
-    buttonWithIcon('Télécharger','download','asv2-primary',drawerFooter,
-      ()=>download(entry,false,{skipConfirm:true}).catch(showError));
-  }else if(entry.status==='REVIEW_REQUIRED'){
+  if(entry.status==='REVIEW_REQUIRED'){
     const work=remainingReviewWork(entry);
     const safety=el('p',null,'asv2-review-safety',drawerFooter);
     svgIcon('shield-check',safety,18);
@@ -2196,6 +2164,8 @@ function askBatchDecision(entry,work){
         el('p',copy.review.severalPlaces,null,box);
       }else{
         el('p',copy.review.batch.body,null,box);
+        el('p',copy.review.batch.keepHint,'asv2-validate-note',box);
+        el('p',copy.review.batch.maskHint,'asv2-validate-note',box);
         if(work.rows.length>20)el('p',copy.review.batch.slow,'asv2-validate-note',box);
       }
       const actions=el('div',null,'asv2-validate-actions',box);
@@ -2234,12 +2204,13 @@ async function cachedOriginPdf(entry){
   entry.originPdf=pdf;entry.originPdfJob=String(entry.jobId);
   return pdf;
 }
-async function passageBoxes(entry,row){
+async function passageBoxes(entry,row,{search=false}={}){
   const pageNumber=Number(row?.page);
   const known=regionRectangles(entry,row);
   const located=Number.isInteger(pageNumber)&&pageNumber>=1
     ?known.filter(box=>box.page===pageNumber):known;
-  if(located.length)return {ok:true,rects:located};
+  if(located.length)return {ok:true,rects:located,source:'server'};
+  if(!search)return {ok:false,reason:'none',rects:[]};
   if(!Number.isInteger(pageNumber)||pageNumber<1)return {ok:false,reason:'none',rects:[]};
   const text=row?.text||row?.surface||'';
   if(normalizeSearch(text).replace(/[^0-9a-z]/g,'').length<3)return {ok:false,reason:'short',rects:[]};
@@ -2259,13 +2230,18 @@ async function settleSkippedZone(entry,action,zone,revision){
   const row=passageRow(entry,occurrenceId,zone);
   entry.revision=revision||entry.revision;
   const mandatory=skipCode(zone)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT';
-  if(action==='KEEP'&&!mandatory){
+  if(action==='KEEP'){
+    if(mandatory)return {revision:entry.revision,changed:false,traced:0,forced:true,left:false,stayed:true};
     try{
       const receipt=await postDecision(entry,occurrenceId,'KEEP','review_batch');
       noteDecision(entry,occurrenceId,'KEEP',receipt.revision);
       return {revision:receipt.revision,changed:true,traced:0,forced:false,left:false};
     }catch(error){
-      if(!needsLinkedRegion(error)&&!conflictsWithKeptMask(error))throw error;
+      if(conflictsWithKeptMask(error))
+        return {revision:entry.revision,changed:false,traced:0,forced:true,left:false,stayed:true};
+      if(needsLinkedRegion(error))
+        return {revision:entry.revision,changed:false,traced:0,forced:false,left:true};
+      throw error;
     }
   }
   const found=await passageBoxes(entry,row);
@@ -2311,7 +2287,7 @@ function revealPassage(entry,row){
   entry.previewKind='origin';
   if(Number(current.page)>=1)entry.page=Number(current.page);
   setMobileTab('doc');
-  passageBoxes(entry,current).then(found=>{
+  passageBoxes(entry,current,{search:true}).then(found=>{
     if(state.active!==entry.key)return;
     if(found.ok){entry.highlightRects=found.rects;entry.page=found.rects[0].page;}
     renderPreview(entry).catch(showError);
@@ -2354,17 +2330,18 @@ async function finishKeptBatch(entry){
   try{await apply(entry,entry.revision,{untilPublished:true});}
   catch(error){showError(error);return false;}
   if(entry.status==='READY')return true;
-  if(!canCloseAfterBatch(closeFacts(entry,'KEEP',0))){
-    drawerMessage(copy.review.batch.notReady,'is-warning');
-    return false;
-  }
-  markUserValidated(entry);
-  return true;
+  drawerMessage(copy.review.batch.notReady,'is-warning');
+  return false;
 }
 async function finishGroupedDecision(entry,receipt,action){
   const skipped=Array.isArray(receipt?.skipped)?receipt.skipped:[];
   if(receipt?.revision)entry.revision=receipt.revision;
-  if(action==='KEEP')return finishKeptBatch(entry);
+  if(action==='KEEP'){
+    const stayed=skipped.filter(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT').length;
+    const closed=await finishKeptBatch(entry);
+    if(!closed&&stayed)drawerMessage(copy.review.batch.mustStayMasked(stayed),'is-info');
+    return closed;
+  }
   const zones=skipped.filter(item=>(skipCode(item)==='NEW_MASK_REQUIRES_LINKED_REGION'||skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT')&&item.occurrenceId);
   let revision=entry.revision;
   let traced=0,forced=0;
@@ -2398,10 +2375,6 @@ async function finishGroupedDecision(entry,receipt,action){
   else if(skipped.some(item=>skipCode(item)==='KEEP_CONFLICTS_WITH_GLOBAL_MASK_CONTRACT'))
     drawerMessage(copy.review.batch.skippedConflict,'is-warning');
   if(entry.status==='READY')return true;
-  if(canCloseAfterBatch(closeFacts(entry,'MASK',0))){
-    markUserValidated(entry);
-    return true;
-  }
   drawerMessage(copy.review.batch.notReady,'is-warning');
   return false;
 }
@@ -2476,10 +2449,6 @@ async function applyStackedBatch(entry,action){
   }else if(forced)drawerMessage(copy.review.batch.forcedMask(forced),'is-info');
   else if(traced)drawerMessage(copy.review.batch.autoPlaced(traced),'is-info');
   if(entry.status==='READY')return true;
-  if(lastRevision&&canCloseAfterBatch(closeFacts(entry,action,placed.length))){
-    markUserValidated(entry);
-    return true;
-  }
   if(lastRevision)drawerMessage(copy.review.batch.notReady,'is-warning');
   return false;
 }
@@ -2518,12 +2487,6 @@ async function approveHumanReview(entry,control){
   try{
     if(!await applyBatchDecision(entry,choice))return;
     if(entry.status==='READY'){await deliverReady(entry);return;}
-    if(entry.validatedByUser){
-      drawerMessage('Document validé.');
-      try{await download(entry,false,{skipConfirm:true});}
-      catch(_){drawerMessage(copy.review.batch.downloadBlocked,'is-warning');}
-      return;
-    }
     await loadCurrent(entry).catch(()=>{});
     if(entry.status==='READY'){await deliverReady(entry);return;}
     drawerMessage(copy.review.batch.notReady,'is-warning');
