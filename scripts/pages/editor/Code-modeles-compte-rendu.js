@@ -901,8 +901,21 @@
       const data = await res.json();
 
       if (data.status === 'OK' || res.ok) {
-        incrementRegenerationCount(jobId, edition);
-        updateExistingRegenerationCounter(jobId, edition);
+        var chargedThisRun = false;
+        async function applyModelCharge(delivered) {
+          const helper = window.__agiloSummaryRegenHelpers;
+          if (!helper || typeof helper.settleRegenerationCharge !== 'function') return;
+          chargedThisRun = await helper.settleRegenerationCharge({
+            jobId: jobId,
+            email: email,
+            token: token,
+            edition: edition,
+            priorContentHash: priorSummaryContentHash,
+            delivered: !!delivered,
+            charged: chargedThisRun
+          });
+          updateExistingRegenerationCounter(jobId, edition);
+        }
         setJobPromptIdLocal(jobId, model.promptModelId);
         cachedJobPromptIds.set(jobId, Number(model.promptModelId));
         try {
@@ -957,6 +970,7 @@
               if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
               else hideSummaryRegenLoader();
               if (outcome === 'cancelled') {
+                await applyModelCharge(false);
                 isGenerating = false;
                 if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
                 else window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
@@ -968,6 +982,7 @@
                     return false;
                   });
                 }
+                await applyModelCharge(true);
                 if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
                 isGenerating = false;
                 if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
@@ -990,14 +1005,18 @@
                     return false;
                   });
                 }
+                await applyModelCharge(true);
                 if (typeof window.toast === 'function') window.toast('Compte-rendu prêt');
-              } else if (typeof H.showSummaryStalledToast === 'function') {
-                H.showSummaryStalledToast(
-                  jobId,
-                  'délai d’attente atteint — actualisez la page (job ' + jobId + ').'
-                );
-              } else if (typeof window.toast === 'function') {
-                window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
+              } else {
+                await applyModelCharge(false);
+                if (typeof H.showSummaryStalledToast === 'function') {
+                  H.showSummaryStalledToast(
+                    jobId,
+                    'délai d’attente atteint. Actualisez la page (job ' + jobId + ').'
+                  );
+                } else if (typeof window.toast === 'function') {
+                  window.toast('Délai d’attente. Actualisez la page pour vérifier le compte-rendu.');
+                }
               }
               isGenerating = false;
               if (typeof H.emitSummaryReady === 'function') H.emitSummaryReady(jobId);
@@ -1008,11 +1027,12 @@
                 populateContainer(true);
               } catch (e) {}
             })
-            .catch(function (e) {
+            .catch(async function (e) {
               log('waitForSummaryTerminalState', e);
               window.__agiloSummaryRegenInProgress = false;
               if (typeof H.hideSummaryLoading === 'function') H.hideSummaryLoading();
               else hideSummaryRegenLoader();
+              try { await applyModelCharge(false); } catch (e2) {}
               isGenerating = false;
               if (typeof H.showSummaryStalledToast === 'function') {
                 H.showSummaryStalledToast(
@@ -1354,17 +1374,19 @@
 
   function isSummaryTabActive() {
     const tab = document.querySelector('[role="tab"][aria-selected="true"]');
-    return tab?.id === 'tab-summary' || (tab?.id && tab.id.includes('summary'));
+    if (tab && tab.id && tab.id.indexOf('summary') !== -1) return true;
+    if (tab && tab.id && tab.id.indexOf('summary') === -1) return false;
+    try {
+      var q = new URLSearchParams(window.location.search).get('tab') || '';
+      return q.toLowerCase().indexOf('summary') !== -1;
+    } catch (e) {
+      return false;
+    }
   }
 
   function hasSummaryContent() {
-    const root = document.querySelector('#editorRoot');
-    if (root?.dataset.summaryEmpty === '1') return false;
-    const el = querySummaryEditor();
-    if (!el) return false;
-    const txt = (el.textContent || '').toLowerCase();
-    if (txt.includes('pas encore disponible') || txt.includes('fichier manquant')) return false;
-    return true;
+    if (isSummaryTabActive()) return true;
+    return !!querySummaryEditor();
   }
 
   let debounceTimer = null;

@@ -682,6 +682,50 @@
     } catch (e) {}
   }
 
+  function decrementRegenerationCount(jobId) {
+    if (!jobId) return;
+    try {
+      const storage = localStorage.getItem('agilo:regenerations');
+      if (!storage) return;
+      const data = JSON.parse(storage);
+      if (!data[jobId] || !data[jobId].count) return;
+      data[jobId].count = Math.max(0, Number(data[jobId].count) - 1);
+      data[jobId].lastUsed = new Date().toISOString();
+      localStorage.setItem('agilo:regenerations', JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  /**
+   * Crédit seulement si le statut est READY_SUMMARY_READY et que le HTML du compte rendu est revenu.
+   * Si un crédit était déjà parti et que ce n'est pas le cas, on le retire.
+   * @returns {Promise<boolean>} true si un crédit reste consommé
+   */
+  async function settleRegenerationCharge(opts) {
+    opts = opts || {};
+    const jobId = opts.jobId;
+    if (!jobId || opts.firstGen || opts.skip) return false;
+    let st = null;
+    let htmlOk = false;
+    if (opts.delivered) {
+      try {
+        st = await fetchTranscriptStatus(jobId, opts.email, opts.token, opts.edition);
+      } catch (e) {
+        st = null;
+      }
+      if (st === 'READY_SUMMARY_READY') {
+        htmlOk = await receiveSummaryIndicatesCrReady(
+          jobId, opts.email, opts.token, opts.edition, opts.priorContentHash
+        );
+      }
+    }
+    if (st === 'READY_SUMMARY_READY' && htmlOk) {
+      if (!opts.charged) incrementRegenerationCount(jobId, opts.edition);
+      return true;
+    }
+    if (opts.charged) decrementRegenerationCount(jobId);
+    return false;
+  }
+
 
   /** L'API peut laisser un message « incident » obsolète côté javaException. */
   function isPhantomIncidentStatusPayload(j) {
@@ -1310,9 +1354,25 @@
       if (result.status === 'OK' || response.ok) {
         log(
           'redoSummary OK' +
-            (firstGen ? ' (première génération)' : skipRegenCharge ? ' (relance incident)' : ' — compteur')
+            (firstGen ? ' (première génération)' : skipRegenCharge ? ' (relance incident)' : ' (crédit après READY)')
         );
-        if (!firstGen && !skipRegenCharge) incrementRegenerationCount(jobId, edition);
+        var chargedThisRun = false;
+        async function applyRegenCharge(delivered) {
+          if (firstGen || skipRegenCharge) return;
+          chargedThisRun = await settleRegenerationCharge({
+            jobId: jobId,
+            email: email,
+            token: token,
+            edition: edition,
+            priorContentHash: priorSummaryContentHash,
+            delivered: !!delivered,
+            charged: chargedThisRun,
+            firstGen: firstGen,
+            skip: skipRegenCharge
+          });
+          updateRegenerationCounter(jobId, edition);
+          updateButtonState(jobId, edition);
+        }
         showSuccessMessage(firstGen ? 'Génération du compte-rendu lancée…' : 'Régénération lancée...');
         openSummaryTab();
         const summaryEditorClear = querySummaryEditor();
@@ -1350,6 +1410,7 @@
               if (outcome === 'cancelled') {
                 window.__agiloSummaryRegenInProgress = false;
                 hideSummaryLoading();
+                await applyRegenCharge(false);
                 isGenerating = false;
                 updateButtonVisibility();
                 emitSummaryReady(jobId);
@@ -1361,6 +1422,7 @@
                 refreshSummaryInEditorWithFallback(jobId, function () {
                   return false;
                 });
+                await applyRegenCharge(true);
                 showSuccessMessage('Compte-rendu prêt');
                 isGenerating = false;
                 updateButtonVisibility();
@@ -1378,8 +1440,10 @@
                 refreshSummaryInEditorWithFallback(jobId, function () {
                   return false;
                 });
+                await applyRegenCharge(true);
                 showSuccessMessage('Compte-rendu prêt');
               } else {
+                await applyRegenCharge(false);
                 showSummaryStalledToast(
                   jobId,
                   'délai d’attente atteint — le compte-rendu a peut-être quand même fini. Actualisez si besoin (job ' +
@@ -1391,10 +1455,11 @@
               updateButtonVisibility();
               emitSummaryReady(jobId);
             })
-            .catch((e) => {
+            .catch(async (e) => {
               logError('waitForSummaryTerminalState', e);
               window.__agiloSummaryRegenInProgress = false;
               hideSummaryLoading();
+              try { await applyRegenCharge(false); } catch (e2) {}
               isGenerating = false;
               showSummaryStalledToast(
                 jobId,
@@ -1849,7 +1914,8 @@
     isPhantomIncidentPayload,
     fetchTranscriptStatusFull,
     emitSummaryPending,
-    emitSummaryReady
+    emitSummaryReady,
+    settleRegenerationCharge
   };
 
   /**
