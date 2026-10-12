@@ -11,6 +11,13 @@
   const log = (...args) => { if (DEBUG) console.log('[AGILO:RELANCE]', ...args); };
   const logError = (...args) => { console.error('[AGILO:RELANCE]', ...args); };
 
+  function emitSummaryPending(jobId) {
+    window.dispatchEvent(new CustomEvent('agilo:summary-pending', { detail: { jobId: String(jobId || '') } }));
+  }
+  function emitSummaryReady(jobId) {
+    window.dispatchEvent(new CustomEvent('agilo:summary-ready', { detail: { jobId: String(jobId || '') } }));
+  }
+
   /** redoSummary KO : même logique que le reste du site — userErrorMessage puis détails Java. */
   function formatRedoSummaryApiError(result) {
     const synth = {
@@ -675,6 +682,50 @@
     } catch (e) {}
   }
 
+  function decrementRegenerationCount(jobId) {
+    if (!jobId) return;
+    try {
+      const storage = localStorage.getItem('agilo:regenerations');
+      if (!storage) return;
+      const data = JSON.parse(storage);
+      if (!data[jobId] || !data[jobId].count) return;
+      data[jobId].count = Math.max(0, Number(data[jobId].count) - 1);
+      data[jobId].lastUsed = new Date().toISOString();
+      localStorage.setItem('agilo:regenerations', JSON.stringify(data));
+    } catch (e) {}
+  }
+
+  /**
+   * Crédit seulement si le statut est READY_SUMMARY_READY et que le HTML du compte rendu est revenu.
+   * Si un crédit était déjà parti et que ce n'est pas le cas, on le retire.
+   * @returns {Promise<boolean>} true si un crédit reste consommé
+   */
+  async function settleRegenerationCharge(opts) {
+    opts = opts || {};
+    const jobId = opts.jobId;
+    if (!jobId || opts.firstGen || opts.skip) return false;
+    let st = null;
+    let htmlOk = false;
+    if (opts.delivered) {
+      try {
+        st = await fetchTranscriptStatus(jobId, opts.email, opts.token, opts.edition);
+      } catch (e) {
+        st = null;
+      }
+      if (st === 'READY_SUMMARY_READY') {
+        htmlOk = await receiveSummaryIndicatesCrReady(
+          jobId, opts.email, opts.token, opts.edition, opts.priorContentHash
+        );
+      }
+    }
+    if (st === 'READY_SUMMARY_READY' && htmlOk) {
+      if (!opts.charged) incrementRegenerationCount(jobId, opts.edition);
+      return true;
+    }
+    if (opts.charged) decrementRegenerationCount(jobId);
+    return false;
+  }
+
 
   /** L'API peut laisser un message « incident » obsolète côté javaException. */
   function isPhantomIncidentStatusPayload(j) {
@@ -842,6 +893,7 @@
   }
 
   function getButtonText() {
+    if (isPvPrompt(_getCachedPromptId(pickJobId()))) return 'Générer un PV';
     const activeTab = document.querySelector('[role="tab"][aria-selected="true"]');
     if (activeTab?.id === 'tab-summary' && hasErrorMessageInDOM()) return 'Générer un compte-rendu';
     if (activeTab?.id === 'tab-summary') return 'Régénérer';
@@ -862,19 +914,25 @@
       if (old) old.remove();
       return;
     }
-    if (old && old.previousElementSibling === anchor) return;
-    if (old) old.remove();
-    const wrap = document.createElement('div');
-    wrap.id = 'agilo-inline-generate-cr-wrap';
-    wrap.className = 'agilo-inline-gen-cr-wrap';
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'agilo-inline-gen-cr-btn';
-    b.setAttribute('data-action', 'relancer-compte-rendu');
-    b.setAttribute('aria-label', 'Générer un compte-rendu');
-    b.textContent = 'Générer un compte-rendu';
-    wrap.appendChild(b);
-    anchor.insertAdjacentElement('afterend', wrap);
+    let wrap = old;
+    if (!wrap || wrap.previousElementSibling !== anchor) {
+      if (old) old.remove();
+      wrap = document.createElement('div');
+      wrap.id = 'agilo-inline-generate-cr-wrap';
+      wrap.className = 'agilo-inline-gen-cr-wrap';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'agilo-inline-gen-cr-btn';
+      b.setAttribute('data-action', 'relancer-compte-rendu');
+      b.setAttribute('aria-label', 'Générer un compte-rendu');
+      b.textContent = 'Générer un compte-rendu';
+      wrap.appendChild(b);
+      anchor.insertAdjacentElement('afterend', wrap);
+    }
+    if (!document.getElementById('agilo-cr-model-picker-inline') &&
+        typeof window.agiloMountCrPickers === 'function') {
+      window.agiloMountCrPickers();
+    }
   }
 
   function applyRelanceButtonLabel() {
@@ -1173,6 +1231,80 @@
     return null;
   }
 
+  function isPvPrompt(id) {
+    const api = window.AgiloFormatInvestigationPv;
+    if (api && typeof api.isInvestigationPvPromptId === 'function') {
+      return api.isInvestigationPvPromptId(id);
+    }
+    const n = Number(id);
+    return n >= 705 && n <= 720;
+  }
+
+  function loadFormatInvestigationPvHelper() {
+    if (window.AgiloFormatInvestigationPv) return Promise.resolve(window.AgiloFormatInvestigationPv);
+    return new Promise((resolve) => {
+      let src = '';
+      const tags = document.getElementsByTagName('script');
+      for (let i = 0; i < tags.length; i++) {
+        const s = tags[i].src || '';
+        if (s.indexOf('relance-compte-rendu.js') !== -1) {
+          src = s.replace(
+            /scripts\/pages\/editor\/relance-compte-rendu\.js/,
+            'scripts/pages/shared/format-investigation-pv.js'
+          );
+          break;
+        }
+      }
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      const el = document.createElement('script');
+      el.src = src;
+      el.onload = () => resolve(window.AgiloFormatInvestigationPv || null);
+      el.onerror = () => resolve(null);
+      document.head.appendChild(el);
+    });
+  }
+
+  async function generateInvestigationPv(creds, promptId) {
+    const confirmed = confirm(
+      'Préparer le PV d’enquête (Word) ?\n\n' +
+      'Le compte rendu affiché ne change pas. Cela ne compte pas comme une régénération.'
+    );
+    if (!confirmed) {
+      isGenerating = false;
+      updateButtonVisibility();
+      return;
+    }
+    const api = await loadFormatInvestigationPvHelper();
+    if (!api) {
+      isGenerating = false;
+      alert('Téléchargement indisponible. Rechargez la page.');
+      updateButtonVisibility();
+      return;
+    }
+    if (typeof window.agiloSaveNow === 'function') {
+      try { await window.agiloSaveNow({ ignoreTab: true, silent: true }); } catch (_) {}
+    }
+    const r = await api.downloadInvestigationPv({
+      username: creds.email,
+      token: creds.token,
+      edition: creds.edition,
+      jobId: String(creds.jobId),
+      templateId: String(promptId)
+    });
+    isGenerating = false;
+    if (!r.ok && !r.busy) {
+      const msg = r.errorMessage || 'Impossible de préparer le Word.';
+      if (typeof window.toast === 'function') window.toast(msg);
+      else alert(msg);
+    } else if (r.ok && typeof window.toast === 'function') {
+      window.toast('Le Word du PV est prêt.');
+    }
+    updateButtonVisibility();
+  }
+
   // ============================================
   // FONCTION PRINCIPALE
   // ============================================
@@ -1203,6 +1335,11 @@
       updateButtonVisibility();
       return;
     }
+    const pvPromptId = _getCachedPromptId(jobId);
+    if (isPvPrompt(pvPromptId)) {
+      await generateInvestigationPv({ email, token, edition, jobId }, pvPromptId);
+      return;
+    }
     
     var skipRegenCharge = await shouldSkipRegenerationCharge(jobId, email, token, edition);
     const firstGen = hasErrorMessageInDOM();
@@ -1226,12 +1363,30 @@
     }
 
     const cachedPromptId = _getCachedPromptId(jobId);
+    let resolved = null;
+    if (typeof window.agiloResolveSummaryModel === 'function') {
+      try {
+        resolved = await window.agiloResolveSummaryModel(jobId);
+      } catch (e) {
+        log('agiloResolveSummaryModel', e);
+      }
+    }
+    if (!resolved) {
+      const live = window.__agiloCurrentSummaryModel;
+      if (live && String(live.jobId) === String(jobId)) resolved = live;
+    }
+    let promptIdToUse = null;
+    if (resolved && resolved.id != null) promptIdToUse = resolved.id;
+    else if (!resolved) promptIdToUse = cachedPromptId;
+    const modelName = (resolved && resolved.name) || '';
+    const modelNote = modelName
+      ? ('Modèle : ' + modelName)
+      : (promptIdToUse
+        ? 'Modèle de ce compte-rendu.'
+        : 'Modèle par défaut de votre compte.');
 
     var confirmMsg = '';
     if (firstGen) {
-      const modelNote = cachedPromptId
-        ? `Modèle utilisé : celui de votre dernière génération (ID ${cachedPromptId}).`
-        : 'Modèle par défaut de votre compte.';
       confirmMsg =
         'Générer le compte-rendu pour cette transcription ?\n\n' +
         modelNote +
@@ -1239,7 +1394,7 @@
     } else {
       confirmMsg =
         'Remplacer le compte-rendu actuel ?\n\n' +
-        (cachedPromptId ? `Modèle : ID ${cachedPromptId} (dernier utilisé).\n\n` : '') +
+        modelNote + '\n\n' +
         `${canRegen.remaining}/${canRegen.limit} régénération${
           canRegen.remaining > 1 ? 's' : ''
         } restante${canRegen.remaining > 1 ? 's' : ''}.\n\n` +
@@ -1266,11 +1421,11 @@
       if (skipRegenCharge) {
         log('Relance incident : quota de régénération non décompté');
       }
-      const promptSuffix = cachedPromptId ? `&promptId=${encodeURIComponent(cachedPromptId)}` : '';
+      const promptSuffix = promptIdToUse ? `&promptId=${encodeURIComponent(promptIdToUse)}` : '';
       const url = `https://api.agilotext.com/api/v1/redoSummary?jobId=${encodeURIComponent(jobId)}&username=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}&edition=${encodeURIComponent(edition)}${promptSuffix}`;
       log(
         'Appel redoSummary' +
-          (cachedPromptId ? ` (promptId=${cachedPromptId})` : ' (modèle défaut compte)') +
+          (promptIdToUse ? ` (promptId=${promptIdToUse})` : ' (modèle défaut compte)') +
           '...'
       );
       const response = await fetchRedoSummaryWithRetry(url, 3);
@@ -1279,9 +1434,25 @@
       if (result.status === 'OK' || response.ok) {
         log(
           'redoSummary OK' +
-            (firstGen ? ' (première génération)' : skipRegenCharge ? ' (relance incident)' : ' — compteur')
+            (firstGen ? ' (première génération)' : skipRegenCharge ? ' (relance incident)' : ' (crédit après READY)')
         );
-        if (!firstGen && !skipRegenCharge) incrementRegenerationCount(jobId, edition);
+        var chargedThisRun = false;
+        async function applyRegenCharge(delivered) {
+          if (firstGen || skipRegenCharge) return;
+          chargedThisRun = await settleRegenerationCharge({
+            jobId: jobId,
+            email: email,
+            token: token,
+            edition: edition,
+            priorContentHash: priorSummaryContentHash,
+            delivered: !!delivered,
+            charged: chargedThisRun,
+            firstGen: firstGen,
+            skip: skipRegenCharge
+          });
+          updateRegenerationCounter(jobId, edition);
+          updateButtonState(jobId, edition);
+        }
         showSuccessMessage(firstGen ? 'Génération du compte-rendu lancée…' : 'Régénération lancée...');
         openSummaryTab();
         const summaryEditorClear = querySummaryEditor();
@@ -1290,6 +1461,7 @@
         // le loader visible même si l'orchestrateur écrase summaryEditor (clearAll,
         // beforeload, polling pendant un fetch). Désactivé dès qu'on rend la main.
         window.__agiloSummaryRegenInProgress = jobId;
+        emitSummaryPending(jobId);
         showSummaryLoading();
         startSummaryLoaderPersistence();
         updateButtonVisibility();
@@ -1318,8 +1490,10 @@
               if (outcome === 'cancelled') {
                 window.__agiloSummaryRegenInProgress = false;
                 hideSummaryLoading();
+                await applyRegenCharge(false);
                 isGenerating = false;
                 updateButtonVisibility();
+                emitSummaryReady(jobId);
                 return;
               }
               if (outcome === 'ready') {
@@ -1328,9 +1502,11 @@
                 refreshSummaryInEditorWithFallback(jobId, function () {
                   return false;
                 });
+                await applyRegenCharge(true);
                 showSuccessMessage('Compte-rendu prêt');
                 isGenerating = false;
                 updateButtonVisibility();
+                emitSummaryReady(jobId);
                 return;
               }
               // outcome === 'timeout' : très rare (≈ 25 min). Dernière chance via
@@ -1344,8 +1520,10 @@
                 refreshSummaryInEditorWithFallback(jobId, function () {
                   return false;
                 });
+                await applyRegenCharge(true);
                 showSuccessMessage('Compte-rendu prêt');
               } else {
+                await applyRegenCharge(false);
                 showSummaryStalledToast(
                   jobId,
                   'délai d’attente atteint — le compte-rendu a peut-être quand même fini. Actualisez si besoin (job ' +
@@ -1355,17 +1533,20 @@
               }
               isGenerating = false;
               updateButtonVisibility();
+              emitSummaryReady(jobId);
             })
-            .catch((e) => {
+            .catch(async (e) => {
               logError('waitForSummaryTerminalState', e);
               window.__agiloSummaryRegenInProgress = false;
               hideSummaryLoading();
+              try { await applyRegenCharge(false); } catch (e2) {}
               isGenerating = false;
               showSummaryStalledToast(
                 jobId,
                 'impossible de vérifier le statut. Actualisez la page ou contactez le support (job ' + jobId + ').'
               );
               updateButtonVisibility();
+              emitSummaryReady(jobId);
             });
         } else {
           isGenerating = false;
@@ -1499,7 +1680,20 @@
     const summaryEl = querySummaryEditor();
     if (summaryEl) {
       let debounceTimer;
-      const observer = new MutationObserver(() => {
+      const observer = new MutationObserver((mutations) => {
+        if (mutations && mutations.length && mutations.every(function (m) {
+          var nodes = [m.target];
+          if (m.addedNodes) for (var i = 0; i < m.addedNodes.length; i++) nodes.push(m.addedNodes[i]);
+          if (m.removedNodes) for (var i = 0; i < m.removedNodes.length; i++) nodes.push(m.removedNodes[i]);
+          return nodes.every(function (n) {
+            if (!n) return true;
+            var el = n.nodeType === 1 ? n : n.parentElement;
+            if (!el || !el.closest) return false;
+            return !!(el.closest('#agilo-inline-generate-cr-wrap') ||
+              el.closest('#agilo-cr-model-panel') ||
+              el.closest('.agilo-cr-picker'));
+          });
+        })) return;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(() => {
           log('Changement DOM summaryEditor détecté');
@@ -1732,7 +1926,10 @@
       }
       .agilo-inline-gen-cr-wrap {
         display: flex;
+        gap: 8px;
+        align-items: center;
         justify-content: center;
+        flex-wrap: wrap;
         margin: 1rem 0 1.25rem;
       }
       .agilo-inline-gen-cr-btn {
@@ -1777,6 +1974,7 @@
   }
 
   window.relancerCompteRendu = relancerCompteRendu;
+  window.agiloIsSummaryEmpty = hasErrorMessageInDOM;
 
   /** Partagé avec Code-modeles-compte-rendu.js (polling statut, pas décompte 2:30). */
   window.__agiloSummaryRegenHelpers = {
@@ -1794,7 +1992,10 @@
     startSummaryLoaderPersistence,
     stopSummaryLoaderPersistence,
     isPhantomIncidentPayload,
-    fetchTranscriptStatusFull
+    fetchTranscriptStatusFull,
+    emitSummaryPending,
+    emitSummaryReady,
+    settleRegenerationCharge
   };
 
   /**

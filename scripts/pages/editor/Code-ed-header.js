@@ -757,14 +757,25 @@
       setInvestigationLinkBusy(a, true);
       try {
         if (typeof window.agiloSaveNow === 'function') {
-          try { await window.agiloSaveNow(); } catch (_) { /* disque déjà là */ }
+          try { await window.agiloSaveNow({ ignoreTab: true, silent: true }); }
+          catch (_) { /* le texte déjà sur le disque suffit */ }
+        }
+        const selected = typeof api.readStoredPromptId === 'function'
+          ? api.readStoredPromptId(window.sessionStorage, jobKey)
+          : 0;
+        const templateId = typeof api.resolveInvestigationTemplateId === 'function'
+          ? api.resolveInvestigationTemplateId(selected, promptIdFromJob(job))
+          : String(promptIdFromJob(job) || '');
+        if (!templateId) {
+          toast('Choisissez un modèle de PV d’enquête, puis réessayez.', 4200);
+          return;
         }
         const r = await api.downloadInvestigationPv({
           username: AUTH.email,
           token: AUTH.token,
           edition: AUTH.edition,
           jobId: jobKey,
-          templateId: String(promptIdFromJob(job) || '')
+          templateId: templateId
         });
         if (!r.ok && !r.busy) toast(r.errorMessage || 'Impossible de préparer le Word.', 4200);
       } finally {
@@ -775,7 +786,10 @@
 
   function updateInvestigationPvLink(jobId, job) {
     const api = window.AgiloFormatInvestigationPv;
-    const show = !!(api && api.shouldShowInvestigationPvLink(promptIdFromJob(job), job && job.transcriptStatus));
+    const selected = api && typeof api.readStoredPromptId === 'function'
+      ? api.readStoredPromptId(window.sessionStorage, jobId)
+      : 0;
+    const show = !!(api && api.shouldShowInvestigationPvLink(promptIdFromJob(job), job && job.transcriptStatus, selected));
     let a = document.querySelector('a.download_wrapper-link_investigation_docx');
     if (!show) {
       if (a) a.style.display = 'none';
@@ -1038,6 +1052,14 @@
     if (!jobId) return;
     const job = await apiGetJob(jobId, AUTH);
     LAST_JOB = job || null;
+    const seeded = promptIdFromJob(job);
+    const pvApi = window.AgiloFormatInvestigationPv;
+    if (pvApi && pvApi.isInvestigationPvPromptId(seeded)) {
+      try {
+        const key = 'agilo:summaryPromptId:' + jobId;
+        if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, String(seeded));
+      } catch (_) { /* session fermée */ }
+    }
 
     if (job && (job.filename || job.jobTitle)) {
       applyHeaderFromJob(job);
@@ -1069,6 +1091,10 @@
     if (!jobId) { console.warn('[Header] Aucun jobId'); return; }
 
     await refreshHeader(jobId);
+    document.addEventListener('agilo:summary-prompt', () => {
+      const id = getJobId();
+      if (id) updateInvestigationPvLink(id, LAST_JOB || {});
+    });
     setupRename();
     setupExport();
     setupWebhook();

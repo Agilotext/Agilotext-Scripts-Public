@@ -47,6 +47,34 @@ describe("shouldShowInvestigationPvLink", () => {
   it("cache 787 même READY", () => {
     assert.equal(api.shouldShowInvestigationPvLink(787, "READY_SUMMARY_READY"), false);
   });
+
+  it("montre le lien si le modèle choisi est un PV, même si le job est sur une fiche", () => {
+    assert.equal(api.shouldShowInvestigationPvLink(7, "READY_SUMMARY_READY", 713), true);
+    assert.equal(api.shouldShowInvestigationPvLink(7, "READY_SUMMARY_ON_ERROR", 713), true);
+  });
+});
+
+describe("resolveInvestigationTemplateId", () => {
+  it("prend le modèle choisi s'il est un PV", () => {
+    assert.equal(api.resolveInvestigationTemplateId(713, 7), "713");
+  });
+
+  it("retombe sur le prompt du job", () => {
+    assert.equal(api.resolveInvestigationTemplateId(0, 713), "713");
+    assert.equal(api.resolveInvestigationTemplateId(7, 713), "713");
+  });
+
+  it("refuse un couple sans PV", () => {
+    assert.equal(api.resolveInvestigationTemplateId(7, 844), "");
+  });
+});
+
+describe("readStoredPromptId", () => {
+  it("lit la clé du job", () => {
+    const storage = { getItem: (k) => (k === "agilo:summaryPromptId:1000040991" ? "713" : null) };
+    assert.equal(api.readStoredPromptId(storage, "1000040991"), 713);
+    assert.equal(api.readStoredPromptId(storage, "1000040998"), 0);
+  });
 });
 
 describe("buildFormBody", () => {

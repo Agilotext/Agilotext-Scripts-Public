@@ -28,8 +28,21 @@
     return String(status || "").toUpperCase().indexOf("READY_SUMMARY_") === 0;
   }
 
-  function shouldShowInvestigationPvLink(promptId, status) {
-    return isInvestigationPvPromptId(promptId) && isReadyStatus(status);
+  function readStoredPromptId(storage, jobId) {
+    if (!storage || !jobId || typeof storage.getItem !== "function") return 0;
+    var n = Number(storage.getItem("agilo:summaryPromptId:" + jobId));
+    return isFinite(n) && n > 0 ? n : 0;
+  }
+
+  function resolveInvestigationTemplateId(selectedId, jobPromptId) {
+    if (isInvestigationPvPromptId(selectedId)) return String(toInt(selectedId));
+    if (isInvestigationPvPromptId(jobPromptId)) return String(toInt(jobPromptId));
+    return "";
+  }
+
+  function shouldShowInvestigationPvLink(promptId, status, selectedId) {
+    var id = isInvestigationPvPromptId(selectedId) ? selectedId : promptId;
+    return isInvestigationPvPromptId(id) && isReadyStatus(status);
   }
 
   function buildFormBody(opts) {
@@ -205,6 +218,8 @@
     LINK_CLASS: LINK_CLASS,
     isInvestigationPvPromptId: isInvestigationPvPromptId,
     isReadyStatus: isReadyStatus,
+    readStoredPromptId: readStoredPromptId,
+    resolveInvestigationTemplateId: resolveInvestigationTemplateId,
     shouldShowInvestigationPvLink: shouldShowInvestigationPvLink,
     buildFormBody: buildFormBody,
     parseContentDispositionFilename: parseContentDispositionFilename,
