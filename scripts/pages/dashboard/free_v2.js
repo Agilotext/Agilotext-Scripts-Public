@@ -12,27 +12,13 @@
  * Prérequis Webflow : supprimer le div `blocker` hover (voir WEBFLOW_FREE_DELETE_BLOCKER.md).
  */
 
-// erreurs API job — mirror scripts/shared/agilo-api-error-format.js
+// erreurs API job — préférer scripts/shared/agilo-api-error-format.js chargé avant ce script
 (function (w) {
   'use strict';
   if (w.agiloJobErrorParts) return;
   function ts(s) { return s == null ? '' : String(s).trim(); }
-  function tr(s, mx) {
-    if (!s || !mx || s.length <= mx) return s || '';
-    return String(s).slice(0, mx - 3) + '...';
-  }
   w.agiloJobErrorParts = function (data, fb) {
-    var primary = ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.';
-    var chunks = [];
-    var ex = ts(data && data.javaException);
-    if (ex) chunks.push(ex);
-    var stk = ts(data && (data.javaStackTrace || data.exceptionStackTrace));
-    if (stk) chunks.push(stk);
-    var tech = chunks.filter(Boolean).join('\n\n');
-    if (tech && primary && tech.indexOf(primary) === 0) tech = ts(tech.slice(primary.length)).replace(/^[\s:]+/, '');
-    if (!ts(tech)) tech = '';
-    var alertText = tech ? primary + '\n\n— Détails techniques —\n' + tr(tech, 2000) : primary;
-    return { primary: primary, technical: tech, alertText: alertText };
+    return { primary: ts(data && data.userErrorMessage) || ts(fb) || 'Une erreur est survenue.', technical: ts(data && data.javaException), alertText: ts(fb) || 'Une erreur est survenue.' };
   };
 })(typeof window !== 'undefined' ? window : this);
 
@@ -300,10 +286,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }[ch]));
 
   const buildBusinessErrorHtml = message => {
+    if (window.agiloBuildBusinessErrorHtml) {
+      return window.agiloBuildBusinessErrorHtml(message, defaultErrorHtml);
+    }
     const text = String(message || '').trim();
     const normalized = text.toLowerCase();
     if (normalized.includes('vide') || normalized.includes('silencieux') || normalized.includes('silent')) {
-      return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide ou silencieux.<br>Vérifiez l’enregistrement, puis envoyez un autre fichier.';
+      return '<strong>Audio non exploitable</strong><br>Le fichier envoyé semble vide, silencieux ou illisible.<br>Vérifiez l’enregistrement sur votre appareil, puis renvoyez un autre fichier.<br>Si le problème persiste, écrivez-nous à contact@agilotext.com.';
     }
     if (!text) return defaultErrorHtml;
     return `<strong>Traitement interrompu</strong><br>${escapeHtml(text).replace(/\n/g, '<br>')}`;
@@ -317,6 +306,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const showBusinessProcessingError = message => {
     if (defaultErrorTextNode) defaultErrorTextNode.innerHTML = buildBusinessErrorHtml(message);
     showError('default');
+    if (window.AgilotextA11y && typeof window.AgilotextA11y.announce === 'function') {
+      window.AgilotextA11y.announce(String(message || 'Audio non exploitable.'));
+    }
+  };
+
+  const resolveAndShowUploadError = data => {
+    if (window.agiloMapUploadErrorResponse) {
+      const mapped = window.agiloMapUploadErrorResponse(data || {});
+      if (mapped.action === 'business') {
+        showBusinessProcessingError(mapped.message);
+        if (mapped.log) console.error('[AGILO:UPLOAD]', mapped.log);
+        return true;
+      }
+      if (mapped.action === 'key') {
+        showError(mapped.key);
+        if (mapped.log) console.error('[AGILO:UPLOAD]', mapped.log);
+        return true;
+      }
+      if (mapped.action === 'alert') {
+        showDefaultError();
+        if (mapped.alertMsg) alert(mapped.alertMsg);
+        if (mapped.log) console.error('[AGILO:UPLOAD]', mapped.log);
+        return true;
+      }
+    }
+    const err = (data && data.errorMessage) || '';
+    if (window.agiloClassifyUploadError) {
+      const c = window.agiloClassifyUploadError(data || err);
+      if (c && c.kind === 'audio_empty') {
+        showBusinessProcessingError(c.userPlain);
+        console.error('[AGILO:UPLOAD] audio_empty', c.logTechnical || err);
+        return true;
+      }
+    }
+    return false;
   };
 
   const scrollToEl = (el, offset = 0) =>
@@ -639,7 +663,7 @@ document.addEventListener('DOMContentLoaded', () => {
               const progressStatusErr = loadingAnimDiv && loadingAnimDiv.querySelector('.progress-status');
               if (progressStatusErr) progressStatusErr.remove();
               if (summaryCheckbox.checked) setSummaryUI('error'); else setSummaryUI('hidden');
-              showBusinessProcessingError(window.agiloJobErrorParts(data, 'Erreur inconnue').primary);
+              showBusinessProcessingError(window.agiloJobErrorParts(data, '').primary);
               break;
 
             default:
@@ -783,7 +807,9 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
 
-        // ⭐ non retryables (backend)
+        if (window.agiloIsNonRetryableUploadErrorMessage && window.agiloIsNonRetryableUploadErrorMessage(em)) {
+          return responseData;
+        }
         if (
           em.includes('error_audio_format_not_supported') ||
           em.includes('error_max_file_size_exceeded') ||
@@ -811,9 +837,11 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('ERROR_INVALID_YOUTUBE_URL') ||
           em.includes('error_maestro_context_ambiguous') ||
           em.includes('error_maestro_context_not_found') ||
-          em.includes('error_maestro_context_file_unsupported')
+          em.includes('error_maestro_context_file_unsupported') ||
+          em.toLowerCase().includes('could not get duration') ||
+          em.toLowerCase().includes('error getting audio duration')
         ) {
-          return responseData; // retourner pour pouvoir afficher le message exact
+          return responseData;
         }
 
         const retryableHttp = [408, 425, 429, 500, 502, 503, 504].includes(res.status);
@@ -959,6 +987,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (file.size === 0) {
+        showBusinessProcessingError(window.agiloAudioEmptyUserPlain || 'Le fichier envoyé semble vide, silencieux ou illisible.');
+        console.error('[AGILO:UPLOAD] audio_empty client precheck', { name: file.name, size: 0 });
+        if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+        if (submitBtn) submitBtn.disabled = false;
+        form.dataset.sending = '0';
+        window.removeEventListener('beforeunload', beforeUnloadGuard);
+        return;
+      }
+
       if (speakersChecked) {
         if (!trialApi || typeof trialApi.reserve !== 'function') {
           speakerReservation = { ok: false, reason: 'guard_missing' };
@@ -1075,39 +1113,10 @@ document.addEventListener('DOMContentLoaded', () => {
               }
             }));
             const err = (data && data.errorMessage) || '';
-
-            // ⭐ Gestion COMPLÈTE des erreurs backend
-            if (err === 'error_too_much_traffic') showError('tooMuchTraffic');
-            else if (
-              err.includes('error_account_pending_validation') ||
-              err.includes('error_limit_reached_for_user') ||
-              err.includes('error_quota_exceeded') ||
-              err.includes('error_pro_quota_exceeded') ||
-              err.includes('error_subscription_quota') ||
-              err.includes('error_plan_limit_reached') ||
-              err.includes('error_subscription_limit') ||
-              err.includes('error_limit_reached')
-            ) showError('tooMuchTraffic');
-            else if (err.includes('error_duration_is_too_long_for_summary')) showError('summaryLimit');
-            else if (err.includes('error_duration_is_too_long') || err.includes('error_max_duration_exceeded')) showError('audioTooLong');
-            else if (err.includes('error_transcript_too_long_for_summary')) showError('summaryLimit');
-            else if (err.includes('error_audio_format_not_supported') || err.includes('error_max_file_size_exceeded')) showError('audioFormat');
-            else if (err.includes('error_invalid_audio_file_content')) showError('invalidAudioContent');
-            else if (err.includes('error_silent_audio_file')) showError('audioFormat');
-            else if (err.includes('error_audio_file_not_found')) showError('audioNotFound');
-            else if (err.includes('error_invalid_token')) showError('invalidToken');
-            else if (
-              err.includes('error_too_many_hours_for_last_30_days') ||
-              err.includes('error_quota_exceeded') ||
-              err.includes('error_pro_quota_exceeded') ||
-              err.includes('error_subscription_quota') ||
-              err.includes('error_plan_limit_reached') ||
-              err.includes('error_subscription_limit') ||
-              err.includes('error_limit_reached')
-            ) showError('tooManyHours');
-            else if (err.includes('error_too_many_devices_used_for_account')) { showDefaultError(); alert('Trop d\'appareils utilisés pour ce compte. Veuillez contacter le support.'); }
-            else if (err.includes('error_too_many_calls')) showError('tooMuchTraffic');
-            else { console.error('❌ Erreur non mappée:', err); showDefaultError(); if (err && err.trim()) alert('Erreur: ' + err); }
+            if (!resolveAndShowUploadError(data)) {
+              console.error('[AGILO:UPLOAD] Erreur non mappée:', err);
+              showBusinessProcessingError(window.agiloJobErrorParts(data, err).primary);
+            }
           }
         })
         .catch(err => {
@@ -1512,5 +1521,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.sendWithRetry = sendWithRetry;
   window.checkTranscriptStatus = checkTranscriptStatus;
   window.showError = showError;
+  window.showBusinessProcessingError = showBusinessProcessingError;
   window.edition = edition;
 });
