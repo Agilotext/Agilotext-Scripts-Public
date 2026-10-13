@@ -1,5 +1,6 @@
 /**
  * free_v2.js — Agilotext FREE dashboard (fichier externe)
+ * v1.12 — essai intervenants : consentement armed, fail-closed, exclusivité format
  * v1.10 — upsell popup ; CR + format Free libres (défaut ON) ; speakers lockés ; hook Maestro
  * v1.07 — compte-rendu : iframe (XHR sync → agilo-summary-dashboard-embed.js) + onglet CR — erreurs : userErrorMessage prioritaire
  * v1.01 (branche GitHub `1.01`) — rafraîchissement jeton Agilotext + libellés UX — voir webflow-login-speed-reduce-florian.md
@@ -732,8 +733,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return Math.max(60 * 60 * 1000, Math.min(bySpeed, 2 * 60 * 60 * 1000));
     })();
     const fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
+    const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
 
-    if (isYouTube) {
+    function usernameOf(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) return target.get('username') || '';
+      if (isYouTube) return (target && target.username) || '';
+      return typeof target.get === 'function' ? (target.get('username') || '') : '';
+    }
+    function applyFreshToken(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) target.set('token', globalToken);
+      else if (target) target.token = globalToken;
+    }
+
+    if (isYouTube && !multipart) {
       const body = new URLSearchParams();
       Object.keys(data).forEach(key => { body.append(key, String(data[key] || '')); });
       fetchOptions.body = body.toString();
@@ -764,14 +776,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const em = (responseData && responseData.errorMessage) || '';
 
         if (em.includes('error_invalid_token') && attempt < max) {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -801,7 +808,10 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('error_too_many_calls') ||
           em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') ||
-          em.includes('ERROR_INVALID_YOUTUBE_URL')
+          em.includes('ERROR_INVALID_YOUTUBE_URL') ||
+          em.includes('error_maestro_context_ambiguous') ||
+          em.includes('error_maestro_context_not_found') ||
+          em.includes('error_maestro_context_file_unsupported')
         ) {
           return responseData; // retourner pour pouvoir afficher le message exact
         }
@@ -818,14 +828,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return responseData;
       } catch (err) {
         if (attempt < max && err && err.type === 'invalidToken') {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -917,14 +922,30 @@ document.addEventListener('DOMContentLoaded', () => {
       if (formLoadingDiv) formLoadingDiv.style.display = 'block';
       if (submitBtn) submitBtn.disabled = true;
 
-      const speakersChecked = speakersCheckbox.checked;
-      const summaryChecked = summaryCheckbox.checked;
-      const formatChecked = formatCheckbox.checked;
-      const speakersExpected = speakersSelect.value;
+      const sessionInputAtStart = form && form.querySelector('input[name="agilo_record_session_id"]');
+      const speakerSourceHint = sessionInputAtStart && sessionInputAtStart.value ? 'recording' : 'upload';
+      const trialApi = window.AgiloFreeSpeakerTrial;
+      const speakerIntent = (trialApi && typeof trialApi.readIntent === 'function')
+        ? trialApi.readIntent(speakerSourceHint)
+        : {
+            speakers: false,
+            armed: false,
+            formatChecked: !!(formatCheckbox && formatCheckbox.checked),
+            speakersExpected: (speakersSelect && speakersSelect.value) || '',
+            source: speakerSourceHint
+          };
+      const speakersChecked = !!(speakerIntent.speakers && speakerIntent.armed);
+      const speakersExpected = speakerIntent.speakersExpected;
+      const speakerSource = speakerIntent.source;
+      const summaryChecked = !!(summaryCheckbox && summaryCheckbox.checked);
+      const formatChecked = speakerIntent.formatChecked != null
+        ? !!speakerIntent.formatChecked
+        : !!(formatCheckbox && formatCheckbox.checked);
 
       setSummaryUI(summaryChecked ? 'loading' : 'hidden');
 
       let payload;
+      let speakerReservation = null;
 
       // ✅ Anti "trop vite" : attendre que FilePond retourne un File natif
       const file = await waitPondFileReady(3000);
@@ -938,16 +959,43 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
+      if (speakersChecked) {
+        if (!trialApi || typeof trialApi.reserve !== 'function') {
+          speakerReservation = { ok: false, reason: 'guard_missing' };
+        } else {
+          speakerReservation = await trialApi.reserve({ source: speakerSource });
+        }
+        if (!speakerReservation || !speakerReservation.ok) {
+          if ((!trialApi || typeof trialApi.reserve !== 'function') && trialApi && typeof trialApi.showStateModal === 'function') {
+            trialApi.showStateModal(speakerReservation && speakerReservation.reason);
+          }
+          if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+          if (submitBtn) submitBtn.disabled = false;
+          form.dataset.sending = '0';
+          window.removeEventListener('beforeunload', beforeUnloadGuard);
+          return;
+        }
+      }
+
       // Remplir proprement le FormData pour l'API
       fd.append('token', globalToken);
       fd.append('username', email);
       fd.append('edition', edition);
-      fd.append('timestampTranscript', speakersChecked ? 'true' : 'false');
-      if (speakersChecked) {
+      const payloadCore = window.AgiloFreeSpeakerTrialCore;
+      const speakersPayload = (payloadCore && typeof payloadCore.resolveFreeSpeakersPayload === 'function')
+        ? payloadCore.resolveFreeSpeakersPayload(!!trialApi, {
+            speakers: speakersChecked,
+            armed: !!(speakerIntent && speakerIntent.armed),
+            formatChecked: formatChecked
+          }, speakerReservation || { ok: false })
+        : (speakersChecked && speakerReservation && speakerReservation.ok
+            ? { timestampTranscript: true, formatTranscript: false }
+            : { timestampTranscript: false, formatTranscript: !!formatChecked });
+      const speakersAllowed = !!speakersPayload.timestampTranscript;
+      fd.append('timestampTranscript', speakersAllowed ? 'true' : 'false');
+      fd.append('formatTranscript', speakersPayload.formatTranscript ? 'true' : 'false');
+      if (speakersAllowed) {
         fd.append('speakersExpected', speakersExpected || '');
-        fd.append('formatTranscript', 'false');
-      } else {
-        fd.append('formatTranscript', formatChecked ? 'true' : 'false');
       }
       fd.append('doSummary', summaryChecked ? 'true' : 'false');
       if (translateCheckbox && translateCheckbox.checked) {
@@ -986,19 +1034,46 @@ document.addEventListener('DOMContentLoaded', () => {
           if (data && data.status === 'OK') {
             showSuccess();
             const jobId = data.jobIdList && data.jobIdList[0];
+            if (speakerReservation && window.AgiloFreeSpeakerTrial && typeof window.AgiloFreeSpeakerTrial.commit === 'function' && jobId) {
+              window.AgiloFreeSpeakerTrial.commit(jobId, { requestId: speakerReservation.requestId, source: speakerSource });
+            }
             if (jobId) {
               localStorage.setItem('currentJobId', jobId);
               document.dispatchEvent(new CustomEvent('newJobIdAvailable'));
               var sessionInput = form && form.querySelector('input[name="agilo_record_session_id"]');
               var recordSessionId = sessionInput ? sessionInput.value : undefined;
-              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', { detail: { sessionId: recordSessionId, jobId: jobId } }));
+              document.dispatchEvent(new CustomEvent('agilo-upload-confirmed', {
+                detail: {
+                  sessionId: recordSessionId,
+                  jobId: jobId,
+                  speakersUsed: speakersAllowed,
+                  source: speakerSource,
+                  trialRequestId: speakerReservation && speakerReservation.requestId
+                }
+              }));
+            } else if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
             }
             if (successDiv) successDiv.style.display = 'flex';
             if (loadingAnimDiv) loadingAnimDiv.style.display = 'block';
             checkTranscriptStatus(jobId, email);
             if (loadingAnimDiv) scrollToEl(loadingAnimDiv, -80);
           } else {
-            document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: (data && data.errorMessage) || '' } }));
+            if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+              if (window.AgiloFreeSpeakerTrial.isCertainRejection(null, data)) {
+                window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+              } else {
+                window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+              }
+            }
+            document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+              detail: {
+                errorMessage: (data && data.errorMessage) || '',
+                speakersUsed: speakersAllowed,
+                source: speakerSource,
+                trialRequestId: speakerReservation && speakerReservation.requestId
+              }
+            }));
             const err = (data && data.errorMessage) || '';
 
             // ⭐ Gestion COMPLÈTE des erreurs backend
@@ -1037,7 +1112,21 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(err => {
           console.error('Erreur lors de l\'envoi:', err);
-          document.dispatchEvent(new CustomEvent('agilo-upload-failed', { detail: { errorMessage: err && err.message || '' } }));
+          if (speakerReservation && window.AgiloFreeSpeakerTrial) {
+            if (window.AgiloFreeSpeakerTrial.isCertainRejection(err, null)) {
+              window.AgiloFreeSpeakerTrial.release({ requestId: speakerReservation.requestId });
+            } else {
+              window.AgiloFreeSpeakerTrial.markUncertain({ requestId: speakerReservation.requestId });
+            }
+          }
+          document.dispatchEvent(new CustomEvent('agilo-upload-failed', {
+            detail: {
+              errorMessage: err && err.message || '',
+              speakersUsed: speakersAllowed,
+              source: speakerSource,
+              trialRequestId: speakerReservation && speakerReservation.requestId
+            }
+          }));
           if (err && err.type === 'timeout') {
             if (defaultErrorTextNode) {
               defaultErrorTextNode.innerHTML =
@@ -1129,7 +1218,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function freeUpgradeBenefits(minPlan, source) {
     if (minPlan === 'ent') {
       return [
-        'Joignez jusqu’à 5 documents de contexte (Word, ODT, PDF, PowerPoint, MD…)',
+        'Joignez jusqu’à 5 PDF, DOCX, TXT de contexte',
         'Noms et termes mieux reconnus',
         'Compte rendu plus précis',
         'IA 100 % française (Business)'
@@ -1137,7 +1226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (source === 'maestro_docs') {
       return [
-        'Joignez 1 document de contexte (Word, ODT, PDF, PowerPoint, MD…)',
+        'Joignez 1 PDF, DOCX ou TXT de contexte',
         'Noms et termes mieux reconnus',
         'Compte rendu plus fiable',
         'Et les atouts Pro (intervenants, modèles…)'
@@ -1312,10 +1401,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ensureFreeToggleDefaultOn(summaryCheckbox, 'data-agilo-summary-defaulted');
   }
 
-  function ensureFreeFormatDefaultOn() {
-    ensureFreeToggleDefaultOn(formatCheckbox, 'data-agilo-format-defaulted');
-  }
-
   function removeInjectedProBadges(scope) {
     const root = scope || document;
     root.querySelectorAll('.agilo-pro-badge').forEach(b => b.remove());
@@ -1391,17 +1476,9 @@ document.addEventListener('DOMContentLoaded', () => {
     injectFreeUpsellCss();
     removeFreeDesireCard();
     ensureFreeSummaryDefaultOn();
-    ensureFreeFormatDefaultOn();
-    // Speakers restent lockés OFF — décocher le format n’active jamais les intervenants
-    lockFreeCheckbox(speakersCheckbox, 'Identifiez automatiquement les intervenants.', 'toggle_speakers');
+    // Format + speakers : exclusivité et défaut gérés par AgiloFreeSpeakerTrial
     // #toggle-summary + #toggle-format-transcript : libres sur Free
     lockFreeCheckbox(translateCheckbox, 'Traduisez la transcription dans une autre langue.', 'toggle_translate');
-
-    lockFreeSelect(
-      document.getElementById('speakers-select') || speakersSelect,
-      'Identifiez automatiquement les intervenants.',
-      'speakers_select'
-    );
     lockFreeSelect(
       document.getElementById('default-template-select'),
       'Utilisez des modèles de compte rendu prêts à l’emploi.',

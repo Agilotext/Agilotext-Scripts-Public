@@ -677,7 +677,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return Math.max(60 * 60 * 1000, Math.min(bySpeed, 2 * 60 * 60 * 1000));
     })();
     const fetchOptions = { method: 'POST', timeout: uploadTimeoutMs };
-    if (isYouTube) {
+    const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
+
+    function usernameOf(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) return target.get('username') || '';
+      if (isYouTube) return (target && target.username) || '';
+      return typeof target.get === 'function' ? (target.get('username') || '') : '';
+    }
+    function applyFreshToken(target) {
+      if (typeof FormData !== 'undefined' && target instanceof FormData) target.set('token', globalToken);
+      else if (target) target.token = globalToken;
+    }
+
+    if (isYouTube && !multipart) {
       const body = new URLSearchParams();
       Object.keys(data).forEach(key => body.append(key, String(data[key] || '')));
       fetchOptions.body = body.toString();
@@ -710,14 +722,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const em = (responseData && responseData.errorMessage) || '';
 
         if (em.includes('error_invalid_token') && attempt < max) {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -746,7 +753,10 @@ document.addEventListener('DOMContentLoaded', () => {
           em.includes('error_too_many_calls') ||
           em.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') ||
           em.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') ||
-          em.includes('ERROR_INVALID_YOUTUBE_URL')
+          em.includes('ERROR_INVALID_YOUTUBE_URL') ||
+          em.includes('error_maestro_context_ambiguous') ||
+          em.includes('error_maestro_context_not_found') ||
+          em.includes('error_maestro_context_file_unsupported')
         ) {
           return responseData;
         }
@@ -763,14 +773,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return responseData;
       } catch (err) {
         if (attempt < max && err && err.type === 'invalidToken') {
-          const emailForRefresh = isYouTube
-            ? data && data.username
-            : typeof data.get === 'function'
-              ? data.get('username')
-              : '';
+          const emailForRefresh = usernameOf(data);
           if (emailForRefresh && (await refreshAgiloTokenFromApi(String(emailForRefresh)))) {
-            if (isYouTube) data.token = globalToken;
-            else if (typeof data.set === 'function') data.set('token', globalToken);
+            applyFreshToken(data);
             continue;
           }
         }
@@ -896,6 +901,36 @@ document.addEventListener('DOMContentLoaded', () => {
         if (speakersChecked) payload.speakersExpected = speakersExpected;
         if (translateCheckbox && translateCheckbox.checked) payload.translateTo = translateSelect.value;
 
+        const maestro = window.AgiloMaestroContext;
+        const contextActive = maestro && typeof maestro.hasActiveContext === 'function' && maestro.hasActiveContext();
+        if (contextActive) {
+          if (typeof maestro.prepareUploadContext !== 'function') {
+            showBusinessProcessingError('Analyse du document impossible. Réessayez.');
+            if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+            if (submitBtn) submitBtn.disabled = false;
+            form.dataset.sending = '0';
+            window.removeEventListener('beforeunload', beforeUnloadGuard);
+            return;
+          }
+          const prepared = await maestro.prepareUploadContext();
+          if (!prepared || prepared.ok !== true || !prepared.contextId) {
+            showBusinessProcessingError((prepared && prepared.message) || 'Analyse impossible. Réessayez ou retirez un document.');
+            if (formLoadingDiv) formLoadingDiv.style.display = 'none';
+            if (submitBtn) submitBtn.disabled = false;
+            form.dataset.sending = '0';
+            window.removeEventListener('beforeunload', beforeUnloadGuard);
+            return;
+          }
+          const fdYt = new FormData();
+          Object.keys(payload).forEach(key => {
+            if (payload[key] == null || payload[key] === '') return;
+            fdYt.append(key, String(payload[key]));
+          });
+          fdYt.set('doSummary', 'true');
+          fdYt.set('contextId', String(prepared.contextId));
+          payload = fdYt;
+        }
+
       } else {
         const file = await waitPondFileReady(3000);
         if (!(file instanceof File)) {
@@ -1001,6 +1036,9 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (err.includes('ERROR_INVALID_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('invalid'))) showError('youtubeInvalid');
             else if (err.includes('ERROR_CANNOT_DONWLOAD_YOUTUBE_URL') || err.includes('ERROR_CANNOT_DOWNLOAD_YOUTUBE_URL') || (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('private'))) showError('youtubePrivate');
             else if (err.toLowerCase().includes('youtube') && err.toLowerCase().includes('not found')) showError('youtubeNotFound');
+            else if (err.includes('error_maestro_context_ambiguous')) showBusinessProcessingError('Le document de contexte n’a pas pu être joint. Retirez-le et ajoutez-le à nouveau.');
+            else if (err.includes('error_maestro_context_not_found')) showBusinessProcessingError('Contexte introuvable. Ajoutez le document à nouveau.');
+            else if (err.includes('error_maestro_context_file_unsupported')) showBusinessProcessingError('Ce document n’est pas accepté avec cet envoi.');
             else { console.error('❌ Erreur non mappée:', err); showDefaultError(); if (err && err.trim()) alert('Erreur: ' + err); }
           }
         })

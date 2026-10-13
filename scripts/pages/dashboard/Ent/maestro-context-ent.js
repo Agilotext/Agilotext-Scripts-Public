@@ -57,6 +57,7 @@
   var state = {
     enabled: false,
     contextId: null,
+    lastContextError: '',
     preAnalyzePromise: null,
     lastPreview: null,
     debounceTimer: null,
@@ -549,6 +550,7 @@
   function clearAllDocs() {
     docs = [];
     state.contextId = null;
+    state.lastContextError = '';
     state.preAnalyzePromise = null;
     state.lastPreview = null;
     state.analyzeGen += 1;
@@ -650,6 +652,8 @@
     var gen = ++state.analyzeGen;
     var email = resolveMemberEmail();
     if (!email) {
+      state.contextId = null;
+      state.lastContextError = 'Email introuvable';
       setAllDocsStatus('warn', 'Email introuvable');
       return Promise.resolve(null);
     }
@@ -661,6 +665,8 @@
       if (gen !== state.analyzeGen) return null;
       var token = w.globalToken;
       if (!ok || !token) {
+        state.contextId = null;
+        state.lastContextError = 'Connectez-vous pour analyser';
         setAllDocsStatus('warn', 'Connectez-vous pour analyser');
         return null;
       }
@@ -674,6 +680,8 @@
           return ensureTokenForEmail(email, true).then(function (ok2) {
             var token2 = w.globalToken;
             if (!ok2 || !token2) {
+              state.contextId = null;
+              state.lastContextError = 'Session expirée';
               setAllDocsStatus('warn', 'Session expirée');
               return null;
             }
@@ -686,6 +694,7 @@
         if (!res.ok || !data || data.status !== 'OK') {
           var msg = mapMaestroError(data);
           state.contextId = null;
+          state.lastContextError = msg;
           // Erreur une seule fois (ligne doc) — pas de doublon dans le preview
           setAllDocsStatus('warn', msg);
           showPreviewHtml('');
@@ -698,6 +707,7 @@
         }
 
         state.contextId = data.contextId || null;
+        state.lastContextError = state.contextId ? '' : 'Analyse impossible — réessayez ou retirez un document.';
         state.lastPreview = data;
         var nPart = participantCountFromData(data);
         if (state.contextId) markContextUsed();
@@ -719,6 +729,7 @@
         if (gen !== state.analyzeGen) return null;
         setAllDocsStatus('warn', 'Réseau indisponible');
         state.contextId = null;
+        state.lastContextError = 'Réseau indisponible';
         showPreviewHtml('');
         syncRgpdVisibility();
         syncContextLoadedBanner(0);
@@ -897,14 +908,49 @@
     });
   }
 
-  function isFileTabActive() {
-    var panel = $('panel-file');
-    if (!panel) return true;
+  /** YouTube : contextId seul. Sans identifiant, l'envoi ne part pas. */
+  function prepareUploadContext() {
+    if (!hasActiveContext()) {
+      return Promise.resolve({ ok: true, active: false, contextId: null, message: '' });
+    }
+    return waitPreAnalyze().then(function () {
+      forceSummaryOn();
+      if (state.contextId) {
+        markContextUsed();
+        trackMaestroEvent('maestro_upload_with_context', {
+          participantCount: participantCountFromData(state.lastPreview),
+          docs: docs.length
+        });
+        return { ok: true, active: true, contextId: state.contextId, message: '' };
+      }
+      trackMaestroEvent('maestro_upload_without_context', { reason: 'preanalyze_failed' });
+      return {
+        ok: false,
+        active: true,
+        contextId: null,
+        message: state.lastContextError || 'Analyse impossible — réessayez ou retirez un document.'
+      };
+    });
+  }
+
+  function panelIsShown(panel) {
+    if (!panel) return false;
     if (panel.hidden) return false;
     if (panel.classList.contains('is-hidden')) return false;
     var style = w.getComputedStyle ? w.getComputedStyle(panel) : null;
     if (style && style.display === 'none') return false;
     return true;
+  }
+
+  function isContextTabActive() {
+    var active = document.querySelector('.source-tab.active');
+    var tab = active ? active.getAttribute('data-tab') : '';
+    if (tab === 'file' || tab === 'youtube') return true;
+    if (tab === 'dictee' || tab === 'dictation') return false;
+    var filePanel = $('panel-file');
+    var youtubePanel = $('panel-youtube');
+    if (!filePanel && !youtubePanel) return true;
+    return panelIsShown(filePanel) || panelIsShown(youtubePanel);
   }
 
   function setToggleChecked(on, persist) {
@@ -928,7 +974,7 @@
     var block = $('maestro-context-block');
     var slot = $('maestro-context-slot');
     if (block) {
-      block.hidden = !(on && isFileTabActive() && !state.locked);
+      block.hidden = !(on && isContextTabActive() && !state.locked);
       if (slot) slot.hidden = block.hidden;
       if (on && !state.locked) {
         syncBlockWidth();
@@ -1073,9 +1119,9 @@
     var block = $('maestro-context-block');
     var slot = $('maestro-context-slot');
     var row = $('maestro-context-option-row');
-    if (row) row.style.display = isFileTabActive() ? '' : 'none';
+    if (row) row.style.display = isContextTabActive() ? '' : 'none';
     if (!block) return;
-    var show = state.enabled && !state.locked && isFileTabActive();
+    var show = state.enabled && !state.locked && isContextTabActive();
     block.hidden = !show;
     if (slot) slot.hidden = !show;
     if (show) syncBlockWidth();
@@ -1090,6 +1136,9 @@
       w.AgiloMaestroContext = {
         enrichFormData: function (fd) { return Promise.resolve(fd); },
         hasActiveContext: function () { return false; },
+        prepareUploadContext: function () {
+          return Promise.resolve({ ok: true, active: false, contextId: null, message: '' });
+        },
         uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); }
       };
       return;
@@ -1209,6 +1258,7 @@
     w.AgiloMaestroContext = {
       enrichFormData: enrichFormData,
       hasActiveContext: hasActiveContext,
+      prepareUploadContext: prepareUploadContext,
       uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
       clear: function () { clearAllDocs(); },
       getState: function () {
