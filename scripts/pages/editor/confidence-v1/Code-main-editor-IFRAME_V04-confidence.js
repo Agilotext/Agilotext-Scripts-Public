@@ -1440,7 +1440,8 @@
   window._segments = Array.isArray(window._segments) ? window._segments : [];
   let _activeSeg = -1;
   let _selectedSegs = new Set();
-  let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null, _bulkRenameBtn = null, _bulkReason = null;
+  let _anchorSeg = -1;
+  let _bulkBar = null, _bulkBarCount = null, _bulkDelBtn = null, _bulkRenameBtn = null, _bulkCopyBtn = null, _bulkReason = null;
   let _activeSelectionPickerClose = null;
   let _selectionRevision = 0;
   let __mode = 'plain';
@@ -1581,9 +1582,10 @@
     clearTimeout(_undoSaveTimer);
     if (_undoStack.length === 0) return;
     _undoSaveTimer = setTimeout(() => {
+      const skipSave = _undoStack.some((entry) => entry && entry.skipAutoSave);
       _undoStack.length = 0;
       hideUndoBar();
-      if (typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
+      if (!skipSave && typeof window.agiloSaveNow === 'function') window.agiloSaveNow();
     }, 4500);
   }
 
@@ -1662,6 +1664,7 @@
     const root = editors.transcript;
     if (root) root.querySelectorAll('.ag-seg.is-selected').forEach((el) => { el.classList.remove('is-selected'); });
     _selectedSegs.clear();
+    _anchorSeg = -1;
     _selectionRevision++;
     if (_bulkBar) _bulkBar.setAttribute('hidden', '');
   }
@@ -1714,6 +1717,30 @@
     _bulkDelBtn.className = 'agilo-bulk-bar__btn';
     _bulkDelBtn.textContent = 'Supprimer la sélection';
     _bulkDelBtn.addEventListener('click', () => { deleteSelectedSegments({ requireConfirm: true }); });
+    _bulkCopyBtn = document.createElement('button');
+    _bulkCopyBtn.type = 'button';
+    _bulkCopyBtn.className = 'agilo-bulk-bar__btn';
+    _bulkCopyBtn.textContent = 'Copier le texte';
+    _bulkCopyBtn.addEventListener('click', async () => {
+      const payload = copySelectedTranscriptText();
+      if (!payload) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(payload);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = payload;
+          ta.style.cssText = 'position:fixed;left:-9999px;';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        toast('Texte copié');
+      } catch {
+        toast('Copie impossible');
+      }
+    });
     const clear = document.createElement('button');
     clear.type = 'button';
     clear.className = 'agilo-bulk-bar__btn agilo-bulk-bar__btn--clear';
@@ -1721,6 +1748,7 @@
     clear.addEventListener('click', clearSegSelection);
     _bulkBar.appendChild(_bulkBarCount);
     _bulkBar.appendChild(_bulkRenameBtn);
+    _bulkBar.appendChild(_bulkCopyBtn);
     _bulkBar.appendChild(_bulkDelBtn);
     _bulkBar.appendChild(clear);
     _bulkBar.appendChild(_bulkReason);
@@ -1764,6 +1792,11 @@
       for (let k = entry.indices.length - 1; k >= 0; k--) {
         window._segments.splice(entry.indices[k], 0, entry.snapshots[k]);
       }
+    } else if (entry.type === 'replace' && Array.isArray(entry.snapshots)) {
+      window._segments = entry.snapshots.map((s) => Object.assign({}, s));
+      __mode = (window._segments.length && window._segments.every((s) => Number.isFinite(s.start)))
+        ? 'structured'
+        : 'plain';
     }
     _activeSeg = -1;
     clearSegSelection();
@@ -1838,8 +1871,118 @@
     el.style.fontWeight = '600';
   }
 
+  function selectSegmentIndices(count, anchor, index, selected, mode) {
+    const next = new Set();
+    if (!Number.isInteger(index) || index < 0 || index >= count) {
+      return { selected: new Set(selected), anchor };
+    }
+    if (mode === 'range') {
+      const startAt = (Number.isInteger(anchor) && anchor >= 0 && anchor < count) ? anchor : index;
+      const a = Math.min(startAt, index);
+      const b = Math.max(startAt, index);
+      for (let i = a; i <= b; i++) next.add(i);
+      return { selected: next, anchor: startAt };
+    }
+    if (mode === 'toggle') {
+      selected.forEach((i) => { if (i >= 0 && i < count) next.add(i); });
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return { selected: next, anchor: index };
+    }
+    next.add(index);
+    return { selected: next, anchor: index };
+  }
+
+  function parseClockToSec(raw) {
+    const parts = String(raw || '').split(':').map((n) => parseInt(n, 10));
+    if (!parts.length || parts.some((n) => !Number.isFinite(n) || n < 0)) return null;
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    return null;
+  }
+
+  function parseTimedTranscript(raw) {
+    const text = String(raw || '').replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').trim();
+    if (!text) return [];
+    const lines = text.split('\n');
+    const blocks = [];
+    let cur = null;
+    const head = /^\s*(?:\[(\d{1,2}:\d{2}(?::\d{2})?)\]|(\d{1,2}:\d{2}(?::\d{2})?))\s*(.*)$/;
+    for (const line of lines) {
+      const m = line.match(head);
+      if (!m) {
+        if (cur) cur.lines.push(line);
+        continue;
+      }
+      const start = parseClockToSec(m[1] || m[2]);
+      if (start == null) {
+        if (cur) cur.lines.push(line);
+        continue;
+      }
+      let rest = String(m[3] || '').trim().replace(/^(?:→|->)\s*/, '');
+      let speaker = '';
+      let body = rest;
+      const colon = rest.match(/^([^:\n]{1,80}?):\s*([\s\S]*)$/);
+      if (colon && colon[1].trim()) {
+        speaker = colon[1].trim();
+        body = colon[2] || '';
+      } else if (rest && rest.length <= 80) {
+        speaker = rest;
+        body = '';
+      }
+      if (cur) blocks.push(cur);
+      cur = { start, speaker, lines: body ? [body] : [] };
+    }
+    if (cur) blocks.push(cur);
+    return blocks.map((b, i, arr) => {
+      const next = arr[i + 1];
+      const end = next && next.start >= b.start ? next.start : b.start;
+      return {
+        id: `p${i}`,
+        start: b.start,
+        end,
+        speaker: b.speaker,
+        text: b.lines.join('\n').trim(),
+        lang: ''
+      };
+    });
+  }
+
+  function copySelectedTranscriptText() {
+    const asc = Array.from(_selectedSegs).sort((a, b) => a - b);
+    return asc.map((i) => {
+      const s = window._segments[i] || {};
+      const who = s.speaker ? `${s.speaker}: ` : '';
+      const clock = Number.isFinite(s.start) ? fmtHMS(s.start) : '00:00';
+      return `[${clock}] ${who}${s.text || ''}`.trimEnd();
+    }).join('\n');
+  }
+
+  function replaceTranscriptSegments(blocks) {
+    if (!Array.isArray(blocks) || blocks.length < 1) return false;
+    const prev = (Array.isArray(window._segments) ? window._segments : []).map((s) => Object.assign({}, s));
+    window._segments = blocks.map((s) => Object.assign({}, s));
+    __mode = 'structured';
+    pushUndo({
+      type: 'replace',
+      snapshots: prev,
+      label: 'Transcription remplacée',
+      skipAutoSave: true
+    });
+    renderSegments(window._segments);
+    if (window.AgiloConfidence && typeof window.AgiloConfidence.markSegmentModified === 'function') {
+      window._segments.forEach((_, i) => { window.AgiloConfidence.markSegmentModified(i); });
+    }
+    return true;
+  }
+
   function renderSegments(segments) {
     const root = editors.transcript; if (!root) return;
+    const prevCount = root.querySelectorAll(':scope > .ag-seg').length;
+    const nextCount = Array.isArray(segments) ? segments.length : 0;
+    const keep = prevCount > 0 && prevCount === nextCount;
+    const keptIdx = keep ? Array.from(_selectedSegs) : [];
+    const keptAnchor = keep ? _anchorSeg : -1;
 
     clearSegSelection();
     root.innerHTML = '';
@@ -1908,25 +2051,35 @@
 
     root.appendChild(frag);
     root.setAttribute('contenteditable', 'false');
+    if (keep && keptIdx.length) {
+      _selectedSegs = new Set(keptIdx.filter((i) => i >= 0 && i < nextCount));
+      _anchorSeg = (Number.isInteger(keptAnchor) && keptAnchor >= 0 && keptAnchor < nextCount) ? keptAnchor : -1;
+      _selectionRevision++;
+      syncSelectedClasses();
+      updateBulkBar();
+    }
     setupSegButtonsObserver(root);
 
     if (!root.__bound) {
       root.addEventListener('click', (e) => {
-        if (__mode !== 'structured' || !e.shiftKey) return;
+        if (__mode !== 'structured') return;
+        if (e.target.closest('button, .speaker, .rename-btn, .delete-seg-btn')) return;
         const art = e.target.closest('.ag-seg');
-        if (!art || e.target.closest('button, .speaker')) return;
-        e.preventDefault();
-        e.stopPropagation();
+        if (!art || !root.contains(art)) return;
         const idx = getSegIndex(root, art);
         if (idx < 0) return;
-        if (_selectedSegs.has(idx)) {
-          _selectedSegs.delete(idx);
-          art.classList.remove('is-selected');
-        } else {
-          _selectedSegs.add(idx);
-          art.classList.add('is-selected');
+        const additive = !!(e.metaKey || e.ctrlKey);
+        const range = !!e.shiftKey && !additive;
+        if (additive || range) {
+          e.preventDefault();
+          e.stopPropagation();
         }
+        const mode = range ? 'range' : (additive ? 'toggle' : 'one');
+        const picked = selectSegmentIndices(window._segments.length, _anchorSeg, idx, _selectedSegs, mode);
+        _selectedSegs = picked.selected;
+        _anchorSeg = picked.anchor;
         _selectionRevision++;
+        syncSelectedClasses();
         updateBulkBar();
       });
 
@@ -2007,9 +2160,32 @@
 
       root.addEventListener('paste', (e) => {
         const node = e.target.closest('.ag-seg__text');
-        if (!node || !e.clipboardData || e.defaultPrevented) return;
+        if (!e.clipboardData || e.defaultPrevented) return;
         const text = e.clipboardData.getData('text/plain');
         if (text == null) return;
+        if (__mode === 'structured') {
+          const blocks = parseTimedTranscript(text);
+          const current = node ? String(node.innerText || node.textContent || '').trim() : '';
+          const allPicked = _selectedSegs.size > 0 && Array.isArray(window._segments) && _selectedSegs.size === window._segments.length;
+          const longer = text.trim().length > current.length + 40;
+          if (blocks.length >= 3 && (allPicked || longer)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            if (!confirm(`${blocks.length} répliques reconnues. Remplacer toute la transcription ?`)) {
+              toast('Rien n’a été remplacé.');
+              return;
+            }
+            replaceTranscriptSegments(blocks);
+            return;
+          }
+          if (allPicked) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            toast('Format non reconnu, rien n’a été remplacé.');
+            return;
+          }
+        }
+        if (!node) return;
         e.preventDefault();
         document.execCommand('insertText', false, text);
       }, true);
@@ -2057,6 +2233,25 @@
             e.preventDefault();
             clearSegSelection();
             return;
+          }
+          const keyLower = String(e.key || '').toLowerCase();
+          if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && keyLower === 'a') {
+            const tag = e.target && e.target.tagName;
+            const inField = (tag === 'INPUT' || tag === 'TEXTAREA') && !e.target.closest?.('.ag-seg__text');
+            const inSummary = !!(editors.summary && editors.summary.contains(e.target));
+            const inChat = !!(byId('pane-chat')?.contains(e.target) || byId('chatView')?.contains(e.target));
+            const inTr = tr.contains(e.target) || tr.contains(document.activeElement);
+            if (!inField && !inSummary && !inChat && inTr && Array.isArray(window._segments) && window._segments.length) {
+              e.preventDefault();
+              e.stopPropagation();
+              const picked = selectSegmentIndices(window._segments.length, 0, window._segments.length - 1, _selectedSegs, 'range');
+              _selectedSegs = picked.selected;
+              _anchorSeg = 0;
+              _selectionRevision++;
+              syncSelectedClasses();
+              updateBulkBar();
+              return;
+            }
           }
 
           const key = String(e.key || '');
@@ -4348,5 +4543,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.14-multi-select';
+  window.__agiloEditorConfidenceVersion = '1.09.15-select-range';
 });
