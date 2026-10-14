@@ -1,5 +1,6 @@
 // Agilotext — colonnes de l’éditeur (liste + Raccourcis)
 // Script parent : il voit .ed-body. L’iframe ne la voit pas.
+// Ne crée pas de bouton. La flèche droite est l’élément Webflow .ia-toggle.
 // Ne toggles pas .ed-rail : Code-changement-audio le fait déjà.
 
 (function () {
@@ -10,23 +11,11 @@
 
   var KEY_IA = 'agilo:editor:ia-hidden';
   var KEY_RAIL = 'agilo:editor:rail-collapsed';
+  var ASIDE_ID = 'agilo-editor-ia';
 
   var COLUMNS_CSS = [
-    '.agilo-col-hide-ia,',
-    '.agilo-col-reopen{',
-    'appearance:none;',
-    'margin:.35rem .4rem;',
-    'padding:.28rem .6rem;',
-    'border:1px solid var(--color--noir_25, rgba(0,0,0,.18));',
-    'border-radius:.4rem;',
-    'background:#fff;',
-    'color:var(--color--gris_foncé, #020202);',
-    'font:600 .72rem/1.2 system-ui,-apple-system,Segoe UI,sans-serif;',
-    'cursor:pointer;',
-    '}',
-    '.agilo-col-reopen[hidden]{display:none;}',
     '@media (max-width:991px){',
-    '.agilo-col-hide-ia,.agilo-col-reopen{display:none !important;}',
+    '.ia-toggle{display:none !important;}',
     '}',
     '@media (min-width:992px){',
     '.ed-body:has(> .ed-rail.is-collapsed):not(.is-ia-hidden){',
@@ -75,12 +64,17 @@
     return document.querySelector('aside.ed-ia');
   }
 
-  function reopenEl() {
-    return document.getElementById('agilo-col-reopen-ia');
+  function iaToggleEl() {
+    return document.querySelector('.ia-toggle');
   }
 
   function pingResize() {
     window.dispatchEvent(new Event('resize'));
+  }
+
+  function clearAsideInlineDisplay(aside) {
+    if (!aside || !aside.style) return;
+    aside.style.removeProperty('display');
   }
 
   function syncRailButton() {
@@ -92,11 +86,13 @@
     btn.setAttribute('aria-label', collapsed ? 'Afficher la liste' : 'Replier la liste');
   }
 
-  function syncReopen(hidden) {
-    var btn = reopenEl();
+  function syncIaButton(hidden) {
+    var btn = iaToggleEl();
     if (!btn) return;
-    btn.hidden = !hidden;
+    btn.textContent = hidden ? '\u00ab' : '\u00bb';
     btn.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+    btn.setAttribute('aria-label', hidden ? 'Afficher les raccourcis' : 'Masquer les raccourcis');
+    btn.setAttribute('aria-controls', ASIDE_ID);
   }
 
   function setIaHidden(hidden, moveFocus) {
@@ -105,50 +101,20 @@
     var aside = asideEl();
     var active = document.activeElement;
     var focusInside = !!(moveFocus && hidden && aside && active && aside.contains(active));
+    clearAsideInlineDisplay(aside);
     body.classList.toggle('is-ia-hidden', !!hidden);
     writeFlag(KEY_IA, !!hidden);
-    syncReopen(!!hidden);
+    syncIaButton(!!hidden);
     if (focusInside) {
-      var back = reopenEl();
+      var back = iaToggleEl();
       if (back) back.focus();
     }
     pingResize();
   }
 
-  function ensureReopen(main) {
-    if (!main || reopenEl()) return reopenEl();
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'agilo-col-reopen-ia';
-    btn.className = 'agilo-col-reopen';
-    btn.textContent = 'Raccourcis';
-    btn.setAttribute('aria-controls', 'agilo-editor-ia');
-    btn.hidden = true;
-    var toggle = main.querySelector('.rail-toggle');
-    if (toggle) toggle.insertAdjacentElement('afterend', btn);
-    else main.insertBefore(btn, main.firstChild);
-    btn.addEventListener('click', function () {
-      setIaHidden(false, false);
-    });
-    return btn;
-  }
-
-  function ensureHide(head) {
-    if (!head || head.querySelector('.agilo-col-hide-ia')) return;
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'agilo-col-hide-ia';
-    btn.textContent = 'Masquer';
-    btn.setAttribute('aria-controls', 'agilo-editor-ia');
-    btn.addEventListener('click', function () {
-      setIaHidden(true, true);
-    });
-    head.appendChild(btn);
-  }
-
   function tagAside() {
     var aside = asideEl();
-    if (aside && !aside.id) aside.id = 'agilo-editor-ia';
+    if (aside && !aside.id) aside.id = ASIDE_ID;
   }
 
   function clickTarget(event) {
@@ -170,15 +136,20 @@
     });
   }
 
+  function onIaClick(event) {
+    var el = clickTarget(event);
+    if (!el || !el.closest || !el.closest('.ia-toggle')) return;
+    var body = bodyEl();
+    if (!body) return;
+    setIaHidden(!body.classList.contains('is-ia-hidden'), true);
+  }
+
   function boot() {
     injectCss();
     var body = bodyEl();
     if (!body) return;
     tagAside();
-    var main = body.querySelector('.ed-main') || document.querySelector('.ed-main');
-    ensureReopen(main);
-    var head = document.querySelector('[data-view="ia"] .ed-ia-head');
-    ensureHide(head);
+    clearAsideInlineDisplay(asideEl());
     if (readFlag(KEY_RAIL)) {
       var rail = railEl();
       if (rail) rail.classList.add('is-collapsed');
@@ -188,6 +159,7 @@
   }
 
   document.addEventListener('click', onRailClick, false);
+  document.addEventListener('click', onIaClick, false);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', boot);
