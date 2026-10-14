@@ -37,6 +37,35 @@
     return null;
   }
 
+  function revealOnboardingStep(step) {
+    if (!step) return;
+    var cs = window.getComputedStyle(step);
+    var hidden = cs.display === 'none' || cs.visibility === 'hidden' || step.offsetHeight === 0;
+    if (!hidden) return;
+    var steps = Array.prototype.slice.call(document.querySelectorAll('[data-form="step"]'));
+    var index = steps.indexOf(step);
+    if (index < 0) return;
+    var dots = document.querySelectorAll('[data-form="progress"]');
+    if (dots[index] && typeof dots[index].click === 'function') dots[index].click();
+  }
+
+  function focusInvalidOnboarding(result, message) {
+    var form = getOnboardingForm();
+    if (result && result.groupName) markRadioGroupInvalid(form, result.groupName);
+    if (result) revealOnboardingStep(result.step);
+    showSetupStepError((result && result.step) || getVisibleOnboardingStep(), message || (result && result.message) || '');
+    if (result && result.focusEl && result.focusEl.scrollIntoView) {
+      result.focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
+  var voiceSession = {
+    active: false,
+    pending: false,
+    memberstack: null,
+    hasPendingAudio: function () { return false; }
+  };
+
   function findUnansweredRadioInStep(step) {
     if (!step) return null;
     var groups = {};
@@ -168,24 +197,59 @@
     if (!form || form.dataset.agiloFinishGuard === '1') return;
     form.dataset.agiloFinishGuard = '1';
 
+    function stopEvent(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+    }
+
+    async function writeSkipThenResubmit(btn) {
+      try {
+        var flag = await readVoiceEnrolledFlag(voiceSession.memberstack);
+        if (flag !== 'true' && flag !== 'skipped') {
+          var wrote = await updateVoiceEnrolledFlag(voiceSession.memberstack, 'skipped');
+          if (!wrote) {
+            showSetupStepError(getVisibleOnboardingStep(), 'Impossible d\'enregistrer votre choix. Réessayez.');
+            return;
+          }
+        }
+        form.dataset.agiloVoiceSkipPassthrough = '1';
+        if (btn) {
+          btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        }
+      } finally {
+        voiceSession.pending = false;
+      }
+    }
+
     function runGuard(e) {
       var submitter = e.target && e.target.closest && e.target.closest('[data-form="submit-btn"], input[type="submit"]');
       if (e.type !== 'submit' && !submitter) return;
 
       var result = validateOnboardingBeforeFinish(form);
       if (!result.ok) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        if (result.groupName) markRadioGroupInvalid(form, result.groupName);
-        showSetupStepError(result.step || getVisibleOnboardingStep(), result.message);
-        if (result.focusEl && result.focusEl.scrollIntoView) {
-          result.focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
+        form.dataset.agiloVoiceSkipPassthrough = '';
+        stopEvent(e);
+        focusInvalidOnboarding(result);
         return false;
       }
 
-      clearInvalidHighlights(form);
+      if (form.dataset.agiloVoiceSkipPassthrough === '1') {
+        if (e.type === 'submit') form.dataset.agiloVoiceSkipPassthrough = '';
+        clearInvalidHighlights(form);
+        return;
+      }
+
+      if (!voiceSession.active || voiceSession.hasPendingAudio()) {
+        clearInvalidHighlights(form);
+        return;
+      }
+
+      stopEvent(e);
+      if (voiceSession.pending) return false;
+      voiceSession.pending = true;
+      writeSkipThenResubmit(submitter);
+      return false;
     }
 
     form.addEventListener('click', runGuard, true);
@@ -200,27 +264,20 @@
   function clickFinishButton() {
     var activeStep = getVisibleOnboardingStep();
     var btn = (activeStep && activeStep.querySelector('[data-form="submit-btn"]'))
-      || document.querySelector('[data-form="submit-btn"]')
-      || (activeStep && activeStep.querySelector('[data-form="next-btn"]'))
-      || document.querySelector('[data-form="next-btn"]');
-    if (btn) {
-      btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    }
+      || document.querySelector('[data-form="submit-btn"]');
+    if (!btn) return false;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+    return true;
   }
 
   function finishOnboardingWithGuard(statusEl, pendingMessage) {
     var form = getOnboardingForm();
     var result = validateOnboardingBeforeFinish(form);
     if (!result.ok) {
-      if (result.groupName) markRadioGroupInvalid(form, result.groupName);
-      showSetupStepError(result.step || getVisibleOnboardingStep(), pendingMessage || result.message);
-      if (result.focusEl && result.focusEl.scrollIntoView) {
-        result.focusEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      focusInvalidOnboarding(result, pendingMessage);
       return false;
     }
-    clickFinishButton();
-    return true;
+    return clickFinishButton();
   }
 
   const AGILO_VOICE_CONFIG = {
@@ -519,12 +576,27 @@
     return { username: email, token: token, edition: edition, firstName: firstName, lastName: lastName, memberstack: ms };
   }
 
+  async function readVoiceEnrolledFlag(ms) {
+    if (!ms || typeof ms.getCurrentMember !== 'function') return '';
+    try {
+      var res = await ms.getCurrentMember();
+      var member = (res && res.data) || res || null;
+      var cf = (member && member.customFields) || {};
+      return String(cf['voice-enrolled'] || '');
+    } catch (e) {
+      console.warn('[agilo-voice-onboarding] getCurrentMember voice-enrolled failed', e);
+      return '';
+    }
+  }
+
   async function updateVoiceEnrolledFlag(ms, value) {
-    if (!ms || typeof ms.updateMember !== 'function') return;
+    if (!ms || typeof ms.updateMember !== 'function') return false;
     try {
       await ms.updateMember({ customFields: { 'voice-enrolled': value } });
+      return true;
     } catch (e) {
       console.warn('[agilo-voice-onboarding] updateMember voice-enrolled failed', e);
+      return false;
     }
   }
 
@@ -582,8 +654,9 @@
       '.agilo-voice-status.is-error{display:block;background:rgba(168,38,51,.08);color:var(--color--rouge,#a82633)}',
       '.agilo-voice-status.is-success{display:block;background:rgba(28,102,26,.1);color:var(--color--vert,#1c661a)}',
       '.agilo-voice-status.is-info{display:block;background:rgba(23,74,150,.08);color:var(--color--blue,#174a96)}',
-      '.agilo-voice-skip-link{display:block;margin:.25rem auto 0;text-align:center;font-size:.82rem;color:var(--color--gris,#525252);text-decoration:none;cursor:pointer}',
-      '.agilo-voice-skip-link:hover{text-decoration:underline;color:var(--color--gris_foncé,#020202)}',
+      '.agilo-voice-submit-row{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;justify-content:center}',
+      '.agilo-voice-skip-btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:' + AGILO_RADIUS + ';border:1px solid var(--color--gris,#525252);background:transparent;color:var(--color--gris_foncé,#020202);font:inherit;font-size:.9rem;cursor:pointer}',
+      '.agilo-voice-skip-btn:hover{border-color:var(--color--blue,#174a96);color:var(--color--blue,#174a96)}',
       '.agilo-voice-teaser{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:rgba(23,74,150,.06);border-left:3px solid var(--color--blue,#174a96);border-radius:0 ' + AGILO_RADIUS + ' ' + AGILO_RADIUS + ' 0;color:var(--color--gris,#525252);font-size:.875rem;line-height:1.45;margin-top:1rem}',
       '.agilo-voice-teaser-icon{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:' + AGILO_RADIUS + ';background:rgba(23,74,150,.12);color:var(--color--blue,#174a96)}',
       '.agilo-voice-teaser-icon svg{width:18px;height:18px;display:block}',
@@ -617,7 +690,7 @@
       var teaser = document.createElement('div');
       teaser.id = 'agilo-voice-teaser';
       teaser.className = 'agilo-voice-teaser';
-      teaser.innerHTML = '<span class="agilo-voice-teaser-icon">' + TEASER_MIC_SVG + '</span><span>À la dernière étape, configurez votre empreinte vocale pour être reconnu(e) automatiquement dans vos transcriptions.</span>';
+      teaser.innerHTML = '<span class="agilo-voice-teaser-icon">' + TEASER_MIC_SVG + '</span><span>À la dernière étape, vous pouvez enregistrer votre voix pour être reconnu(e) dans vos transcriptions. C\'est optionnel.</span>';
       // buttonGroup n'est pas enfant direct de firstStep → insérer via son parent réel
       buttonGroup.parentNode.insertBefore(teaser, buttonGroup);
 
@@ -681,6 +754,7 @@
       '    <p class="agilo-voice-hint text-size-small" id="agilo-voice-hint">Parlez clairement, seul(e), dans un endroit calme.</p>',
       '    <div class="agilo-voice-submit-row">',
       '      <button type="button" class="agilo-voice-btn-submit button save" id="agilo-voice-submit">Enregistrer ma voix</button>',
+      '      <button type="button" class="agilo-voice-skip-btn" id="agilo-voice-skip">Continuer sans enregistrer ma voix</button>',
       '    </div>',
       '    <button type="button" class="agilo-voice-file-alt" id="agilo-voice-file-alt">Importer un fichier audio à la place</button>',
       '    <div class="agilo-voice-drop-zone" id="agilo-voice-drop-zone" role="button" tabindex="0">',
@@ -691,7 +765,6 @@
       '  </div>',
       '  <div class="agilo-voice-actions">',
       '    <div class="agilo-voice-status" id="agilo-voice-status" role="status"></div>',
-      '    <a class="agilo-voice-skip-link" id="agilo-voice-skip" href="#" role="button">Passer cette étape</a>',
       '  </div>',
       '</div>'
     ].join('');
@@ -760,6 +833,12 @@
     };
 
     applyWebflowSaveButton(els.submitBtn, 'Enregistrer ma voix');
+
+    voiceSession.active = true;
+    voiceSession.memberstack = creds.memberstack;
+    voiceSession.hasPendingAudio = function () {
+      return !!(state.recording || state.recordedBlob || (els.fileInput && els.fileInput.files && els.fileInput.files.length));
+    };
 
     function setStatus(type, message) {
       els.status.className = 'agilo-voice-status';
@@ -1061,17 +1140,61 @@
       }
     }
 
+    function discardPendingAudio() {
+      state.audioChunks = [];
+      if (state.mediaRecorder) {
+        state.mediaRecorder.onstop = null;
+        state.mediaRecorder.ondataavailable = null;
+        try {
+          if (state.mediaRecorder.state !== 'inactive') state.mediaRecorder.stop();
+        } catch (err) { /* noop */ }
+      }
+      state.fileMode = false;
+      if (els.fileInput) els.fileInput.value = '';
+      updateDropZoneLabel('');
+      resetRecordingState();
+    }
+
+    var skipInFlight = false;
+
     async function skipStep(e) {
       if (e) e.preventDefault();
-      setBusy(true);
-      await updateVoiceEnrolledFlag(state.credentials.memberstack, 'skipped');
+      if (skipInFlight) return;
+
+      var form = getOnboardingForm();
+      var result = validateOnboardingBeforeFinish(form);
+      if (!result.ok) {
+        setBusy(false);
+        focusInvalidOnboarding(result, 'Répondez à la question ci-dessus puis cliquez sur Terminer.');
+        return;
+      }
+
+      skipInFlight = true;
+      discardPendingAudio();
+
+      var flag = await readVoiceEnrolledFlag(state.credentials.memberstack);
+      if (flag !== 'true' && flag !== 'skipped') {
+        var wrote = await updateVoiceEnrolledFlag(state.credentials.memberstack, 'skipped');
+        if (!wrote) {
+          skipInFlight = false;
+          setBusy(false);
+          setStatus('error', 'Impossible d\'enregistrer votre choix. Réessayez.');
+          return;
+        }
+      }
+
+      if (form) form.dataset.agiloVoiceSkipPassthrough = '1';
+      var clicked = clickFinishButton();
+      if (!clicked) {
+        if (form) form.dataset.agiloVoiceSkipPassthrough = '';
+        skipInFlight = false;
+        setBusy(false);
+        setStatus('error', 'Le bouton Terminer est introuvable. Rechargez la page.');
+        return;
+      }
+
       setStatus('info', 'Étape ignorée.');
-      setTimeout(function () {
-        finishOnboardingWithGuard(
-          els.status,
-          'Répondez à la question ci-dessus puis cliquez sur Terminer.'
-        );
-      }, 250);
+      setBusy(true);
     }
 
     els.hero.addEventListener('click', handleHeroAction);
