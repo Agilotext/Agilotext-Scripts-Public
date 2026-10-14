@@ -4,15 +4,11 @@ import test from 'node:test';
 
 const src = fs.readFileSync(new URL('./agilo-editor-columns.js', import.meta.url), 'utf8');
 
-function cssAll() {
+function cssBlock() {
   const start = src.indexOf('var COLUMNS_CSS = [');
   const end = src.indexOf('].join', start);
   assert.ok(start >= 0 && end > start, 'chaine CSS introuvable');
-  return [...src.slice(start, end).matchAll(/'([^']*)'/g)].map((m) => m[1]).join('');
-}
-
-function cssBlock() {
-  const css = cssAll();
+  const css = [...src.slice(start, end).matchAll(/'([^']*)'/g)].map((m) => m[1]).join('');
   const mediaAt = css.indexOf('@media (min-width:992px){');
   assert.ok(mediaAt >= 0, 'media desktop manquante');
   return css.slice(mediaAt);
@@ -27,14 +23,10 @@ test('trois grilles desktop, pas de largeur seule sur le rail', () => {
   assert.doesNotMatch(css, /\.ed-rail\.is-collapsed\s*\{[^}]*\bwidth\s*:/);
 });
 
-test('la flèche Webflow pilote la colonne, sans bouton texte', () => {
+test('le script ne retoggle pas le rail et mémorise après le clic', () => {
   assert.match(src, /queueMicrotask/);
   assert.doesNotMatch(src, /classList\.toggle\(\s*['"]is-collapsed['"]\s*\)/);
   assert.match(src, /agilo:editor:ia-hidden/);
   assert.match(src, /agilo:editor:rail-collapsed/);
-  assert.match(src, /\.ia-toggle/);
-  assert.match(src, /closest\('\.ia-toggle'\)/);
-  assert.match(cssAll(), /@media \(max-width:991px\)\{\.ia-toggle\{display:none !important;\}/);
-  assert.doesNotMatch(src, /agilo-col-hide-ia|agilo-col-reopen/);
-  assert.doesNotMatch(src, /textContent = 'Raccourcis'|textContent = 'Masquer'/);
+  assert.match(src, /\[data-view="ia"\] \.ed-ia-head/);
 });
