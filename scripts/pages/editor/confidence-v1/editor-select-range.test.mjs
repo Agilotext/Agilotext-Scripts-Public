@@ -154,3 +154,28 @@ test('couleurs distinctes par ordre, sans reprendre le vert du voisin', () => {
   assert.equal(full.N0, 0);
   assert.equal(full.N1, 1);
 });
+
+test('le clic sans modificateur ne sélectionne pas', () => {
+  assert.equal(src.includes("const mode = range ? 'range' : (additive ? 'toggle' : 'one')"), false);
+  assert.equal(src.includes('if (!additive && !range)'), true);
+  assert.equal(src.includes("const mode = range ? 'range' : 'toggle'"), true);
+});
+
+test('sélection et lecture ne rétrécissent pas la ligne', () => {
+  const css = fs.readFileSync(new URL('../Code-editor-css.js', import.meta.url), 'utf8');
+  function ruleBody(marker) {
+    const at = css.indexOf(marker);
+    assert.ok(at >= 0, marker);
+    const open = css.indexOf('{', at);
+    const close = css.indexOf('}', open);
+    return css.slice(open, close);
+  }
+  const active = ruleBody('.ag-seg.is-active');
+  const selected = ruleBody('#pane-transcript .ag-seg.is-selected');
+  assert.equal(active.includes('padding-left'), false);
+  assert.equal(active.includes('border-left'), false);
+  assert.match(active, /linear-gradient/);
+  assert.equal(selected.includes('padding-left'), false);
+  assert.equal(selected.includes('border-left'), false);
+  assert.match(selected, /outline:/);
+});

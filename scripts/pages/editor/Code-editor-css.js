@@ -324,8 +324,6 @@
     color-mix(in srgb, var(--agilo-primary) 6%, transparent),
     color-mix(in srgb, var(--agilo-primary) 2%, transparent)
   ) !important;
-  border-left:3px solid var(--agilo-primary);
-  padding-left:.5rem;
 }
 
 .agilo-seg .ag-time,
@@ -481,8 +479,6 @@
   outline: 2px solid var(--agilo-primary, #174a96) !important;
   outline-offset: 0 !important;
   background: color-mix(in srgb, var(--agilo-primary, #174a96) 12%, transparent) !important;
-  border-left: 3px solid color-mix(in srgb, var(--agilo-primary, #174a96) 45%, transparent) !important;
-  padding-left: 0.5rem !important;
 }
 
 #agilo-bulk-bar {

@@ -2152,17 +2152,19 @@
       root.addEventListener('click', (e) => {
         if (__mode !== 'structured') return;
         if (e.target.closest('button, .speaker, .rename-btn, .delete-seg-btn')) return;
+        const additive = !!(e.metaKey || e.ctrlKey);
+        const range = !!e.shiftKey && !additive;
+        if (!additive && !range) {
+          if (_selectedSegs.size) clearSegSelection();
+          return;
+        }
         const art = e.target.closest('.ag-seg');
         if (!art || !root.contains(art)) return;
         const idx = getSegIndex(root, art);
         if (idx < 0) return;
-        const additive = !!(e.metaKey || e.ctrlKey);
-        const range = !!e.shiftKey && !additive;
-        if (additive || range) {
-          e.preventDefault();
-          e.stopPropagation();
-        }
-        const mode = range ? 'range' : (additive ? 'toggle' : 'one');
+        e.preventDefault();
+        e.stopPropagation();
+        const mode = range ? 'range' : 'toggle';
         const picked = selectSegmentIndices(window._segments.length, _anchorSeg, idx, _selectedSegs, mode);
         _selectedSegs = picked.selected;
         _anchorSeg = picked.anchor;
@@ -4637,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.19-corriger';
+  window.__agiloEditorConfidenceVersion = '1.09.20-select-click';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
