@@ -15,9 +15,11 @@ function sliceBetween(source, begin, end) {
   return source.slice(start, stop);
 }
 
+const labelCode = sliceBetween(editor,
+  '  function displaySpeakerLabel(', '  function isJunkSpeakerLabel(');
 const selectionCode = sliceBetween(editor,
   '  function selectionStatusForSegments(', '  function currentSelectionStatus(');
-const selection = vm.runInNewContext(`${selectionCode}\nselectionStatusForSegments`, {});
+const selection = vm.runInNewContext(`${labelCode}\n${selectionCode}\nselectionStatusForSegments`, {});
 const segments = [
   { speaker: 'Alice', text: 'un', start: 0 },
   { speaker: 'Bob', text: 'deux', start: 1 },
@@ -33,16 +35,20 @@ assert.match(selection(new Set([0, 1]), segments).reason, /différents/);
 assert.match(selection(new Set([0, 5]), segments).reason, /sans locuteur/);
 assert.equal(selection(new Set([0]), segments).eligible, false, 'at least two');
 assert.equal(selection(new Set([0, 99]), segments).eligible, false, 'stale index');
+const machine = selection(new Set([0, 1]), [{ speaker: 'Speaker_A' }, { speaker: 'Speaker_A' }]);
+assert.equal(machine.displayLabel, '« Intervenant 1 »');
+assert.equal(machine.oldName, 'Speaker_A');
 
 const snapshotContext = {
   _selectedSegs: new Set([0, 2]), _selectionRevision: 0,
   editors: { transcript: { children: [] } },
-  window: { _segments: structuredClone(segments) }
+  window: { _segments: structuredClone(segments) },
+  getSegList(root) { return (root && root.children) || []; }
 };
 snapshotContext.editors.transcript.children = snapshotContext.window._segments.map(() => ({
   classList: { contains: name => name === 'ag-seg' }
 }));
-const snapshotCode = selectionCode + sliceBetween(editor,
+const snapshotCode = labelCode + selectionCode + sliceBetween(editor,
   '  function currentSelectionStatus(', '  function clearSegSelection(');
 vm.createContext(snapshotContext);
 vm.runInContext(snapshotCode, snapshotContext);
@@ -72,10 +78,11 @@ const renameContext = {
   editors: { transcript: { children: nodes } },
   window: { _segments: structuredClone(segments) },
   setSpeakerStyle() {},
+  getSegList(root) { return (root && root.children) || []; },
   ag_contiguousRangeFrom() { throw Error('wrong scope'); }
 };
 const renameCode = sliceBetween(editor, '  function ag_applyRenameScope(', '  function stickyBottomY(');
-const rename = vm.runInNewContext(`${renameCode}\nag_applyRenameScope`, renameContext);
+const rename = vm.runInNewContext(`${labelCode}\n${renameCode}\nag_applyRenameScope`, renameContext);
 assert.equal(rename({ scope: 'selected', oldName: 'Alice', newName: 'Alicia', indices: [0, 2] }), 2);
 assert.deepEqual(Array.from(renameContext.window._segments, s => s.speaker),
   ['Alicia', 'Bob', 'Alicia', 'alice', 'Alice ', '   ']);

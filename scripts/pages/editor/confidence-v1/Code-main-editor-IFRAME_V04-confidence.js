@@ -121,6 +121,26 @@
   function foldSpeakerSearch(s) {
     return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
+  function displaySpeakerLabel(raw) {
+    const t = String(raw ?? '').trim();
+    if (!t) return '';
+    let m = /^(?:speaker|locuteur|spk)[\s._-]+s(\d+)$/i.exec(t);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > 0) return 'Intervenant ' + n;
+    }
+    m = /^(?:speaker|locuteur|spk)[\s._-]+(\d+)$/i.exec(t);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > 0) return 'Intervenant ' + n;
+    }
+    m = /^(?:speaker|locuteur|spk)[\s._-]+([a-z])$/i.exec(t);
+    if (m) {
+      const n = m[1].toUpperCase().charCodeAt(0) - 64;
+      if (n >= 1 && n <= 26) return 'Intervenant ' + n;
+    }
+    return t;
+  }
   function isJunkSpeakerLabel(s) {
     const t = String(s ?? '').trim();
     if (!t) return true;
@@ -1495,9 +1515,13 @@
         const speaker = String(segEl.dataset.speaker || '').trim();
         const start = Number(segEl.dataset.start);
         const end = Number(segEl.dataset.end);
+        const shown = String(label && label.textContent || '').trim();
+        const labelDrift = label && !label.classList.contains('is-placeholder')
+          && shown !== speaker
+          && shown !== displaySpeakerLabel(speaker);
         if (!id || ids.has(id) || !box || (__mode === 'structured' && !label) || segEl.dataset.start == null || segEl.dataset.end == null ||
             !Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end < start ||
-            (label && !label.classList.contains('is-placeholder') && speaker !== String(label.textContent || '').trim())) {
+            labelDrift) {
           window.__agiloTranscriptModelSyncError = 'Segment affiché incomplet ou incohérent';
           return false;
         }
@@ -1622,7 +1646,7 @@
     if (labels.some(label => label !== labels[0])) {
       return { eligible: false, selected, displayLabel: 'locuteurs différents', reason: 'Locuteurs différents (casse et espaces compris).' };
     }
-    const displayLabel = labels.length ? `« ${labels[0]} »` : '';
+    const displayLabel = labels.length ? `« ${displaySpeakerLabel(labels[0])} »` : '';
     if (selected.length < 2) return { eligible: false, selected, displayLabel, reason: 'Sélectionnez au moins 2 passages.' };
     return { eligible: true, selected, oldName: labels[0], displayLabel, reason: '' };
   }
@@ -1952,7 +1976,8 @@
     const asc = Array.from(_selectedSegs).sort((a, b) => a - b);
     return asc.map((i) => {
       const s = window._segments[i] || {};
-      const who = s.speaker ? `${s.speaker}: ` : '';
+      const shown = displaySpeakerLabel(s.speaker);
+      const who = shown ? `${shown}: ` : '';
       const clock = Number.isFinite(s.start) ? fmtHMS(s.start) : '00:00';
       return `[${clock}] ${who}${s.text || ''}`.trimEnd();
     }).join('\n');
@@ -2028,7 +2053,7 @@
         const spanSpk = document.createElement('span');
         spanSpk.className = 'speaker';
         const spkName = (s.speaker || '').trim();
-        spanSpk.textContent = spkName;
+        spanSpk.textContent = displaySpeakerLabel(spkName);
         setSpeakerStyle(spanSpk, spkName);
         header.appendChild(spanSpk);
 
@@ -2503,7 +2528,7 @@
       if (!el) return;
       el.dataset.speaker = newName;
       const sp = el.querySelector('.speaker');
-      if (sp) { sp.textContent = newName; sp.classList.remove('is-placeholder'); setSpeakerStyle(sp, newName); }
+      if (sp) { sp.textContent = displaySpeakerLabel(newName); sp.classList.remove('is-placeholder'); setSpeakerStyle(sp, newName); }
     });
     return unique.length;
   }
@@ -4543,5 +4568,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.15-select-range';
+  window.__agiloEditorConfidenceVersion = '1.09.16-intervenant';
 });

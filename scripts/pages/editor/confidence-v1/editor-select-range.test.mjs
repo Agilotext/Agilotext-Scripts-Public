@@ -24,10 +24,12 @@ function loadAll(names) {
   return new Function(`${body}\nreturn { ${names.join(', ')} };`)();
 }
 
-const { selectSegmentIndices, parseTimedTranscript } = loadAll([
+const { selectSegmentIndices, parseTimedTranscript, displaySpeakerLabel, syncDomToModel } = loadAll([
   'parseClockToSec',
   'selectSegmentIndices',
-  'parseTimedTranscript'
+  'parseTimedTranscript',
+  'displaySpeakerLabel',
+  'syncDomToModel'
 ]);
 
 test('clic simple pose l ancre sur un seul segment', () => {
@@ -102,4 +104,24 @@ test('fleche et horloge sans crochets', () => {
 
 test('prose sans heure ne fait aucun bloc', () => {
   assert.deepEqual(parseTimedTranscript('Bonjour tout le monde\nSans horloge'), []);
+});
+
+test('libellé machine affiché en français, prénom inchangé', () => {
+  assert.equal(displaySpeakerLabel('Speaker_A'), 'Intervenant 1');
+  assert.equal(displaySpeakerLabel('speaker_a'), 'Intervenant 1');
+  assert.equal(displaySpeakerLabel('Speaker_B'), 'Intervenant 2');
+  assert.equal(displaySpeakerLabel('Speaker_S1'), 'Intervenant 1');
+  assert.equal(displaySpeakerLabel('Speaker_S2'), 'Intervenant 2');
+  assert.equal(displaySpeakerLabel('Speaker_1'), 'Intervenant 1');
+  assert.equal(displaySpeakerLabel('locuteur 2'), 'Intervenant 2');
+  assert.equal(displaySpeakerLabel('Speaker_0'), 'Speaker_0');
+  assert.equal(displaySpeakerLabel('Lucile'), 'Lucile');
+  assert.equal(displaySpeakerLabel('Intervenant 1'), 'Intervenant 1');
+  assert.equal(displaySpeakerLabel(''), '');
+  assert.equal(displaySpeakerLabel('   '), '');
+});
+
+test('syncDomToModel accepte le libellé affiché et garde la valeur brute', () => {
+  assert.match(extractFunction('syncDomToModel'), /displaySpeakerLabel\(speaker\)/);
+  assert.equal(typeof syncDomToModel, 'function');
 });
