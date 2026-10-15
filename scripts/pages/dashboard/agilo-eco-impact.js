@@ -68,6 +68,18 @@
     return "≈ " + verres + (verres > 1 ? " verres" : " verre") + " (25 cl)";
   }
 
+  function analogySentence(liters) {
+    var label = equivalenceLabel(liters);
+    if (label.indexOf("≈ ") === 0) return "Ça correspond à environ " + label.slice(2) + ".";
+    if (label === "moins d'un verre (25 cl)") return "Ça correspond à moins d'un verre (25 cl).";
+    var n = Number(liters);
+    if (!label && isFinite(n) && n > 0) {
+      var gourdes = Math.max(1, Math.round(n / GOURDE_L));
+      return "Ça correspond à environ " + gourdes + (gourdes > 1 ? " gourdes" : " gourde") + " (50 cl).";
+    }
+    return "";
+  }
+
   function glassLevel(liters) {
     var n = Number(liters);
     if (!isFinite(n) || n <= 0) return 0;
@@ -98,6 +110,7 @@
     readImpact: readImpact,
     resolveDisplayedImpact: resolveDisplayedImpact,
     equivalenceLabel: equivalenceLabel,
+    analogySentence: analogySentence,
     glassLevel: glassLevel,
     formatLiters: formatLiters,
     currentMonthLabelFr: currentMonthLabelFr
@@ -212,28 +225,17 @@
       ".agilo-eco-drop-fill{fill:#7dd3fc;transition:fill 160ms ease,height 700ms ease-out,y 700ms ease-out}",
       ".agilo-eco-btn:hover .agilo-eco-drop-fill{fill:#0284c7}",
       ".agilo-eco-btn:focus-visible{outline:2px solid #174a96;outline-offset:2px}",
-      ".agilo-eco-modal{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;",
-      "padding:16px;background:rgba(15,23,42,.45)}",
+      ".agilo-eco-modal{position:fixed;inset:0;z-index:9999}",
       ".agilo-eco-modal[hidden]{display:none}",
-      ".agilo-eco-card{position:relative;width:min(22rem,100%);background:#fff;border-radius:16px;",
-      "padding:20px;text-align:left;box-shadow:0 18px 50px rgba(15,23,42,.16);color:#0f172a;",
-      "animation:agilo-eco-in 180ms ease}",
-      "@keyframes agilo-eco-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}",
-      ".agilo-eco-close{position:absolute;top:12px;right:12px;width:2rem;height:2rem;border:0;border-radius:999px;",
-      "background:#f1f5f9;color:#334155;cursor:pointer;font:700 14px/1 system-ui,sans-serif}",
-      ".agilo-eco-close:focus-visible{outline:2px solid #174a96;outline-offset:2px}",
-      ".agilo-eco-month{margin:0;padding-right:2rem;color:#64748b;font:500 12px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-hero{display:flex;align-items:center;gap:16px;margin-top:14px}",
-      ".agilo-eco-hero svg{display:block;width:72px;height:72px;flex:0 0 auto;color:#174a96}",
-      ".agilo-eco-figure{margin:0;font:800 32px/1 system-ui,sans-serif;color:#174a96}",
-      ".agilo-eco-figure span[data-agilo-eco='unit']{font:700 14px/1.2 system-ui,sans-serif;color:#64748b}",
-      ".agilo-eco-for{margin:4px 0 0;color:#334155;font:500 13px/1.3 system-ui,sans-serif}",
-      ".agilo-eco-eq{margin:12px 0 0;color:#334155;font:600 13px/1.35 system-ui,sans-serif}",
-      ".agilo-eco-scope,.agilo-eco-co2{margin:8px 0 0;color:#64748b;font:500 12px/1.35 system-ui,sans-serif}",
-      ".agilo-eco-attest{display:inline-block;margin-top:14px;color:#174a96;font:600 12px/1.3 system-ui,sans-serif}",
+      ".agilo-eco-modal .aq-modal__panel{width:min(36rem,100%)}",
+      ".agilo-eco-hero-drop{width:2.75rem;height:2.75rem;flex:0 0 auto;color:#174a96}",
+      ".agilo-eco-hero-drop svg{display:block;width:100%;height:100%}",
+      ".agilo-eco-co2{margin:0.45rem 0 0;color:#525252;font-size:0.75rem}",
+      ".agilo-eco-attest-wrap{margin-top:0.85rem;padding-top:0.85rem;border-top:1px solid #e4eaf3}",
+      ".agilo-eco-attest{color:#174a96;font-weight:600;font-size:0.875rem}",
+      ".agilo-eco-attest--soon{margin:0;color:#525252;font-weight:500;font-size:0.8rem;cursor:default}",
       "@media (prefers-reduced-motion:reduce){",
-      ".agilo-eco-drop-fill,.agilo-eco-modal{transition:none}",
-      ".agilo-eco-card{animation:none}",
+      ".agilo-eco-drop-fill,.agilo-eco-modal .aq-modal__panel{transition:none}",
       "}"
     ].join("");
     document.head.appendChild(s);
@@ -258,33 +260,48 @@
     else flat.appendChild(btn);
 
     var modal = document.createElement("div");
-    modal.className = "agilo-eco-modal";
+    modal.className = "aq-modal agilo-eco-modal";
     modal.hidden = true;
     modal.setAttribute("data-agilo-eco", "modal");
-    modal.innerHTML = '<div class="agilo-eco-card" role="dialog" aria-modal="true" aria-labelledby="agilo-eco-title">'
-      + '<button type="button" class="agilo-eco-close" data-agilo-eco="close" aria-label="Fermer">×</button>'
-      + '<p class="agilo-eco-month" data-agilo-eco="month"></p>'
-      + '<div class="agilo-eco-hero">'
-      + dropSvg("agilo-eco-drop-modal", "level")
-      + '<div><p class="agilo-eco-figure" id="agilo-eco-title"><span data-agilo-eco="modal-liters"></span> <span data-agilo-eco="unit">L</span></p>'
-      + '<p class="agilo-eco-for">pour vos transcriptions</p></div>'
+    modal.innerHTML = '<div class="aq-modal__backdrop" data-agilo-eco="backdrop"></div>'
+      + '<section class="aq-modal__panel" role="dialog" aria-modal="true" aria-labelledby="agilo-eco-title" aria-describedby="agilo-eco-desc">'
+      + '<button type="button" class="aq-modal__close" data-agilo-eco="close" aria-label="Fermer">×</button>'
+      + '<header class="aq-modal__header">'
+      + '<h3 id="agilo-eco-title">Consommation d\'eau du mois</h3>'
+      + '<p id="agilo-eco-desc">Ce compteur correspond au mois calendaire en cours, pas à votre historique total.</p>'
+      + '</header>'
+      + '<div class="aq-modal__hero">'
+      + '<div class="aq-modal__hero-left"><strong data-agilo-eco="modal-liters"></strong>'
+      + '<span>pour l\'audio traité ce mois-ci</span></div>'
+      + '<div class="agilo-eco-hero-drop" aria-hidden="true">' + dropSvg("agilo-eco-drop-modal", "level") + '</div>'
       + '</div>'
-      + '<p class="agilo-eco-eq" data-agilo-eco="modal-eq" hidden></p>'
-      + '<p class="agilo-eco-scope">Mois calendaire en cours, comme vos minutes.</p>'
+      + '<div class="aq-modal__analogy-box" data-agilo-eco="analogy" hidden>'
+      + '<p class="aq-modal__analogy-title" aria-hidden="true">Saviez-vous que ?</p>'
+      + '<p class="aq-modal__fact-line" data-agilo-eco="modal-eq"></p>'
+      + '</div>'
+      + '<div class="aq-modal__month" data-agilo-eco="month"></div>'
       + '<p class="agilo-eco-co2" data-agilo-eco="co2" hidden></p>'
-      + '<a class="agilo-eco-attest" data-agilo-eco="attest" hidden target="_blank" rel="noopener">Télécharger l\'attestation</a>'
-      + '</div>';
+      + '<div class="agilo-eco-attest-wrap" data-agilo-eco="attest-wrap"></div>'
+      + '</section>';
     document.body.appendChild(modal);
 
+    function minutesModalOpen() {
+      var other = document.querySelector("[data-aq" + '="modal"]');
+      return !!(other && !other.hidden);
+    }
     function close() {
       modal.hidden = true;
+      if (!minutesModalOpen()) document.body.classList.remove("aq-modal-open");
       if (btn && typeof btn.focus === "function") btn.focus();
     }
     function openModal() {
       if (!mounted || !mounted.impact) return;
       var wasHidden = modal.hidden;
       modal.hidden = false;
+      document.body.classList.add("aq-modal-open");
       if (wasHidden) revealLevel(modal.querySelector('[data-agilo-eco="level"]'));
+      var closeBtn = modal.querySelector('[data-agilo-eco="close"]');
+      if (closeBtn && typeof closeBtn.focus === "function") closeBtn.focus();
     }
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
@@ -299,7 +316,7 @@
     });
     modal.addEventListener("click", function (e) {
       e.stopPropagation();
-      if (e.target === modal) close();
+      if (e.target === modal || (e.target && e.target.getAttribute && e.target.getAttribute("data-agilo-eco") === "backdrop")) close();
     });
     modal.querySelector('[data-agilo-eco="close"]').addEventListener("click", function (e) {
       e.stopPropagation();
@@ -317,32 +334,42 @@
   function paint(impact) {
     if (!mounted) return;
     var formatted = formatLiters(impact.liters);
-    var eq = equivalenceLabel(impact.liters);
+    var sentence = analogySentence(impact.liters);
     var month = currentMonthLabelFr(new Date());
     var pct = glassLevel(impact.liters);
     mounted.btn.querySelector('[data-agilo-eco="liters"]').textContent = formatted + " L";
     mounted.btn.setAttribute("aria-label", "Empreinte eau du mois, " + formatted + " litres");
     applyLevel(mounted.btn.querySelector('[data-agilo-eco="chip-level"]'), pct);
-    mounted.modal.querySelector('[data-agilo-eco="month"]').textContent = month;
-    mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatted;
+    mounted.modal.querySelector('[data-agilo-eco="month"]').textContent = "Période : mois calendaire en cours (" + month + ").";
+    mounted.modal.querySelector('[data-agilo-eco="modal-liters"]').textContent = formatted + " L";
     applyLevel(mounted.modal.querySelector('[data-agilo-eco="level"]'), pct);
+    var box = mounted.modal.querySelector('[data-agilo-eco="analogy"]');
     var modalEq = mounted.modal.querySelector('[data-agilo-eco="modal-eq"]');
-    modalEq.hidden = !eq;
-    modalEq.textContent = eq;
+    box.hidden = !sentence;
+    modalEq.textContent = sentence;
     var co2 = mounted.modal.querySelector('[data-agilo-eco="co2"]');
-    if (impact.co2Grams != null) {
+    if (impact.co2Grams != null && impact.co2Grams > 0) {
       co2.hidden = false;
       co2.textContent = formatLiters(impact.co2Grams) + " g CO₂";
     } else {
       co2.hidden = true;
+      co2.textContent = "";
     }
-    var attest = mounted.modal.querySelector('[data-agilo-eco="attest"]');
+    var wrap = mounted.modal.querySelector('[data-agilo-eco="attest-wrap"]');
+    wrap.textContent = "";
     if (impact.attestationUrl) {
-      attest.hidden = false;
-      attest.href = impact.attestationUrl;
+      var link = document.createElement("a");
+      link.className = "agilo-eco-attest";
+      link.href = impact.attestationUrl;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "Télécharger l'attestation";
+      wrap.appendChild(link);
     } else {
-      attest.hidden = true;
-      attest.removeAttribute("href");
+      var soon = document.createElement("p");
+      soon.className = "agilo-eco-attest agilo-eco-attest--soon";
+      soon.textContent = "L'attestation arrive.";
+      wrap.appendChild(soon);
     }
     mounted.impact = impact;
   }
