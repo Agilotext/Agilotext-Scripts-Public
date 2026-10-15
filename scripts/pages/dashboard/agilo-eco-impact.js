@@ -4,8 +4,9 @@
    Charge : après agilo-quotas-widget
    API live : https://api.agilotext.com/api/v1 (www, apex, site de test).
    Sonde 2026-10-05 sans jeton : HTTP 400, status KO, username_and_token_required.
-   readImpact n'accepte que status OK + numberOfLiters > 0 (même forme que
-   numberOfMinutes). Corps vide, KO ou 0 L : le bloc est retiré, partout.
+   readImpact n'accepte que status OK + litres > 0. La clé live est water_liters.
+   numberOfLiters reste en secours s'il est absent. CO2 : co2_grams, puis co2Grams.
+   Corps vide, KO ou 0 L : le bloc est retiré, partout.
    ================================================================ */
 (function agiloEcoImpact() {
   "use strict";
@@ -27,9 +28,11 @@
 
   function readImpact(json) {
     if (!json || json.status !== "OK") return null;
-    var liters = finiteNumber(json.numberOfLiters);
+    var liters = finiteNumber(json.water_liters);
+    if (liters == null) liters = finiteNumber(json.numberOfLiters);
     if (liters == null || liters < 0) return null;
-    var co2 = finiteNumber(json.co2Grams);
+    var co2 = finiteNumber(json.co2_grams);
+    if (co2 == null) co2 = finiteNumber(json.co2Grams);
     var url = "";
     if (typeof json.attestationUrl === "string" && /^https?:\/\//i.test(json.attestationUrl)) {
       url = json.attestationUrl;
