@@ -23,4 +23,10 @@ test('la confirmation corriger explique avant de lancer', () => {
   assert.equal(src.includes('--aq-radius'), true);
   assert.equal(src.includes('z-index:100000'), true);
   assert.equal(src.includes('.agilo-correction-dialog__ok'), false);
+  assert.equal(src.includes("link.className = 'button cancel'"), false);
+  const formatLinks = src.includes('.aq-modal__downloads a{display:inline;width:auto;min-width:0;height:auto;min-height:0;flex:0 0 auto;padding:0;margin:0;border:0;border-radius:0;background:transparent');
+  assert.equal(formatLinks, true);
+  assert.equal(src.includes('padding:0'), true);
+  assert.equal(src.includes('width:auto'), true);
+  assert.equal(src.includes('background:transparent'), true);
 });

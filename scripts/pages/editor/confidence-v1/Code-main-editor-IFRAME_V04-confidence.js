@@ -4639,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.22-correct-charte';
+  window.__agiloEditorConfidenceVersion = '1.09.23-correct-links';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -5070,23 +5070,29 @@
     box.append(fact);
     panel.append(box);
     correctionAddLine(panel, 'Sauvegardez pour garder le résultat. Recharger avant ça remet le texte précédent.');
-    correctionAddLine(panel, 'Télécharger le fichier enregistré, pas les retouches encore à l’écran.');
-    const downloads = document.createElement('div');
+    const downloadLine = document.createElement('p');
+    downloadLine.className = 'aq-modal__line';
+    downloadLine.append(document.createTextNode('Télécharger le fichier enregistré, pas les retouches encore à l’écran.'));
+    const downloads = document.createElement('span');
     downloads.className = 'aq-modal__downloads';
-    CORRECTION_FORMATS.forEach((pair) => {
+    CORRECTION_FORMATS.forEach((pair, index) => {
+      if (index > 0) {
+        const dot = document.createElement('span');
+        dot.setAttribute('aria-hidden', 'true');
+        dot.textContent = '·';
+        downloads.append(dot);
+      }
       const link = document.createElement('a');
-      link.className = 'button cancel';
+      link.textContent = pair[0];
       link.setAttribute('data-agilo-correction-format', pair[1]);
       link.setAttribute('aria-disabled', 'true');
-      const inner = document.createElement('div');
-      inner.textContent = pair[0];
-      link.append(inner);
       link.addEventListener('click', (event) => {
         if (link.getAttribute('aria-disabled') === 'true' || !link.getAttribute('href')) event.preventDefault();
       });
       downloads.append(link);
     });
-    panel.append(downloads);
+    downloadLine.append(downloads);
+    panel.append(downloadLine);
     const skipLabel = document.createElement('label');
     skipLabel.className = 'agilo-correction-skip';
     const skip = document.createElement('input');
@@ -5198,8 +5204,12 @@
         '.agilo-correction-modal .aq-modal__header p,.agilo-correction-modal .aq-modal__line{margin:0.28rem 0 0;font-size:0.78rem;color:var(--gris, #525252);line-height:1.35}',
         '.agilo-correction-modal .aq-modal__analogy-box{margin-top:0.75rem;padding:0.75rem 0.9rem;border-radius:var(--aq-radius);background:linear-gradient(145deg, color-mix(in srgb, var(--aq-fill) 8%, var(--white, #fff)), color-mix(in srgb, var(--aq-fill) 3%, var(--blanc_gris, #f8f9fa)));border:1px solid color-mix(in srgb, var(--aq-fill) 28%, var(--blanc_gris, #e4eaf3));text-align:left}',
         '.agilo-correction-modal .aq-modal__fact-line{margin:0;font-size:0.8125rem;line-height:1.5;color:var(--gris_fonce, #1a1a1a);font-weight:500}',
-        '.agilo-correction-modal .aq-modal__downloads{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.6rem}',
-        '.agilo-correction-modal .aq-modal__downloads a[aria-disabled="true"]{opacity:.45;pointer-events:none}',
+        '.agilo-correction-modal .aq-modal__downloads{display:flex;flex-wrap:wrap;align-items:baseline;gap:0.15rem 0.4rem;margin-top:0.2rem}',
+        '.agilo-correction-modal .aq-modal__downloads a{display:inline;width:auto;min-width:0;height:auto;min-height:0;flex:0 0 auto;padding:0;margin:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--aq-fill);font:inherit;font-size:0.78rem;font-weight:500;line-height:1.35;text-decoration:none;cursor:pointer}',
+        '.agilo-correction-modal .aq-modal__downloads span{color:var(--gris, #525252)}',
+        '.agilo-correction-modal .aq-modal__downloads a:hover{text-decoration:underline;text-underline-offset:0.12em}',
+        '.agilo-correction-modal .aq-modal__downloads a:focus-visible{outline:2px solid var(--aq-fill);outline-offset:2px}',
+        '.agilo-correction-modal .aq-modal__downloads a[aria-disabled="true"]{opacity:.45;pointer-events:none;cursor:default;text-decoration:none}',
         '.agilo-correction-modal .agilo-correction-skip{display:flex;align-items:center;gap:.5rem;margin:0.85rem 0 0;font-size:0.78rem;color:var(--gris, #525252)}',
         '.agilo-correction-modal .wrapper-button{display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.85rem}',
         '@media (prefers-reduced-motion: reduce){.agilo-correction-modal .aq-modal__panel{animation:none;transition:none}}'
