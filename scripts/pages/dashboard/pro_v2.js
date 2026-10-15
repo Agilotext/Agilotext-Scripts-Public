@@ -419,7 +419,19 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ------------------- Sécurités FilePond (anti "trop vite") ------------------- */
-  const setSubmitEnabled = (enabled) => { if (submitBtn) submitBtn.disabled = !enabled; };
+  function maestroAnalysisPending() {
+    const api = window.AgiloMaestroContext;
+    return !!(api && typeof api.isAnalysisPending === 'function' && api.isAnalysisPending());
+  }
+  function setSubmitEnabled(enabled) {
+    if (!submitBtn) return;
+    submitBtn.setAttribute('data-pond-ready', enabled ? '1' : '0');
+    if (maestroAnalysisPending()) {
+      submitBtn.disabled = true;
+      return;
+    }
+    submitBtn.disabled = !enabled;
+  }
   setSubmitEnabled(false);
   pond?.on('addfile', () => setSubmitEnabled(true));
   pond?.on('removefile', () => setSubmitEnabled(false));
@@ -886,7 +898,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const tokenFresh = await ensureValidToken(String(email).trim(), true);
       if (!tokenFresh || !globalToken) {
         console.error('Token non disponible');
-        if (submitBtn) submitBtn.disabled = false;
+        setSubmitEnabled(true);
         if (formLoadingDiv) formLoadingDiv.style.display = 'none';
         form.dataset.sending = '0';
         window.removeEventListener('beforeunload', beforeUnloadGuard);
@@ -935,7 +947,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (typeof maestro.prepareUploadContext !== 'function') {
             showBusinessProcessingError('Analyse du document impossible. Réessayez.');
             if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
+            setSubmitEnabled(true);
             form.dataset.sending = '0';
             window.removeEventListener('beforeunload', beforeUnloadGuard);
             return;
@@ -944,7 +956,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!prepared || prepared.ok !== true || !prepared.contextId) {
             showBusinessProcessingError((prepared && prepared.message) || 'Analyse impossible. Réessayez ou retirez un document.');
             if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
+            setSubmitEnabled(true);
             form.dataset.sending = '0';
             window.removeEventListener('beforeunload', beforeUnloadGuard);
             return;
@@ -965,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
           showError('audioNotFound');
           alert('Le fichier n\u2019est pas encore prêt. Réessayez.');
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
+          setSubmitEnabled(true);
           form.dataset.sending = '0';
           window.removeEventListener('beforeunload', beforeUnloadGuard);
           return;
@@ -988,7 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
           showBusinessProcessingError(window.agiloAudioEmptyUserPlain || 'Le fichier envoyé semble vide, silencieux ou illisible.');
           console.error('[AGILO:UPLOAD] audio_empty client precheck', { name: file.name, size: 0 });
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
+          setSubmitEnabled(true);
           form.dataset.sending = '0';
           window.removeEventListener('beforeunload', beforeUnloadGuard);
           return;
@@ -1064,7 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .finally(() => {
           if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-          if (submitBtn) submitBtn.disabled = false;
+          setSubmitEnabled(true);
           form.dataset.sending = '0';
           window.removeEventListener('beforeunload', beforeUnloadGuard);
         });

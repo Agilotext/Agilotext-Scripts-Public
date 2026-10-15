@@ -18,6 +18,7 @@
     w.AgiloMaestroContext = {
       enrichFormData: function (fd) { return Promise.resolve(fd); },
       hasActiveContext: function () { return false; },
+      isAnalysisPending: function () { return false; },
       uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); }
     };
     return;
@@ -32,6 +33,7 @@
   var LABEL_COMPACT = '+ Ajouter un document';
   var API_PREANALYZE = 'https://api.agilotext.com/api/v1/preAnalyzeContextDocument';
   var DEBOUNCE_MS = 400;
+  var ANALYSIS_WAIT_MSG = 'Le document est encore en cours d’analyse. Patientez avant d’envoyer le fichier.';
   var CONTEXT_USED_KEY = 'agilo.maestro.contextUsed.v1';
   var NEW_BADGE_UNTIL_MS = Date.parse('2026-09-01T00:00:00+02:00');
 
@@ -545,6 +547,7 @@
       d.statusText = text || '';
     });
     renderDocList();
+    syncSubmitGate();
   }
 
   function clearAllDocs() {
@@ -564,6 +567,7 @@
     showPreviewHtml('');
     syncRgpdVisibility();
     syncContextLoadedBanner(0);
+    syncSubmitGate();
   }
 
   function buildPreviewFromAnalysis(data) {
@@ -646,6 +650,7 @@
       state.contextId = null;
       state.preAnalyzePromise = null;
       showPreviewHtml('');
+      syncSubmitGate();
       return Promise.resolve(null);
     }
 
@@ -742,13 +747,84 @@
     return promise;
   }
 
+  /* analysisBlocksSubmit:start */
+  function analysisBlocksSubmit(docs, debouncePending, contextTabActive) {
+    if (!contextTabActive) return false;
+    if (!docs || !docs.length) return false;
+    if (debouncePending) return true;
+    var i;
+    for (i = 0; i < docs.length; i++) {
+      if (docs[i] && docs[i].status === 'loading') return true;
+    }
+    return false;
+  }
+  /* analysisBlocksSubmit:end */
+
+  function isAnalysisPending() {
+    return analysisBlocksSubmit(
+      docs,
+      !!state.debounceTimer,
+      !!(state.enabled && !state.locked && isContextTabActive())
+    );
+  }
+
+  function showAnalysisWait(btn) {
+    var el = document.getElementById('maestro-analysis-wait');
+    if (!el) {
+      el = document.createElement('p');
+      el.id = 'maestro-analysis-wait';
+      el.setAttribute('role', 'status');
+      el.style.cssText = 'margin:8px 0 0;font-size:13px;font-weight:600;color:#9a3412;';
+      if (btn && btn.parentNode) btn.parentNode.insertBefore(el, btn.nextSibling);
+    }
+    el.textContent = ANALYSIS_WAIT_MSG;
+    el.hidden = false;
+  }
+
+  function syncSubmitGate() {
+    var btn = document.getElementById('submit-button');
+    var pending = isAnalysisPending();
+    var msg = document.getElementById('maestro-analysis-wait');
+    if (pending) {
+      if (!btn) return;
+      btn.disabled = true;
+      btn.setAttribute('data-maestro-hold', '1');
+      showAnalysisWait(btn);
+      return;
+    }
+    if (msg) msg.hidden = true;
+    if (!btn || btn.getAttribute('data-maestro-hold') !== '1') return;
+    btn.removeAttribute('data-maestro-hold');
+    if (btn.form && btn.form.dataset.sending === '1') {
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = btn.getAttribute('data-pond-ready') === '0';
+  }
+
+  function bindSubmitGate() {
+    var btn = document.getElementById('submit-button');
+    var form = btn && btn.form;
+    if (!form || form.getAttribute('data-maestro-gate') === '1') return;
+    form.setAttribute('data-maestro-gate', '1');
+    form.addEventListener('submit', function (e) {
+      if (!isAnalysisPending()) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      syncSubmitGate();
+    }, true);
+  }
+
   function schedulePreAnalyze() {
     state.contextId = null;
     syncRgpdVisibility();
+    syncContextLoadedBanner(0);
     if (state.debounceTimer) clearTimeout(state.debounceTimer);
+    state.debounceTimer = null;
     if (!docs.length) {
       showPreviewHtml('');
       syncRgpdVisibility();
+      syncSubmitGate();
       return;
     }
     setAllDocsStatus('loading', 'Analyse…');
@@ -756,6 +832,7 @@
       state.debounceTimer = null;
       runPreAnalyzeAll();
     }, DEBOUNCE_MS);
+    syncSubmitGate();
   }
 
   function addFiles(fileList) {
@@ -1125,6 +1202,7 @@
     block.hidden = !show;
     if (slot) slot.hidden = !show;
     if (show) syncBlockWidth();
+    syncSubmitGate();
   }
 
   function bindUi() {
@@ -1136,6 +1214,7 @@
       w.AgiloMaestroContext = {
         enrichFormData: function (fd) { return Promise.resolve(fd); },
         hasActiveContext: function () { return false; },
+        isAnalysisPending: function () { return false; },
         prepareUploadContext: function () {
           return Promise.resolve({ ok: true, active: false, contextId: null, message: '' });
         },
@@ -1252,12 +1331,14 @@
       if (state.enabled) syncBlockWidth();
     });
 
+    bindSubmitGate();
     setToggleChecked(state.locked ? false : readPref(), false);
     syncVisibility();
 
     w.AgiloMaestroContext = {
       enrichFormData: enrichFormData,
       hasActiveContext: hasActiveContext,
+      isAnalysisPending: isAnalysisPending,
       prepareUploadContext: prepareUploadContext,
       uploadAttachments: function () { return Promise.resolve({ ok: true, skipped: true }); },
       clear: function () { clearAllDocs(); },

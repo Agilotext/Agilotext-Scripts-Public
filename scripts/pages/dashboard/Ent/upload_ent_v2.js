@@ -516,7 +516,19 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   /* ─── Submit guard ─────────────────────────────────────────── */
-  function setSubmitEnabled(enabled) { if (submitBtn) submitBtn.disabled = !enabled; }
+  function maestroAnalysisPending() {
+    var api = window.AgiloMaestroContext;
+    return !!(api && typeof api.isAnalysisPending === 'function' && api.isAnalysisPending());
+  }
+  function setSubmitEnabled(enabled) {
+    if (!submitBtn) return;
+    submitBtn.setAttribute('data-pond-ready', enabled ? '1' : '0');
+    if (maestroAnalysisPending()) {
+      submitBtn.disabled = true;
+      return;
+    }
+    submitBtn.disabled = !enabled;
+  }
   setSubmitEnabled(false);
   if (pond) {
     pond.on('addfile', function () { setSubmitEnabled(true); });
@@ -986,7 +998,7 @@ document.addEventListener('DOMContentLoaded', function () {
               showError('audioNotFound');
               alert('Le fichier n\'est pas encore prêt. Réessayez.');
               if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-              if (submitBtn) submitBtn.disabled = false;
+              setSubmitEnabled(true);
               form.dataset.sending = '0';
               window.removeEventListener('beforeunload', beforeUnloadGuard);
               return null;
@@ -1004,7 +1016,7 @@ document.addEventListener('DOMContentLoaded', function () {
               showBusinessProcessingError(window.agiloAudioEmptyUserPlain || 'Le fichier envoyé semble vide, silencieux ou illisible.');
               console.error('[AGILO:UPLOAD] audio_empty client precheck', { name: file.name, size: 0 });
               if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-              if (submitBtn) submitBtn.disabled = false;
+              setSubmitEnabled(true);
               form.dataset.sending = '0';
               window.removeEventListener('beforeunload', beforeUnloadGuard);
               return null;
@@ -1080,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', function () {
           })
           .finally(function () {
             if (formLoadingDiv) formLoadingDiv.style.display = 'none';
-            if (submitBtn) submitBtn.disabled = false;
+            setSubmitEnabled(true);
             form.dataset.sending = '0';
             window.removeEventListener('beforeunload', beforeUnloadGuard);
           });
