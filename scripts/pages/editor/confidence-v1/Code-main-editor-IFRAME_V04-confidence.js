@@ -4637,7 +4637,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.18-corriger';
+  window.__agiloEditorConfidenceVersion = '1.09.19-corriger';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -4675,9 +4675,72 @@
     const pane = byId('pane-transcript');
     return !!(pane && !pane.hasAttribute('hidden') && (pane.classList.contains('is-active') || isVisible(pane)));
   }
+  function correctionWaitHost() {
+    return byId('pane-transcript') || (editors.transcript || pickTranscriptEl())?.parentElement || null;
+  }
+  function correctionStartLottie(el) {
+    const path = 'https://cdn.prod.website-files.com/6815bee5a9c0b57da18354fb/6815bee5a9c0b57da18355b3_Animation%20-%201705419825493.json';
+    if (window.lottie && typeof window.lottie.loadAnimation === 'function' && !el._lottie) {
+      try {
+        el._lottie = window.lottie.loadAnimation({ container: el, renderer: 'svg', loop: true, autoplay: true, path });
+      } catch { }
+    }
+    setTimeout(() => {
+      if (!el.isConnected) return;
+      if (el.querySelector('svg, canvas') || el._lottie) return;
+      const fallback = document.createElement('div');
+      fallback.className = 'lottie-fallback';
+      el.replaceWith(fallback);
+    }, 1000);
+  }
+  function correctionShowWait() {
+    const root = editors.transcript || pickTranscriptEl();
+    const host = byId('pane-transcript') || root?.parentElement || null;
+    if (!host || !root) return;
+    host.setAttribute('data-agilo-correction-wait', '');
+    if (host.querySelector(':scope > [data-agilo-correction-loader]')) return;
+    const loader = document.createElement('div');
+    loader.className = 'summary-loading-indicator';
+    loader.setAttribute('data-agilo-correction-loader', '');
+    const anim = document.createElement('div');
+    anim.id = 'loading-correction';
+    anim.className = 'lottie-check-statut';
+    const title = document.createElement('p');
+    title.className = 'loading-text';
+    title.textContent = 'Correction en cours…';
+    const subtitle = document.createElement('p');
+    subtitle.className = 'loading-subtitle';
+    subtitle.textContent = 'Cela peut prendre quelques minutes.';
+    loader.append(anim, title, subtitle);
+    if (root.parentElement === host) host.insertBefore(loader, root);
+    else host.prepend(loader);
+    correctionStartLottie(anim);
+  }
+  function correctionHideWait() {
+    const host = correctionWaitHost();
+    if (!host) return;
+    host.removeAttribute('data-agilo-correction-wait');
+    host.querySelector('[data-agilo-correction-loader]')?.remove();
+  }
+  function correctionMatchButton(btn, save) {
+    if (!btn || !save) return;
+    let sample = save;
+    save.querySelectorAll('span, div, p').forEach((node) => {
+      if ((node.textContent || '').trim() === (save.textContent || '').trim()) sample = node;
+    });
+    const cs = getComputedStyle(sample);
+    btn.style.fontFamily = cs.fontFamily;
+    btn.style.fontSize = cs.fontSize;
+    btn.style.fontWeight = cs.fontWeight;
+    btn.style.fontStyle = cs.fontStyle;
+    btn.style.lineHeight = cs.lineHeight;
+    btn.style.letterSpacing = cs.letterSpacing;
+    const box = getComputedStyle(save);
+    btn.style.borderRadius = box.borderRadius;
+    btn.style.padding = box.padding;
+  }
   function correctionSetButton(mode) {
     const btn = document.querySelector('[data-agilo-correction]');
-    const hint = document.querySelector('.agilo-correction-hint');
     if (!btn) return;
     const label = btn.querySelector('.agilo-correction-label');
     if (mode === 'running') {
@@ -4685,13 +4748,13 @@
       btn.setAttribute('aria-busy', 'true');
       btn.classList.add('is-running');
       if (label) label.textContent = 'Correction en cours…';
-      if (hint) hint.hidden = false;
+      correctionShowWait();
     } else {
       btn.disabled = false;
       btn.removeAttribute('aria-busy');
       btn.classList.remove('is-running');
       if (label) label.textContent = 'Corriger';
-      if (hint) hint.hidden = true;
+      correctionHideWait();
     }
   }
   function correctionSyncVisibility() {
@@ -4861,15 +4924,11 @@
       btn.className = 'agilo-correction-btn';
       btn.setAttribute('data-agilo-correction', '');
       btn.setAttribute('aria-label', 'Corriger la transcription');
-      btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
+      btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-spin" aria-hidden="true"></span><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
       btn.addEventListener('click', () => correctionAsk(true));
-      const hint = document.createElement('span');
-      hint.className = 'agilo-correction-hint';
-      hint.hidden = true;
-      hint.setAttribute('aria-live', 'polite');
-      hint.textContent = 'Cela peut prendre quelques minutes.';
-      slot.append(btn, hint);
+      slot.append(btn);
     }
+    correctionMatchButton(slot.querySelector('[data-agilo-correction]'), save);
     const earlier = (save.compareDocumentPosition(anon) & Node.DOCUMENT_POSITION_FOLLOWING) ? save : anon;
     if (slot.parentElement !== earlier.parentElement || slot.nextElementSibling !== earlier) {
       earlier.parentElement.insertBefore(slot, earlier);
@@ -4883,16 +4942,19 @@
       const style = document.createElement('style');
       style.id = 'agilo-correction-style';
       style.textContent = [
-        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
+        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;margin:0 8px 0 0;vertical-align:middle}',
         '[data-agilo-correction-slot][hidden]{display:none !important}',
-        '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;border-radius:8px;padding:8px 12px;font:inherit;line-height:1.2;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
+        '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
         '.agilo-correction-btn:disabled{cursor:progress}',
         '.agilo-correction-ico{width:18px;height:18px;display:block;flex:0 0 auto}',
-        '.agilo-correction-ia{font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid rgba(255,255,255,.75);border-radius:4px;padding:0 4px;line-height:1.5}',
-        '.agilo-correction-hint{font-size:13px;color:#525252}',
-        '.agilo-correction-btn.is-running{background-image:linear-gradient(90deg,#174a96 0%,#0f3066 40%,#174a96 80%);background-size:200% 100%;animation:agilo-correction-shimmer 1.4s linear infinite}',
-        '@keyframes agilo-correction-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}',
-        '@media (prefers-reduced-motion: reduce){.agilo-correction-btn.is-running{animation:none}}',
+        '.agilo-correction-spin{display:none;width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;box-sizing:border-box}',
+        '.agilo-correction-btn.is-running .agilo-correction-ico{display:none}',
+        '.agilo-correction-btn.is-running .agilo-correction-spin{display:block;animation:agilo-correction-spin .8s linear infinite}',
+        '.agilo-correction-ia{font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid rgba(255,255,255,.75);border-radius:4px;padding:0 4px;line-height:1.5;font-family:inherit}',
+        '@keyframes agilo-correction-spin{to{transform:rotate(360deg)}}',
+        '@media (prefers-reduced-motion: reduce){.agilo-correction-btn.is-running .agilo-correction-spin{animation:none}}',
+        '[data-agilo-correction-wait] > :not([data-agilo-correction-loader]){display:none !important}',
+        '#pane-transcript [data-agilo-correction-loader] #loading-correction{width:5.5rem;height:5.5rem;margin:0 auto 1.5rem;display:block}',
         '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}'
       ].join('');
       document.head.appendChild(style);
