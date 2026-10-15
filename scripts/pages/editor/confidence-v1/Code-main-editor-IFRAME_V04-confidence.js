@@ -4639,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.20-select-click';
+  window.__agiloEditorConfidenceVersion = '1.09.21-correct-confirm';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -4655,6 +4655,18 @@
   let correctionTimer = 0;
   let correctionStatus = 'idle';
   let correctionStarted = 0;
+  let correctionReadyJob = '';
+  let correctionErrorJob = '';
+  let correctionErrorReason = '';
+  let correctionDialogReturn = null;
+  const CORRECTION_SKIP_KEY = 'agilo-correction-skip-intro';
+  const CORRECTION_FORMATS = [
+    ['TXT', 'format=txt'],
+    ['RTF', 'format=rtf'],
+    ['DOC', 'format=doc'],
+    ['DOCX', 'format=docx'],
+    ['PDF', 'format=pdf']
+  ];
 
   function correctionJobId() {
     return new URLSearchParams(location.search).get('jobId') || '';
@@ -4773,6 +4785,10 @@
     correctionStopPoll();
     correctionStatus = 'idle';
     correctionStarted = 0;
+    correctionReadyJob = '';
+    correctionErrorJob = '';
+    correctionErrorReason = '';
+    correctionCloseDialog();
     correctionSetButton('idle');
   }
   function correctionSchedule() {
@@ -4825,9 +4841,14 @@
       arts[i].classList.add('is-flash');
       setTimeout(() => arts[i].classList.remove('is-flash'), 2000);
     });
-    toast(changed
-      ? 'Version corrigée affichée. Sauvegardez pour la garder. Rechargez la page pour retrouver le texte d’avant, tant que vous n’avez pas sauvegardé.'
-      : 'Aucune modification proposée.');
+    correctionReadyJob = jobId;
+    correctionErrorJob = '';
+    correctionErrorReason = '';
+    if (!changed) {
+      correctionOpenNotice('done');
+      return;
+    }
+    toast('Version corrigée affichée. Sauvegardez pour la garder. Rechargez la page pour retrouver le texte d’avant, tant que vous n’avez pas sauvegardé.');
   }
   async function correctionAsk(fromClick) {
     if (EDITION !== 'ent') return;
@@ -4907,10 +4928,201 @@
       return;
     }
     if (status === 'error') {
-      toast(CORRECTION_REASONS[payload.reason] || 'La correction a échoué.');
+      const reason = CORRECTION_REASONS[payload.reason] || 'La correction a échoué.';
+      correctionErrorJob = jobId;
+      correctionErrorReason = reason;
+      toast(reason);
       return;
     }
     toast('La correction ne répond pas.');
+  }
+  function correctionSkipStored() {
+    try { return localStorage.getItem(CORRECTION_SKIP_KEY) === '1'; }
+    catch { return false; }
+  }
+  function correctionRememberSkip() {
+    try { localStorage.setItem(CORRECTION_SKIP_KEY, '1'); }
+    catch { }
+  }
+  function correctionDialogKey(event) {
+    if (event.key !== 'Escape') return;
+    if (!document.querySelector('[data-agilo-correction-dialog]')) return;
+    event.preventDefault();
+    correctionCloseDialog();
+  }
+  function correctionCloseDialog() {
+    const dialog = document.querySelector('[data-agilo-correction-dialog]');
+    if (dialog) dialog.remove();
+    document.removeEventListener('keydown', correctionDialogKey);
+    const back = correctionDialogReturn;
+    correctionDialogReturn = null;
+    if (back && back.isConnected) {
+      try { back.focus(); } catch { }
+    }
+  }
+  function correctionPanelFont(panel) {
+    const save = document.querySelector('button[data-action="save-transcript"]') || document.querySelector('button.button.save');
+    if (!save || !panel) return;
+    const cs = getComputedStyle(save);
+    panel.style.fontFamily = cs.fontFamily;
+    panel.style.fontSize = cs.fontSize;
+    panel.style.lineHeight = cs.lineHeight;
+  }
+  function correctionOpenShell(titleId, title) {
+    correctionCloseDialog();
+    correctionDialogReturn = document.querySelector('[data-agilo-correction]');
+    const overlay = document.createElement('div');
+    overlay.className = 'agilo-correction-dialog';
+    overlay.setAttribute('data-agilo-correction-dialog', '');
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) correctionCloseDialog();
+    });
+    const panel = document.createElement('div');
+    panel.className = 'agilo-correction-dialog__panel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-labelledby', titleId);
+    const heading = document.createElement('h2');
+    heading.id = titleId;
+    heading.className = 'agilo-correction-dialog__title';
+    heading.textContent = title;
+    panel.append(heading);
+    overlay.append(panel);
+    document.body.append(overlay);
+    correctionPanelFont(panel);
+    document.addEventListener('keydown', correctionDialogKey);
+    return panel;
+  }
+  function correctionFocusCancel(panel) {
+    const cancel = panel.querySelector('[data-agilo-correction-cancel]');
+    if (cancel) cancel.focus();
+  }
+  function correctionAddActions(panel, confirmLabel, onConfirm) {
+    const actions = document.createElement('div');
+    actions.className = 'agilo-correction-dialog__actions';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'agilo-correction-dialog__cancel';
+    cancel.setAttribute('data-agilo-correction-cancel', '');
+    cancel.textContent = confirmLabel ? 'Annuler' : 'Fermer';
+    cancel.addEventListener('click', () => correctionCloseDialog());
+    actions.append(cancel);
+    if (confirmLabel) {
+      const ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'agilo-correction-dialog__ok';
+      ok.setAttribute('data-agilo-correction-confirm', '');
+      ok.textContent = confirmLabel;
+      ok.addEventListener('click', onConfirm);
+      actions.append(ok);
+    }
+    panel.append(actions);
+    correctionFocusCancel(panel);
+  }
+  function correctionAddText(panel, text) {
+    const p = document.createElement('p');
+    p.className = 'agilo-correction-dialog__text';
+    p.textContent = text;
+    panel.append(p);
+  }
+  async function correctionFillDownloads(box) {
+    let auth = null;
+    try { auth = await ensureAuth(); }
+    catch { auth = null; }
+    if (!box.isConnected) return;
+    const jobId = correctionJobId();
+    const ready = !!(auth?.username && auth?.token && jobId);
+    box.querySelectorAll('[data-agilo-correction-format]').forEach((link) => {
+      const query = link.getAttribute('data-agilo-correction-format') || '';
+      if (!ready) {
+        link.removeAttribute('href');
+        link.setAttribute('aria-disabled', 'true');
+        return;
+      }
+      const baseQ = 'jobId=' + encodeURIComponent(jobId)
+        + '&username=' + encodeURIComponent(auth.username)
+        + '&token=' + encodeURIComponent(auth.token)
+        + '&edition=' + encodeURIComponent(auth.edition || EDITION);
+      link.href = API_BASE + '/receiveText?' + baseQ + '&' + query;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.removeAttribute('aria-disabled');
+    });
+  }
+  function correctionOpenIntro() {
+    const panel = correctionOpenShell('agilo-correction-intro-title', 'Corriger la transcription');
+    correctionAddText(panel, '« le le budget » devient « le budget ». C’est un mot dit deux fois de suite. « oui oui », un chiffre et une heure restent.');
+    correctionAddText(panel, 'La ponctuation est reprise aussi.');
+    correctionAddText(panel, 'Les noms affichés à gauche, les temps et l’audio ne changent pas. Un nom écrit dans une phrase peut bouger : ce n’est pas le glossaire du compte.');
+    correctionAddText(panel, 'Ensuite, Sauvegarder garde le résultat. Avant ça, recharger la page remet le texte précédent.');
+    correctionAddText(panel, 'Pour en garder une copie maintenant, téléchargez la transcription encore enregistrée. C’est le fichier du serveur, pas les modifications non sauvegardées à l’écran.');
+    const downloads = document.createElement('div');
+    downloads.className = 'agilo-correction-dialog__downloads';
+    CORRECTION_FORMATS.forEach((pair) => {
+      const link = document.createElement('a');
+      link.textContent = pair[0];
+      link.setAttribute('data-agilo-correction-format', pair[1]);
+      link.setAttribute('aria-disabled', 'true');
+      link.addEventListener('click', (event) => {
+        if (link.getAttribute('aria-disabled') === 'true' || !link.getAttribute('href')) event.preventDefault();
+      });
+      downloads.append(link);
+    });
+    panel.append(downloads);
+    const skipLabel = document.createElement('label');
+    skipLabel.className = 'agilo-correction-dialog__skip';
+    const skip = document.createElement('input');
+    skip.type = 'checkbox';
+    skip.setAttribute('data-agilo-correction-skip', '');
+    const skipText = document.createElement('span');
+    skipText.textContent = 'Ne plus afficher ce message';
+    skipLabel.append(skip, skipText);
+    panel.append(skipLabel);
+    correctionAddActions(panel, 'Confirmer', () => {
+      const remember = !!skip.checked;
+      correctionCloseDialog();
+      correctionAsk(true);
+      if (remember && correctionStatus === 'running') correctionRememberSkip();
+    });
+    correctionFillDownloads(downloads);
+  }
+  function correctionOpenNotice(kind) {
+    const failed = kind === 'error';
+    const panel = correctionOpenShell(
+      failed ? 'agilo-correction-error-title' : 'agilo-correction-done-title',
+      failed ? 'Correction déjà tentée' : 'Déjà corrigée'
+    );
+    correctionAddText(panel, failed
+      ? 'Cette correction a déjà échoué. Un nouveau clic ne la relance pas.'
+      : 'Cette transcription a déjà été corrigée. Un nouveau clic ne relance pas la correction.');
+    if (failed && correctionErrorReason) correctionAddText(panel, correctionErrorReason);
+    correctionAddActions(panel, '', null);
+  }
+  function correctionOnButtonClick() {
+    if (document.querySelector('[data-agilo-correction-dialog]')) return;
+    if (correctionStatus === 'running') return;
+    if (document.querySelector('.agilo-anon-banner.is-visible')) {
+      toast('Terminez ou annulez l’anonymisation d’abord.');
+      return;
+    }
+    if (correctionDirty()) {
+      toast('Enregistrez ou abandonnez vos modifications d’abord.');
+      return;
+    }
+    const jobId = correctionJobId();
+    if (jobId && correctionReadyJob === jobId) {
+      correctionOpenNotice('done');
+      return;
+    }
+    if (jobId && correctionErrorJob === jobId) {
+      correctionOpenNotice('error');
+      return;
+    }
+    if (correctionSkipStored()) {
+      correctionAsk(true);
+      return;
+    }
+    correctionOpenIntro();
   }
   function correctionMount() {
     if (EDITION !== 'ent') return false;
@@ -4927,7 +5139,7 @@
       btn.setAttribute('data-agilo-correction', '');
       btn.setAttribute('aria-label', 'Corriger la transcription');
       btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-spin" aria-hidden="true"></span><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
-      btn.addEventListener('click', () => correctionAsk(true));
+      btn.addEventListener('click', () => correctionOnButtonClick());
       slot.append(btn);
     }
     correctionMatchButton(slot.querySelector('[data-agilo-correction]'), save);
@@ -4957,7 +5169,20 @@
         '@media (prefers-reduced-motion: reduce){.agilo-correction-btn.is-running .agilo-correction-spin{animation:none}}',
         '[data-agilo-correction-wait] > :not([data-agilo-correction-loader]){display:none !important}',
         '#pane-transcript [data-agilo-correction-loader] #loading-correction{width:5.5rem;height:5.5rem;margin:0 auto 1.5rem;display:block}',
-        '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}'
+        '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}',
+        '.agilo-correction-dialog{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(2,2,2,.45)}',
+        '.agilo-correction-dialog__panel{width:min(32rem,calc(100% - 2rem));max-height:calc(100% - 2rem);overflow:auto;background:#fff;color:#020202;border-radius:8px;padding:1.25rem 1.25rem 1rem;box-shadow:0 8px 24px rgba(0,0,0,.14)}',
+        '.agilo-correction-dialog__title{margin:0 0 .75rem;font-size:1.125rem;font-weight:700;color:#174a96}',
+        '.agilo-correction-dialog__text{margin:0 0 .75rem;line-height:1.45}',
+        '.agilo-correction-dialog__downloads{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 .75rem}',
+        '.agilo-correction-dialog__downloads a{color:#174a96;font-weight:700;text-decoration:none;border:1px solid #174a96;border-radius:8px;padding:.35rem .6rem}',
+        '.agilo-correction-dialog__downloads a[aria-disabled="true"]{opacity:.45;pointer-events:none}',
+        '.agilo-correction-dialog__skip{display:flex;align-items:center;gap:.5rem;margin:0 0 1rem}',
+        '.agilo-correction-dialog__actions{display:flex;justify-content:flex-end;gap:.5rem}',
+        '.agilo-correction-dialog__cancel,.agilo-correction-dialog__ok{border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}',
+        '.agilo-correction-dialog__cancel{background:#fff;color:#174a96;border:1px solid #174a96}',
+        '.agilo-correction-dialog__ok{background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0}',
+        '@media (prefers-reduced-motion: reduce){.agilo-correction-dialog,.agilo-correction-dialog__panel{animation:none;transition:none}}'
       ].join('');
       document.head.appendChild(style);
     }
