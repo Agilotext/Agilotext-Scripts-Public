@@ -4639,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.21-correct-confirm';
+  window.__agiloEditorConfidenceVersion = '1.09.22-correct-charte';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -4960,70 +4960,77 @@
       try { back.focus(); } catch { }
     }
   }
-  function correctionPanelFont(panel) {
-    const save = document.querySelector('button[data-action="save-transcript"]') || document.querySelector('button.button.save');
-    if (!save || !panel) return;
-    const cs = getComputedStyle(save);
-    panel.style.fontFamily = cs.fontFamily;
-    panel.style.fontSize = cs.fontSize;
-    panel.style.lineHeight = cs.lineHeight;
+  function correctionWfButton(kind, label) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = kind === 'bleu' ? 'button bleu' : 'button cancel';
+    const inner = document.createElement('div');
+    inner.textContent = label;
+    btn.append(inner);
+    return btn;
   }
-  function correctionOpenShell(titleId, title) {
+  function correctionFocusClose(panel) {
+    const close = panel.querySelector('.aq-modal__close');
+    if (close) close.focus();
+  }
+  function correctionOpenShell(titleId, title, note) {
     correctionCloseDialog();
     correctionDialogReturn = document.querySelector('[data-agilo-correction]');
     const overlay = document.createElement('div');
-    overlay.className = 'agilo-correction-dialog';
+    overlay.className = 'aq-modal agilo-correction-modal';
     overlay.setAttribute('data-agilo-correction-dialog', '');
+    const backdrop = document.createElement('div');
+    backdrop.className = 'aq-modal__backdrop';
+    backdrop.setAttribute('data-agilo-correction-backdrop', '');
     overlay.addEventListener('click', (event) => {
-      if (event.target === overlay) correctionCloseDialog();
+      if (event.target === overlay || event.target === backdrop) correctionCloseDialog();
     });
-    const panel = document.createElement('div');
-    panel.className = 'agilo-correction-dialog__panel';
+    const panel = document.createElement('section');
+    panel.className = 'aq-modal__panel';
     panel.setAttribute('role', 'dialog');
     panel.setAttribute('aria-modal', 'true');
     panel.setAttribute('aria-labelledby', titleId);
-    const heading = document.createElement('h2');
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'aq-modal__close';
+    close.setAttribute('aria-label', 'Fermer');
+    close.textContent = '×';
+    close.addEventListener('click', () => correctionCloseDialog());
+    const header = document.createElement('header');
+    header.className = 'aq-modal__header';
+    const heading = document.createElement('h3');
     heading.id = titleId;
-    heading.className = 'agilo-correction-dialog__title';
     heading.textContent = title;
-    panel.append(heading);
-    overlay.append(panel);
+    header.append(heading);
+    if (note) {
+      const line = document.createElement('p');
+      line.textContent = note;
+      header.append(line);
+    }
+    panel.append(close, header);
+    overlay.append(backdrop, panel);
     document.body.append(overlay);
-    correctionPanelFont(panel);
     document.addEventListener('keydown', correctionDialogKey);
     return panel;
   }
-  function correctionFocusCancel(panel) {
-    const cancel = panel.querySelector('[data-agilo-correction-cancel]');
-    if (cancel) cancel.focus();
+  function correctionAddLine(panel, text) {
+    const p = document.createElement('p');
+    p.className = 'aq-modal__line';
+    p.textContent = text;
+    panel.append(p);
   }
   function correctionAddActions(panel, confirmLabel, onConfirm) {
     const actions = document.createElement('div');
-    actions.className = 'agilo-correction-dialog__actions';
-    const cancel = document.createElement('button');
-    cancel.type = 'button';
-    cancel.className = 'agilo-correction-dialog__cancel';
-    cancel.setAttribute('data-agilo-correction-cancel', '');
-    cancel.textContent = confirmLabel ? 'Annuler' : 'Fermer';
+    actions.className = 'wrapper-button';
+    const cancel = correctionWfButton('cancel', confirmLabel ? 'Annuler' : 'Fermer');
     cancel.addEventListener('click', () => correctionCloseDialog());
     actions.append(cancel);
     if (confirmLabel) {
-      const ok = document.createElement('button');
-      ok.type = 'button';
-      ok.className = 'agilo-correction-dialog__ok';
-      ok.setAttribute('data-agilo-correction-confirm', '');
-      ok.textContent = confirmLabel;
+      const ok = correctionWfButton('bleu', confirmLabel);
       ok.addEventListener('click', onConfirm);
       actions.append(ok);
     }
     panel.append(actions);
-    correctionFocusCancel(panel);
-  }
-  function correctionAddText(panel, text) {
-    const p = document.createElement('p');
-    p.className = 'agilo-correction-dialog__text';
-    p.textContent = text;
-    panel.append(p);
   }
   async function correctionFillDownloads(box) {
     let auth = null;
@@ -5050,19 +5057,30 @@
     });
   }
   function correctionOpenIntro() {
-    const panel = correctionOpenShell('agilo-correction-intro-title', 'Corriger la transcription');
-    correctionAddText(panel, '« le le budget » devient « le budget ». C’est un mot dit deux fois de suite. « oui oui », un chiffre et une heure restent.');
-    correctionAddText(panel, 'La ponctuation est reprise aussi.');
-    correctionAddText(panel, 'Les noms affichés à gauche, les temps et l’audio ne changent pas. Un nom écrit dans une phrase peut bouger : ce n’est pas le glossaire du compte.');
-    correctionAddText(panel, 'Ensuite, Sauvegarder garde le résultat. Avant ça, recharger la page remet le texte précédent.');
-    correctionAddText(panel, 'Pour en garder une copie maintenant, téléchargez la transcription encore enregistrée. C’est le fichier du serveur, pas les modifications non sauvegardées à l’écran.');
+    const panel = correctionOpenShell(
+      'agilo-correction-intro-title',
+      'Corriger la transcription',
+      'Un mot dit deux fois de suite est retiré, et la ponctuation est reprise. Les noms à gauche, les temps et l’audio restent. Un nom dans une phrase peut changer.'
+    );
+    const box = document.createElement('div');
+    box.className = 'aq-modal__analogy-box';
+    const fact = document.createElement('p');
+    fact.className = 'aq-modal__fact-line';
+    fact.textContent = '« le le budget » devient « le budget ». « oui oui », un chiffre et une heure restent.';
+    box.append(fact);
+    panel.append(box);
+    correctionAddLine(panel, 'Sauvegardez pour garder le résultat. Recharger avant ça remet le texte précédent.');
+    correctionAddLine(panel, 'Télécharger le fichier enregistré, pas les retouches encore à l’écran.');
     const downloads = document.createElement('div');
-    downloads.className = 'agilo-correction-dialog__downloads';
+    downloads.className = 'aq-modal__downloads';
     CORRECTION_FORMATS.forEach((pair) => {
       const link = document.createElement('a');
-      link.textContent = pair[0];
+      link.className = 'button cancel';
       link.setAttribute('data-agilo-correction-format', pair[1]);
       link.setAttribute('aria-disabled', 'true');
+      const inner = document.createElement('div');
+      inner.textContent = pair[0];
+      link.append(inner);
       link.addEventListener('click', (event) => {
         if (link.getAttribute('aria-disabled') === 'true' || !link.getAttribute('href')) event.preventDefault();
       });
@@ -5070,7 +5088,7 @@
     });
     panel.append(downloads);
     const skipLabel = document.createElement('label');
-    skipLabel.className = 'agilo-correction-dialog__skip';
+    skipLabel.className = 'agilo-correction-skip';
     const skip = document.createElement('input');
     skip.type = 'checkbox';
     skip.setAttribute('data-agilo-correction-skip', '');
@@ -5084,19 +5102,21 @@
       correctionAsk(true);
       if (remember && correctionStatus === 'running') correctionRememberSkip();
     });
+    correctionFocusClose(panel);
     correctionFillDownloads(downloads);
   }
   function correctionOpenNotice(kind) {
     const failed = kind === 'error';
     const panel = correctionOpenShell(
       failed ? 'agilo-correction-error-title' : 'agilo-correction-done-title',
-      failed ? 'Correction déjà tentée' : 'Déjà corrigée'
+      failed ? 'Correction déjà tentée' : 'Déjà corrigée',
+      failed
+        ? 'Cette correction a déjà échoué. Un nouveau clic ne la relance pas.'
+        : 'Cette transcription a déjà été corrigée. Un nouveau clic ne relance pas la correction.'
     );
-    correctionAddText(panel, failed
-      ? 'Cette correction a déjà échoué. Un nouveau clic ne la relance pas.'
-      : 'Cette transcription a déjà été corrigée. Un nouveau clic ne relance pas la correction.');
-    if (failed && correctionErrorReason) correctionAddText(panel, correctionErrorReason);
+    if (failed && correctionErrorReason) correctionAddLine(panel, correctionErrorReason);
     correctionAddActions(panel, '', null);
+    correctionFocusClose(panel);
   }
   function correctionOnButtonClick() {
     if (document.querySelector('[data-agilo-correction-dialog]')) return;
@@ -5170,19 +5190,19 @@
         '[data-agilo-correction-wait] > :not([data-agilo-correction-loader]){display:none !important}',
         '#pane-transcript [data-agilo-correction-loader] #loading-correction{width:5.5rem;height:5.5rem;margin:0 auto 1.5rem;display:block}',
         '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}',
-        '.agilo-correction-dialog{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(2,2,2,.45)}',
-        '.agilo-correction-dialog__panel{width:min(32rem,calc(100% - 2rem));max-height:calc(100% - 2rem);overflow:auto;background:#fff;color:#020202;border-radius:8px;padding:1.25rem 1.25rem 1rem;box-shadow:0 8px 24px rgba(0,0,0,.14)}',
-        '.agilo-correction-dialog__title{margin:0 0 .75rem;font-size:1.125rem;font-weight:700;color:#174a96}',
-        '.agilo-correction-dialog__text{margin:0 0 .75rem;line-height:1.45}',
-        '.agilo-correction-dialog__downloads{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 .75rem}',
-        '.agilo-correction-dialog__downloads a{color:#174a96;font-weight:700;text-decoration:none;border:1px solid #174a96;border-radius:8px;padding:.35rem .6rem}',
-        '.agilo-correction-dialog__downloads a[aria-disabled="true"]{opacity:.45;pointer-events:none}',
-        '.agilo-correction-dialog__skip{display:flex;align-items:center;gap:.5rem;margin:0 0 1rem}',
-        '.agilo-correction-dialog__actions{display:flex;justify-content:flex-end;gap:.5rem}',
-        '.agilo-correction-dialog__cancel,.agilo-correction-dialog__ok{border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}',
-        '.agilo-correction-dialog__cancel{background:#fff;color:#174a96;border:1px solid #174a96}',
-        '.agilo-correction-dialog__ok{background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0}',
-        '@media (prefers-reduced-motion: reduce){.agilo-correction-dialog,.agilo-correction-dialog__panel{animation:none;transition:none}}'
+        '.agilo-correction-modal{--aq-radius:var(--0-5_radius, 0.5rem);--aq-fill:var(--color--blue, #174a96);position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:1rem}',
+        '.agilo-correction-modal .aq-modal__backdrop{position:absolute;inset:0;z-index:0;background:linear-gradient(145deg, rgba(8, 22, 52, 0.72), rgba(7, 16, 35, 0.62));backdrop-filter:blur(5px)}',
+        '.agilo-correction-modal .aq-modal__panel{position:relative;z-index:1;width:min(36rem, 100%);max-height:min(95vh, 62rem);overflow:auto;border-radius:var(--aq-radius);background:linear-gradient(170deg, var(--white, #fff) 0%, var(--blanc_gris, #f8f9fa) 100%);border:1px solid color-mix(in srgb, var(--aq-fill) 20%, var(--blanc_gris, #e4eaf3));box-shadow:0 22px 52px var(--noir_25, rgba(52, 58, 64, 0.25));color:var(--gris_fonce, #020202);padding:0.95rem 1rem 0.9rem}',
+        '.agilo-correction-modal .aq-modal__close{position:absolute;top:0.55rem;right:0.7rem;border:0;background:transparent !important;border-radius:0;box-shadow:none;color:color-mix(in srgb, var(--aq-fill) 76%, var(--gris_fonce, #020202));font-size:1.45rem;line-height:1;width:auto;height:auto;padding:0;cursor:pointer}',
+        '.agilo-correction-modal .aq-modal__header h3{margin:0;padding-right:2.2rem;font-size:1.02rem;font-weight:780;letter-spacing:-0.01rem;color:var(--gris_fonce, #020202)}',
+        '.agilo-correction-modal .aq-modal__header p,.agilo-correction-modal .aq-modal__line{margin:0.28rem 0 0;font-size:0.78rem;color:var(--gris, #525252);line-height:1.35}',
+        '.agilo-correction-modal .aq-modal__analogy-box{margin-top:0.75rem;padding:0.75rem 0.9rem;border-radius:var(--aq-radius);background:linear-gradient(145deg, color-mix(in srgb, var(--aq-fill) 8%, var(--white, #fff)), color-mix(in srgb, var(--aq-fill) 3%, var(--blanc_gris, #f8f9fa)));border:1px solid color-mix(in srgb, var(--aq-fill) 28%, var(--blanc_gris, #e4eaf3));text-align:left}',
+        '.agilo-correction-modal .aq-modal__fact-line{margin:0;font-size:0.8125rem;line-height:1.5;color:var(--gris_fonce, #1a1a1a);font-weight:500}',
+        '.agilo-correction-modal .aq-modal__downloads{display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.6rem}',
+        '.agilo-correction-modal .aq-modal__downloads a[aria-disabled="true"]{opacity:.45;pointer-events:none}',
+        '.agilo-correction-modal .agilo-correction-skip{display:flex;align-items:center;gap:.5rem;margin:0.85rem 0 0;font-size:0.78rem;color:var(--gris, #525252)}',
+        '.agilo-correction-modal .wrapper-button{display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.85rem}',
+        '@media (prefers-reduced-motion: reduce){.agilo-correction-modal .aq-modal__panel{animation:none;transition:none}}'
       ].join('');
       document.head.appendChild(style);
     }

@@ -17,4 +17,10 @@ test('la confirmation corriger explique avant de lancer', () => {
   assert.equal(src.includes("btn.addEventListener('click', () => correctionAsk(true))"), false);
   assert.equal(src.includes('correctionAsk(true)'), true);
   assert.equal(src.includes('data-aq="modal"'), false);
+  assert.equal(src.includes('aq-modal__close'), true);
+  assert.equal(src.includes('button bleu'), true);
+  assert.equal(src.includes('button cancel'), true);
+  assert.equal(src.includes('--aq-radius'), true);
+  assert.equal(src.includes('z-index:100000'), true);
+  assert.equal(src.includes('.agilo-correction-dialog__ok'), false);
 });
