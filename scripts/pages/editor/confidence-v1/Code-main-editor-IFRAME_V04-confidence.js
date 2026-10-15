@@ -1576,12 +1576,69 @@
     '#a16207', '#7c2d12', '#374151', '#1d4ed8'
   ];
 
+  let _speakerColorMap = Object.create(null);
+
+  function syncSpeakerColors(prev, names, paletteSize) {
+    const size = Math.max(1, Number(paletteSize) || 1);
+    const source = prev && typeof prev === 'object' ? prev : {};
+    const incoming = [];
+    const seen = Object.create(null);
+    (Array.isArray(names) ? names : []).forEach((raw) => {
+      const name = String(raw ?? '').trim();
+      if (!name || seen[name]) return;
+      seen[name] = 1;
+      incoming.push(name);
+    });
+    const next = Object.create(null);
+    const used = Object.create(null);
+    incoming.forEach((name) => {
+      if (!Object.prototype.hasOwnProperty.call(source, name)) return;
+      const idx = ((Number(source[name]) % size) + size) % size;
+      next[name] = idx;
+      used[idx] = 1;
+    });
+    let overflow = 0;
+    incoming.forEach((name) => {
+      if (Object.prototype.hasOwnProperty.call(next, name)) return;
+      let idx = -1;
+      for (let i = 0; i < size; i++) {
+        if (!used[i]) { idx = i; break; }
+      }
+      if (idx < 0) {
+        idx = overflow % size;
+        overflow += 1;
+      }
+      next[name] = idx;
+      used[idx] = 1;
+    });
+    return next;
+  }
+
+  function speakerColorIndex(map, name, paletteSize) {
+    const size = Math.max(1, Number(paletteSize) || 1);
+    const t = String(name ?? '').trim();
+    if (!t) return -1;
+    const table = map && typeof map === 'object' ? map : {};
+    if (Object.prototype.hasOwnProperty.call(table, t)) {
+      const idx = Number(table[t]);
+      if (!Number.isFinite(idx)) return 0;
+      return ((idx % size) + size) % size;
+    }
+    const used = Object.create(null);
+    Object.keys(table).forEach((key) => { used[table[key]] = 1; });
+    for (let i = 0; i < size; i++) if (!used[i]) return i;
+    return 0;
+  }
+
+  function refreshSpeakerColors(segments) {
+    const names = (Array.isArray(segments) ? segments : []).map((s) => s && s.speaker);
+    _speakerColorMap = syncSpeakerColors(_speakerColorMap, names, SPK_COLORS.length);
+  }
+
   function getSpeakerColor(name) {
-    if (!name) return '#666';
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    const c = SPK_COLORS[Math.abs(hash) % SPK_COLORS.length];
-    return c;
+    const t = String(name ?? '').trim();
+    if (!t) return '#666';
+    return SPK_COLORS[speakerColorIndex(_speakerColorMap, t, SPK_COLORS.length)];
   }
 
   const UNDO_MAX = 20;
@@ -2003,6 +2060,7 @@
 
   function renderSegments(segments) {
     const root = editors.transcript; if (!root) return;
+    refreshSpeakerColors(segments);
     const prevCount = root.querySelectorAll(':scope > .ag-seg').length;
     const nextCount = Array.isArray(segments) ? segments.length : 0;
     const keep = prevCount > 0 && prevCount === nextCount;
@@ -2527,6 +2585,11 @@
       const el = getSegList(root)[i];
       if (!el) return;
       el.dataset.speaker = newName;
+    });
+    refreshSpeakerColors(window._segments);
+    unique.forEach(i => {
+      const el = getSegList(root)[i];
+      if (!el) return;
       const sp = el.querySelector('.speaker');
       if (sp) { sp.textContent = displaySpeakerLabel(newName); sp.classList.remove('is-placeholder'); setSpeakerStyle(sp, newName); }
     });
@@ -4568,5 +4631,5 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.16-intervenant';
+  window.__agiloEditorConfidenceVersion = '1.09.17-speaker-color';
 });

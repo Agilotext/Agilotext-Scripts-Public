@@ -78,6 +78,7 @@ const renameContext = {
   editors: { transcript: { children: nodes } },
   window: { _segments: structuredClone(segments) },
   setSpeakerStyle() {},
+  refreshSpeakerColors() {},
   getSegList(root) { return (root && root.children) || []; },
   ag_contiguousRangeFrom() { throw Error('wrong scope'); }
 };

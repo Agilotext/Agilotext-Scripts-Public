@@ -24,12 +24,13 @@ function loadAll(names) {
   return new Function(`${body}\nreturn { ${names.join(', ')} };`)();
 }
 
-const { selectSegmentIndices, parseTimedTranscript, displaySpeakerLabel, syncDomToModel } = loadAll([
+const { selectSegmentIndices, parseTimedTranscript, displaySpeakerLabel, syncDomToModel, syncSpeakerColors } = loadAll([
   'parseClockToSec',
   'selectSegmentIndices',
   'parseTimedTranscript',
   'displaySpeakerLabel',
-  'syncDomToModel'
+  'syncDomToModel',
+  'syncSpeakerColors'
 ]);
 
 test('clic simple pose l ancre sur un seul segment', () => {
@@ -124,4 +125,32 @@ test('libellé machine affiché en français, prénom inchangé', () => {
 test('syncDomToModel accepte le libellé affiché et garde la valeur brute', () => {
   assert.match(extractFunction('syncDomToModel'), /displaySpeakerLabel\(speaker\)/);
   assert.equal(typeof syncDomToModel, 'function');
+});
+
+test('couleurs distinctes par ordre, sans reprendre le vert du voisin', () => {
+  const first = syncSpeakerColors({}, ['Speaker_A', 'Speaker_B'], 20);
+  assert.equal(first.Speaker_A, 0);
+  assert.equal(first.Speaker_B, 1);
+  const renamed = syncSpeakerColors(first, ['Aline', 'Flo'], 20);
+  assert.equal(renamed.Aline, 0);
+  assert.equal(renamed.Flo, 1);
+  assert.notEqual(renamed.Aline, renamed.Flo);
+  const twice = syncSpeakerColors({}, ['Aline', 'Aline'], 20);
+  assert.deepEqual(Object.keys(twice), ['Aline']);
+  assert.equal(twice.Aline, 0);
+  const merged = syncSpeakerColors({ Aline: 0, Flo: 1 }, ['Aline', 'Aline'], 20);
+  assert.equal(merged.Aline, 0);
+  assert.equal('Flo' in merged, false);
+  const blank = syncSpeakerColors({}, ['', '   ', 'Aline'], 20);
+  assert.deepEqual(Object.keys(blank), ['Aline']);
+  const freed = syncSpeakerColors({ Aline: 0, Flo: 1 }, ['Flo'], 20);
+  const next = syncSpeakerColors(freed, ['Flo', 'Lucile'], 20);
+  assert.equal(next.Flo, 1);
+  assert.equal(next.Lucile, 0);
+  const many = [];
+  for (let i = 0; i < 21; i++) many.push('N' + i);
+  const full = syncSpeakerColors({}, many, 20);
+  assert.equal(full.N20, 0);
+  assert.equal(full.N0, 0);
+  assert.equal(full.N1, 1);
 });
