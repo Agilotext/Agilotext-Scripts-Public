@@ -47,6 +47,8 @@
       id: r.id != null ? String(r.id) : null,
       start: msToSec(r.milli_start),
       end: Number.isFinite(r.milli_end) ? msToSec(r.milli_end) : null,
+      milliStart: Number.isFinite(+r.milli_start) ? +r.milli_start : null,
+      milliEnd: Number.isFinite(+r.milli_end) ? +r.milli_end : null,
       speaker: String(r.speaker || '').trim(),
       text: decodeNL(r.text)
     }));
@@ -2091,6 +2093,8 @@
       if (s.id != null) art.dataset.id = String(s.id);
       if (Number.isFinite(s.start)) art.dataset.start = String(s.start);
       if (Number.isFinite(s.end)) art.dataset.end = String(s.end);
+      if (s.milliStart != null) art.dataset.milliStart = String(s.milliStart);
+      if (s.milliEnd != null) art.dataset.milliEnd = String(s.milliEnd);
       art.dataset.speaker = s.speaker || '';
 
       if (__mode === 'structured') {
@@ -2127,6 +2131,7 @@
       body.contentEditable = 'true';
       body.spellcheck = false;
       body.textContent = s.text || '';
+      body.dataset.agiloLoaded = s.text || '';
       art.appendChild(body);
 
       frag.appendChild(art);
@@ -3753,6 +3758,7 @@
   let __wdToken = 0;
 
   window.addEventListener('agilo:beforeload', (e) => {
+    try { correctionReset(); } catch { }
     try { window.AgiloConfidence?.resetSessionState?.(); } catch { }
     // ⚠️ AMÉLIORATION : Nettoyer immédiatement tous les états précédents
     try { __activeFetchCtl?.abort?.(); } catch { }
@@ -4631,5 +4637,280 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.17-speaker-color';
+  window.__agiloEditorConfidenceVersion = '1.09.18-corriger';
+
+  const CORRECTION_POLL_MS = 5000;
+  const CORRECTION_WAIT_MS = 15 * 60 * 1000;
+  const CORRECTION_SPARKLE = '<path d="M6.65802 4.02597L5.39502 3.60495L4.97402 2.34195C4.83702 1.93395 4.16202 1.93395 4.02502 2.34195L3.60402 3.60495L2.34102 4.02597C2.13702 4.09397 1.99902 4.28497 1.99902 4.49997C1.99902 4.71497 2.13702 4.90597 2.34102 4.97397L3.60402 5.39499L4.02502 6.65799C4.09302 6.86199 4.28502 6.99997 4.50002 6.99997C4.71502 6.99997 4.90602 6.86199 4.97502 6.65799L5.39602 5.39499L6.65902 4.97397C6.86302 4.90597 7.00102 4.71497 7.00102 4.49997C7.00102 4.28497 6.86202 4.09397 6.65802 4.02597Z" fill="currentColor"/><path d="M15.658 13.026L14.395 12.605L13.974 11.3419C13.837 10.9339 13.162 10.9339 13.025 11.3419L12.604 12.605L11.341 13.026C11.137 13.094 10.999 13.285 10.999 13.5C10.999 13.715 11.137 13.906 11.341 13.974L12.604 14.395L13.025 15.658C13.093 15.862 13.285 16 13.5 16C13.715 16 13.906 15.862 13.975 15.658L14.396 14.395L15.659 13.974C15.863 13.906 16.001 13.715 16.001 13.5C16.001 13.285 15.862 13.094 15.658 13.026Z" fill="currentColor"/><path d="M6 8.75L6.671 11.329L9.25 12L6.671 12.671L6 15.25L5.329 12.671L2.75 12L5.329 11.329L6 8.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 2.75L12.671 5.32898L15.25 6L12.671 6.67102L12 9.25L11.329 6.67102L8.75 6L11.329 5.32898L12 2.75Z" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  const CORRECTION_REASONS = {
+    droit: 'Vous n’avez pas accès à cette correction.',
+    introuvable: 'Transcription introuvable.',
+    modele: 'La correction n’a pas abouti.',
+    requete: 'La demande n’a pas été acceptée.',
+    technique: 'La correction a échoué.'
+  };
+  let correctionEpoch = 0;
+  let correctionTimer = 0;
+  let correctionStatus = 'idle';
+  let correctionStarted = 0;
+
+  function correctionJobId() {
+    return new URLSearchParams(location.search).get('jobId') || '';
+  }
+  function correctionSameBound(art, key, value) {
+    const raw = art.dataset[key];
+    if (value == null || value === '') return raw == null || raw === '';
+    return Number(raw) === Number(value);
+  }
+  function correctionDirty() {
+    const root = editors.transcript || pickTranscriptEl();
+    if (!root) return false;
+    return Array.from(root.querySelectorAll(':scope > .ag-seg .ag-seg__text')).some((box) => {
+      return (box.textContent || '') !== (box.dataset.agiloLoaded || '');
+    });
+  }
+  function correctionOnTranscriptTab() {
+    const tab = byId('tab-transcript');
+    if (tab?.getAttribute('aria-selected') === 'true') return true;
+    const pane = byId('pane-transcript');
+    return !!(pane && !pane.hasAttribute('hidden') && (pane.classList.contains('is-active') || isVisible(pane)));
+  }
+  function correctionSetButton(mode) {
+    const btn = document.querySelector('[data-agilo-correction]');
+    const hint = document.querySelector('.agilo-correction-hint');
+    if (!btn) return;
+    const label = btn.querySelector('.agilo-correction-label');
+    if (mode === 'running') {
+      btn.disabled = true;
+      btn.setAttribute('aria-busy', 'true');
+      btn.classList.add('is-running');
+      if (label) label.textContent = 'Correction en cours…';
+      if (hint) hint.hidden = false;
+    } else {
+      btn.disabled = false;
+      btn.removeAttribute('aria-busy');
+      btn.classList.remove('is-running');
+      if (label) label.textContent = 'Corriger';
+      if (hint) hint.hidden = true;
+    }
+  }
+  function correctionSyncVisibility() {
+    const slot = document.querySelector('[data-agilo-correction-slot]');
+    if (!slot) return;
+    slot.hidden = EDITION !== 'ent' || !correctionOnTranscriptTab();
+  }
+  function correctionStopPoll() {
+    if (correctionTimer) clearTimeout(correctionTimer);
+    correctionTimer = 0;
+  }
+  function correctionReset() {
+    correctionEpoch++;
+    correctionStopPoll();
+    correctionStatus = 'idle';
+    correctionStarted = 0;
+    correctionSetButton('idle');
+  }
+  function correctionSchedule() {
+    correctionStopPoll();
+    if (correctionStatus !== 'running') return;
+    if (correctionStarted && Date.now() - correctionStarted > CORRECTION_WAIT_MS) {
+      correctionStatus = 'idle';
+      correctionStarted = 0;
+      correctionSetButton('idle');
+      toast('L’attente à l’écran s’arrête. Le traitement sur le serveur continue.');
+      return;
+    }
+    correctionTimer = setTimeout(() => { correctionAsk(false); }, CORRECTION_POLL_MS);
+  }
+  function correctionApply(payload, jobId) {
+    const root = editors.transcript || pickTranscriptEl();
+    const incoming = Array.isArray(payload?.segments) ? payload.segments : null;
+    const arts = root ? Array.from(root.querySelectorAll(':scope > .ag-seg')) : [];
+    const model = Array.isArray(window._segments) ? window._segments : null;
+    if (!root || !incoming || !model || incoming.length !== arts.length || model.length !== arts.length) {
+      toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
+      return;
+    }
+    for (let i = 0; i < arts.length; i++) {
+      const seg = incoming[i] || {};
+      const art = arts[i];
+      const id = seg.id != null ? String(seg.id) : '';
+      if (String(art.dataset.id || '') !== id || String(model[i]?.id || '') !== id) {
+        toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
+        return;
+      }
+      if (!correctionSameBound(art, 'milliStart', seg.milli_start) || !correctionSameBound(art, 'milliEnd', seg.milli_end)) {
+        toast('Les segments ne correspondent pas. La version corrigée n’est pas affichée.');
+        return;
+      }
+    }
+    if (jobId !== correctionJobId()) return;
+    let changed = 0;
+    incoming.forEach((seg, i) => {
+      const next = decodeNL(seg.text);
+      const box = arts[i].querySelector('.ag-seg__text');
+      const prev = box ? (box.textContent || '') : (model[i].text || '');
+      if (next === prev) return;
+      changed++;
+      model[i].text = next;
+      if (box) {
+        box.textContent = next;
+        box.dataset.agiloLoaded = next;
+      }
+      arts[i].classList.add('is-flash');
+      setTimeout(() => arts[i].classList.remove('is-flash'), 2000);
+    });
+    toast(changed
+      ? 'Version corrigée affichée. Sauvegardez pour la garder. Rechargez la page pour retrouver le texte d’avant, tant que vous n’avez pas sauvegardé.'
+      : 'Aucune modification proposée.');
+  }
+  async function correctionAsk(fromClick) {
+    if (EDITION !== 'ent') return;
+    if (fromClick && correctionStatus === 'running') return;
+    if (!fromClick && correctionStatus !== 'running') return;
+    const epoch = correctionEpoch;
+    const jobId = correctionJobId();
+    if (!jobId) return;
+    if (fromClick) {
+      if (document.querySelector('.agilo-anon-banner.is-visible')) {
+        toast('Terminez ou annulez l’anonymisation d’abord.');
+        return;
+      }
+      if (correctionDirty()) {
+        toast('Enregistrez ou abandonnez vos modifications d’abord.');
+        return;
+      }
+      correctionStatus = 'running';
+      if (!correctionStarted) correctionStarted = Date.now();
+      correctionSetButton('running');
+    }
+    let auth;
+    try { auth = await ensureAuth(); }
+    catch { auth = null; }
+    if (epoch !== correctionEpoch || jobId !== correctionJobId()) return;
+    if (!auth?.username || !auth?.token) {
+      correctionStatus = 'idle';
+      correctionStarted = 0;
+      correctionSetButton('idle');
+      toast('La correction ne répond pas.');
+      return;
+    }
+    let payload;
+    try {
+      const body = new URLSearchParams();
+      body.set('username', auth.username);
+      body.set('token', auth.token);
+      body.set('edition', auth.edition || EDITION);
+      body.set('jobId', jobId);
+      const res = await fetch(API_BASE + '/correctTranscript', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+        credentials: 'omit',
+        cache: 'no-store'
+      });
+      if (!res.ok) throw new Error('http');
+      payload = await res.json();
+    } catch {
+      if (epoch !== correctionEpoch || jobId !== correctionJobId()) return;
+      correctionStatus = 'idle';
+      correctionStarted = 0;
+      correctionStopPoll();
+      correctionSetButton('idle');
+      toast('La correction ne répond pas.');
+      return;
+    }
+    if (epoch !== correctionEpoch || jobId !== correctionJobId()) return;
+    const status = String(payload?.status || '');
+    if (status === 'running') {
+      correctionStatus = 'running';
+      if (!correctionStarted) correctionStarted = Date.now();
+      correctionSetButton('running');
+      correctionSchedule();
+      return;
+    }
+    correctionStopPoll();
+    correctionStarted = 0;
+    correctionStatus = 'idle';
+    correctionSetButton('idle');
+    if (status === 'ready') {
+      if (correctionDirty()) {
+        toast('Enregistrez ou abandonnez vos modifications d’abord.');
+        return;
+      }
+      correctionApply(payload, jobId);
+      return;
+    }
+    if (status === 'error') {
+      toast(CORRECTION_REASONS[payload.reason] || 'La correction a échoué.');
+      return;
+    }
+    toast('La correction ne répond pas.');
+  }
+  function correctionMount() {
+    if (EDITION !== 'ent') return false;
+    const save = document.querySelector('button[data-action="save-transcript"]') || document.querySelector('button.button.save');
+    const anon = document.querySelector('button[data-action="anonymiser"]');
+    if (!save || !anon || !save.parentElement || save.parentElement !== anon.parentElement) return false;
+    let slot = document.querySelector('[data-agilo-correction-slot]');
+    if (!slot) {
+      slot = document.createElement('span');
+      slot.setAttribute('data-agilo-correction-slot', '');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'agilo-correction-btn';
+      btn.setAttribute('data-agilo-correction', '');
+      btn.setAttribute('aria-label', 'Corriger la transcription');
+      btn.innerHTML = '<svg class="agilo-correction-ico" viewBox="0 0 18 18" aria-hidden="true">' + CORRECTION_SPARKLE + '</svg><span class="agilo-correction-label">Corriger</span><span class="agilo-correction-ia">IA</span>';
+      btn.addEventListener('click', () => correctionAsk(true));
+      const hint = document.createElement('span');
+      hint.className = 'agilo-correction-hint';
+      hint.hidden = true;
+      hint.setAttribute('aria-live', 'polite');
+      hint.textContent = 'Cela peut prendre quelques minutes.';
+      slot.append(btn, hint);
+    }
+    const earlier = (save.compareDocumentPosition(anon) & Node.DOCUMENT_POSITION_FOLLOWING) ? save : anon;
+    if (slot.parentElement !== earlier.parentElement || slot.nextElementSibling !== earlier) {
+      earlier.parentElement.insertBefore(slot, earlier);
+    }
+    correctionSyncVisibility();
+    return true;
+  }
+  function correctionBoot() {
+    if (EDITION !== 'ent') return;
+    if (!document.getElementById('agilo-correction-style')) {
+      const style = document.createElement('style');
+      style.id = 'agilo-correction-style';
+      style.textContent = [
+        '[data-agilo-correction-slot]{display:inline-flex;align-items:center;gap:8px;margin:0 8px 0 0;vertical-align:middle}',
+        '[data-agilo-correction-slot][hidden]{display:none !important}',
+        '.agilo-correction-btn{display:inline-flex;align-items:center;gap:6px;background:#174a96;background-image:linear-gradient(180deg,#174a96,#0f3066);color:#fff;border:0;border-radius:8px;padding:8px 12px;font:inherit;line-height:1.2;cursor:pointer;box-shadow:0 1px 2px color-mix(in srgb,#174a96 35%,transparent)}',
+        '.agilo-correction-btn:disabled{cursor:progress}',
+        '.agilo-correction-ico{width:18px;height:18px;display:block;flex:0 0 auto}',
+        '.agilo-correction-ia{font-size:10px;font-weight:700;letter-spacing:.04em;border:1px solid rgba(255,255,255,.75);border-radius:4px;padding:0 4px;line-height:1.5}',
+        '.agilo-correction-hint{font-size:13px;color:#525252}',
+        '.agilo-correction-btn.is-running{background-image:linear-gradient(90deg,#174a96 0%,#0f3066 40%,#174a96 80%);background-size:200% 100%;animation:agilo-correction-shimmer 1.4s linear infinite}',
+        '@keyframes agilo-correction-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}',
+        '@media (prefers-reduced-motion: reduce){.agilo-correction-btn.is-running{animation:none}}',
+        '.ag-seg.is-flash{background:color-mix(in srgb,#174a96 14%,transparent)}'
+      ].join('');
+      document.head.appendChild(style);
+    }
+    let tries = 0;
+    const retry = setInterval(() => {
+      tries++;
+      if (correctionMount() || tries > 40) clearInterval(retry);
+    }, 400);
+    document.addEventListener('click', (event) => {
+      if (event.target.closest('#tab-transcript, #tab-summary, #tab-chat')) correctionSyncVisibility();
+    });
+    const watch = new MutationObserver(() => correctionSyncVisibility());
+    ['tab-transcript', 'tab-summary', 'tab-chat', 'pane-transcript'].forEach((id) => {
+      const node = byId(id);
+      if (node) watch.observe(node, { attributes: true, attributeFilter: ['aria-selected', 'hidden', 'class'] });
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', correctionBoot);
+  else correctionBoot();
 });
