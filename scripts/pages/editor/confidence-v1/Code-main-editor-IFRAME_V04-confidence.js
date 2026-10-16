@@ -4639,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.23-correct-links';
+  window.__agiloEditorConfidenceVersion = '1.09.24-noms-cites';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -5060,7 +5060,7 @@
     const panel = correctionOpenShell(
       'agilo-correction-intro-title',
       'Corriger la transcription',
-      'Un mot dit deux fois de suite est retiré, et la ponctuation est reprise. Les noms à gauche, les temps et l’audio restent. Un nom dans une phrase peut changer.'
+      'Un mot dit deux fois de suite est retiré, et la ponctuation est reprise. Un nom cité dans les propos reste, comme les intervenants, les temps et l’audio.'
     );
     const box = document.createElement('div');
     box.className = 'aq-modal__analogy-box';

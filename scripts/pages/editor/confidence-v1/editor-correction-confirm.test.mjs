@@ -6,6 +6,9 @@ const src = fs.readFileSync(new URL('./Code-main-editor-IFRAME_V04-confidence.js
 
 test('la confirmation corriger explique avant de lancer', () => {
   assert.equal(src.includes('le le budget'), true);
+  assert.equal(src.includes('Un nom cité dans les propos reste, comme les intervenants, les temps et l’audio.'), true);
+  assert.equal(src.includes('peut changer'), false);
+  assert.equal(src.includes('Les noms, les temps et l’audio restent.'), false);
   assert.equal(src.includes('on va on va'), false);
   assert.equal(src.includes('Ne plus afficher ce message'), true);
   assert.equal(src.includes('agilo-correction-skip-intro'), true);
