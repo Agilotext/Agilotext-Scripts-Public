@@ -5,10 +5,13 @@ import test from 'node:test';
 const src = fs.readFileSync(new URL('./Code-main-editor-IFRAME_V04-confidence.js', import.meta.url), 'utf8');
 
 test('la confirmation corriger explique avant de lancer', () => {
+  assert.equal(src.includes('Ce bouton enlève un mot dit deux fois de suite par erreur, et il corrige la ponctuation. Un nom ou un prénom dans la phrase ne change pas. Les intervenants à gauche et l’audio non plus.'), true);
   assert.equal(src.includes('le le budget'), true);
-  assert.equal(src.includes('Un nom cité dans les propos reste, comme les intervenants, les temps et l’audio.'), true);
+  assert.equal(src.includes('c’est une insistance'), true);
+  assert.equal(src.includes('Confirmer affiche la correction'), true);
+  assert.equal(src.includes('exprès'), false);
   assert.equal(src.includes('peut changer'), false);
-  assert.equal(src.includes('Les noms, les temps et l’audio restent.'), false);
+  assert.equal(src.includes('Un nom cité dans les propos reste'), false);
   assert.equal(src.includes('on va on va'), false);
   assert.equal(src.includes('Ne plus afficher ce message'), true);
   assert.equal(src.includes('agilo-correction-skip-intro'), true);

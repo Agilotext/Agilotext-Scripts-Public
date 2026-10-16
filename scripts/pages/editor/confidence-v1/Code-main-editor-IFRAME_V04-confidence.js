@@ -4639,7 +4639,7 @@
     }, { passive: true });
   }
 
-  window.__agiloEditorConfidenceVersion = '1.09.24-noms-cites';
+  window.__agiloEditorConfidenceVersion = '1.09.25-corriger-clair';
 
   const CORRECTION_POLL_MS = 5000;
   const CORRECTION_WAIT_MS = 15 * 60 * 1000;
@@ -5060,16 +5060,16 @@
     const panel = correctionOpenShell(
       'agilo-correction-intro-title',
       'Corriger la transcription',
-      'Un mot dit deux fois de suite est retiré, et la ponctuation est reprise. Un nom cité dans les propos reste, comme les intervenants, les temps et l’audio.'
+      'Ce bouton enlève un mot dit deux fois de suite par erreur, et il corrige la ponctuation. Un nom ou un prénom dans la phrase ne change pas. Les intervenants à gauche et l’audio non plus.'
     );
     const box = document.createElement('div');
     box.className = 'aq-modal__analogy-box';
     const fact = document.createElement('p');
     fact.className = 'aq-modal__fact-line';
-    fact.textContent = '« le le budget » devient « le budget ». « oui oui », un chiffre et une heure restent.';
+    fact.textContent = '« le le budget » devient « le budget ». « oui oui » reste, c’est une insistance. Un chiffre et une heure aussi.';
     box.append(fact);
     panel.append(box);
-    correctionAddLine(panel, 'Sauvegardez pour garder le résultat. Recharger avant ça remet le texte précédent.');
+    correctionAddLine(panel, 'Confirmer affiche la correction à l’écran. Cliquez ensuite sur Sauvegarder pour la garder. Si vous rechargez la page avant, le texte d’avant revient.');
     const downloadLine = document.createElement('p');
     downloadLine.className = 'aq-modal__line';
     downloadLine.append(document.createTextNode('Télécharger le fichier enregistré, pas les retouches encore à l’écran.'));
